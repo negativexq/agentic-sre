@@ -66,6 +66,20 @@ def test_incident_and_alert_round_trip_through_json() -> None:
     assert Alert.model_validate_json(alert.model_dump_json()) == alert
 
 
+def test_incident_is_immutable() -> None:
+    incident = Incident(
+        status=IncidentStatus.OPEN,
+        severity=IncidentSeverity.WARNING,
+        source=IncidentSource.SYSTEM,
+        title="Immutable incident",
+        created_at=NOW,
+        updated_at=NOW,
+    )
+
+    with pytest.raises(ValidationError):
+        incident.status = IncidentStatus.TRIAGING
+
+
 def test_event_is_immutable_and_json_round_trip_safe() -> None:
     event = IncidentEvent(
         incident_id=INCIDENT_ID,

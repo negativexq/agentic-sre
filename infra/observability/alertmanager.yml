@@ -1,0 +1,7 @@
+route:
+  receiver: control-plane
+  group_by: [alertname, service, namespace]
+receivers:
+  - name: control-plane
+    webhook_configs:
+      - url: http://control-plane:8000/api/v1/webhooks/alertmanager

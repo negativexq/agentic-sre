@@ -1,0 +1,27 @@
+{
+  "title": "Agentic SRE Service Overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "HTTP request rate",
+      "targets": [{"expr": "sum(rate(http_requests_total[5m]))"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP error rate",
+      "targets": [{"expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m]))"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Kafka consumer lag",
+      "targets": [{"expr": "kafka_consumer_lag"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Active database connections",
+      "targets": [{"expr": "db_active_connections"}]
+    }
+  ]
+}

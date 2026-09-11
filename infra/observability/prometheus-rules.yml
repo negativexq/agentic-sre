@@ -1,0 +1,43 @@
+groups:
+  - name: agentic-sre-baseline
+    rules:
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          namespace: sre-demo
+        annotations:
+          runbook: https://example.invalid/runbooks/high-error-rate
+      - alert: HighRequestLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+          namespace: sre-demo
+        annotations:
+          runbook: https://example.invalid/runbooks/high-request-latency
+      - alert: KafkaConsumerLag
+        expr: kafka_consumer_lag > 100
+        for: 2m
+        labels:
+          severity: critical
+          namespace: sre-demo
+        annotations:
+          runbook: https://example.invalid/runbooks/kafka-consumer-lag
+      - alert: PodRestartSpike
+        expr: increase(kube_pod_container_status_restarts_total[10m]) > 3
+        for: 1m
+        labels:
+          severity: warning
+          namespace: sre-demo
+        annotations:
+          runbook: https://example.invalid/runbooks/pod-restart-spike
+      - alert: DBConnectionPressure
+        expr: db_active_connections > 90
+        for: 2m
+        labels:
+          severity: critical
+          namespace: sre-demo
+        annotations:
+          runbook: https://example.invalid/runbooks/db-connection-pressure

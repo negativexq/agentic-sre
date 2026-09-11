@@ -14,6 +14,10 @@ repos:
           - alembic>=1.16,<2.0
           - fastapi>=0.116,<1.0
           - httpx2>=2.12,<3.0
+          - opentelemetry-api>=1.37,<2.0
+          - opentelemetry-exporter-otlp>=1.37,<2.0
+          - opentelemetry-sdk>=1.37,<2.0
           - pydantic>=2.11,<3.0
+          - prometheus-client>=0.22,<1.0
           - pytest>=8.4,<9.0
           - sqlalchemy>=2.0,<3.0

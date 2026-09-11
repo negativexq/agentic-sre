@@ -82,12 +82,15 @@ class BoundedToolExecutor:
     def execute(self, tool: Tool, request: ToolRequest) -> ToolResult:
         """Run a tool with caller-provided bounds and record the outcome."""
         started_at = datetime.now().astimezone()
+        executor: ThreadPoolExecutor | None = None
         try:
             if request.tool_name != tool.name or request.tool_version != tool.version:
                 raise ValueError("tool identity does not match request")
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(tool.run, request)
-                data = future.result(timeout=request.timeout_ms / 1000)
+            executor = ThreadPoolExecutor(max_workers=1)
+            future = executor.submit(tool.run, request)
+            data = future.result(timeout=request.timeout_ms / 1000)
+            if not isinstance(data, dict):
+                raise ValueError("tool backend returned a non-object result")
             encoded = json.dumps(data, default=str, separators=(",", ":")).encode("utf-8")
             result_count = (
                 len(data.get("records", [])) if isinstance(data.get("records", []), list) else 1
@@ -134,6 +137,9 @@ class BoundedToolExecutor:
                 code=ToolErrorCode.INVALID_QUERY,
                 message=str(error),
             )
+        finally:
+            if executor is not None:
+                executor.shutdown(wait=False, cancel_futures=True)
         finished_at = datetime.now().astimezone()
         if self._audit_sink is not None:
             self._audit_sink.record(ToolAuditRecord(request, result, started_at, finished_at))

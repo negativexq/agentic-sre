@@ -7,9 +7,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class WorkloadModel(BaseModel):
-    """Strict JSON-safe workload contract base."""
+    """JSON-safe workload contract base.
 
-    model_config = ConfigDict(extra="forbid", strict=True)
+    HTTP JSON represents UUIDs as strings, so request models intentionally use
+    Pydantic's JSON parsing rules while still rejecting unknown fields.
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class OrderStatus(StrEnum):

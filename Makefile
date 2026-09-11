@@ -58,3 +58,4 @@ cluster-down:
 
 release-check: check
 	.venv/bin/python -m pytest tests/e2e
+	.venv/bin/python -m pytest tests/unit/test_state_machine.py --cov=packages.incident.state_machine --cov-report=term-missing --cov-fail-under=100

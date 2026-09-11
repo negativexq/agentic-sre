@@ -8,6 +8,8 @@ data:
   REDIS_URL: redis://redis:6379/0
   KAFKA_BOOTSTRAP_SERVERS: kafka:9092
   PAYMENT_SERVICE_URL: http://payment-service:8000
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability.svc.cluster.local:4317
+  ENABLE_TEST_FAULTS: "true"
 ---
 apiVersion: v1
 kind: Secret

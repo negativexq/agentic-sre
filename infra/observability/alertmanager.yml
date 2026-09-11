@@ -4,4 +4,4 @@ route:
 receivers:
   - name: control-plane
     webhook_configs:
-      - url: http://control-plane:8000/api/v1/webhooks/alertmanager
+      - url: http://control-plane.sre-demo.svc.cluster.local:8000/api/v1/webhooks/alertmanager

@@ -1,8 +1,11 @@
 """Deterministic workload adapters and production integration boundaries."""
 
 from collections.abc import Callable
+from contextlib import nullcontext
 from typing import Any, Protocol
 from urllib.request import Request, urlopen
+
+from opentelemetry import propagate
 
 from workload.common.contracts import (
     EventTopic,
@@ -62,49 +65,73 @@ class InMemoryProcessedStateStore:
 class HttpPaymentGateway:
     """Small standard-library HTTP adapter for payment-service calls."""
 
-    def __init__(self, base_url: str, *, timeout_seconds: float = 5.0) -> None:
+    def __init__(
+        self, base_url: str, *, timeout_seconds: float = 5.0, runtime: Any | None = None
+    ) -> None:
         self._base_url = base_url.rstrip("/")
         self._timeout_seconds = timeout_seconds
+        self._runtime = runtime
 
     def charge(self, request: PaymentRequest) -> PaymentResponse:
         body = request.model_dump_json().encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        propagate.inject(headers)
         http_request = Request(
             f"{self._base_url}/payments",
             data=body,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
-        with urlopen(http_request, timeout=self._timeout_seconds) as response:
-            return PaymentResponse.model_validate_json(response.read())
+        span_context = (
+            self._runtime.tracer.start_as_current_span("HTTP payment-service")
+            if self._runtime is not None
+            else nullcontext()
+        )
+        with span_context:
+            with urlopen(http_request, timeout=self._timeout_seconds) as response:
+                return PaymentResponse.model_validate_json(response.read())
 
 
 class KafkaEventPublisher:
     """Kafka publisher adapter; the broker is never contacted at import time."""
 
-    def __init__(self, bootstrap_servers: str) -> None:
+    def __init__(self, bootstrap_servers: str, *, runtime: Any | None = None) -> None:
         from confluent_kafka import Producer
 
         self._producer: Any = Producer({"bootstrap.servers": bootstrap_servers})
+        self._runtime = runtime
 
     def publish(self, topic: EventTopic, event: OrderCreatedEvent) -> None:
-        self._producer.produce(
-            topic.value,
-            key=str(event.order_id),
-            value=event.model_dump_json(),
+        headers: dict[str, str] = {}
+        propagate.inject(headers)
+        span_context = (
+            self._runtime.tracer.start_as_current_span("kafka publish")
+            if self._runtime is not None
+            else nullcontext()
         )
-        self._producer.flush()
+        with span_context:
+            self._producer.produce(
+                topic.value,
+                key=str(event.order_id),
+                value=event.model_dump_json(),
+                headers=list(headers.items()),
+            )
+            self._producer.flush()
+        if self._runtime is not None:
+            self._runtime.metrics.kafka(self._runtime.service_name, topic.value, "produced")
 
 
 class LazyKafkaEventPublisher:
     """Kafka publisher that defers broker initialization until first use."""
 
-    def __init__(self, bootstrap_servers: str) -> None:
+    def __init__(self, bootstrap_servers: str, *, runtime: Any | None = None) -> None:
         self._bootstrap_servers = bootstrap_servers
+        self._runtime = runtime
         self._publisher: KafkaEventPublisher | None = None
 
     def publish(self, topic: EventTopic, event: OrderCreatedEvent) -> None:
         if self._publisher is None:
-            self._publisher = KafkaEventPublisher(self._bootstrap_servers)
+            self._publisher = KafkaEventPublisher(self._bootstrap_servers, runtime=self._runtime)
         self._publisher.publish(topic, event)
 
 

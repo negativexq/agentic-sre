@@ -8,6 +8,8 @@ from uuid import UUID, uuid4
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from prometheus_client import make_asgi_app
+from prometheus_client.registry import CollectorRegistry
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
@@ -24,6 +26,7 @@ from packages.storage import (
     create_database_engine,
     create_session_factory,
 )
+from packages.telemetry import TelemetryMiddleware, create_runtime
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/agentic_sre"
 
@@ -61,7 +64,15 @@ def create_app(session_factory: sessionmaker[Session] | None = None) -> FastAPI:
         finally:
             session.close()
 
+    registry = CollectorRegistry()
+    telemetry = create_runtime(
+        "control-plane",
+        registry=registry,
+        otlp_endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+    )
     app = FastAPI(title="Agentic SRE Control Plane", version="0.1.0")
+    app.add_middleware(TelemetryMiddleware, runtime=telemetry)
+    app.mount("/metrics", make_asgi_app(registry=registry))
     app.dependency_overrides[get_session] = session_dependency
 
     @app.exception_handler(IncidentNotFoundError)

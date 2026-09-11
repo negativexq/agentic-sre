@@ -1,0 +1,613 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: observability
+data:
+  config.yaml: |
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      batch:
+    exporters:
+      prometheus:
+        endpoint: 0.0.0.0:8889
+      otlp/tempo:
+        endpoint: tempo.observability.svc.cluster.local:4317
+        tls:
+          insecure: true
+      loki:
+        endpoint: http://loki.observability.svc.cluster.local:3100/loki/api/v1/push
+    service:
+      extensions: [health_check]
+      pipelines:
+        metrics:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [prometheus]
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlp/tempo]
+        logs:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [loki]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.131.0
+          args: ["--config=/etc/otelcol-contrib/config.yaml"]
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+            - name: otlp-http
+              containerPort: 4318
+            - name: metrics
+              containerPort: 8889
+            - name: health
+              containerPort: 13133
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol-contrib/config.yaml
+              subPath: config.yaml
+          readinessProbe:
+            httpGet:
+              path: /
+              port: health
+          livenessProbe:
+            httpGet:
+              path: /
+              port: health
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: observability
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+    - name: metrics
+      port: 8889
+      targetPort: metrics
+    - name: health
+      port: 13133
+      targetPort: health
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: observability
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 5s
+      evaluation_interval: 5s
+    rule_files:
+      - /etc/prometheus/rules.yml
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: [alertmanager.observability.svc.cluster.local:9093]
+    scrape_configs:
+      - job_name: otel-collector
+        static_configs:
+          - targets: [otel-collector.observability.svc.cluster.local:8889]
+  rules.yml: |
+    groups:
+      - name: agentic-sre-live
+        rules:
+          - alert: HighErrorRate
+            expr: sum(rate(http_requests_total{service="payment-service",status=~"5.."}[30s])) > 0.05
+            for: 15s
+            labels:
+              severity: critical
+              service: payment-service
+              namespace: sre-demo
+              runbook: deterministic-payment-errors
+            annotations:
+              summary: Payment service error rate is high
+          - alert: HighRequestLatency
+            expr: histogram_quantile(0.95, sum by (le, service) (rate(http_request_duration_seconds_bucket{service="payment-service"}[30s]))) > 0.5
+            for: 15s
+            labels:
+              severity: warning
+              service: payment-service
+              namespace: sre-demo
+              runbook: deterministic-payment-latency
+            annotations:
+              summary: Payment service latency is high
+          - alert: KafkaConsumerLag
+            expr: sum(kafka_consumer_lag{service="order-worker"}) > 100
+            for: 15s
+            labels:
+              severity: critical
+              service: order-worker
+              namespace: sre-demo
+              runbook: deterministic-kafka-lag
+            annotations:
+              summary: Order worker consumer lag is high
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.5.0
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --web.enable-lifecycle
+          ports:
+            - containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus/prometheus.yml
+              subPath: prometheus.yml
+            - name: config
+              mountPath: /etc/prometheus/rules.yml
+              subPath: rules.yml
+            - name: data
+              mountPath: /prometheus
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: observability
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - port: 9090
+      targetPort: 9090
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-config
+  namespace: observability
+data:
+  config.yaml: |
+    auth_enabled: false
+    server:
+      http_listen_port: 3100
+    common:
+      replication_factor: 1
+      path_prefix: /loki
+    schema_config:
+      configs:
+        - from: 2024-01-01
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+    storage_config:
+      filesystem:
+        directory: /loki/chunks
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loki
+  template:
+    metadata:
+      labels:
+        app: loki
+    spec:
+      containers:
+        - name: loki
+          image: grafana/loki:3.5.0
+          args: ["-config.file=/etc/loki/config.yaml"]
+          ports:
+            - containerPort: 3100
+          volumeMounts:
+            - name: config
+              mountPath: /etc/loki/config.yaml
+              subPath: config.yaml
+            - name: data
+              mountPath: /loki
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3100
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: 3100
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: config
+          configMap:
+            name: loki-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: observability
+spec:
+  selector:
+    app: loki
+  ports:
+    - port: 3100
+      targetPort: 3100
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tempo-config
+  namespace: observability
+data:
+  config.yaml: |
+    server:
+      http_listen_port: 3200
+    distributor:
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+            http:
+    storage:
+      trace:
+        backend: local
+        local:
+          path: /tmp/tempo/traces
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tempo
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tempo
+  template:
+    metadata:
+      labels:
+        app: tempo
+    spec:
+      containers:
+        - name: tempo
+          image: grafana/tempo:2.8.2
+          args: ["-config.file=/etc/tempo/config.yaml"]
+          ports:
+            - name: tempo-http
+              containerPort: 3200
+            - name: otlp-grpc
+              containerPort: 4317
+          volumeMounts:
+            - name: config
+              mountPath: /etc/tempo/config.yaml
+              subPath: config.yaml
+            - name: data
+              mountPath: /tmp/tempo
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: tempo-http
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: tempo-http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: config
+          configMap:
+            name: tempo-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tempo
+  namespace: observability
+spec:
+  selector:
+    app: tempo
+  ports:
+    - name: tempo-http
+      port: 3200
+      targetPort: tempo-http
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.28.1
+          args: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+          ports:
+            - containerPort: 9093
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertmanager/alertmanager.yml
+              subPath: alertmanager.yml
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9093
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9093
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+      volumes:
+        - name: config
+          configMap:
+            name: alertmanager-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: observability
+data:
+  alertmanager.yml: |
+    route:
+      receiver: control-plane
+      group_by: [alertname, service, namespace]
+      group_wait: 1s
+      group_interval: 5s
+      repeat_interval: 1h
+    receivers:
+      - name: control-plane
+        webhook_configs:
+          - url: http://control-plane.sre-demo.svc.cluster.local:8000/api/v1/webhooks/alertmanager
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: observability
+spec:
+  selector:
+    app: alertmanager
+  ports:
+    - port: 9093
+      targetPort: 9093
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-provisioning
+  namespace: observability
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus.observability.svc.cluster.local:9090
+        isDefault: true
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki.observability.svc.cluster.local:3100
+      - name: Tempo
+        type: tempo
+        access: proxy
+        url: http://tempo.observability.svc.cluster.local:3200
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: agentic-sre
+        orgId: 1
+        folder: Agentic SRE
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 30
+        options:
+          path: /var/lib/grafana/dashboards
+  service-overview.json: |
+    {
+      "annotations": {"list": []},
+      "editable": true,
+      "panels": [
+        {"datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"}, "fieldConfig": {"defaults": {}, "overrides": []}, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}, "id": 1, "targets": [{"expr": "sum(rate(http_requests_total[5m]))", "refId": "A"}], "title": "Request rate", "type": "timeseries"},
+        {"datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"}, "fieldConfig": {"defaults": {}, "overrides": []}, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}, "id": 2, "targets": [{"expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m]))", "refId": "A"}], "title": "Error rate", "type": "timeseries"}
+      ],
+      "schemaVersion": 39,
+      "title": "Agentic SRE Service Overview",
+      "time": {"from": "now-1h", "to": "now"},
+      "version": 1
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:12.1.0
+          env:
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: Viewer
+          ports:
+            - containerPort: 3000
+          volumeMounts:
+            - name: provisioning
+              mountPath: /etc/grafana/provisioning/datasources/datasources.yaml
+              subPath: datasources.yaml
+            - name: provisioning
+              mountPath: /etc/grafana/provisioning/dashboards/dashboards.yaml
+              subPath: dashboards.yaml
+            - name: provisioning
+              mountPath: /var/lib/grafana/dashboards/service-overview.json
+              subPath: service-overview.json
+            - name: data
+              mountPath: /var/lib/grafana
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: provisioning
+          configMap:
+            name: grafana-provisioning
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: observability
+spec:
+  selector:
+    app: grafana
+  ports:
+    - port: 3000
+      targetPort: 3000

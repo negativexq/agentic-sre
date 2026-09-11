@@ -34,6 +34,7 @@ build-images:
 
 deploy: build-images
 	kubectl apply -f infra/kubernetes/namespace.yaml
+	kubectl apply -f infra/kubernetes/observability.yaml
 	kubectl apply -f infra/kubernetes/workload.yaml
 	kubectl apply -f infra/kubernetes/control-plane.yaml
 	kubectl apply -f infra/kubernetes/dependencies.yaml
@@ -46,12 +47,19 @@ deploy: build-images
 	kubectl apply -f infra/kubernetes/db-migration.yaml
 	kubectl wait --for=condition=complete job/db-migration -n sre-demo --timeout=120s
 	kubectl apply -f infra/kubernetes/tools-rbac.yaml
+	kubectl rollout status deployment/otel-collector -n observability --timeout=180s
+	kubectl rollout status deployment/prometheus -n observability --timeout=180s
+	kubectl rollout status deployment/loki -n observability --timeout=180s
+	kubectl rollout status deployment/tempo -n observability --timeout=180s
+	kubectl rollout status deployment/alertmanager -n observability --timeout=180s
+	kubectl rollout status deployment/grafana -n observability --timeout=180s
 
 load:
 	kubectl port-forward -n sre-demo svc/order-service 8000:8000 >/tmp/agentic-sre-port-forward.log 2>&1 & port_pid=$$!; trap 'kill "$$port_pid" 2>/dev/null || true' EXIT; sleep 2; .venv/bin/python -m workload.load_generator --base-url http://localhost:8000 --rate 10 --duration 1 --seed 42
 
 status:
 	kubectl get pods,svc -n sre-demo
+	kubectl get pods,svc -n observability
 
 cluster-down:
 	kind delete cluster --name agentic-sre

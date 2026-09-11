@@ -1,13 +1,18 @@
 """Payment service with deterministic authorization behavior."""
 
 import os
+import time
 from collections.abc import Callable
+from contextlib import nullcontext
 from datetime import UTC, datetime
 
 from fastapi import FastAPI
+from prometheus_client import make_asgi_app
+from prometheus_client.registry import CollectorRegistry
 from sqlalchemy.orm import Session, sessionmaker
 
 from packages.storage import create_database_engine, create_session_factory
+from packages.telemetry import TelemetryMiddleware, TelemetryRuntime, create_runtime
 from workload.common.contracts import PaymentRequest, PaymentResponse, PaymentStatus
 from workload.common.persistence import PaymentRepository
 
@@ -23,10 +28,12 @@ class PaymentService:
         *,
         clock: Callable[[], datetime] | None = None,
         decline_above_cents: int | None = None,
+        runtime: TelemetryRuntime | None = None,
     ) -> None:
         self._repository_factory = repository_factory
         self._clock = clock or (lambda: datetime.now(UTC))
         self._decline_above_cents = decline_above_cents
+        self._runtime = runtime
 
     def charge(self, request: PaymentRequest) -> PaymentResponse:
         """Persist a deterministic approval or decline."""
@@ -37,7 +44,23 @@ class PaymentService:
         ):
             status = PaymentStatus.DECLINED
         with self._repository_factory() as session:
-            return PaymentRepository(session).create(request, status, self._clock())
+            started = time.perf_counter()
+            try:
+                span_context = (
+                    self._runtime.tracer.start_as_current_span("postgres payment create")
+                    if self._runtime is not None
+                    else nullcontext()
+                )
+                with span_context:
+                    response = PaymentRepository(session).create(request, status, self._clock())
+            except Exception:
+                if self._runtime is not None:
+                    self._runtime.metrics.db_error("payment-service")
+                raise
+            finally:
+                if self._runtime is not None:
+                    self._runtime.metrics.db("payment-service", time.perf_counter() - started)
+            return response
 
 
 def create_app(
@@ -49,12 +72,25 @@ def create_app(
     if session_factory is None:
         database_url = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
         session_factory = create_session_factory(create_database_engine(database_url))
-    payment_service = service or PaymentService(session_factory)
+    registry = CollectorRegistry()
+    telemetry = create_runtime(
+        "payment-service",
+        registry=registry,
+        otlp_endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+    )
+    payment_service = service or PaymentService(session_factory, runtime=telemetry)
 
     app = FastAPI(title="Payment Service", version="0.1.0")
+    app.add_middleware(TelemetryMiddleware, runtime=telemetry)
+    app.mount("/metrics", make_asgi_app(registry=registry))
 
     @app.post("/payments", response_model=PaymentResponse, status_code=201)
     def create_payment(request: PaymentRequest) -> PaymentResponse:
+        fault_delay_ms = int(os.getenv("FAULT_PAYMENT_DELAY_MS", "0"))
+        if fault_delay_ms > 0:
+            time.sleep(fault_delay_ms / 1000)
+        if os.getenv("FAULT_PAYMENT_ERROR", "false").lower() == "true":
+            raise RuntimeError("injected payment failure")
         return payment_service.charge(request)
 
     @app.get("/health")

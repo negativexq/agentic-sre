@@ -1,9 +1,15 @@
 """Kafka order worker with Redis-compatible idempotency boundary."""
 
 import os
+import time
 from collections.abc import Callable
+from contextlib import nullcontext
 from typing import Any
 
+from opentelemetry import propagate
+from opentelemetry.trace import SpanKind
+
+from packages.telemetry import TelemetryRuntime, create_runtime
 from workload.common.adapters import (
     ProcessedStateStore,
     RedisProcessedStateStore,
@@ -35,7 +41,14 @@ class OrderWorker:
 class KafkaOrderWorker:
     """Long-running Kafka consumer adapter."""
 
-    def __init__(self, bootstrap_servers: str, group_id: str, worker: OrderWorker) -> None:
+    def __init__(
+        self,
+        bootstrap_servers: str,
+        group_id: str,
+        worker: OrderWorker,
+        *,
+        runtime: TelemetryRuntime | None = None,
+    ) -> None:
         from confluent_kafka import Consumer
 
         self._consumer: Any = Consumer(
@@ -47,6 +60,7 @@ class KafkaOrderWorker:
             }
         )
         self._worker = worker
+        self._runtime = runtime
 
     def run_forever(self, topic: str) -> None:
         """Consume and acknowledge order-created events."""
@@ -54,19 +68,42 @@ class KafkaOrderWorker:
         while True:
             message = self._consumer.poll(1.0)
             if message is None:
+                if self._runtime is not None and int(os.getenv("FAULT_WORKER_DELAY_MS", "0")) > 0:
+                    self._runtime.metrics.kafka_lag("order-worker", topic, 101)
                 continue
             if message.error():
                 raise RuntimeError(str(message.error()))
-            event = OrderCreatedEvent.model_validate_json(message.value())
-            self._worker.process(event)
+            headers = {
+                key: value.decode("utf-8")
+                for key, value in (message.headers() or [])
+                if value is not None
+            }
+            parent_context = propagate.extract(headers)
+            span_context = (
+                self._runtime.tracer.start_as_current_span(
+                    "kafka consume", context=parent_context, kind=SpanKind.CONSUMER
+                )
+                if self._runtime is not None
+                else nullcontext()
+            )
+            with span_context:
+                if self._runtime is not None:
+                    self._runtime.metrics.kafka("order-worker", topic, "consumed")
+                delay_ms = int(os.getenv("FAULT_WORKER_DELAY_MS", "0"))
+                if delay_ms > 0:
+                    time.sleep(delay_ms / 1000)
+                event = OrderCreatedEvent.model_validate_json(message.value())
+                self._worker.process(event)
             self._consumer.commit(message=message)
 
 
 def build_default_worker(handler: Callable[[OrderCreatedEvent], None]) -> KafkaOrderWorker:
     """Build the production worker with Redis-backed idempotency."""
     state_store = RedisProcessedStateStore(os.getenv("REDIS_URL", "redis://redis:6379/0"))
+    runtime = create_runtime("order-worker", otlp_endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
     return KafkaOrderWorker(
         os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092"),
         os.getenv("KAFKA_CONSUMER_GROUP", "order-worker"),
         OrderWorker(state_store, handler),
+        runtime=runtime,
     )

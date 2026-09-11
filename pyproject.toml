@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agentic-sre"
+version = "0.1.0"
+description = "Deterministic SRE foundation for the Agentic SRE project."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Agentic SRE contributors" }]
+dependencies = [
+    "alembic>=1.16,<2.0",
+    "fastapi>=0.116,<1.0",
+    "pydantic>=2.11,<3.0",
+    "sqlalchemy>=2.0,<3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.17,<2.0",
+    "pre-commit>=4.3,<5.0",
+    "pytest>=8.4,<9.0",
+    "pytest-cov>=6.2,<7.0",
+    "ruff>=0.13,<1.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["apps", "packages"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["apps", "packages", "tests"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["apps", "packages"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["apps", "packages"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers"
+testpaths = ["tests"]

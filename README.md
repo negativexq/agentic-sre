@@ -22,6 +22,27 @@ make check
 
 `make check` runs Ruff, mypy, and pytest in that order.
 
+## Local runtime
+
+The deterministic workload can be run on kind with PostgreSQL, Redis, and
+Kafka:
+
+```shell
+make cluster-up
+make deploy
+make load
+make status
+```
+
+`make deploy` builds and loads the local images, applies the manifests, and
+runs the Alembic migration Job before the workload smoke load.
+
+The release gate is:
+
+```shell
+make release-check
+```
+
 ## Scope boundary
 
 The deterministic foundation contains no LLM calls, LangGraph, agent

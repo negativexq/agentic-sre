@@ -59,6 +59,8 @@ class TimeWindow(ContractModel):
 class Incident(ContractModel):
     """Current materialized state of an incident."""
 
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
     incident_id: IncidentId = Field(default_factory=uuid4)
     status: IncidentStatus
     severity: IncidentSeverity
@@ -67,7 +69,7 @@ class Incident(ContractModel):
     description: str | None = None
     created_at: datetime
     updated_at: datetime
-    correlation_id: UUID | None = None
+    correlation_id: UUID = Field(default_factory=uuid4)
 
 
 class Alert(ContractModel):

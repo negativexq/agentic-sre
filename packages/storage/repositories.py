@@ -6,15 +6,21 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from packages.contracts import (
+    Alert,
+    AlertSource,
+    AlertStatus,
+    Evidence,
+    EvidenceSourceType,
     Incident,
     IncidentEvent,
     IncidentEventType,
     IncidentSeverity,
     IncidentSource,
     IncidentStatus,
+    TimeWindow,
 )
 from packages.incident import TransitionResult
-from packages.storage.models import IncidentEventRow, IncidentRow
+from packages.storage.models import AlertRow, EvidenceRow, IncidentEventRow, IncidentRow
 
 
 class IncidentNotFoundError(LookupError):
@@ -160,6 +166,67 @@ class IncidentEventRepository:
                 timestamp=row.timestamp,
                 payload=row.payload,
                 correlation_id=row.correlation_id,
+            )
+            for row in rows
+        ]
+
+
+class AlertRepository:
+    """Read operations for normalized alerts."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def list_for_incident(self, incident_id: object) -> list[Alert]:
+        """Return alerts attached to an incident in stable start order."""
+        rows = self._session.scalars(
+            select(AlertRow)
+            .where(AlertRow.incident_id == incident_id)
+            .order_by(AlertRow.starts_at, AlertRow.alert_id)
+        ).all()
+        return [
+            Alert(
+                alert_id=row.alert_id,
+                alert_name=row.alert_name,
+                service=row.service,
+                namespace=row.namespace,
+                cluster=row.cluster,
+                starts_at=row.starts_at,
+                ends_at=row.ends_at,
+                labels=row.labels,
+                annotations=row.annotations,
+                fingerprint=row.fingerprint,
+                status=AlertStatus(row.status),
+                source=AlertSource(row.source),
+            )
+            for row in rows
+        ]
+
+
+class EvidenceRepository:
+    """Read operations for provenance-backed evidence."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def list_for_incident(self, incident_id: object) -> list[Evidence]:
+        """Return evidence ordered by collection time and identifier."""
+        rows = self._session.scalars(
+            select(EvidenceRow)
+            .where(EvidenceRow.incident_id == incident_id)
+            .order_by(EvidenceRow.collected_at, EvidenceRow.evidence_id)
+        ).all()
+        return [
+            Evidence(
+                evidence_id=row.evidence_id,
+                incident_id=row.incident_id,
+                source_type=EvidenceSourceType(row.source_type),
+                source_system=row.source_system,
+                observation=row.observation,
+                time_window=TimeWindow.model_validate(row.time_window),
+                tool_call_id=row.tool_call_id,
+                raw_result_reference=row.raw_result_reference,
+                collected_at=row.collected_at,
             )
             for row in rows
         ]

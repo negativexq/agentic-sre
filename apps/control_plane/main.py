@@ -1,0 +1,136 @@
+"""FastAPI application for the deterministic incident control plane."""
+
+import os
+from collections.abc import Iterator
+from uuid import UUID, uuid4
+
+from fastapi import Depends, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session, sessionmaker
+
+from apps.control_plane.schemas import ErrorDetail, ErrorResponse
+from packages.contracts import Alert, Evidence, Incident, IncidentEvent
+from packages.storage import (
+    AlertRepository,
+    EvidenceRepository,
+    IncidentEventRepository,
+    IncidentNotFoundError,
+    IncidentRepository,
+    create_database_engine,
+    create_session_factory,
+)
+
+DEFAULT_DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/agentic_sre"
+
+
+def _correlation_id(request: Request) -> str:
+    """Use a caller correlation ID or generate one for the response."""
+    return request.headers.get("X-Correlation-ID", str(uuid4()))
+
+
+def _error(request: Request, code: str, message: str, status_code: int) -> JSONResponse:
+    """Build the common error envelope."""
+    body = ErrorResponse(
+        error=ErrorDetail(code=code, message=message, correlation_id=_correlation_id(request))
+    )
+    return JSONResponse(status_code=status_code, content=body.model_dump())
+
+
+def get_session() -> Iterator[Session]:
+    """Dependency placeholder replaced by ``create_app``."""
+    raise RuntimeError("database session dependency is not configured")
+    yield  # pragma: no cover
+
+
+def create_app(session_factory: sessionmaker[Session] | None = None) -> FastAPI:
+    """Create the control-plane application with injectable persistence."""
+    if session_factory is None:
+        database_url = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
+        engine = create_database_engine(database_url)
+        session_factory = create_session_factory(engine)
+
+    def session_dependency() -> Iterator[Session]:
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    app = FastAPI(title="Agentic SRE Control Plane", version="0.1.0")
+    app.dependency_overrides[get_session] = session_dependency
+
+    @app.exception_handler(IncidentNotFoundError)
+    async def incident_not_found_handler(
+        request: Request, _: IncidentNotFoundError
+    ) -> JSONResponse:
+        return _error(request, "INCIDENT_NOT_FOUND", "Incident was not found.", 404)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(request: Request, _: RequestValidationError) -> JSONResponse:
+        return _error(request, "VALIDATION_ERROR", "Request validation failed.", 422)
+
+    @app.get("/health")
+    def health() -> dict[str, str]:
+        """Return process health without requiring the database."""
+        return {"status": "ok"}
+
+    @app.get("/ready", response_model=dict[str, str], responses={503: {"model": ErrorResponse}})
+    def ready(
+        request: Request,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> dict[str, str] | JSONResponse:
+        """Check that the database dependency is reachable."""
+        try:
+            session.execute(text("SELECT 1"))
+        except SQLAlchemyError:
+            return _error(request, "DATABASE_UNAVAILABLE", "Database is unavailable.", 503)
+        return {"status": "ready"}
+
+    @app.get("/api/v1/incidents", response_model=list[Incident])
+    def list_incidents(session: Session = Depends(get_session)) -> list[Incident]:  # noqa: B008
+        """List incidents from materialized current state."""
+        return IncidentRepository(session).list()
+
+    @app.get(
+        "/api/v1/incidents/{incident_id}",
+        response_model=Incident,
+        responses={404: {"model": ErrorResponse}},
+    )
+    def get_incident(incident_id: UUID, session: Session = Depends(get_session)) -> Incident:  # noqa: B008
+        """Return one incident or the typed not-found error."""
+        incident = IncidentRepository(session).get(incident_id)
+        if incident is None:
+            raise IncidentNotFoundError(str(incident_id))
+        return incident
+
+    @app.get("/api/v1/incidents/{incident_id}/events", response_model=list[IncidentEvent])
+    def get_incident_events(
+        incident_id: UUID,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> list[IncidentEvent]:
+        """Return the immutable incident timeline."""
+        return IncidentEventRepository(session).list_for_incident(incident_id)
+
+    @app.get("/api/v1/incidents/{incident_id}/alerts", response_model=list[Alert])
+    def get_incident_alerts(
+        incident_id: UUID,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> list[Alert]:
+        """Return normalized alerts attached to an incident."""
+        return AlertRepository(session).list_for_incident(incident_id)
+
+    @app.get("/api/v1/incidents/{incident_id}/evidence", response_model=list[Evidence])
+    def get_incident_evidence(
+        incident_id: UUID,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> list[Evidence]:
+        """Return provenance-backed evidence attached to an incident."""
+        return EvidenceRepository(session).list_for_incident(incident_id)
+
+    return app
+
+
+app = create_app()

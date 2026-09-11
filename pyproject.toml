@@ -20,6 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "httpx2>=2.12,<3.0",
     "mypy>=1.17,<2.0",
     "pre-commit>=4.3,<5.0",
     "pytest>=8.4,<9.0",

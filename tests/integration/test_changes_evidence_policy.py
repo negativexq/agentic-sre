@@ -67,9 +67,11 @@ def test_policy_fails_closed_for_all_foundation_writes() -> None:
     )
 
     result = PolicyEvaluator(PolicyConfig()).evaluate(action)
+    explicitly_enabled = PolicyEvaluator(PolicyConfig(writes_enabled=True)).evaluate(action)
     unknown = PolicyEvaluator(PolicyConfig()).evaluate_raw({"action_type": "delete_namespace"})
     missing_config = PolicyEvaluator(None).evaluate(action)
 
     assert result.decision is PolicyDecision.DENY
+    assert explicitly_enabled.decision is PolicyDecision.DENY
     assert unknown.decision is PolicyDecision.DENY
     assert missing_config.decision is PolicyDecision.DENY

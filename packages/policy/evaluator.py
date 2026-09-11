@@ -23,25 +23,18 @@ class PolicyEvaluator:
         self._config = config
 
     def evaluate(self, action: ActionRequest) -> PolicyEvaluation:
-        """Evaluate a typed action; foundation defaults to DENY."""
-        if self._config is None or not self._config.writes_enabled:
-            reason = (
-                "policy configuration missing"
-                if self._config is None
-                else "writes disabled by release policy"
-            )
-            version = "unavailable" if self._config is None else self._config.version
-            return PolicyEvaluation(
-                decision=PolicyDecision.DENY,
-                reason=reason,
-                evaluated_at=datetime.now(UTC),
-                policy_version=version,
-            )
+        """Evaluate a typed action; v0.1.0 always denies infrastructure writes."""
+        if self._config is None:
+            reason = "policy configuration missing"
+            version = "unavailable"
+        else:
+            reason = "writes disabled by v0.1.0 release policy"
+            version = self._config.version
         return PolicyEvaluation(
-            decision=PolicyDecision.ALLOW,
-            reason="action is allowed by configured policy",
+            decision=PolicyDecision.DENY,
+            reason=reason,
             evaluated_at=datetime.now(UTC),
-            policy_version=self._config.version,
+            policy_version=version,
         )
 
     def evaluate_raw(self, raw: Any) -> PolicyEvaluation:

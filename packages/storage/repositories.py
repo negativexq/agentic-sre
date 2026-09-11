@@ -1,6 +1,11 @@
 """Repositories with explicit transaction boundaries."""
 
+from __future__ import annotations
+
 from collections.abc import Sequence
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
@@ -19,8 +24,16 @@ from packages.contracts import (
     IncidentStatus,
     TimeWindow,
 )
-from packages.incident import TransitionResult
-from packages.storage.models import AlertRow, EvidenceRow, IncidentEventRow, IncidentRow
+from packages.storage.models import (
+    AlertRow,
+    EvidenceRow,
+    IncidentEventRow,
+    IncidentRow,
+    ToolCallRow,
+)
+
+if TYPE_CHECKING:
+    from packages.incident.state_machine import TransitionResult
 
 
 class IncidentNotFoundError(LookupError):
@@ -230,3 +243,64 @@ class EvidenceRepository:
             )
             for row in rows
         ]
+
+
+class ToolCallRepository:
+    """Persistence operations for audited tool invocations."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def append(
+        self,
+        tool_call_id: UUID,
+        incident_id: UUID,
+        tool_name: str,
+        tool_version: str,
+        request: dict[str, Any],
+        response: dict[str, Any],
+        started_at: datetime,
+        finished_at: datetime,
+    ) -> None:
+        """Append one immutable tool-call audit record."""
+        self._session.add(
+            ToolCallRow(
+                tool_call_id=tool_call_id,
+                incident_id=incident_id,
+                tool_name=tool_name,
+                tool_version=tool_version,
+                request=request,
+                response=response,
+                started_at=started_at,
+                finished_at=finished_at,
+            )
+        )
+        self._session.commit()
+
+
+class EvidenceWriteRepository:
+    """Persistence boundary for provenance-validated evidence."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def append(self, evidence: Evidence) -> Evidence:
+        """Reject missing or cross-incident tool references before insert."""
+        tool_call = self._session.get(ToolCallRow, evidence.tool_call_id)
+        if tool_call is None or tool_call.incident_id != evidence.incident_id:
+            raise ValueError("tool call does not belong to evidence incident")
+        self._session.add(
+            EvidenceRow(
+                evidence_id=evidence.evidence_id,
+                incident_id=evidence.incident_id,
+                source_type=evidence.source_type.value,
+                source_system=evidence.source_system,
+                observation=evidence.observation,
+                time_window=evidence.time_window.model_dump(mode="json"),
+                tool_call_id=evidence.tool_call_id,
+                raw_result_reference=evidence.raw_result_reference,
+                collected_at=evidence.collected_at,
+            )
+        )
+        self._session.commit()
+        return evidence

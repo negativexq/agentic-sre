@@ -2,6 +2,7 @@
 
 import os
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, Request
@@ -12,7 +13,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from apps.control_plane.schemas import ErrorDetail, ErrorResponse
-from packages.contracts import Alert, Evidence, Incident, IncidentEvent
+from packages.contracts import Alert, AlertmanagerWebhook, Evidence, Incident, IncidentEvent
+from packages.incident import IncidentManager, normalize_alert
 from packages.storage import (
     AlertRepository,
     EvidenceRepository,
@@ -129,6 +131,20 @@ def create_app(session_factory: sessionmaker[Session] | None = None) -> FastAPI:
     ) -> list[Evidence]:
         """Return provenance-backed evidence attached to an incident."""
         return EvidenceRepository(session).list_for_incident(incident_id)
+
+    @app.post("/api/v1/webhooks/alertmanager")
+    def alertmanager_webhook(
+        payload: AlertmanagerWebhook,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> dict[str, object]:
+        """Normalize and ingest an Alertmanager delivery idempotently."""
+        now = datetime.now(UTC)
+        manager = IncidentManager(session)
+        incidents = [manager.ingest(normalize_alert(alert), now=now) for alert in payload.alerts]
+        return {
+            "accepted": len(incidents),
+            "incident_ids": [str(incident.incident_id) for incident in incidents],
+        }
 
     return app
 

@@ -1,5 +1,6 @@
 """Stable domain contracts."""
 
+from packages.contracts.change import ChangeRecord, ChangeType
 from packages.contracts.enums import (
     ActionExecutionStatus,
     ActionType,
@@ -19,6 +20,8 @@ from packages.contracts.models import (
     ActionExecution,
     ActionRequest,
     Alert,
+    AlertmanagerAlertPayload,
+    AlertmanagerWebhook,
     AuthorizedAction,
     Evidence,
     Hypothesis,
@@ -37,9 +40,13 @@ __all__ = [
     "ActionRequest",
     "ActionType",
     "Alert",
+    "AlertmanagerAlertPayload",
+    "AlertmanagerWebhook",
     "AlertSource",
     "AlertStatus",
     "AuthorizedAction",
+    "ChangeRecord",
+    "ChangeType",
     "Evidence",
     "EvidenceSourceType",
     "Hypothesis",

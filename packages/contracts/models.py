@@ -89,6 +89,27 @@ class Alert(ContractModel):
     source: AlertSource
 
 
+class AlertmanagerAlertPayload(ContractModel):
+    """Subset of an Alertmanager alert accepted by the webhook."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, populate_by_name=True)
+
+    status: str = Field(min_length=1)
+    labels: dict[str, str]
+    annotations: dict[str, str] = Field(default_factory=dict)
+    starts_at: datetime = Field(alias="startsAt")
+    ends_at: datetime | None = Field(default=None, alias="endsAt")
+    fingerprint: str | None = Field(default=None, min_length=1)
+
+
+class AlertmanagerWebhook(ContractModel):
+    """Alertmanager webhook envelope."""
+
+    receiver: str = Field(min_length=1)
+    status: str = Field(min_length=1)
+    alerts: list[AlertmanagerAlertPayload]
+
+
 class IncidentEvent(ContractModel):
     """Immutable audit event belonging to one incident."""
 

@@ -93,6 +93,43 @@ def _compile_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _extract_structured_text(raw: Any) -> str:
+    """Read exactly one structured output segment from a Responses object.
+
+    ``output_text`` is a convenience aggregate and can concatenate multiple
+    output segments. The structured response boundary must not parse that
+    aggregate or attempt to repair it with regexes.
+    """
+    output = getattr(raw, "output", None)
+    if isinstance(output, list):
+        segments: list[str] = []
+        for item in output:
+            if getattr(item, "type", None) != "message":
+                continue
+            content = getattr(item, "content", None)
+            if not isinstance(content, list):
+                continue
+            for part in content:
+                if getattr(part, "type", None) == "output_text":
+                    text = getattr(part, "text", None)
+                    if isinstance(text, str):
+                        segments.append(text)
+        if len(segments) != 1:
+            raise ProviderError(
+                ProviderErrorCode.INVALID_RESPONSE,
+                "provider returned an unexpected structured output shape",
+            )
+        return segments[0]
+
+    output_text = getattr(raw, "output_text", None)
+    if isinstance(output_text, str):
+        return output_text
+    raise ProviderError(
+        ProviderErrorCode.INVALID_RESPONSE,
+        "provider returned no structured output",
+    )
+
+
 class OpenAIProvider:
     """Call OpenAI only when explicitly enabled and budget-authorized."""
 
@@ -216,11 +253,7 @@ class OpenAIProvider:
         started: float,
     ) -> ModelResponse:
         """Parse structured JSON and usage without retaining raw provider output."""
-        output_text = getattr(raw, "output_text", None)
-        if not isinstance(output_text, str):
-            raise ProviderError(
-                ProviderErrorCode.INVALID_RESPONSE, "provider returned no structured output"
-            )
+        output_text = _extract_structured_text(raw)
         try:
             structured_output = json.loads(output_text)
         except json.JSONDecodeError as error:

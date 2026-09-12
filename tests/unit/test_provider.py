@@ -1,6 +1,7 @@
 """Offline provider contracts and credit budget tests."""
 
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -190,3 +191,64 @@ def test_responses_schema_compiler_emits_strict_provider_subset() -> None:
             assert_strict(value)
 
     assert_strict(schema)
+
+
+def test_responses_parser_uses_one_output_segment_not_aggregate_text() -> None:
+    """A concatenated SDK convenience field cannot corrupt valid output."""
+    aggregate = '{"decision":"STOP"}{"decision":"STOP"}'
+    response = SimpleNamespace(
+        output_text=aggregate,
+        output=[
+            SimpleNamespace(
+                type="message",
+                content=[SimpleNamespace(type="output_text", text='{"decision":"STOP"}')],
+            )
+        ],
+    )
+
+    class Transport:
+        def create(self, **_kwargs: object) -> object:
+            return response
+
+    provider = OpenAIProvider(
+        budget=LiveModelBudget(1),
+        config=LiveModelConfig(enabled=True),
+        transport=Transport(),
+        max_retry=0,
+    )
+
+    result = provider.complete(request())
+
+    assert result.structured_output == {"decision": "STOP"}
+
+
+def test_responses_parser_rejects_multiple_structured_segments() -> None:
+    """Multiple output segments fail closed instead of being concatenated."""
+    response = SimpleNamespace(
+        output_text='{"decision":"STOP"}{"decision":"STOP"}',
+        output=[
+            SimpleNamespace(
+                type="message",
+                content=[
+                    SimpleNamespace(type="output_text", text='{"decision":"STOP"}'),
+                    SimpleNamespace(type="output_text", text='{"decision":"STOP"}'),
+                ],
+            )
+        ],
+    )
+
+    class Transport:
+        def create(self, **_kwargs: object) -> object:
+            return response
+
+    provider = OpenAIProvider(
+        budget=LiveModelBudget(1),
+        config=LiveModelConfig(enabled=True),
+        transport=Transport(),
+        max_retry=0,
+    )
+
+    with pytest.raises(ProviderError) as error:
+        provider.complete(request())
+
+    assert error.value.code is ProviderErrorCode.INVALID_RESPONSE

@@ -21,6 +21,7 @@ from packages.investigation import (
     RegisteredTool,
     StopReason,
     TerminationReason,
+    ToolRepeatPolicy,
 )
 from packages.investigation.audit import InMemoryInvestigationAuditSink
 from packages.investigation.runtime import InvestigationRuntime
@@ -42,7 +43,10 @@ def incident() -> Incident:
     )
 
 
-def registry(count: int = 1) -> ReadOnlyToolRegistry:
+def registry(
+    count: int = 1,
+    repeat_policy: ToolRepeatPolicy = ToolRepeatPolicy.FIXED_WINDOW,
+) -> ReadOnlyToolRegistry:
     """Build named read-only metric tools backed by deterministic data."""
     backend = metrics_tool(lambda _operation, _parameters: {"records": [{"p95": 1.7}]})
     return ReadOnlyToolRegistry(
@@ -53,6 +57,7 @@ def registry(count: int = 1) -> ReadOnlyToolRegistry:
                 operation="service_latency",
                 source_type=EvidenceSourceType.METRIC,
                 tool=backend,
+                repeat_policy=repeat_policy,
             )
             for index in range(count)
         )
@@ -418,55 +423,181 @@ def test_batches_use_remaining_total_tool_budget(first_count: int, second_count:
     assert len(result.evidence) == 8
 
 
-def test_batch_above_remaining_budget_fails_closed() -> None:
-    """A request above remaining capacity gets the total-budget failure."""
+def test_novel_batch_above_remaining_budget_fails_closed() -> None:
+    """Only novel executions are compared with the remaining tool budget."""
     provider = FakeModelProvider(
         [
-            {"decision": DecisionType.CALL_TOOLS, "requests": _tool_requests(1)},
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [{"tool": "metric_8", "arguments": {"service": "order-worker"}}],
+            },
             {"decision": DecisionType.CALL_TOOLS, "requests": _tool_requests(8)},
         ]
     )
 
-    result = InvestigationRuntime(provider, registry(8)).run(incident())
+    result = InvestigationRuntime(provider, registry(9)).run(incident())
 
     assert result.termination_reason is TerminationReason.TOOL_CALL_LIMIT
     assert result.error_code == "TOOL_BUDGET_EXCEEDED"
     assert result.usage.tool_calls == 1
 
 
-def test_batch_with_no_remaining_budget_fails_closed() -> None:
-    """No tool request can execute once the total incident budget is consumed."""
+def test_all_duplicate_batch_does_not_consume_remaining_budget() -> None:
+    """A duplicate request is suppressed rather than treated as new work."""
     provider = FakeModelProvider(
         [
-            {"decision": DecisionType.CALL_TOOLS, "requests": _tool_requests(8)},
-            {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "service_latency"}]},
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [{"tool": "service_latency", "arguments": {"service": "order-worker"}}],
+            },
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [{"tool": "service_latency", "arguments": {"service": "order-worker"}}],
+            },
+            {"decision": DecisionType.STOP, "stop_reason": "insufficient_evidence"},
         ]
     )
 
     result = InvestigationRuntime(provider, registry(8)).run(incident())
 
-    assert result.termination_reason is TerminationReason.TOOL_CALL_LIMIT
-    assert result.error_code == "TOOL_BUDGET_EXCEEDED"
-    assert result.usage.tool_calls == 8
+    assert result.termination_reason is TerminationReason.AGENT_STOPPED
+    assert result.error_code is None
+    assert result.usage.tool_calls == 1
+    assert result.usage.duplicate_requests_suppressed == 1
 
 
-def test_exact_duplicate_tool_requests_are_rejected_without_execution() -> None:
-    """Exact duplicate requests are not silently deduplicated or executed."""
+def test_exact_duplicate_tool_requests_are_suppressed_without_reexecution() -> None:
+    """Exact duplicates reuse the original observation and do not reexecute."""
+    audit = InMemoryInvestigationAuditSink()
     provider = FakeModelProvider(
         [
             {
                 "decision": DecisionType.CALL_TOOLS,
                 "requests": [
-                    {"tool": "service_latency", "arguments": {"window": "5m"}},
-                    {"tool": "service_latency", "arguments": {"window": "5m"}},
+                    {"tool": "service_latency", "arguments": {"service": "order-worker"}},
+                    {"tool": "service_latency", "arguments": {"service": "order-worker"}},
                 ],
-            }
+            },
+            {"decision": DecisionType.STOP, "stop_reason": "insufficient_evidence"},
         ]
     )
 
-    result = InvestigationRuntime(provider, registry()).run(incident())
+    result = InvestigationRuntime(provider, registry(), audit_sink=audit).run(incident())
 
-    assert result.termination_reason is TerminationReason.INVALID_DECISION
-    assert result.error_code == "DUPLICATE_TOOL_REQUEST"
-    assert result.usage.tool_calls == 0
-    assert result.evidence == []
+    assert result.termination_reason is TerminationReason.AGENT_STOPPED
+    assert result.error_code is None
+    assert result.usage.tool_calls == 1
+    assert result.usage.tool_requests_total == 2
+    assert result.usage.duplicate_requests_suppressed == 1
+    assert len(result.evidence) == 1
+    assert result.turns[0]["summaries"][1]["status"] == "SKIPPED_DUPLICATE"
+    assert result.turns[0]["summaries"][1]["reused_evidence_ids"] == [
+        str(result.evidence[0].evidence_id)
+    ]
+    assert result.turns[0]["requested_tool_names"] == ["service_latency", "service_latency"]
+    assert audit.turn_records[0].requested_tool_names == [
+        "service_latency",
+        "service_latency",
+    ]
+    assert audit.turn_records[0].request_audits[1]["status"] == "SKIPPED_DUPLICATE"
+    assert audit.turn_records[0].tool_calls_attempted == 1
+    assert audit.turn_records[0].tool_calls_succeeded == 1
+    assert audit.turn_records[0].tool_calls_failed == 0
+
+
+def test_mixed_batch_suppresses_duplicate_and_executes_novel_requests() -> None:
+    """A duplicate must not discard valid sibling investigation work."""
+    args = {"service": "order-worker"}
+    provider = FakeModelProvider(
+        [
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [
+                    {"tool": name, "arguments": args}
+                    for name in ("service_latency", "metric_1", "metric_2")
+                ],
+            },
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [
+                    {"tool": name, "arguments": args}
+                    for name in ("service_latency", "metric_3", "metric_4", "metric_5")
+                ],
+            },
+            {"decision": DecisionType.STOP, "stop_reason": "insufficient_evidence"},
+        ]
+    )
+
+    result = InvestigationRuntime(provider, registry(6)).run(incident())
+
+    assert result.termination_reason is TerminationReason.AGENT_STOPPED
+    assert result.usage.tool_requests_total == 7
+    assert result.usage.tool_calls == 6
+    assert result.usage.duplicate_requests_suppressed == 1
+    assert len(result.evidence) == 6
+    assert result.turns[1]["summaries"][0]["status"] == "SKIPPED_DUPLICATE"
+    assert result.turns[1]["tool_calls_attempted"] == 3
+
+
+def test_current_state_requests_can_refresh_across_turns() -> None:
+    """Current-state tools are reusable only within a single batch."""
+    args = {"service": "order-worker"}
+    provider = FakeModelProvider(
+        [
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [{"tool": "service_latency", "arguments": args}],
+            },
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [{"tool": "service_latency", "arguments": args}],
+            },
+            {"decision": DecisionType.STOP, "stop_reason": "insufficient_evidence"},
+        ]
+    )
+
+    result = InvestigationRuntime(
+        provider,
+        registry(repeat_policy=ToolRepeatPolicy.CURRENT_STATE),
+    ).run(incident())
+
+    assert result.termination_reason is TerminationReason.AGENT_STOPPED
+    assert result.usage.tool_calls == 2
+    assert result.usage.duplicate_requests_suppressed == 0
+
+
+def test_canonical_nullable_arguments_share_identity() -> None:
+    """Omitted and provider-null optional values canonicalize identically."""
+    from packages.investigation.duplicates import make_tool_request_identity
+    from packages.investigation.tool_contracts import ServiceWindowArgs
+
+    first = ServiceWindowArgs.model_validate({"service": "order-worker"}).model_dump(
+        mode="json", exclude_none=True
+    )
+    second = ServiceWindowArgs.model_validate(
+        {"service": "order-worker", "range_seconds": None}
+    ).model_dump(mode="json", exclude_none=True)
+    window = {"starts_at": "2026-09-12T00:00:00Z", "ends_at": "2026-09-12T00:05:00Z"}
+
+    assert (
+        make_tool_request_identity("service_logs", first, window).identity_hash
+        == make_tool_request_identity("service_logs", second, window).identity_hash
+    )
+
+
+def test_different_observation_windows_are_not_duplicate_identities() -> None:
+    """The authoritative observation scope participates in fixed-window identity."""
+    from packages.investigation.duplicates import make_tool_request_identity
+
+    first = make_tool_request_identity(
+        "kafka_consumer_lag",
+        {"consumer": "order-worker"},
+        {"starts_at": "2026-09-12T00:00:00Z", "ends_at": "2026-09-12T00:05:00Z"},
+    )
+    second = make_tool_request_identity(
+        "kafka_consumer_lag",
+        {"consumer": "order-worker"},
+        {"starts_at": "2026-09-12T00:01:00Z", "ends_at": "2026-09-12T00:06:00Z"},
+    )
+
+    assert first.identity_hash != second.identity_hash

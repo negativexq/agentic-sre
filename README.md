@@ -230,4 +230,4 @@ make check
 
 ## License
 
-MIT. See the project metadata in [`pyproject.toml`](pyproject.toml).
+MIT. See [`LICENSE`](LICENSE).

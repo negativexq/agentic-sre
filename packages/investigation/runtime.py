@@ -651,6 +651,9 @@ class InvestigationRuntime:
                         "arguments": arguments,
                         "status": result.code.value,
                         "error_code": result.code.value,
+                        "backend": result.backend,
+                        "operation": result.operation,
+                        "http_status": result.http_status,
                         "evidence_ids": [],
                     }
                 )

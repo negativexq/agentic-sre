@@ -45,7 +45,7 @@ def _get_alerts(incident_id: str) -> tuple[Alert, ...]:
         raise RuntimeError("control plane alert lookup failed") from error
     if not isinstance(payload, list):
         raise RuntimeError("control plane returned an invalid alert list")
-    return tuple(Alert.model_validate(item) for item in payload)
+    return tuple(Alert.model_validate_json(json.dumps(item)) for item in payload)
 
 
 def _git_sha() -> str:

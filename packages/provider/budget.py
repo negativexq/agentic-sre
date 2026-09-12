@@ -1,7 +1,10 @@
 """Local guards for explicit live model call budgets."""
 
+import fcntl
+import json
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from threading import Lock
 
 from packages.provider.contracts import ProviderError, ProviderErrorCode
@@ -23,12 +26,13 @@ class BudgetSnapshot:
 class LiveModelBudget:
     """Thread-safe, fail-closed budget consumed before every live request."""
 
-    def __init__(self, limit: int = 40) -> None:
+    def __init__(self, limit: int = 40, *, ledger_path: str | None = None) -> None:
         if limit <= 0:
             raise ValueError("live model budget must be positive")
         self._limit = limit
         self._calls_used = 0
         self._lock = Lock()
+        self._ledger_path = Path(ledger_path) if ledger_path else None
 
     @classmethod
     def from_environment(cls) -> "LiveModelBudget":
@@ -38,11 +42,13 @@ class LiveModelBudget:
             limit = int(raw_limit)
         except ValueError as error:
             raise ValueError("SRE_LIVE_MODEL_CALL_BUDGET must be an integer") from error
-        return cls(limit)
+        return cls(limit, ledger_path=os.getenv("SRE_LIVE_MODEL_BUDGET_FILE"))
 
     def snapshot(self) -> BudgetSnapshot:
         """Return a consistent usage snapshot."""
         with self._lock:
+            if self._ledger_path is not None:
+                self._calls_used = self._read_ledger()
             return BudgetSnapshot(self._limit, self._calls_used)
 
     def ensure_capacity(self, count: int) -> BudgetSnapshot:
@@ -50,6 +56,8 @@ class LiveModelBudget:
         if count <= 0:
             raise ValueError("capacity requirement must be positive")
         with self._lock:
+            if self._ledger_path is not None:
+                self._calls_used = self._read_ledger()
             if self._calls_used + count > self._limit:
                 raise ProviderError(
                     ProviderErrorCode.LIVE_MODEL_BUDGET_EXHAUSTED,
@@ -62,10 +70,62 @@ class LiveModelBudget:
         if count <= 0:
             raise ValueError("budget consumption must be positive")
         with self._lock:
+            if self._ledger_path is not None:
+                self._calls_used = self._consume_ledger(count)
+                return BudgetSnapshot(self._limit, self._calls_used)
             if self._calls_used + count > self._limit:
                 raise ProviderError(
                     ProviderErrorCode.LIVE_MODEL_BUDGET_EXHAUSTED,
                     "live model call budget exhausted",
                 )
             self._calls_used += count
+            if self._ledger_path is not None:
+                self._write_ledger(self._calls_used)
             return BudgetSnapshot(self._limit, self._calls_used)
+
+    def _read_ledger(self) -> int:
+        """Read the shared call counter under an advisory file lock."""
+        assert self._ledger_path is not None
+        self._ledger_path.parent.mkdir(parents=True, exist_ok=True)
+        with self._ledger_path.open("a+", encoding="utf-8") as ledger:
+            fcntl.flock(ledger.fileno(), fcntl.LOCK_EX)
+            ledger.seek(0)
+            content = ledger.read()
+            fcntl.flock(ledger.fileno(), fcntl.LOCK_UN)
+        return self._parse_ledger(content)
+
+    def _consume_ledger(self, count: int) -> int:
+        """Atomically reserve calls in the shared ledger."""
+        assert self._ledger_path is not None
+        self._ledger_path.parent.mkdir(parents=True, exist_ok=True)
+        with self._ledger_path.open("a+", encoding="utf-8") as ledger:
+            fcntl.flock(ledger.fileno(), fcntl.LOCK_EX)
+            ledger.seek(0)
+            calls_used = self._parse_ledger(ledger.read())
+            if calls_used + count > self._limit:
+                fcntl.flock(ledger.fileno(), fcntl.LOCK_UN)
+                raise ProviderError(
+                    ProviderErrorCode.LIVE_MODEL_BUDGET_EXHAUSTED,
+                    "live model call budget exhausted",
+                )
+            calls_used += count
+            ledger.seek(0)
+            ledger.truncate()
+            json.dump({"calls_used": calls_used}, ledger)
+            ledger.flush()
+            os.fsync(ledger.fileno())
+            fcntl.flock(ledger.fileno(), fcntl.LOCK_UN)
+        return calls_used
+
+    @staticmethod
+    def _parse_ledger(content: str) -> int:
+        """Validate a ledger payload without accepting arbitrary metadata."""
+        if not content:
+            return 0
+        try:
+            value = json.loads(content).get("calls_used", 0)
+        except (AttributeError, json.JSONDecodeError) as error:
+            raise ValueError("live model budget ledger is invalid") from error
+        if not isinstance(value, int) or value < 0:
+            raise ValueError("live model budget ledger is invalid")
+        return value

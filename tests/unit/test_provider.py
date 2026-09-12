@@ -1,5 +1,6 @@
 """Offline provider contracts and credit budget tests."""
 
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -76,6 +77,21 @@ def test_live_budget_preflight_rejects_insufficient_capacity() -> None:
 
     assert error.value.code is ProviderErrorCode.LIVE_MODEL_BUDGET_EXHAUSTED
     assert budget.snapshot().calls_used == 1
+
+
+def test_live_budget_can_share_a_call_ledger_between_process_boundaries(tmp_path: Path) -> None:
+    """Separate explicit live commands can share one counter without secrets."""
+    ledger = tmp_path / "budget.json"
+    first = LiveModelBudget(2, ledger_path=str(ledger))
+    second = LiveModelBudget(2, ledger_path=str(ledger))
+
+    first.consume()
+    second.consume()
+    with pytest.raises(ProviderError) as error:
+        first.consume()
+
+    assert error.value.code is ProviderErrorCode.LIVE_MODEL_BUDGET_EXHAUSTED
+    assert ledger.read_text(encoding="utf-8") == '{"calls_used": 2}'
 
 
 def test_live_provider_is_disabled_by_default() -> None:

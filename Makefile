@@ -126,4 +126,10 @@ release-check: check agent-check benchmark-offline observability-check evidence-
 	.venv/bin/python -m pytest tests/e2e
 	.venv/bin/python -m pytest tests/unit/test_state_machine.py --cov=packages.incident.state_machine --cov-report=term-missing --cov-fail-under=100
 
-release-check-live: release-check model-smoke-live agent-smoke-live benchmark-live
+release-check-live:
+	$(MAKE) release-check
+	budget_file=$$(mktemp -t agentic-sre-live-budget); \
+	trap 'rm -f "$$budget_file"' EXIT; \
+	SRE_LIVE_MODEL_BUDGET_FILE="$$budget_file" $(MAKE) model-smoke-live; \
+	SRE_LIVE_MODEL_BUDGET_FILE="$$budget_file" $(MAKE) agent-smoke-live; \
+	SRE_LIVE_MODEL_BUDGET_FILE="$$budget_file" $(MAKE) benchmark-live

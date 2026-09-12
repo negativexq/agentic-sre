@@ -9,8 +9,9 @@ from packages.provider.openai import live_model_config
 def main() -> None:
     """Make exactly one live structured request and print safe usage metadata."""
     config = live_model_config()
-    budget = LiveModelBudget(1)
-    provider = OpenAIProvider(budget=budget, config=config)
+    budget = LiveModelBudget.from_environment()
+    budget.ensure_capacity(1)
+    provider = OpenAIProvider(budget=budget, config=config, max_retry=0)
     response = provider.complete(
         ModelRequest(
             run_id=uuid4(),

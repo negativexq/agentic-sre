@@ -36,7 +36,7 @@ benchmark-harness-check:
 	kubectl port-forward -n sre-demo svc/order-service 18000:8000 >/tmp/agentic-sre-order-forward.log 2>&1 & order_pid=$$!; \
 	kubectl port-forward -n sre-demo svc/payment-service 18001:8000 >/tmp/agentic-sre-payment-forward.log 2>&1 & payment_pid=$$!; \
 	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" "$$order_pid" "$$payment_pid" 2>/dev/null || true' EXIT; \
-	sleep 3; .venv/bin/python scripts/benchmark_harness_check.py
+	sleep 10; .venv/bin/python scripts/benchmark_harness_check.py
 
 model-smoke-live:
 	test -n "$$OPENAI_API_KEY"

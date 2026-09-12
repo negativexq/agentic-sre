@@ -5,7 +5,7 @@ Revises: 0002_workload_tables
 """
 
 from alembic import op
-from sqlalchemy import JSON, Column, DateTime, String, Uuid
+from sqlalchemy import JSON, Column, DateTime, String, Uuid, inspect
 
 revision = "0003_change_records"
 down_revision = "0002_workload_tables"
@@ -15,6 +15,8 @@ depends_on = None
 
 def upgrade() -> None:
     """Create the change journal used by deterministic harnesses and readers."""
+    if "change_records" in inspect(op.get_bind()).get_table_names():
+        return
     op.create_table(
         "change_records",
         Column("change_id", Uuid(), primary_key=True),
@@ -31,4 +33,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Drop the change journal."""
-    op.drop_table("change_records")
+    if "change_records" in inspect(op.get_bind()).get_table_names():
+        op.drop_table("change_records")

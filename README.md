@@ -55,12 +55,12 @@ Agentic reasoning is intentionally **not enabled** in `v0.1.1`. This repository
 currently has:
 
 ```text
-LLM calls                  0
-Agent framework imports    0
-MCP / A2A                  absent
-Autonomous remediation     absent
-Kubernetes write verbs     0
-Arbitrary shell API        absent
+Default/CI live API calls  0
+Agent framework imports   0
+MCP / A2A                 absent
+Autonomous remediation    absent
+Kubernetes write verbs    0
+Arbitrary shell API       absent
 ```
 
 The project defines future-facing contracts, but no contract authorizes model
@@ -224,7 +224,8 @@ make model-smoke-live  # explicit provider smoke, exactly 1 live call
 ```
 
 See [ADR-003](docs/adr/ADR-003-credit-aware-single-agent-baseline.md) for the
-credit and safety boundary.
+credit and safety boundary. The current offline benchmark is documented in
+[docs/benchmarks/v0.2.0-single-agent.md](docs/benchmarks/v0.2.0-single-agent.md).
 
 ## Development conventions
 

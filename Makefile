@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test check agent-check agent-smoke model-smoke-live cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check
+.PHONY: install lint typecheck test check agent-check agent-smoke benchmark-offline model-smoke-live cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check
 
 install:
 	python3.12 -m venv .venv
@@ -22,6 +22,9 @@ agent-check:
 
 agent-smoke: agent-check
 	@echo "fake-provider agent smoke: PASS (live API calls: 0)"
+
+benchmark-offline:
+	.venv/bin/python scripts/offline_benchmark.py
 
 model-smoke-live:
 	test -n "$$OPENAI_API_KEY"

@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test check cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check
+.PHONY: install lint typecheck test check agent-check agent-smoke model-smoke-live cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check
 
 install:
 	python3.12 -m venv .venv
@@ -16,6 +16,16 @@ test:
 	.venv/bin/python -m pytest
 
 check: lint typecheck test
+
+agent-check:
+	.venv/bin/python -m pytest tests/unit/test_provider.py tests/integration/test_investigation_runtime.py
+
+agent-smoke: agent-check
+	@echo "fake-provider agent smoke: PASS (live API calls: 0)"
+
+model-smoke-live:
+	test -n "$$OPENAI_API_KEY"
+	SRE_LIVE_MODEL_ENABLED=true .venv/bin/python scripts/model_smoke_live.py
 
 cluster-up:
 	kind create cluster --config infra/kubernetes/kind-config.yaml

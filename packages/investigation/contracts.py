@@ -1,0 +1,128 @@
+"""Strict structured decisions and run records for the investigator."""
+
+from enum import StrEnum
+from typing import Any
+from uuid import UUID, uuid4
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from packages.contracts import Evidence
+
+
+class InvestigationModel(BaseModel):
+    """Shared strict boundary for model-generated and runtime contracts."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+
+class DecisionType(StrEnum):
+    """Only decisions the single-agent runtime can execute."""
+
+    CALL_TOOLS = "CALL_TOOLS"
+    SUBMIT_HYPOTHESIS = "SUBMIT_HYPOTHESIS"
+    STOP = "STOP"
+
+
+class HypothesisMechanism(StrEnum):
+    """Controlled mechanism vocabulary for the baseline RCA output."""
+
+    SERVICE_ERROR_REGRESSION = "service_error_regression"
+    SERVICE_LATENCY_REGRESSION = "service_latency_regression"
+    DEPENDENCY_FAILURE = "dependency_failure"
+    DEPENDENCY_LATENCY = "dependency_latency"
+    DATABASE_CONNECTION_PRESSURE = "database_connection_pressure"
+    DATABASE_QUERY_LATENCY = "database_query_latency"
+    KAFKA_CONSUMER_LAG = "kafka_consumer_lag"
+    CONSUMER_FAILURE = "consumer_failure"
+    POD_CRASH = "pod_crash"
+    RESOURCE_PRESSURE = "resource_pressure"
+    DEPLOYMENT_REGRESSION = "deployment_regression"
+    CONFIGURATION_REGRESSION = "configuration_regression"
+    UNKNOWN = "unknown"
+
+
+class ToolRequestSpec(InvestigationModel):
+    """One named read-only tool request in a model decision."""
+
+    tool: str = Field(min_length=1, max_length=100)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+class HypothesisSubmission(InvestigationModel):
+    """Model hypothesis that must cite system-generated evidence IDs."""
+
+    affected_component: str = Field(min_length=1, max_length=255)
+    mechanism: HypothesisMechanism
+    suspected_trigger: str = Field(min_length=1, max_length=1_000)
+    evidence_ids: list[UUID] = Field(min_length=1, max_length=12)
+
+
+class InvestigationDecision(InvestigationModel):
+    """Validated model output with mutually exclusive decision payloads."""
+
+    decision: DecisionType
+    requests: list[ToolRequestSpec] = Field(default_factory=list, max_length=4)
+    hypothesis: HypothesisSubmission | None = None
+
+    @model_validator(mode="after")
+    def validate_payload(self) -> "InvestigationDecision":
+        """Ensure each decision carries exactly the payload it is allowed to use."""
+        if self.decision is DecisionType.CALL_TOOLS and not self.requests:
+            raise ValueError("CALL_TOOLS requires at least one tool request")
+        if self.decision is not DecisionType.CALL_TOOLS and self.requests:
+            raise ValueError("only CALL_TOOLS may contain tool requests")
+        if self.decision is DecisionType.SUBMIT_HYPOTHESIS and self.hypothesis is None:
+            raise ValueError("SUBMIT_HYPOTHESIS requires a hypothesis")
+        if self.decision is not DecisionType.SUBMIT_HYPOTHESIS and self.hypothesis is not None:
+            raise ValueError("only SUBMIT_HYPOTHESIS may contain a hypothesis")
+        return self
+
+
+class InvestigationLimits(InvestigationModel):
+    """Hard local limits independent of provider behavior."""
+
+    max_model_calls: int = Field(default=3, gt=0, le=3)
+    max_tool_calls: int = Field(default=8, gt=0, le=8)
+    max_tools_per_turn: int = Field(default=4, gt=0, le=4)
+    max_agent_turns: int = Field(default=3, gt=0, le=3)
+    max_wall_time_seconds: int = Field(default=60, gt=0, le=300)
+
+
+class TerminationReason(StrEnum):
+    """Stable reason a run stopped producing decisions."""
+
+    HYPOTHESIS_SUBMITTED = "HYPOTHESIS_SUBMITTED"
+    AGENT_STOPPED = "AGENT_STOPPED"
+    MODEL_CALL_LIMIT = "MODEL_CALL_LIMIT"
+    TOOL_CALL_LIMIT = "TOOL_CALL_LIMIT"
+    INVALID_DECISION = "INVALID_DECISION"
+    PROVIDER_ERROR = "PROVIDER_ERROR"
+    WALL_TIME_LIMIT = "WALL_TIME_LIMIT"
+
+
+class InvestigationUsage(InvestigationModel):
+    """Usage accounting attached to every run."""
+
+    model_calls: int = Field(ge=0)
+    tool_calls: int = Field(ge=0)
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+    latency_ms: int = Field(ge=0)
+    prompt_hash: str = Field(min_length=1)
+    provider: str = Field(min_length=1)
+    model: str = Field(min_length=1)
+    reasoning_effort: str = Field(min_length=1)
+    estimated_api_calls: int = Field(ge=0)
+    actual_api_calls: int = Field(ge=0)
+
+
+class InvestigationResult(InvestigationModel):
+    """Complete runtime result; evidence is always runtime-owned."""
+
+    run_id: UUID = Field(default_factory=uuid4)
+    incident_id: UUID
+    hypothesis: HypothesisSubmission | None = None
+    evidence: list[Evidence] = Field(default_factory=list, max_length=12)
+    usage: InvestigationUsage
+    termination_reason: TerminationReason
+    error_code: str | None = None

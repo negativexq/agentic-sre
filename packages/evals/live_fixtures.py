@@ -298,15 +298,34 @@ class LiveBenchmarkEnvironment:
         self._wait_rollout(deployment)
         self._original_env.pop(deployment, None)
 
+    @staticmethod
+    def _rollout_is_complete(status: Any, pods: list[Any], desired_replicas: int) -> bool:
+        """Require the new replica set to be the only live pod set."""
+        if (status.updated_replicas or 0) != desired_replicas:
+            return False
+        if (status.available_replicas or 0) != desired_replicas:
+            return False
+        if (status.ready_replicas or 0) != desired_replicas:
+            return False
+        return len(pods) == desired_replicas and all(
+            pod.metadata.deletion_timestamp is None for pod in pods
+        )
+
     def _wait_rollout(self, deployment: str, timeout_seconds: float = 120) -> None:
         kubernetes = importlib.import_module("kubernetes")
         kubernetes_config = importlib.import_module("kubernetes.config")
         kubernetes_config.load_kube_config()
         api = kubernetes.client.AppsV1Api()
+        core = kubernetes.client.CoreV1Api()
         deadline = time.monotonic() + timeout_seconds
         while time.monotonic() < deadline:
+            deployment_obj = api.read_namespaced_deployment(deployment, self.namespace)
+            desired_replicas = deployment_obj.spec.replicas or 1
             status = api.read_namespaced_deployment_status(deployment, self.namespace).status
-            if (status.available_replicas or 0) >= 1 and (status.updated_replicas or 0) >= 1:
+            pods = core.list_namespaced_pod(
+                self.namespace, label_selector=f"app={deployment}"
+            ).items
+            if self._rollout_is_complete(status, pods, desired_replicas):
                 return
             time.sleep(2)
         raise TimeoutError(f"deployment rollout timed out: {deployment}")

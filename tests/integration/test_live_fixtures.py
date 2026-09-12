@@ -1,6 +1,7 @@
 """Offline lifecycle and registry tests for the real benchmark harness."""
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,7 +15,11 @@ from packages.contracts import (
     IncidentStatus,
 )
 from packages.evals import FIXTURE_BY_NAME, FROZEN_DATASET, FixtureLifecycle
-from packages.evals.live_fixtures import FixtureDefinition, fixture_registry_is_complete
+from packages.evals.live_fixtures import (
+    FixtureDefinition,
+    LiveBenchmarkEnvironment,
+    fixture_registry_is_complete,
+)
 
 NOW = datetime(2026, 9, 12, 12, 0, tzinfo=UTC)
 
@@ -105,3 +110,14 @@ def test_fixture_lifecycle_records_real_incident_identity_without_truth_fields()
     assert trial.alert_name == "OrderWorkerLagHigh"
     assert scenario.mechanism.value not in trial.model_dump_json()
     assert scenario.suspected_trigger not in trial.model_dump_json()
+
+
+def test_rollout_wait_requires_old_pods_to_be_gone() -> None:
+    status = SimpleNamespace(updated_replicas=1, available_replicas=1, ready_replicas=1)
+    current = SimpleNamespace(metadata=SimpleNamespace(deletion_timestamp=None))
+    terminating_old = SimpleNamespace(metadata=SimpleNamespace(deletion_timestamp=NOW))
+
+    assert not LiveBenchmarkEnvironment._rollout_is_complete(
+        status, [current, terminating_old], desired_replicas=1
+    )
+    assert LiveBenchmarkEnvironment._rollout_is_complete(status, [current], desired_replicas=1)

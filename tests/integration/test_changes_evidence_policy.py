@@ -9,6 +9,7 @@ from packages.changes.service import ChangeService
 from packages.contracts import (
     ActionRequest,
     ActionType,
+    ChangeScope,
     ChangeType,
     Evidence,
     EvidenceSourceType,
@@ -17,7 +18,12 @@ from packages.contracts import (
 )
 from packages.evidence.service import CrossIncidentEvidenceError, EvidenceService
 from packages.policy.evaluator import PolicyConfig, PolicyEvaluator
-from packages.tools.live_backends import KubernetesChangeBackend
+from packages.tools.live_backends import (
+    CHANGE_LOOKBACK_SECONDS,
+    MAX_CHANGE_QUERY_WINDOW_SECONDS,
+    ControlPlaneChangeReader,
+    KubernetesChangeBackend,
+)
 
 NOW = datetime(2026, 9, 12, 12, 0, tzinfo=UTC)
 
@@ -98,6 +104,138 @@ def test_change_query_is_bounded_to_incident_window_and_excludes_later_changes()
         result["__effective_time_window"]["starts_at"]
         == (NOW + timedelta(minutes=15) - timedelta(seconds=900)).isoformat()
     )
+
+
+def test_change_reader_does_not_expand_already_expanded_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The transport reader validates and serializes the backend-owned window once."""
+    requested: dict[str, str] = {}
+
+    class Response:
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self, _limit: int) -> bytes:
+            return b"[]"
+
+    def fake_urlopen(request: object, timeout: float) -> Response:
+        assert timeout == 5.0
+        url = str(request.full_url)  # type: ignore[attr-defined]
+        from urllib.parse import parse_qs, urlparse
+
+        requested.update({key: values[0] for key, values in parse_qs(urlparse(url).query).items()})
+        return Response()
+
+    monkeypatch.setattr("packages.tools.live_backends.urlopen", fake_urlopen)
+    incident_start = NOW
+    incident_end = NOW + timedelta(seconds=340)
+    expanded_start = incident_start - timedelta(seconds=CHANGE_LOOKBACK_SECONDS)
+    reader = ControlPlaneChangeReader("http://control-plane/api/v1/changes")
+
+    assert (
+        reader.query(
+            "recent_deployment_changes",
+            {
+                "deployment": "order-worker",
+                "observation_window": {
+                    "starts_at": expanded_start.isoformat(),
+                    "ends_at": incident_end.isoformat(),
+                },
+            },
+        )
+        == []
+    )
+    assert requested["starts_at"] == expanded_start.isoformat()
+    assert requested["ends_at"] == incident_end.isoformat()
+
+
+def test_change_window_boundaries_are_expanded_once() -> None:
+    """Change queries accept incident-plus-lookback, but reject larger windows."""
+    from packages.tools.live_backends import _change_time_window, _parse_observation_window
+
+    normal_start = NOW
+    normal_end = NOW + timedelta(seconds=340)
+    _, _, normal = _change_time_window(
+        {
+            "observation_window": {
+                "starts_at": normal_start.isoformat(),
+                "ends_at": normal_end.isoformat(),
+            }
+        }
+    )
+    parsed_start, parsed_end, _ = _parse_observation_window(
+        {"observation_window": normal}, maximum_seconds=MAX_CHANGE_QUERY_WINDOW_SECONDS
+    )
+    assert parsed_end - parsed_start == timedelta(seconds=340 + CHANGE_LOOKBACK_SECONDS)
+
+    max_end = NOW + timedelta(seconds=900)
+    _, _, maximum = _change_time_window(
+        {
+            "observation_window": {
+                "starts_at": NOW.isoformat(),
+                "ends_at": max_end.isoformat(),
+            }
+        }
+    )
+    parsed_start, parsed_end, _ = _parse_observation_window(
+        {"observation_window": maximum}, maximum_seconds=MAX_CHANGE_QUERY_WINDOW_SECONDS
+    )
+    assert parsed_end - parsed_start == timedelta(seconds=MAX_CHANGE_QUERY_WINDOW_SECONDS)
+
+    with pytest.raises(ValueError, match="observation_window"):
+        _parse_observation_window(
+            {
+                "observation_window": {
+                    "starts_at": NOW.isoformat(),
+                    "ends_at": (
+                        NOW + timedelta(seconds=MAX_CHANGE_QUERY_WINDOW_SECONDS + 1)
+                    ).isoformat(),
+                }
+            },
+            maximum_seconds=MAX_CHANGE_QUERY_WINDOW_SECONDS,
+        )
+
+
+def test_change_reader_selects_factual_scope_per_operation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Deployment and configuration readers cannot silently return the same facts."""
+    requested_scopes: list[str] = []
+
+    class Response:
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self, _limit: int) -> bytes:
+            return b"[]"
+
+    def fake_urlopen(request: object, timeout: float) -> Response:
+        assert timeout == 5.0
+        from urllib.parse import parse_qs, urlparse
+
+        query = parse_qs(urlparse(str(request.full_url)).query)  # type: ignore[attr-defined]
+        requested_scopes.append(query["scope"][0])
+        return Response()
+
+    monkeypatch.setattr("packages.tools.live_backends.urlopen", fake_urlopen)
+    parameters = {
+        "deployment": "order-worker",
+        "observation_window": {
+            "starts_at": NOW.isoformat(),
+            "ends_at": (NOW + timedelta(minutes=5)).isoformat(),
+        },
+    }
+    reader = ControlPlaneChangeReader("http://control-plane/api/v1/changes")
+
+    reader.query("recent_deployment_changes", parameters)
+    reader.query("recent_configuration_changes", parameters)
+
+    assert requested_scopes == [ChangeScope.DEPLOYMENT.value, ChangeScope.CONFIGURATION.value]
 
 
 def test_evidence_rejects_cross_incident_tool_reference() -> None:

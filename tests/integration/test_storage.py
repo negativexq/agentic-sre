@@ -3,6 +3,7 @@
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 from alembic import command
@@ -14,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from packages.contracts import (
     ChangeRecord,
+    ChangeScope,
     ChangeType,
     Incident,
     IncidentSeverity,
@@ -132,6 +134,38 @@ def test_change_records_survive_session_restart_and_window_query(session: Sessio
         ends_at=NOW,
     )
     assert loaded == [record]
+
+
+def test_change_record_queries_filter_factual_scope(session: Session) -> None:
+    """Operation-specific readers can distinguish deployment and configuration facts."""
+    repository = ChangeRecordRepository(session)
+    deployment = ChangeRecord(
+        timestamp=NOW,
+        resource_type="Deployment",
+        resource_name="order-worker",
+        change_type=ChangeType.ROLLOUT,
+        scope=ChangeScope.DEPLOYMENT,
+        before={"revision": "a"},
+        after={"revision": "b"},
+        revision="b",
+        source="deterministic-harness",
+    )
+    configuration = deployment.model_copy(
+        update={
+            "change_id": UUID(int=deployment.change_id.int + 1),
+            "resource_type": "Configuration",
+            "scope": ChangeScope.CONFIGURATION,
+        }
+    )
+    repository.append(deployment)
+    repository.append(configuration)
+
+    assert repository.between(
+        resource_name="order-worker", starts_at=NOW, ends_at=NOW, scope=ChangeScope.DEPLOYMENT
+    ) == [deployment]
+    assert repository.between(
+        resource_name="order-worker", starts_at=NOW, ends_at=NOW, scope=ChangeScope.CONFIGURATION
+    ) == [configuration]
 
 
 def test_alembic_migration_up_and_down(tmp_path: Path) -> None:

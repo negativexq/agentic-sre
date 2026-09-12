@@ -15,8 +15,12 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from packages.contracts import ChangeRecord
+from packages.contracts import ChangeRecord, ChangeScope
 from packages.tools.contracts import BackendProtocolError, ToolErrorCode
+
+MAX_INCIDENT_WINDOW_SECONDS = 900
+CHANGE_LOOKBACK_SECONDS = 900
+MAX_CHANGE_QUERY_WINDOW_SECONDS = 1_800
 
 
 class LiveBackend:
@@ -93,7 +97,7 @@ class LiveBackend:
 
 
 def _parse_observation_window(
-    parameters: dict[str, Any], *, maximum_seconds: int = 900
+    parameters: dict[str, Any], *, maximum_seconds: int = MAX_INCIDENT_WINDOW_SECONDS
 ) -> tuple[datetime, datetime, dict[str, str]]:
     supplied = parameters.get("observation_window")
     if (
@@ -140,7 +144,7 @@ def _tempo_time_params(parameters: dict[str, Any]) -> tuple[dict[str, str], dict
 
 
 def _change_time_window(
-    parameters: dict[str, Any], *, lookback_seconds: int = 900
+    parameters: dict[str, Any], *, lookback_seconds: int = CHANGE_LOOKBACK_SECONDS
 ) -> tuple[datetime, datetime, dict[str, str]]:
     """Expand the incident window by one bounded lookback for change evidence."""
     start, end, _ = _parse_observation_window(parameters)
@@ -474,6 +478,7 @@ class KubernetesChangeBackend:
                         "resource_type": record.resource_type,
                         "resource_name": record.resource_name,
                         "change_type": record.change_type.value,
+                        "scope": record.scope.value,
                         "timestamp": record.timestamp.isoformat(),
                         "before": record.before,
                         "after": record.after,
@@ -521,12 +526,22 @@ class ControlPlaneChangeReader:
         resource_name = parameters.get("deployment")
         if not isinstance(resource_name, str) or not resource_name:
             raise ValueError("deployment is required")
-        _, _, window = _change_time_window(parameters)
+        # The backend owns the lookback policy and passes the expanded window
+        # to this reader. The reader only validates and serializes it.
+        _, _, window = _parse_observation_window(
+            parameters, maximum_seconds=MAX_CHANGE_QUERY_WINDOW_SECONDS
+        )
+        scope = (
+            ChangeScope.DEPLOYMENT
+            if operation == "recent_deployment_changes"
+            else ChangeScope.CONFIGURATION
+        )
         query = urlencode(
             {
                 "resource_name": resource_name,
                 "starts_at": window["starts_at"],
                 "ends_at": window["ends_at"],
+                "scope": scope.value,
             }
         )
         request = Request(f"{self._endpoint}?{query}", method="GET")

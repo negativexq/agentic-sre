@@ -21,6 +21,7 @@ from packages.contracts import (
     Alert,
     AlertmanagerWebhook,
     ChangeRecord,
+    ChangeScope,
     Evidence,
     Incident,
     IncidentEvent,
@@ -158,6 +159,7 @@ def create_app(session_factory: sessionmaker[Session] | None = None) -> FastAPI:
         resource_name: str,
         starts_at: datetime,
         ends_at: datetime,
+        scope: ChangeScope | None = None,
         session: Session = Depends(get_session),  # noqa: B008
     ) -> list[ChangeRecord]:
         """Read bounded historical change facts for investigation backends."""
@@ -165,6 +167,7 @@ def create_app(session_factory: sessionmaker[Session] | None = None) -> FastAPI:
             resource_name=resource_name,
             starts_at=starts_at,
             ends_at=ends_at,
+            scope=scope,
         )
 
     @app.post("/api/v1/changes", response_model=ChangeRecord)

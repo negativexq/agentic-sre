@@ -15,6 +15,7 @@ from packages.contracts import (
     AlertSource,
     AlertStatus,
     ChangeRecord,
+    ChangeScope,
     ChangeType,
     Evidence,
     EvidenceSourceType,
@@ -236,6 +237,7 @@ class ChangeRecordRepository:
                 resource_type=record.resource_type,
                 resource_name=record.resource_name,
                 change_type=record.change_type.value,
+                scope=record.scope.value,
                 before=record.before,
                 after=record.after,
                 revision=record.revision,
@@ -251,18 +253,22 @@ class ChangeRecordRepository:
         resource_name: str,
         starts_at: datetime,
         ends_at: datetime,
+        scope: ChangeScope | None = None,
         limit: int = 100,
     ) -> list[ChangeRecord]:
         """Read only records within the bounded incident observation window."""
         if limit < 1:
             raise ValueError("limit must be positive")
+        filters = [
+            ChangeRecordRow.resource_name == resource_name,
+            ChangeRecordRow.timestamp >= starts_at,
+            ChangeRecordRow.timestamp <= ends_at,
+        ]
+        if scope is not None:
+            filters.append(ChangeRecordRow.scope == scope.value)
         rows = self._session.scalars(
             select(ChangeRecordRow)
-            .where(
-                ChangeRecordRow.resource_name == resource_name,
-                ChangeRecordRow.timestamp >= starts_at,
-                ChangeRecordRow.timestamp <= ends_at,
-            )
+            .where(*filters)
             .order_by(desc(ChangeRecordRow.timestamp), ChangeRecordRow.change_id)
             .limit(limit)
         ).all()
@@ -273,6 +279,7 @@ class ChangeRecordRepository:
                 resource_type=row.resource_type,
                 resource_name=row.resource_name,
                 change_type=ChangeType(row.change_type),
+                scope=ChangeScope(row.scope),
                 before=row.before,
                 after=row.after,
                 revision=row.revision,

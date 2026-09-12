@@ -103,6 +103,7 @@ class ChangeRecordRow(Base):
     resource_type: Mapped[str] = mapped_column(String(255), nullable=False)
     resource_name: Mapped[str] = mapped_column(String(255), nullable=False)
     change_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    scope: Mapped[str] = mapped_column(String(64), nullable=False, default="DEPLOYMENT")
     before: Mapped[dict[str, Any]] = mapped_column("before", JSON, nullable=False)
     after: Mapped[dict[str, Any]] = mapped_column("after", JSON, nullable=False)
     revision: Mapped[str] = mapped_column(String(255), nullable=False)

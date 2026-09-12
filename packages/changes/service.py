@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterable
 from datetime import datetime
 from typing import Any
 
-from packages.contracts import ChangeRecord, ChangeType
+from packages.contracts import ChangeRecord, ChangeScope, ChangeType
 
 
 class ChangeService:
@@ -21,6 +21,7 @@ class ChangeService:
         resource_type: str,
         resource_name: str,
         change_type: ChangeType,
+        scope: ChangeScope = ChangeScope.DEPLOYMENT,
         before: dict[str, Any],
         after: dict[str, Any],
         revision: str,
@@ -32,6 +33,7 @@ class ChangeService:
             resource_type=resource_type,
             resource_name=resource_name,
             change_type=change_type,
+            scope=scope,
             before=before,
             after=after,
             revision=revision,

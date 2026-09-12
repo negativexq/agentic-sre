@@ -19,6 +19,13 @@ class ChangeType(StrEnum):
     SCALED = "SCALED"
 
 
+class ChangeScope(StrEnum):
+    """Factual resource domain represented by a change record."""
+
+    DEPLOYMENT = "DEPLOYMENT"
+    CONFIGURATION = "CONFIGURATION"
+
+
 class ChangeRecord(ContractModel):
     """Captured fact about a resource change; no inferred cause."""
 
@@ -27,6 +34,7 @@ class ChangeRecord(ContractModel):
     resource_type: str = Field(min_length=1)
     resource_name: str = Field(min_length=1)
     change_type: ChangeType
+    scope: ChangeScope = ChangeScope.DEPLOYMENT
     before: dict[str, Any]
     after: dict[str, Any]
     revision: str = Field(min_length=1)

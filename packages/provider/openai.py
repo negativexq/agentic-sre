@@ -132,7 +132,9 @@ def _response_metadata(raw: Any) -> ResponseEnvelopeMetadata:
     output_texts = [
         _field(item, "text")
         for item in content_items
-        if _field(item, "type") == "output_text" and isinstance(_field(item, "text"), str)
+        if _field(item, "type") == "output_text"
+        and isinstance(_field(item, "text"), str)
+        and _field(item, "text") != ""
     ]
     refusals = [item for item in content_items if _field(item, "type") == "refusal"]
     error = _field(raw, "error")
@@ -214,12 +216,6 @@ def _extract_structured_text(raw: Any) -> tuple[str, ResponseEnvelopeMetadata]:
             "provider response contained no assistant message",
             metadata=metadata,
         )
-    if metadata.message_count > 1:
-        raise ProviderError(
-            ProviderErrorCode.MULTIPLE_OUTPUT_MESSAGES,
-            "provider response contained multiple assistant messages",
-            metadata=metadata,
-        )
     if metadata.refusal_item_count > 0:
         raise ProviderError(
             ProviderErrorCode.OUTPUT_REFUSAL,
@@ -234,8 +230,8 @@ def _extract_structured_text(raw: Any) -> tuple[str, ResponseEnvelopeMetadata]:
         )
     if metadata.output_text_item_count > 1:
         raise ProviderError(
-            ProviderErrorCode.MULTIPLE_OUTPUT_TEXT_ITEMS,
-            "assistant message contained multiple output text items",
+            ProviderErrorCode.MULTIPLE_OUTPUT_TEXT_PAYLOADS,
+            "assistant messages contained multiple output text payloads",
             metadata=metadata,
         )
     for item in output:

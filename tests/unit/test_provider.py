@@ -222,8 +222,8 @@ def test_responses_parser_uses_one_output_segment_not_aggregate_text() -> None:
     assert result.structured_output == {"decision": "STOP"}
 
 
-def test_responses_parser_rejects_multiple_structured_segments() -> None:
-    """Multiple output segments fail closed instead of being concatenated."""
+def test_responses_parser_rejects_multiple_structured_payloads() -> None:
+    """Multiple output payloads fail closed instead of being concatenated."""
     response = SimpleNamespace(
         output_text='{"decision":"STOP"}{"decision":"STOP"}',
         output=[
@@ -251,7 +251,7 @@ def test_responses_parser_rejects_multiple_structured_segments() -> None:
     with pytest.raises(ProviderError) as error:
         provider.complete(request())
 
-    assert error.value.code is ProviderErrorCode.MULTIPLE_OUTPUT_TEXT_ITEMS
+    assert error.value.code is ProviderErrorCode.MULTIPLE_OUTPUT_TEXT_PAYLOADS
 
 
 def _envelope(
@@ -320,6 +320,34 @@ def _normalize_fixture(raw: SimpleNamespace, model_request: ModelRequest | None 
             None,
         ),
         (
+            _envelope(
+                [
+                    SimpleNamespace(type="reasoning", summary=[]),
+                    _message(),
+                    _message(_output_text('{"decision":"STOP"}')),
+                ]
+            ),
+            None,
+        ),
+        (
+            _envelope(
+                [
+                    _message(_output_text('{"decision":"STOP"}')),
+                    _message(),
+                ]
+            ),
+            None,
+        ),
+        (
+            _envelope(
+                [
+                    SimpleNamespace(type="web_search_call", status="completed"),
+                    _message(_output_text('{"decision":"STOP"}')),
+                ]
+            ),
+            None,
+        ),
+        (
             _envelope([_message(SimpleNamespace(type="refusal", refusal="not available"))]),
             ProviderErrorCode.OUTPUT_REFUSAL,
         ),
@@ -336,7 +364,7 @@ def _normalize_fixture(raw: SimpleNamespace, model_request: ModelRequest | None 
                     )
                 ]
             ),
-            ProviderErrorCode.MULTIPLE_OUTPUT_TEXT_ITEMS,
+            ProviderErrorCode.MULTIPLE_OUTPUT_TEXT_PAYLOADS,
         ),
         (
             _envelope(
@@ -345,7 +373,22 @@ def _normalize_fixture(raw: SimpleNamespace, model_request: ModelRequest | None 
                     _message(_output_text('{"decision":"STOP"}')),
                 ]
             ),
-            ProviderErrorCode.MULTIPLE_OUTPUT_MESSAGES,
+            ProviderErrorCode.MULTIPLE_OUTPUT_TEXT_PAYLOADS,
+        ),
+        (
+            _envelope([_message(), _message()]),
+            ProviderErrorCode.OUTPUT_TEXT_MISSING,
+        ),
+        (
+            _envelope(
+                [
+                    _message(
+                        _output_text('{"decision":"STOP"}'),
+                        SimpleNamespace(type="refusal", refusal="not available"),
+                    )
+                ]
+            ),
+            ProviderErrorCode.OUTPUT_REFUSAL,
         ),
         (
             _envelope([_message(_output_text('{"decision":"STOP"}{"decision":"STOP"}'))]),

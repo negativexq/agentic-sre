@@ -1,5 +1,7 @@
 """Telemetry correlation tests across service and Kafka boundaries."""
 
+from pathlib import Path
+
 from prometheus_client import CollectorRegistry, generate_latest
 
 from packages.telemetry import TelemetryContext, WorkloadMetrics, create_runtime, structured_log
@@ -50,3 +52,14 @@ def test_kafka_lag_is_a_current_gauge_not_an_accumulating_sample() -> None:
 
     output = generate_latest(registry).decode()
     assert 'kafka_consumer_lag{service="order-worker",topic="orders.created"} 4.0' in output
+
+
+def test_worker_failure_alert_uses_cumulative_error_signal() -> None:
+    rules = Path("infra/observability/prometheus-rules.yml").read_text(encoding="utf-8")
+    manifest = Path("infra/kubernetes/observability.yaml").read_text(encoding="utf-8")
+    expression = 'sum(kafka_consumer_errors_total{service="order-worker"}) > 0'
+    old_expression = 'sum(rate(kafka_consumer_errors_total{service="order-worker"}[30s]))'
+    assert expression in rules
+    assert expression in manifest
+    assert old_expression not in rules
+    assert old_expression not in manifest

@@ -219,7 +219,7 @@ data:
             labels: {severity: critical, namespace: sre-demo, service: order-worker}
             annotations: {summary: Order worker consumer lag is high}
           - alert: OrderWorkerConsumerErrorsHigh
-            expr: sum(rate(kafka_consumer_errors_total{service="order-worker"}[30s])) > 0
+            expr: sum(kafka_consumer_errors_total{service="order-worker"}) > 0
             for: 15s
             labels: {severity: critical, namespace: sre-demo, service: order-worker}
             annotations: {summary: Order worker consumer processing errors are high}

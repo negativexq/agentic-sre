@@ -498,6 +498,7 @@ def test_responses_request_exposes_only_three_decision_functions() -> None:
         "decision": "STOP",
         "requests": [],
         "hypothesis": None,
+        "stop_reason": "insufficient_evidence",
     }
     assert captured["parallel_tool_calls"] is False
     assert captured["tool_choice"] == "required"
@@ -531,6 +532,7 @@ def test_decision_function_accepts_non_decision_output_items(output: list[object
         "decision": "STOP",
         "requests": [],
         "hypothesis": None,
+        "stop_reason": "insufficient_evidence",
     }
     assert response.response_metadata is not None  # type: ignore[attr-defined]
     assert response.response_metadata.decision_function_call_count == 1  # type: ignore[attr-defined]

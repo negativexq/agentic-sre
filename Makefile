@@ -83,7 +83,8 @@ deploy: build-images
 	kubectl apply -f infra/kubernetes/workload.yaml
 	kubectl apply -f infra/kubernetes/control-plane.yaml
 	kubectl apply -f infra/kubernetes/dependencies.yaml
-	kubectl rollout status deployment/kafka -n sre-demo --timeout=120s
+	kubectl rollout status deployment/kafka -n sre-demo --timeout=300s
+	ready=no; for attempt in $$(seq 1 60); do if kubectl exec -n sre-demo deployment/kafka -- /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092 >/dev/null 2>&1; then ready=yes; break; fi; sleep 2; done; test "$$ready" = yes
 	kubectl exec -n sre-demo deployment/kafka -- /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --topic orders.created --bootstrap-server localhost:9092
 	kubectl rollout restart deployment/order-service deployment/payment-service deployment/order-worker deployment/control-plane -n sre-demo
 	kubectl rollout restart deployment/prometheus -n observability

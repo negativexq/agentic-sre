@@ -1,5 +1,7 @@
 # Agentic SRE
 
+Release: `v0.1.1 — Live Observability Hardening`
+
 Agentic SRE is being built in deliberate milestones. Release `v0.1.1` is the
 live observability hardening release on top of the `v0.1.0` deterministic SRE
 foundation.

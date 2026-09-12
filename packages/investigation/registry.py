@@ -5,7 +5,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from packages.contracts import EvidenceSourceType
-from packages.tools import ToolRequest
+from packages.tools import LokiBackend, PrometheusBackend, TempoBackend, ToolRequest
 from packages.tools.executor import Tool
 
 
@@ -59,3 +59,45 @@ class ReadOnlyToolRegistry:
     def names(self) -> tuple[str, ...]:
         """Return stable tool names for compact context construction."""
         return tuple(sorted(self._tools))
+
+
+def live_observability_registry(
+    prometheus_url: str,
+    loki_url: str,
+    tempo_url: str,
+) -> ReadOnlyToolRegistry:
+    """Build the named live registry from bounded backend adapters only."""
+    prometheus = PrometheusBackend(prometheus_url)
+    loki = LokiBackend(loki_url)
+    tempo = TempoBackend(tempo_url)
+    from packages.tools import logs_tool, metrics_tool, traces_tool
+
+    metrics = metrics_tool(prometheus.query)
+    logs = logs_tool(loki.query)
+    traces = traces_tool(tempo.query)
+    return ReadOnlyToolRegistry(
+        (
+            RegisteredTool(
+                "service_error_rate", "1", "service_error_rate", EvidenceSourceType.METRIC, metrics
+            ),
+            RegisteredTool(
+                "service_latency", "1", "service_latency", EvidenceSourceType.METRIC, metrics
+            ),
+            RegisteredTool(
+                "db_connection_pressure",
+                "1",
+                "db_connection_pressure",
+                EvidenceSourceType.METRIC,
+                metrics,
+            ),
+            RegisteredTool(
+                "kafka_consumer_lag", "1", "kafka_consumer_lag", EvidenceSourceType.METRIC, metrics
+            ),
+            RegisteredTool("service_logs", "1", "query_logs", EvidenceSourceType.LOG, logs),
+            RegisteredTool(
+                "service_error_logs", "1", "find_log_patterns", EvidenceSourceType.LOG, logs
+            ),
+            RegisteredTool("slow_traces", "1", "search_traces", EvidenceSourceType.TRACE, traces),
+            RegisteredTool("trace_detail", "1", "get_trace", EvidenceSourceType.TRACE, traces),
+        )
+    )

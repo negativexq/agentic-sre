@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test check agent-check agent-smoke benchmark-offline model-smoke-live cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check
+.PHONY: install lint typecheck test check agent-check agent-smoke benchmark-offline model-smoke-live agent-smoke-live benchmark-live cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check
 
 install:
 	python3.12 -m venv .venv
@@ -29,6 +29,25 @@ benchmark-offline:
 model-smoke-live:
 	test -n "$$OPENAI_API_KEY"
 	SRE_LIVE_MODEL_ENABLED=true .venv/bin/python scripts/model_smoke_live.py
+
+agent-smoke-live:
+	test -n "$$OPENAI_API_KEY"
+	kubectl port-forward -n observability svc/prometheus 19090:9090 >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \
+	kubectl port-forward -n observability svc/loki 19300:3100 >/tmp/agentic-sre-loki-forward.log 2>&1 & loki_pid=$$!; \
+	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
+	kubectl port-forward -n sre-demo svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
+	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" 2>/dev/null || true' EXIT; \
+	sleep 3; SRE_LIVE_MODEL_ENABLED=true .venv/bin/python scripts/live_agent_smoke.py
+
+benchmark-live:
+	test -n "$$OPENAI_API_KEY"
+	test -n "$$SRE_BENCHMARK_INCIDENT_IDS"
+	kubectl port-forward -n observability svc/prometheus 19090:9090 >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \
+	kubectl port-forward -n observability svc/loki 19300:3100 >/tmp/agentic-sre-loki-forward.log 2>&1 & loki_pid=$$!; \
+	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
+	kubectl port-forward -n sre-demo svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
+	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" 2>/dev/null || true' EXIT; \
+	sleep 3; SRE_LIVE_MODEL_ENABLED=true .venv/bin/python scripts/live_benchmark.py
 
 cluster-up:
 	kind create cluster --config infra/kubernetes/kind-config.yaml
@@ -103,6 +122,6 @@ status:
 cluster-down:
 	kind delete cluster --name agentic-sre
 
-release-check: check observability-check evidence-check rbac-check
+release-check: check agent-check benchmark-offline observability-check evidence-check rbac-check
 	.venv/bin/python -m pytest tests/e2e
 	.venv/bin/python -m pytest tests/unit/test_state_machine.py --cov=packages.incident.state_machine --cov-report=term-missing --cov-fail-under=100

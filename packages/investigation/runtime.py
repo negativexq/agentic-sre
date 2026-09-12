@@ -3,6 +3,7 @@
 import json
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from hashlib import sha256
 from time import monotonic
 from typing import Any
 from uuid import UUID, uuid4
@@ -42,6 +43,7 @@ from packages.provider import (
     ModelRequest,
     ProviderAccountingSnapshot,
     ProviderError,
+    ToolSchemaDescriptor,
 )
 from packages.tools import BoundedToolExecutor, ToolFailure, ToolResponse
 
@@ -480,6 +482,18 @@ class InvestigationRuntime:
                             selected_decision_function=item.get("selected_decision"),
                             requested_tool_count=item.get("requested_tool_count", 0),
                             requested_tool_names=item.get("requested_tool_names", []),
+                            requested_tool_argument_keys=[
+                                summary.get("argument_keys", [])
+                                for summary in item.get("summaries", [])
+                            ],
+                            requested_tool_argument_types=[
+                                summary.get("argument_types", {})
+                                for summary in item.get("summaries", [])
+                            ],
+                            requested_tool_argument_hashes=[
+                                summary.get("argument_value_hashes", {})
+                                for summary in item.get("summaries", [])
+                            ],
                             model_input_tokens=item.get("input_tokens", 0),
                             model_output_tokens=item.get("output_tokens", 0),
                             validation_stage=(
@@ -590,14 +604,12 @@ class InvestigationRuntime:
                 )
             ),
             allowed_tool_names=self._registry.names(),
-            allowed_tool_argument_keys=tuple(
-                sorted(
-                    {
-                        key
-                        for descriptor in self._registry.descriptors()
-                        for key in descriptor.get("arguments", {})
-                    }
+            tool_schemas=tuple(
+                ToolSchemaDescriptor(
+                    name=descriptor["name"],
+                    arguments=descriptor["arguments"],
                 )
+                for descriptor in self._registry.descriptors()
             ),
         )
         return self._provider.complete(request)
@@ -645,10 +657,11 @@ class InvestigationRuntime:
             call_id = result.tool_call_id
             self._evidence_service.register_tool_call(call_id, incident.incident_id)
             if isinstance(result, ToolFailure):
+                safe_arguments = self._safe_arguments(arguments)
                 summaries.append(
                     {
                         "tool": tool.name,
-                        "arguments": arguments,
+                        **safe_arguments,
                         "status": result.code.value,
                         "error_code": result.code.value,
                         "backend": result.backend,
@@ -676,15 +689,38 @@ class InvestigationRuntime:
                     "temporal_mode": result.temporal_mode,
                 }
             normalized.append(self._evidence_service.add(evidence))
+            safe_arguments = self._safe_arguments(arguments)
             summaries.append(
                 {
                     "tool": tool.name,
-                    "arguments": arguments,
+                    **safe_arguments,
                     "status": "SUCCESS",
                     "evidence_ids": [str(normalized[-1].evidence_id)],
                 }
             )
         return normalized, summaries
+
+    @staticmethod
+    def _safe_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
+        """Expose argument shape and hashes without retaining free-form values."""
+        safe_values = {
+            key: value
+            for key, value in arguments.items()
+            if key in {"service", "consumer", "deployment", "trace_id", "range_seconds"}
+        }
+        return {
+            "argument_keys": sorted(arguments),
+            "argument_types": {key: type(arguments[key]).__name__ for key in sorted(arguments)},
+            "argument_value_hashes": {
+                key: sha256(
+                    json.dumps(
+                        arguments[key], sort_keys=True, separators=(",", ":"), default=str
+                    ).encode()
+                ).hexdigest()
+                for key in sorted(arguments)
+            },
+            "arguments": safe_values,
+        }
 
     @staticmethod
     def _validation_path(error: ValidationError) -> str:

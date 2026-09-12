@@ -64,7 +64,8 @@ class InvestigationTurnAudit(BaseModel):
     requested_tool_count: int = Field(ge=0, le=8)
     requested_tool_names: list[str] = Field(default_factory=list, max_length=8)
     requested_tool_argument_keys: list[list[str]] = Field(default_factory=list, max_length=8)
-    requested_tool_argument_hashes: list[str] = Field(default_factory=list, max_length=8)
+    requested_tool_argument_types: list[dict[str, str]] = Field(default_factory=list, max_length=8)
+    requested_tool_argument_hashes: list[dict[str, str]] = Field(default_factory=list, max_length=8)
     validation_stage: ValidationStage | None = None
     validation_result: str = "NOT_EVALUATED"
     error_code: str | None = None

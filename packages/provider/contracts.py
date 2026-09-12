@@ -46,6 +46,15 @@ class ModelMessage(BaseModel):
     content: str = Field(min_length=1, max_length=100_000)
 
 
+class ToolSchemaDescriptor(BaseModel):
+    """Safe provider-facing schema derived from one registered tool contract."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    name: str = Field(min_length=1, max_length=128)
+    arguments: dict[str, Any]
+
+
 class ModelRequest(BaseModel):
     """Provider-independent structured-output request."""
 
@@ -62,7 +71,7 @@ class ModelRequest(BaseModel):
     timeout_ms: int = Field(gt=0, le=120_000)
     allowed_decisions: tuple[Literal["CALL_TOOLS", "SUBMIT_HYPOTHESIS", "STOP"], ...] | None = None
     allowed_tool_names: tuple[str, ...] | None = None
-    allowed_tool_argument_keys: tuple[str, ...] | None = None
+    tool_schemas: tuple[ToolSchemaDescriptor, ...] | None = None
 
 
 class ResponseEnvelopeMetadata(BaseModel):

@@ -55,11 +55,45 @@ def descriptor_schema(model: type[ToolArguments]) -> dict[str, Any]:
     schema = model.model_json_schema()
     properties = schema.get("properties", {})
     required = set(schema.get("required", []))
+
+    def project(value: Any) -> dict[str, Any]:
+        """Project one Pydantic field to the safe descriptor vocabulary."""
+        if not isinstance(value, dict):
+            return {}
+        result: dict[str, Any] = {}
+        if "anyOf" in value and isinstance(value["anyOf"], list):
+            types: list[str] = []
+            branches: list[dict[str, Any]] = []
+            for branch in value["anyOf"]:
+                projected = project(branch)
+                branch_type = projected.get("type")
+                if isinstance(branch_type, list):
+                    types.extend(item for item in branch_type if item not in types)
+                elif isinstance(branch_type, str) and branch_type not in types:
+                    types.append(branch_type)
+                branches.append(projected)
+            if types:
+                result["type"] = types
+            for branch in branches:
+                for key in ("enum", "minLength", "maxLength", "minimum", "maximum"):
+                    if key in branch and key not in result:
+                        result[key] = branch[key]
+            return result
+        field_type = value.get("type")
+        if isinstance(field_type, str):
+            result["type"] = field_type
+        if isinstance(value.get("enum"), list):
+            result["enum"] = list(value["enum"])
+        for key in ("minLength", "maxLength", "minimum", "maximum"):
+            if key in value:
+                result[key] = value[key]
+        return result
+
     result: dict[str, Any] = {}
     for name, value in properties.items():
         if not isinstance(value, dict):
             continue
-        item = {key: item for key, item in value.items() if key in {"type", "enum"}}
+        item = project(value)
         item["required"] = name in required
         result[name] = item
     return result

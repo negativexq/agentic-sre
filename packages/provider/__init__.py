@@ -10,6 +10,7 @@ from packages.provider.contracts import (
     ProviderError,
     ProviderErrorCode,
     ResponseEnvelopeMetadata,
+    ToolSchemaDescriptor,
 )
 from packages.provider.fake import FakeModelProvider
 from packages.provider.openai import OpenAIProvider, live_model_config
@@ -27,5 +28,6 @@ __all__ = [
     "ProviderErrorCode",
     "ProviderAccountingSnapshot",
     "ResponseEnvelopeMetadata",
+    "ToolSchemaDescriptor",
     "live_model_config",
 ]

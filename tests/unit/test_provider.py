@@ -9,6 +9,7 @@ from uuid import uuid4
 import pytest
 
 from packages.investigation import InvestigationDecision
+from packages.investigation.registry import live_observability_registry
 from packages.provider import (
     FakeModelProvider,
     LiveModelBudget,
@@ -17,12 +18,14 @@ from packages.provider import (
     OpenAIProvider,
     ProviderError,
     ProviderErrorCode,
+    ToolSchemaDescriptor,
 )
 from packages.provider.openai import (
     DECISION_FUNCTION_DESCRIPTIONS,
     DECISION_FUNCTION_NAMES,
     LiveModelConfig,
     _compile_strict_schema,
+    _decision_function_schemas,
 )
 
 
@@ -46,6 +49,20 @@ def function_request() -> ModelRequest:
         update={
             "response_schema_name": "investigation_decision",
             "response_schema": InvestigationDecision.model_json_schema(),
+        }
+    )
+
+
+def registry_function_request() -> ModelRequest:
+    """Build an investigation request with canonical per-tool schemas."""
+    registry = live_observability_registry("prometheus", "loki", "tempo")
+    return function_request().model_copy(
+        update={
+            "allowed_tool_names": registry.names(),
+            "tool_schemas": tuple(
+                ToolSchemaDescriptor(name=item["name"], arguments=item["arguments"])
+                for item in registry.descriptors()
+            ),
         }
     )
 
@@ -509,6 +526,99 @@ def test_responses_request_exposes_only_three_decision_functions() -> None:
     assert all(tool["type"] == "function" for tool in tools)
     assert all(tool["strict"] is True for tool in tools)
     assert all(tool["parameters"]["additionalProperties"] is False for tool in tools)
+
+
+def test_provider_request_schema_is_specific_to_each_registered_tool() -> None:
+    """The provider schema derives each argument object from its registered tool."""
+    request = registry_function_request()
+    schemas = _decision_function_schemas(
+        request.response_schema,
+        request.allowed_tool_names,
+        request.tool_schemas,
+    )
+    items = schemas["request_investigation_tools"]["properties"]["tool_requests"]["items"]
+    branches = items["anyOf"]
+    assert len(branches) == 17
+    by_name = {branch["properties"]["tool"]["enum"][0]: branch for branch in branches}
+    assert set(by_name) == set(request.allowed_tool_names or ())
+    assert set(by_name["service_logs"]["properties"]["arguments"]["properties"]) == {
+        "service",
+        "range_seconds",
+    }
+    assert set(by_name["service_error_logs"]["properties"]["arguments"]["properties"]) == {
+        "service",
+        "pattern",
+    }
+    assert by_name["service_logs"]["properties"]["arguments"]["properties"]["range_seconds"][
+        "type"
+    ] == ["integer", "null"]
+
+    for descriptor in request.tool_schemas or ():
+        branch = by_name[descriptor.name]
+        arguments = branch["properties"]["arguments"]
+        assert arguments["additionalProperties"] is False
+        assert arguments["required"] == list(descriptor.arguments)
+        assert set(arguments["properties"]) == set(descriptor.arguments)
+        for field_name, field_schema in descriptor.arguments.items():
+            provider_schema = arguments["properties"][field_name]
+            expected_type = field_schema["type"]
+            if field_schema["required"] is False and isinstance(expected_type, str):
+                expected_type = [expected_type, "null"]
+            assert provider_schema["type"] == expected_type
+
+
+def test_provider_rejects_cross_tool_argument_leakage_before_runtime() -> None:
+    """A service_logs request cannot use service_error_logs-only arguments."""
+    request = registry_function_request()
+    raw = _envelope(
+        [
+            _function_call(
+                json.dumps(
+                    {
+                        "reason": "inspect logs",
+                        "tool_requests": [
+                            {
+                                "tool": "service_logs",
+                                "arguments": {"service": "order-worker", "pattern": "ERROR"},
+                            }
+                        ],
+                    }
+                ),
+                name="request_investigation_tools",
+            )
+        ]
+    )
+    with pytest.raises(ProviderError) as error:
+        _normalize_fixture(raw, request)
+    assert error.value.code is ProviderErrorCode.FUNCTION_ARGUMENTS_SCHEMA_INVALID
+
+
+def test_provider_accepts_fields_for_their_canonical_tool_only() -> None:
+    """A service_error_logs pattern remains valid in its own schema branch."""
+    request = registry_function_request()
+    raw = _envelope(
+        [
+            _function_call(
+                json.dumps(
+                    {
+                        "reason": "inspect error logs",
+                        "tool_requests": [
+                            {
+                                "tool": "service_error_logs",
+                                "arguments": {"service": "order-worker", "pattern": "ERROR"},
+                            }
+                        ],
+                    }
+                ),
+                name="request_investigation_tools",
+            )
+        ]
+    )
+    normalized = _normalize_fixture(raw, request)
+    assert normalized.structured_output["requests"][0]["arguments"] == {  # type: ignore[attr-defined]
+        "service": "order-worker",
+        "pattern": "ERROR",
+    }
 
 
 def test_final_turn_exposes_only_terminal_decision_functions() -> None:

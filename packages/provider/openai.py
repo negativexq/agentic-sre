@@ -16,6 +16,7 @@ from packages.provider.contracts import (
     ProviderError,
     ProviderErrorCode,
     ResponseEnvelopeMetadata,
+    ToolSchemaDescriptor,
     messages_to_dicts,
 )
 
@@ -113,11 +114,17 @@ def _compile_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(node, dict):
             return node
 
-        compiled = {
-            key: compile_node(value)
-            for key, value in node.items()
-            if key not in _UNSUPPORTED_STRICT_KEYWORDS
-        }
+        compiled: dict[str, Any] = {}
+        for key, value in node.items():
+            if key in _UNSUPPORTED_STRICT_KEYWORDS:
+                continue
+            if key == "properties" and isinstance(value, dict):
+                # Property names are data, not JSON Schema keywords. In
+                # particular, a legitimate field named ``pattern`` must not
+                # be removed while compiling the surrounding object.
+                compiled[key] = {name: compile_node(item) for name, item in value.items()}
+            else:
+                compiled[key] = compile_node(value)
         if compiled.get("type") == "object":
             properties = compiled.get("properties")
             if isinstance(properties, dict):
@@ -137,7 +144,7 @@ def _compile_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
 def _decision_function_schemas(
     schema: dict[str, Any],
     allowed_tool_names: tuple[str, ...] | None = None,
-    allowed_tool_argument_keys: tuple[str, ...] | None = None,
+    tool_schemas: tuple[ToolSchemaDescriptor, ...] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Build three strict transport schemas from the existing decision contracts."""
     compiled = _compile_strict_schema(schema)
@@ -166,37 +173,84 @@ def _decision_function_schemas(
 
     reason = {"type": "string"}
     tool_request = dict(tool_request)
-    if allowed_tool_names is not None:
+    if tool_schemas is not None:
+        branches: list[dict[str, Any]] = []
+        allowed = set(allowed_tool_names) if allowed_tool_names is not None else None
+        for descriptor in tool_schemas:
+            if allowed is not None and descriptor.name not in allowed:
+                continue
+            argument_properties: dict[str, Any] = {}
+            argument_required: list[str] = []
+            for key, descriptor_field in descriptor.arguments.items():
+                if not isinstance(descriptor_field, dict):
+                    continue
+                projected = {
+                    field_key: field_value
+                    for field_key, field_value in descriptor_field.items()
+                    if field_key
+                    in {
+                        "type",
+                        "enum",
+                        "minLength",
+                        "maxLength",
+                        "minimum",
+                        "maximum",
+                    }
+                }
+                field_type = projected.get("type", "string")
+                if descriptor_field.get("required") is False:
+                    if isinstance(field_type, list):
+                        projected["type"] = (
+                            [*field_type] if "null" in field_type else [*field_type, "null"]
+                        )
+                    else:
+                        projected["type"] = [field_type, "null"]
+                projected.pop("required", None)
+                argument_properties[key] = projected
+                argument_required.append(key)
+            branches.append(
+                {
+                    "type": "object",
+                    "properties": {
+                        "tool": {"type": "string", "enum": [descriptor.name]},
+                        "arguments": {
+                            "type": "object",
+                            "properties": argument_properties,
+                            "required": argument_required,
+                            "additionalProperties": False,
+                        },
+                    },
+                    "required": ["tool", "arguments"],
+                    "additionalProperties": False,
+                }
+            )
+        tool_request_item: dict[str, Any] = {"anyOf": branches}
+        tool_request_properties = dict(tool_request.get("properties", {}))
+        tool_request_properties["tool"] = {"type": "string"}
+        tool_request_properties["arguments"] = {"type": "object"}
+        tool_request["properties"] = tool_request_properties
+        tool_request["_provider_tool_request_item"] = tool_request_item
+    elif allowed_tool_names is not None:
         properties = dict(tool_request.get("properties", {}))
         tool_property = dict(properties.get("tool", {"type": "string"}))
         tool_property["enum"] = list(allowed_tool_names)
         properties["tool"] = tool_property
         tool_request["properties"] = properties
-    if allowed_tool_argument_keys:
-        argument_properties: dict[str, Any] = {}
-        for key in allowed_tool_argument_keys:
-            argument_properties[key] = {
-                "type": ["integer", "null"] if key == "range_seconds" else ["string", "null"]
-            }
-        properties = dict(tool_request.get("properties", {}))
-        properties["arguments"] = {
-            "type": "object",
-            "properties": argument_properties,
-            "required": list(argument_properties),
-            "additionalProperties": False,
-        }
-        tool_request["properties"] = properties
-    return {
+    request_items = tool_request.pop(
+        "_provider_tool_request_item", {"$ref": "#/$defs/ToolRequestSpec"}
+    )
+    request_definitions = {} if tool_schemas is not None else {"ToolRequestSpec": tool_request}
+    schemas = {
         "request_investigation_tools": object_schema(
             {
                 "reason": reason,
                 "tool_requests": {
                     "type": "array",
-                    "items": {"$ref": "#/$defs/ToolRequestSpec"},
+                    "items": request_items,
                 },
             },
             ["reason", "tool_requests"],
-            {"ToolRequestSpec": tool_request},
+            request_definitions,
         ),
         "submit_root_cause_hypothesis": object_schema(
             {
@@ -225,6 +279,7 @@ def _decision_function_schemas(
             ["reason", "stop_reason"],
         ),
     }
+    return {name: _compile_strict_schema(value) for name, value in schemas.items()}
 
 
 def _field(value: Any, name: str, default: Any = None) -> Any:
@@ -476,7 +531,7 @@ def _extract_decision_function(
     schemas = _decision_function_schemas(
         request.response_schema,
         request.allowed_tool_names,
-        request.allowed_tool_argument_keys,
+        request.tool_schemas,
     )
     schema_error_path = _json_schema_error(structured_output, schemas[function_name])
     if schema_error_path is not None:
@@ -670,7 +725,7 @@ class OpenAIProvider:
             schemas = _decision_function_schemas(
                 request.response_schema,
                 request.allowed_tool_names,
-                request.allowed_tool_argument_keys,
+                request.tool_schemas,
             )
             allowed = (
                 tuple(DECISION_TO_FUNCTION[item] for item in request.allowed_decisions)

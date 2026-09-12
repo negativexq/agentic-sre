@@ -445,7 +445,12 @@ def _extract_decision_function(
             },
         }, metadata
     if function_name == "stop_investigation":
-        return {"decision": "STOP", "requests": [], "hypothesis": None}, metadata
+        return {
+            "decision": "STOP",
+            "requests": [],
+            "hypothesis": None,
+            "stop_reason": structured_output["stop_reason"],
+        }, metadata
     raise ProviderError(
         ProviderErrorCode.UNEXPECTED_FUNCTION_CALL,
         "provider response contained an unexpected decision function",

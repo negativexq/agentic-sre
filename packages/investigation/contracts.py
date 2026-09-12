@@ -23,6 +23,14 @@ class DecisionType(StrEnum):
     STOP = "STOP"
 
 
+class StopReason(StrEnum):
+    """Controlled reasons for a terminal STOP decision."""
+
+    INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+    INVESTIGATION_COMPLETE = "investigation_complete"
+    NO_ACTION_NEEDED = "no_action_needed"
+
+
 class InvestigationErrorCode(StrEnum):
     """Typed semantic failures produced by the deterministic runtime."""
 
@@ -34,6 +42,7 @@ class InvestigationErrorCode(StrEnum):
     EMPTY_EVIDENCE_SET = "EMPTY_EVIDENCE_SET"
     UNKNOWN_HYPOTHESIS_MECHANISM = "UNKNOWN_HYPOTHESIS_MECHANISM"
     INVALID_HYPOTHESIS_SHAPE = "INVALID_HYPOTHESIS_SHAPE"
+    INVALID_STOP_REASON = "INVALID_STOP_REASON"
     FABRICATED_EVIDENCE_REFERENCE = "FABRICATED_EVIDENCE_REFERENCE"
     INVALID_DECISION = "INVALID_DECISION"
 
@@ -78,6 +87,7 @@ class InvestigationDecision(InvestigationModel):
     decision: DecisionType
     requests: list[ToolRequestSpec] = Field(default_factory=list, max_length=8)
     hypothesis: HypothesisSubmission | None = None
+    stop_reason: StopReason | None = None
 
     @model_validator(mode="after")
     def validate_payload(self) -> "InvestigationDecision":
@@ -90,6 +100,10 @@ class InvestigationDecision(InvestigationModel):
             raise ValueError("SUBMIT_HYPOTHESIS requires a hypothesis")
         if self.decision is not DecisionType.SUBMIT_HYPOTHESIS and self.hypothesis is not None:
             raise ValueError("only SUBMIT_HYPOTHESIS may contain a hypothesis")
+        if self.decision is DecisionType.STOP and self.stop_reason is None:
+            raise ValueError("STOP requires a stop reason")
+        if self.decision is not DecisionType.STOP and self.stop_reason is not None:
+            raise ValueError("only STOP may contain a stop reason")
         return self
 
 
@@ -133,6 +147,10 @@ class InvestigationUsage(InvestigationModel):
     outbound_api_attempts: int = Field(ge=0, default=0)
     provider_retries: int = Field(ge=0, default=0)
     shared_ledger_consumed: int = Field(ge=0, default=0)
+    model_calls_limit: int = Field(ge=0)
+    terminal_decision: DecisionType | None = None
+    stop_reason: StopReason | None = None
+    model_budget_exhausted_after_terminal_decision: bool = False
 
 
 class InvestigationResult(InvestigationModel):
@@ -145,3 +163,5 @@ class InvestigationResult(InvestigationModel):
     usage: InvestigationUsage
     termination_reason: TerminationReason
     error_code: str | None = None
+    terminal_decision: DecisionType | None = None
+    stop_reason: StopReason | None = None

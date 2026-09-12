@@ -66,8 +66,17 @@ def main() -> int:
             {
                 "incident_id": str(incident.incident_id),
                 "termination_reason": result.termination_reason.value,
+                "terminal_decision": (
+                    result.terminal_decision.value if result.terminal_decision else None
+                ),
+                "stop_reason": result.stop_reason.value if result.stop_reason else None,
                 "hypothesis_submitted": result.hypothesis is not None,
                 "evidence_count": len(result.evidence),
+                "model_calls_used": result.usage.model_calls,
+                "model_calls_limit": result.usage.model_calls_limit,
+                "model_budget_exhausted_after_terminal_decision": (
+                    result.usage.model_budget_exhausted_after_terminal_decision
+                ),
                 "actual_api_calls": result.usage.actual_api_calls,
             }
         )

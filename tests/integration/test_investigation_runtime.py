@@ -19,6 +19,7 @@ from packages.investigation import (
     InvestigationLimits,
     ReadOnlyToolRegistry,
     RegisteredTool,
+    StopReason,
     TerminationReason,
 )
 from packages.investigation.audit import InMemoryInvestigationAuditSink
@@ -89,9 +90,13 @@ def test_fake_provider_runtime_batches_tools_and_submits_real_evidence() -> None
     assert result.hypothesis.evidence_ids == [result.evidence[0].evidence_id]
     assert result.usage.model_calls == 2
     assert result.usage.tool_calls == 1
+    assert result.terminal_decision is DecisionType.SUBMIT_HYPOTHESIS
+    assert result.usage.model_calls_limit == 3
+    assert result.usage.model_budget_exhausted_after_terminal_decision is False
     assert len(audit.records) == 1
     assert audit.records[0].actual_api_calls == 0
     assert audit.records[0].estimated_api_calls == 2
+    assert audit.records[0].terminal_decision is DecisionType.SUBMIT_HYPOTHESIS
 
 
 def test_unknown_tool_fails_closed_without_backend_execution() -> None:
@@ -152,6 +157,77 @@ def test_model_budget_stops_after_three_turns() -> None:
     assert result.termination_reason is TerminationReason.MODEL_CALL_LIMIT
     assert result.usage.model_calls == 3
     assert result.usage.tool_calls == 3
+    assert result.terminal_decision is None
+
+
+def test_final_allowed_call_can_submit_a_hypothesis() -> None:
+    """A terminal hypothesis on call three is not relabeled as exhaustion."""
+
+    def submit(model_request: ModelRequest) -> dict[str, Any]:
+        context = json.loads(model_request.messages[1].content)
+        return {
+            "decision": DecisionType.SUBMIT_HYPOTHESIS,
+            "hypothesis": {
+                "affected_component": "payment-service",
+                "mechanism": "service_latency_regression",
+                "suspected_trigger": "elevated latency",
+                "evidence_ids": [context["evidence"][0]["evidence_id"]],
+            },
+        }
+
+    call_tools = {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "service_latency"}]}
+    result = InvestigationRuntime(
+        FakeModelProvider([call_tools, call_tools, submit]), registry()
+    ).run(incident())
+
+    assert result.termination_reason is TerminationReason.HYPOTHESIS_SUBMITTED
+    assert result.terminal_decision is DecisionType.SUBMIT_HYPOTHESIS
+    assert result.usage.model_calls == 3
+    assert result.usage.model_budget_exhausted_after_terminal_decision is True
+
+
+def test_final_allowed_call_can_stop_with_a_valid_reason() -> None:
+    """A terminal STOP on call three keeps its actual termination semantics."""
+    call_tools = {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "service_latency"}]}
+    stop = {
+        "decision": DecisionType.STOP,
+        "stop_reason": StopReason.INSUFFICIENT_EVIDENCE,
+    }
+    audit = InMemoryInvestigationAuditSink()
+    result = InvestigationRuntime(
+        FakeModelProvider([call_tools, call_tools, stop]), registry(), audit_sink=audit
+    ).run(incident())
+
+    assert result.termination_reason is TerminationReason.AGENT_STOPPED
+    assert result.terminal_decision is DecisionType.STOP
+    assert result.stop_reason is StopReason.INSUFFICIENT_EVIDENCE
+    assert result.usage.model_calls == 3
+    assert result.usage.model_budget_exhausted_after_terminal_decision is True
+    assert audit.records[0].terminal_decision is DecisionType.STOP
+    assert audit.records[0].stop_reason is StopReason.INSUFFICIENT_EVIDENCE
+    assert audit.records[0].termination_reason is TerminationReason.AGENT_STOPPED
+
+
+def test_provider_failure_on_final_call_is_not_model_exhaustion() -> None:
+    """A provider failure on call three retains provider-error semantics."""
+
+    class FailingFinalProvider(FakeModelProvider):
+        def complete(self, request: ModelRequest):  # type: ignore[no-untyped-def]
+            if len(self.requests) == 2:
+                from packages.provider import ProviderError, ProviderErrorCode
+
+                self.requests.append(request)
+                raise ProviderError(ProviderErrorCode.PROVIDER_UNAVAILABLE, "offline fixture")
+            return super().complete(request)
+
+    call_tools = {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "service_latency"}]}
+    result = InvestigationRuntime(
+        FailingFinalProvider([call_tools, call_tools, call_tools]), registry()
+    ).run(incident())
+
+    assert result.termination_reason is TerminationReason.PROVIDER_ERROR
+    assert result.terminal_decision is None
+    assert result.usage.model_calls == 3
 
 
 def test_decision_accepts_a_batch_up_to_the_incident_budget() -> None:
@@ -197,7 +273,9 @@ def test_batches_use_remaining_total_tool_budget(first_count: int, second_count:
         responses.append(
             {"decision": DecisionType.CALL_TOOLS, "requests": _tool_requests(second_count)}
         )
-    responses.append({"decision": DecisionType.STOP})
+    responses.append(
+        {"decision": DecisionType.STOP, "stop_reason": StopReason.INSUFFICIENT_EVIDENCE}
+    )
 
     result = InvestigationRuntime(
         FakeModelProvider(responses),

@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from packages.investigation.contracts import TerminationReason
+from packages.investigation.contracts import DecisionType, StopReason, TerminationReason
 
 
 class InvestigationAuditRecord(BaseModel):
@@ -32,6 +32,10 @@ class InvestigationAuditRecord(BaseModel):
     outbound_api_attempts: int = Field(ge=0, default=0)
     provider_retries: int = Field(ge=0, default=0)
     shared_ledger_consumed: int = Field(ge=0, default=0)
+    model_calls_limit: int = Field(ge=0)
+    terminal_decision: DecisionType | None = None
+    stop_reason: StopReason | None = None
+    model_budget_exhausted_after_terminal_decision: bool = False
     termination_reason: TerminationReason
     recorded_at: datetime
 

@@ -8,6 +8,7 @@ from packages.investigation.contracts import (
     InvestigationErrorCode,
     InvestigationLimits,
     InvestigationResult,
+    StopReason,
     TerminationReason,
     ToolRequestSpec,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "InvestigationLimits",
     "InvestigationResult",
     "InvestigationRuntime",
+    "StopReason",
     "INVESTIGATOR_PROMPT_VERSION",
     "ReadOnlyToolRegistry",
     "RegisteredTool",

@@ -21,6 +21,7 @@ from packages.investigation.contracts import (
     InvestigationLimits,
     InvestigationResult,
     InvestigationUsage,
+    StopReason,
     TerminationReason,
 )
 from packages.investigation.prompt import INVESTIGATOR_PROMPT, investigator_prompt_hash
@@ -58,6 +59,9 @@ def _semantic_error_code(payload: Any, limits: InvestigationLimits) -> str:
             return InvestigationErrorCode.EMPTY_EVIDENCE_SET.value
         if hypothesis.get("mechanism") not in {item.value for item in HypothesisMechanism}:
             return InvestigationErrorCode.UNKNOWN_HYPOTHESIS_MECHANISM.value
+    elif decision == DecisionType.STOP:
+        if payload.get("stop_reason") not in {item.value for item in StopReason}:
+            return InvestigationErrorCode.INVALID_STOP_REASON.value
     return InvestigationErrorCode.INVALID_DECISION.value
 
 
@@ -114,6 +118,8 @@ class InvestigationRuntime:
         termination = TerminationReason.AGENT_STOPPED
         error_code: str | None = None
         hypothesis = None
+        terminal_decision: DecisionType | None = None
+        stop_reason: StopReason | None = None
 
         for _turn in range(self._limits.max_agent_turns):
             if monotonic() - started > self._limits.max_wall_time_seconds:
@@ -153,10 +159,13 @@ class InvestigationRuntime:
                     error_code = InvestigationErrorCode.FABRICATED_EVIDENCE_REFERENCE.value
                 else:
                     hypothesis = decision.hypothesis
+                    terminal_decision = DecisionType.SUBMIT_HYPOTHESIS
                     termination = TerminationReason.HYPOTHESIS_SUBMITTED
                 break
 
-            if not decision.requests:
+            if decision.decision is DecisionType.STOP:
+                terminal_decision = DecisionType.STOP
+                stop_reason = decision.stop_reason
                 termination = TerminationReason.AGENT_STOPPED
                 break
             remaining = self._limits.max_tool_calls - tool_calls
@@ -184,9 +193,14 @@ class InvestigationRuntime:
 
         if (
             termination is TerminationReason.AGENT_STOPPED
+            and terminal_decision is None
             and logical_model_turns >= self._limits.max_model_calls
         ):
             termination = TerminationReason.MODEL_CALL_LIMIT
+
+        model_budget_exhausted_after_terminal_decision = (
+            terminal_decision is not None and logical_model_turns >= self._limits.max_model_calls
+        )
 
         accounting_reader = getattr(self._provider, "accounting_snapshot", None)
         if callable(accounting_reader):
@@ -221,6 +235,12 @@ class InvestigationRuntime:
             outbound_api_attempts=accounting.outbound_api_attempts,
             provider_retries=accounting.provider_retries,
             shared_ledger_consumed=accounting.shared_ledger_consumed,
+            model_calls_limit=self._limits.max_model_calls,
+            terminal_decision=terminal_decision,
+            stop_reason=stop_reason,
+            model_budget_exhausted_after_terminal_decision=(
+                model_budget_exhausted_after_terminal_decision
+            ),
         )
         result = InvestigationResult(
             run_id=run_id,
@@ -230,6 +250,8 @@ class InvestigationRuntime:
             usage=usage,
             termination_reason=termination,
             error_code=error_code,
+            terminal_decision=terminal_decision,
+            stop_reason=stop_reason,
         )
         if self._audit_sink is not None:
             self._audit_sink.record(
@@ -252,6 +274,12 @@ class InvestigationRuntime:
                     outbound_api_attempts=usage.outbound_api_attempts,
                     provider_retries=usage.provider_retries,
                     shared_ledger_consumed=usage.shared_ledger_consumed,
+                    model_calls_limit=usage.model_calls_limit,
+                    terminal_decision=usage.terminal_decision,
+                    stop_reason=usage.stop_reason,
+                    model_budget_exhausted_after_terminal_decision=(
+                        usage.model_budget_exhausted_after_terminal_decision
+                    ),
                     termination_reason=result.termination_reason,
                     recorded_at=datetime.now(UTC),
                 )

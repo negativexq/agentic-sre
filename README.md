@@ -221,11 +221,19 @@ offline gates pass.
 make agent-check       # local agent tests, live API calls: 0
 make agent-smoke       # fake-provider smoke, live API calls: 0
 make model-smoke-live  # explicit provider smoke, exactly 1 live call
+make agent-smoke-live  # three existing incidents, max 9 live calls
+make benchmark-live    # ten mapped incidents, max 30 live calls
 ```
 
 See [ADR-003](docs/adr/ADR-003-credit-aware-single-agent-baseline.md) for the
 credit and safety boundary. The current offline benchmark is documented in
 [docs/benchmarks/v0.2.0-single-agent.md](docs/benchmarks/v0.2.0-single-agent.md).
+
+`agent-smoke-live` selects the three newest incidents by default. Set
+`SRE_LIVE_INCIDENT_IDS` to provide an explicit comma-separated set. The
+one-pass `benchmark-live` requires ten ordered IDs in
+`SRE_BENCHMARK_INCIDENT_IDS`; both commands perform a worst-case budget
+preflight before making a model request.
 
 ## Development conventions
 

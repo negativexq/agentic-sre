@@ -415,7 +415,7 @@ class LiveBenchmarkEnvironment:
             "payment_config_change",
         }:
             if fixture == "payment_db_pool_pressure":
-                self._concurrent_payments()
+                self._concurrent_payments(count=30)
             else:
                 self._payment_requests(count=60, interval_seconds=0.5)
         elif fixture in {

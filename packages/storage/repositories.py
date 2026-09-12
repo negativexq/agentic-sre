@@ -14,6 +14,8 @@ from packages.contracts import (
     Alert,
     AlertSource,
     AlertStatus,
+    ChangeRecord,
+    ChangeType,
     Evidence,
     EvidenceSourceType,
     Incident,
@@ -26,6 +28,7 @@ from packages.contracts import (
 )
 from packages.storage.models import (
     AlertRow,
+    ChangeRecordRow,
     EvidenceRow,
     IncidentEventRow,
     IncidentRow,
@@ -213,6 +216,67 @@ class AlertRepository:
                 fingerprint=row.fingerprint,
                 status=AlertStatus(row.status),
                 source=AlertSource(row.source),
+            )
+            for row in rows
+        ]
+
+
+class ChangeRecordRepository:
+    """Persistence operations for immutable historical change facts."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def append(self, record: ChangeRecord) -> ChangeRecord:
+        """Persist one harness/control-plane change fact."""
+        self._session.add(
+            ChangeRecordRow(
+                change_id=record.change_id,
+                timestamp=record.timestamp,
+                resource_type=record.resource_type,
+                resource_name=record.resource_name,
+                change_type=record.change_type.value,
+                before=record.before,
+                after=record.after,
+                revision=record.revision,
+                source=record.source,
+            )
+        )
+        self._session.commit()
+        return record
+
+    def between(
+        self,
+        *,
+        resource_name: str,
+        starts_at: datetime,
+        ends_at: datetime,
+        limit: int = 100,
+    ) -> list[ChangeRecord]:
+        """Read only records within the bounded incident observation window."""
+        if limit < 1:
+            raise ValueError("limit must be positive")
+        rows = self._session.scalars(
+            select(ChangeRecordRow)
+            .where(
+                ChangeRecordRow.resource_name == resource_name,
+                ChangeRecordRow.timestamp >= starts_at,
+                ChangeRecordRow.timestamp <= ends_at,
+            )
+            .order_by(desc(ChangeRecordRow.timestamp), ChangeRecordRow.change_id)
+            .limit(limit)
+        ).all()
+        return [
+            ChangeRecord(
+                change_id=row.change_id,
+                timestamp=row.timestamp,
+                resource_type=row.resource_type,
+                resource_name=row.resource_name,
+                change_type=ChangeType(row.change_type),
+                before=row.before,
+                after=row.after,
+                revision=row.revision,
+                source=row.source,
             )
             for row in rows
         ]

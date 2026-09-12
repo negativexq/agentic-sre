@@ -15,6 +15,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from packages.contracts import ChangeRecord
 from packages.tools.contracts import BackendProtocolError, ToolErrorCode
 
 
@@ -136,6 +137,22 @@ def _tempo_time_params(parameters: dict[str, Any]) -> tuple[dict[str, str], dict
     """Serialize the semantic window as Unix seconds for Tempo search."""
     start, end, window = _parse_observation_window(parameters)
     return {"start": str(int(start.timestamp())), "end": str(int(end.timestamp()))}, window
+
+
+def _change_time_window(
+    parameters: dict[str, Any], *, lookback_seconds: int = 900
+) -> tuple[datetime, datetime, dict[str, str]]:
+    """Expand the incident window by one bounded lookback for change evidence."""
+    start, end, _ = _parse_observation_window(parameters)
+    expanded_start = start - timedelta(seconds=lookback_seconds)
+    return (
+        expanded_start,
+        end,
+        {
+            "starts_at": expanded_start.isoformat(),
+            "ends_at": end.isoformat(),
+        },
+    )
 
 
 def _service(parameters: dict[str, Any]) -> str:
@@ -430,16 +447,48 @@ class KubernetesBackend:
 
 
 class KubernetesChangeBackend:
-    """Expose bounded current change facts from Kubernetes resource metadata."""
+    """Expose historical journal facts, with explicit current-state fallback."""
 
-    def __init__(self, kubernetes: KubernetesBackend) -> None:
+    def __init__(
+        self,
+        kubernetes: Any,
+        historical_reader: Any | None = None,
+    ) -> None:
         self._kubernetes = kubernetes
+        self.has_historical_source = historical_reader is not None
+        self._historical_reader = historical_reader
 
     def query(self, operation: str, parameters: dict[str, Any]) -> dict[str, Any]:
         if operation not in {"recent_deployment_changes", "recent_configuration_changes"}:
             raise ValueError("unsupported change operation")
+        if self._historical_reader is not None:
+            _, _, expanded_window = _change_time_window(parameters)
+            reader_parameters = {**parameters, "observation_window": expanded_window}
+            records = self._historical_reader(operation, reader_parameters)
+            result: dict[str, Any] = {
+                "backend": "change_journal",
+                "operation": operation,
+                "records": [
+                    {
+                        "change_id": str(record.change_id),
+                        "resource_type": record.resource_type,
+                        "resource_name": record.resource_name,
+                        "change_type": record.change_type.value,
+                        "timestamp": record.timestamp.isoformat(),
+                        "before": record.before,
+                        "after": record.after,
+                        "revision": record.revision,
+                        "source": record.source,
+                    }
+                    for record in records
+                    if isinstance(record, ChangeRecord)
+                ],
+            }
+            result["__effective_time_window"] = expanded_window
+            result["__temporal_mode"] = "HISTORICAL_CHANGE"
+            return result
         deployment = self._kubernetes.query("get_deployment", parameters)
-        result: dict[str, Any] = {
+        current_result: dict[str, Any] = {
             "backend": "kubernetes",
             "operation": operation,
             "records": [
@@ -454,6 +503,83 @@ class KubernetesChangeBackend:
         }
         window = parameters.get("observation_window")
         if isinstance(window, dict):
-            result["__effective_time_window"] = window
-        result["__temporal_mode"] = "CURRENT_STATE"
-        return result
+            current_result["__effective_time_window"] = window
+        current_result["__temporal_mode"] = "CURRENT_STATE"
+        return current_result
+
+
+class ControlPlaneChangeReader:
+    """Read persisted change records through the control-plane API."""
+
+    def __init__(self, endpoint: str) -> None:
+        self._endpoint = endpoint.rstrip("/")
+
+    def query(self, operation: str, parameters: dict[str, Any]) -> list[ChangeRecord]:
+        """Fetch only bounded records for the authoritative observation window."""
+        if operation not in {"recent_deployment_changes", "recent_configuration_changes"}:
+            raise ValueError("unsupported change operation")
+        resource_name = parameters.get("deployment")
+        if not isinstance(resource_name, str) or not resource_name:
+            raise ValueError("deployment is required")
+        _, _, window = _change_time_window(parameters)
+        query = urlencode(
+            {
+                "resource_name": resource_name,
+                "starts_at": window["starts_at"],
+                "ends_at": window["ends_at"],
+            }
+        )
+        request = Request(f"{self._endpoint}?{query}", method="GET")
+        try:
+            with urlopen(request, timeout=5.0) as response:
+                payload = json.loads(response.read(1_000_001))
+        except HTTPError as error:
+            code = (
+                ToolErrorCode.BACKEND_REQUEST_REJECTED
+                if 400 <= error.code < 500
+                else ToolErrorCode.BACKEND_SERVER_ERROR
+            )
+            raise BackendProtocolError(
+                code,
+                "change journal rejected or failed the request",
+                backend="change_journal",
+                operation=operation,
+                http_status=error.code,
+            ) from error
+        except TimeoutError as error:
+            raise BackendProtocolError(
+                ToolErrorCode.BACKEND_TIMEOUT,
+                "change journal request timed out",
+                backend="change_journal",
+                operation=operation,
+            ) from error
+        except URLError as error:
+            raise BackendProtocolError(
+                ToolErrorCode.BACKEND_UNAVAILABLE,
+                "change journal is unavailable",
+                backend="change_journal",
+                operation=operation,
+            ) from error
+        except json.JSONDecodeError as error:
+            raise BackendProtocolError(
+                ToolErrorCode.BACKEND_RESPONSE_INVALID,
+                "change journal returned invalid JSON",
+                backend="change_journal",
+                operation=operation,
+            ) from error
+        if not isinstance(payload, list):
+            raise BackendProtocolError(
+                ToolErrorCode.BACKEND_RESPONSE_INVALID,
+                "change journal returned an invalid record list",
+                backend="change_journal",
+                operation=operation,
+            )
+        try:
+            return [ChangeRecord.model_validate(item) for item in payload[:100]]
+        except ValueError as error:
+            raise BackendProtocolError(
+                ToolErrorCode.BACKEND_RESPONSE_INVALID,
+                "change journal returned an invalid record",
+                backend="change_journal",
+                operation=operation,
+            ) from error

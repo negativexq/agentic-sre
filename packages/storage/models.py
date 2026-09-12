@@ -93,6 +93,22 @@ class AlertRow(Base):
     source: Mapped[str] = mapped_column(String(32), nullable=False)
 
 
+class ChangeRecordRow(Base):
+    """Immutable observed resource-change fact used by read-only investigation."""
+
+    __tablename__ = "change_records"
+
+    change_id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    timestamp: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    resource_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    resource_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    change_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    before: Mapped[dict[str, Any]] = mapped_column("before", JSON, nullable=False)
+    after: Mapped[dict[str, Any]] = mapped_column("after", JSON, nullable=False)
+    revision: Mapped[str] = mapped_column(String(255), nullable=False)
+    source: Mapped[str] = mapped_column(String(255), nullable=False)
+
+
 class EvidenceRow(Base):
     """Provenance-backed normalized evidence."""
 

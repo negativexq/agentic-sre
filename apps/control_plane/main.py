@@ -1,11 +1,13 @@
 """FastAPI application for the deterministic incident control plane."""
 
+import json
 import os
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from prometheus_client import make_asgi_app
@@ -15,10 +17,18 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from apps.control_plane.schemas import ErrorDetail, ErrorResponse
-from packages.contracts import Alert, AlertmanagerWebhook, Evidence, Incident, IncidentEvent
+from packages.contracts import (
+    Alert,
+    AlertmanagerWebhook,
+    ChangeRecord,
+    Evidence,
+    Incident,
+    IncidentEvent,
+)
 from packages.incident import IncidentManager, normalize_alert
 from packages.storage import (
     AlertRepository,
+    ChangeRecordRepository,
     EvidenceRepository,
     IncidentEventRepository,
     IncidentNotFoundError,
@@ -142,6 +152,32 @@ def create_app(session_factory: sessionmaker[Session] | None = None) -> FastAPI:
     ) -> list[Evidence]:
         """Return provenance-backed evidence attached to an incident."""
         return EvidenceRepository(session).list_for_incident(incident_id)
+
+    @app.get("/api/v1/changes", response_model=list[ChangeRecord])
+    def list_changes(
+        resource_name: str,
+        starts_at: datetime,
+        ends_at: datetime,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> list[ChangeRecord]:
+        """Read bounded historical change facts for investigation backends."""
+        return ChangeRecordRepository(session).between(
+            resource_name=resource_name,
+            starts_at=starts_at,
+            ends_at=ends_at,
+        )
+
+    @app.post("/api/v1/changes", response_model=ChangeRecord)
+    def record_change(
+        record: dict[str, Any],
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> ChangeRecord:
+        """Persist a deterministic harness change fact for later read-only inspection."""
+        try:
+            normalized = ChangeRecord.model_validate_json(json.dumps(record))
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail="invalid change record") from error
+        return ChangeRecordRepository(session).append(normalized)
 
     @app.post("/api/v1/webhooks/alertmanager")
     def alertmanager_webhook(

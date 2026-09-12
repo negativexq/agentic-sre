@@ -11,7 +11,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from apps.control_plane.main import create_app
-from packages.contracts import Incident, IncidentSeverity, IncidentSource, IncidentStatus
+from packages.contracts import (
+    ChangeRecord,
+    ChangeType,
+    Incident,
+    IncidentSeverity,
+    IncidentSource,
+    IncidentStatus,
+)
 from packages.storage.database import create_session_factory
 from packages.storage.models import Base
 from packages.storage.repositories import IncidentRepository
@@ -83,6 +90,34 @@ def test_not_found_and_validation_errors_are_typed(client: tuple[TestClient, UUI
     assert invalid.status_code == 422
     assert invalid.json()["error"]["code"] == "VALIDATION_ERROR"
     assert invalid.json()["error"]["correlation_id"] == correlation_id
+
+
+def test_change_journal_accepts_and_reads_harness_facts(client: tuple[TestClient, UUID]) -> None:
+    """The control-plane persistence boundary preserves historical change facts."""
+    test_client, _ = client
+    record = ChangeRecord(
+        timestamp=NOW,
+        resource_type="Deployment",
+        resource_name="payment-service",
+        change_type=ChangeType.UPDATED,
+        before={"revision": "a"},
+        after={"revision": "b"},
+        revision="b",
+        source="deterministic-harness",
+    )
+    created = test_client.post("/api/v1/changes", json=record.model_dump(mode="json"))
+    assert created.status_code == 200
+
+    queried = test_client.get(
+        "/api/v1/changes",
+        params={
+            "resource_name": "payment-service",
+            "starts_at": NOW.isoformat(),
+            "ends_at": NOW.isoformat(),
+        },
+    )
+    assert queried.status_code == 200
+    assert queried.json()[0]["revision"] == "b"
 
 
 def test_readiness_reports_database_unavailable() -> None:

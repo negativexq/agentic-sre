@@ -15,6 +15,7 @@ from packages.tools.executor import (
     ToolAuditRecord,
 )
 from packages.tools.live_backends import (
+    ControlPlaneChangeReader,
     KubernetesBackend,
     KubernetesChangeBackend,
     LokiBackend,
@@ -44,6 +45,7 @@ __all__ = [
     "kubernetes_read_tool",
     "KubernetesBackend",
     "KubernetesChangeBackend",
+    "ControlPlaneChangeReader",
     "LokiBackend",
     "logs_tool",
     "metrics_tool",

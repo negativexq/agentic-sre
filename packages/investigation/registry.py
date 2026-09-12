@@ -43,6 +43,7 @@ class RegisteredTool:
     tool: Tool
     purpose: str = ""
     argument_model: type[ToolArguments] = AnyToolArguments
+    historical_change_source: bool = False
 
     def descriptor(self) -> dict[str, Any]:
         """Return the safe model-facing capability descriptor."""
@@ -126,6 +127,17 @@ class ReadOnlyToolRegistry:
         """Return deterministic bounded capability descriptors."""
         return tuple(self._tools[name].descriptor() for name in sorted(self._tools))
 
+    def has_historical_change_source(self) -> bool:
+        """Report whether both change tools read an actual historical journal."""
+        return all(
+            self._tools[name].historical_change_source
+            for name in ("recent_deployment_changes", "recent_configuration_changes")
+            if name in self._tools
+        ) and all(
+            name in self._tools
+            for name in ("recent_deployment_changes", "recent_configuration_changes")
+        )
+
     def validate(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Validate one request without executing it."""
         return self.get(name).validate_arguments(arguments)
@@ -135,6 +147,8 @@ def live_observability_registry(
     prometheus_url: str,
     loki_url: str,
     tempo_url: str,
+    *,
+    change_reader: Any | None = None,
 ) -> ReadOnlyToolRegistry:
     """Build the named live registry from bounded backend adapters only."""
     prometheus = PrometheusBackend(prometheus_url)
@@ -147,7 +161,8 @@ def live_observability_registry(
     traces = traces_tool(tempo.query)
     kubernetes = KubernetesBackend()
     k8s_tool = kubernetes_read_tool(kubernetes.query)
-    changes = change_read_tool(KubernetesChangeBackend(kubernetes).query)
+    change_backend = KubernetesChangeBackend(kubernetes, change_reader)
+    changes = change_read_tool(change_backend.query)
     return ReadOnlyToolRegistry(
         (
             RegisteredTool(
@@ -293,6 +308,7 @@ def live_observability_registry(
                 changes,
                 "Inspect bounded observable deployment revision and image facts.",
                 DeploymentArgs,
+                change_backend.has_historical_source,
             ),
             RegisteredTool(
                 "recent_configuration_changes",
@@ -302,6 +318,7 @@ def live_observability_registry(
                 changes,
                 "Inspect bounded observable deployment configuration facts.",
                 DeploymentArgs,
+                change_backend.has_historical_source,
             ),
         )
     )

@@ -17,6 +17,7 @@ from packages.evals import FROZEN_DATASET, capability_matrix, grade_evidence, gr
 from packages.investigation import InvestigationLimits, InvestigationRuntime
 from packages.investigation.registry import live_observability_registry
 from packages.provider import LiveModelBudget, OpenAIProvider
+from packages.tools import ControlPlaneChangeReader
 
 CONTROL_PLANE_URL = "http://localhost:18081"
 
@@ -82,6 +83,7 @@ def main() -> int:
         "http://localhost:19090",
         "http://localhost:19300",
         "http://localhost:19320",
+        change_reader=ControlPlaneChangeReader(f"{CONTROL_PLANE_URL}/api/v1/changes").query,
     )
     matrix = capability_matrix(registry=registry)
     if not all(item.available for item in matrix):

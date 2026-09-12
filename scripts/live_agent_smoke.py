@@ -13,6 +13,7 @@ from packages.contracts import Alert, Incident
 from packages.investigation import InvestigationLimits, InvestigationRuntime
 from packages.investigation.registry import live_observability_registry
 from packages.provider import LiveModelBudget, OpenAIProvider
+from packages.tools import ControlPlaneChangeReader
 
 CONTROL_PLANE_URL = "http://localhost:18081"
 
@@ -68,6 +69,7 @@ def main() -> int:
         "http://localhost:19090",
         "http://localhost:19300",
         "http://localhost:19320",
+        change_reader=ControlPlaneChangeReader(f"{CONTROL_PLANE_URL}/api/v1/changes").query,
     )
     results = []
     for incident in selected:

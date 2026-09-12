@@ -12,10 +12,21 @@ from sqlalchemy import inspect as inspect_database
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from packages.contracts import Incident, IncidentSeverity, IncidentSource, IncidentStatus
+from packages.contracts import (
+    ChangeRecord,
+    ChangeType,
+    Incident,
+    IncidentSeverity,
+    IncidentSource,
+    IncidentStatus,
+)
 from packages.incident import TransitionResult, transition
 from packages.storage.models import Base
-from packages.storage.repositories import IncidentEventRepository, IncidentRepository
+from packages.storage.repositories import (
+    ChangeRecordRepository,
+    IncidentEventRepository,
+    IncidentRepository,
+)
 
 NOW = datetime(2026, 9, 12, 12, 0, tzinfo=UTC)
 
@@ -99,6 +110,30 @@ def test_duplicate_incident_is_rejected(session: Session) -> None:
         repository.create(incident)
 
 
+def test_change_records_survive_session_restart_and_window_query(session: Session) -> None:
+    """Change facts are persisted as immutable records for later investigation."""
+    record = ChangeRecord(
+        timestamp=NOW,
+        resource_type="Deployment",
+        resource_name="payment-service",
+        change_type=ChangeType.UPDATED,
+        before={"revision": "a"},
+        after={"revision": "b"},
+        revision="b",
+        source="deterministic-harness",
+    )
+    repository = ChangeRecordRepository(session)
+    repository.append(record)
+    session.expunge_all()
+
+    loaded = repository.between(
+        resource_name="payment-service",
+        starts_at=NOW,
+        ends_at=NOW,
+    )
+    assert loaded == [record]
+
+
 def test_alembic_migration_up_and_down(tmp_path: Path) -> None:
     database_path = tmp_path / "migration.db"
     config = Config("alembic.ini")
@@ -109,6 +144,7 @@ def test_alembic_migration_up_and_down(tmp_path: Path) -> None:
     expected_tables = {
         "action_executions",
         "alerts",
+        "change_records",
         "evidence",
         "hypotheses",
         "incident_events",

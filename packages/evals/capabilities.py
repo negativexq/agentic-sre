@@ -60,7 +60,11 @@ def capability_matrix(
                 _minimal_args(registry, tool) is not None
                 for tool in _REQUIRED_TOOLS[scenario.category]
             ),
-            temporal_readiness=scenario.category != "deployment",
+            temporal_readiness=(
+                scenario.category != "deployment"
+                or registry is None
+                or registry.has_historical_change_source()
+            ),
             provenance_readiness=True,
         )
         for scenario in scenarios

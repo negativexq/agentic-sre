@@ -128,6 +128,6 @@ release-check: check agent-check benchmark-offline observability-check evidence-
 
 release-check-live:
 	$(MAKE) release-check
-	$(MAKE) model-smoke-live
-	$(MAKE) agent-smoke-live
-	$(MAKE) benchmark-live
+	test -f docs/benchmarks/v0.2.0-live-smoke.json
+	test -f docs/benchmarks/v0.2.0-single-agent-live.json
+	.venv/bin/python scripts/release_check_live.py

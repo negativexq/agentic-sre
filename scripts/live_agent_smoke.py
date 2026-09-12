@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
@@ -96,6 +97,9 @@ def main() -> int:
             }
         )
     payload = {"scenarios": results, "total_live_api_calls": budget.snapshot().calls_used}
+    Path("docs/benchmarks/v0.2.0-live-smoke.json").write_text(
+        json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
     print(json.dumps(payload, sort_keys=True))
     successful = all(
         item["termination_reason"] in {"HYPOTHESIS_SUBMITTED", "AGENT_STOPPED"}

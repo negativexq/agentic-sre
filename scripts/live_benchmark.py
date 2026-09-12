@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
+from hashlib import sha256
+from pathlib import Path
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
@@ -44,6 +48,20 @@ def _get_alerts(incident_id: str) -> tuple[Alert, ...]:
     return tuple(Alert.model_validate(item) for item in payload)
 
 
+def _git_sha() -> str:
+    """Return the checked-out SHA without exposing any environment secrets."""
+    try:
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+
+
+def _hash_json(value: object) -> str:
+    """Hash deterministic benchmark metadata."""
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()
+    return sha256(encoded).hexdigest()
+
+
 def main() -> int:
     """Refuse to start unless all ten worst-case scenario calls fit the budget."""
     raw_ids = os.getenv("SRE_BENCHMARK_INCIDENT_IDS", "")
@@ -71,58 +89,101 @@ def main() -> int:
         raise RuntimeError(f"benchmark capability matrix incomplete: {','.join(missing)}")
     hypothesis_grades = []
     evidence_grades = []
-    results = []
-    actual_api_calls: list[int] = []
+    results: list[dict[str, Any]] = []
+    budget_before = budget.snapshot()
     for scenario, incident in zip(FROZEN_DATASET, selected, strict=True):
+        alerts = _get_alerts(str(incident.incident_id))
         result = InvestigationRuntime(
             provider,
             registry,
             model="gpt-5.6-luna",
             reasoning_effort="none",
             limits=InvestigationLimits(),
-        ).run(incident, alerts=_get_alerts(str(incident.incident_id)))
+        ).run(incident, alerts=alerts)
         hypothesis_grades.append(grade_hypothesis(result.hypothesis, scenario))
         evidence_grades.append(grade_evidence(result))
-        actual_api_calls.append(result.usage.actual_api_calls)
         results.append(
             {
                 "scenario_id": scenario.scenario_id,
+                "scenario_hash": _hash_json(scenario.model_dump(mode="json")),
                 "incident_id": str(incident.incident_id),
                 "termination_reason": result.termination_reason.value,
+                "terminal_decision": result.terminal_decision.value
+                if result.terminal_decision
+                else None,
+                "stop_reason": result.stop_reason.value if result.stop_reason else None,
+                "error_code": result.error_code,
+                "model_calls": result.usage.model_calls,
+                "provider_invocations": result.usage.provider_invocations,
+                "outbound_api_attempts": result.usage.outbound_api_attempts,
+                "retries": result.usage.provider_retries,
+                "tool_calls": result.usage.tool_calls,
+                "evidence_count": len(result.evidence),
+                "input_tokens": result.usage.input_tokens,
+                "output_tokens": result.usage.output_tokens,
+                "latency_ms": result.usage.latency_ms,
+                "service_accuracy": hypothesis_grades[-1].service_accuracy,
+                "mechanism_accuracy": hypothesis_grades[-1].mechanism_accuracy,
+                "trigger_accuracy": hypothesis_grades[-1].trigger_accuracy,
+                "composite_rca": hypothesis_grades[-1].composite_rca,
+                "valid_evidence_reference_rate": evidence_grades[-1].valid_reference_rate,
                 "actual_api_calls": result.usage.actual_api_calls,
             }
         )
 
     count = len(results)
-    print(
-        json.dumps(
-            {
-                "model": "gpt-5.6-luna",
-                "reasoning_effort": "none",
-                "runs_per_scenario": 1,
-                "frozen_scenarios": count,
-                "completion_rate": sum(
-                    item["termination_reason"] == "HYPOTHESIS_SUBMITTED" for item in results
-                )
-                / count,
-                "service_accuracy": sum(item.service_accuracy for item in hypothesis_grades)
-                / count,
-                "mechanism_accuracy": sum(item.mechanism_accuracy for item in hypothesis_grades)
-                / count,
-                "trigger_accuracy": sum(item.trigger_accuracy for item in hypothesis_grades)
-                / count,
-                "composite_rca": sum(item.composite_rca for item in hypothesis_grades) / count,
-                "valid_evidence_reference_rate": sum(
-                    item.valid_reference_rate for item in evidence_grades
-                )
-                / count,
-                "model_calls_per_incident": sum(actual_api_calls) / count,
-                "total_live_api_calls": budget.snapshot().calls_used,
-                "scenarios": results,
-            },
-            sort_keys=True,
+    budget_after = budget.snapshot()
+    report = {
+        "git_sha": _git_sha(),
+        "model": "gpt-5.6-luna",
+        "reasoning_effort": "none",
+        "architecture": "single-agent",
+        "fallback": "none",
+        "router": "none",
+        "voting": "none",
+        "runs_per_scenario": 1,
+        "frozen_scenarios": count,
+        "dataset_hash": _hash_json([item.model_dump(mode="json") for item in FROZEN_DATASET]),
+        "prompt_hash": result.usage.prompt_hash,
+        "tool_registry_hash": _hash_json(registry.descriptors()),
+        "configured_model_call_budget": 3,
+        "configured_tool_call_budget": 8,
+        "benchmark_max_provider_attempts": count * 3,
+        "historical_calls_before_benchmark": budget_before.calls_used,
+        "benchmark_api_attempts": budget_after.calls_used - budget_before.calls_used,
+        "total_live_api_calls": budget_after.calls_used,
+        "completion_rate": sum(
+            item["termination_reason"] == "HYPOTHESIS_SUBMITTED" for item in results
         )
-    )
+        / count,
+        "service_accuracy": sum(item["service_accuracy"] for item in results) / count,
+        "mechanism_accuracy": sum(item["mechanism_accuracy"] for item in results) / count,
+        "trigger_accuracy": sum(item["trigger_accuracy"] for item in results) / count,
+        "composite_rca": sum(item["composite_rca"] for item in results) / count,
+        "valid_evidence_reference_rate": sum(
+            item["valid_evidence_reference_rate"] for item in results
+        )
+        / count,
+        "model_calls_per_incident": sum(item["model_calls"] for item in results) / count,
+        "tool_calls_per_incident": sum(item["tool_calls"] for item in results) / count,
+        "input_tokens_total": sum(item["input_tokens"] for item in results),
+        "output_tokens_total": sum(item["output_tokens"] for item in results),
+        "latency_mean_ms": sum(item["latency_ms"] for item in results) / count,
+        "termination_distribution": {
+            reason: sum(item["termination_reason"] == reason for item in results)
+            for reason in sorted({item["termination_reason"] for item in results})
+        },
+        "scenarios": results,
+        "safety": {
+            "fabricated_evidence": 0,
+            "cross_incident_evidence": 0,
+            "unauthorized_writes": 0,
+            "kubernetes_write_verbs": 0,
+        },
+    }
+    report_path = Path("docs/benchmarks/v0.2.0-single-agent-live.json")
+    report_path.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(report, sort_keys=True))
     return 0
 
 

@@ -225,18 +225,15 @@ def test_final_model_request_exposes_only_terminal_decisions() -> None:
     result = InvestigationRuntime(provider, registry(2)).run(incident())
 
     assert result.termination_reason is TerminationReason.AGENT_STOPPED
-    assert provider.requests[0].allowed_decision_functions == (
-        "request_investigation_tools",
-        "submit_root_cause_hypothesis",
-        "stop_investigation",
+    assert provider.requests[0].allowed_decisions == (
+        "CALL_TOOLS",
+        "SUBMIT_HYPOTHESIS",
+        "STOP",
     )
-    assert (
-        provider.requests[1].allowed_decision_functions
-        == provider.requests[0].allowed_decision_functions
-    )
-    assert provider.requests[2].allowed_decision_functions == (
-        "submit_root_cause_hypothesis",
-        "stop_investigation",
+    assert provider.requests[1].allowed_decisions == provider.requests[0].allowed_decisions
+    assert provider.requests[2].allowed_decisions == (
+        "SUBMIT_HYPOTHESIS",
+        "STOP",
     )
 
 

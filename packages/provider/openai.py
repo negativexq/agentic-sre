@@ -45,6 +45,11 @@ DECISION_FUNCTION_DESCRIPTIONS = {
         "This is a terminal decision."
     ),
 }
+DECISION_TO_FUNCTION = {
+    "CALL_TOOLS": "request_investigation_tools",
+    "SUBMIT_HYPOTHESIS": "submit_root_cause_hypothesis",
+    "STOP": "stop_investigation",
+}
 _STOP_REASON_VALUES = (
     "insufficient_evidence",
     "investigation_complete",
@@ -432,7 +437,11 @@ def _extract_decision_function(
             metadata=metadata,
         )
     function_name = _field(decision_calls[0], "name")
-    allowed_functions = request.allowed_decision_functions or DECISION_FUNCTION_NAMES
+    allowed_functions = (
+        tuple(DECISION_TO_FUNCTION[item] for item in request.allowed_decisions)
+        if request.allowed_decisions is not None
+        else DECISION_FUNCTION_NAMES
+    )
     if function_name not in allowed_functions:
         raise ProviderError(
             ProviderErrorCode.UNEXPECTED_FUNCTION_CALL,
@@ -620,7 +629,11 @@ class OpenAIProvider:
         }
         if request.response_schema_name == "investigation_decision":
             schemas = _decision_function_schemas(request.response_schema)
-            allowed = request.allowed_decision_functions or DECISION_FUNCTION_NAMES
+            allowed = (
+                tuple(DECISION_TO_FUNCTION[item] for item in request.allowed_decisions)
+                if request.allowed_decisions is not None
+                else DECISION_FUNCTION_NAMES
+            )
             unknown = set(allowed) - set(DECISION_FUNCTION_NAMES)
             if unknown:
                 raise ProviderError(

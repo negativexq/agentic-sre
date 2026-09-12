@@ -527,11 +527,7 @@ def test_final_turn_exposes_only_terminal_decision_functions() -> None:
         max_retry=0,
     )
     provider.complete(
-        function_request().model_copy(
-            update={
-                "allowed_decision_functions": ("submit_root_cause_hypothesis", "stop_investigation")
-            }
-        )
+        function_request().model_copy(update={"allowed_decisions": ("SUBMIT_HYPOTHESIS", "STOP")})
     )
 
     tools = captured["tools"]

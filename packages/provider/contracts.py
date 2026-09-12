@@ -60,7 +60,7 @@ class ModelRequest(BaseModel):
     reasoning_effort: Literal["none", "minimal", "low", "medium", "high", "xhigh"] = "none"
     max_output_tokens: int = Field(gt=0, le=128_000)
     timeout_ms: int = Field(gt=0, le=120_000)
-    allowed_decision_functions: tuple[str, ...] | None = None
+    allowed_decisions: tuple[Literal["CALL_TOOLS", "SUBMIT_HYPOTHESIS", "STOP"], ...] | None = None
 
 
 class ResponseEnvelopeMetadata(BaseModel):

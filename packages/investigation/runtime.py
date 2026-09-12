@@ -357,13 +357,13 @@ class InvestigationRuntime:
             reasoning_effort=self._reasoning_effort,  # type: ignore[arg-type]
             max_output_tokens=1_000,
             timeout_ms=10_000,
-            allowed_decision_functions=(
-                ("submit_root_cause_hypothesis", "stop_investigation")
+            allowed_decisions=(
+                ("SUBMIT_HYPOTHESIS", "STOP")
                 if model_calls >= self._limits.max_model_calls
                 else (
-                    "request_investigation_tools",
-                    "submit_root_cause_hypothesis",
-                    "stop_investigation",
+                    "CALL_TOOLS",
+                    "SUBMIT_HYPOTHESIS",
+                    "STOP",
                 )
             ),
         )

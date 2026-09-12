@@ -594,8 +594,10 @@ class OpenAIProvider:
                             "type": "function",
                             "name": name,
                             "description": (
-                                "Transport one decision to the deterministic runtime. "
-                                "Do not execute infrastructure actions."
+                                "Request one or more read-only investigation tools, not exceeding "
+                                "the remaining tool-call budget supplied in the incident context. "
+                                "Transport the decision to the deterministic runtime; do not execute "
+                                "infrastructure actions."
                             ),
                             "parameters": schema,
                             "strict": True,

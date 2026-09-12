@@ -44,8 +44,8 @@ def _semantic_error_code(payload: Any, limits: InvestigationLimits) -> str:
         requests = payload.get("requests")
         if not isinstance(requests, list) or not requests:
             return InvestigationErrorCode.EMPTY_TOOL_REQUESTS.value
-        if len(requests) > limits.max_tools_per_turn:
-            return InvestigationErrorCode.TOO_MANY_TOOL_REQUESTS.value
+        if len(requests) > limits.max_tool_calls:
+            return InvestigationErrorCode.TOOL_BUDGET_EXCEEDED.value
         for request in requests:
             if not isinstance(request, dict) or not isinstance(request.get("arguments", {}), dict):
                 return InvestigationErrorCode.INVALID_TOOL_ARGUMENTS.value
@@ -59,6 +59,22 @@ def _semantic_error_code(payload: Any, limits: InvestigationLimits) -> str:
         if hypothesis.get("mechanism") not in {item.value for item in HypothesisMechanism}:
             return InvestigationErrorCode.UNKNOWN_HYPOTHESIS_MECHANISM.value
     return InvestigationErrorCode.INVALID_DECISION.value
+
+
+def _has_duplicate_tool_requests(requests: list[Any]) -> bool:
+    """Reject exact duplicate tool requests without silently deduplicating them."""
+    seen: set[tuple[str, str]] = set()
+    for request in requests:
+        if not hasattr(request, "tool") or not hasattr(request, "arguments"):
+            continue
+        key = (
+            request.tool,
+            json.dumps(request.arguments, sort_keys=True, separators=(",", ":"), default=str),
+        )
+        if key in seen:
+            return True
+        seen.add(key)
+    return False
 
 
 class InvestigationRuntime:
@@ -143,14 +159,14 @@ class InvestigationRuntime:
             if not decision.requests:
                 termination = TerminationReason.AGENT_STOPPED
                 break
-            if len(decision.requests) > self._limits.max_tools_per_turn:
-                termination = TerminationReason.TOOL_CALL_LIMIT
-                error_code = InvestigationErrorCode.TOO_MANY_TOOL_REQUESTS.value
-                break
             remaining = self._limits.max_tool_calls - tool_calls
             if len(decision.requests) > remaining:
                 termination = TerminationReason.TOOL_CALL_LIMIT
-                error_code = InvestigationErrorCode.TOO_MANY_TOOL_REQUESTS.value
+                error_code = InvestigationErrorCode.TOOL_BUDGET_EXCEEDED.value
+                break
+            if _has_duplicate_tool_requests(decision.requests):
+                termination = TerminationReason.INVALID_DECISION
+                error_code = InvestigationErrorCode.DUPLICATE_TOOL_REQUEST.value
                 break
 
             try:

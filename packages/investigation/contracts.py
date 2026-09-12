@@ -27,7 +27,8 @@ class InvestigationErrorCode(StrEnum):
     """Typed semantic failures produced by the deterministic runtime."""
 
     EMPTY_TOOL_REQUESTS = "EMPTY_TOOL_REQUESTS"
-    TOO_MANY_TOOL_REQUESTS = "TOO_MANY_TOOL_REQUESTS"
+    TOOL_BUDGET_EXCEEDED = "TOOL_BUDGET_EXCEEDED"
+    DUPLICATE_TOOL_REQUEST = "DUPLICATE_TOOL_REQUEST"
     UNKNOWN_INVESTIGATION_TOOL = "UNKNOWN_INVESTIGATION_TOOL"
     INVALID_TOOL_ARGUMENTS = "INVALID_TOOL_ARGUMENTS"
     EMPTY_EVIDENCE_SET = "EMPTY_EVIDENCE_SET"
@@ -75,7 +76,7 @@ class InvestigationDecision(InvestigationModel):
     """Validated model output with mutually exclusive decision payloads."""
 
     decision: DecisionType
-    requests: list[ToolRequestSpec] = Field(default_factory=list, max_length=4)
+    requests: list[ToolRequestSpec] = Field(default_factory=list, max_length=8)
     hypothesis: HypothesisSubmission | None = None
 
     @model_validator(mode="after")
@@ -97,7 +98,6 @@ class InvestigationLimits(InvestigationModel):
 
     max_model_calls: int = Field(default=3, gt=0, le=3)
     max_tool_calls: int = Field(default=8, gt=0, le=8)
-    max_tools_per_turn: int = Field(default=4, gt=0, le=4)
     max_agent_turns: int = Field(default=3, gt=0, le=3)
     max_wall_time_seconds: int = Field(default=60, gt=0, le=300)
 

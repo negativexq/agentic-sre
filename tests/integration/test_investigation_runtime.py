@@ -2,6 +2,7 @@
 
 import json
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
@@ -15,6 +16,7 @@ from packages.contracts import (
 from packages.investigation import (
     DecisionType,
     InvestigationDecision,
+    InvestigationLimits,
     ReadOnlyToolRegistry,
     RegisteredTool,
     TerminationReason,
@@ -38,18 +40,19 @@ def incident() -> Incident:
     )
 
 
-def registry() -> ReadOnlyToolRegistry:
-    """Build one named read-only metric tool backed by deterministic data."""
+def registry(count: int = 1) -> ReadOnlyToolRegistry:
+    """Build named read-only metric tools backed by deterministic data."""
     backend = metrics_tool(lambda _operation, _parameters: {"records": [{"p95": 1.7}]})
     return ReadOnlyToolRegistry(
-        (
+        tuple(
             RegisteredTool(
-                name="service_latency",
+                name="service_latency" if index == 0 else f"metric_{index}",
                 version="1",
                 operation="service_latency",
                 source_type=EvidenceSourceType.METRIC,
                 tool=backend,
-            ),
+            )
+            for index in range(count)
         )
     )
 
@@ -151,12 +154,112 @@ def test_model_budget_stops_after_three_turns() -> None:
     assert result.usage.tool_calls == 3
 
 
-def test_decision_rejects_more_than_four_tools() -> None:
-    """The structured contract rejects an oversized tool batch before runtime."""
+def test_decision_accepts_a_batch_up_to_the_incident_budget() -> None:
+    """The provider-independent decision contract permits the full total budget."""
+    decision = InvestigationDecision.model_validate(
+        {
+            "decision": DecisionType.CALL_TOOLS,
+            "requests": [{"tool": f"tool-{index}"} for index in range(8)],
+        }
+    )
+
+    assert len(decision.requests) == 8
+
+
+def test_decision_rejects_more_than_the_incident_budget() -> None:
+    """The contract still rejects a batch above the hard incident budget."""
     with pytest.raises(ValueError):
         InvestigationDecision.model_validate(
             {
-                "decision": "CALL_TOOLS",
-                "requests": [{"tool": f"tool-{index}"} for index in range(5)],
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [{"tool": f"tool-{index}"} for index in range(9)],
             }
         )
+
+
+def _tool_requests(count: int) -> list[dict[str, str]]:
+    """Build a batch of distinct registered tool requests."""
+    return [
+        {"tool": "service_latency" if index == 0 else f"metric_{index}"} for index in range(count)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("first_count", "second_count"),
+    [(8, 0), (1, 7), (4, 4)],
+)
+def test_batches_use_remaining_total_tool_budget(first_count: int, second_count: int) -> None:
+    """A batch may consume all currently remaining incident tool capacity."""
+    responses: list[dict[str, Any]] = [
+        {"decision": DecisionType.CALL_TOOLS, "requests": _tool_requests(first_count)}
+    ]
+    if second_count:
+        responses.append(
+            {"decision": DecisionType.CALL_TOOLS, "requests": _tool_requests(second_count)}
+        )
+    responses.append({"decision": DecisionType.STOP})
+
+    result = InvestigationRuntime(
+        FakeModelProvider(responses),
+        registry(8),
+        limits=InvestigationLimits(max_agent_turns=2),
+    ).run(incident())
+
+    assert result.termination_reason is TerminationReason.AGENT_STOPPED
+    assert result.error_code is None
+    assert result.usage.tool_calls == 8
+    assert len(result.evidence) == 8
+
+
+def test_batch_above_remaining_budget_fails_closed() -> None:
+    """A request above remaining capacity gets the total-budget failure."""
+    provider = FakeModelProvider(
+        [
+            {"decision": DecisionType.CALL_TOOLS, "requests": _tool_requests(1)},
+            {"decision": DecisionType.CALL_TOOLS, "requests": _tool_requests(8)},
+        ]
+    )
+
+    result = InvestigationRuntime(provider, registry(8)).run(incident())
+
+    assert result.termination_reason is TerminationReason.TOOL_CALL_LIMIT
+    assert result.error_code == "TOOL_BUDGET_EXCEEDED"
+    assert result.usage.tool_calls == 1
+
+
+def test_batch_with_no_remaining_budget_fails_closed() -> None:
+    """No tool request can execute once the total incident budget is consumed."""
+    provider = FakeModelProvider(
+        [
+            {"decision": DecisionType.CALL_TOOLS, "requests": _tool_requests(8)},
+            {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "service_latency"}]},
+        ]
+    )
+
+    result = InvestigationRuntime(provider, registry(8)).run(incident())
+
+    assert result.termination_reason is TerminationReason.TOOL_CALL_LIMIT
+    assert result.error_code == "TOOL_BUDGET_EXCEEDED"
+    assert result.usage.tool_calls == 8
+
+
+def test_exact_duplicate_tool_requests_are_rejected_without_execution() -> None:
+    """Exact duplicate requests are not silently deduplicated or executed."""
+    provider = FakeModelProvider(
+        [
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [
+                    {"tool": "service_latency", "arguments": {"window": "5m"}},
+                    {"tool": "service_latency", "arguments": {"window": "5m"}},
+                ],
+            }
+        ]
+    )
+
+    result = InvestigationRuntime(provider, registry()).run(incident())
+
+    assert result.termination_reason is TerminationReason.INVALID_DECISION
+    assert result.error_code == "DUPLICATE_TOOL_REQUEST"
+    assert result.usage.tool_calls == 0
+    assert result.evidence == []

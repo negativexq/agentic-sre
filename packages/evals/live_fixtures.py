@@ -333,6 +333,11 @@ class LiveBenchmarkEnvironment:
             if interval_seconds > 0:
                 time.sleep(interval_seconds)
 
+    def _concurrent_orders(self, count: int = 30) -> None:
+        """Create a bounded burst so worker lag is observable before catch-up."""
+        with ThreadPoolExecutor(max_workers=min(count, 30)) as executor:
+            list(executor.map(lambda _: self._order_requests(1), range(count)))
+
     def _concurrent_payments(self, count: int = 12) -> None:
         with ThreadPoolExecutor(max_workers=min(count, 30)) as executor:
             list(executor.map(lambda _: self._payment_requests(1), range(count)))
@@ -426,6 +431,9 @@ class LiveBenchmarkEnvironment:
             "order_worker_lag",
             "order_worker_failure",
         }:
+            if fixture == "order_worker_lag":
+                self._concurrent_orders(count=30)
+                return
             self._order_requests(
                 count=60 if fixture in {"order_error_spike", "order_worker_failure"} else 30,
                 interval_seconds=(

@@ -82,6 +82,7 @@ def _compile_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
             if isinstance(properties, dict):
                 compiled["required"] = list(properties)
             else:
+                compiled["properties"] = {}
                 compiled["required"] = []
             compiled["additionalProperties"] = False
         return compiled

@@ -311,15 +311,17 @@ class LiveBenchmarkEnvironment:
             time.sleep(2)
         raise TimeoutError(f"deployment rollout timed out: {deployment}")
 
-    def _payment_requests(self, count: int = 20) -> None:
+    def _payment_requests(self, count: int = 20, interval_seconds: float = 0.0) -> None:
         for _ in range(count):
             request = PaymentRequest(order_id=uuid4(), amount_cents=2_500, currency="USD")
             try:
                 self._post_json(f"{self.payment_url}/payments", request)
             except RuntimeError:
                 pass
+            if interval_seconds > 0:
+                time.sleep(interval_seconds)
 
-    def _order_requests(self, count: int = 20) -> None:
+    def _order_requests(self, count: int = 20, interval_seconds: float = 0.0) -> None:
         for _ in range(count):
             request = OrderCreateRequest(
                 customer_id=f"benchmark-{uuid4().hex[:12]}", amount_cents=2_500, currency="USD"
@@ -328,6 +330,8 @@ class LiveBenchmarkEnvironment:
                 self._post_json(f"{self.order_url}/orders", request)
             except RuntimeError:
                 pass
+            if interval_seconds > 0:
+                time.sleep(interval_seconds)
 
     def _concurrent_payments(self, count: int = 12) -> None:
         with ThreadPoolExecutor(max_workers=min(count, 12)) as executor:
@@ -413,7 +417,7 @@ class LiveBenchmarkEnvironment:
             if fixture == "payment_db_pool_pressure":
                 self._concurrent_payments()
             else:
-                self._payment_requests()
+                self._payment_requests(count=60, interval_seconds=0.5)
         elif fixture in {
             "order_error_spike",
             "payment_dependency_latency",
@@ -422,7 +426,12 @@ class LiveBenchmarkEnvironment:
             "order_worker_lag",
             "order_worker_failure",
         }:
-            self._order_requests()
+            self._order_requests(
+                count=60 if fixture in {"order_error_spike", "order_worker_failure"} else 30,
+                interval_seconds=(
+                    0.5 if fixture in {"order_error_spike", "order_worker_failure"} else 0.0
+                ),
+            )
         else:
             raise KeyError(fixture)
 

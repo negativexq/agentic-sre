@@ -334,7 +334,7 @@ class LiveBenchmarkEnvironment:
                 time.sleep(interval_seconds)
 
     def _concurrent_payments(self, count: int = 12) -> None:
-        with ThreadPoolExecutor(max_workers=min(count, 12)) as executor:
+        with ThreadPoolExecutor(max_workers=min(count, 30)) as executor:
             list(executor.map(lambda _: self._payment_requests(1), range(count)))
 
     def _restart_payment_container(self) -> None:

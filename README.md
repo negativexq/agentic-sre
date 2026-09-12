@@ -3,6 +3,7 @@
 Deterministic SRE foundations for a future agentic investigation platform.
 
 [![Version](https://img.shields.io/github/v/tag/negativexq/agentic-sre?sort=semver)](https://github.com/negativexq/agentic-sre/tags)
+[![CI](https://github.com/negativexq/agentic-sre/actions/workflows/checks.yml/badge.svg)](https://github.com/negativexq/agentic-sre/actions/workflows/checks.yml)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Kubernetes](https://img.shields.io/badge/runtime-kind-326CE5?logo=kubernetes&logoColor=white)](https://kind.sigs.k8s.io/)
 

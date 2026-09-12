@@ -178,6 +178,28 @@ def test_prometheus_kafka_request_uses_seconds(monkeypatch) -> None:  # type: ig
     assert 'kafka_consumer_lag{service="order-worker"}' in params["query"]
 
 
+def test_database_queries_are_service_scoped(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Database evidence must not aggregate another service's signal."""
+    captured: list[dict[str, object]] = []
+
+    def fake_get(self, path, params, timeout_seconds, **kwargs):  # type: ignore[no-untyped-def]
+        captured.append(params)
+        return {"data": {"result": []}}
+
+    monkeypatch.setattr(PrometheusBackend, "_get", fake_get)
+    backend = PrometheusBackend("http://prometheus")
+    for operation, service in (
+        ("db_connection_pressure", "payment-service"),
+        ("db_query_latency", "order-service"),
+    ):
+        backend.query(operation, {"service": service, "range_seconds": 60})
+
+    assert 'service="payment-service"' in str(captured[0]["query"])
+    assert 'service="order-service"' in str(captured[1]["query"])
+    assert "db_connection_acquisition_seconds_count" in str(captured[0]["query"])
+    assert "db_query_duration_seconds_count" in str(captured[1]["query"])
+
+
 def test_tempo_search_request_uses_integer_seconds(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """Tempo search receives integer Unix seconds, not Loki nanoseconds."""
     captured: dict[str, object] = {}

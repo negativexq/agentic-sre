@@ -27,6 +27,7 @@ class FaultConfig(BaseModel):
 
     delay_ms: int = Field(default=0, ge=0, le=30_000)
     error: bool = False
+    db_hold_ms: int = Field(default=0, ge=0, le=5_000)
 
 
 class PaymentService:
@@ -39,11 +40,13 @@ class PaymentService:
         clock: Callable[[], datetime] | None = None,
         decline_above_cents: int | None = None,
         runtime: TelemetryRuntime | None = None,
+        fault_config: FaultConfig | None = None,
     ) -> None:
         self._repository_factory = repository_factory
         self._clock = clock or (lambda: datetime.now(UTC))
         self._decline_above_cents = decline_above_cents
         self._runtime = runtime
+        self._fault_config = fault_config
 
     def charge(self, request: PaymentRequest) -> PaymentResponse:
         """Persist a deterministic approval or decline."""
@@ -54,8 +57,19 @@ class PaymentService:
         ):
             status = PaymentStatus.DECLINED
         with self._repository_factory() as session:
-            started = time.perf_counter()
+            query_started = time.perf_counter()
             try:
+                acquisition_started = time.perf_counter()
+                session.connection()
+                if self._runtime is not None:
+                    self._runtime.record_db(
+                        "payment-service",
+                        time.perf_counter() - acquisition_started,
+                        acquisition=True,
+                    )
+                if self._fault_config is not None and self._fault_config.db_hold_ms:
+                    time.sleep(self._fault_config.db_hold_ms / 1000)
+                query_started = time.perf_counter()
                 span_context = (
                     self._runtime.tracer.start_as_current_span("postgres payment create")
                     if self._runtime is not None
@@ -69,7 +83,7 @@ class PaymentService:
                 raise
             finally:
                 if self._runtime is not None:
-                    self._runtime.metrics.db("payment-service", time.perf_counter() - started)
+                    self._runtime.record_db("payment-service", time.perf_counter() - query_started)
             return response
 
 
@@ -88,12 +102,15 @@ def create_app(
         registry=registry,
         otlp_endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
     )
-    payment_service = service or PaymentService(session_factory, runtime=telemetry)
     fault_config = FaultConfig(
         delay_ms=int(os.getenv("FAULT_PAYMENT_DELAY_MS", "0")),
         error=os.getenv("FAULT_PAYMENT_ERROR", "false").lower() == "true",
+        db_hold_ms=int(os.getenv("FAULT_PAYMENT_DB_HOLD_MS", "0")),
     )
     faults_enabled = os.getenv("ENABLE_TEST_FAULTS", "false").lower() == "true"
+    payment_service = service or PaymentService(
+        session_factory, runtime=telemetry, fault_config=fault_config
+    )
 
     app = FastAPI(title="Payment Service", version="0.1.1")
     app.add_middleware(TelemetryMiddleware, runtime=telemetry)
@@ -114,6 +131,7 @@ def create_app(
             raise HTTPException(status_code=404, detail="test faults are disabled")
         fault_config.delay_ms = config.delay_ms
         fault_config.error = config.error
+        fault_config.db_hold_ms = config.db_hold_ms
         return fault_config
 
     @app.get("/health")

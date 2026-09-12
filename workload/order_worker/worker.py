@@ -92,6 +92,11 @@ class KafkaOrderWorker:
                 delay_ms = int(os.getenv("FAULT_WORKER_DELAY_MS", "0"))
                 if delay_ms > 0:
                     time.sleep(delay_ms / 1000)
+                if os.getenv("FAULT_WORKER_FAILURE", "false").lower() == "true":
+                    if self._runtime is not None:
+                        self._runtime.record_kafka_error("order-worker", topic)
+                        self._runtime.logger.error("kafka.consumer.failure")
+                    continue
                 event = OrderCreatedEvent.model_validate_json(message.value())
                 self._worker.process(event)
             self._consumer.commit(message=message)

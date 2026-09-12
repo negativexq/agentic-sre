@@ -57,6 +57,11 @@ class RuntimeMetrics:
         self._http_duration = meter.create_histogram(
             "http_request_duration_seconds", unit="s", description="HTTP request duration"
         )
+        self._dependency_duration = meter.create_histogram(
+            "dependency_request_duration_seconds",
+            unit="s",
+            description="Outbound dependency request duration",
+        )
         self._db_acquisition = meter.create_histogram(
             "db_connection_acquisition_seconds",
             unit="s",
@@ -73,6 +78,11 @@ class RuntimeMetrics:
         )
         self._kafka_lag = meter.create_up_down_counter(
             "kafka_consumer_lag", unit="1", description="Kafka consumer lag"
+        )
+        self._kafka_errors = meter.create_counter(
+            "kafka_consumer_errors_total",
+            unit="1",
+            description="Kafka consumer processing errors",
         )
 
     def http(self, service: str, route: str, status: int, duration_seconds: float) -> None:
@@ -93,6 +103,16 @@ class RuntimeMetrics:
     def kafka_lag(self, service: str, topic: str, delta: int) -> None:
         self._kafka_lag.add(delta, {"service": service, "topic": topic})
 
+    def dependency(self, service: str, dependency: str, duration_seconds: float) -> None:
+        """Record one outbound dependency call, including failed calls."""
+        self._dependency_duration.record(
+            duration_seconds, {"service": service, "dependency": dependency}
+        )
+
+    def kafka_error(self, service: str, topic: str) -> None:
+        """Record one bounded consumer processing failure."""
+        self._kafka_errors.add(1, {"service": service, "topic": topic})
+
 
 class TelemetryRuntime:
     """Service-local telemetry providers and instruments."""
@@ -110,6 +130,30 @@ class TelemetryRuntime:
         self.metrics = metrics
         self.prometheus_metrics = prometheus_metrics
         self.logger = logger
+
+    def record_db(
+        self, service: str, duration_seconds: float, *, acquisition: bool = False
+    ) -> None:
+        """Record a database observation in OTLP and the local scrape registry."""
+        self.metrics.db(service, duration_seconds, acquisition=acquisition)
+        instrument = (
+            self.prometheus_metrics.db_acquisition
+            if acquisition
+            else self.prometheus_metrics.db_query_duration
+        )
+        instrument.labels(service).observe(duration_seconds)
+
+    def record_dependency(self, service: str, dependency: str, duration_seconds: float) -> None:
+        """Record an outbound dependency observation in both metric paths."""
+        self.metrics.dependency(service, dependency, duration_seconds)
+        self.prometheus_metrics.dependency_duration.labels(service, dependency).observe(
+            duration_seconds
+        )
+
+    def record_kafka_error(self, service: str, topic: str) -> None:
+        """Record a consumer processing failure in both metric paths."""
+        self.metrics.kafka_error(service, topic)
+        self.prometheus_metrics.kafka_consumer_errors.labels(service, topic).inc()
 
 
 def _otlp_endpoint(endpoint: str | None) -> str | None:

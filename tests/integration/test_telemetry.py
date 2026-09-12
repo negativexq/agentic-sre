@@ -36,3 +36,6 @@ def test_metrics_expose_http_database_and_kafka_signals() -> None:
     assert "http_requests_total" in output
     assert "db_active_connections" in output
     assert "kafka_messages_total" in output
+    assert "db_connection_acquisition_seconds" in output
+    assert "db_query_duration_seconds" in output
+    assert "dependency_request_duration_seconds" in output

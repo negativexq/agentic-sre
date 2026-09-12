@@ -20,6 +20,24 @@ class WorkloadMetrics:
             ["service", "route"],
             registry=registry,
         )
+        self.dependency_duration = Histogram(
+            "dependency_request_duration_seconds",
+            "Outbound dependency request duration",
+            ["service", "dependency"],
+            registry=registry,
+        )
+        self.db_acquisition = Histogram(
+            "db_connection_acquisition_seconds",
+            "Database connection acquisition duration",
+            ["service"],
+            registry=registry,
+        )
+        self.db_query_duration = Histogram(
+            "db_query_duration_seconds",
+            "Database query duration",
+            ["service"],
+            registry=registry,
+        )
         self.db_active_connections = Gauge(
             "db_active_connections", "Active database connections", ["service"], registry=registry
         )
@@ -31,4 +49,10 @@ class WorkloadMetrics:
         )
         self.kafka_consumer_lag = Gauge(
             "kafka_consumer_lag", "Kafka consumer lag", ["service", "topic"], registry=registry
+        )
+        self.kafka_consumer_errors = Counter(
+            "kafka_consumer_errors_total",
+            "Kafka consumer processing errors",
+            ["service", "topic"],
+            registry=registry,
         )

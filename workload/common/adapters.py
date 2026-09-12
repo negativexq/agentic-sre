@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from contextlib import nullcontext
+from time import perf_counter
 from typing import Any, Protocol
 from urllib.request import Request, urlopen
 
@@ -87,9 +88,16 @@ class HttpPaymentGateway:
             if self._runtime is not None
             else nullcontext()
         )
-        with span_context:
-            with urlopen(http_request, timeout=self._timeout_seconds) as response:
-                return PaymentResponse.model_validate_json(response.read())
+        started = perf_counter()
+        try:
+            with span_context:
+                with urlopen(http_request, timeout=self._timeout_seconds) as response:
+                    return PaymentResponse.model_validate_json(response.read())
+        finally:
+            if self._runtime is not None:
+                self._runtime.record_dependency(
+                    self._runtime.service_name, "payment-service", perf_counter() - started
+                )
 
 
 class KafkaEventPublisher:

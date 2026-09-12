@@ -2,7 +2,7 @@ groups:
   - name: agentic-sre-baseline
     rules:
       - alert: HighErrorRate
-        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+        expr: sum(rate(http_requests_total{service="payment-service",status=~"5.."}[30s])) > 0.05
         for: 2m
         labels:
           severity: critical
@@ -10,7 +10,7 @@ groups:
         annotations:
           runbook: https://example.invalid/runbooks/high-error-rate
       - alert: HighRequestLatency
-        expr: sum(rate(http_request_duration_seconds_sum[5m])) / sum(rate(http_request_duration_seconds_count[5m])) > 0.5
+        expr: sum(rate(http_request_duration_seconds_sum{service="payment-service"}[30s])) / sum(rate(http_request_duration_seconds_count{service="payment-service"}[30s])) > 0.5
         for: 2m
         labels:
           severity: warning
@@ -18,7 +18,7 @@ groups:
         annotations:
           runbook: https://example.invalid/runbooks/high-request-latency
       - alert: KafkaConsumerLag
-        expr: kafka_consumer_lag > 100
+        expr: sum(kafka_consumer_lag{service="order-worker"}) > 100
         for: 2m
         labels:
           severity: critical
@@ -34,10 +34,60 @@ groups:
         annotations:
           runbook: https://example.invalid/runbooks/pod-restart-spike
       - alert: DBConnectionPressure
-        expr: db_active_connections > 90
+        expr: sum(rate(db_connection_acquisition_seconds_sum{service="payment-service"}[30s])) / sum(rate(db_connection_acquisition_seconds_count{service="payment-service"}[30s])) > 0.5
         for: 2m
         labels:
           severity: critical
           namespace: sre-demo
         annotations:
           runbook: https://example.invalid/runbooks/db-connection-pressure
+      - alert: PaymentErrorRateHigh
+        expr: sum(rate(http_requests_total{service="payment-service",status=~"5.."}[30s])) > 0.05
+        for: 15s
+        labels: {severity: critical, namespace: sre-demo, service: payment-service}
+        annotations: {summary: Payment service error rate is high}
+      - alert: OrderErrorRateHigh
+        expr: sum(rate(http_requests_total{service="order-service",status=~"5.."}[30s])) > 0.05
+        for: 15s
+        labels: {severity: critical, namespace: sre-demo, service: order-service}
+        annotations: {summary: Order service error rate is high}
+      - alert: OrderDependencyLatencyHigh
+        expr: sum(rate(dependency_request_duration_seconds_sum{service="order-service",dependency="payment-service"}[30s])) / sum(rate(dependency_request_duration_seconds_count{service="order-service",dependency="payment-service"}[30s])) > 0.5
+        for: 15s
+        labels: {severity: warning, namespace: sre-demo, service: order-service}
+        annotations: {summary: Order payment dependency latency is high}
+      - alert: OrderRequestLatencyHigh
+        expr: sum(rate(http_request_duration_seconds_sum{service="order-service"}[30s])) / sum(rate(http_request_duration_seconds_count{service="order-service"}[30s])) > 0.5
+        for: 15s
+        labels: {severity: warning, namespace: sre-demo, service: order-service}
+        annotations: {summary: Order request latency is high}
+      - alert: PaymentDbAcquisitionSlow
+        expr: sum(rate(db_connection_acquisition_seconds_sum{service="payment-service"}[30s])) / sum(rate(db_connection_acquisition_seconds_count{service="payment-service"}[30s])) > 0.5
+        for: 15s
+        labels: {severity: critical, namespace: sre-demo, service: payment-service}
+        annotations: {summary: Payment database connection acquisition is slow}
+      - alert: OrderDbQueryLatencyHigh
+        expr: sum(rate(db_query_duration_seconds_sum{service="order-service"}[30s])) / sum(rate(db_query_duration_seconds_count{service="order-service"}[30s])) > 0.5
+        for: 15s
+        labels: {severity: warning, namespace: sre-demo, service: order-service}
+        annotations: {summary: Order database query latency is high}
+      - alert: OrderWorkerLagHigh
+        expr: sum(kafka_consumer_lag{service="order-worker"}) > 100
+        for: 15s
+        labels: {severity: critical, namespace: sre-demo, service: order-worker}
+        annotations: {summary: Order worker consumer lag is high}
+      - alert: OrderWorkerConsumerErrorsHigh
+        expr: sum(rate(kafka_consumer_errors_total{service="order-worker"}[30s])) > 0
+        for: 15s
+        labels: {severity: critical, namespace: sre-demo, service: order-worker}
+        annotations: {summary: Order worker consumer processing errors are high}
+      - alert: PaymentServiceUnavailable
+        expr: min(up{job="payment-service"}) < 1
+        for: 15s
+        labels: {severity: critical, namespace: sre-demo, service: payment-service}
+        annotations: {summary: Payment service is unavailable}
+      - alert: PaymentRequestLatencyHigh
+        expr: sum(rate(http_request_duration_seconds_sum{service="payment-service"}[30s])) / sum(rate(http_request_duration_seconds_count{service="payment-service"}[30s])) > 0.5
+        for: 15s
+        labels: {severity: warning, namespace: sre-demo, service: payment-service}
+        annotations: {summary: Payment request latency is high}

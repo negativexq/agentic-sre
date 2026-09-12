@@ -398,7 +398,7 @@ class LiveBenchmarkEnvironment:
             self._order_fault(db_query_delay_ms=700)
         elif fixture == "order_worker_lag":
             self._kubectl_patch_env(
-                "order-worker", {"FAULT_WORKER_DELAY_MS": "1000", "FAULT_WORKER_FAILURE": "false"}
+                "order-worker", {"FAULT_WORKER_DELAY_MS": "2000", "FAULT_WORKER_FAILURE": "false"}
             )
         elif fixture == "order_worker_failure":
             self._kubectl_patch_env(

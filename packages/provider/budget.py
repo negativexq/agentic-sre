@@ -45,6 +45,18 @@ class LiveModelBudget:
         with self._lock:
             return BudgetSnapshot(self._limit, self._calls_used)
 
+    def ensure_capacity(self, count: int) -> BudgetSnapshot:
+        """Fail before a run starts when its worst-case calls do not fit."""
+        if count <= 0:
+            raise ValueError("capacity requirement must be positive")
+        with self._lock:
+            if self._calls_used + count > self._limit:
+                raise ProviderError(
+                    ProviderErrorCode.LIVE_MODEL_BUDGET_EXHAUSTED,
+                    "live model budget cannot cover the requested worst-case run",
+                )
+            return BudgetSnapshot(self._limit, self._calls_used)
+
     def consume(self, count: int = 1) -> BudgetSnapshot:
         """Reserve calls or fail before any network request is made."""
         if count <= 0:

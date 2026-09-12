@@ -123,6 +123,8 @@ class OpenAIProvider:
             except ProviderError:
                 raise
             except (TimeoutError, ConnectionError) as error:
+                if attempt + 1 < attempts:
+                    continue
                 if attempt + 1 == attempts:
                     raise ProviderError(
                         ProviderErrorCode.PROVIDER_TIMEOUT
@@ -132,16 +134,26 @@ class OpenAIProvider:
                     ) from error
             except Exception as error:
                 status_code = getattr(error, "status_code", None)
+                error_name = error.__class__.__name__.lower()
+                if "timeout" in error_name:
+                    if attempt + 1 < attempts:
+                        continue
+                    raise ProviderError(
+                        ProviderErrorCode.PROVIDER_TIMEOUT,
+                        "live provider request timed out",
+                    ) from error
                 retryable = status_code == 429 or (
                     isinstance(status_code, int) and status_code >= 500
                 )
                 if retryable and attempt + 1 < attempts:
                     continue
-                code = (
-                    ProviderErrorCode.RATE_LIMITED
-                    if status_code == 429
-                    else ProviderErrorCode.PROVIDER_UNAVAILABLE
-                )
+                message = str(error).lower()
+                if "context" in message and "limit" in message:
+                    code = ProviderErrorCode.CONTEXT_LIMIT_EXCEEDED
+                elif status_code == 429:
+                    code = ProviderErrorCode.RATE_LIMITED
+                else:
+                    code = ProviderErrorCode.PROVIDER_UNAVAILABLE
                 raise ProviderError(code, "live provider request failed") from error
         raise AssertionError("provider retry loop must return or raise")
 

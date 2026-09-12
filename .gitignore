@@ -16,6 +16,7 @@ build/
 # Local infrastructure state
 .kind/
 *.log
+.local/
 
 # macOS
 .DS_Store

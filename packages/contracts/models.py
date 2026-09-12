@@ -92,7 +92,7 @@ class Alert(ContractModel):
 class AlertmanagerAlertPayload(ContractModel):
     """Subset of an Alertmanager alert accepted by the webhook."""
 
-    model_config = ConfigDict(extra="forbid", strict=True, populate_by_name=True)
+    model_config = ConfigDict(extra="ignore", strict=False, populate_by_name=True)
 
     status: str = Field(min_length=1)
     labels: dict[str, str]
@@ -100,14 +100,20 @@ class AlertmanagerAlertPayload(ContractModel):
     starts_at: datetime = Field(alias="startsAt")
     ends_at: datetime | None = Field(default=None, alias="endsAt")
     fingerprint: str | None = Field(default=None, min_length=1)
+    generator_url: str | None = Field(default=None, alias="generatorURL")
 
 
 class AlertmanagerWebhook(ContractModel):
     """Alertmanager webhook envelope."""
 
+    model_config = ConfigDict(extra="ignore", strict=True, populate_by_name=True)
+
     receiver: str = Field(min_length=1)
     status: str = Field(min_length=1)
     alerts: list[AlertmanagerAlertPayload]
+    version: str | None = None
+    group_key: str | None = Field(default=None, alias="groupKey")
+    external_url: str | None = Field(default=None, alias="externalURL")
 
 
 class IncidentEvent(ContractModel):

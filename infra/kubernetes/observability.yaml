@@ -29,8 +29,8 @@ data:
         endpoint: tempo.observability.svc.cluster.local:4317
         tls:
           insecure: true
-      loki:
-        endpoint: http://loki.observability.svc.cluster.local:3100/loki/api/v1/push
+      otlphttp/loki:
+        endpoint: http://loki.observability.svc.cluster.local:3100/otlp
     service:
       extensions: [health_check]
       pipelines:
@@ -45,7 +45,7 @@ data:
         logs:
           receivers: [otlp]
           processors: [batch]
-          exporters: [loki]
+          exporters: [otlphttp/loki]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -156,7 +156,7 @@ data:
             annotations:
               summary: Payment service error rate is high
           - alert: HighRequestLatency
-            expr: histogram_quantile(0.95, sum by (le, service) (rate(http_request_duration_seconds_bucket{service="payment-service"}[30s]))) > 0.5
+            expr: sum(rate(http_request_duration_seconds_sum{service="payment-service"}[30s])) / sum(rate(http_request_duration_seconds_count{service="payment-service"}[30s])) > 0.5
             for: 15s
             labels:
               severity: warning
@@ -256,6 +256,9 @@ data:
     common:
       replication_factor: 1
       path_prefix: /loki
+      ring:
+        kvstore:
+          store: inmemory
     schema_config:
       configs:
         - from: 2024-01-01
@@ -344,7 +347,9 @@ data:
         otlp:
           protocols:
             grpc:
+              endpoint: 0.0.0.0:4317
             http:
+              endpoint: 0.0.0.0:4318
     storage:
       trace:
         backend: local
@@ -505,15 +510,18 @@ data:
     datasources:
       - name: Prometheus
         type: prometheus
+        uid: prometheus
         access: proxy
         url: http://prometheus.observability.svc.cluster.local:9090
         isDefault: true
       - name: Loki
         type: loki
+        uid: loki
         access: proxy
         url: http://loki.observability.svc.cluster.local:3100
       - name: Tempo
         type: tempo
+        uid: tempo
         access: proxy
         url: http://tempo.observability.svc.cluster.local:3200
   dashboards.yaml: |
@@ -532,8 +540,8 @@ data:
       "annotations": {"list": []},
       "editable": true,
       "panels": [
-        {"datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"}, "fieldConfig": {"defaults": {}, "overrides": []}, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}, "id": 1, "targets": [{"expr": "sum(rate(http_requests_total[5m]))", "refId": "A"}], "title": "Request rate", "type": "timeseries"},
-        {"datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"}, "fieldConfig": {"defaults": {}, "overrides": []}, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}, "id": 2, "targets": [{"expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m]))", "refId": "A"}], "title": "Error rate", "type": "timeseries"}
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {}, "overrides": []}, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}, "id": 1, "targets": [{"expr": "sum(rate(http_requests_total[5m]))", "refId": "A"}], "title": "Request rate", "type": "timeseries"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {}, "overrides": []}, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}, "id": 2, "targets": [{"expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m]))", "refId": "A"}], "title": "Error rate", "type": "timeseries"}
       ],
       "schemaVersion": 39,
       "title": "Agentic SRE Service Overview",

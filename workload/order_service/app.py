@@ -142,7 +142,7 @@ def create_app(
     )
     order_service = service or OrderService(session_factory, gateway, publisher, runtime=telemetry)
 
-    app = FastAPI(title="Order Service", version="0.1.0")
+    app = FastAPI(title="Order Service", version="0.1.1")
     app.add_middleware(TelemetryMiddleware, runtime=telemetry)
     app.mount("/metrics", make_asgi_app(registry=registry))
 

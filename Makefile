@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test check cluster-up build-images deploy load status cluster-down release-check
+.PHONY: install lint typecheck test check cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check
 
 install:
 	python3.12 -m venv .venv
@@ -10,7 +10,7 @@ lint:
 	.venv/bin/python -m ruff format --check .
 
 typecheck:
-	.venv/bin/python -m mypy apps packages tests
+	.venv/bin/python -m mypy apps packages tests scripts
 
 test:
 	.venv/bin/python -m pytest
@@ -57,6 +57,32 @@ deploy: build-images
 load:
 	kubectl port-forward -n sre-demo svc/order-service 8000:8000 >/tmp/agentic-sre-port-forward.log 2>&1 & port_pid=$$!; trap 'kill "$$port_pid" 2>/dev/null || true' EXIT; sleep 2; .venv/bin/python -m workload.load_generator --base-url http://localhost:8000 --rate 10 --duration 1 --seed 42
 
+observability-check:
+	kubectl port-forward -n observability svc/prometheus 19090:9090 >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \
+	kubectl port-forward -n observability svc/loki 19300:3100 >/tmp/agentic-sre-loki-forward.log 2>&1 & loki_pid=$$!; \
+	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
+	kubectl port-forward -n observability svc/alertmanager 19093:9093 >/tmp/agentic-sre-alertmanager-forward.log 2>&1 & alertmanager_pid=$$!; \
+	kubectl port-forward -n observability svc/grafana 13000:3000 >/tmp/agentic-sre-grafana-forward.log 2>&1 & grafana_pid=$$!; \
+	kubectl port-forward -n sre-demo svc/order-service 18000:8000 >/tmp/agentic-sre-order-forward.log 2>&1 & order_pid=$$!; \
+	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$alertmanager_pid" "$$grafana_pid" "$$order_pid" 2>/dev/null || true' EXIT; \
+	sleep 3; .venv/bin/python scripts/observability_check.py
+
+evidence-check:
+	kubectl port-forward -n observability svc/prometheus 19090:9090 >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \
+	kubectl port-forward -n sre-demo svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
+	kubectl port-forward -n sre-demo svc/postgres 15432:5432 >/tmp/agentic-sre-postgres-forward.log 2>&1 & postgres_pid=$$!; \
+	trap 'kill "$$prom_pid" "$$control_pid" "$$postgres_pid" 2>/dev/null || true' EXIT; \
+	sleep 3; .venv/bin/python scripts/live_evidence_check.py
+
+rbac-check:
+	test "$$(kubectl auth can-i get pods --as=system:serviceaccount:sre-demo:investigation-tools -n sre-demo)" = yes
+	test "$$(kubectl auth can-i list pods --as=system:serviceaccount:sre-demo:investigation-tools -n sre-demo)" = yes
+	test "$$(kubectl auth can-i watch pods --as=system:serviceaccount:sre-demo:investigation-tools -n sre-demo)" = yes
+	test "$$(kubectl auth can-i create deployments --as=system:serviceaccount:sre-demo:investigation-tools -n sre-demo)" = no
+	test "$$(kubectl auth can-i patch deployments --as=system:serviceaccount:sre-demo:investigation-tools -n sre-demo)" = no
+	test "$$(kubectl auth can-i delete pods --as=system:serviceaccount:sre-demo:investigation-tools -n sre-demo)" = no
+	echo "investigation RBAC: read-only PASS"
+
 status:
 	kubectl get pods,svc -n sre-demo
 	kubectl get pods,svc -n observability
@@ -64,6 +90,6 @@ status:
 cluster-down:
 	kind delete cluster --name agentic-sre
 
-release-check: check
+release-check: check observability-check evidence-check rbac-check
 	.venv/bin/python -m pytest tests/e2e
 	.venv/bin/python -m pytest tests/unit/test_state_machine.py --cov=packages.incident.state_machine --cov-report=term-missing --cov-fail-under=100

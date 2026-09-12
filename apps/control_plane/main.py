@@ -70,7 +70,7 @@ def create_app(session_factory: sessionmaker[Session] | None = None) -> FastAPI:
         registry=registry,
         otlp_endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
     )
-    app = FastAPI(title="Agentic SRE Control Plane", version="0.1.0")
+    app = FastAPI(title="Agentic SRE Control Plane", version="0.1.1")
     app.add_middleware(TelemetryMiddleware, runtime=telemetry)
     app.mount("/metrics", make_asgi_app(registry=registry))
     app.dependency_overrides[get_session] = session_dependency

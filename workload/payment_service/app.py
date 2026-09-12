@@ -6,9 +6,10 @@ from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import UTC, datetime
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from prometheus_client import make_asgi_app
 from prometheus_client.registry import CollectorRegistry
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session, sessionmaker
 
 from packages.storage import create_database_engine, create_session_factory
@@ -17,6 +18,15 @@ from workload.common.contracts import PaymentRequest, PaymentResponse, PaymentSt
 from workload.common.persistence import PaymentRepository
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/agentic_sre"
+
+
+class FaultConfig(BaseModel):
+    """Test-only deterministic fault knobs for live alert scenarios."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    delay_ms: int = Field(default=0, ge=0, le=30_000)
+    error: bool = False
 
 
 class PaymentService:
@@ -79,19 +89,32 @@ def create_app(
         otlp_endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
     )
     payment_service = service or PaymentService(session_factory, runtime=telemetry)
+    fault_config = FaultConfig(
+        delay_ms=int(os.getenv("FAULT_PAYMENT_DELAY_MS", "0")),
+        error=os.getenv("FAULT_PAYMENT_ERROR", "false").lower() == "true",
+    )
+    faults_enabled = os.getenv("ENABLE_TEST_FAULTS", "false").lower() == "true"
 
-    app = FastAPI(title="Payment Service", version="0.1.0")
+    app = FastAPI(title="Payment Service", version="0.1.1")
     app.add_middleware(TelemetryMiddleware, runtime=telemetry)
     app.mount("/metrics", make_asgi_app(registry=registry))
 
     @app.post("/payments", response_model=PaymentResponse, status_code=201)
     def create_payment(request: PaymentRequest) -> PaymentResponse:
-        fault_delay_ms = int(os.getenv("FAULT_PAYMENT_DELAY_MS", "0"))
-        if fault_delay_ms > 0:
-            time.sleep(fault_delay_ms / 1000)
-        if os.getenv("FAULT_PAYMENT_ERROR", "false").lower() == "true":
+        if fault_config.delay_ms > 0:
+            time.sleep(fault_config.delay_ms / 1000)
+        if fault_config.error:
             raise RuntimeError("injected payment failure")
         return payment_service.charge(request)
+
+    @app.post("/__faults", response_model=FaultConfig)
+    def set_faults(config: FaultConfig) -> FaultConfig:
+        """Set deterministic test faults; never enabled in a production deployment."""
+        if not faults_enabled:
+            raise HTTPException(status_code=404, detail="test faults are disabled")
+        fault_config.delay_ms = config.delay_ms
+        fault_config.error = config.error
+        return fault_config
 
     @app.get("/health")
     def health() -> dict[str, str]:

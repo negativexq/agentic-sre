@@ -13,4 +13,4 @@ def create_tracer(service_name: str, *, otlp_endpoint: str | None = None) -> tra
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
         provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint)))
-    return provider.get_tracer("agentic-sre", "0.1.0")
+    return provider.get_tracer("agentic-sre", "0.1.1")

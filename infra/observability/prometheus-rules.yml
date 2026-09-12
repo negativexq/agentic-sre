@@ -10,7 +10,7 @@ groups:
         annotations:
           runbook: https://example.invalid/runbooks/high-error-rate
       - alert: HighRequestLatency
-        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 0.5
+        expr: sum(rate(http_request_duration_seconds_sum[5m])) / sum(rate(http_request_duration_seconds_count[5m])) > 0.5
         for: 2m
         labels:
           severity: warning

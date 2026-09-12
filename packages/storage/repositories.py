@@ -93,6 +93,8 @@ class IncidentRepository:
             payload={"status": incident.status.value},
         )
         self._session.add(row)
+        # Ensure the parent exists before the immutable event is flushed.
+        self._session.flush()
         self._session.add(
             IncidentEventRow(
                 event_id=event.event_id,

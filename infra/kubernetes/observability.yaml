@@ -184,7 +184,7 @@ data:
             annotations:
               summary: Payment service latency is high
           - alert: KafkaConsumerLag
-            expr: sum(kafka_consumer_lag{service="order-worker"}) > 10
+            expr: clamp_min(sum(kafka_messages_total{service="order-service",topic="orders.created",direction="produced"}) - sum(kafka_messages_total{service="order-worker",topic="orders.created",direction="consumed"}), 0) > 10
             for: 15s
             labels:
               severity: critical
@@ -214,7 +214,7 @@ data:
             labels: {severity: warning, namespace: sre-demo, service: order-service}
             annotations: {summary: Order database query latency is high}
           - alert: OrderWorkerLagHigh
-            expr: sum(kafka_consumer_lag{service="order-worker"}) > 10
+            expr: clamp_min(sum(kafka_messages_total{service="order-service",topic="orders.created",direction="produced"}) - sum(kafka_messages_total{service="order-worker",topic="orders.created",direction="consumed"}), 0) > 10
             for: 15s
             labels: {severity: critical, namespace: sre-demo, service: order-worker}
             annotations: {summary: Order worker consumer lag is high}
@@ -606,7 +606,7 @@ data:
         {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {}, "overrides": []}, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}, "id": 1, "targets": [{"expr": "sum(rate(http_requests_total[5m]))", "refId": "A"}], "title": "Request rate", "type": "timeseries"},
         {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {}, "overrides": []}, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}, "id": 2, "targets": [{"expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m]))", "refId": "A"}], "title": "Error rate", "type": "timeseries"},
         {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {}, "overrides": []}, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}, "id": 3, "targets": [{"expr": "histogram_quantile(0.95, sum by (le, service) (rate(http_request_duration_seconds_bucket[5m])))", "refId": "A"}], "title": "P95 latency", "type": "timeseries"},
-        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {}, "overrides": []}, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}, "id": 4, "targets": [{"expr": "sum(kafka_consumer_lag{service=\"order-worker\"})", "refId": "A"}], "title": "Kafka consumer lag", "type": "timeseries"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {}, "overrides": []}, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}, "id": 4, "targets": [{"expr": "clamp_min(sum(kafka_messages_total{service=\"order-service\",topic=\"orders.created\",direction=\"produced\"}) - sum(kafka_messages_total{service=\"order-worker\",topic=\"orders.created\",direction=\"consumed\"}), 0)", "refId": "A"}], "title": "Kafka consumer lag", "type": "timeseries"},
         {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {}, "overrides": []}, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}, "id": 5, "targets": [{"expr": "sum(up{job=\"otel-collector\"})", "refId": "A"}], "title": "Observability pod health", "type": "stat"}
       ],
       "schemaVersion": 39,

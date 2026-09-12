@@ -175,7 +175,16 @@ def test_prometheus_kafka_request_uses_seconds(monkeypatch) -> None:  # type: ig
     params = captured["params"]
     assert isinstance(params, dict)
     assert float(params["start"]) < 10**11
-    assert 'kafka_consumer_lag{service="order-worker"}' in params["query"]
+    query = str(params["query"])
+    assert (
+        'kafka_messages_total{service="order-service",topic="orders.created",direction="produced"}'
+        in query
+    )
+    assert (
+        'kafka_messages_total{service="order-worker",topic="orders.created",direction="consumed"}'
+        in query
+    )
+    assert "clamp_min" in query
 
 
 def test_database_queries_are_service_scoped(monkeypatch) -> None:  # type: ignore[no-untyped-def]

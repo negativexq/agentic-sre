@@ -18,7 +18,7 @@ groups:
         annotations:
           runbook: https://example.invalid/runbooks/high-request-latency
       - alert: KafkaConsumerLag
-        expr: sum(kafka_consumer_lag{service="order-worker"}) > 10
+        expr: clamp_min(sum(kafka_messages_total{service="order-service",topic="orders.created",direction="produced"}) - sum(kafka_messages_total{service="order-worker",topic="orders.created",direction="consumed"}), 0) > 10
         for: 2m
         labels:
           severity: critical
@@ -72,7 +72,7 @@ groups:
         labels: {severity: warning, namespace: sre-demo, service: order-service}
         annotations: {summary: Order database query latency is high}
       - alert: OrderWorkerLagHigh
-        expr: sum(kafka_consumer_lag{service="order-worker"}) > 10
+        expr: clamp_min(sum(kafka_messages_total{service="order-service",topic="orders.created",direction="produced"}) - sum(kafka_messages_total{service="order-worker",topic="orders.created",direction="consumed"}), 0) > 10
         for: 15s
         labels: {severity: critical, namespace: sre-demo, service: order-worker}
         annotations: {summary: Order worker consumer lag is high}

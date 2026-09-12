@@ -21,6 +21,7 @@ from packages.tools.contracts import BackendProtocolError, ToolErrorCode
 MAX_INCIDENT_WINDOW_SECONDS = 900
 CHANGE_LOOKBACK_SECONDS = 900
 MAX_CHANGE_QUERY_WINDOW_SECONDS = 1_800
+ORDERS_CREATED_TOPIC = "orders.created"
 
 
 class LiveBackend:
@@ -191,7 +192,14 @@ class PrometheusBackend(LiveBackend):
             ),
         }
         if operation == "kafka_consumer_lag":
-            queries[operation] = f'kafka_consumer_lag{{service="{_consumer(parameters)}"}}'
+            consumer = _consumer(parameters)
+            queries[operation] = (
+                "clamp_min("
+                f'sum(kafka_messages_total{{service="order-service",'
+                f'topic="{ORDERS_CREATED_TOPIC}",direction="produced"}}) - '
+                f'sum(kafka_messages_total{{service="{consumer}",'
+                f'topic="{ORDERS_CREATED_TOPIC}",direction="consumed"}}), 0)'
+            )
         if operation not in queries:
             raise ValueError("unsupported Prometheus operation")
         time_params, window = _prometheus_time_params(parameters)

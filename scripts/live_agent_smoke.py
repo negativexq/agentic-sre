@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
@@ -61,9 +62,22 @@ def _selected_incidents() -> list[Incident]:
 
 def main() -> int:
     """Run at most nine live model calls after worst-case preflight."""
-    budget = LiveModelBudget.from_environment()
+    budget = LiveModelBudget.from_environment(require_shared_ledger=True)
+    before = budget.snapshot()
     selected = _selected_incidents()
     budget.ensure_capacity(len(selected) * 3)
+    print(
+        json.dumps(
+            {
+                "budget_limit": before.limit,
+                "calls_used": before.calls_used,
+                "calls_remaining": before.calls_remaining,
+                "shared_ledger_enabled": budget.shared_ledger_enabled,
+                "ledger_path": budget.ledger_path,
+            },
+            sort_keys=True,
+        )
+    )
     provider = OpenAIProvider(budget=budget, max_retry=0)
     registry = live_observability_registry(
         "http://localhost:19090",
@@ -71,7 +85,7 @@ def main() -> int:
         "http://localhost:19320",
         change_reader=ControlPlaneChangeReader(f"{CONTROL_PLANE_URL}/api/v1/changes").query,
     )
-    results = []
+    results: list[dict[str, Any]] = []
     for incident in selected:
         result = InvestigationRuntime(
             provider,
@@ -109,7 +123,20 @@ def main() -> int:
                 "turns": result.turns,
             }
         )
-    payload = {"scenarios": results, "total_live_api_calls": budget.snapshot().calls_used}
+    after = budget.snapshot()
+    outbound_attempts = sum(item["outbound_api_attempts"] for item in results)
+    budget.verify_ledger_delta(before, after, outbound_attempts)
+    payload = {
+        "scenarios": results,
+        "total_live_api_calls": after.calls_used,
+        "budget": {
+            "limit": after.limit,
+            "calls_used_before": before.calls_used,
+            "calls_used_after": after.calls_used,
+            "outbound_api_attempts": outbound_attempts,
+            "shared_ledger_enabled": budget.shared_ledger_enabled,
+        },
+    }
     Path("docs/benchmarks/v0.2.0-live-smoke.json").write_text(
         json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8"
     )

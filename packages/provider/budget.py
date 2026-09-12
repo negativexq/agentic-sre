@@ -35,14 +35,30 @@ class LiveModelBudget:
         self._ledger_path = Path(ledger_path) if ledger_path else None
 
     @classmethod
-    def from_environment(cls) -> "LiveModelBudget":
+    def from_environment(cls, *, require_shared_ledger: bool = False) -> "LiveModelBudget":
         """Build a budget from an environment variable without logging it."""
         raw_limit = os.getenv("SRE_LIVE_MODEL_CALL_BUDGET", "40")
         try:
             limit = int(raw_limit)
         except ValueError as error:
             raise ValueError("SRE_LIVE_MODEL_CALL_BUDGET must be an integer") from error
-        return cls(limit, ledger_path=os.getenv("SRE_LIVE_MODEL_BUDGET_FILE"))
+        ledger_path = os.getenv("SRE_LIVE_MODEL_BUDGET_FILE")
+        if require_shared_ledger and not ledger_path:
+            raise ProviderError(
+                ProviderErrorCode.LIVE_MODEL_BUDGET_LEDGER_REQUIRED,
+                "a shared live model budget ledger is required",
+            )
+        return cls(limit, ledger_path=ledger_path)
+
+    @property
+    def shared_ledger_enabled(self) -> bool:
+        """Return whether reservations are persisted across live processes."""
+        return self._ledger_path is not None
+
+    @property
+    def ledger_path(self) -> str | None:
+        """Return the configured ledger path without reading its contents."""
+        return str(self._ledger_path) if self._ledger_path is not None else None
 
     def snapshot(self) -> BudgetSnapshot:
         """Return a consistent usage snapshot."""
@@ -79,9 +95,44 @@ class LiveModelBudget:
                     "live model call budget exhausted",
                 )
             self._calls_used += count
-            if self._ledger_path is not None:
-                self._write_ledger(self._calls_used)
             return BudgetSnapshot(self._limit, self._calls_used)
+
+    @staticmethod
+    def reconcile_ledger(
+        ledger_path: str, *, expected_current: int, corrected_current: int
+    ) -> None:
+        """Atomically reconcile a known ledger without ever decrementing it."""
+        if expected_current < 0 or corrected_current < expected_current:
+            raise ValueError("ledger reconciliation would decrease or invalidate usage")
+        ledger = Path(ledger_path)
+        if not ledger.exists():
+            raise ValueError("ledger reconciliation requires an existing ledger")
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        with ledger.open("a+", encoding="utf-8") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                handle.seek(0)
+                current = LiveModelBudget._parse_ledger(handle.read())
+                if current != expected_current:
+                    raise ValueError("ledger reconciliation precondition failed")
+                handle.seek(0)
+                handle.truncate()
+                json.dump({"calls_used": corrected_current}, handle)
+                handle.flush()
+                os.fsync(handle.fileno())
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+    @staticmethod
+    def verify_ledger_delta(
+        before: BudgetSnapshot, after: BudgetSnapshot, outbound_api_attempts: int
+    ) -> None:
+        """Fail closed when persisted usage differs from outbound attempts."""
+        if after.calls_used - before.calls_used != outbound_api_attempts:
+            raise ProviderError(
+                ProviderErrorCode.LIVE_MODEL_BUDGET_LEDGER_MISMATCH,
+                "shared ledger delta does not match outbound API attempts",
+            )
 
     def _read_ledger(self) -> int:
         """Read the shared call counter under an advisory file lock."""

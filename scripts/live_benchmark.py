@@ -70,8 +70,21 @@ def main() -> int:
     if len(incident_ids) != len(FROZEN_DATASET):
         raise RuntimeError("benchmark-live requires ten comma-separated incident IDs")
 
-    budget = LiveModelBudget.from_environment()
+    budget = LiveModelBudget.from_environment(require_shared_ledger=True)
+    startup = budget.snapshot()
     budget.ensure_capacity(len(FROZEN_DATASET) * 3)
+    print(
+        json.dumps(
+            {
+                "budget_limit": startup.limit,
+                "calls_used": startup.calls_used,
+                "calls_remaining": startup.calls_remaining,
+                "shared_ledger_enabled": budget.shared_ledger_enabled,
+                "ledger_path": budget.ledger_path,
+            },
+            sort_keys=True,
+        )
+    )
     incidents = _get_incidents()
     selected = [incidents[item] for item in incident_ids if item in incidents]
     if len(selected) != len(FROZEN_DATASET):
@@ -141,6 +154,8 @@ def main() -> int:
 
     count = len(results)
     budget_after = budget.snapshot()
+    outbound_attempts = sum(item["outbound_api_attempts"] for item in results)
+    budget.verify_ledger_delta(budget_before, budget_after, outbound_attempts)
     report = {
         "git_sha": _git_sha(),
         "model": "gpt-5.6-luna",
@@ -160,6 +175,7 @@ def main() -> int:
         "historical_calls_before_benchmark": budget_before.calls_used,
         "benchmark_api_attempts": budget_after.calls_used - budget_before.calls_used,
         "total_live_api_calls": budget_after.calls_used,
+        "shared_ledger_enabled": budget.shared_ledger_enabled,
         "completion_rate": sum(
             item["termination_reason"] == "HYPOTHESIS_SUBMITTED" for item in results
         )

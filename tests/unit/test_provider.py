@@ -159,6 +159,54 @@ def test_live_budget_can_share_a_call_ledger_between_process_boundaries(tmp_path
     assert ledger.read_text(encoding="utf-8") == '{"calls_used": 2}'
 
 
+def test_paid_budget_requires_a_shared_ledger(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Paid command setup fails before transport when no persistent ledger is configured."""
+    monkeypatch.delenv("SRE_LIVE_MODEL_BUDGET_FILE", raising=False)
+    monkeypatch.setenv("SRE_LIVE_MODEL_CALL_BUDGET", "80")
+
+    with pytest.raises(ProviderError) as error:
+        LiveModelBudget.from_environment(require_shared_ledger=True)
+
+    assert error.value.code is ProviderErrorCode.LIVE_MODEL_BUDGET_LEDGER_REQUIRED
+
+
+def test_ledger_reconciliation_is_guarded_and_never_decrements(tmp_path: Path) -> None:
+    """Historical untracked calls can be added only from the expected current value."""
+    ledger = tmp_path / "budget.json"
+    ledger.write_text('{"calls_used": 43}', encoding="utf-8")
+
+    LiveModelBudget.reconcile_ledger(str(ledger), expected_current=43, corrected_current=45)
+    assert ledger.read_text(encoding="utf-8") == '{"calls_used": 45}'
+
+    with pytest.raises(ValueError):
+        LiveModelBudget.reconcile_ledger(str(ledger), expected_current=43, corrected_current=46)
+    with pytest.raises(ValueError):
+        LiveModelBudget.reconcile_ledger(str(ledger), expected_current=45, corrected_current=44)
+
+    missing = tmp_path / "missing.json"
+    with pytest.raises(ValueError):
+        LiveModelBudget.reconcile_ledger(str(missing), expected_current=0, corrected_current=1)
+    corrupt = tmp_path / "corrupt.json"
+    corrupt.write_text("not-json", encoding="utf-8")
+    with pytest.raises(ValueError):
+        LiveModelBudget.reconcile_ledger(str(corrupt), expected_current=43, corrected_current=45)
+
+
+def test_ledger_delta_must_match_outbound_attempts(tmp_path: Path) -> None:
+    """A paid command cannot report success when its shared ledger was bypassed."""
+    ledger = tmp_path / "budget.json"
+    ledger.write_text('{"calls_used": 43}', encoding="utf-8")
+    budget = LiveModelBudget(80, ledger_path=str(ledger))
+    before = budget.snapshot()
+    budget.consume()
+    after = budget.snapshot()
+    budget.verify_ledger_delta(before, after, 1)
+
+    with pytest.raises(ProviderError) as error:
+        budget.verify_ledger_delta(before, after, 2)
+    assert error.value.code is ProviderErrorCode.LIVE_MODEL_BUDGET_LEDGER_MISMATCH
+
+
 def test_live_provider_is_disabled_by_default() -> None:
     """A passed transport cannot bypass the explicit disabled flag."""
     provider = OpenAIProvider(

@@ -1,5 +1,7 @@
 .PHONY: install lint typecheck test check agent-check agent-smoke benchmark-offline model-smoke-live agent-smoke-live benchmark-live cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check release-check-live
 
+LIVE_BUDGET_FILE ?= .local/v0.2.0-live-budget.json
+
 install:
 	python3.12 -m venv .venv
 	.venv/bin/python -m pip install --upgrade pip
@@ -28,7 +30,7 @@ benchmark-offline:
 
 model-smoke-live:
 	test -n "$$OPENAI_API_KEY"
-	SRE_LIVE_MODEL_ENABLED=true .venv/bin/python scripts/model_smoke_live.py
+	SRE_LIVE_MODEL_ENABLED=true SRE_LIVE_MODEL_BUDGET_FILE="$(LIVE_BUDGET_FILE)" .venv/bin/python scripts/model_smoke_live.py
 
 agent-smoke-live:
 	test -n "$$OPENAI_API_KEY"
@@ -37,7 +39,7 @@ agent-smoke-live:
 	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
 	kubectl port-forward -n sre-demo svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
 	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" 2>/dev/null || true' EXIT; \
-	sleep 3; SRE_LIVE_MODEL_ENABLED=true .venv/bin/python scripts/live_agent_smoke.py
+	sleep 3; SRE_LIVE_MODEL_ENABLED=true SRE_LIVE_MODEL_BUDGET_FILE="$(LIVE_BUDGET_FILE)" .venv/bin/python scripts/live_agent_smoke.py
 
 benchmark-live:
 	test -n "$$OPENAI_API_KEY"
@@ -47,7 +49,7 @@ benchmark-live:
 	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
 	kubectl port-forward -n sre-demo svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
 	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" 2>/dev/null || true' EXIT; \
-	sleep 3; SRE_LIVE_MODEL_ENABLED=true .venv/bin/python scripts/live_benchmark.py
+	sleep 3; SRE_LIVE_MODEL_ENABLED=true SRE_LIVE_MODEL_BUDGET_FILE="$(LIVE_BUDGET_FILE)" .venv/bin/python scripts/live_benchmark.py
 
 cluster-up:
 	kind create cluster --config infra/kubernetes/kind-config.yaml

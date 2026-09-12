@@ -441,6 +441,11 @@ class LiveBenchmarkEnvironment:
             "payment_pod_crash",
             "payment_config_change",
         }:
+            if fixture == "payment_pod_crash":
+                # The crash itself is the controlled stimulus.  Sending a request
+                # through the same port-forward would turn expected downtime into
+                # a harness transport failure and can tear down the forward.
+                return
             if fixture == "payment_db_pool_pressure":
                 for _ in range(POOL_PRESSURE_WAVES):
                     self._concurrent_payments(count=POOL_PRESSURE_CONCURRENCY)
@@ -507,10 +512,11 @@ class LiveBenchmarkEnvironment:
 
     def cleanup(self, fixture: str) -> None:
         errors: list[Exception] = []
-        try:
-            self._payment_fault()
-        except Exception as error:  # pragma: no cover - live environment
-            errors.append(error)
+        if fixture != "payment_pod_crash":
+            try:
+                self._payment_fault()
+            except Exception as error:  # pragma: no cover - live environment
+                errors.append(error)
         try:
             self._order_fault()
         except Exception as error:  # pragma: no cover - live environment

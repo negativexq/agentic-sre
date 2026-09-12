@@ -132,3 +132,15 @@ def test_pool_pressure_fixture_has_bounded_concurrency() -> None:
     assert POOL_PRESSURE_WAVES == 3
     assert POOL_PRESSURE_CONCURRENCY < 30
     assert POOL_PRESSURE_HOLD_MS <= 5_000
+
+
+def test_payment_pod_crash_does_not_send_through_downtime_port_forward(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    environment = LiveBenchmarkEnvironment()
+
+    def fail_if_called(*_: object, **__: object) -> None:
+        raise AssertionError("pod-crash stimulus must not send a payment request")
+
+    monkeypatch.setattr(environment, "_payment_requests", fail_if_called)
+    environment.stimulate("payment_pod_crash")

@@ -1,6 +1,7 @@
 """Bounded read-only investigation tools."""
 
 from packages.tools.contracts import (
+    BackendProtocolError,
     ToolErrorCode,
     ToolFailure,
     ToolRequest,
@@ -34,6 +35,7 @@ __all__ = [
     "StorageToolAuditSink",
     "ToolAuditRecord",
     "ToolErrorCode",
+    "BackendProtocolError",
     "ToolFailure",
     "ToolRequest",
     "ToolResponse",

@@ -1,9 +1,15 @@
 """Bounded read-only investigation tool tests."""
 
 import time
+from io import BytesIO
+from typing import Any, cast
+from urllib.error import HTTPError, URLError
 from uuid import uuid4
 
+import pytest
+
 from packages.tools import (
+    BackendProtocolError,
     BoundedToolExecutor,
     InMemoryToolAuditSink,
     ToolErrorCode,
@@ -12,7 +18,14 @@ from packages.tools import (
     kubernetes_read_tool,
     metrics_tool,
 )
-from packages.tools.live_backends import LokiBackend, PrometheusBackend, TempoBackend
+from packages.tools.live_backends import (
+    LokiBackend,
+    PrometheusBackend,
+    TempoBackend,
+    _loki_time_params,
+    _prometheus_time_params,
+    _tempo_time_params,
+)
 
 
 def make_request(tool_name: str, **parameters: object) -> ToolRequest:
@@ -82,8 +95,6 @@ def test_live_backends_reject_implicit_service_or_consumer_scope() -> None:
     loki = LokiBackend("http://127.0.0.1:1")
     tempo = TempoBackend("http://127.0.0.1:1")
 
-    import pytest
-
     with pytest.raises(ValueError, match="service is invalid"):
         prometheus.query("service_latency", {})
     with pytest.raises(ValueError, match="consumer is invalid"):
@@ -92,3 +103,101 @@ def test_live_backends_reject_implicit_service_or_consumer_scope() -> None:
         loki.query("query_logs", {})
     with pytest.raises(ValueError, match="service is invalid"):
         tempo.query("search_traces", {})
+
+
+def test_backend_time_serializers_use_backend_specific_units() -> None:
+    """The semantic window has distinct Prometheus, Loki, and Tempo encodings."""
+    parameters = {
+        "observation_window": {
+            "starts_at": "2026-09-12T12:00:00+00:00",
+            "ends_at": "2026-09-12T12:05:00+00:00",
+        }
+    }
+    prometheus, _ = _prometheus_time_params(parameters)
+    loki, _ = _loki_time_params(parameters)
+    tempo, _ = _tempo_time_params(parameters)
+    assert 10**9 < float(prometheus["start"]) < 10**11
+    assert 10**18 < int(loki["start"]) < 10**19
+    assert 10**9 < float(tempo["start"]) < 10**11
+
+
+def test_backend_http_failures_have_typed_classes(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Reachability, request, server, timeout, and response failures stay distinct."""
+    from packages.tools.live_backends import LiveBackend
+
+    backend = LiveBackend("http://backend")
+
+    def invoke(error: BaseException) -> BackendProtocolError:
+        def failing(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+            raise error
+
+        monkeypatch.setattr("packages.tools.live_backends.urlopen", failing)
+        with pytest.raises(BackendProtocolError) as raised:
+            backend._get("/api", {}, 1, backend="test", operation="query")
+        return raised.value
+
+    assert (
+        invoke(
+            HTTPError("http://backend/api", 400, "bad", cast(Any, {}), BytesIO(b"{}"))
+        ).code.value
+        == "BACKEND_REQUEST_REJECTED"
+    )
+    assert (
+        invoke(
+            HTTPError("http://backend/api", 500, "bad", cast(Any, {}), BytesIO(b"{}"))
+        ).code.value
+        == "BACKEND_SERVER_ERROR"
+    )
+    assert invoke(URLError("refused")).code.value == "BACKEND_UNAVAILABLE"
+    assert invoke(TimeoutError()).code.value == "BACKEND_TIMEOUT"
+
+
+def test_prometheus_kafka_request_uses_seconds(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """The generated query_range request cannot carry nanosecond bounds."""
+    captured: dict[str, object] = {}
+
+    def fake_get(self, path, params, timeout_seconds, **kwargs):  # type: ignore[no-untyped-def]
+        captured.update(path=path, params=params, kwargs=kwargs)
+        return {"data": {"result": []}}
+
+    monkeypatch.setattr(PrometheusBackend, "_get", fake_get)
+    PrometheusBackend("http://prometheus").query(
+        "kafka_consumer_lag",
+        {
+            "consumer": "order-worker",
+            "observation_window": {
+                "starts_at": "2026-09-12T12:00:00+00:00",
+                "ends_at": "2026-09-12T12:05:00+00:00",
+            },
+        },
+    )
+    assert captured["path"] == "/api/v1/query_range"
+    params = captured["params"]
+    assert isinstance(params, dict)
+    assert float(params["start"]) < 10**11
+    assert 'kafka_consumer_lag{service="order-worker"}' in params["query"]
+
+
+def test_tempo_search_request_uses_integer_seconds(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Tempo search receives integer Unix seconds, not Loki nanoseconds."""
+    captured: dict[str, object] = {}
+
+    def fake_get(self, path, params, timeout_seconds, **kwargs):  # type: ignore[no-untyped-def]
+        captured.update(path=path, params=params, kwargs=kwargs)
+        return {"traces": []}
+
+    monkeypatch.setattr(TempoBackend, "_get", fake_get)
+    TempoBackend("http://tempo").query(
+        "search_traces",
+        {
+            "service": "order-worker",
+            "observation_window": {
+                "starts_at": "2026-09-12T12:00:00+00:00",
+                "ends_at": "2026-09-12T12:05:00+00:00",
+            },
+        },
+    )
+    assert captured["path"] == "/api/search"
+    params = captured["params"]
+    assert isinstance(params, dict)
+    assert int(params["start"]) < 10**11

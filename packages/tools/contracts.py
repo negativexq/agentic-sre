@@ -14,6 +14,10 @@ class ToolErrorCode(StrEnum):
 
     TOOL_TIMEOUT = "TOOL_TIMEOUT"
     BACKEND_UNAVAILABLE = "BACKEND_UNAVAILABLE"
+    BACKEND_TIMEOUT = "BACKEND_TIMEOUT"
+    BACKEND_REQUEST_REJECTED = "BACKEND_REQUEST_REJECTED"
+    BACKEND_RESPONSE_INVALID = "BACKEND_RESPONSE_INVALID"
+    BACKEND_SERVER_ERROR = "BACKEND_SERVER_ERROR"
     INVALID_QUERY = "INVALID_QUERY"
     RESULT_LIMIT_EXCEEDED = "RESULT_LIMIT_EXCEEDED"
     NOT_FOUND = "NOT_FOUND"
@@ -55,6 +59,28 @@ class ToolFailure(BaseModel):
     tool_call_id: UUID
     code: ToolErrorCode
     message: str = Field(min_length=1)
+    backend: str | None = None
+    operation: str | None = None
+    http_status: int | None = Field(default=None, ge=100, le=599)
+
+
+class BackendProtocolError(RuntimeError):
+    """Safe backend transport/query error with a stable tool-facing code."""
+
+    def __init__(
+        self,
+        code: ToolErrorCode,
+        message: str,
+        *,
+        backend: str,
+        operation: str,
+        http_status: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.backend = backend
+        self.operation = operation
+        self.http_status = http_status
 
 
 ToolResult = ToolResponse | ToolFailure

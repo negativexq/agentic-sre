@@ -15,6 +15,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from packages.tools.contracts import BackendProtocolError, ToolErrorCode
+
 
 class LiveBackend:
     """Small bounded JSON HTTP client for a read-only backend."""
@@ -23,25 +25,75 @@ class LiveBackend:
         self._base_url = base_url.rstrip("/")
         self._max_timeout_seconds = max_timeout_seconds
 
-    def _get(self, path: str, params: dict[str, str], timeout_seconds: float) -> dict[str, Any]:
+    def _get(
+        self,
+        path: str,
+        params: dict[str, str],
+        timeout_seconds: float,
+        *,
+        backend: str,
+        operation: str,
+    ) -> dict[str, Any]:
         timeout = min(max(timeout_seconds, 0.001), self._max_timeout_seconds)
         query = f"?{urlencode(params)}" if params else ""
         request = Request(f"{self._base_url}{path}{query}", method="GET")
         try:
             with urlopen(request, timeout=timeout) as response:
                 payload = json.loads(response.read(10_000_001))
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
-            raise ConnectionError(f"live backend request failed: {error}") from error
+        except HTTPError as error:
+            code = (
+                ToolErrorCode.BACKEND_REQUEST_REJECTED
+                if 400 <= error.code < 500
+                else ToolErrorCode.BACKEND_SERVER_ERROR
+            )
+            raise BackendProtocolError(
+                code,
+                "live backend rejected or failed the request",
+                backend=backend,
+                operation=operation,
+                http_status=error.code,
+            ) from error
+        except TimeoutError as error:
+            raise BackendProtocolError(
+                ToolErrorCode.BACKEND_TIMEOUT,
+                "live backend request timed out",
+                backend=backend,
+                operation=operation,
+            ) from error
+        except URLError as error:
+            raise BackendProtocolError(
+                ToolErrorCode.BACKEND_UNAVAILABLE,
+                "live backend is unavailable",
+                backend=backend,
+                operation=operation,
+            ) from error
+        except json.JSONDecodeError as error:
+            raise BackendProtocolError(
+                ToolErrorCode.BACKEND_RESPONSE_INVALID,
+                "live backend returned invalid JSON",
+                backend=backend,
+                operation=operation,
+            ) from error
         if not isinstance(payload, dict):
-            raise ValueError("live backend returned a non-object response")
+            raise BackendProtocolError(
+                ToolErrorCode.BACKEND_RESPONSE_INVALID,
+                "live backend returned a non-object response",
+                backend=backend,
+                operation=operation,
+            )
         if payload.get("status") == "error":
-            raise ValueError(str(payload.get("error", "backend query failed")))
+            raise BackendProtocolError(
+                ToolErrorCode.BACKEND_REQUEST_REJECTED,
+                "live backend rejected the query",
+                backend=backend,
+                operation=operation,
+            )
         return payload
 
 
-def _time_window(
+def _parse_observation_window(
     parameters: dict[str, Any], *, maximum_seconds: int = 900
-) -> tuple[str, str, dict[str, str]]:
+) -> tuple[datetime, datetime, dict[str, str]]:
     supplied = parameters.get("observation_window")
     if (
         isinstance(supplied, dict)
@@ -52,21 +104,38 @@ def _time_window(
         end = datetime.fromisoformat(supplied["ends_at"].replace("Z", "+00:00"))
         if end < start or (end - start).total_seconds() > maximum_seconds:
             raise ValueError("observation_window is outside bounded limits")
-        return (
-            str(int(start.timestamp() * 1_000_000_000)),
-            str(int(end.timestamp() * 1_000_000_000)),
-            {"starts_at": start.isoformat(), "ends_at": end.isoformat()},
-        )
+        return start, end, {"starts_at": start.isoformat(), "ends_at": end.isoformat()}
     seconds = int(parameters.get("range_seconds", 300))
     if seconds <= 0 or seconds > maximum_seconds:
         raise ValueError(f"range_seconds must be between 1 and {maximum_seconds}")
     end = datetime.now(UTC)
     start = end - timedelta(seconds=seconds)
-    return (
-        str(int(start.timestamp() * 1_000_000_000)),
-        str(int(end.timestamp() * 1_000_000_000)),
-        {"starts_at": start.isoformat(), "ends_at": end.isoformat()},
-    )
+    return start, end, {"starts_at": start.isoformat(), "ends_at": end.isoformat()}
+
+
+def _prometheus_time_params(parameters: dict[str, Any]) -> tuple[dict[str, str], dict[str, str]]:
+    """Serialize the semantic window as Unix seconds for Prometheus."""
+    start, end, window = _parse_observation_window(parameters)
+    return {
+        "start": f"{start.timestamp():.3f}",
+        "end": f"{end.timestamp():.3f}",
+        "step": "15",
+    }, window
+
+
+def _loki_time_params(parameters: dict[str, Any]) -> tuple[dict[str, str], dict[str, str]]:
+    """Serialize the semantic window as Unix nanoseconds for Loki."""
+    start, end, window = _parse_observation_window(parameters)
+    return {
+        "start": str(int(start.timestamp() * 1_000_000_000)),
+        "end": str(int(end.timestamp() * 1_000_000_000)),
+    }, window
+
+
+def _tempo_time_params(parameters: dict[str, Any]) -> tuple[dict[str, str], dict[str, str]]:
+    """Serialize the semantic window as Unix seconds for Tempo search."""
+    start, end, window = _parse_observation_window(parameters)
+    return {"start": str(int(start.timestamp())), "end": str(int(end.timestamp()))}, window
 
 
 def _service(parameters: dict[str, Any]) -> str:
@@ -96,11 +165,13 @@ class PrometheusBackend(LiveBackend):
             queries[operation] = f'kafka_consumer_lag{{service="{_consumer(parameters)}"}}'
         if operation not in queries:
             raise ValueError("unsupported Prometheus operation")
-        start, end, window = _time_window(parameters)
+        time_params, window = _prometheus_time_params(parameters)
         payload = self._get(
             "/api/v1/query_range",
-            {"query": queries[operation], "start": start, "end": end, "step": "15"},
+            {"query": queries[operation], **time_params},
             5.0,
+            backend="prometheus",
+            operation=operation,
         )
         result = payload.get("data", {}).get("result", [])
         if not isinstance(result, list):
@@ -128,7 +199,7 @@ class LokiBackend(LiveBackend):
     def query(self, operation: str, parameters: dict[str, Any]) -> dict[str, Any]:
         if operation not in {"query_logs", "find_log_patterns"}:
             raise ValueError("unsupported Loki operation")
-        start, end, window = _time_window(parameters)
+        time_params, window = _loki_time_params(parameters)
         service = _service(parameters)
         query = f'{{service_name="{service}"}}'
         pattern = parameters.get("pattern")
@@ -143,8 +214,10 @@ class LokiBackend(LiveBackend):
             query += f' | request_id = "{request_id}"'
         payload = self._get(
             "/loki/api/v1/query_range",
-            {"query": query, "start": start, "end": end, "limit": "100"},
+            {"query": query, **time_params, "limit": "100"},
             5.0,
+            backend="loki",
+            operation=operation,
         )
         streams = payload.get("data", {}).get("result", [])
         records: list[dict[str, Any]] = []
@@ -171,16 +244,13 @@ class TempoBackend(LiveBackend):
     def query(self, operation: str, parameters: dict[str, Any]) -> dict[str, Any]:
         if operation == "search_traces":
             service = _service(parameters)
-            start, end, window = _time_window(parameters)
+            time_params, window = _tempo_time_params(parameters)
             payload = self._get(
                 "/api/search",
-                {
-                    "limit": "20",
-                    "tags": f"service.name={service}",
-                    "start": start,
-                    "end": end,
-                },
+                {"limit": "20", "tags": f"service.name={service}", **time_params},
                 5.0,
+                backend="tempo",
+                operation=operation,
             )
             traces = payload.get("traces", [])
             if not isinstance(traces, list):
@@ -200,8 +270,14 @@ class TempoBackend(LiveBackend):
                 int(trace_id, 16)
             except ValueError as error:
                 raise ValueError("trace_id must be hexadecimal") from error
-            payload = self._get(f"/api/traces/{trace_id}", {}, 5.0)
-            _start, _end, window = _time_window(parameters)
+            payload = self._get(
+                f"/api/traces/{trace_id}",
+                {},
+                5.0,
+                backend="tempo",
+                operation=operation,
+            )
+            _time_params, window = _tempo_time_params(parameters)
             return {
                 "backend": "tempo",
                 "operation": operation,
@@ -379,5 +455,5 @@ class KubernetesChangeBackend:
         window = parameters.get("observation_window")
         if isinstance(window, dict):
             result["__effective_time_window"] = window
-        result["__temporal_mode"] = "HISTORICAL_CHANGE"
+        result["__temporal_mode"] = "CURRENT_STATE"
         return result

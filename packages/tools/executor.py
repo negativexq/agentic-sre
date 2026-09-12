@@ -9,6 +9,7 @@ from typing import Any, Protocol
 from packages.contracts import TimeWindow
 from packages.storage import ToolCallRepository
 from packages.tools.contracts import (
+    BackendProtocolError,
     ToolErrorCode,
     ToolFailure,
     ToolRequest,
@@ -145,6 +146,15 @@ class BoundedToolExecutor:
                 tool_call_id=request.tool_call_id,
                 code=ToolErrorCode.NOT_FOUND,
                 message=str(error),
+            )
+        except BackendProtocolError as error:
+            result = ToolFailure(
+                tool_call_id=request.tool_call_id,
+                code=error.code,
+                message=str(error),
+                backend=error.backend,
+                operation=error.operation,
+                http_status=error.http_status,
             )
         except ConnectionError as error:
             result = ToolFailure(

@@ -32,7 +32,8 @@ def test_live_registry_covers_every_frozen_scenario_category() -> None:
     registry = live_observability_registry("http://prometheus", "http://loki", "http://tempo")
     matrix = capability_matrix(registry=registry)
     assert len(matrix) == 10
-    assert all(item.available for item in matrix)
+    assert all(item.available for item in matrix if item.category != "deployment")
+    assert not next(item for item in matrix if item.category == "deployment").available
 
 
 def test_live_registry_is_bounded_and_write_free() -> None:

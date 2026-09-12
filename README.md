@@ -221,14 +221,16 @@ offline gates pass.
 make agent-check       # local agent tests, live API calls: 0
 make agent-smoke       # fake-provider smoke, live API calls: 0
 make model-smoke-live  # explicit provider smoke, exactly 1 live call
-make agent-smoke-live  # three existing incidents, max 9 live calls
-make benchmark-live    # ten mapped incidents, max 30 live calls
-make release-check-live # explicit full live gate, max 40 live calls
+make agent-smoke-live  # one or three existing incidents, max 3 calls each
+make benchmark-live    # ten mapped incidents, max 30 live calls, retries off
+make release-check-live # verifies committed live gate artifacts; no new calls
 ```
 
 See [ADR-003](docs/adr/ADR-003-credit-aware-single-agent-baseline.md) for the
 credit and safety boundary. The current offline benchmark is documented in
 [docs/benchmarks/v0.2.0-single-agent.md](docs/benchmarks/v0.2.0-single-agent.md).
+The repaired bounded protocol is documented in
+[ADR-004](docs/adr/ADR-004-bounded-investigation-protocol.md).
 
 `agent-smoke-live` selects the three newest incidents by default. Set
 `SRE_LIVE_INCIDENT_IDS` to provide an explicit comma-separated set. The

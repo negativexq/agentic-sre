@@ -28,10 +28,14 @@ The runtime enforces:
 
 - at most three model calls per incident;
 - at most eight tool calls per incident;
-- at most four read-only tool requests per turn;
+- a read-only batch may consume only the remaining incident tool budget;
 - no write tools, shell execution, remediation, or Kubernetes write access;
-- a process-local global live-call budget, defaulting to 40;
+- a shared file-backed live-call budget configured by the operator;
 - zero schema-repair calls and no fallback model.
+
+The provider exposes three semantic decision functions. On the final allowed
+model turn, only the terminal hypothesis and stop functions are exposed; a
+tool-request function is not a valid future state on that turn.
 
 Normal checks, CI, fake-provider integration, and offline benchmark grading do
 not call OpenAI. Live provider and benchmark commands are explicit opt-in

@@ -31,7 +31,8 @@ CONTROL_PLANE_DEFAULT = "http://localhost:18081"
 ORDER_SERVICE_DEFAULT = "http://localhost:18000"
 PAYMENT_SERVICE_DEFAULT = "http://localhost:18001"
 POOL_PRESSURE_CONCURRENCY = 18
-POOL_PRESSURE_HOLD_MS = 3_500
+POOL_PRESSURE_HOLD_MS = 5_000
+POOL_PRESSURE_WAVES = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -441,7 +442,8 @@ class LiveBenchmarkEnvironment:
             "payment_config_change",
         }:
             if fixture == "payment_db_pool_pressure":
-                self._concurrent_payments(count=POOL_PRESSURE_CONCURRENCY)
+                for _ in range(POOL_PRESSURE_WAVES):
+                    self._concurrent_payments(count=POOL_PRESSURE_CONCURRENCY)
             else:
                 self._payment_requests(count=60, interval_seconds=0.5)
         elif fixture in {

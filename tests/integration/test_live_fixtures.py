@@ -18,6 +18,7 @@ from packages.evals import FIXTURE_BY_NAME, FROZEN_DATASET, FixtureLifecycle
 from packages.evals.live_fixtures import (
     POOL_PRESSURE_CONCURRENCY,
     POOL_PRESSURE_HOLD_MS,
+    POOL_PRESSURE_WAVES,
     FixtureDefinition,
     LiveBenchmarkEnvironment,
     fixture_registry_is_complete,
@@ -127,6 +128,7 @@ def test_rollout_wait_requires_old_pods_to_be_gone() -> None:
 
 def test_pool_pressure_fixture_has_bounded_concurrency() -> None:
     assert POOL_PRESSURE_CONCURRENCY == 18
-    assert POOL_PRESSURE_HOLD_MS == 3_500
+    assert POOL_PRESSURE_HOLD_MS == 5_000
+    assert POOL_PRESSURE_WAVES == 3
     assert POOL_PRESSURE_CONCURRENCY < 30
     assert POOL_PRESSURE_HOLD_MS <= 5_000

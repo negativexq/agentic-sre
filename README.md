@@ -223,6 +223,7 @@ make agent-smoke       # fake-provider smoke, live API calls: 0
 make model-smoke-live  # explicit provider smoke, exactly 1 live call
 make agent-smoke-live  # three existing incidents, max 9 live calls
 make benchmark-live    # ten mapped incidents, max 30 live calls
+make release-check-live # explicit full live gate, max 40 live calls
 ```
 
 See [ADR-003](docs/adr/ADR-003-credit-aware-single-agent-baseline.md) for the

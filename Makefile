@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test check agent-check agent-smoke benchmark-offline model-smoke-live agent-smoke-live benchmark-live cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check
+.PHONY: install lint typecheck test check agent-check agent-smoke benchmark-offline model-smoke-live agent-smoke-live benchmark-live cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check release-check-live
 
 install:
 	python3.12 -m venv .venv
@@ -125,3 +125,5 @@ cluster-down:
 release-check: check agent-check benchmark-offline observability-check evidence-check rbac-check
 	.venv/bin/python -m pytest tests/e2e
 	.venv/bin/python -m pytest tests/unit/test_state_machine.py --cov=packages.incident.state_machine --cov-report=term-missing --cov-fail-under=100
+
+release-check-live: release-check model-smoke-live agent-smoke-live benchmark-live

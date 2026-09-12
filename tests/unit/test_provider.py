@@ -1,5 +1,6 @@
 """Offline provider contracts and credit budget tests."""
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -16,7 +17,11 @@ from packages.provider import (
     ProviderError,
     ProviderErrorCode,
 )
-from packages.provider.openai import LiveModelConfig, _compile_strict_schema
+from packages.provider.openai import (
+    DECISION_FUNCTION_NAME,
+    LiveModelConfig,
+    _compile_strict_schema,
+)
 
 
 def request() -> ModelRequest:
@@ -31,6 +36,27 @@ def request() -> ModelRequest:
         max_output_tokens=100,
         timeout_ms=1_000,
     )
+
+
+def function_request() -> ModelRequest:
+    """Build an investigation request that uses the forced decision function."""
+    return request().model_copy(
+        update={
+            "response_schema_name": "investigation_decision",
+            "response_schema": InvestigationDecision.model_json_schema(),
+        }
+    )
+
+
+def decision_arguments(**overrides: object) -> str:
+    """Build valid strict function arguments for an investigation decision."""
+    payload: dict[str, object] = {
+        "decision": "STOP",
+        "requests": [],
+        "hypothesis": None,
+    }
+    payload.update(overrides)
+    return json.dumps(payload)
 
 
 def test_fake_provider_is_deterministic_and_records_requests() -> None:
@@ -283,6 +309,15 @@ def _output_text(value: str) -> SimpleNamespace:
     return SimpleNamespace(type="output_text", text=value)
 
 
+def _function_call(
+    arguments: str,
+    *,
+    name: str = DECISION_FUNCTION_NAME,
+) -> SimpleNamespace:
+    """Build one Responses function-call output item."""
+    return SimpleNamespace(type="function_call", name=name, arguments=arguments)
+
+
 def _normalize_fixture(raw: SimpleNamespace, model_request: ModelRequest | None = None) -> object:
     """Normalize a response fixture without invoking the transport."""
     provider = OpenAIProvider(
@@ -292,6 +327,125 @@ def _normalize_fixture(raw: SimpleNamespace, model_request: ModelRequest | None 
         max_retry=0,
     )
     return provider._normalize_response(model_request or request(), raw, 0.0)
+
+
+def test_responses_request_forces_one_decision_function() -> None:
+    """Investigation decisions use one forced transport function, never text output."""
+    captured: dict[str, object] = {}
+
+    class Transport:
+        def create(self, **kwargs: object) -> object:
+            captured.update(kwargs)
+            return _envelope([_function_call(decision_arguments())])
+
+    provider = OpenAIProvider(
+        budget=LiveModelBudget(1),
+        config=LiveModelConfig(enabled=True),
+        transport=Transport(),
+        max_retry=0,
+    )
+
+    response = provider.complete(function_request())
+
+    assert response.structured_output == {
+        "decision": "STOP",
+        "requests": [],
+        "hypothesis": None,
+    }
+    assert captured["parallel_tool_calls"] is False
+    assert captured["tool_choice"] == {"type": "function", "name": DECISION_FUNCTION_NAME}
+    tools = captured["tools"]
+    assert isinstance(tools, list)
+    assert len(tools) == 1
+    assert tools[0] == {
+        "type": "function",
+        "name": DECISION_FUNCTION_NAME,
+        "description": (
+            "Transport one validated investigation decision to the deterministic runtime. "
+            "Do not execute infrastructure actions."
+        ),
+        "parameters": _compile_strict_schema(InvestigationDecision.model_json_schema()),
+        "strict": True,
+    }
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        [_function_call(decision_arguments())],
+        [
+            SimpleNamespace(type="reasoning", summary=[]),
+            _function_call(decision_arguments()),
+        ],
+        [
+            _message(_output_text("harmless assistant commentary")),
+            _function_call(decision_arguments()),
+        ],
+    ],
+)
+def test_decision_function_accepts_non_decision_output_items(output: list[object]) -> None:
+    """Reasoning and message items do not become decision transport payloads."""
+    response = _normalize_fixture(_envelope(output), function_request())
+
+    assert response.structured_output == {  # type: ignore[attr-defined]
+        "decision": "STOP",
+        "requests": [],
+        "hypothesis": None,
+    }
+    assert response.response_metadata is not None  # type: ignore[attr-defined]
+    assert response.response_metadata.decision_function_call_count == 1  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize(
+    ("output", "expected"),
+    [
+        ([], ProviderErrorCode.DECISION_FUNCTION_MISSING),
+        (
+            [_function_call(decision_arguments()), _function_call(decision_arguments())],
+            ProviderErrorCode.MULTIPLE_DECISION_FUNCTION_CALLS,
+        ),
+        (
+            [_function_call(decision_arguments(), name="other_function")],
+            ProviderErrorCode.UNEXPECTED_FUNCTION_CALL,
+        ),
+        (
+            [_function_call('{"decision":')],
+            ProviderErrorCode.FUNCTION_ARGUMENTS_INVALID_JSON,
+        ),
+        (
+            [_function_call('{"decision":"STOP"}')],
+            ProviderErrorCode.FUNCTION_ARGUMENTS_SCHEMA_INVALID,
+        ),
+        (
+            [_message(SimpleNamespace(type="refusal", refusal="not available"))],
+            ProviderErrorCode.OUTPUT_REFUSAL,
+        ),
+    ],
+)
+def test_decision_function_failure_taxonomy(
+    output: list[object], expected: ProviderErrorCode
+) -> None:
+    """Function-call extraction rejects every ambiguous or malformed envelope."""
+    with pytest.raises(ProviderError) as error:
+        _normalize_fixture(_envelope(output), function_request())
+
+    assert error.value.code is expected
+    assert error.value.metadata is not None
+    assert error.value.metadata.response_id == "resp_fixture"
+
+
+def test_decision_function_rejects_incomplete_response_before_extraction() -> None:
+    """Incomplete Responses never reach function argument parsing."""
+    raw = _envelope(
+        [_function_call(decision_arguments())],
+        status="incomplete",
+        incomplete_details=SimpleNamespace(reason="max_output_tokens"),
+    )
+
+    with pytest.raises(ProviderError) as error:
+        _normalize_fixture(raw, function_request())
+
+    assert error.value.code is ProviderErrorCode.RESPONSE_INCOMPLETE
 
 
 @pytest.mark.parametrize(

@@ -24,6 +24,11 @@ class ProviderErrorCode(StrEnum):
     OUTPUT_TEXT_MISSING = "OUTPUT_TEXT_MISSING"
     MULTIPLE_OUTPUT_TEXT_ITEMS = "MULTIPLE_OUTPUT_TEXT_ITEMS"
     MULTIPLE_OUTPUT_TEXT_PAYLOADS = "MULTIPLE_OUTPUT_TEXT_PAYLOADS"
+    DECISION_FUNCTION_MISSING = "DECISION_FUNCTION_MISSING"
+    MULTIPLE_DECISION_FUNCTION_CALLS = "MULTIPLE_DECISION_FUNCTION_CALLS"
+    UNEXPECTED_FUNCTION_CALL = "UNEXPECTED_FUNCTION_CALL"
+    FUNCTION_ARGUMENTS_INVALID_JSON = "FUNCTION_ARGUMENTS_INVALID_JSON"
+    FUNCTION_ARGUMENTS_SCHEMA_INVALID = "FUNCTION_ARGUMENTS_SCHEMA_INVALID"
     JSON_DECODE_FAILED = "JSON_DECODE_FAILED"
     SCHEMA_VALIDATION_FAILED = "SCHEMA_VALIDATION_FAILED"
     CONTEXT_LIMIT_EXCEEDED = "CONTEXT_LIMIT_EXCEEDED"
@@ -77,6 +82,11 @@ class ResponseEnvelopeMetadata(BaseModel):
     refusal_item_count: int = Field(ge=0, default=0)
     output_text_lengths: list[int] = Field(default_factory=list)
     output_text_hashes: list[str] = Field(default_factory=list)
+    function_call_count: int = Field(ge=0, default=0)
+    decision_function_call_count: int = Field(ge=0, default=0)
+    function_call_names: list[str] = Field(default_factory=list)
+    function_call_argument_lengths: list[int] = Field(default_factory=list)
+    function_call_argument_hashes: list[str] = Field(default_factory=list)
     json_error_position: int | None = Field(default=None, ge=0)
     schema_error_path: str | None = None
 

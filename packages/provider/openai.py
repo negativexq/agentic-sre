@@ -17,6 +17,8 @@ from packages.provider.contracts import (
     messages_to_dicts,
 )
 
+DECISION_FUNCTION_NAME = "submit_investigation_decision"
+
 
 @dataclass(frozen=True, slots=True)
 class LiveModelConfig:
@@ -129,6 +131,9 @@ def _response_metadata(raw: Any) -> ResponseEnvelopeMetadata:
         if isinstance(content, list):
             content_items.extend(content[:32])
     content_types = _safe_strings([_field(item, "type") for item in content_items[:64]])
+    function_calls = [item for item in items if _field(item, "type") == "function_call"]
+    function_call_names = [_field(item, "name") for item in function_calls]
+    function_call_arguments = [_field(item, "arguments") for item in function_calls]
     output_texts = [
         _field(item, "text")
         for item in content_items
@@ -156,6 +161,19 @@ def _response_metadata(raw: Any) -> ResponseEnvelopeMetadata:
         refusal_item_count=len(refusals),
         output_text_lengths=[len(item) for item in output_texts[:32]],
         output_text_hashes=[sha256(item.encode("utf-8")).hexdigest() for item in output_texts[:32]],
+        function_call_count=len(function_calls),
+        decision_function_call_count=sum(
+            _field(item, "name") == DECISION_FUNCTION_NAME for item in function_calls
+        ),
+        function_call_names=_safe_strings(function_call_names[:32]),
+        function_call_argument_lengths=[
+            len(item) for item in function_call_arguments[:32] if isinstance(item, str)
+        ],
+        function_call_argument_hashes=[
+            sha256(item.encode("utf-8")).hexdigest()
+            for item in function_call_arguments[:32]
+            if isinstance(item, str)
+        ],
     )
 
 
@@ -176,29 +194,7 @@ def _with_output_metadata(
 def _extract_structured_text(raw: Any) -> tuple[str, ResponseEnvelopeMetadata]:
     """Resolve exactly one assistant structured output segment, fail-closed."""
     metadata = _response_metadata(raw)
-    status = metadata.response_status
-    if status is not None and status != "completed":
-        code = (
-            ProviderErrorCode.RESPONSE_ERROR
-            if metadata.has_error
-            else ProviderErrorCode.RESPONSE_INCOMPLETE
-            if metadata.incomplete_reason or status != "failed"
-            else ProviderErrorCode.RESPONSE_FAILED
-        )
-        raise ProviderError(code, "provider response was not completed", metadata=metadata)
-    if metadata.has_error:
-        raise ProviderError(
-            ProviderErrorCode.RESPONSE_ERROR,
-            "provider response contained an error",
-            metadata=metadata,
-        )
-    if metadata.incomplete_reason is not None:
-        raise ProviderError(
-            ProviderErrorCode.RESPONSE_INCOMPLETE,
-            "provider response was incomplete",
-            metadata=metadata,
-        )
-
+    _validate_response_envelope(metadata)
     output = _field(raw, "output")
     if output is None:
         output_text = _field(raw, "output_text")
@@ -247,6 +243,104 @@ def _extract_structured_text(raw: Any) -> tuple[str, ResponseEnvelopeMetadata]:
         "assistant output text payload was not readable",
         metadata=metadata,
     )
+
+
+def _validate_response_envelope(metadata: ResponseEnvelopeMetadata) -> None:
+    """Reject failed or incomplete Responses envelopes before extraction."""
+    status = metadata.response_status
+    if status is not None and status != "completed":
+        code = (
+            ProviderErrorCode.RESPONSE_ERROR
+            if metadata.has_error
+            else ProviderErrorCode.RESPONSE_INCOMPLETE
+            if metadata.incomplete_reason or status != "failed"
+            else ProviderErrorCode.RESPONSE_FAILED
+        )
+        raise ProviderError(code, "provider response was not completed", metadata=metadata)
+    if metadata.has_error:
+        raise ProviderError(
+            ProviderErrorCode.RESPONSE_ERROR,
+            "provider response contained an error",
+            metadata=metadata,
+        )
+    if metadata.incomplete_reason is not None:
+        raise ProviderError(
+            ProviderErrorCode.RESPONSE_INCOMPLETE,
+            "provider response was incomplete",
+            metadata=metadata,
+        )
+
+
+def _extract_decision_function(
+    request: ModelRequest,
+    raw: Any,
+) -> tuple[dict[str, Any], ResponseEnvelopeMetadata]:
+    """Extract exactly one forced decision function call from a Responses envelope."""
+    metadata = _response_metadata(raw)
+    _validate_response_envelope(metadata)
+    if metadata.refusal_item_count > 0:
+        raise ProviderError(
+            ProviderErrorCode.OUTPUT_REFUSAL,
+            "provider response contained a refusal",
+            metadata=metadata,
+        )
+
+    output = _field(raw, "output")
+    items = output if isinstance(output, list) else []
+    function_calls = [item for item in items if _field(item, "type") == "function_call"]
+    decision_calls = [
+        item for item in function_calls if _field(item, "name") == DECISION_FUNCTION_NAME
+    ]
+    if len(decision_calls) > 1:
+        raise ProviderError(
+            ProviderErrorCode.MULTIPLE_DECISION_FUNCTION_CALLS,
+            "provider response contained multiple decision function calls",
+            metadata=metadata,
+        )
+    if len(function_calls) != len(decision_calls):
+        raise ProviderError(
+            ProviderErrorCode.UNEXPECTED_FUNCTION_CALL,
+            "provider response contained an unexpected function call",
+            metadata=metadata,
+        )
+    if not decision_calls:
+        raise ProviderError(
+            ProviderErrorCode.DECISION_FUNCTION_MISSING,
+            "provider response contained no decision function call",
+            metadata=metadata,
+        )
+
+    arguments = _field(decision_calls[0], "arguments")
+    if not isinstance(arguments, str):
+        raise ProviderError(
+            ProviderErrorCode.FUNCTION_ARGUMENTS_INVALID_JSON,
+            "decision function arguments were not a JSON string",
+            metadata=metadata,
+        )
+    try:
+        structured_output = json.loads(arguments)
+    except json.JSONDecodeError as error:
+        raise ProviderError(
+            ProviderErrorCode.FUNCTION_ARGUMENTS_INVALID_JSON,
+            "decision function arguments were not valid JSON",
+            metadata=metadata.model_copy(update={"json_error_position": error.pos}),
+        ) from error
+    if not isinstance(structured_output, dict):
+        raise ProviderError(
+            ProviderErrorCode.FUNCTION_ARGUMENTS_SCHEMA_INVALID,
+            "decision function arguments were not an object",
+            metadata=metadata,
+        )
+    schema_error_path = _json_schema_error(
+        structured_output, _compile_strict_schema(request.response_schema)
+    )
+    if schema_error_path is not None:
+        raise ProviderError(
+            ProviderErrorCode.FUNCTION_ARGUMENTS_SCHEMA_INVALID,
+            "decision function arguments did not match response schema",
+            metadata=metadata.model_copy(update={"schema_error_path": schema_error_path}),
+        )
+    return structured_output, metadata
 
 
 def _json_schema_error(
@@ -405,14 +499,20 @@ class OpenAIProvider:
                     input=messages_to_dicts(request.messages),
                     reasoning={"effort": request.reasoning_effort},
                     max_output_tokens=request.max_output_tokens,
-                    text={
-                        "format": {
-                            "type": "json_schema",
-                            "name": request.response_schema_name,
-                            "schema": _compile_strict_schema(request.response_schema),
+                    tools=[
+                        {
+                            "type": "function",
+                            "name": DECISION_FUNCTION_NAME,
+                            "description": (
+                                "Transport one validated investigation decision to the "
+                                "deterministic runtime. Do not execute infrastructure actions."
+                            ),
+                            "parameters": _compile_strict_schema(request.response_schema),
                             "strict": True,
                         }
-                    },
+                    ],
+                    parallel_tool_calls=False,
+                    tool_choice={"type": "function", "name": DECISION_FUNCTION_NAME},
                     timeout=request.timeout_ms / 1000,
                 )
                 return self._normalize_response(request, raw, started)
@@ -460,28 +560,31 @@ class OpenAIProvider:
         started: float,
     ) -> ModelResponse:
         """Parse structured JSON and usage without retaining raw provider output."""
-        output_text, metadata = _extract_structured_text(raw)
-        try:
-            structured_output = json.loads(output_text)
-        except json.JSONDecodeError as error:
-            raise ProviderError(
-                ProviderErrorCode.JSON_DECODE_FAILED,
-                "provider structured output was not valid JSON",
-                metadata=metadata.model_copy(update={"json_error_position": error.pos}),
-            ) from error
-        if not isinstance(structured_output, dict):
-            raise ProviderError(
-                ProviderErrorCode.SCHEMA_VALIDATION_FAILED,
-                "provider structured output was not an object",
-                metadata=metadata,
-            )
-        schema_error_path = _json_schema_error(structured_output, request.response_schema)
-        if schema_error_path is not None:
-            raise ProviderError(
-                ProviderErrorCode.SCHEMA_VALIDATION_FAILED,
-                "provider structured output did not match response schema",
-                metadata=metadata.model_copy(update={"schema_error_path": schema_error_path}),
-            )
+        if request.response_schema_name == "investigation_decision":
+            structured_output, metadata = _extract_decision_function(request, raw)
+        else:
+            output_text, metadata = _extract_structured_text(raw)
+            try:
+                structured_output = json.loads(output_text)
+            except json.JSONDecodeError as error:
+                raise ProviderError(
+                    ProviderErrorCode.JSON_DECODE_FAILED,
+                    "provider structured output was not valid JSON",
+                    metadata=metadata.model_copy(update={"json_error_position": error.pos}),
+                ) from error
+            if not isinstance(structured_output, dict):
+                raise ProviderError(
+                    ProviderErrorCode.SCHEMA_VALIDATION_FAILED,
+                    "provider structured output was not an object",
+                    metadata=metadata,
+                )
+            schema_error_path = _json_schema_error(structured_output, request.response_schema)
+            if schema_error_path is not None:
+                raise ProviderError(
+                    ProviderErrorCode.SCHEMA_VALIDATION_FAILED,
+                    "provider structured output did not match response schema",
+                    metadata=metadata.model_copy(update={"schema_error_path": schema_error_path}),
+                )
         usage = getattr(raw, "usage", None)
         return ModelResponse(
             request_id=request.request_id,

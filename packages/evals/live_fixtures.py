@@ -30,6 +30,7 @@ from packages.tools.contracts import ToolResponse
 CONTROL_PLANE_DEFAULT = "http://localhost:18081"
 ORDER_SERVICE_DEFAULT = "http://localhost:18000"
 PAYMENT_SERVICE_DEFAULT = "http://localhost:18001"
+POOL_PRESSURE_CONCURRENCY = 18
 
 
 @dataclass(frozen=True, slots=True)
@@ -357,8 +358,8 @@ class LiveBenchmarkEnvironment:
         with ThreadPoolExecutor(max_workers=min(count, 30)) as executor:
             list(executor.map(lambda _: self._order_requests(1), range(count)))
 
-    def _concurrent_payments(self, count: int = 12) -> None:
-        with ThreadPoolExecutor(max_workers=min(count, 30)) as executor:
+    def _concurrent_payments(self, count: int = POOL_PRESSURE_CONCURRENCY) -> None:
+        with ThreadPoolExecutor(max_workers=min(count, POOL_PRESSURE_CONCURRENCY)) as executor:
             list(executor.map(lambda _: self._payment_requests(1), range(count)))
 
     def _restart_payment_container(self) -> None:
@@ -439,7 +440,7 @@ class LiveBenchmarkEnvironment:
             "payment_config_change",
         }:
             if fixture == "payment_db_pool_pressure":
-                self._concurrent_payments(count=30)
+                self._concurrent_payments(count=POOL_PRESSURE_CONCURRENCY)
             else:
                 self._payment_requests(count=60, interval_seconds=0.5)
         elif fixture in {

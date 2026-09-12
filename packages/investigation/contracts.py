@@ -23,6 +23,13 @@ class DecisionType(StrEnum):
     STOP = "STOP"
 
 
+class ToolRepeatPolicy(StrEnum):
+    """Whether a successful observation can be reused across model turns."""
+
+    FIXED_WINDOW = "FIXED_WINDOW"
+    CURRENT_STATE = "CURRENT_STATE"
+
+
 class StopReason(StrEnum):
     """Controlled reasons for a terminal STOP decision."""
 
@@ -152,6 +159,8 @@ class InvestigationUsage(InvestigationModel):
 
     model_calls: int = Field(ge=0)
     tool_calls: int = Field(ge=0)
+    tool_requests_total: int = Field(ge=0, default=0)
+    duplicate_requests_suppressed: int = Field(ge=0, default=0)
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
     latency_ms: int = Field(ge=0)

@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 from pydantic import ValidationError
 
 from packages.contracts import EvidenceSourceType
+from packages.investigation.contracts import ToolRepeatPolicy
 from packages.investigation.tool_contracts import (
     AnyToolArguments,
     ConsumerArgs,
@@ -44,6 +45,7 @@ class RegisteredTool:
     purpose: str = ""
     argument_model: type[ToolArguments] = AnyToolArguments
     historical_change_source: bool = False
+    repeat_policy: ToolRepeatPolicy = ToolRepeatPolicy.FIXED_WINDOW
 
     def descriptor(self) -> dict[str, Any]:
         """Return the safe model-facing capability descriptor."""
@@ -52,6 +54,7 @@ class RegisteredTool:
             "version": self.version,
             "purpose": self.purpose or f"Read-only {self.operation} observation",
             "evidence_type": self.source_type.value,
+            "repeat_policy": self.repeat_policy.value,
             "arguments": descriptor_schema(self.argument_model),
         }
 
@@ -254,6 +257,7 @@ def live_observability_registry(
                 k8s_tool,
                 "Inspect bounded pod health and restart state for a named deployment.",
                 DeploymentArgs,
+                repeat_policy=ToolRepeatPolicy.CURRENT_STATE,
             ),
             RegisteredTool(
                 "kubernetes_deployment",
@@ -263,6 +267,7 @@ def live_observability_registry(
                 k8s_tool,
                 "Inspect bounded deployment replica and image state.",
                 DeploymentArgs,
+                repeat_policy=ToolRepeatPolicy.CURRENT_STATE,
             ),
             RegisteredTool(
                 "kubernetes_events",
@@ -272,6 +277,7 @@ def live_observability_registry(
                 k8s_tool,
                 "Inspect bounded Kubernetes events for a named deployment.",
                 DeploymentArgs,
+                repeat_policy=ToolRepeatPolicy.FIXED_WINDOW,
             ),
             RegisteredTool(
                 "kubernetes_rollout_history",
@@ -281,6 +287,7 @@ def live_observability_registry(
                 k8s_tool,
                 "Inspect bounded deployment revision metadata.",
                 DeploymentArgs,
+                repeat_policy=ToolRepeatPolicy.FIXED_WINDOW,
             ),
             RegisteredTool(
                 "kubernetes_container_restarts",
@@ -290,6 +297,7 @@ def live_observability_registry(
                 k8s_tool,
                 "Inspect bounded container restart counts for a named deployment.",
                 DeploymentArgs,
+                repeat_policy=ToolRepeatPolicy.CURRENT_STATE,
             ),
             RegisteredTool(
                 "kubernetes_resource_state",
@@ -299,6 +307,7 @@ def live_observability_registry(
                 k8s_tool,
                 "Inspect bounded current deployment resource state.",
                 DeploymentArgs,
+                repeat_policy=ToolRepeatPolicy.CURRENT_STATE,
             ),
             RegisteredTool(
                 "recent_deployment_changes",

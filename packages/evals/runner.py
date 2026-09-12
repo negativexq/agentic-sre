@@ -34,7 +34,9 @@ class OfflineBenchmarkReport(BaseModel):
     composite_rca: float = Field(ge=0, le=1)
     valid_evidence_reference_rate: float = Field(ge=0, le=1)
     model_calls_per_incident: float = Field(ge=0)
+    tool_requests_per_incident: float = Field(ge=0)
     tool_calls_per_incident: float = Field(ge=0)
+    duplicate_requests_suppressed_per_incident: float = Field(ge=0)
     total_live_api_calls: int = Field(ge=0)
 
 
@@ -53,7 +55,9 @@ def run_offline_benchmark(
             composite_rca=0,
             valid_evidence_reference_rate=0,
             model_calls_per_incident=0,
+            tool_requests_per_incident=0,
             tool_calls_per_incident=0,
+            duplicate_requests_suppressed_per_incident=0,
             total_live_api_calls=0,
         )
 
@@ -79,7 +83,13 @@ def run_offline_benchmark(
         ),
         model_calls_per_incident=sum(result.usage.model_calls for _, result in results)
         / len(results),
+        tool_requests_per_incident=sum(result.usage.tool_requests_total for _, result in results)
+        / len(results),
         tool_calls_per_incident=sum(result.usage.tool_calls for _, result in results)
+        / len(results),
+        duplicate_requests_suppressed_per_incident=sum(
+            result.usage.duplicate_requests_suppressed for _, result in results
+        )
         / len(results),
         total_live_api_calls=sum(result.usage.actual_api_calls for _, result in results),
     )

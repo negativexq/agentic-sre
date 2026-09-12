@@ -120,6 +120,8 @@ def main() -> int:
                 "outbound_api_attempts": result.usage.outbound_api_attempts,
                 "provider_retries": result.usage.provider_retries,
                 "tool_calls_used": result.usage.tool_calls,
+                "tool_requests_total": result.usage.tool_requests_total,
+                "duplicate_requests_suppressed": result.usage.duplicate_requests_suppressed,
                 "turns": result.turns,
             }
         )

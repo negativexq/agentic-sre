@@ -2,6 +2,7 @@
 
 import json
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
 from time import monotonic
@@ -32,7 +33,13 @@ from packages.investigation.contracts import (
     InvestigationUsage,
     StopReason,
     TerminationReason,
+    ToolRepeatPolicy,
     ValidationStage,
+)
+from packages.investigation.duplicates import (
+    ToolObservationHistory,
+    ToolRequestIdentity,
+    make_tool_request_identity,
 )
 from packages.investigation.prompt import INVESTIGATOR_PROMPT, investigator_prompt_hash
 from packages.investigation.registry import ReadOnlyToolRegistry, RegisteredTool
@@ -77,20 +84,22 @@ def _semantic_error_code(payload: Any, limits: InvestigationLimits) -> str:
     return InvestigationErrorCode.INVALID_DECISION.value
 
 
-def _has_duplicate_tool_requests(requests: list[Any]) -> bool:
-    """Reject exact duplicate tool requests without silently deduplicating them."""
-    seen: set[tuple[str, str]] = set()
-    for request in requests:
-        if not hasattr(request, "tool") or not hasattr(request, "arguments"):
-            continue
-        key = (
-            request.tool,
-            json.dumps(request.arguments, sort_keys=True, separators=(",", ":"), default=str),
-        )
-        if key in seen:
-            return True
-        seen.add(key)
-    return False
+@dataclass(frozen=True, slots=True)
+class _PreparedToolRequest:
+    """One validated request with its canonical reusable identity."""
+
+    request: Any
+    registered: RegisteredTool
+    canonical_arguments: dict[str, Any]
+    identity: ToolRequestIdentity
+
+
+class _ToolBudgetExceeded(ValueError):
+    """Internal typed boundary for a novel batch larger than remaining budget."""
+
+    def __init__(self, audits: list[dict[str, Any]]) -> None:
+        super().__init__("tool batch exceeds remaining incident budget")
+        self.audits = audits
 
 
 class InvestigationRuntime:
@@ -138,7 +147,9 @@ class InvestigationRuntime:
         terminal_decision: DecisionType | None = None
         stop_reason: StopReason | None = None
         progress: list[dict[str, Any]] = []
-        requested_tool_keys: set[tuple[str, str]] = set()
+        observation_history: dict[str, ToolObservationHistory] = {}
+        tool_requests_total = 0
+        duplicate_requests_suppressed = 0
         turns: list[dict[str, Any]] = []
         observation_window = derive_observation_window(incident, alerts)
 
@@ -247,54 +258,16 @@ class InvestigationRuntime:
                     )
                 )
                 break
-            remaining = self._limits.max_tool_calls - tool_calls
-            if len(decision.requests) > remaining:
-                termination = TerminationReason.TOOL_CALL_LIMIT
-                error_code = InvestigationErrorCode.TOOL_BUDGET_EXCEEDED.value
-                validation_stage = ValidationStage.TOOL_BUDGET
-                validation_path = "$.requests"
-                validator = "InvestigationLimits"
-                turns.append(
-                    self._turn_summary(
-                        logical_model_turns,
-                        response,
-                        "FAIL",
-                        validation_stage,
-                        validation_path,
-                        decision=decision,
-                    )
-                )
-                break
-            if _has_duplicate_tool_requests(decision.requests) or any(
-                (
-                    request.tool,
-                    json.dumps(
-                        request.arguments, sort_keys=True, separators=(",", ":"), default=str
-                    ),
-                )
-                in requested_tool_keys
-                for request in decision.requests
-            ):
-                termination = TerminationReason.INVALID_DECISION
-                error_code = InvestigationErrorCode.DUPLICATE_TOOL_REQUEST.value
-                validation_stage = ValidationStage.TOOL_ARGUMENTS
-                validation_path = "$.requests"
-                validator = "InvestigationRuntime"
-                turns.append(
-                    self._turn_summary(
-                        logical_model_turns,
-                        response,
-                        "FAIL",
-                        validation_stage,
-                        validation_path,
-                        decision=decision,
-                    )
-                )
-                break
+            tool_requests_total += len(decision.requests)
 
             try:
-                new_evidence, summaries = self._execute_tools(
-                    incident, decision.requests, observation_window
+                new_evidence, summaries, attempted, suppressed = self._execute_tools(
+                    incident,
+                    decision.requests,
+                    observation_window,
+                    turn=logical_model_turns,
+                    tool_calls_used=tool_calls,
+                    history=observation_history,
                 )
             except PermissionError:
                 termination = TerminationReason.INVALID_DECISION
@@ -330,6 +303,24 @@ class InvestigationRuntime:
                     )
                 )
                 break
+            except _ToolBudgetExceeded as error:
+                termination = TerminationReason.TOOL_CALL_LIMIT
+                error_code = InvestigationErrorCode.TOOL_BUDGET_EXCEEDED.value
+                validation_stage = ValidationStage.TOOL_BUDGET
+                validation_path = "$.requests"
+                validator = "InvestigationLimits"
+                turns.append(
+                    self._turn_summary(
+                        logical_model_turns,
+                        response,
+                        "FAIL",
+                        validation_stage,
+                        validation_path,
+                        decision=decision,
+                        request_audits=error.audits,
+                    )
+                )
+                break
             except ValueError:
                 termination = TerminationReason.INVALID_DECISION
                 error_code = InvestigationErrorCode.INVALID_TOOL_ARGUMENTS.value
@@ -338,22 +329,19 @@ class InvestigationRuntime:
                 validator = "BoundedToolExecutor"
                 break
             failed_summary = next(
-                (item for item in summaries if item.get("status") != "SUCCESS"), None
+                (
+                    item
+                    for item in summaries
+                    if item.get("status") not in {"SUCCESS", "SKIPPED_DUPLICATE"}
+                ),
+                None,
             )
             # Account for every dispatch and retain all successful evidence
             # before classifying any sibling tool failure.
-            tool_calls += len(decision.requests)
+            tool_calls += attempted
             evidence.extend(new_evidence)
-            requested_tool_keys.update(
-                (
-                    request.tool,
-                    json.dumps(
-                        request.arguments, sort_keys=True, separators=(",", ":"), default=str
-                    ),
-                )
-                for request in decision.requests
-            )
             progress.extend(summaries)
+            duplicate_requests_suppressed += suppressed
             if failed_summary is not None:
                 termination = TerminationReason.TOOL_FAILURE
                 error_code = str(failed_summary.get("error_code", "TOOL_EXECUTION_FAILED"))
@@ -369,6 +357,17 @@ class InvestigationRuntime:
                         validation_path,
                         decision=decision,
                         summaries=summaries,
+                        request_audits=summaries,
+                        tool_calls_attempted=attempted,
+                        tool_calls_succeeded=sum(
+                            1 for item in summaries if item.get("status") == "SUCCESS"
+                        ),
+                        tool_calls_failed=sum(
+                            1
+                            for item in summaries
+                            if item.get("status") not in {"SUCCESS", "SKIPPED_DUPLICATE"}
+                        ),
+                        duplicate_requests_suppressed=suppressed,
                     )
                 )
                 break
@@ -381,6 +380,17 @@ class InvestigationRuntime:
                     None,
                     decision=decision,
                     summaries=summaries,
+                    request_audits=summaries,
+                    tool_calls_attempted=attempted,
+                    tool_calls_succeeded=sum(
+                        1 for item in summaries if item.get("status") == "SUCCESS"
+                    ),
+                    tool_calls_failed=sum(
+                        1
+                        for item in summaries
+                        if item.get("status") not in {"SUCCESS", "SKIPPED_DUPLICATE"}
+                    ),
+                    duplicate_requests_suppressed=suppressed,
                 )
             )
 
@@ -429,6 +439,8 @@ class InvestigationRuntime:
             provider=provider_name,
             model=self._model,
             reasoning_effort=self._reasoning_effort,
+            tool_requests_total=tool_requests_total,
+            duplicate_requests_suppressed=duplicate_requests_suppressed,
             estimated_api_calls=estimated_api_calls,
             actual_api_calls=accounting.outbound_api_attempts,
             logical_model_turns=logical_model_turns,
@@ -496,6 +508,10 @@ class InvestigationRuntime:
                                 summary.get("argument_value_hashes", {})
                                 for summary in item.get("summaries", [])
                             ],
+                            request_audits=item.get("request_audits", []),
+                            duplicate_requests_suppressed=item.get(
+                                "duplicate_requests_suppressed", 0
+                            ),
                             model_input_tokens=item.get("input_tokens", 0),
                             model_output_tokens=item.get("output_tokens", 0),
                             validation_stage=(
@@ -510,21 +526,13 @@ class InvestigationRuntime:
                                 if item.get("validation_result") != "PASS"
                                 else None
                             ),
-                            tool_calls_attempted=item.get("requested_tool_count", 0),
-                            tool_calls_succeeded=sum(
-                                1
-                                for summary in item.get("summaries", [])
-                                if summary.get("status") == "SUCCESS"
-                            ),
-                            tool_calls_failed=item.get("requested_tool_count", 0)
-                            - sum(
-                                1
-                                for summary in item.get("summaries", [])
-                                if summary.get("status") == "SUCCESS"
-                            ),
+                            tool_calls_attempted=item.get("tool_calls_attempted", 0),
+                            tool_calls_succeeded=item.get("tool_calls_succeeded", 0),
+                            tool_calls_failed=item.get("tool_calls_failed", 0),
                             evidence_ids_created=[
                                 evidence_id
                                 for summary in item.get("summaries", [])
+                                if summary.get("status") == "SUCCESS"
                                 for evidence_id in summary.get("evidence_ids", [])
                             ],
                             recorded_at=datetime.now(UTC),
@@ -540,6 +548,8 @@ class InvestigationRuntime:
                     prompt_hash=usage.prompt_hash,
                     model_calls=usage.model_calls,
                     tool_calls=usage.tool_calls,
+                    tool_requests_total=usage.tool_requests_total,
+                    duplicate_requests_suppressed=usage.duplicate_requests_suppressed,
                     input_tokens=usage.input_tokens,
                     output_tokens=usage.output_tokens,
                     latency_ms=usage.latency_ms,
@@ -626,68 +636,117 @@ class InvestigationRuntime:
         incident: Incident,
         requests: list[Any],
         observation_window: InvestigationObservationWindow,
-    ) -> tuple[list[Evidence], list[dict[str, Any]]]:
-        """Resolve and execute a batch concurrently, then normalize successes."""
-        resolved: list[tuple[RegisteredTool, Any, dict[str, Any]]] = []
+        *,
+        turn: int,
+        tool_calls_used: int,
+        history: dict[str, ToolObservationHistory],
+    ) -> tuple[list[Evidence], list[dict[str, Any]], int, int]:
+        """Suppress reusable duplicates and execute only novel requests."""
+        scope = {
+            "starts_at": observation_window.starts_at.isoformat(),
+            "ends_at": observation_window.ends_at.isoformat(),
+            "temporal_mode": observation_window.temporal_mode,
+        }
+        prepared: list[_PreparedToolRequest] = []
         for request in requests:
-            tool = self._registry.get(request.tool)
-            resolved.append(
-                (
-                    tool,
-                    tool.request(
-                        incident.incident_id,
-                        request.arguments,
-                        observation_window={
-                            "starts_at": observation_window.starts_at.isoformat(),
-                            "ends_at": observation_window.ends_at.isoformat(),
-                        },
-                        temporal_mode=observation_window.temporal_mode,
-                    ),
-                    request.arguments,
+            registered = self._registry.get(request.tool)
+            canonical = registered.validate_arguments(request.arguments)
+            prepared.append(
+                _PreparedToolRequest(
+                    request=request,
+                    registered=registered,
+                    canonical_arguments=canonical,
+                    identity=make_tool_request_identity(registered.name, canonical, scope),
                 )
             )
 
-        outputs: list[tuple[RegisteredTool, Any, dict[str, Any]]] = []
-        with ThreadPoolExecutor(max_workers=len(resolved)) as pool:
-            futures = [
-                pool.submit(self._tool_executor.execute, tool.tool, call)
-                for tool, call, _arguments in resolved
-            ]
-            for future, pair in zip(futures, resolved, strict=True):
-                outputs.append((pair[0], future.result(), pair[2]))
+        novel: list[tuple[int, _PreparedToolRequest]] = []
+        duplicate_indices: list[tuple[int, _PreparedToolRequest, str]] = []
+        seen_in_turn: set[str] = set()
+        for index, item in enumerate(prepared):
+            identity_hash = item.identity.identity_hash
+            prior = history.get(identity_hash)
+            same_turn = identity_hash in seen_in_turn
+            suppress = same_turn or (
+                item.registered.repeat_policy is ToolRepeatPolicy.FIXED_WINDOW
+                and prior is not None
+                and prior.status == "SUCCESS"
+            )
+            if suppress:
+                duplicate_indices.append((index, item, "SAME_TURN" if same_turn else "PRIOR_TURN"))
+            else:
+                novel.append((index, item))
+                seen_in_turn.add(identity_hash)
+
+        if len(novel) > self._limits.max_tool_calls - tool_calls_used:
+            raise _ToolBudgetExceeded(
+                [self._request_audit(item, "REJECTED_BUDGET") for item in prepared]
+            )
+
+        resolved: list[tuple[int, _PreparedToolRequest, Any]] = []
+        for index, item in novel:
+            call = item.registered.request(
+                incident.incident_id,
+                item.canonical_arguments,
+                observation_window={
+                    "starts_at": observation_window.starts_at.isoformat(),
+                    "ends_at": observation_window.ends_at.isoformat(),
+                },
+                temporal_mode=observation_window.temporal_mode,
+            )
+            resolved.append((index, item, call))
+
+        outputs: list[tuple[int, _PreparedToolRequest, Any]] = []
+        if resolved:
+            with ThreadPoolExecutor(max_workers=len(resolved)) as pool:
+                futures = [
+                    pool.submit(self._tool_executor.execute, item.registered.tool, call)
+                    for _index, item, call in resolved
+                ]
+                for future, pair in zip(futures, resolved, strict=True):
+                    outputs.append((pair[0], pair[1], future.result()))
 
         collected_at = datetime.now(UTC)
         window = observation_window.time_window()
         normalized: list[Evidence] = []
-        summaries: list[dict[str, Any]] = []
-        for tool, result, arguments in outputs:
+        summaries_by_index: dict[int, dict[str, Any]] = {}
+        for index, item, result in outputs:
             call_id = result.tool_call_id
             self._evidence_service.register_tool_call(call_id, incident.incident_id)
             if isinstance(result, ToolFailure):
-                safe_arguments = self._safe_arguments(arguments)
-                summaries.append(
-                    {
-                        "tool": tool.name,
-                        **safe_arguments,
-                        "status": result.code.value,
-                        "error_code": result.code.value,
-                        "backend": result.backend,
-                        "operation": result.operation,
-                        "http_status": result.http_status,
-                        "evidence_ids": [],
-                    }
+                summary = {
+                    "tool": item.registered.name,
+                    **self._safe_arguments(item.canonical_arguments),
+                    "status": result.code.value,
+                    "error_code": result.code.value,
+                    "backend": result.backend,
+                    "operation": result.operation,
+                    "http_status": result.http_status,
+                    "evidence_ids": [],
+                    "identity_hash": item.identity.identity_hash,
+                    "repeat_policy": item.registered.repeat_policy.value,
+                }
+                summaries_by_index[index] = summary
+                history[item.identity.identity_hash] = ToolObservationHistory(
+                    identity=item.identity,
+                    repeat_policy=item.registered.repeat_policy,
+                    turn=turn,
+                    status=result.code.value,
+                    evidence_ids=(),
+                    tool_call_id=str(call_id),
+                    result_count=0,
                 )
                 continue
             if not isinstance(result, ToolResponse):
                 continue
             evidence = Evidence(
                 incident_id=incident.incident_id,
-                source_type=tool.source_type,
-                source_system=tool.name,
+                source_type=item.registered.source_type,
+                source_system=item.registered.name,
                 observation=result.data,
                 time_window=result.effective_time_window or window,
                 tool_call_id=call_id,
-                raw_result_reference=f"{tool.name}://{call_id}",
+                raw_result_reference=f"{item.registered.name}://{call_id}",
                 collected_at=collected_at,
             )
             if result.temporal_mode:
@@ -696,16 +755,56 @@ class InvestigationRuntime:
                     "temporal_mode": result.temporal_mode,
                 }
             normalized.append(self._evidence_service.add(evidence))
-            safe_arguments = self._safe_arguments(arguments)
-            summaries.append(
-                {
-                    "tool": tool.name,
-                    **safe_arguments,
-                    "status": "SUCCESS",
-                    "evidence_ids": [str(normalized[-1].evidence_id)],
-                }
+            evidence_ids = (str(normalized[-1].evidence_id),)
+            summaries_by_index[index] = {
+                "tool": item.registered.name,
+                **self._safe_arguments(item.canonical_arguments),
+                "status": "SUCCESS",
+                "evidence_ids": list(evidence_ids),
+                "identity_hash": item.identity.identity_hash,
+                "repeat_policy": item.registered.repeat_policy.value,
+            }
+            history[item.identity.identity_hash] = ToolObservationHistory(
+                identity=item.identity,
+                repeat_policy=item.registered.repeat_policy,
+                turn=turn,
+                status="SUCCESS",
+                evidence_ids=evidence_ids,
+                tool_call_id=str(call_id),
+                result_count=result.result_count,
             )
-        return normalized, summaries
+
+        for index, item, duplicate_scope in duplicate_indices:
+            prior = history.get(item.identity.identity_hash)
+            summaries_by_index[index] = {
+                "tool": item.registered.name,
+                **self._safe_arguments(item.canonical_arguments),
+                "status": "SKIPPED_DUPLICATE",
+                "duplicate_scope": duplicate_scope,
+                "original_turn": prior.turn if prior else turn,
+                "original_tool_call_id": prior.tool_call_id if prior else None,
+                "reused_evidence_ids": list(prior.evidence_ids) if prior else [],
+                "evidence_ids": list(prior.evidence_ids) if prior else [],
+                "identity_hash": item.identity.identity_hash,
+                "repeat_policy": item.registered.repeat_policy.value,
+            }
+
+        return (
+            normalized,
+            [summaries_by_index[index] for index in range(len(prepared))],
+            len(novel),
+            len(duplicate_indices),
+        )
+
+    def _request_audit(self, item: _PreparedToolRequest, status: str) -> dict[str, Any]:
+        """Return a safe pre-execution request record."""
+        return {
+            "tool": item.registered.name,
+            **self._safe_arguments(item.canonical_arguments),
+            "status": status,
+            "identity_hash": item.identity.identity_hash,
+            "repeat_policy": item.registered.repeat_policy.value,
+        }
 
     @staticmethod
     def _safe_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -748,9 +847,14 @@ class InvestigationRuntime:
         *,
         decision: InvestigationDecision | None = None,
         summaries: list[dict[str, Any]] | None = None,
+        request_audits: list[dict[str, Any]] | None = None,
+        tool_calls_attempted: int = 0,
+        tool_calls_succeeded: int = 0,
+        tool_calls_failed: int = 0,
+        duplicate_requests_suppressed: int = 0,
     ) -> dict[str, Any]:
         """Return bounded turn data safe for smoke/benchmark artifacts."""
-        names = [item.get("tool") for item in (summaries or []) if item.get("tool")]
+        names = [item.tool for item in (decision.requests if decision else [])]
         metadata = getattr(response, "response_metadata", None)
         function_names = getattr(metadata, "function_call_names", []) or []
         return {
@@ -761,6 +865,11 @@ class InvestigationRuntime:
             "requested_tool_count": len(decision.requests) if decision else 0,
             "requested_tool_names": names,
             "summaries": summaries or [],
+            "request_audits": request_audits or summaries or [],
+            "tool_calls_attempted": tool_calls_attempted,
+            "tool_calls_succeeded": tool_calls_succeeded,
+            "tool_calls_failed": tool_calls_failed,
+            "duplicate_requests_suppressed": duplicate_requests_suppressed,
             "validation_result": result,
             "validation_stage": stage.value if stage else None,
             "error_path": path,

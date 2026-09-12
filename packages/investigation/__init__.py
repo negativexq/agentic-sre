@@ -10,7 +10,13 @@ from packages.investigation.contracts import (
     InvestigationResult,
     StopReason,
     TerminationReason,
+    ToolRepeatPolicy,
     ToolRequestSpec,
+)
+from packages.investigation.duplicates import (
+    ToolObservationHistory,
+    ToolRequestIdentity,
+    make_tool_request_identity,
 )
 from packages.investigation.prompt import INVESTIGATOR_PROMPT_VERSION, investigator_prompt_hash
 from packages.investigation.registry import ReadOnlyToolRegistry, RegisteredTool
@@ -31,6 +37,10 @@ __all__ = [
     "ReadOnlyToolRegistry",
     "RegisteredTool",
     "TerminationReason",
+    "ToolRepeatPolicy",
+    "ToolObservationHistory",
+    "ToolRequestIdentity",
     "ToolRequestSpec",
+    "make_tool_request_identity",
     "investigator_prompt_hash",
 ]

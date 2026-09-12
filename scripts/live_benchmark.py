@@ -138,6 +138,8 @@ def main() -> int:
                 "outbound_api_attempts": result.usage.outbound_api_attempts,
                 "retries": result.usage.provider_retries,
                 "tool_calls": result.usage.tool_calls,
+                "tool_requests_total": result.usage.tool_requests_total,
+                "duplicate_requests_suppressed": result.usage.duplicate_requests_suppressed,
                 "evidence_count": len(result.evidence),
                 "input_tokens": result.usage.input_tokens,
                 "output_tokens": result.usage.output_tokens,
@@ -190,6 +192,14 @@ def main() -> int:
         / count,
         "model_calls_per_incident": sum(item["model_calls"] for item in results) / count,
         "tool_calls_per_incident": sum(item["tool_calls"] for item in results) / count,
+        "tool_requests_per_incident": sum(item["tool_requests_total"] for item in results) / count,
+        "duplicate_requests_suppressed_total": sum(
+            item["duplicate_requests_suppressed"] for item in results
+        ),
+        "duplicate_requests_suppressed_per_incident": sum(
+            item["duplicate_requests_suppressed"] for item in results
+        )
+        / count,
         "input_tokens_total": sum(item["input_tokens"] for item in results),
         "output_tokens_total": sum(item["output_tokens"] for item in results),
         "latency_mean_ms": sum(item["latency_ms"] for item in results) / count,

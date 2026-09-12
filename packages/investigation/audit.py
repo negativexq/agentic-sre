@@ -1,7 +1,7 @@
 """Non-secret investigation usage and termination audit records."""
 
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -27,6 +27,8 @@ class InvestigationAuditRecord(BaseModel):
     prompt_hash: str = Field(min_length=1)
     model_calls: int = Field(ge=0)
     tool_calls: int = Field(ge=0)
+    tool_requests_total: int = Field(ge=0, default=0)
+    duplicate_requests_suppressed: int = Field(ge=0, default=0)
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
     latency_ms: int = Field(ge=0)
@@ -66,6 +68,8 @@ class InvestigationTurnAudit(BaseModel):
     requested_tool_argument_keys: list[list[str]] = Field(default_factory=list, max_length=8)
     requested_tool_argument_types: list[dict[str, str]] = Field(default_factory=list, max_length=8)
     requested_tool_argument_hashes: list[dict[str, str]] = Field(default_factory=list, max_length=8)
+    request_audits: list[dict[str, Any]] = Field(default_factory=list, max_length=8)
+    duplicate_requests_suppressed: int = Field(ge=0, default=0)
     validation_stage: ValidationStage | None = None
     validation_result: str = "NOT_EVALUATED"
     error_code: str | None = None

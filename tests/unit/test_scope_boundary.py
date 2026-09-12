@@ -1,4 +1,4 @@
-"""Guardrails for the deterministic-first release boundary."""
+"""Guardrails for the credit-aware single-agent release boundary."""
 
 import tomllib
 from pathlib import Path
@@ -14,15 +14,14 @@ FORBIDDEN_PACKAGES = {
     "langgraph",
     "llama-index",
     "mcp",
-    "openai",
     "qdrant-client",
     "sentence-transformers",
     "transformers",
 }
 
 
-def test_deterministic_release_has_no_agent_or_model_dependencies() -> None:
-    """The foundation cannot silently acquire probabilistic runtime dependencies."""
+def test_release_has_no_agent_orchestration_dependencies() -> None:
+    """The baseline may use one guarded provider but no agent framework."""
     project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
     dependencies = project["project"]["dependencies"]
     dependencies.extend(project["project"]["optional-dependencies"]["dev"])

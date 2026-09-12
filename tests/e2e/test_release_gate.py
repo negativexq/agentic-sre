@@ -34,7 +34,7 @@ def test_release_contains_required_observability_and_runtime_boundaries() -> Non
 
 
 def test_python_source_contains_no_agent_runtime_imports() -> None:
-    forbidden = ("langgraph", "langchain", "openai", "anthropic", "crewai", "autogen", "mcp")
+    forbidden = ("langgraph", "langchain", "anthropic", "crewai", "autogen", "mcp")
     source_files = (
         list(Path("apps").rglob("*.py"))
         + list(Path("packages").rglob("*.py"))

@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentic-sre"
-version = "0.1.1"
-description = "Deterministic SRE foundation for the Agentic SRE project."
+version = "0.2.0"
+description = "Credit-aware single-agent investigation baseline for the Agentic SRE project."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -20,6 +20,7 @@ dependencies = [
     "opentelemetry-api>=1.37,<2.0",
     "opentelemetry-exporter-otlp>=1.37,<2.0",
     "opentelemetry-sdk>=1.37,<2.0",
+    "openai>=1.0,<3.0",
     "prometheus-client>=0.22,<1.0",
     "sqlalchemy>=2.0,<3.0",
     "uvicorn[standard]>=0.35,<1.0",

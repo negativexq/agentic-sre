@@ -1,10 +1,24 @@
 """Allow-listed read-only investigation tool registry."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid4
 
+from pydantic import ValidationError
+
 from packages.contracts import EvidenceSourceType
+from packages.investigation.tool_contracts import (
+    AnyToolArguments,
+    ConsumerArgs,
+    DeploymentArgs,
+    ServiceArgs,
+    ServicePatternArgs,
+    ServiceWindowArgs,
+    ToolArguments,
+    ToolArgumentValidationError,
+    TraceIdArgs,
+    descriptor_schema,
+)
 from packages.tools import (
     KubernetesBackend,
     KubernetesChangeBackend,
@@ -28,7 +42,7 @@ class RegisteredTool:
     source_type: EvidenceSourceType
     tool: Tool
     purpose: str = ""
-    argument_schema: dict[str, Any] = field(default_factory=dict)
+    argument_model: type[ToolArguments] = AnyToolArguments
 
     def descriptor(self) -> dict[str, Any]:
         """Return the safe model-facing capability descriptor."""
@@ -37,12 +51,39 @@ class RegisteredTool:
             "version": self.version,
             "purpose": self.purpose or f"Read-only {self.operation} observation",
             "evidence_type": self.source_type.value,
-            "arguments": self.argument_schema,
+            "arguments": descriptor_schema(self.argument_model),
         }
 
-    def request(self, incident_id: UUID, arguments: dict[str, Any]) -> ToolRequest:
+    def validate_arguments(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Validate and canonicalize arguments before a backend can execute."""
+        try:
+            parsed = self.argument_model.model_validate(arguments)
+        except ValidationError as error:
+            first = error.errors()[0]
+            location = ".".join(str(item) for item in first.get("loc", ()))
+            raise ToolArgumentValidationError(
+                f"$.{location}" if location else "$",
+                "tool arguments do not match the registered contract",
+            ) from error
+        return parsed.model_dump(mode="json", exclude_none=True)
+
+    def request(
+        self,
+        incident_id: UUID,
+        arguments: dict[str, Any],
+        *,
+        observation_window: dict[str, str] | None = None,
+        temporal_mode: str = "INCIDENT_WINDOW",
+    ) -> ToolRequest:
         """Build a bounded invocation while preventing operation override."""
-        parameters = {**arguments, "operation": self.operation}
+        canonical = self.validate_arguments(arguments)
+        parameters = {
+            **canonical,
+            "operation": self.operation,
+            "temporal_mode": temporal_mode,
+        }
+        if observation_window is not None:
+            parameters["observation_window"] = observation_window
         return ToolRequest(
             tool_name=self.tool.name,
             tool_version=self.tool.version,
@@ -85,6 +126,10 @@ class ReadOnlyToolRegistry:
         """Return deterministic bounded capability descriptors."""
         return tuple(self._tools[name].descriptor() for name in sorted(self._tools))
 
+    def validate(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Validate one request without executing it."""
+        return self.get(name).validate_arguments(arguments)
+
 
 def live_observability_registry(
     prometheus_url: str,
@@ -112,7 +157,7 @@ def live_observability_registry(
                 EvidenceSourceType.METRIC,
                 metrics,
                 "Measure bounded HTTP error rate for an explicitly named service.",
-                {"service": {"type": "string", "required": True}},
+                ServiceArgs,
             ),
             RegisteredTool(
                 "service_latency",
@@ -121,7 +166,7 @@ def live_observability_registry(
                 EvidenceSourceType.METRIC,
                 metrics,
                 "Measure bounded HTTP latency for an explicitly named service.",
-                {"service": {"type": "string", "required": True}},
+                ServiceArgs,
             ),
             RegisteredTool(
                 "db_connection_pressure",
@@ -130,7 +175,7 @@ def live_observability_registry(
                 EvidenceSourceType.METRIC,
                 metrics,
                 "Measure database connection acquisition pressure.",
-                {"service": {"type": "string", "required": True}},
+                ServiceArgs,
             ),
             RegisteredTool(
                 "kafka_consumer_lag",
@@ -139,7 +184,7 @@ def live_observability_registry(
                 EvidenceSourceType.METRIC,
                 metrics,
                 "Measure Kafka lag for an explicitly named consumer.",
-                {"consumer": {"type": "string", "required": True}},
+                ConsumerArgs,
             ),
             RegisteredTool(
                 "db_query_latency",
@@ -148,7 +193,7 @@ def live_observability_registry(
                 EvidenceSourceType.METRIC,
                 metrics,
                 "Measure bounded database query latency for an explicitly named service.",
-                {"service": {"type": "string", "required": True}},
+                ServiceArgs,
             ),
             RegisteredTool(
                 "service_logs",
@@ -157,10 +202,7 @@ def live_observability_registry(
                 EvidenceSourceType.LOG,
                 logs,
                 "Search bounded structured logs for an explicitly named service.",
-                {
-                    "service": {"type": "string", "required": True},
-                    "range_seconds": {"type": "integer", "required": False},
-                },
+                ServiceWindowArgs,
             ),
             RegisteredTool(
                 "service_error_logs",
@@ -169,10 +211,7 @@ def live_observability_registry(
                 EvidenceSourceType.LOG,
                 logs,
                 "Find bounded error patterns in an explicitly named service's logs.",
-                {
-                    "service": {"type": "string", "required": True},
-                    "pattern": {"type": "string", "required": False},
-                },
+                ServicePatternArgs,
             ),
             RegisteredTool(
                 "slow_traces",
@@ -181,7 +220,7 @@ def live_observability_registry(
                 EvidenceSourceType.TRACE,
                 traces,
                 "Search bounded slow traces for an explicitly named service.",
-                {"service": {"type": "string", "required": True}},
+                ServiceArgs,
             ),
             RegisteredTool(
                 "trace_detail",
@@ -190,7 +229,7 @@ def live_observability_registry(
                 EvidenceSourceType.TRACE,
                 traces,
                 "Retrieve one bounded trace by its trace identifier.",
-                {"trace_id": {"type": "string", "required": True}},
+                TraceIdArgs,
             ),
             RegisteredTool(
                 "kubernetes_pods",
@@ -199,7 +238,7 @@ def live_observability_registry(
                 EvidenceSourceType.KUBERNETES,
                 k8s_tool,
                 "Inspect bounded pod health and restart state for a named deployment.",
-                {"deployment": {"type": "string", "required": True}},
+                DeploymentArgs,
             ),
             RegisteredTool(
                 "kubernetes_deployment",
@@ -208,7 +247,7 @@ def live_observability_registry(
                 EvidenceSourceType.KUBERNETES,
                 k8s_tool,
                 "Inspect bounded deployment replica and image state.",
-                {"deployment": {"type": "string", "required": True}},
+                DeploymentArgs,
             ),
             RegisteredTool(
                 "kubernetes_events",
@@ -217,7 +256,7 @@ def live_observability_registry(
                 EvidenceSourceType.KUBERNETES,
                 k8s_tool,
                 "Inspect bounded Kubernetes events for a named deployment.",
-                {"deployment": {"type": "string", "required": True}},
+                DeploymentArgs,
             ),
             RegisteredTool(
                 "kubernetes_rollout_history",
@@ -226,7 +265,7 @@ def live_observability_registry(
                 EvidenceSourceType.KUBERNETES,
                 k8s_tool,
                 "Inspect bounded deployment revision metadata.",
-                {"deployment": {"type": "string", "required": True}},
+                DeploymentArgs,
             ),
             RegisteredTool(
                 "kubernetes_container_restarts",
@@ -235,7 +274,7 @@ def live_observability_registry(
                 EvidenceSourceType.KUBERNETES,
                 k8s_tool,
                 "Inspect bounded container restart counts for a named deployment.",
-                {"deployment": {"type": "string", "required": True}},
+                DeploymentArgs,
             ),
             RegisteredTool(
                 "kubernetes_resource_state",
@@ -244,7 +283,7 @@ def live_observability_registry(
                 EvidenceSourceType.KUBERNETES,
                 k8s_tool,
                 "Inspect bounded current deployment resource state.",
-                {"deployment": {"type": "string", "required": True}},
+                DeploymentArgs,
             ),
             RegisteredTool(
                 "recent_deployment_changes",
@@ -253,7 +292,7 @@ def live_observability_registry(
                 EvidenceSourceType.CHANGE,
                 changes,
                 "Inspect bounded observable deployment revision and image facts.",
-                {"deployment": {"type": "string", "required": True}},
+                DeploymentArgs,
             ),
             RegisteredTool(
                 "recent_configuration_changes",
@@ -262,7 +301,7 @@ def live_observability_registry(
                 EvidenceSourceType.CHANGE,
                 changes,
                 "Inspect bounded observable deployment configuration facts.",
-                {"deployment": {"type": "string", "required": True}},
+                DeploymentArgs,
             ),
         )
     )

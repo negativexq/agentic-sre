@@ -13,7 +13,22 @@ class ScenarioCapability:
     scenario_id: str
     category: str
     required_tools: tuple[str, ...]
-    available: bool
+    tool_capability: bool
+    argument_readiness: bool
+    temporal_readiness: bool
+    provenance_readiness: bool
+
+    @property
+    def available(self) -> bool:
+        """Backward-compatible overall readiness flag."""
+        return all(
+            (
+                self.tool_capability,
+                self.argument_readiness,
+                self.temporal_readiness,
+                self.provenance_readiness,
+            )
+        )
 
 
 _REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
@@ -38,7 +53,33 @@ def capability_matrix(
             scenario_id=scenario.scenario_id,
             category=scenario.category,
             required_tools=_REQUIRED_TOOLS[scenario.category],
-            available=registry is None or set(_REQUIRED_TOOLS[scenario.category]).issubset(names),
+            tool_capability=registry is None
+            or set(_REQUIRED_TOOLS[scenario.category]).issubset(names),
+            argument_readiness=registry is None
+            or all(
+                _minimal_args(registry, tool) is not None
+                for tool in _REQUIRED_TOOLS[scenario.category]
+            ),
+            temporal_readiness=True,
+            provenance_readiness=True,
         )
         for scenario in scenarios
     )
+
+
+def _minimal_args(registry: ReadOnlyToolRegistry, name: str) -> dict[str, object] | None:
+    """Validate the smallest production-shaped argument set for one tool."""
+    values = {
+        "service": "payment-service",
+        "consumer": "order-worker",
+        "deployment": "payment-service",
+        "trace_id": "0" * 32,
+    }
+    try:
+        model = registry.get(name).argument_model
+        return registry.validate(
+            name,
+            {key: values[key] for key, field in model.model_fields.items() if field.is_required()},
+        )
+    except (KeyError, PermissionError, ValueError):
+        return None

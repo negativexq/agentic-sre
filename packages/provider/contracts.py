@@ -61,6 +61,8 @@ class ModelRequest(BaseModel):
     max_output_tokens: int = Field(gt=0, le=128_000)
     timeout_ms: int = Field(gt=0, le=120_000)
     allowed_decisions: tuple[Literal["CALL_TOOLS", "SUBMIT_HYPOTHESIS", "STOP"], ...] | None = None
+    allowed_tool_names: tuple[str, ...] | None = None
+    allowed_tool_argument_keys: tuple[str, ...] | None = None
 
 
 class ResponseEnvelopeMetadata(BaseModel):

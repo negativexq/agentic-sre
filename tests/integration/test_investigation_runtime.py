@@ -109,6 +109,9 @@ def test_unknown_tool_fails_closed_without_backend_execution() -> None:
 
     assert result.termination_reason is TerminationReason.INVALID_DECISION
     assert result.error_code == "UNKNOWN_INVESTIGATION_TOOL"
+    assert result.validation_stage is not None
+    assert result.validation_stage.value == "TOOL_REGISTRY"
+    assert result.validation_path == "$.requests[].tool"
     assert result.usage.tool_calls == 0
 
 
@@ -122,6 +125,8 @@ def test_empty_tool_requests_have_a_typed_semantic_failure() -> None:
 
     assert result.termination_reason is TerminationReason.INVALID_DECISION
     assert result.error_code == "EMPTY_TOOL_REQUESTS"
+    assert result.validation_stage is not None
+    assert result.validation_stage.value == "DECISION_SCHEMA"
 
 
 def test_unknown_hypothesis_mechanism_has_a_typed_semantic_failure() -> None:

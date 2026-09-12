@@ -44,6 +44,7 @@ class ToolResponse(BaseModel):
     data: dict[str, Any]
     result_count: int = Field(ge=0)
     effective_time_window: TimeWindow | None = None
+    temporal_mode: str = Field(default="INCIDENT_WINDOW", min_length=1)
 
 
 class ToolFailure(BaseModel):

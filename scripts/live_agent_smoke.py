@@ -86,6 +86,12 @@ def main() -> int:
                     result.terminal_decision.value if result.terminal_decision else None
                 ),
                 "stop_reason": result.stop_reason.value if result.stop_reason else None,
+                "error_code": result.error_code,
+                "validation_stage": (
+                    result.validation_stage.value if result.validation_stage else None
+                ),
+                "validation_path": result.validation_path,
+                "validator": result.validator,
                 "hypothesis_submitted": result.hypothesis is not None,
                 "evidence_count": len(result.evidence),
                 "model_calls_used": result.usage.model_calls,
@@ -94,6 +100,11 @@ def main() -> int:
                     result.usage.model_budget_exhausted_after_terminal_decision
                 ),
                 "actual_api_calls": result.usage.actual_api_calls,
+                "provider_invocations": result.usage.provider_invocations,
+                "outbound_api_attempts": result.usage.outbound_api_attempts,
+                "provider_retries": result.usage.provider_retries,
+                "tool_calls_used": result.usage.tool_calls,
+                "turns": result.turns,
             }
         )
     payload = {"scenarios": results, "total_live_api_calls": budget.snapshot().calls_used}

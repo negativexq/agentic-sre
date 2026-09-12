@@ -134,7 +134,11 @@ def _compile_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _decision_function_schemas(schema: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _decision_function_schemas(
+    schema: dict[str, Any],
+    allowed_tool_names: tuple[str, ...] | None = None,
+    allowed_tool_argument_keys: tuple[str, ...] | None = None,
+) -> dict[str, dict[str, Any]]:
     """Build three strict transport schemas from the existing decision contracts."""
     compiled = _compile_strict_schema(schema)
     definitions = compiled.get("$defs", {})
@@ -161,6 +165,27 @@ def _decision_function_schemas(schema: dict[str, Any]) -> dict[str, dict[str, An
         return result
 
     reason = {"type": "string"}
+    tool_request = dict(tool_request)
+    if allowed_tool_names is not None:
+        properties = dict(tool_request.get("properties", {}))
+        tool_property = dict(properties.get("tool", {"type": "string"}))
+        tool_property["enum"] = list(allowed_tool_names)
+        properties["tool"] = tool_property
+        tool_request["properties"] = properties
+    if allowed_tool_argument_keys:
+        argument_properties: dict[str, Any] = {}
+        for key in allowed_tool_argument_keys:
+            argument_properties[key] = {
+                "type": ["integer", "null"] if key == "range_seconds" else ["string", "null"]
+            }
+        properties = dict(tool_request.get("properties", {}))
+        properties["arguments"] = {
+            "type": "object",
+            "properties": argument_properties,
+            "required": list(argument_properties),
+            "additionalProperties": False,
+        }
+        tool_request["properties"] = properties
     return {
         "request_investigation_tools": object_schema(
             {
@@ -448,7 +473,11 @@ def _extract_decision_function(
             "provider response used a decision function not exposed for this turn",
             metadata=metadata,
         )
-    schemas = _decision_function_schemas(request.response_schema)
+    schemas = _decision_function_schemas(
+        request.response_schema,
+        request.allowed_tool_names,
+        request.allowed_tool_argument_keys,
+    )
     schema_error_path = _json_schema_error(structured_output, schemas[function_name])
     if schema_error_path is not None:
         error_code = (
@@ -464,7 +493,17 @@ def _extract_decision_function(
     if function_name == "request_investigation_tools":
         return {
             "decision": "CALL_TOOLS",
-            "requests": structured_output["tool_requests"],
+            "requests": [
+                {
+                    **request,
+                    "arguments": {
+                        key: value
+                        for key, value in request.get("arguments", {}).items()
+                        if value is not None
+                    },
+                }
+                for request in structured_output["tool_requests"]
+            ],
             "hypothesis": None,
         }, metadata
     if function_name == "submit_root_cause_hypothesis":
@@ -628,7 +667,11 @@ class OpenAIProvider:
             "timeout": request.timeout_ms / 1000,
         }
         if request.response_schema_name == "investigation_decision":
-            schemas = _decision_function_schemas(request.response_schema)
+            schemas = _decision_function_schemas(
+                request.response_schema,
+                request.allowed_tool_names,
+                request.allowed_tool_argument_keys,
+            )
             allowed = (
                 tuple(DECISION_TO_FUNCTION[item] for item in request.allowed_decisions)
                 if request.allowed_decisions is not None

@@ -113,6 +113,11 @@ def main() -> int:
                 else None,
                 "stop_reason": result.stop_reason.value if result.stop_reason else None,
                 "error_code": result.error_code,
+                "validation_stage": (
+                    result.validation_stage.value if result.validation_stage else None
+                ),
+                "validation_path": result.validation_path,
+                "validator": result.validator,
                 "model_calls": result.usage.model_calls,
                 "provider_invocations": result.usage.provider_invocations,
                 "outbound_api_attempts": result.usage.outbound_api_attempts,
@@ -128,6 +133,7 @@ def main() -> int:
                 "composite_rca": hypothesis_grades[-1].composite_rca,
                 "valid_evidence_reference_rate": evidence_grades[-1].valid_reference_rate,
                 "actual_api_calls": result.usage.actual_api_calls,
+                "turns": result.turns,
             }
         )
 

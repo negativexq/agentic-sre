@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
+from packages.contracts import TimeWindow
 from packages.storage import ToolCallRepository
 from packages.tools.contracts import (
     ToolErrorCode,
@@ -92,9 +93,21 @@ class BoundedToolExecutor:
             if not isinstance(data, dict):
                 raise ValueError("tool backend returned a non-object result")
             effective_window = data.get("__effective_time_window")
+            temporal_mode = data.get("__temporal_mode", "INCIDENT_WINDOW")
             response_data = {
-                key: value for key, value in data.items() if key != "__effective_time_window"
+                key: value
+                for key, value in data.items()
+                if key not in {"__effective_time_window", "__temporal_mode"}
             }
+            if isinstance(effective_window, dict):
+                effective_window = TimeWindow(
+                    starts_at=datetime.fromisoformat(
+                        str(effective_window["starts_at"]).replace("Z", "+00:00")
+                    ),
+                    ends_at=datetime.fromisoformat(
+                        str(effective_window["ends_at"]).replace("Z", "+00:00")
+                    ),
+                )
             encoded = json.dumps(data, default=str, separators=(",", ":")).encode("utf-8")
             result_count = (
                 len(response_data.get("records", []))
@@ -113,6 +126,7 @@ class BoundedToolExecutor:
                     data=response_data,
                     result_count=result_count,
                     effective_time_window=effective_window,
+                    temporal_mode=str(temporal_mode),
                 )
         except TimeoutError:
             result = ToolFailure(

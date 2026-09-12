@@ -45,6 +45,24 @@ class InvestigationErrorCode(StrEnum):
     INVALID_STOP_REASON = "INVALID_STOP_REASON"
     FABRICATED_EVIDENCE_REFERENCE = "FABRICATED_EVIDENCE_REFERENCE"
     INVALID_DECISION = "INVALID_DECISION"
+    DECISION_SCHEMA_INVALID = "DECISION_SCHEMA_INVALID"
+    TOOL_ARGUMENT_SCHEMA_INVALID = "TOOL_ARGUMENT_SCHEMA_INVALID"
+    TOOL_EXECUTION_FAILED = "TOOL_EXECUTION_FAILED"
+
+
+class ValidationStage(StrEnum):
+    """Stable boundary at which a deterministic validation failed."""
+
+    PROVIDER_ENVELOPE = "PROVIDER_ENVELOPE"
+    PROVIDER_FUNCTION_ARGUMENTS = "PROVIDER_FUNCTION_ARGUMENTS"
+    DECISION_SCHEMA = "DECISION_SCHEMA"
+    DECISION_SEMANTICS = "DECISION_SEMANTICS"
+    TOOL_REGISTRY = "TOOL_REGISTRY"
+    TOOL_ARGUMENTS = "TOOL_ARGUMENTS"
+    TOOL_BUDGET = "TOOL_BUDGET"
+    TOOL_EXECUTION = "TOOL_EXECUTION"
+    EVIDENCE_PROVENANCE = "EVIDENCE_PROVENANCE"
+    HYPOTHESIS_VALIDATION = "HYPOTHESIS_VALIDATION"
 
 
 class HypothesisMechanism(StrEnum):
@@ -151,6 +169,9 @@ class InvestigationUsage(InvestigationModel):
     terminal_decision: DecisionType | None = None
     stop_reason: StopReason | None = None
     model_budget_exhausted_after_terminal_decision: bool = False
+    validation_stage: ValidationStage | None = None
+    validation_path: str | None = None
+    validator: str | None = None
 
 
 class InvestigationResult(InvestigationModel):
@@ -165,3 +186,7 @@ class InvestigationResult(InvestigationModel):
     error_code: str | None = None
     terminal_decision: DecisionType | None = None
     stop_reason: StopReason | None = None
+    validation_stage: ValidationStage | None = None
+    validation_path: str | None = None
+    validator: str | None = None
+    turns: list[dict[str, Any]] = Field(default_factory=list, max_length=3)

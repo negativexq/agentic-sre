@@ -42,6 +42,21 @@ class LiveBackend:
 def _time_window(
     parameters: dict[str, Any], *, maximum_seconds: int = 900
 ) -> tuple[str, str, dict[str, str]]:
+    supplied = parameters.get("observation_window")
+    if (
+        isinstance(supplied, dict)
+        and isinstance(supplied.get("starts_at"), str)
+        and isinstance(supplied.get("ends_at"), str)
+    ):
+        start = datetime.fromisoformat(supplied["starts_at"].replace("Z", "+00:00"))
+        end = datetime.fromisoformat(supplied["ends_at"].replace("Z", "+00:00"))
+        if end < start or (end - start).total_seconds() > maximum_seconds:
+            raise ValueError("observation_window is outside bounded limits")
+        return (
+            str(int(start.timestamp() * 1_000_000_000)),
+            str(int(end.timestamp() * 1_000_000_000)),
+            {"starts_at": start.isoformat(), "ends_at": end.isoformat()},
+        )
     seconds = int(parameters.get("range_seconds", 300))
     if seconds <= 0 or seconds > maximum_seconds:
         raise ValueError(f"range_seconds must be between 1 and {maximum_seconds}")
@@ -81,16 +96,21 @@ class PrometheusBackend(LiveBackend):
             queries[operation] = f'kafka_consumer_lag{{service="{_consumer(parameters)}"}}'
         if operation not in queries:
             raise ValueError("unsupported Prometheus operation")
-        payload = self._get("/api/v1/query", {"query": queries[operation]}, 5.0)
+        start, end, window = _time_window(parameters)
+        payload = self._get(
+            "/api/v1/query_range",
+            {"query": queries[operation], "start": start, "end": end, "step": "15"},
+            5.0,
+        )
         result = payload.get("data", {}).get("result", [])
         if not isinstance(result, list):
             raise ValueError("Prometheus result is invalid")
-        now = datetime.now(UTC).isoformat()
         return {
             "backend": "prometheus",
             "operation": operation,
             "records": result[:100],
-            "__effective_time_window": {"starts_at": now, "ends_at": now},
+            "__effective_time_window": window,
+            "__temporal_mode": parameters.get("temporal_mode", "INCIDENT_WINDOW"),
         }
 
 
@@ -141,6 +161,7 @@ class LokiBackend(LiveBackend):
             "operation": operation,
             "records": records[:100],
             "__effective_time_window": window,
+            "__temporal_mode": parameters.get("temporal_mode", "INCIDENT_WINDOW"),
         }
 
 
@@ -150,20 +171,26 @@ class TempoBackend(LiveBackend):
     def query(self, operation: str, parameters: dict[str, Any]) -> dict[str, Any]:
         if operation == "search_traces":
             service = _service(parameters)
+            start, end, window = _time_window(parameters)
             payload = self._get(
                 "/api/search",
-                {"limit": "20", "tags": f"service.name={service}"},
+                {
+                    "limit": "20",
+                    "tags": f"service.name={service}",
+                    "start": start,
+                    "end": end,
+                },
                 5.0,
             )
             traces = payload.get("traces", [])
             if not isinstance(traces, list):
                 raise ValueError("Tempo search result is invalid")
-            now = datetime.now(UTC).isoformat()
             return {
                 "backend": "tempo",
                 "operation": operation,
                 "records": traces[:20],
-                "__effective_time_window": {"starts_at": now, "ends_at": now},
+                "__effective_time_window": window,
+                "__temporal_mode": parameters.get("temporal_mode", "INCIDENT_WINDOW"),
             }
         if operation == "get_trace":
             trace_id = parameters.get("trace_id")
@@ -174,12 +201,13 @@ class TempoBackend(LiveBackend):
             except ValueError as error:
                 raise ValueError("trace_id must be hexadecimal") from error
             payload = self._get(f"/api/traces/{trace_id}", {}, 5.0)
-            now = datetime.now(UTC).isoformat()
+            _start, _end, window = _time_window(parameters)
             return {
                 "backend": "tempo",
                 "operation": operation,
                 "records": [payload],
-                "__effective_time_window": {"starts_at": now, "ends_at": now},
+                "__effective_time_window": window,
+                "__temporal_mode": parameters.get("temporal_mode", "INCIDENT_WINDOW"),
             }
         raise ValueError("unsupported Tempo operation")
 
@@ -212,6 +240,18 @@ class KubernetesBackend:
             raise ValueError("deployment is required")
         return name
 
+    @staticmethod
+    def _annotate(
+        payload: dict[str, Any], parameters: dict[str, Any], temporal_mode: str
+    ) -> dict[str, Any]:
+        """Attach truthful temporal metadata to Kubernetes observations."""
+        result = dict(payload)
+        window = parameters.get("observation_window")
+        if isinstance(window, dict):
+            result["__effective_time_window"] = window
+        result["__temporal_mode"] = temporal_mode
+        return result
+
     def query(self, operation: str, parameters: dict[str, Any]) -> dict[str, Any]:
         """Execute one explicitly allow-listed Kubernetes read operation."""
         core, apps = self._clients()
@@ -230,66 +270,86 @@ class KubernetesBackend:
             ]
             if operation == "get_container_restarts":
                 records = [{"pod": item["name"], "restarts": item["restarts"]} for item in records]
-            return {"backend": "kubernetes", "operation": operation, "records": records}
+            return self._annotate(
+                {"backend": "kubernetes", "operation": operation, "records": records},
+                parameters,
+                "CURRENT_STATE",
+            )
         deployment = apps.read_namespaced_deployment(name, self._namespace)
         if operation == "get_deployment":
-            return {
-                "backend": "kubernetes",
-                "operation": operation,
-                "records": [
-                    {
-                        "name": deployment.metadata.name,
-                        "generation": deployment.metadata.generation,
-                        "replicas": deployment.spec.replicas,
-                        "available_replicas": deployment.status.available_replicas or 0,
-                        "image": deployment.spec.template.spec.containers[0].image,
-                    }
-                ],
-            }
+            return self._annotate(
+                {
+                    "backend": "kubernetes",
+                    "operation": operation,
+                    "records": [
+                        {
+                            "name": deployment.metadata.name,
+                            "generation": deployment.metadata.generation,
+                            "replicas": deployment.spec.replicas,
+                            "available_replicas": deployment.status.available_replicas or 0,
+                            "image": deployment.spec.template.spec.containers[0].image,
+                        }
+                    ],
+                },
+                parameters,
+                "CURRENT_STATE",
+            )
         if operation == "get_rollout_history":
             annotations = deployment.metadata.annotations or {}
-            return {
-                "backend": "kubernetes",
-                "operation": operation,
-                "records": [
-                    {
-                        "deployment": name,
-                        "revision": annotations.get("deployment.kubernetes.io/revision"),
-                        "generation": deployment.metadata.generation,
-                    }
-                ],
-            }
+            return self._annotate(
+                {
+                    "backend": "kubernetes",
+                    "operation": operation,
+                    "records": [
+                        {
+                            "deployment": name,
+                            "revision": annotations.get("deployment.kubernetes.io/revision"),
+                            "generation": deployment.metadata.generation,
+                        }
+                    ],
+                },
+                parameters,
+                "HISTORICAL_CHANGE",
+            )
         if operation == "get_resource_state":
-            return {
-                "backend": "kubernetes",
-                "operation": operation,
-                "records": [
-                    {
-                        "deployment": name,
-                        "desired_replicas": deployment.spec.replicas,
-                        "ready_replicas": deployment.status.ready_replicas or 0,
-                        "generation": deployment.metadata.generation,
-                    }
-                ],
-            }
+            return self._annotate(
+                {
+                    "backend": "kubernetes",
+                    "operation": operation,
+                    "records": [
+                        {
+                            "deployment": name,
+                            "desired_replicas": deployment.spec.replicas,
+                            "ready_replicas": deployment.status.ready_replicas or 0,
+                            "generation": deployment.metadata.generation,
+                        }
+                    ],
+                },
+                parameters,
+                "CURRENT_STATE",
+            )
         if operation == "get_events":
             events = core.list_namespaced_event(
                 self._namespace,
                 field_selector=f"involvedObject.name={name}",
             ).items
-            return {
-                "backend": "kubernetes",
-                "operation": operation,
-                "records": [
-                    {
-                        "reason": event.reason,
-                        "message": event.message,
-                        "type": event.type,
-                        "last_timestamp": str(event.last_timestamp),
-                    }
-                    for event in events[:100]
-                ],
-            }
+            return self._annotate(
+                {
+                    "backend": "kubernetes",
+                    "operation": operation,
+                    "records": [
+                        {
+                            "reason": event.reason,
+                            "message": event.message,
+                            "type": event.type,
+                            "last_timestamp": str(event.last_timestamp),
+                        }
+                        for event in events[:100]
+                    ],
+                },
+                parameters,
+                "HISTORICAL_EVENT",
+            )
         raise ValueError("unsupported Kubernetes operation")
 
 
@@ -303,7 +363,7 @@ class KubernetesChangeBackend:
         if operation not in {"recent_deployment_changes", "recent_configuration_changes"}:
             raise ValueError("unsupported change operation")
         deployment = self._kubernetes.query("get_deployment", parameters)
-        return {
+        result: dict[str, Any] = {
             "backend": "kubernetes",
             "operation": operation,
             "records": [
@@ -316,3 +376,8 @@ class KubernetesChangeBackend:
                 }
             ],
         }
+        window = parameters.get("observation_window")
+        if isinstance(window, dict):
+            result["__effective_time_window"] = window
+        result["__temporal_mode"] = "HISTORICAL_CHANGE"
+        return result

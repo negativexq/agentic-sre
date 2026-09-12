@@ -9,10 +9,18 @@ from uuid import UUID, uuid4
 
 from pydantic import ValidationError
 
-from packages.contracts import Alert, Evidence, Incident, TimeWindow
+from packages.contracts import Alert, Evidence, Incident
 from packages.evidence import EvidenceService
-from packages.investigation.audit import InvestigationAuditRecord, InvestigationAuditSink
-from packages.investigation.context import CompactContextBuilder
+from packages.investigation.audit import (
+    InvestigationAuditRecord,
+    InvestigationAuditSink,
+    InvestigationTurnAudit,
+)
+from packages.investigation.context import (
+    CompactContextBuilder,
+    InvestigationObservationWindow,
+    derive_observation_window,
+)
 from packages.investigation.contracts import (
     DecisionType,
     HypothesisMechanism,
@@ -23,9 +31,11 @@ from packages.investigation.contracts import (
     InvestigationUsage,
     StopReason,
     TerminationReason,
+    ValidationStage,
 )
 from packages.investigation.prompt import INVESTIGATOR_PROMPT, investigator_prompt_hash
 from packages.investigation.registry import ReadOnlyToolRegistry, RegisteredTool
+from packages.investigation.tool_contracts import ToolArgumentValidationError
 from packages.provider import (
     ModelMessage,
     ModelProvider,
@@ -119,11 +129,16 @@ class InvestigationRuntime:
         output_tokens = 0
         termination = TerminationReason.AGENT_STOPPED
         error_code: str | None = None
+        validation_stage: ValidationStage | None = None
+        validation_path: str | None = None
+        validator: str | None = None
         hypothesis = None
         terminal_decision: DecisionType | None = None
         stop_reason: StopReason | None = None
         progress: list[dict[str, Any]] = []
         requested_tool_keys: set[tuple[str, str]] = set()
+        turns: list[dict[str, Any]] = []
+        observation_window = derive_observation_window(incident, alerts)
 
         for _turn in range(self._limits.max_agent_turns):
             if monotonic() - started > self._limits.max_wall_time_seconds:
@@ -144,6 +159,7 @@ class InvestigationRuntime:
                     logical_model_turns,
                     tool_calls,
                     progress,
+                    observation_window,
                 )
                 input_tokens += response.input_tokens
                 output_tokens += response.output_tokens
@@ -153,11 +169,39 @@ class InvestigationRuntime:
             except ProviderError as error:
                 termination = TerminationReason.PROVIDER_ERROR
                 error_code = error.code.value
+                validation_stage = (
+                    ValidationStage.PROVIDER_FUNCTION_ARGUMENTS
+                    if "FUNCTION" in error.code.value or "DECISION" in error.code.value
+                    else ValidationStage.PROVIDER_ENVELOPE
+                )
+                validation_path = error.metadata.schema_error_path if error.metadata else None
+                validator = "OpenAIResponsesAdapter"
+                turns.append(
+                    self._turn_summary(
+                        logical_model_turns,
+                        response,
+                        error_code,
+                        validation_stage,
+                        validation_path,
+                    )
+                )
                 break
-            except (ValidationError, ValueError):
+            except ValidationError as error:
                 termination = TerminationReason.INVALID_DECISION
                 error_code = _semantic_error_code(
                     getattr(response, "structured_output", None), self._limits
+                )
+                validation_stage = ValidationStage.DECISION_SCHEMA
+                validation_path = self._validation_path(error)
+                validator = "InvestigationDecision"
+                turns.append(
+                    self._turn_summary(
+                        logical_model_turns,
+                        response,
+                        error_code,
+                        validation_stage,
+                        validation_path,
+                    )
                 )
                 break
 
@@ -167,21 +211,57 @@ class InvestigationRuntime:
                 if not referenced.issubset(available):
                     termination = TerminationReason.INVALID_DECISION
                     error_code = InvestigationErrorCode.FABRICATED_EVIDENCE_REFERENCE.value
+                    validation_stage = ValidationStage.EVIDENCE_PROVENANCE
+                    validation_path = "$.hypothesis.evidence_ids"
+                    validator = "EvidenceService"
                 else:
                     hypothesis = decision.hypothesis
                     terminal_decision = DecisionType.SUBMIT_HYPOTHESIS
                     termination = TerminationReason.HYPOTHESIS_SUBMITTED
+                turns.append(
+                    self._turn_summary(
+                        logical_model_turns,
+                        response,
+                        "PASS" if terminal_decision else error_code or "FAIL",
+                        validation_stage,
+                        validation_path,
+                        decision=decision,
+                    )
+                )
                 break
 
             if decision.decision is DecisionType.STOP:
                 terminal_decision = DecisionType.STOP
                 stop_reason = decision.stop_reason
                 termination = TerminationReason.AGENT_STOPPED
+                turns.append(
+                    self._turn_summary(
+                        logical_model_turns,
+                        response,
+                        "PASS",
+                        None,
+                        None,
+                        decision=decision,
+                    )
+                )
                 break
             remaining = self._limits.max_tool_calls - tool_calls
             if len(decision.requests) > remaining:
                 termination = TerminationReason.TOOL_CALL_LIMIT
                 error_code = InvestigationErrorCode.TOOL_BUDGET_EXCEEDED.value
+                validation_stage = ValidationStage.TOOL_BUDGET
+                validation_path = "$.requests"
+                validator = "InvestigationLimits"
+                turns.append(
+                    self._turn_summary(
+                        logical_model_turns,
+                        response,
+                        "FAIL",
+                        validation_stage,
+                        validation_path,
+                        decision=decision,
+                    )
+                )
                 break
             if _has_duplicate_tool_requests(decision.requests) or any(
                 (
@@ -195,17 +275,86 @@ class InvestigationRuntime:
             ):
                 termination = TerminationReason.INVALID_DECISION
                 error_code = InvestigationErrorCode.DUPLICATE_TOOL_REQUEST.value
+                validation_stage = ValidationStage.TOOL_ARGUMENTS
+                validation_path = "$.requests"
+                validator = "InvestigationRuntime"
+                turns.append(
+                    self._turn_summary(
+                        logical_model_turns,
+                        response,
+                        "FAIL",
+                        validation_stage,
+                        validation_path,
+                        decision=decision,
+                    )
+                )
                 break
 
             try:
-                new_evidence, summaries = self._execute_tools(incident, decision.requests)
+                new_evidence, summaries = self._execute_tools(
+                    incident, decision.requests, observation_window
+                )
             except PermissionError:
                 termination = TerminationReason.INVALID_DECISION
                 error_code = InvestigationErrorCode.UNKNOWN_INVESTIGATION_TOOL.value
+                validation_stage = ValidationStage.TOOL_REGISTRY
+                validation_path = "$.requests[].tool"
+                validator = "ReadOnlyToolRegistry"
+                turns.append(
+                    self._turn_summary(
+                        logical_model_turns,
+                        response,
+                        "FAIL",
+                        validation_stage,
+                        validation_path,
+                        decision=decision,
+                    )
+                )
+                break
+            except ToolArgumentValidationError as error:
+                termination = TerminationReason.INVALID_DECISION
+                error_code = InvestigationErrorCode.TOOL_ARGUMENT_SCHEMA_INVALID.value
+                validation_stage = ValidationStage.TOOL_ARGUMENTS
+                validation_path = error.path
+                validator = "RegisteredTool.argument_model"
+                turns.append(
+                    self._turn_summary(
+                        logical_model_turns,
+                        response,
+                        "FAIL",
+                        validation_stage,
+                        validation_path,
+                        decision=decision,
+                    )
+                )
                 break
             except ValueError:
                 termination = TerminationReason.INVALID_DECISION
                 error_code = InvestigationErrorCode.INVALID_TOOL_ARGUMENTS.value
+                validation_stage = ValidationStage.TOOL_EXECUTION
+                validation_path = "$.requests"
+                validator = "BoundedToolExecutor"
+                break
+            failed_summary = next(
+                (item for item in summaries if item.get("status") != "SUCCESS"), None
+            )
+            if failed_summary is not None:
+                termination = TerminationReason.INVALID_DECISION
+                error_code = str(failed_summary.get("error_code", "TOOL_EXECUTION_FAILED"))
+                validation_stage = ValidationStage.TOOL_EXECUTION
+                validation_path = "$.requests"
+                validator = "BoundedToolExecutor"
+                turns.append(
+                    self._turn_summary(
+                        logical_model_turns,
+                        response,
+                        "FAIL",
+                        validation_stage,
+                        validation_path,
+                        decision=decision,
+                        summaries=summaries,
+                    )
+                )
                 break
             tool_calls += len(decision.requests)
             evidence.extend(new_evidence)
@@ -219,6 +368,17 @@ class InvestigationRuntime:
                 for request in decision.requests
             )
             progress.extend(summaries)
+            turns.append(
+                self._turn_summary(
+                    logical_model_turns,
+                    response,
+                    "PASS",
+                    None,
+                    None,
+                    decision=decision,
+                    summaries=summaries,
+                )
+            )
 
         if (
             termination is TerminationReason.AGENT_STOPPED
@@ -278,6 +438,9 @@ class InvestigationRuntime:
             model_budget_exhausted_after_terminal_decision=(
                 model_budget_exhausted_after_terminal_decision
             ),
+            validation_stage=validation_stage,
+            validation_path=validation_path,
+            validator=validator,
         )
         result = InvestigationResult(
             run_id=run_id,
@@ -289,8 +452,63 @@ class InvestigationRuntime:
             error_code=error_code,
             terminal_decision=terminal_decision,
             stop_reason=stop_reason,
+            validation_stage=validation_stage,
+            validation_path=validation_path,
+            validator=validator,
+            turns=turns,
         )
         if self._audit_sink is not None:
+            record_turn = getattr(self._audit_sink, "record_turn", None)
+            if callable(record_turn):
+                for item in turns:
+                    allowed = (
+                        ["SUBMIT_HYPOTHESIS", "STOP"]
+                        if item["turn"] >= self._limits.max_model_calls
+                        else ["CALL_TOOLS", "SUBMIT_HYPOTHESIS", "STOP"]
+                    )
+                    record_turn(
+                        InvestigationTurnAudit(
+                            run_id=run_id,
+                            incident_id=incident.incident_id,
+                            turn_number=item["turn"],
+                            current_model_call=item["turn"],
+                            future_model_calls_after_decision=max(
+                                self._limits.max_model_calls - item["turn"], 0
+                            ),
+                            is_final_model_turn=item["turn"] >= self._limits.max_model_calls,
+                            allowed_decisions=allowed,
+                            selected_decision_function=item.get("selected_decision"),
+                            requested_tool_count=item.get("requested_tool_count", 0),
+                            requested_tool_names=item.get("requested_tool_names", []),
+                            model_input_tokens=item.get("input_tokens", 0),
+                            model_output_tokens=item.get("output_tokens", 0),
+                            validation_stage=(
+                                ValidationStage(item["validation_stage"])
+                                if item.get("validation_stage")
+                                else None
+                            ),
+                            validation_result=item.get("validation_result", "NOT_EVALUATED"),
+                            error_path=item.get("error_path"),
+                            error_code=(
+                                result.error_code
+                                if item.get("validation_result") != "PASS"
+                                else None
+                            ),
+                            tool_calls_attempted=item.get("requested_tool_count", 0),
+                            tool_calls_succeeded=sum(
+                                1
+                                for summary in item.get("summaries", [])
+                                if summary.get("status") == "SUCCESS"
+                            ),
+                            tool_calls_failed=0,
+                            evidence_ids_created=[
+                                evidence_id
+                                for summary in item.get("summaries", [])
+                                for evidence_id in summary.get("evidence_ids", [])
+                            ],
+                            recorded_at=datetime.now(UTC),
+                        )
+                    )
             self._audit_sink.record(
                 InvestigationAuditRecord(
                     run_id=run_id,
@@ -318,6 +536,9 @@ class InvestigationRuntime:
                         usage.model_budget_exhausted_after_terminal_decision
                     ),
                     termination_reason=result.termination_reason,
+                    validation_stage=result.validation_stage,
+                    validation_path=result.validation_path,
+                    validator=result.validator,
                     recorded_at=datetime.now(UTC),
                 )
             )
@@ -332,6 +553,7 @@ class InvestigationRuntime:
         model_calls: int,
         tool_calls: int,
         progress: list[dict[str, Any]],
+        observation_window: InvestigationObservationWindow,
     ) -> Any:
         """Build a bounded request with the versioned structured-output schema."""
         context = self._context_builder.build(
@@ -344,6 +566,7 @@ class InvestigationRuntime:
             max_model_calls=self._limits.max_model_calls,
             tool_calls_used=tool_calls,
             tool_calls_remaining=self._limits.max_tool_calls - tool_calls,
+            observation_window=observation_window,
         )
         request = ModelRequest(
             run_id=run_id,
@@ -366,18 +589,43 @@ class InvestigationRuntime:
                     "STOP",
                 )
             ),
+            allowed_tool_names=self._registry.names(),
+            allowed_tool_argument_keys=tuple(
+                sorted(
+                    {
+                        key
+                        for descriptor in self._registry.descriptors()
+                        for key in descriptor.get("arguments", {})
+                    }
+                )
+            ),
         )
         return self._provider.complete(request)
 
     def _execute_tools(
-        self, incident: Incident, requests: list[Any]
+        self,
+        incident: Incident,
+        requests: list[Any],
+        observation_window: InvestigationObservationWindow,
     ) -> tuple[list[Evidence], list[dict[str, Any]]]:
         """Resolve and execute a batch concurrently, then normalize successes."""
         resolved: list[tuple[RegisteredTool, Any, dict[str, Any]]] = []
         for request in requests:
             tool = self._registry.get(request.tool)
             resolved.append(
-                (tool, tool.request(incident.incident_id, request.arguments), request.arguments)
+                (
+                    tool,
+                    tool.request(
+                        incident.incident_id,
+                        request.arguments,
+                        observation_window={
+                            "starts_at": observation_window.starts_at.isoformat(),
+                            "ends_at": observation_window.ends_at.isoformat(),
+                        },
+                        temporal_mode=observation_window.temporal_mode,
+                    ),
+                    request.arguments,
+                )
             )
 
         outputs: list[tuple[RegisteredTool, Any, dict[str, Any]]] = []
@@ -390,7 +638,7 @@ class InvestigationRuntime:
                 outputs.append((pair[0], future.result(), pair[2]))
 
         collected_at = datetime.now(UTC)
-        window = TimeWindow(starts_at=incident.created_at, ends_at=incident.updated_at)
+        window = observation_window.time_window()
         normalized: list[Evidence] = []
         summaries: list[dict[str, Any]] = []
         for tool, result, arguments in outputs:
@@ -402,6 +650,7 @@ class InvestigationRuntime:
                         "tool": tool.name,
                         "arguments": arguments,
                         "status": result.code.value,
+                        "error_code": result.code.value,
                         "evidence_ids": [],
                     }
                 )
@@ -418,6 +667,11 @@ class InvestigationRuntime:
                 raw_result_reference=f"{tool.name}://{call_id}",
                 collected_at=collected_at,
             )
+            if result.temporal_mode:
+                evidence.observation = {
+                    **evidence.observation,
+                    "temporal_mode": result.temporal_mode,
+                }
             normalized.append(self._evidence_service.add(evidence))
             summaries.append(
                 {
@@ -428,3 +682,42 @@ class InvestigationRuntime:
                 }
             )
         return normalized, summaries
+
+    @staticmethod
+    def _validation_path(error: ValidationError) -> str:
+        """Convert a Pydantic location into a safe JSON path."""
+        errors = error.errors()
+        if not errors:
+            return "$"
+        location = ".".join(str(item) for item in errors[0].get("loc", ()))
+        return f"$.{location}" if location else "$"
+
+    @staticmethod
+    def _turn_summary(
+        turn: int,
+        response: Any,
+        result: str,
+        stage: ValidationStage | None,
+        path: str | None,
+        *,
+        decision: InvestigationDecision | None = None,
+        summaries: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Return bounded turn data safe for smoke/benchmark artifacts."""
+        names = [item.get("tool") for item in (summaries or []) if item.get("tool")]
+        metadata = getattr(response, "response_metadata", None)
+        function_names = getattr(metadata, "function_call_names", []) or []
+        return {
+            "turn": turn,
+            "selected_decision": function_names[0]
+            if function_names
+            else (decision.decision.value if decision else None),
+            "requested_tool_count": len(decision.requests) if decision else 0,
+            "requested_tool_names": names,
+            "summaries": summaries or [],
+            "validation_result": result,
+            "validation_stage": stage.value if stage else None,
+            "error_path": path,
+            "input_tokens": getattr(response, "input_tokens", 0),
+            "output_tokens": getattr(response, "output_tokens", 0),
+        }

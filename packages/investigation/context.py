@@ -1,12 +1,55 @@
 """Bounded context construction that never forwards raw backend dumps."""
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from packages.contracts import Alert, Evidence, Incident
+from packages.contracts import Alert, AlertStatus, Evidence, Incident, TimeWindow
+
+
+class InvestigationObservationWindow(BaseModel):
+    """Authoritative bounded window derived from normalized production alerts."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    starts_at: datetime
+    ends_at: datetime
+    source: str = Field(min_length=1)
+    temporal_mode: str = Field(default="INCIDENT_WINDOW", min_length=1)
+
+    def time_window(self) -> TimeWindow:
+        """Return the contract consumed by evidence provenance."""
+        return TimeWindow(starts_at=self.starts_at, ends_at=self.ends_at)
+
+
+def derive_observation_window(
+    incident: Incident,
+    alerts: tuple[Alert, ...],
+    *,
+    now: datetime | None = None,
+    maximum_seconds: int = 900,
+) -> InvestigationObservationWindow:
+    """Derive a deterministic union window; the model cannot choose it."""
+    if alerts:
+        start = min(alert.starts_at for alert in alerts)
+        resolved_ends = [alert.ends_at for alert in alerts if alert.ends_at is not None]
+        active = any(alert.status is AlertStatus.FIRING for alert in alerts)
+        end = (now or datetime.now(UTC)) if active else max(resolved_ends or [incident.updated_at])
+        source = "ACTIVE_ALERT" if active else "RESOLVED_ALERT"
+    else:
+        start, end, source = incident.created_at, incident.updated_at, "INCIDENT_FALLBACK"
+    if end < start:
+        end = start
+    if (end - start).total_seconds() > maximum_seconds:
+        start = end - timedelta(seconds=maximum_seconds)
+    return InvestigationObservationWindow(
+        starts_at=start,
+        ends_at=end,
+        source=source,
+        temporal_mode="INCIDENT_WINDOW",
+    )
 
 
 class AlertSummary(BaseModel):
@@ -72,6 +115,7 @@ class CompactContextBuilder:
         max_model_calls: int = 3,
         tool_calls_used: int = 0,
         tool_calls_remaining: int = 8,
+        observation_window: InvestigationObservationWindow | None = None,
     ) -> str:
         """Return deterministic, size-bounded context for a model turn."""
         payload: dict[str, Any] = {
@@ -85,6 +129,9 @@ class CompactContextBuilder:
                     "ends_at": incident.updated_at.isoformat(),
                 },
             },
+            "observation_window": (
+                observation_window.model_dump(mode="json") if observation_window else None
+            ),
             "alerts": [AlertSummary.from_alert(alert).model_dump(mode="json") for alert in alerts],
             "evidence": [
                 self._evidence_summary(item) for item in evidence[: self._max_evidence_items]
@@ -127,4 +174,6 @@ class CompactContextBuilder:
             "source_system": evidence.source_system,
             "observation_summary": observation,
             "collected_at": evidence.collected_at.isoformat(),
+            "time_window": evidence.time_window.model_dump(mode="json"),
+            "temporal_mode": evidence.observation.get("temporal_mode", "INCIDENT_WINDOW"),
         }

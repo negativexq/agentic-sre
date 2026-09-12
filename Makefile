@@ -84,6 +84,7 @@ deploy: build-images
 	kubectl apply -f infra/kubernetes/control-plane.yaml
 	kubectl apply -f infra/kubernetes/dependencies.yaml
 	kubectl rollout restart deployment/order-service deployment/payment-service deployment/order-worker deployment/control-plane -n sre-demo
+	kubectl rollout restart deployment/prometheus -n observability
 	kubectl rollout status deployment/order-service -n sre-demo --timeout=120s
 	kubectl rollout status deployment/payment-service -n sre-demo --timeout=120s
 	kubectl rollout status deployment/order-worker -n sre-demo --timeout=120s

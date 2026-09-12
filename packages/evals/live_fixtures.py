@@ -21,7 +21,7 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field
 from workload.common.contracts import OrderCreateRequest, PaymentRequest
 
-from packages.contracts import Alert, Incident, TimeWindow
+from packages.contracts import Alert, AlertStatus, Incident, TimeWindow
 from packages.evals.dataset import FROZEN_DATASET, FrozenIncident
 from packages.investigation.registry import ReadOnlyToolRegistry
 from packages.tools import BoundedToolExecutor
@@ -559,7 +559,11 @@ def preflight_evidence(
     """Run the fixture's primary read-only evidence paths without a model call."""
     definition = FIXTURE_BY_NAME[fixture]
     relevant = next(item for item in alerts if item.alert_name == definition.alert_name)
-    end = relevant.ends_at or datetime.now(UTC)
+    end = (
+        relevant.ends_at
+        if relevant.status is AlertStatus.RESOLVED and relevant.ends_at is not None
+        else datetime.now(UTC)
+    )
     window = TimeWindow(starts_at=relevant.starts_at, ends_at=end)
     args_by_tool: dict[str, dict[str, Any]] = {
         "service_error_rate": {"service": definition.service},

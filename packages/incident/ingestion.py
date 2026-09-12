@@ -49,7 +49,10 @@ def normalize_alert(payload: AlertmanagerAlertPayload) -> Alert:
         namespace=labels.get("namespace", "unknown"),
         cluster=labels.get("cluster", "unknown"),
         starts_at=payload.starts_at,
-        ends_at=payload.ends_at,
+        # Alertmanager sends a zero/sentinel ``endsAt`` for firing alerts.
+        # It is not an observation boundary; retaining it would make a live
+        # alert appear to end before it starts and corrupt downstream windows.
+        ends_at=payload.ends_at if status == AlertStatus.RESOLVED.value else None,
         labels=labels,
         annotations=payload.annotations,
         fingerprint=payload.fingerprint or fingerprint_for_alert(payload),

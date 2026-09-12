@@ -37,6 +37,14 @@ def test_fingerprint_and_normalization_are_stable() -> None:
     assert first.service == "payment-service"
 
 
+def test_firing_alert_sentinel_end_is_not_an_observation_boundary() -> None:
+    payload = make_alert().model_copy(update={"ends_at": datetime.min.replace(tzinfo=UTC)})
+
+    normalized = normalize_alert(payload)
+
+    assert normalized.ends_at is None
+
+
 def test_repeated_firing_and_resolution_share_one_incident(tmp_path: Path) -> None:
     engine = create_engine(f"sqlite:///{tmp_path / 'incidents.db'}")
     Base.metadata.create_all(engine)

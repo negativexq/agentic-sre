@@ -79,6 +79,8 @@ build-images:
 	kind load docker-image agentic-sre/migrator:dev --name agentic-sre
 
 deploy: build-images
+	rm -f /tmp/agentic-sre-existing-workloads
+	if kubectl get deployment/order-service deployment/payment-service deployment/order-worker deployment/control-plane -n sre-demo >/dev/null 2>&1; then touch /tmp/agentic-sre-existing-workloads; fi
 	kubectl apply -f infra/kubernetes/namespace.yaml
 	kubectl apply -f infra/kubernetes/observability.yaml
 	kubectl apply -f infra/kubernetes/workload.yaml
@@ -87,7 +89,8 @@ deploy: build-images
 	kubectl rollout status deployment/kafka -n sre-demo --timeout=300s
 	ready=no; for attempt in $$(seq 1 60); do if kubectl exec -n sre-demo deployment/kafka -- /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092 >/dev/null 2>&1; then ready=yes; break; fi; sleep 2; done; test "$$ready" = yes
 	kubectl exec -n sre-demo deployment/kafka -- /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --topic orders.created --bootstrap-server localhost:9092
-	kubectl rollout restart deployment/order-service deployment/payment-service deployment/order-worker deployment/control-plane -n sre-demo
+	if test -f /tmp/agentic-sre-existing-workloads; then kubectl rollout restart deployment/order-service deployment/payment-service deployment/order-worker deployment/control-plane -n sre-demo; fi
+	rm -f /tmp/agentic-sre-existing-workloads
 	kubectl rollout restart deployment/prometheus -n observability
 	kubectl rollout status deployment/order-service -n sre-demo --timeout=120s
 	kubectl rollout status deployment/payment-service -n sre-demo --timeout=120s

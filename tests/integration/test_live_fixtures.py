@@ -116,6 +116,19 @@ def test_fixture_lifecycle_records_real_incident_identity_without_truth_fields()
     assert scenario.suspected_trigger not in trial.model_dump_json()
 
 
+def test_fixture_snapshot_is_taken_after_prepare_before_stimulus() -> None:
+    environment = FakeEnvironment()
+    lifecycle = FixtureLifecycle(environment)
+    scenario = next(item for item in FROZEN_DATASET if item.fixture == "order_worker_lag")
+
+    lifecycle.run(scenario)
+
+    assert environment.calls.index("prepare:order_worker_lag") < environment.calls.index("snapshot")
+    assert environment.calls.index("snapshot") < environment.calls.index(
+        "stimulate:order_worker_lag"
+    )
+
+
 def test_rollout_wait_requires_old_pods_to_be_gone() -> None:
     status = SimpleNamespace(updated_replicas=1, available_replicas=1, ready_replicas=1)
     current = SimpleNamespace(metadata=SimpleNamespace(deletion_timestamp=None))

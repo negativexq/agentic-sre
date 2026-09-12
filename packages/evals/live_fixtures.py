@@ -659,12 +659,12 @@ class FixtureLifecycle:
             started_at=datetime.now(UTC),
             alert_name=definition.alert_name,
         )
-        before_ids = self.environment.snapshot_incident_ids()
         result: Any | None = None
         incident: Incident | None = None
         try:
             self.environment.baseline()
             self.environment.prepare(scenario.fixture)
+            before_ids = self.environment.snapshot_incident_ids()
             trial = trial.model_copy(update={"fault_started_at": datetime.now(UTC)})
             self.environment.stimulate(scenario.fixture)
             incident, alerts = self.environment.wait_for_incident(definition, before_ids)

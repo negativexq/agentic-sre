@@ -41,6 +41,57 @@ class ResponsesTransport(Protocol):
         """Create one Responses API request."""
 
 
+_UNSUPPORTED_STRICT_KEYWORDS = frozenset(
+    {
+        "minLength",
+        "maxLength",
+        "pattern",
+        "format",
+        "minimum",
+        "maximum",
+        "multipleOf",
+        "minItems",
+        "maxItems",
+        "default",
+    }
+)
+
+
+def _compile_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Compile Pydantic JSON Schema to the strict Responses API subset.
+
+    Pydantic constraints remain enforced when the response is parsed locally.
+    The wire schema must instead use the provider's strict subset: every object
+    property is required, every object rejects unknown keys, and unsupported
+    validation-only keywords are omitted.
+    """
+
+    def compile_node(node: Any) -> Any:
+        if isinstance(node, list):
+            return [compile_node(item) for item in node]
+        if not isinstance(node, dict):
+            return node
+
+        compiled = {
+            key: compile_node(value)
+            for key, value in node.items()
+            if key not in _UNSUPPORTED_STRICT_KEYWORDS
+        }
+        if compiled.get("type") == "object":
+            properties = compiled.get("properties")
+            if isinstance(properties, dict):
+                compiled["required"] = list(properties)
+            else:
+                compiled["required"] = []
+            compiled["additionalProperties"] = False
+        return compiled
+
+    result = compile_node(schema)
+    if not isinstance(result, dict):
+        raise ValueError("response schema root must be an object")
+    return result
+
+
 class OpenAIProvider:
     """Call OpenAI only when explicitly enabled and budget-authorized."""
 
@@ -113,7 +164,7 @@ class OpenAIProvider:
                         "format": {
                             "type": "json_schema",
                             "name": request.response_schema_name,
-                            "schema": request.response_schema,
+                            "schema": _compile_strict_schema(request.response_schema),
                             "strict": True,
                         }
                     },

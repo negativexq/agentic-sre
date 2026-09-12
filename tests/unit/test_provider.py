@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 
+from packages.investigation import InvestigationDecision
 from packages.provider import (
     FakeModelProvider,
     LiveModelBudget,
@@ -14,7 +15,7 @@ from packages.provider import (
     ProviderError,
     ProviderErrorCode,
 )
-from packages.provider.openai import LiveModelConfig
+from packages.provider.openai import LiveModelConfig, _compile_strict_schema
 
 
 def request() -> ModelRequest:
@@ -156,3 +157,36 @@ def test_live_provider_retries_connection_reset_once() -> None:
     provider.complete(request())
 
     assert calls == 2
+
+
+def test_responses_schema_compiler_emits_strict_provider_subset() -> None:
+    """Pydantic validation constraints do not invalidate strict wire schemas."""
+    schema = _compile_strict_schema(InvestigationDecision.model_json_schema())
+
+    def assert_strict(node: object) -> None:
+        if isinstance(node, list):
+            for item in node:
+                assert_strict(item)
+        if not isinstance(node, dict):
+            return
+        for keyword in (
+            "minLength",
+            "maxLength",
+            "pattern",
+            "format",
+            "minimum",
+            "maximum",
+            "multipleOf",
+            "minItems",
+            "maxItems",
+            "default",
+        ):
+            assert keyword not in node
+        if node.get("type") == "object":
+            assert node["additionalProperties"] is False
+            properties = node.get("properties", {})
+            assert node["required"] == list(properties)
+        for value in node.values():
+            assert_strict(value)
+
+    assert_strict(schema)

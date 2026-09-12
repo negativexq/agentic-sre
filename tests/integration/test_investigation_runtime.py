@@ -24,6 +24,7 @@ from packages.investigation import (
 )
 from packages.investigation.audit import InMemoryInvestigationAuditSink
 from packages.investigation.runtime import InvestigationRuntime
+from packages.investigation.tool_contracts import ServiceArgs
 from packages.provider import FakeModelProvider, ModelRequest
 from packages.tools import metrics_tool
 
@@ -76,7 +77,10 @@ def test_fake_provider_runtime_batches_tools_and_submits_real_evidence() -> None
 
     provider = FakeModelProvider(
         [
-            {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "service_latency"}]},
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [{"tool": "service_latency", "arguments": {"service": "order-worker"}}],
+            },
             submit,
         ]
     )
@@ -277,6 +281,73 @@ def test_provider_failure_on_final_call_is_not_model_exhaustion() -> None:
     assert result.termination_reason is TerminationReason.PROVIDER_ERROR
     assert result.terminal_decision is None
     assert result.usage.model_calls == 3
+
+
+def test_partial_tool_batch_preserves_attempts_evidence_and_typed_failure() -> None:
+    """A failed sibling tool does not erase successful work from the same batch."""
+
+    class PartialTool:
+        def __init__(self, name: str, fails: bool = False) -> None:
+            self.name = name
+            self.version = "1"
+            self._fails = fails
+
+        def run(self, _request: Any) -> dict[str, Any]:
+            if self._fails:
+                raise ValueError("deterministic backend query rejection")
+            return {"records": [{"tool": self.name}]}
+
+    tools = tuple(
+        RegisteredTool(
+            name="service_latency" if index == 0 else f"metric_{index}",
+            version="1",
+            operation="service_latency",
+            source_type=EvidenceSourceType.METRIC,
+            tool=PartialTool(
+                "service_latency" if index == 0 else f"metric_{index}",
+                fails=index in {4, 5},
+            ),
+            argument_model=ServiceArgs,
+        )
+        for index in range(6)
+    )
+    provider = FakeModelProvider(
+        [
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [{"tool": "service_latency", "arguments": {"service": "order-worker"}}],
+            },
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [
+                    {
+                        "tool": f"metric_{index}",
+                        "arguments": {"service": "order-worker"},
+                    }
+                    for index in range(1, 6)
+                ],
+            },
+        ]
+    )
+    audit = InMemoryInvestigationAuditSink()
+
+    result = InvestigationRuntime(
+        provider,
+        ReadOnlyToolRegistry(tools),
+        audit_sink=audit,
+    ).run(incident())
+
+    assert result.termination_reason is TerminationReason.TOOL_FAILURE
+    assert result.error_code == "INVALID_QUERY"
+    assert result.validation_stage is not None
+    assert result.validation_stage.value == "TOOL_EXECUTION"
+    assert result.usage.tool_calls == 6
+    assert len(result.evidence) == 4
+    assert len(audit.turn_records) == 2
+    assert audit.turn_records[1].tool_calls_attempted == 5
+    assert audit.turn_records[1].tool_calls_succeeded == 3
+    assert audit.turn_records[1].tool_calls_failed == 2
+    assert len(audit.turn_records[1].evidence_ids_created) == 3
 
 
 def test_decision_accepts_a_batch_up_to_the_incident_budget() -> None:

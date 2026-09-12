@@ -340,8 +340,22 @@ class InvestigationRuntime:
             failed_summary = next(
                 (item for item in summaries if item.get("status") != "SUCCESS"), None
             )
+            # Account for every dispatch and retain all successful evidence
+            # before classifying any sibling tool failure.
+            tool_calls += len(decision.requests)
+            evidence.extend(new_evidence)
+            requested_tool_keys.update(
+                (
+                    request.tool,
+                    json.dumps(
+                        request.arguments, sort_keys=True, separators=(",", ":"), default=str
+                    ),
+                )
+                for request in decision.requests
+            )
+            progress.extend(summaries)
             if failed_summary is not None:
-                termination = TerminationReason.INVALID_DECISION
+                termination = TerminationReason.TOOL_FAILURE
                 error_code = str(failed_summary.get("error_code", "TOOL_EXECUTION_FAILED"))
                 validation_stage = ValidationStage.TOOL_EXECUTION
                 validation_path = "$.requests"
@@ -358,18 +372,6 @@ class InvestigationRuntime:
                     )
                 )
                 break
-            tool_calls += len(decision.requests)
-            evidence.extend(new_evidence)
-            requested_tool_keys.update(
-                (
-                    request.tool,
-                    json.dumps(
-                        request.arguments, sort_keys=True, separators=(",", ":"), default=str
-                    ),
-                )
-                for request in decision.requests
-            )
-            progress.extend(summaries)
             turns.append(
                 self._turn_summary(
                     logical_model_turns,
@@ -514,7 +516,12 @@ class InvestigationRuntime:
                                 for summary in item.get("summaries", [])
                                 if summary.get("status") == "SUCCESS"
                             ),
-                            tool_calls_failed=0,
+                            tool_calls_failed=item.get("requested_tool_count", 0)
+                            - sum(
+                                1
+                                for summary in item.get("summaries", [])
+                                if summary.get("status") == "SUCCESS"
+                            ),
                             evidence_ids_created=[
                                 evidence_id
                                 for summary in item.get("summaries", [])

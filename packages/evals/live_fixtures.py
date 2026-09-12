@@ -157,7 +157,7 @@ class ControlPlaneClient:
         try:
             with urlopen(request, timeout=10) as response:
                 return json.loads(response.read(2_000_001))
-        except (HTTPError, URLError, TimeoutError) as error:
+        except (HTTPError, URLError, TimeoutError, OSError) as error:
             raise RuntimeError("control-plane request failed") from error
 
     def incidents(self) -> list[Incident]:
@@ -210,7 +210,7 @@ class LiveBenchmarkEnvironment:
         try:
             with urlopen(request, timeout=10) as response:
                 return json.loads(response.read(1_000_001))
-        except (HTTPError, URLError, TimeoutError) as error:
+        except (HTTPError, URLError, TimeoutError, OSError) as error:
             raise RuntimeError(f"workload request failed: {url.rsplit('/', 1)[-1]}") from error
 
     @staticmethod
@@ -218,7 +218,7 @@ class LiveBenchmarkEnvironment:
         try:
             with urlopen(url, timeout=10) as response:
                 return json.loads(response.read(1_000_001))
-        except (HTTPError, URLError, TimeoutError) as error:
+        except (HTTPError, URLError, TimeoutError, OSError) as error:
             raise RuntimeError("workload health request failed") from error
 
     def baseline(self) -> None:
@@ -397,7 +397,7 @@ class LiveBenchmarkEnvironment:
         try:
             with urlopen(request, timeout=10) as response:
                 payload = json.loads(response.read(1_000_001))
-        except (HTTPError, URLError, TimeoutError) as error:
+        except (HTTPError, URLError, TimeoutError, OSError) as error:
             raise RuntimeError("Prometheus process-start query failed") from error
         results = payload.get("data", {}).get("result", [])
         if not isinstance(results, list) or not results:
@@ -426,7 +426,7 @@ class LiveBenchmarkEnvironment:
             try:
                 payload = self._get_json(f"{self.payment_url}/health")
                 return isinstance(payload, dict) and payload.get("status") == "ok"
-            except RuntimeError:
+            except (RuntimeError, OSError):
                 return False
 
         self._wait_until(

@@ -195,6 +195,24 @@ def test_payment_pod_crash_stimulus_confirms_two_restart_cycles(
     assert state["restarts"] == 6
 
 
+def test_payment_health_poll_treats_port_forward_disconnect_as_transient(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    environment = LiveBenchmarkEnvironment()
+    attempts = {"count": 0}
+
+    def health(_: str) -> dict[str, str]:
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise OSError("port-forward disconnected")
+        return {"status": "ok"}
+
+    monkeypatch.setattr(environment, "_get_json", health)
+
+    environment._wait_for_payment_health()
+    assert attempts["count"] == 2
+
+
 def test_payment_pod_crash_uses_runtime_instability_alert() -> None:
     definition = FIXTURE_BY_NAME["payment_pod_crash"]
 

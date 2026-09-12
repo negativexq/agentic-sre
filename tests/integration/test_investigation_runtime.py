@@ -100,8 +100,43 @@ def test_unknown_tool_fails_closed_without_backend_execution() -> None:
     result = InvestigationRuntime(provider, registry()).run(incident())
 
     assert result.termination_reason is TerminationReason.INVALID_DECISION
-    assert result.error_code == "UNKNOWN_OR_FORBIDDEN_TOOL"
+    assert result.error_code == "UNKNOWN_INVESTIGATION_TOOL"
     assert result.usage.tool_calls == 0
+
+
+def test_empty_tool_requests_have_a_typed_semantic_failure() -> None:
+    """A schema-valid empty batch remains invalid at the core boundary."""
+    provider = FakeModelProvider(
+        [{"decision": DecisionType.CALL_TOOLS, "requests": [], "hypothesis": None}]
+    )
+
+    result = InvestigationRuntime(provider, registry()).run(incident())
+
+    assert result.termination_reason is TerminationReason.INVALID_DECISION
+    assert result.error_code == "EMPTY_TOOL_REQUESTS"
+
+
+def test_unknown_hypothesis_mechanism_has_a_typed_semantic_failure() -> None:
+    """The controlled hypothesis ontology remains enforced by the core."""
+    provider = FakeModelProvider(
+        [
+            {
+                "decision": DecisionType.SUBMIT_HYPOTHESIS,
+                "requests": [],
+                "hypothesis": {
+                    "affected_component": "payment-service",
+                    "mechanism": "not-a-controlled-mechanism",
+                    "suspected_trigger": "unknown",
+                    "evidence_ids": ["00000000-0000-0000-0000-000000000001"],
+                },
+            }
+        ]
+    )
+
+    result = InvestigationRuntime(provider, registry()).run(incident())
+
+    assert result.termination_reason is TerminationReason.INVALID_DECISION
+    assert result.error_code == "UNKNOWN_HYPOTHESIS_MECHANISM"
 
 
 def test_model_budget_stops_after_three_turns() -> None:

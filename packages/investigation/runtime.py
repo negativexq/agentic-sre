@@ -14,7 +14,10 @@ from packages.evidence import EvidenceService
 from packages.investigation.audit import InvestigationAuditRecord, InvestigationAuditSink
 from packages.investigation.context import CompactContextBuilder
 from packages.investigation.contracts import (
+    DecisionType,
+    HypothesisMechanism,
     InvestigationDecision,
+    InvestigationErrorCode,
     InvestigationLimits,
     InvestigationResult,
     InvestigationUsage,
@@ -22,8 +25,40 @@ from packages.investigation.contracts import (
 )
 from packages.investigation.prompt import INVESTIGATOR_PROMPT, investigator_prompt_hash
 from packages.investigation.registry import ReadOnlyToolRegistry, RegisteredTool
-from packages.provider import ModelMessage, ModelProvider, ModelRequest, ProviderError
+from packages.provider import (
+    ModelMessage,
+    ModelProvider,
+    ModelRequest,
+    ProviderAccountingSnapshot,
+    ProviderError,
+)
 from packages.tools import BoundedToolExecutor, ToolFailure, ToolResponse
+
+
+def _semantic_error_code(payload: Any, limits: InvestigationLimits) -> str:
+    """Classify model contract failures without weakening the domain validator."""
+    if not isinstance(payload, dict):
+        return InvestigationErrorCode.INVALID_DECISION.value
+    decision = payload.get("decision")
+    if decision == DecisionType.CALL_TOOLS:
+        requests = payload.get("requests")
+        if not isinstance(requests, list) or not requests:
+            return InvestigationErrorCode.EMPTY_TOOL_REQUESTS.value
+        if len(requests) > limits.max_tools_per_turn:
+            return InvestigationErrorCode.TOO_MANY_TOOL_REQUESTS.value
+        for request in requests:
+            if not isinstance(request, dict) or not isinstance(request.get("arguments", {}), dict):
+                return InvestigationErrorCode.INVALID_TOOL_ARGUMENTS.value
+    elif decision == DecisionType.SUBMIT_HYPOTHESIS:
+        hypothesis = payload.get("hypothesis")
+        if not isinstance(hypothesis, dict):
+            return InvestigationErrorCode.INVALID_HYPOTHESIS_SHAPE.value
+        evidence_ids = hypothesis.get("evidence_ids")
+        if not isinstance(evidence_ids, list) or not evidence_ids:
+            return InvestigationErrorCode.EMPTY_EVIDENCE_SET.value
+        if hypothesis.get("mechanism") not in {item.value for item in HypothesisMechanism}:
+            return InvestigationErrorCode.UNKNOWN_HYPOTHESIS_MECHANISM.value
+    return InvestigationErrorCode.INVALID_DECISION.value
 
 
 class InvestigationRuntime:
@@ -56,7 +91,7 @@ class InvestigationRuntime:
         run_id = uuid4()
         started = monotonic()
         evidence: list[Evidence] = []
-        model_calls = 0
+        logical_model_turns = 0
         tool_calls = 0
         input_tokens = 0
         output_tokens = 0
@@ -68,27 +103,30 @@ class InvestigationRuntime:
             if monotonic() - started > self._limits.max_wall_time_seconds:
                 termination = TerminationReason.WALL_TIME_LIMIT
                 break
-            if model_calls >= self._limits.max_model_calls:
+            if logical_model_turns >= self._limits.max_model_calls:
                 termination = TerminationReason.MODEL_CALL_LIMIT
                 break
 
+            logical_model_turns += 1
+            response: Any = None
             try:
-                response = self._complete(run_id, incident, evidence, model_calls, tool_calls)
-                model_calls += 1
+                response = self._complete(
+                    run_id, incident, evidence, logical_model_turns - 1, tool_calls
+                )
                 input_tokens += response.input_tokens
                 output_tokens += response.output_tokens
                 decision = InvestigationDecision.model_validate_json(
                     json.dumps(response.structured_output)
                 )
             except ProviderError as error:
-                model_calls += 1
                 termination = TerminationReason.PROVIDER_ERROR
                 error_code = error.code.value
                 break
             except (ValidationError, ValueError):
-                model_calls += 1
                 termination = TerminationReason.INVALID_DECISION
-                error_code = "INVALID_DECISION"
+                error_code = _semantic_error_code(
+                    getattr(response, "structured_output", None), self._limits
+                )
                 break
 
             if decision.hypothesis is not None:
@@ -96,7 +134,7 @@ class InvestigationRuntime:
                 available = {item.evidence_id for item in evidence}
                 if not referenced.issubset(available):
                     termination = TerminationReason.INVALID_DECISION
-                    error_code = "FABRICATED_EVIDENCE_REFERENCE"
+                    error_code = InvestigationErrorCode.FABRICATED_EVIDENCE_REFERENCE.value
                 else:
                     hypothesis = decision.hypothesis
                     termination = TerminationReason.HYPOTHESIS_SUBMITTED
@@ -107,43 +145,66 @@ class InvestigationRuntime:
                 break
             if len(decision.requests) > self._limits.max_tools_per_turn:
                 termination = TerminationReason.TOOL_CALL_LIMIT
-                error_code = "TOOL_BATCH_LIMIT_EXCEEDED"
+                error_code = InvestigationErrorCode.TOO_MANY_TOOL_REQUESTS.value
                 break
             remaining = self._limits.max_tool_calls - tool_calls
             if len(decision.requests) > remaining:
                 termination = TerminationReason.TOOL_CALL_LIMIT
-                error_code = "TOOL_CALL_LIMIT"
+                error_code = InvestigationErrorCode.TOO_MANY_TOOL_REQUESTS.value
                 break
 
             try:
                 new_evidence = self._execute_tools(incident, decision.requests)
-            except (PermissionError, ValueError):
+            except PermissionError:
                 termination = TerminationReason.INVALID_DECISION
-                error_code = "UNKNOWN_OR_FORBIDDEN_TOOL"
+                error_code = InvestigationErrorCode.UNKNOWN_INVESTIGATION_TOOL.value
+                break
+            except ValueError:
+                termination = TerminationReason.INVALID_DECISION
+                error_code = InvestigationErrorCode.INVALID_TOOL_ARGUMENTS.value
                 break
             tool_calls += len(decision.requests)
             evidence.extend(new_evidence)
 
         if (
             termination is TerminationReason.AGENT_STOPPED
-            and model_calls >= self._limits.max_model_calls
+            and logical_model_turns >= self._limits.max_model_calls
         ):
             termination = TerminationReason.MODEL_CALL_LIMIT
 
+        accounting_reader = getattr(self._provider, "accounting_snapshot", None)
+        if callable(accounting_reader):
+            accounting = accounting_reader()
+        else:
+            provider_name = getattr(self._provider, "provider_name", "unknown")
+            outbound = logical_model_turns if provider_name == "openai" else 0
+            accounting = ProviderAccountingSnapshot(
+                provider_invocations=logical_model_turns,
+                outbound_api_attempts=outbound,
+                shared_ledger_consumed=outbound,
+            )
+        provider_name = getattr(self._provider, "provider_name", "unknown")
+        estimated_api_calls = (
+            accounting.outbound_api_attempts if provider_name == "openai" else logical_model_turns
+        )
+
         usage = InvestigationUsage(
-            model_calls=model_calls,
+            model_calls=logical_model_turns,
             tool_calls=tool_calls,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             latency_ms=int((monotonic() - started) * 1000),
             prompt_hash=investigator_prompt_hash(),
-            provider=getattr(self._provider, "provider_name", "unknown"),
+            provider=provider_name,
             model=self._model,
             reasoning_effort=self._reasoning_effort,
-            estimated_api_calls=model_calls,
-            actual_api_calls=model_calls
-            if getattr(self._provider, "provider_name", "unknown") == "openai"
-            else 0,
+            estimated_api_calls=estimated_api_calls,
+            actual_api_calls=accounting.outbound_api_attempts,
+            logical_model_turns=logical_model_turns,
+            provider_invocations=accounting.provider_invocations,
+            outbound_api_attempts=accounting.outbound_api_attempts,
+            provider_retries=accounting.provider_retries,
+            shared_ledger_consumed=accounting.shared_ledger_consumed,
         )
         result = InvestigationResult(
             run_id=run_id,
@@ -170,6 +231,11 @@ class InvestigationRuntime:
                     latency_ms=usage.latency_ms,
                     estimated_api_calls=usage.estimated_api_calls,
                     actual_api_calls=usage.actual_api_calls,
+                    logical_model_turns=usage.logical_model_turns,
+                    provider_invocations=usage.provider_invocations,
+                    outbound_api_attempts=usage.outbound_api_attempts,
+                    provider_retries=usage.provider_retries,
+                    shared_ledger_consumed=usage.shared_ledger_consumed,
                     termination_reason=result.termination_reason,
                     recorded_at=datetime.now(UTC),
                 )

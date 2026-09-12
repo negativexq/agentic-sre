@@ -5,6 +5,7 @@ from packages.investigation.context import CompactContextBuilder
 from packages.investigation.contracts import (
     DecisionType,
     InvestigationDecision,
+    InvestigationErrorCode,
     InvestigationLimits,
     InvestigationResult,
     TerminationReason,
@@ -18,6 +19,7 @@ __all__ = [
     "CompactContextBuilder",
     "InMemoryInvestigationAuditSink",
     "DecisionType",
+    "InvestigationErrorCode",
     "InvestigationDecision",
     "InvestigationAuditRecord",
     "InvestigationLimits",

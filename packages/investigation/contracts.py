@@ -23,6 +23,20 @@ class DecisionType(StrEnum):
     STOP = "STOP"
 
 
+class InvestigationErrorCode(StrEnum):
+    """Typed semantic failures produced by the deterministic runtime."""
+
+    EMPTY_TOOL_REQUESTS = "EMPTY_TOOL_REQUESTS"
+    TOO_MANY_TOOL_REQUESTS = "TOO_MANY_TOOL_REQUESTS"
+    UNKNOWN_INVESTIGATION_TOOL = "UNKNOWN_INVESTIGATION_TOOL"
+    INVALID_TOOL_ARGUMENTS = "INVALID_TOOL_ARGUMENTS"
+    EMPTY_EVIDENCE_SET = "EMPTY_EVIDENCE_SET"
+    UNKNOWN_HYPOTHESIS_MECHANISM = "UNKNOWN_HYPOTHESIS_MECHANISM"
+    INVALID_HYPOTHESIS_SHAPE = "INVALID_HYPOTHESIS_SHAPE"
+    FABRICATED_EVIDENCE_REFERENCE = "FABRICATED_EVIDENCE_REFERENCE"
+    INVALID_DECISION = "INVALID_DECISION"
+
+
 class HypothesisMechanism(StrEnum):
     """Controlled mechanism vocabulary for the baseline RCA output."""
 
@@ -114,6 +128,11 @@ class InvestigationUsage(InvestigationModel):
     reasoning_effort: str = Field(min_length=1)
     estimated_api_calls: int = Field(ge=0)
     actual_api_calls: int = Field(ge=0)
+    logical_model_turns: int = Field(ge=0, default=0)
+    provider_invocations: int = Field(ge=0, default=0)
+    outbound_api_attempts: int = Field(ge=0, default=0)
+    provider_retries: int = Field(ge=0, default=0)
+    shared_ledger_consumed: int = Field(ge=0, default=0)
 
 
 class InvestigationResult(InvestigationModel):

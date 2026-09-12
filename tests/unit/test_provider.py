@@ -1,6 +1,7 @@
 """Offline provider contracts and credit budget tests."""
 
 import json
+import multiprocessing
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -70,6 +71,11 @@ def function_arguments(name: str) -> str:
     return json.dumps(
         {"reason": "no more useful evidence is available", "stop_reason": "insufficient_evidence"}
     )
+
+
+def _reserve_budget_worker(path: str) -> None:
+    """Reserve one shared budget unit from a child process."""
+    LiveModelBudget(2, ledger_path=path).consume()
 
 
 def test_fake_provider_is_deterministic_and_records_requests() -> None:
@@ -174,6 +180,134 @@ def test_live_provider_allows_one_explicit_transient_retry() -> None:
 
     assert response.structured_output == {"decision": "STOP"}
     assert calls == 2
+
+
+def test_live_provider_accounting_counts_retry_and_ledger_units() -> None:
+    """Provider retries are outbound attempts and consume shared units."""
+    calls = 0
+
+    class TransientError(RuntimeError):
+        status_code = 503
+
+    class Transport:
+        def create(self, **_kwargs: object) -> object:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise TransientError()
+            return type("Response", (), {"output_text": '{"decision":"STOP"}'})()
+
+    provider = OpenAIProvider(
+        budget=LiveModelBudget(2),
+        config=LiveModelConfig(enabled=True),
+        transport=Transport(),
+    )
+
+    provider.complete(request())
+    accounting = provider.accounting_snapshot()
+
+    assert accounting.provider_invocations == 1
+    assert accounting.outbound_api_attempts == 2
+    assert accounting.provider_retries == 1
+    assert accounting.shared_ledger_consumed == 2
+
+
+def test_local_request_schema_failure_consumes_no_budget_or_transport_call() -> None:
+    """Invalid local function schema is rejected before an outbound attempt."""
+    calls = 0
+
+    class Transport:
+        def create(self, **_kwargs: object) -> object:
+            nonlocal calls
+            calls += 1
+            raise AssertionError("transport must not be called")
+
+    provider = OpenAIProvider(
+        budget=LiveModelBudget(1),
+        config=LiveModelConfig(enabled=True),
+        transport=Transport(),
+        max_retry=0,
+    )
+    invalid_request = function_request().model_copy(update={"response_schema": []})
+
+    with pytest.raises(ValueError):
+        provider.complete(invalid_request)
+
+    accounting = provider.accounting_snapshot()
+    assert calls == 0
+    assert accounting.outbound_api_attempts == 0
+    assert accounting.shared_ledger_consumed == 0
+
+
+def test_provider_parse_failure_consumes_one_attempt() -> None:
+    """A response parsing failure still represents one consumed API attempt."""
+
+    class Transport:
+        def create(self, **_kwargs: object) -> object:
+            return type("Response", (), {"output_text": '{"decision":"STOP"}{"decision":"STOP"}'})()
+
+    provider = OpenAIProvider(
+        budget=LiveModelBudget(1),
+        config=LiveModelConfig(enabled=True),
+        transport=Transport(),
+        max_retry=0,
+    )
+
+    with pytest.raises(ProviderError) as error:
+        provider.complete(request())
+
+    assert error.value.code is ProviderErrorCode.JSON_DECODE_FAILED
+    accounting = provider.accounting_snapshot()
+    assert accounting.outbound_api_attempts == 1
+    assert accounting.shared_ledger_consumed == 1
+
+
+def test_semantic_invalid_decision_consumes_one_attempt() -> None:
+    """A schema-valid but semantically empty tool request is still charged once."""
+
+    class Transport:
+        def create(self, **_kwargs: object) -> object:
+            return _envelope(
+                [
+                    _function_call(
+                        json.dumps({"reason": "missing evidence", "tool_requests": []}),
+                        name="request_investigation_tools",
+                    )
+                ]
+            )
+
+    provider = OpenAIProvider(
+        budget=LiveModelBudget(1),
+        config=LiveModelConfig(enabled=True),
+        transport=Transport(),
+        max_retry=0,
+    )
+
+    response = provider.complete(function_request())
+    with pytest.raises(ValueError):
+        InvestigationDecision.model_validate(response.structured_output)
+
+    accounting = provider.accounting_snapshot()
+    assert accounting.outbound_api_attempts == 1
+    assert accounting.shared_ledger_consumed == 1
+
+
+def test_two_processes_reserve_final_shared_budget_units(tmp_path: Path) -> None:
+    """The file lock prevents concurrent processes from exceeding the cap."""
+    ledger = tmp_path / "budget.json"
+    ledger.write_text('{"calls_used": 0}', encoding="utf-8")
+    context = multiprocessing.get_context("fork")
+    processes = [
+        context.Process(target=_reserve_budget_worker, args=(str(ledger),)) for _ in range(2)
+    ]
+
+    for process in processes:
+        process.start()
+    for process in processes:
+        process.join(timeout=5)
+
+    assert all(process.exitcode == 0 for process in processes)
+    assert LiveModelBudget(2, ledger_path=str(ledger)).snapshot().calls_used == 2
 
 
 def test_live_provider_retries_connection_reset_once() -> None:

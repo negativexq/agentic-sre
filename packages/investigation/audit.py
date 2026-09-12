@@ -27,6 +27,11 @@ class InvestigationAuditRecord(BaseModel):
     latency_ms: int = Field(ge=0)
     estimated_api_calls: int = Field(ge=0)
     actual_api_calls: int = Field(ge=0)
+    logical_model_turns: int = Field(ge=0, default=0)
+    provider_invocations: int = Field(ge=0, default=0)
+    outbound_api_attempts: int = Field(ge=0, default=0)
+    provider_retries: int = Field(ge=0, default=0)
+    shared_ledger_consumed: int = Field(ge=0, default=0)
     termination_reason: TerminationReason
     recorded_at: datetime
 

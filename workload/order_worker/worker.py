@@ -85,8 +85,6 @@ class KafkaOrderWorker:
                 else nullcontext()
             )
             with span_context:
-                if self._runtime is not None:
-                    self._runtime.metrics.kafka("order-worker", topic, "consumed")
                 delay_ms = int(os.getenv("FAULT_WORKER_DELAY_MS", "0"))
                 if delay_ms > 0:
                     time.sleep(delay_ms / 1000)
@@ -97,6 +95,8 @@ class KafkaOrderWorker:
                     continue
                 event = OrderCreatedEvent.model_validate_json(message.value())
                 self._worker.process(event)
+                if self._runtime is not None:
+                    self._runtime.metrics.kafka("order-worker", topic, "consumed")
             self._consumer.commit(message=message)
 
 

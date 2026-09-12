@@ -1,6 +1,7 @@
 """Deterministic commerce flow tests without external infrastructure."""
 
 from collections.abc import Generator
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -24,7 +25,7 @@ from workload.common.models import WorkloadBase
 from workload.load_generator import LoadConfig, run_load
 from workload.order_service.app import OrderService
 from workload.order_service.app import create_app as create_order_app
-from workload.order_worker.worker import OrderWorker
+from workload.order_worker.worker import KafkaOrderWorker, OrderWorker
 from workload.payment_service.app import PaymentService
 from workload.seed import generate_orders
 
@@ -74,6 +75,85 @@ def test_worker_is_idempotent(workload_factory: sessionmaker[Session]) -> None:
     assert worker.process(event) is True
     assert worker.process(event) is False
     assert processed == [event.order_id]
+
+
+def test_kafka_consumed_metric_is_recorded_after_successful_processing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Backlog telemetry counts committed work, not merely polled messages."""
+
+    class StopPolling(Exception):
+        pass
+
+    class FakeMessage:
+        def __init__(self, event: OrderCreatedEvent) -> None:
+            self._event = event
+
+        def error(self) -> None:
+            return None
+
+        def headers(self) -> list[tuple[str, bytes]]:
+            return []
+
+        def value(self) -> bytes:
+            return self._event.model_dump_json().encode()
+
+    class FakeConsumer:
+        def __init__(self, message: FakeMessage) -> None:
+            self.message = message
+            self.subscribed: list[str] = []
+            self.commits = 0
+            self.polled = False
+
+        def subscribe(self, topics: list[str]) -> None:
+            self.subscribed = topics
+
+        def poll(self, _timeout: float) -> FakeMessage:
+            if self.polled:
+                raise StopPolling
+            self.polled = True
+            return self.message
+
+        def commit(self, *, message: FakeMessage) -> None:
+            assert message is self.message
+            self.commits += 1
+
+    class FakeTracer:
+        def start_as_current_span(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+            return nullcontext()
+
+    class FakeMetrics:
+        def __init__(self) -> None:
+            self.processed = False
+            self.kafka_calls: list[tuple[str, str, str]] = []
+
+        def kafka(self, service: str, topic: str, direction: str) -> None:
+            assert self.processed
+            self.kafka_calls.append((service, topic, direction))
+
+    event = OrderCreatedEvent(
+        order_id=uuid4(), customer_id="customer-0001", amount_cents=100, currency="USD"
+    )
+    metrics = FakeMetrics()
+    state_store = InMemoryProcessedStateStore()
+    processed: list[UUID] = []
+
+    def handle(value: OrderCreatedEvent) -> None:
+        processed.append(value.order_id)
+        metrics.processed = True
+
+    worker = KafkaOrderWorker.__new__(KafkaOrderWorker)
+    worker._consumer = FakeConsumer(FakeMessage(event))
+    worker._worker = OrderWorker(state_store, handle)
+    worker._runtime = type("Runtime", (), {"tracer": FakeTracer(), "metrics": metrics})()
+    monkeypatch.setenv("FAULT_WORKER_DELAY_MS", "0")
+    monkeypatch.setenv("FAULT_WORKER_FAILURE", "false")
+
+    with pytest.raises(StopPolling):
+        worker.run_forever("orders.created")
+
+    assert processed == [event.order_id]
+    assert metrics.kafka_calls == [("order-worker", "orders.created", "consumed")]
 
 
 def test_seed_and_load_results_are_reproducible() -> None:

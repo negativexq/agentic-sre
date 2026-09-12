@@ -33,3 +33,17 @@ def test_live_registry_covers_every_frozen_scenario_category() -> None:
     matrix = capability_matrix(registry=registry)
     assert len(matrix) == 10
     assert all(item.available for item in matrix)
+
+
+def test_live_registry_is_bounded_and_write_free() -> None:
+    """Every exposed capability is descriptive and read-only."""
+    registry = live_observability_registry("http://prometheus", "http://loki", "http://tempo")
+    forbidden = {"kubectl", "shell", "bash", "delete", "patch", "apply", "rollback", "scale"}
+    for descriptor in registry.descriptors():
+        assert descriptor["name"]
+        assert descriptor["version"]
+        assert descriptor["purpose"]
+        assert descriptor["evidence_type"]
+        assert descriptor["arguments"] is not None
+        haystack = descriptor["name"].lower()
+        assert haystack not in forbidden

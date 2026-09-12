@@ -128,8 +128,6 @@ release-check: check agent-check benchmark-offline observability-check evidence-
 
 release-check-live:
 	$(MAKE) release-check
-	budget_file=$$(mktemp -t agentic-sre-live-budget); \
-	trap 'rm -f "$$budget_file"' EXIT; \
-	SRE_LIVE_MODEL_BUDGET_FILE="$$budget_file" $(MAKE) model-smoke-live; \
-	SRE_LIVE_MODEL_BUDGET_FILE="$$budget_file" $(MAKE) agent-smoke-live; \
-	SRE_LIVE_MODEL_BUDGET_FILE="$$budget_file" $(MAKE) benchmark-live
+	$(MAKE) model-smoke-live
+	$(MAKE) agent-smoke-live
+	$(MAKE) benchmark-live

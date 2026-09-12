@@ -237,6 +237,20 @@ def test_final_model_request_exposes_only_terminal_decisions() -> None:
     )
 
 
+def test_reused_provider_records_per_run_accounting_delta() -> None:
+    """A shared provider's cumulative counters do not leak into one run's usage."""
+    stop = {"decision": DecisionType.STOP, "stop_reason": StopReason.INSUFFICIENT_EVIDENCE}
+    provider = FakeModelProvider([stop, stop])
+
+    first = InvestigationRuntime(provider, registry()).run(incident())
+    second = InvestigationRuntime(provider, registry()).run(incident())
+
+    assert first.usage.provider_invocations == 1
+    assert second.usage.provider_invocations == 1
+    assert first.usage.actual_api_calls == 0
+    assert second.usage.actual_api_calls == 0
+
+
 def test_provider_failure_on_final_call_is_not_model_exhaustion() -> None:
     """A provider failure on call three retains provider-error semantics."""
 

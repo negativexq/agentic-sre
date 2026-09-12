@@ -18,7 +18,7 @@ from packages.provider import (
     ProviderErrorCode,
 )
 from packages.provider.openai import (
-    DECISION_FUNCTION_NAME,
+    DECISION_FUNCTION_NAMES,
     LiveModelConfig,
     _compile_strict_schema,
 )
@@ -48,15 +48,28 @@ def function_request() -> ModelRequest:
     )
 
 
-def decision_arguments(**overrides: object) -> str:
-    """Build valid strict function arguments for an investigation decision."""
-    payload: dict[str, object] = {
-        "decision": "STOP",
-        "requests": [],
-        "hypothesis": None,
-    }
-    payload.update(overrides)
-    return json.dumps(payload)
+def function_arguments(name: str) -> str:
+    """Build valid arguments for one semantic decision transport function."""
+    if name == "request_investigation_tools":
+        return json.dumps(
+            {
+                "reason": "latency evidence is needed",
+                "tool_requests": [{"tool": "service_latency", "arguments": {}}],
+            }
+        )
+    if name == "submit_root_cause_hypothesis":
+        return json.dumps(
+            {
+                "reason": "the available evidence is sufficient",
+                "affected_component": "payment-service",
+                "mechanism": "service_latency_regression",
+                "suspected_trigger": "elevated latency",
+                "evidence_ids": [str(uuid4())],
+            }
+        )
+    return json.dumps(
+        {"reason": "no more useful evidence is available", "stop_reason": "insufficient_evidence"}
+    )
 
 
 def test_fake_provider_is_deterministic_and_records_requests() -> None:
@@ -312,7 +325,7 @@ def _output_text(value: str) -> SimpleNamespace:
 def _function_call(
     arguments: str,
     *,
-    name: str = DECISION_FUNCTION_NAME,
+    name: str = "stop_investigation",
 ) -> SimpleNamespace:
     """Build one Responses function-call output item."""
     return SimpleNamespace(type="function_call", name=name, arguments=arguments)
@@ -329,14 +342,14 @@ def _normalize_fixture(raw: SimpleNamespace, model_request: ModelRequest | None 
     return provider._normalize_response(model_request or request(), raw, 0.0)
 
 
-def test_responses_request_forces_one_decision_function() -> None:
-    """Investigation decisions use one forced transport function, never text output."""
+def test_responses_request_exposes_only_three_decision_functions() -> None:
+    """Investigation decisions expose only semantic transport functions."""
     captured: dict[str, object] = {}
 
     class Transport:
         def create(self, **kwargs: object) -> object:
             captured.update(kwargs)
-            return _envelope([_function_call(decision_arguments())])
+            return _envelope([_function_call(function_arguments("stop_investigation"))])
 
     provider = OpenAIProvider(
         budget=LiveModelBudget(1),
@@ -353,33 +366,26 @@ def test_responses_request_forces_one_decision_function() -> None:
         "hypothesis": None,
     }
     assert captured["parallel_tool_calls"] is False
-    assert captured["tool_choice"] == {"type": "function", "name": DECISION_FUNCTION_NAME}
+    assert captured["tool_choice"] == "required"
     tools = captured["tools"]
     assert isinstance(tools, list)
-    assert len(tools) == 1
-    assert tools[0] == {
-        "type": "function",
-        "name": DECISION_FUNCTION_NAME,
-        "description": (
-            "Transport one validated investigation decision to the deterministic runtime. "
-            "Do not execute infrastructure actions."
-        ),
-        "parameters": _compile_strict_schema(InvestigationDecision.model_json_schema()),
-        "strict": True,
-    }
+    assert [tool["name"] for tool in tools] == list(DECISION_FUNCTION_NAMES)
+    assert all(tool["type"] == "function" for tool in tools)
+    assert all(tool["strict"] is True for tool in tools)
+    assert all(tool["parameters"]["additionalProperties"] is False for tool in tools)
 
 
 @pytest.mark.parametrize(
     "output",
     [
-        [_function_call(decision_arguments())],
+        [_function_call(function_arguments("stop_investigation"))],
         [
             SimpleNamespace(type="reasoning", summary=[]),
-            _function_call(decision_arguments()),
+            _function_call(function_arguments("stop_investigation")),
         ],
         [
             _message(_output_text("harmless assistant commentary")),
-            _function_call(decision_arguments()),
+            _function_call(function_arguments("stop_investigation")),
         ],
     ],
 )
@@ -397,20 +403,48 @@ def test_decision_function_accepts_non_decision_output_items(output: list[object
 
 
 @pytest.mark.parametrize(
+    ("function_name", "decision"),
+    [
+        ("request_investigation_tools", "CALL_TOOLS"),
+        ("submit_root_cause_hypothesis", "SUBMIT_HYPOTHESIS"),
+        ("stop_investigation", "STOP"),
+    ],
+)
+def test_decision_functions_map_to_provider_independent_decisions(
+    function_name: str, decision: str
+) -> None:
+    """Each function identity maps to the existing InvestigationDecision shape."""
+    response = _normalize_fixture(
+        _envelope([_function_call(function_arguments(function_name), name=function_name)]),
+        function_request(),
+    )
+
+    assert response.structured_output["decision"] == decision  # type: ignore[attr-defined]
+    assert "reason" not in response.structured_output  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize(
     ("output", "expected"),
     [
         ([], ProviderErrorCode.DECISION_FUNCTION_MISSING),
         (
-            [_function_call(decision_arguments()), _function_call(decision_arguments())],
+            [
+                _function_call(function_arguments("stop_investigation")),
+                _function_call(function_arguments("stop_investigation")),
+            ],
             ProviderErrorCode.MULTIPLE_DECISION_FUNCTION_CALLS,
         ),
         (
-            [_function_call(decision_arguments(), name="other_function")],
+            [_function_call(function_arguments("stop_investigation"), name="other_function")],
             ProviderErrorCode.UNEXPECTED_FUNCTION_CALL,
         ),
         (
             [_function_call('{"decision":')],
             ProviderErrorCode.FUNCTION_ARGUMENTS_INVALID_JSON,
+        ),
+        (
+            [_function_call('{"reason":"x","stop_reason":"bad"}')],
+            ProviderErrorCode.INVALID_STOP_REASON,
         ),
         (
             [_function_call('{"decision":"STOP"}')],
@@ -437,7 +471,7 @@ def test_decision_function_failure_taxonomy(
 def test_decision_function_rejects_incomplete_response_before_extraction() -> None:
     """Incomplete Responses never reach function argument parsing."""
     raw = _envelope(
-        [_function_call(decision_arguments())],
+        [_function_call(function_arguments("stop_investigation"))],
         status="incomplete",
         incomplete_details=SimpleNamespace(reason="max_output_tokens"),
     )

@@ -6,6 +6,7 @@ from packages.provider.contracts import (
     ModelProvider,
     ModelRequest,
     ModelResponse,
+    ProviderAccountingSnapshot,
     ProviderError,
     ProviderErrorCode,
     ResponseEnvelopeMetadata,
@@ -24,6 +25,7 @@ __all__ = [
     "OpenAIProvider",
     "ProviderError",
     "ProviderErrorCode",
+    "ProviderAccountingSnapshot",
     "ResponseEnvelopeMetadata",
     "live_model_config",
 ]

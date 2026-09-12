@@ -29,6 +29,7 @@ class ProviderErrorCode(StrEnum):
     UNEXPECTED_FUNCTION_CALL = "UNEXPECTED_FUNCTION_CALL"
     FUNCTION_ARGUMENTS_INVALID_JSON = "FUNCTION_ARGUMENTS_INVALID_JSON"
     FUNCTION_ARGUMENTS_SCHEMA_INVALID = "FUNCTION_ARGUMENTS_SCHEMA_INVALID"
+    INVALID_STOP_REASON = "INVALID_STOP_REASON"
     JSON_DECODE_FAILED = "JSON_DECODE_FAILED"
     SCHEMA_VALIDATION_FAILED = "SCHEMA_VALIDATION_FAILED"
     CONTEXT_LIMIT_EXCEEDED = "CONTEXT_LIMIT_EXCEEDED"
@@ -89,6 +90,17 @@ class ResponseEnvelopeMetadata(BaseModel):
     function_call_argument_hashes: list[str] = Field(default_factory=list)
     json_error_position: int | None = Field(default=None, ge=0)
     schema_error_path: str | None = None
+
+
+class ProviderAccountingSnapshot(BaseModel):
+    """Non-secret provider and outbound-attempt counters for one process."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    provider_invocations: int = Field(ge=0, default=0)
+    outbound_api_attempts: int = Field(ge=0, default=0)
+    provider_retries: int = Field(ge=0, default=0)
+    shared_ledger_consumed: int = Field(ge=0, default=0)
 
 
 class ModelResponse(BaseModel):

@@ -4,7 +4,12 @@ from collections.abc import Callable, Iterable
 from time import monotonic
 from typing import Any
 
-from packages.provider.contracts import ModelProvider, ModelRequest, ModelResponse
+from packages.provider.contracts import (
+    ModelProvider,
+    ModelRequest,
+    ModelResponse,
+    ProviderAccountingSnapshot,
+)
 
 FakeResponse = dict[str, Any] | Callable[[ModelRequest], dict[str, Any]]
 
@@ -46,6 +51,10 @@ class FakeModelProvider:
             latency_ms=int((monotonic() - started) * 1000),
             finish_reason="scripted",
         )
+
+    def accounting_snapshot(self) -> ProviderAccountingSnapshot:
+        """Expose deterministic invocation counts without any network accounting."""
+        return ProviderAccountingSnapshot(provider_invocations=len(self.requests))
 
 
 def is_fake_provider(provider: ModelProvider) -> bool:

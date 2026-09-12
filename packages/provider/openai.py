@@ -4,6 +4,7 @@ import json
 import os
 from dataclasses import dataclass
 from hashlib import sha256
+from threading import Lock
 from time import monotonic
 from typing import Any, Protocol, cast
 
@@ -11,13 +12,23 @@ from packages.provider.budget import LiveModelBudget
 from packages.provider.contracts import (
     ModelRequest,
     ModelResponse,
+    ProviderAccountingSnapshot,
     ProviderError,
     ProviderErrorCode,
     ResponseEnvelopeMetadata,
     messages_to_dicts,
 )
 
-DECISION_FUNCTION_NAME = "submit_investigation_decision"
+DECISION_FUNCTION_NAMES = (
+    "request_investigation_tools",
+    "submit_root_cause_hypothesis",
+    "stop_investigation",
+)
+_STOP_REASON_VALUES = (
+    "insufficient_evidence",
+    "investigation_complete",
+    "no_action_needed",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +108,74 @@ def _compile_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _decision_function_schemas(schema: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Build three strict transport schemas from the existing decision contracts."""
+    compiled = _compile_strict_schema(schema)
+    definitions = compiled.get("$defs", {})
+    if not isinstance(definitions, dict):
+        raise ValueError("investigation decision schema definitions are invalid")
+    tool_request = definitions.get("ToolRequestSpec")
+    hypothesis = definitions.get("HypothesisSubmission")
+    if not isinstance(tool_request, dict) or not isinstance(hypothesis, dict):
+        raise ValueError("investigation decision schema definitions are incomplete")
+
+    def object_schema(
+        properties: dict[str, Any],
+        required: list[str],
+        used_definitions: dict[str, dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "type": "object",
+            "properties": properties,
+            "required": required,
+            "additionalProperties": False,
+        }
+        if used_definitions:
+            result["$defs"] = used_definitions
+        return result
+
+    reason = {"type": "string"}
+    return {
+        "request_investigation_tools": object_schema(
+            {
+                "reason": reason,
+                "tool_requests": {
+                    "type": "array",
+                    "items": {"$ref": "#/$defs/ToolRequestSpec"},
+                },
+            },
+            ["reason", "tool_requests"],
+            {"ToolRequestSpec": tool_request},
+        ),
+        "submit_root_cause_hypothesis": object_schema(
+            {
+                "reason": reason,
+                "affected_component": hypothesis["properties"]["affected_component"],
+                "mechanism": hypothesis["properties"]["mechanism"],
+                "suspected_trigger": hypothesis["properties"]["suspected_trigger"],
+                "evidence_ids": hypothesis["properties"]["evidence_ids"],
+            },
+            [
+                "reason",
+                "affected_component",
+                "mechanism",
+                "suspected_trigger",
+                "evidence_ids",
+            ],
+            {
+                "HypothesisMechanism": definitions["HypothesisMechanism"],
+            },
+        ),
+        "stop_investigation": object_schema(
+            {
+                "reason": reason,
+                "stop_reason": {"type": "string", "enum": list(_STOP_REASON_VALUES)},
+            },
+            ["reason", "stop_reason"],
+        ),
+    }
+
+
 def _field(value: Any, name: str, default: Any = None) -> Any:
     """Read a field from either an SDK object or a JSON-like fixture."""
     if isinstance(value, dict):
@@ -163,7 +242,7 @@ def _response_metadata(raw: Any) -> ResponseEnvelopeMetadata:
         output_text_hashes=[sha256(item.encode("utf-8")).hexdigest() for item in output_texts[:32]],
         function_call_count=len(function_calls),
         decision_function_call_count=sum(
-            _field(item, "name") == DECISION_FUNCTION_NAME for item in function_calls
+            _field(item, "name") in DECISION_FUNCTION_NAMES for item in function_calls
         ),
         function_call_names=_safe_strings(function_call_names[:32]),
         function_call_argument_lengths=[
@@ -275,7 +354,7 @@ def _extract_decision_function(
     request: ModelRequest,
     raw: Any,
 ) -> tuple[dict[str, Any], ResponseEnvelopeMetadata]:
-    """Extract exactly one forced decision function call from a Responses envelope."""
+    """Extract exactly one semantic decision function from a Responses envelope."""
     metadata = _response_metadata(raw)
     _validate_response_envelope(metadata)
     if metadata.refusal_item_count > 0:
@@ -289,7 +368,7 @@ def _extract_decision_function(
     items = output if isinstance(output, list) else []
     function_calls = [item for item in items if _field(item, "type") == "function_call"]
     decision_calls = [
-        item for item in function_calls if _field(item, "name") == DECISION_FUNCTION_NAME
+        item for item in function_calls if _field(item, "name") in DECISION_FUNCTION_NAMES
     ]
     if len(decision_calls) > 1:
         raise ProviderError(
@@ -331,16 +410,47 @@ def _extract_decision_function(
             "decision function arguments were not an object",
             metadata=metadata,
         )
-    schema_error_path = _json_schema_error(
-        structured_output, _compile_strict_schema(request.response_schema)
-    )
+    function_name = _field(decision_calls[0], "name")
+    schemas = _decision_function_schemas(request.response_schema)
+    schema_error_path = _json_schema_error(structured_output, schemas[function_name])
     if schema_error_path is not None:
+        error_code = (
+            ProviderErrorCode.INVALID_STOP_REASON
+            if function_name == "stop_investigation" and schema_error_path == "$.stop_reason"
+            else ProviderErrorCode.FUNCTION_ARGUMENTS_SCHEMA_INVALID
+        )
         raise ProviderError(
-            ProviderErrorCode.FUNCTION_ARGUMENTS_SCHEMA_INVALID,
+            error_code,
             "decision function arguments did not match response schema",
             metadata=metadata.model_copy(update={"schema_error_path": schema_error_path}),
         )
-    return structured_output, metadata
+    if function_name == "request_investigation_tools":
+        return {
+            "decision": "CALL_TOOLS",
+            "requests": structured_output["tool_requests"],
+            "hypothesis": None,
+        }, metadata
+    if function_name == "submit_root_cause_hypothesis":
+        return {
+            "decision": "SUBMIT_HYPOTHESIS",
+            "requests": [],
+            "hypothesis": {
+                key: structured_output[key]
+                for key in (
+                    "affected_component",
+                    "mechanism",
+                    "suspected_trigger",
+                    "evidence_ids",
+                )
+            },
+        }, metadata
+    if function_name == "stop_investigation":
+        return {"decision": "STOP", "requests": [], "hypothesis": None}, metadata
+    raise ProviderError(
+        ProviderErrorCode.UNEXPECTED_FUNCTION_CALL,
+        "provider response contained an unexpected decision function",
+        metadata=metadata,
+    )
 
 
 def _json_schema_error(
@@ -450,6 +560,62 @@ class OpenAIProvider:
         self._config = config or live_model_config()
         self._transport = transport or self._build_transport()
         self._max_retry = max_retry
+        self._accounting_lock = Lock()
+        self._provider_invocations = 0
+        self._outbound_api_attempts = 0
+        self._provider_retries = 0
+        self._shared_ledger_consumed = 0
+
+    def accounting_snapshot(self) -> ProviderAccountingSnapshot:
+        """Return non-secret counters for provider and outbound API activity."""
+        with self._accounting_lock:
+            return ProviderAccountingSnapshot(
+                provider_invocations=self._provider_invocations,
+                outbound_api_attempts=self._outbound_api_attempts,
+                provider_retries=self._provider_retries,
+                shared_ledger_consumed=self._shared_ledger_consumed,
+            )
+
+    def _request_parameters(self, request: ModelRequest) -> dict[str, Any]:
+        """Build the request payload before reserving any live budget."""
+        parameters: dict[str, Any] = {
+            "model": request.model,
+            "input": messages_to_dicts(request.messages),
+            "reasoning": {"effort": request.reasoning_effort},
+            "max_output_tokens": request.max_output_tokens,
+            "timeout": request.timeout_ms / 1000,
+        }
+        if request.response_schema_name == "investigation_decision":
+            schemas = _decision_function_schemas(request.response_schema)
+            parameters.update(
+                {
+                    "tools": [
+                        {
+                            "type": "function",
+                            "name": name,
+                            "description": (
+                                "Transport one decision to the deterministic runtime. "
+                                "Do not execute infrastructure actions."
+                            ),
+                            "parameters": schema,
+                            "strict": True,
+                        }
+                        for name, schema in schemas.items()
+                    ],
+                    "parallel_tool_calls": False,
+                    "tool_choice": "required",
+                }
+            )
+        else:
+            parameters["text"] = {
+                "format": {
+                    "type": "json_schema",
+                    "name": request.response_schema_name,
+                    "schema": _compile_strict_schema(request.response_schema),
+                    "strict": True,
+                }
+            }
+        return parameters
 
     def _build_transport(self) -> ResponsesTransport:
         """Construct the SDK client lazily, keeping imports out of offline paths."""
@@ -489,32 +655,20 @@ class OpenAIProvider:
                 "live model execution is disabled",
             )
 
+        parameters = self._request_parameters(request)
+        with self._accounting_lock:
+            self._provider_invocations += 1
         attempts = self._max_retry + 1
         for attempt in range(attempts):
             self._budget.consume()
+            with self._accounting_lock:
+                self._shared_ledger_consumed += 1
+                self._outbound_api_attempts += 1
+                if attempt > 0:
+                    self._provider_retries += 1
             started = monotonic()
             try:
-                raw = self._transport.create(
-                    model=request.model,
-                    input=messages_to_dicts(request.messages),
-                    reasoning={"effort": request.reasoning_effort},
-                    max_output_tokens=request.max_output_tokens,
-                    tools=[
-                        {
-                            "type": "function",
-                            "name": DECISION_FUNCTION_NAME,
-                            "description": (
-                                "Transport one validated investigation decision to the "
-                                "deterministic runtime. Do not execute infrastructure actions."
-                            ),
-                            "parameters": _compile_strict_schema(request.response_schema),
-                            "strict": True,
-                        }
-                    ],
-                    parallel_tool_calls=False,
-                    tool_choice={"type": "function", "name": DECISION_FUNCTION_NAME},
-                    timeout=request.timeout_ms / 1000,
-                )
+                raw = self._transport.create(**parameters)
                 return self._normalize_response(request, raw, started)
             except ProviderError:
                 raise

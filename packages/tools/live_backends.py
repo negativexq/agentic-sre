@@ -176,8 +176,10 @@ class PrometheusBackend(LiveBackend):
                 f'sum(rate(http_requests_total{{service="{service}",status=~"5.."}}[30s]))'
             ),
             "service_latency": (
-                f'sum(rate(http_request_duration_seconds_sum{{service="{service}"}}[30s])) '
-                f'/ sum(rate(http_request_duration_seconds_count{{service="{service}"}}[30s]))'
+                f'sum(rate(http_request_duration_seconds_sum{{service="{service}",'
+                'route!~"/(health|metrics|__faults).*"}[30s])) '
+                f'/ sum(rate(http_request_duration_seconds_count{{service="{service}",'
+                'route!~"/(health|metrics|__faults).*"}[30s]))'
             ),
             "db_connection_pressure": (
                 f'sum(rate(db_connection_acquisition_seconds_sum{{service="{service}"}}[30s])) '

@@ -10,7 +10,7 @@ groups:
         annotations:
           runbook: https://example.invalid/runbooks/high-error-rate
       - alert: HighRequestLatency
-        expr: sum(rate(http_request_duration_seconds_sum{service="payment-service"}[30s])) / sum(rate(http_request_duration_seconds_count{service="payment-service"}[30s])) > 0.5
+        expr: sum(rate(http_request_duration_seconds_sum{service="payment-service",route!~"/(health|metrics|__faults).*"}[30s])) / sum(rate(http_request_duration_seconds_count{service="payment-service",route!~"/(health|metrics|__faults).*"}[30s])) > 0.5
         for: 2m
         labels:
           severity: warning
@@ -57,7 +57,7 @@ groups:
         labels: {severity: warning, namespace: sre-demo, service: order-service}
         annotations: {summary: Order payment dependency latency is high}
       - alert: OrderRequestLatencyHigh
-        expr: sum(rate(http_request_duration_seconds_sum{service="order-service"}[30s])) / sum(rate(http_request_duration_seconds_count{service="order-service"}[30s])) > 0.5
+        expr: sum(rate(http_request_duration_seconds_sum{service="order-service",route!~"/(health|metrics|__faults).*"}[30s])) / sum(rate(http_request_duration_seconds_count{service="order-service",route!~"/(health|metrics|__faults).*"}[30s])) > 0.5
         for: 15s
         labels: {severity: warning, namespace: sre-demo, service: order-service}
         annotations: {summary: Order request latency is high}
@@ -87,7 +87,7 @@ groups:
         labels: {severity: critical, namespace: sre-demo, service: payment-service}
         annotations: {summary: Payment service is unavailable}
       - alert: PaymentRequestLatencyHigh
-        expr: sum(rate(http_request_duration_seconds_sum{service="payment-service"}[30s])) / sum(rate(http_request_duration_seconds_count{service="payment-service"}[30s])) > 0.5
+        expr: sum(rate(http_request_duration_seconds_sum{service="payment-service",route!~"/(health|metrics|__faults).*"}[30s])) / sum(rate(http_request_duration_seconds_count{service="payment-service",route!~"/(health|metrics|__faults).*"}[30s])) > 0.5
         for: 15s
         labels: {severity: warning, namespace: sre-demo, service: payment-service}
         annotations: {summary: Payment request latency is high}

@@ -200,6 +200,25 @@ def test_database_queries_are_service_scoped(monkeypatch) -> None:  # type: igno
     assert "db_query_duration_seconds_count" in str(captured[1]["query"])
 
 
+def test_service_latency_excludes_infrastructure_routes(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Latency evidence measures workload traffic, not health/scrape probes."""
+    captured: dict[str, object] = {}
+
+    def fake_get(self, path, params, timeout_seconds, **kwargs):  # type: ignore[no-untyped-def]
+        captured.update(params=params)
+        return {"data": {"result": []}}
+
+    monkeypatch.setattr(PrometheusBackend, "_get", fake_get)
+    PrometheusBackend("http://prometheus").query(
+        "service_latency", {"service": "order-service", "range_seconds": 60}
+    )
+
+    params = captured["params"]
+    assert isinstance(params, dict)
+    query = str(params["query"])
+    assert 'route!~"/(health|metrics|__faults).*"' in query
+
+
 def test_tempo_search_request_uses_integer_seconds(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """Tempo search receives integer Unix seconds, not Loki nanoseconds."""
     captured: dict[str, object] = {}

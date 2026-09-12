@@ -90,12 +90,12 @@ class OrderService:
                         time.perf_counter() - acquisition_started,
                         acquisition=True,
                     )
+                query_started = time.perf_counter()
                 if self._fault_config is not None and self._fault_config.db_query_delay_ms:
                     session.execute(
                         text("SELECT pg_sleep(:delay_seconds)"),
                         {"delay_seconds": self._fault_config.db_query_delay_ms / 1000},
                     )
-                query_started = time.perf_counter()
                 span_context = (
                     self._runtime.tracer.start_as_current_span("postgres order create")
                     if self._runtime is not None

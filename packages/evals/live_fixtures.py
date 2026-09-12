@@ -368,7 +368,7 @@ class LiveBenchmarkEnvironment:
                 "change_type": "UPDATED",
                 "scope": "CONFIGURATION",
                 "before": {"FAULT_PAYMENT_DELAY_MS": "0"},
-                "after": {"FAULT_PAYMENT_DELAY_MS": "2200"},
+                "after": {"FAULT_PAYMENT_DELAY_MS": "3500"},
                 "revision": f"benchmark-{now.strftime('%Y%m%d%H%M%S%f')}",
                 "source": "benchmark-harness",
             }
@@ -402,7 +402,7 @@ class LiveBenchmarkEnvironment:
         elif fixture == "payment_pod_crash":
             self._restart_payment_container()
         elif fixture == "payment_config_change":
-            self._kubectl_patch_env("payment-service", {"FAULT_PAYMENT_DELAY_MS": "2200"})
+            self._kubectl_patch_env("payment-service", {"FAULT_PAYMENT_DELAY_MS": "3500"})
             self._record_payment_config_change()
         else:
             raise KeyError(fixture)

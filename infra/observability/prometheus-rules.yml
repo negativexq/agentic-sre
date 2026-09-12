@@ -67,7 +67,7 @@ groups:
         labels: {severity: critical, namespace: sre-demo, service: payment-service}
         annotations: {summary: Payment database connection acquisition is slow}
       - alert: OrderDbQueryLatencyHigh
-        expr: sum(rate(db_query_duration_seconds_sum{service="order-service"}[30s])) / sum(rate(db_query_duration_seconds_count{service="order-service"}[30s])) > 0.5
+        expr: sum(rate(db_query_duration_seconds_sum{service="order-service",operation="create"}[30s])) / sum(rate(db_query_duration_seconds_count{service="order-service",operation="create"}[30s])) > 0.5
         for: 15s
         labels: {severity: warning, namespace: sre-demo, service: order-service}
         annotations: {summary: Order database query latency is high}

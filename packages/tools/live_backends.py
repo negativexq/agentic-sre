@@ -186,8 +186,8 @@ class PrometheusBackend(LiveBackend):
                 f'/ sum(rate(db_connection_acquisition_seconds_count{{service="{service}"}}[30s]))'
             ),
             "db_query_latency": (
-                f'sum(rate(db_query_duration_seconds_sum{{service="{service}"}}[30s])) '
-                f'/ sum(rate(db_query_duration_seconds_count{{service="{service}"}}[30s]))'
+                f'sum(rate(db_query_duration_seconds_sum{{service="{service}",operation="create"}}[30s])) '
+                f'/ sum(rate(db_query_duration_seconds_count{{service="{service}",operation="create"}}[30s]))'
             ),
         }
         if operation == "kafka_consumer_lag":

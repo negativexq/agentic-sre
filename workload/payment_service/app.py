@@ -83,7 +83,11 @@ class PaymentService:
                 raise
             finally:
                 if self._runtime is not None:
-                    self._runtime.record_db("payment-service", time.perf_counter() - query_started)
+                    self._runtime.record_db(
+                        "payment-service",
+                        time.perf_counter() - query_started,
+                        operation="create",
+                    )
             return response
 
 

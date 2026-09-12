@@ -197,7 +197,9 @@ def test_database_queries_are_service_scoped(monkeypatch) -> None:  # type: igno
     assert 'service="payment-service"' in str(captured[0]["query"])
     assert 'service="order-service"' in str(captured[1]["query"])
     assert "db_connection_acquisition_seconds_count" in str(captured[0]["query"])
-    assert "db_query_duration_seconds_count" in str(captured[1]["query"])
+    assert 'db_query_duration_seconds_count{service="order-service",operation="create"}' in str(
+        captured[1]["query"]
+    )
 
 
 def test_service_latency_excludes_infrastructure_routes(monkeypatch) -> None:  # type: ignore[no-untyped-def]

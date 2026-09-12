@@ -105,7 +105,11 @@ class OrderService:
                     order_repository.create(order_id, request, self._clock())
             finally:
                 if self._runtime is not None:
-                    self._runtime.record_db("order-service", time.perf_counter() - query_started)
+                    self._runtime.record_db(
+                        "order-service",
+                        time.perf_counter() - query_started,
+                        operation="create",
+                    )
 
         payment = self._payment_gateway.charge(
             PaymentRequest(
@@ -139,7 +143,11 @@ class OrderService:
                         response = order_repository.mark_payment_failed(order_id)
             finally:
                 if self._runtime is not None:
-                    self._runtime.record_db("order-service", time.perf_counter() - query_started)
+                    self._runtime.record_db(
+                        "order-service",
+                        time.perf_counter() - query_started,
+                        operation="update",
+                    )
 
         event = OrderCreatedEvent(
             event_id=uuid5(EVENT_NAMESPACE, str(order_id)),

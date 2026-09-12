@@ -90,9 +90,19 @@ class RuntimeMetrics:
         self._http_requests.add(1, attributes)
         self._http_duration.record(duration_seconds, {"service": service, "route": route})
 
-    def db(self, service: str, duration_seconds: float, *, acquisition: bool = False) -> None:
+    def db(
+        self,
+        service: str,
+        duration_seconds: float,
+        *,
+        acquisition: bool = False,
+        operation: str = "unspecified",
+    ) -> None:
         instrument = self._db_acquisition if acquisition else self._db_queries
-        instrument.record(duration_seconds, {"service": service})
+        attributes = {"service": service}
+        if not acquisition:
+            attributes["operation"] = operation
+        instrument.record(duration_seconds, attributes)
 
     def db_error(self, service: str) -> None:
         self._db_errors.add(1, {"service": service})
@@ -132,16 +142,29 @@ class TelemetryRuntime:
         self.logger = logger
 
     def record_db(
-        self, service: str, duration_seconds: float, *, acquisition: bool = False
+        self,
+        service: str,
+        duration_seconds: float,
+        *,
+        acquisition: bool = False,
+        operation: str = "unspecified",
     ) -> None:
         """Record a database observation in OTLP and the local scrape registry."""
-        self.metrics.db(service, duration_seconds, acquisition=acquisition)
+        self.metrics.db(
+            service,
+            duration_seconds,
+            acquisition=acquisition,
+            operation=operation,
+        )
         instrument = (
             self.prometheus_metrics.db_acquisition
             if acquisition
             else self.prometheus_metrics.db_query_duration
         )
-        instrument.labels(service).observe(duration_seconds)
+        if acquisition:
+            instrument.labels(service).observe(duration_seconds)
+        else:
+            instrument.labels(service, operation).observe(duration_seconds)
 
     def record_dependency(self, service: str, dependency: str, duration_seconds: float) -> None:
         """Record an outbound dependency observation in both metric paths."""

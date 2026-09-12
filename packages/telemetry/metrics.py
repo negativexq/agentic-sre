@@ -35,7 +35,7 @@ class WorkloadMetrics:
         self.db_query_duration = Histogram(
             "db_query_duration_seconds",
             "Database query duration",
-            ["service"],
+            ["service", "operation"],
             registry=registry,
         )
         self.db_active_connections = Gauge(

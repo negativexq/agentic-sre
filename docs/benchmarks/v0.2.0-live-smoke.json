@@ -1,0 +1,51 @@
+{
+  "scenarios": [
+    {
+      "actual_api_calls": 1,
+      "error_code": "BACKEND_UNAVAILABLE",
+      "evidence_count": 0,
+      "hypothesis_submitted": false,
+      "incident_id": "a16a30ab-544e-472b-9b8d-ca27bcce7143",
+      "model_budget_exhausted_after_terminal_decision": false,
+      "model_calls_limit": 3,
+      "model_calls_used": 1,
+      "outbound_api_attempts": 1,
+      "provider_invocations": 1,
+      "provider_retries": 0,
+      "stop_reason": null,
+      "terminal_decision": null,
+      "termination_reason": "INVALID_DECISION",
+      "tool_calls_used": 0,
+      "turns": [
+        {
+          "error_path": "$.requests",
+          "input_tokens": 1799,
+          "output_tokens": 98,
+          "requested_tool_count": 1,
+          "requested_tool_names": [
+            "kafka_consumer_lag"
+          ],
+          "selected_decision": "request_investigation_tools",
+          "summaries": [
+            {
+              "arguments": {
+                "consumer": "order-worker"
+              },
+              "error_code": "BACKEND_UNAVAILABLE",
+              "evidence_ids": [],
+              "status": "BACKEND_UNAVAILABLE",
+              "tool": "kafka_consumer_lag"
+            }
+          ],
+          "turn": 1,
+          "validation_result": "FAIL",
+          "validation_stage": "TOOL_EXECUTION"
+        }
+      ],
+      "validation_path": "$.requests",
+      "validation_stage": "TOOL_EXECUTION",
+      "validator": "BoundedToolExecutor"
+    }
+  ],
+  "total_live_api_calls": 41
+}

@@ -57,7 +57,7 @@ groups:
         labels: {severity: warning, namespace: sre-demo, service: order-service}
         annotations: {summary: Order payment dependency latency is high}
       - alert: OrderRequestLatencyHigh
-        expr: sum(rate(http_request_duration_seconds_sum{service="order-service",route!~"/(health|metrics|__faults).*"}[30s])) / sum(rate(http_request_duration_seconds_count{service="order-service",route!~"/(health|metrics|__faults).*"}[30s])) > 0.5
+        expr: (sum(rate(http_request_duration_seconds_sum{service="order-service",route="/orders"}[30s])) / sum(rate(http_request_duration_seconds_count{service="order-service",route="/orders"}[30s])) > 0.5) and on() (sum(rate(dependency_request_duration_seconds_sum{service="order-service",dependency="payment-service"}[30s])) / sum(rate(dependency_request_duration_seconds_count{service="order-service",dependency="payment-service"}[30s])) < 0.5)
         for: 15s
         labels: {severity: warning, namespace: sre-demo, service: order-service}
         annotations: {summary: Order request latency is high}
@@ -91,3 +91,8 @@ groups:
         for: 15s
         labels: {severity: warning, namespace: sre-demo, service: payment-service}
         annotations: {summary: Payment request latency is high}
+      - alert: PaymentRequestLatencyCritical
+        expr: sum(rate(http_request_duration_seconds_sum{service="payment-service",route="/payments"}[30s])) / sum(rate(http_request_duration_seconds_count{service="payment-service",route="/payments"}[30s])) > 2
+        for: 15s
+        labels: {severity: critical, namespace: sre-demo, service: payment-service}
+        annotations: {summary: Payment request latency is critically high}

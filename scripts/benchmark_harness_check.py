@@ -49,7 +49,7 @@ def main() -> int:
         ) -> Any:
             return preflight_evidence(registry, incident, alerts, fixture)
 
-        trial, _ = lifecycle.run(
+        trial, evidence = lifecycle.run(
             scenario,
             investigate=preflight,
         )
@@ -57,16 +57,25 @@ def main() -> int:
             "scenario_id": scenario.scenario_id,
             "fixture": scenario.fixture,
             "fault_injection": trial.fault_started_at is not None,
+            "telemetry": evidence is not None and len(evidence) > 0,
             "real_alert": trial.alert_fingerprint is not None,
             "real_incident": trial.incident_id is not None,
-            "relevant_backend": True,
+            "evidence": evidence is not None and len(evidence) > 0,
             "cleanup": trial.cleanup_finished_at is not None,
             "resolution": trial.alert_resolved,
             "openai_calls": 0,
         }
         if not all(
             record[key]
-            for key in ("fault_injection", "real_alert", "real_incident", "cleanup", "resolution")
+            for key in (
+                "fault_injection",
+                "telemetry",
+                "real_alert",
+                "real_incident",
+                "evidence",
+                "cleanup",
+                "resolution",
+            )
         ):
             raise RuntimeError(f"fixture qualification failed: {scenario.scenario_id}")
         records.append(record)

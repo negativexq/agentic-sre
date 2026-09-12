@@ -1,5 +1,6 @@
 """Telemetry correlation tests across service and Kafka boundaries."""
 
+import re
 from pathlib import Path
 
 from prometheus_client import CollectorRegistry, generate_latest
@@ -74,5 +75,9 @@ def test_worker_failure_alert_uses_bounded_error_burst_signal() -> None:
     old_expression = 'sum(kafka_consumer_errors_total{service="order-worker"}) > 0'
     assert expression in rules
     assert expression in manifest
+    assert not re.search(r"- alert: OrderWorkerConsumerErrorsHigh\n\s+expr: [^\n]+\n\s+for:", rules)
+    assert not re.search(
+        r"- alert: OrderWorkerConsumerErrorsHigh\n\s+expr: [^\n]+\n\s+for:", manifest
+    )
     assert old_expression not in rules
     assert old_expression not in manifest

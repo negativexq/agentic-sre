@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test check agent-check agent-smoke benchmark-offline model-smoke-live agent-smoke-live benchmark-live cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check release-check-live
+.PHONY: install lint typecheck test check agent-check agent-smoke benchmark-offline benchmark-harness-check model-smoke-live agent-smoke-live benchmark-live cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check release-check-live
 
 LIVE_BUDGET_FILE ?= .local/v0.2.0-live-budget.json
 
@@ -28,6 +28,16 @@ agent-smoke: agent-check
 benchmark-offline:
 	.venv/bin/python scripts/offline_benchmark.py
 
+benchmark-harness-check:
+	kubectl port-forward -n observability svc/prometheus 19090:9090 >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \
+	kubectl port-forward -n observability svc/loki 19300:3100 >/tmp/agentic-sre-loki-forward.log 2>&1 & loki_pid=$$!; \
+	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
+	kubectl port-forward -n sre-demo svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
+	kubectl port-forward -n sre-demo svc/order-service 18000:8000 >/tmp/agentic-sre-order-forward.log 2>&1 & order_pid=$$!; \
+	kubectl port-forward -n sre-demo svc/payment-service 18001:8000 >/tmp/agentic-sre-payment-forward.log 2>&1 & payment_pid=$$!; \
+	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" "$$order_pid" "$$payment_pid" 2>/dev/null || true' EXIT; \
+	sleep 3; .venv/bin/python scripts/benchmark_harness_check.py
+
 model-smoke-live:
 	test -n "$$OPENAI_API_KEY"
 	SRE_LIVE_MODEL_ENABLED=true SRE_LIVE_MODEL_BUDGET_FILE="$(LIVE_BUDGET_FILE)" .venv/bin/python scripts/model_smoke_live.py
@@ -43,12 +53,13 @@ agent-smoke-live:
 
 benchmark-live:
 	test -n "$$OPENAI_API_KEY"
-	test -n "$$SRE_BENCHMARK_INCIDENT_IDS"
 	kubectl port-forward -n observability svc/prometheus 19090:9090 >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \
 	kubectl port-forward -n observability svc/loki 19300:3100 >/tmp/agentic-sre-loki-forward.log 2>&1 & loki_pid=$$!; \
 	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
 	kubectl port-forward -n sre-demo svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
-	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" 2>/dev/null || true' EXIT; \
+	kubectl port-forward -n sre-demo svc/order-service 18000:8000 >/tmp/agentic-sre-order-forward.log 2>&1 & order_pid=$$!; \
+	kubectl port-forward -n sre-demo svc/payment-service 18001:8000 >/tmp/agentic-sre-payment-forward.log 2>&1 & payment_pid=$$!; \
+	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" "$$order_pid" "$$payment_pid" 2>/dev/null || true' EXIT; \
 	sleep 3; SRE_LIVE_MODEL_ENABLED=true SRE_LIVE_MODEL_BUDGET_FILE="$(LIVE_BUDGET_FILE)" .venv/bin/python scripts/live_benchmark.py
 
 cluster-up:

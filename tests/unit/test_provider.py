@@ -251,4 +251,148 @@ def test_responses_parser_rejects_multiple_structured_segments() -> None:
     with pytest.raises(ProviderError) as error:
         provider.complete(request())
 
-    assert error.value.code is ProviderErrorCode.INVALID_RESPONSE
+    assert error.value.code is ProviderErrorCode.MULTIPLE_OUTPUT_TEXT_ITEMS
+
+
+def _envelope(
+    output: list[object],
+    *,
+    status: str = "completed",
+    error: object | None = None,
+    incomplete_details: object | None = None,
+    output_text: str | None = None,
+) -> SimpleNamespace:
+    """Build a safe Responses envelope fixture without raw provider payloads."""
+    return SimpleNamespace(
+        id="resp_fixture",
+        status=status,
+        error=error,
+        incomplete_details=incomplete_details,
+        output=output,
+        output_text=output_text,
+    )
+
+
+def _message(*content: object) -> SimpleNamespace:
+    """Build one assistant message fixture."""
+    return SimpleNamespace(type="message", content=list(content))
+
+
+def _output_text(value: str) -> SimpleNamespace:
+    """Build one structured output content fixture."""
+    return SimpleNamespace(type="output_text", text=value)
+
+
+def _normalize_fixture(raw: SimpleNamespace, model_request: ModelRequest | None = None) -> object:
+    """Normalize a response fixture without invoking the transport."""
+    provider = OpenAIProvider(
+        budget=LiveModelBudget(1),
+        config=LiveModelConfig(enabled=True),
+        transport=object(),  # type: ignore[arg-type]
+        max_retry=0,
+    )
+    return provider._normalize_response(model_request or request(), raw, 0.0)
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (
+            _envelope([], status="incomplete", incomplete_details=SimpleNamespace(reason="length")),
+            ProviderErrorCode.RESPONSE_INCOMPLETE,
+        ),
+        (
+            _envelope(
+                [],
+                status="failed",
+                error=SimpleNamespace(type="server_error", code="response_failed", param=None),
+            ),
+            ProviderErrorCode.RESPONSE_ERROR,
+        ),
+        (_envelope([]), ProviderErrorCode.OUTPUT_MESSAGE_MISSING),
+        (
+            _envelope(
+                [
+                    SimpleNamespace(type="reasoning", summary=[]),
+                    _message(_output_text('{"decision":"STOP"}')),
+                ]
+            ),
+            None,
+        ),
+        (
+            _envelope([_message(SimpleNamespace(type="refusal", refusal="not available"))]),
+            ProviderErrorCode.OUTPUT_REFUSAL,
+        ),
+        (
+            _envelope([_message(SimpleNamespace(type="input_text", text="not structured"))]),
+            ProviderErrorCode.OUTPUT_TEXT_MISSING,
+        ),
+        (
+            _envelope(
+                [
+                    _message(
+                        _output_text('{"decision":"STOP"}'),
+                        _output_text('{"decision":"STOP"}'),
+                    )
+                ]
+            ),
+            ProviderErrorCode.MULTIPLE_OUTPUT_TEXT_ITEMS,
+        ),
+        (
+            _envelope(
+                [
+                    _message(_output_text('{"decision":"STOP"}')),
+                    _message(_output_text('{"decision":"STOP"}')),
+                ]
+            ),
+            ProviderErrorCode.MULTIPLE_OUTPUT_MESSAGES,
+        ),
+        (
+            _envelope([_message(_output_text('{"decision":"STOP"}{"decision":"STOP"}'))]),
+            ProviderErrorCode.JSON_DECODE_FAILED,
+        ),
+    ],
+)
+def test_responses_envelope_failure_taxonomy(
+    raw: SimpleNamespace, expected: ProviderErrorCode | None
+) -> None:
+    """Classify every response envelope failure without JSON salvage."""
+    if expected is None:
+        assert _normalize_fixture(raw).structured_output == {"decision": "STOP"}  # type: ignore[attr-defined]
+        return
+
+    with pytest.raises(ProviderError) as error:
+        _normalize_fixture(raw)
+
+    assert error.value.code is expected
+    assert error.value.metadata is not None
+    assert error.value.metadata.response_id == "resp_fixture"
+
+
+def test_responses_parser_accepts_whitespace_around_structured_json() -> None:
+    """Whitespace is valid JSON framing and is retained as one segment."""
+    raw = _envelope([_message(_output_text('  \n {"decision":"STOP"} \n  '))])
+
+    assert _normalize_fixture(raw).structured_output == {"decision": "STOP"}  # type: ignore[attr-defined]
+
+
+def test_responses_parser_reports_schema_mismatch_path() -> None:
+    """Valid JSON with missing required fields is a typed schema failure."""
+    raw = _envelope([_message(_output_text('{"unexpected":"value"}'))])
+    model_request = request().model_copy(
+        update={
+            "response_schema": {
+                "type": "object",
+                "properties": {"decision": {"type": "string"}},
+                "required": ["decision"],
+                "additionalProperties": False,
+            }
+        }
+    )
+
+    with pytest.raises(ProviderError) as error:
+        _normalize_fixture(raw, model_request)
+
+    assert error.value.code is ProviderErrorCode.SCHEMA_VALIDATION_FAILED
+    assert error.value.metadata is not None
+    assert error.value.metadata.schema_error_path == "$.decision"

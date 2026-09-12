@@ -15,6 +15,15 @@ class ProviderErrorCode(StrEnum):
     PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
     RATE_LIMITED = "RATE_LIMITED"
     INVALID_RESPONSE = "INVALID_RESPONSE"
+    RESPONSE_FAILED = "RESPONSE_FAILED"
+    RESPONSE_INCOMPLETE = "RESPONSE_INCOMPLETE"
+    RESPONSE_ERROR = "RESPONSE_ERROR"
+    OUTPUT_MESSAGE_MISSING = "OUTPUT_MESSAGE_MISSING"
+    MULTIPLE_OUTPUT_MESSAGES = "MULTIPLE_OUTPUT_MESSAGES"
+    OUTPUT_REFUSAL = "OUTPUT_REFUSAL"
+    OUTPUT_TEXT_MISSING = "OUTPUT_TEXT_MISSING"
+    MULTIPLE_OUTPUT_TEXT_ITEMS = "MULTIPLE_OUTPUT_TEXT_ITEMS"
+    JSON_DECODE_FAILED = "JSON_DECODE_FAILED"
     SCHEMA_VALIDATION_FAILED = "SCHEMA_VALIDATION_FAILED"
     CONTEXT_LIMIT_EXCEEDED = "CONTEXT_LIMIT_EXCEEDED"
     LIVE_MODEL_DISABLED = "LIVE_MODEL_DISABLED"
@@ -46,6 +55,31 @@ class ModelRequest(BaseModel):
     timeout_ms: int = Field(gt=0, le=120_000)
 
 
+class ResponseEnvelopeMetadata(BaseModel):
+    """Safe, bounded metadata describing a Responses API envelope."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    response_id: str | None = None
+    response_status: str | None = None
+    has_error: bool = False
+    error_type: str | None = None
+    error_code: str | None = None
+    error_param: str | None = None
+    incomplete_reason: str | None = None
+    output_item_count: int = Field(ge=0, default=0)
+    output_item_types: list[str] = Field(default_factory=list)
+    message_count: int = Field(ge=0, default=0)
+    content_item_count: int = Field(ge=0, default=0)
+    content_item_types: list[str] = Field(default_factory=list)
+    output_text_item_count: int = Field(ge=0, default=0)
+    refusal_item_count: int = Field(ge=0, default=0)
+    output_text_lengths: list[int] = Field(default_factory=list)
+    output_text_hashes: list[str] = Field(default_factory=list)
+    json_error_position: int | None = Field(default=None, ge=0)
+    schema_error_path: str | None = None
+
+
 class ModelResponse(BaseModel):
     """Normalized structured provider response with usage metadata."""
 
@@ -59,6 +93,7 @@ class ModelResponse(BaseModel):
     output_tokens: int = Field(ge=0)
     latency_ms: int = Field(ge=0)
     finish_reason: str = Field(min_length=1)
+    response_metadata: ResponseEnvelopeMetadata | None = None
 
 
 class ModelProvider(Protocol):
@@ -71,9 +106,16 @@ class ModelProvider(Protocol):
 class ProviderError(RuntimeError):
     """Typed provider error without exposing credentials or raw secrets."""
 
-    def __init__(self, code: ProviderErrorCode, message: str) -> None:
+    def __init__(
+        self,
+        code: ProviderErrorCode,
+        message: str,
+        *,
+        metadata: ResponseEnvelopeMetadata | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
+        self.metadata = metadata
 
 
 def messages_to_dicts(messages: Sequence[ModelMessage]) -> list[dict[str, str]]:

@@ -79,6 +79,7 @@ class RuntimeMetrics:
         self._kafka_lag = meter.create_up_down_counter(
             "kafka_consumer_lag", unit="1", description="Kafka consumer lag"
         )
+        self._kafka_lag_values: dict[tuple[str, str], int] = {}
         self._kafka_errors = meter.create_counter(
             "kafka_consumer_errors_total",
             unit="1",
@@ -110,8 +111,12 @@ class RuntimeMetrics:
     def kafka(self, service: str, topic: str, direction: str) -> None:
         self._kafka_messages.add(1, {"service": service, "topic": topic, "direction": direction})
 
-    def kafka_lag(self, service: str, topic: str, delta: int) -> None:
-        self._kafka_lag.add(delta, {"service": service, "topic": topic})
+    def set_kafka_lag(self, service: str, topic: str, value: int) -> None:
+        """Set current lag without accumulating repeated observations."""
+        key = (service, topic)
+        previous = self._kafka_lag_values.get(key, 0)
+        self._kafka_lag.add(value - previous, {"service": service, "topic": topic})
+        self._kafka_lag_values[key] = value
 
     def dependency(self, service: str, dependency: str, duration_seconds: float) -> None:
         """Record one outbound dependency call, including failed calls."""
@@ -177,6 +182,11 @@ class TelemetryRuntime:
         """Record a consumer processing failure in both metric paths."""
         self.metrics.kafka_error(service, topic)
         self.prometheus_metrics.kafka_consumer_errors.labels(service, topic).inc()
+
+    def record_kafka_lag(self, service: str, topic: str, value: int) -> None:
+        """Record current Kafka lag in both telemetry paths."""
+        self.metrics.set_kafka_lag(service, topic, value)
+        self.prometheus_metrics.kafka_consumer_lag.labels(service, topic).set(value)
 
 
 def _otlp_endpoint(endpoint: str | None) -> str | None:

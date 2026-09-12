@@ -2,7 +2,7 @@
 
 from prometheus_client import CollectorRegistry, generate_latest
 
-from packages.telemetry import TelemetryContext, WorkloadMetrics, structured_log
+from packages.telemetry import TelemetryContext, WorkloadMetrics, create_runtime, structured_log
 
 
 def test_context_round_trips_through_kafka_style_headers() -> None:
@@ -39,3 +39,14 @@ def test_metrics_expose_http_database_and_kafka_signals() -> None:
     assert "db_connection_acquisition_seconds" in output
     assert "db_query_duration_seconds" in output
     assert "dependency_request_duration_seconds" in output
+
+
+def test_kafka_lag_is_a_current_gauge_not_an_accumulating_sample() -> None:
+    registry = CollectorRegistry()
+    runtime = create_runtime("order-worker", registry=registry)
+
+    runtime.record_kafka_lag("order-worker", "orders.created", 12)
+    runtime.record_kafka_lag("order-worker", "orders.created", 4)
+
+    output = generate_latest(registry).decode()
+    assert 'kafka_consumer_lag{service="order-worker",topic="orders.created"} 4.0' in output

@@ -67,9 +67,8 @@ class KafkaOrderWorker:
         self._consumer.subscribe([topic])
         while True:
             message = self._consumer.poll(1.0)
+            self._record_current_lag(topic)
             if message is None:
-                if self._runtime is not None and int(os.getenv("FAULT_WORKER_DELAY_MS", "0")) > 0:
-                    self._runtime.metrics.kafka_lag("order-worker", topic, 101)
                 continue
             if message.error():
                 raise RuntimeError(str(message.error()))
@@ -100,6 +99,23 @@ class KafkaOrderWorker:
                 event = OrderCreatedEvent.model_validate_json(message.value())
                 self._worker.process(event)
             self._consumer.commit(message=message)
+
+    def _record_current_lag(self, topic: str) -> None:
+        """Export broker-derived lag for assigned consumer partitions."""
+        if self._runtime is None:
+            return
+        lag = 0
+        try:
+            assignments = self._consumer.assignment()
+            positions = self._consumer.position(assignments) if assignments else []
+            for position in positions:
+                if position.offset < 0:
+                    continue
+                _low, high = self._consumer.get_watermark_offsets(position, timeout=0.5)
+                lag += max(0, high - position.offset)
+        except Exception:
+            lag = 0
+        self._runtime.record_kafka_lag("order-worker", topic, lag)
 
 
 def build_default_worker(handler: Callable[[OrderCreatedEvent], None]) -> KafkaOrderWorker:

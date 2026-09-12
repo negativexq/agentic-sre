@@ -7,7 +7,8 @@ Deterministic SRE foundations for a future agentic investigation platform.
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Kubernetes](https://img.shields.io/badge/runtime-kind-326CE5?logo=kubernetes&logoColor=white)](https://kind.sigs.k8s.io/)
 
-> Current release: **`v0.1.1` — Live Observability Hardening**
+> Current release: **`v0.1.1` — Live Observability Hardening**  
+> Development target: **`v0.2.0` — Single-Agent Investigation Baseline**
 
 Agentic SRE is built in deliberate milestones. The current releases establish a
 measurable incident control plane before probabilistic decision-making is
@@ -45,6 +46,8 @@ order/payment workload, PostgreSQL, Redis, and Kafka.
 - Bounded, typed, audited, read-only investigation tools for metrics, logs,
   traces, and Kubernetes state.
 - Fail-closed policy evaluation and provenance-backed evidence records.
+- A credit-aware single-agent baseline built around a deterministic
+  `FakeModelProvider` and explicit opt-in live model smoke.
 
 ## Scope boundary
 
@@ -207,12 +210,21 @@ Validated the workload-to-telemetry-to-incident pipeline against real runtime
 backends in `kind`, including alert deduplication, alert resolution, live
 investigation, backend failure handling, and provenance checks.
 
-### Next: `v0.2.0`
+### Development target: `v0.2.0`
 
-The next milestone is a single evidence-grounded SRE investigator. It will
-consume the existing read-only tools and evidence contracts. Agent orchestration
-and remediation remain out of scope until explicitly introduced by a later
-release.
+The single-agent baseline consumes the existing read-only tools and evidence
+contracts. Daily checks and CI use the fake provider and make zero API calls.
+Live model execution is available only through explicit commands after the
+offline gates pass.
+
+```shell
+make agent-check       # local agent tests, live API calls: 0
+make agent-smoke       # fake-provider smoke, live API calls: 0
+make model-smoke-live  # explicit provider smoke, exactly 1 live call
+```
+
+See [ADR-003](docs/adr/ADR-003-credit-aware-single-agent-baseline.md) for the
+credit and safety boundary.
 
 ## Development conventions
 

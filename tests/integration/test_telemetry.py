@@ -54,10 +54,10 @@ def test_kafka_lag_is_a_current_gauge_not_an_accumulating_sample() -> None:
     assert 'kafka_consumer_lag{service="order-worker",topic="orders.created"} 4.0' in output
 
 
-def test_worker_failure_alert_uses_rate_error_signal() -> None:
+def test_worker_failure_alert_uses_bounded_error_burst_signal() -> None:
     rules = Path("infra/observability/prometheus-rules.yml").read_text(encoding="utf-8")
     manifest = Path("infra/kubernetes/observability.yaml").read_text(encoding="utf-8")
-    expression = 'sum(rate(kafka_consumer_errors_total{service="order-worker"}[30s])) > 0'
+    expression = 'sum(increase(kafka_consumer_errors_total{service="order-worker"}[30s])) > 0'
     old_expression = 'sum(kafka_consumer_errors_total{service="order-worker"}) > 0'
     assert expression in rules
     assert expression in manifest

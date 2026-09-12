@@ -12,6 +12,7 @@ from packages.evals.live_fixtures import (
     LiveBenchmarkEnvironment,
     fixture_registry_is_complete,
     preflight_evidence,
+    select_harness_scenarios,
 )
 from packages.evals.runner import OfflineBenchmarkReport, run_offline_benchmark
 
@@ -35,4 +36,5 @@ __all__ = [
     "LiveBenchmarkEnvironment",
     "fixture_registry_is_complete",
     "preflight_evidence",
+    "select_harness_scenarios",
 ]

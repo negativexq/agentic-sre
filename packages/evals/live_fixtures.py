@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from uuid import UUID, uuid4
 
@@ -30,9 +31,14 @@ from packages.tools.contracts import ToolResponse
 CONTROL_PLANE_DEFAULT = "http://localhost:18081"
 ORDER_SERVICE_DEFAULT = "http://localhost:18000"
 PAYMENT_SERVICE_DEFAULT = "http://localhost:18001"
+PROMETHEUS_DEFAULT = "http://localhost:19090"
 POOL_PRESSURE_CONCURRENCY = 18
 POOL_PRESSURE_HOLD_MS = 5_000
 POOL_PRESSURE_WAVES = 3
+POD_CRASH_RESTARTS = 2
+POD_CRASH_RESTART_TIMEOUT_SECONDS = 30
+POD_CRASH_HEALTH_TIMEOUT_SECONDS = 30
+POD_CRASH_PROMETHEUS_TIMEOUT_SECONDS = 30
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,7 +84,7 @@ FIXTURE_DEFINITIONS: tuple[FixtureDefinition, ...] = (
     ),
     FixtureDefinition(
         "payment_pod_crash",
-        "PaymentServiceUnavailable",
+        "PaymentRuntimeInstability",
         "payment-service",
         ("kubernetes_container_restarts", "kubernetes_events"),
     ),
@@ -179,13 +185,17 @@ class LiveBenchmarkEnvironment:
         control_plane_url: str = CONTROL_PLANE_DEFAULT,
         order_url: str = ORDER_SERVICE_DEFAULT,
         payment_url: str = PAYMENT_SERVICE_DEFAULT,
+        prometheus_url: str = PROMETHEUS_DEFAULT,
         namespace: str = "sre-demo",
     ) -> None:
         self.control_plane = ControlPlaneClient(control_plane_url)
         self.order_url = order_url.rstrip("/")
         self.payment_url = payment_url.rstrip("/")
+        self.prometheus_url = prometheus_url.rstrip("/")
         self.namespace = namespace
         self._original_env: dict[str, list[dict[str, str]]] = {}
+        self._payment_restart_baseline: int | None = None
+        self._payment_process_start_baseline: float | None = None
 
     @staticmethod
     def _post_json(url: str, value: BaseModel | dict[str, Any]) -> Any:
@@ -364,7 +374,68 @@ class LiveBenchmarkEnvironment:
         with ThreadPoolExecutor(max_workers=min(count, POOL_PRESSURE_CONCURRENCY)) as executor:
             list(executor.map(lambda _: self._payment_requests(1), range(count)))
 
-    def _restart_payment_container(self) -> None:
+    def _payment_restart_count(self) -> int:
+        kubernetes = importlib.import_module("kubernetes")
+        kubernetes_config = importlib.import_module("kubernetes.config")
+        kubernetes_config.load_kube_config()
+        core = kubernetes.client.CoreV1Api()
+        pods = core.list_namespaced_pod(self.namespace, label_selector="app=payment-service").items
+        if not pods:
+            raise RuntimeError("payment pod not found")
+        return sum(
+            item.restart_count for pod in pods for item in (pod.status.container_statuses or [])
+        )
+
+    def _payment_process_start_time(self) -> float | None:
+        query = (
+            'service_process_start_time_seconds{job="payment-service",service="payment-service"}'
+        )
+        request = Request(
+            f"{self.prometheus_url}/api/v1/query?{urlencode({'query': query})}",
+            method="GET",
+        )
+        try:
+            with urlopen(request, timeout=10) as response:
+                payload = json.loads(response.read(1_000_001))
+        except (HTTPError, URLError, TimeoutError) as error:
+            raise RuntimeError("Prometheus process-start query failed") from error
+        results = payload.get("data", {}).get("result", [])
+        if not isinstance(results, list) or not results:
+            return None
+        value = results[0].get("value")
+        if not isinstance(value, list) or len(value) < 2:
+            return None
+        try:
+            return float(value[1])
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _wait_until(
+        predicate: Callable[[], bool], *, timeout_seconds: float, description: str
+    ) -> None:
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            if predicate():
+                return
+            time.sleep(1)
+        raise TimeoutError(description)
+
+    def _wait_for_payment_health(self) -> None:
+        def healthy() -> bool:
+            try:
+                payload = self._get_json(f"{self.payment_url}/health")
+                return isinstance(payload, dict) and payload.get("status") == "ok"
+            except RuntimeError:
+                return False
+
+        self._wait_until(
+            healthy,
+            timeout_seconds=POD_CRASH_HEALTH_TIMEOUT_SECONDS,
+            description="payment health did not recover after restart",
+        )
+
+    def _restart_payment_container_once(self) -> None:
         kubernetes = importlib.import_module("kubernetes")
         kubernetes_config = importlib.import_module("kubernetes.config")
         kubernetes_stream = importlib.import_module("kubernetes.stream")
@@ -384,6 +455,41 @@ class LiveBenchmarkEnvironment:
             stdout=True,
             tty=False,
         )
+
+    def _restart_payment_container_repeatedly(self) -> None:
+        previous_restart_count = self._payment_restart_baseline
+        previous_process_start = self._payment_process_start_baseline
+        if previous_restart_count is None or previous_process_start is None:
+            raise RuntimeError("payment restart baseline was not captured")
+        previous_process_start_value = previous_process_start
+        for _ in range(POD_CRASH_RESTARTS):
+            self._restart_payment_container_once()
+            expected_restart_count = previous_restart_count + 1
+
+            def restart_observed(expected: int = expected_restart_count) -> bool:
+                return self._payment_restart_count() >= expected
+
+            self._wait_until(
+                restart_observed,
+                timeout_seconds=POD_CRASH_RESTART_TIMEOUT_SECONDS,
+                description="payment container restart was not observed",
+            )
+            self._wait_for_payment_health()
+
+            def process_start_observed(previous: float = previous_process_start_value) -> bool:
+                current = self._payment_process_start_time()
+                return current is not None and current > previous
+
+            self._wait_until(
+                process_start_observed,
+                timeout_seconds=POD_CRASH_PROMETHEUS_TIMEOUT_SECONDS,
+                description="Prometheus did not observe the new payment process start",
+            )
+            previous_restart_count = expected_restart_count
+            observed = self._payment_process_start_time()
+            if observed is None:
+                raise RuntimeError("Prometheus process-start observation disappeared")
+            previous_process_start_value = observed
 
     def _record_payment_config_change(self) -> None:
         now = datetime.now(UTC)
@@ -427,7 +533,10 @@ class LiveBenchmarkEnvironment:
                 "order-worker", {"FAULT_WORKER_DELAY_MS": "0", "FAULT_WORKER_FAILURE": "true"}
             )
         elif fixture == "payment_pod_crash":
-            self._restart_payment_container()
+            self._payment_restart_baseline = self._payment_restart_count()
+            self._payment_process_start_baseline = self._payment_process_start_time()
+            if self._payment_process_start_baseline is None:
+                raise RuntimeError("Prometheus process-start baseline unavailable")
         elif fixture == "payment_config_change":
             self._kubectl_patch_env("payment-service", {"FAULT_PAYMENT_DELAY_MS": "3500"})
             self._record_payment_config_change()
@@ -445,6 +554,7 @@ class LiveBenchmarkEnvironment:
                 # The crash itself is the controlled stimulus.  Sending a request
                 # through the same port-forward would turn expected downtime into
                 # a harness transport failure and can tear down the forward.
+                self._restart_payment_container_repeatedly()
                 return
             if fixture == "payment_db_pool_pressure":
                 for _ in range(POOL_PRESSURE_WAVES):
@@ -596,6 +706,20 @@ def fixture_registry_is_complete() -> bool:
     ) == 10
 
 
+def select_harness_scenarios(requested: str | None = None) -> tuple[FrozenIncident, ...]:
+    """Select validated development scenarios without changing the frozen dataset."""
+    if requested is None or not requested.strip():
+        return FROZEN_DATASET
+    by_id = {item.scenario_id: item for item in FROZEN_DATASET}
+    ids = tuple(item.strip() for item in requested.split(",") if item.strip())
+    unknown = sorted(set(ids) - set(by_id))
+    if unknown:
+        raise ValueError(f"unknown harness scenarios: {','.join(unknown)}")
+    if not ids:
+        raise ValueError("harness scenario selection must contain at least one scenario ID")
+    return tuple(by_id[item] for item in ids)
+
+
 def preflight_evidence(
     registry: ReadOnlyToolRegistry,
     incident: Incident,
@@ -655,4 +779,5 @@ __all__ = [
     "LiveBenchmarkEnvironment",
     "fixture_registry_is_complete",
     "preflight_evidence",
+    "select_harness_scenarios",
 ]

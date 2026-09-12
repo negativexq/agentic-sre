@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -15,9 +16,15 @@ from packages.evals import (
     LiveBenchmarkEnvironment,
     fixture_registry_is_complete,
     preflight_evidence,
+    select_harness_scenarios,
 )
 from packages.investigation.registry import live_observability_registry
 from packages.tools import ControlPlaneChangeReader
+
+
+def selected_scenarios() -> tuple[Any, ...]:
+    """Return validated development selections without changing the frozen dataset."""
+    return select_harness_scenarios(os.getenv("SRE_HARNESS_SCENARIOS"))
 
 
 def main() -> int:
@@ -33,7 +40,9 @@ def main() -> int:
     )
     lifecycle = FixtureLifecycle(environment)
     records: list[dict[str, Any]] = []
-    for scenario in FROZEN_DATASET:
+    scenarios = selected_scenarios()
+    filtered = len(scenarios) != len(FROZEN_DATASET)
+    for scenario in scenarios:
 
         def preflight(
             incident: Incident, alerts: tuple[Alert, ...], fixture: str = scenario.fixture
@@ -61,6 +70,10 @@ def main() -> int:
         ):
             raise RuntimeError(f"fixture qualification failed: {scenario.scenario_id}")
         records.append(record)
+        print(f"{scenario.scenario_id} PASS", flush=True)
+    if filtered:
+        print(json.dumps({"selected": [item.scenario_id for item in scenarios], "qualified": True}))
+        return 0
     report = {
         "architecture": "real-fault-to-alertmanager-to-incident harness",
         "scenarios": records,

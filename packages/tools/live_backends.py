@@ -442,10 +442,23 @@ class KubernetesBackend:
                 "CURRENT_STATE",
             )
         if operation == "get_events":
-            events = core.list_namespaced_event(
-                self._namespace,
-                field_selector=f"involvedObject.name={name}",
-            ).items
+            pods = core.list_namespaced_pod(self._namespace, label_selector=f"app={name}").items
+            object_names = [pod.metadata.name for pod in pods[:50]] + [name]
+            events_by_key: dict[str, Any] = {}
+            for object_name in object_names:
+                events = core.list_namespaced_event(
+                    self._namespace,
+                    field_selector=f"involvedObject.name={object_name}",
+                ).items
+                for event in events:
+                    key = getattr(event.metadata, "uid", None) or (
+                        object_name,
+                        event.reason,
+                        event.message,
+                        str(event.last_timestamp),
+                    )
+                    events_by_key[str(key)] = event
+            events = list(events_by_key.values())
             return self._annotate(
                 {
                     "backend": "kubernetes",
@@ -455,6 +468,7 @@ class KubernetesBackend:
                             "reason": event.reason,
                             "message": event.message,
                             "type": event.type,
+                            "involved_object": event.involved_object.name,
                             "last_timestamp": str(event.last_timestamp),
                         }
                         for event in events[:100]

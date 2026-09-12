@@ -223,11 +223,10 @@ data:
             for: 15s
             labels: {severity: critical, namespace: sre-demo, service: order-worker}
             annotations: {summary: Order worker consumer processing errors are high}
-          - alert: PaymentServiceUnavailable
-            expr: min(up{job="payment-service"}) < 1
-            for: 15s
+          - alert: PaymentRuntimeInstability
+            expr: sum(changes(service_process_start_time_seconds{job="payment-service",service="payment-service"}[1m])) >= 2
             labels: {severity: critical, namespace: sre-demo, service: payment-service}
-            annotations: {summary: Payment service is unavailable}
+            annotations: {summary: Payment runtime stability is degraded}
           - alert: PaymentRequestLatencyHigh
             expr: sum(rate(http_request_duration_seconds_sum{service="payment-service",route!~"/(health|metrics|__faults).*"}[30s])) / sum(rate(http_request_duration_seconds_count{service="payment-service",route!~"/(health|metrics|__faults).*"}[30s])) > 0.5
             for: 15s

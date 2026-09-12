@@ -1,5 +1,7 @@
 """Minimal workload metrics boundary backed by Prometheus client."""
 
+import time
+
 from prometheus_client import Counter, Gauge, Histogram
 from prometheus_client.registry import CollectorRegistry
 
@@ -7,7 +9,20 @@ from prometheus_client.registry import CollectorRegistry
 class WorkloadMetrics:
     """Stable HTTP, database, and Kafka metric instruments."""
 
-    def __init__(self, registry: CollectorRegistry | None = None) -> None:
+    def __init__(
+        self,
+        registry: CollectorRegistry | None = None,
+        *,
+        service_name: str | None = None,
+    ) -> None:
+        self.process_start_time = Gauge(
+            "service_process_start_time_seconds",
+            "Unix timestamp when the workload process started",
+            ["service"],
+            registry=registry,
+        )
+        if service_name is not None:
+            self.process_start_time.labels(service=service_name).set(time.time())
         self.http_requests = Counter(
             "http_requests_total",
             "Total HTTP requests",

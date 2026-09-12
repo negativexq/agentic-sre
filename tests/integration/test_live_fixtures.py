@@ -16,6 +16,7 @@ from packages.contracts import (
 )
 from packages.evals import FIXTURE_BY_NAME, FROZEN_DATASET, FixtureLifecycle
 from packages.evals.live_fixtures import (
+    POD_CRASH_RESTARTS,
     POOL_PRESSURE_CONCURRENCY,
     POOL_PRESSURE_HOLD_MS,
     POOL_PRESSURE_WAVES,
@@ -143,4 +144,58 @@ def test_payment_pod_crash_does_not_send_through_downtime_port_forward(
         raise AssertionError("pod-crash stimulus must not send a payment request")
 
     monkeypatch.setattr(environment, "_payment_requests", fail_if_called)
+    environment._payment_restart_baseline = 0
+    environment._payment_process_start_baseline = 1.0
+    monkeypatch.setattr(environment, "_restart_payment_container_repeatedly", lambda: None)
     environment.stimulate("payment_pod_crash")
+
+
+def test_payment_pod_crash_prepare_only_captures_baseline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    environment = LiveBenchmarkEnvironment()
+    calls: list[str] = []
+    monkeypatch.setattr(environment, "_payment_fault", lambda **_: calls.append("payment_fault"))
+    monkeypatch.setattr(environment, "_order_fault", lambda **_: calls.append("order_fault"))
+    monkeypatch.setattr(environment, "_restore_env", lambda _: calls.append("restore"))
+    monkeypatch.setattr(environment, "_payment_restart_count", lambda: 4)
+    monkeypatch.setattr(environment, "_payment_process_start_time", lambda: 100.0)
+    monkeypatch.setattr(
+        environment, "_restart_payment_container_once", lambda: calls.append("restart")
+    )
+
+    environment.prepare("payment_pod_crash")
+
+    assert environment._payment_restart_baseline == 4
+    assert environment._payment_process_start_baseline == 100.0
+    assert "restart" not in calls
+
+
+def test_payment_pod_crash_stimulus_confirms_two_restart_cycles(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    environment = LiveBenchmarkEnvironment()
+    environment._payment_restart_baseline = 4
+    environment._payment_process_start_baseline = 100.0
+    state = {"restarts": 4, "starts": 100.0, "calls": 0}
+
+    def restart() -> None:
+        state["calls"] += 1
+        state["restarts"] += 1
+        state["starts"] += 1
+
+    monkeypatch.setattr(environment, "_restart_payment_container_once", restart)
+    monkeypatch.setattr(environment, "_payment_restart_count", lambda: int(state["restarts"]))
+    monkeypatch.setattr(environment, "_payment_process_start_time", lambda: float(state["starts"]))
+    monkeypatch.setattr(environment, "_wait_for_payment_health", lambda: None)
+
+    environment.stimulate("payment_pod_crash")
+
+    assert state["calls"] == POD_CRASH_RESTARTS == 2
+    assert state["restarts"] == 6
+
+
+def test_payment_pod_crash_uses_runtime_instability_alert() -> None:
+    definition = FIXTURE_BY_NAME["payment_pod_crash"]
+
+    assert definition.alert_name == "PaymentRuntimeInstability"

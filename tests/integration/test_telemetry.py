@@ -43,6 +43,19 @@ def test_metrics_expose_http_database_and_kafka_signals() -> None:
     assert "dependency_request_duration_seconds" in output
 
 
+def test_metrics_expose_process_start_time_for_named_service() -> None:
+    registry = CollectorRegistry()
+    WorkloadMetrics(registry, service_name="payment-service")
+
+    output = generate_latest(registry).decode()
+
+    assert 'service_process_start_time_seconds{service="payment-service"}' in output
+    value = float(
+        output.split('service_process_start_time_seconds{service="payment-service"} ')[1].split()[0]
+    )
+    assert value > 0
+
+
 def test_kafka_lag_is_a_current_gauge_not_an_accumulating_sample() -> None:
     registry = CollectorRegistry()
     runtime = create_runtime("order-worker", registry=registry)

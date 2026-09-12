@@ -244,7 +244,7 @@ def create_runtime(
         service_name,
         tracer,
         RuntimeMetrics(meter),
-        WorkloadMetrics(registry),
+        WorkloadMetrics(registry, service_name=service_name),
         logger,
     )
 

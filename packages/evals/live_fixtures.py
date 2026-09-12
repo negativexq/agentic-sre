@@ -31,6 +31,7 @@ CONTROL_PLANE_DEFAULT = "http://localhost:18081"
 ORDER_SERVICE_DEFAULT = "http://localhost:18000"
 PAYMENT_SERVICE_DEFAULT = "http://localhost:18001"
 POOL_PRESSURE_CONCURRENCY = 18
+POOL_PRESSURE_HOLD_MS = 3_500
 
 
 @dataclass(frozen=True, slots=True)
@@ -413,7 +414,7 @@ class LiveBenchmarkEnvironment:
         elif fixture == "order_latency_spike":
             self._order_fault(delay_ms=700)
         elif fixture == "payment_db_pool_pressure":
-            self._payment_fault(db_hold_ms=1_500)
+            self._payment_fault(db_hold_ms=POOL_PRESSURE_HOLD_MS)
         elif fixture == "order_db_query_latency":
             self._order_fault(db_query_delay_ms=700)
         elif fixture == "order_worker_lag":

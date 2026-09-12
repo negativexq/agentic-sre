@@ -1,5 +1,6 @@
 """Change, evidence, and policy foundation tests."""
 
+import json
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -9,6 +10,7 @@ from packages.changes.service import ChangeService
 from packages.contracts import (
     ActionRequest,
     ActionType,
+    ChangeRecord,
     ChangeScope,
     ChangeType,
     Evidence,
@@ -236,6 +238,51 @@ def test_change_reader_selects_factual_scope_per_operation(monkeypatch: pytest.M
     reader.query("recent_configuration_changes", parameters)
 
     assert requested_scopes == [ChangeScope.DEPLOYMENT.value, ChangeScope.CONFIGURATION.value]
+
+
+def test_change_reader_parses_json_records_at_the_http_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Strict domain validation accepts serialized UUID/datetime values from HTTP JSON."""
+    record = ChangeRecord(
+        timestamp=NOW,
+        resource_type="Deployment",
+        resource_name="order-worker",
+        change_type=ChangeType.UPDATED,
+        scope=ChangeScope.DEPLOYMENT,
+        before={"revision": "a"},
+        after={"revision": "b"},
+        revision="b",
+        source="deterministic-harness",
+    )
+
+    class Response:
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self, _limit: int) -> bytes:
+            return json.dumps([record.model_dump(mode="json")]).encode()
+
+    def fake_urlopen(_request: object, timeout: float) -> Response:
+        assert timeout == 5.0
+        return Response()
+
+    monkeypatch.setattr("packages.tools.live_backends.urlopen", fake_urlopen)
+    reader = ControlPlaneChangeReader("http://control-plane/api/v1/changes")
+
+    assert reader.query(
+        "recent_deployment_changes",
+        {
+            "deployment": "order-worker",
+            "observation_window": {
+                "starts_at": NOW.isoformat(),
+                "ends_at": (NOW + timedelta(minutes=5)).isoformat(),
+            },
+        },
+    ) == [record]
 
 
 def test_evidence_rejects_cross_incident_tool_reference() -> None:

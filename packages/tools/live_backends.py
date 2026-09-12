@@ -590,7 +590,7 @@ class ControlPlaneChangeReader:
                 operation=operation,
             )
         try:
-            return [ChangeRecord.model_validate(item) for item in payload[:100]]
+            return [ChangeRecord.model_validate_json(json.dumps(item)) for item in payload[:100]]
         except ValueError as error:
             raise BackendProtocolError(
                 ToolErrorCode.BACKEND_RESPONSE_INVALID,

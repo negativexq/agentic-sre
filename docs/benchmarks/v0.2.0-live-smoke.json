@@ -2,7 +2,7 @@
   "scenarios": [
     {
       "actual_api_calls": 2,
-      "error_code": "TOOL_ARGUMENT_SCHEMA_INVALID",
+      "error_code": "INVALID_QUERY",
       "evidence_count": 1,
       "hypothesis_submitted": false,
       "incident_id": "a16a30ab-544e-472b-9b8d-ca27bcce7143",
@@ -19,8 +19,8 @@
       "turns": [
         {
           "error_path": null,
-          "input_tokens": 1799,
-          "output_tokens": 100,
+          "input_tokens": 2136,
+          "output_tokens": 78,
           "requested_tool_count": 1,
           "requested_tool_names": [
             "kafka_consumer_lag"
@@ -28,11 +28,20 @@
           "selected_decision": "request_investigation_tools",
           "summaries": [
             {
+              "argument_keys": [
+                "consumer"
+              ],
+              "argument_types": {
+                "consumer": "str"
+              },
+              "argument_value_hashes": {
+                "consumer": "927d29a7d1135ba5ceddf76e691fabf197e5a3715f731d5bdd1fd9b504789922"
+              },
               "arguments": {
                 "consumer": "order-worker"
               },
               "evidence_ids": [
-                "375c8d6e-5d19-44e4-a1fb-082982f1f65d"
+                "b8cbbfea-0a65-43b6-8d52-9a9664c1fad8"
               ],
               "status": "SUCCESS",
               "tool": "kafka_consumer_lag"
@@ -43,22 +52,128 @@
           "validation_stage": null
         },
         {
-          "error_path": "$.pattern",
-          "input_tokens": 2012,
-          "output_tokens": 106,
-          "requested_tool_count": 1,
-          "requested_tool_names": [],
+          "error_path": "$.requests",
+          "input_tokens": 2409,
+          "output_tokens": 128,
+          "requested_tool_count": 5,
+          "requested_tool_names": [
+            "kubernetes_deployment",
+            "kubernetes_pods",
+            "kubernetes_events",
+            "recent_deployment_changes",
+            "recent_configuration_changes"
+          ],
           "selected_decision": "request_investigation_tools",
-          "summaries": [],
+          "summaries": [
+            {
+              "argument_keys": [
+                "deployment"
+              ],
+              "argument_types": {
+                "deployment": "str"
+              },
+              "argument_value_hashes": {
+                "deployment": "927d29a7d1135ba5ceddf76e691fabf197e5a3715f731d5bdd1fd9b504789922"
+              },
+              "arguments": {
+                "deployment": "order-worker"
+              },
+              "evidence_ids": [
+                "b6258d78-fca5-4738-a8c0-569d4bf1a691"
+              ],
+              "status": "SUCCESS",
+              "tool": "kubernetes_deployment"
+            },
+            {
+              "argument_keys": [
+                "deployment"
+              ],
+              "argument_types": {
+                "deployment": "str"
+              },
+              "argument_value_hashes": {
+                "deployment": "927d29a7d1135ba5ceddf76e691fabf197e5a3715f731d5bdd1fd9b504789922"
+              },
+              "arguments": {
+                "deployment": "order-worker"
+              },
+              "evidence_ids": [
+                "293e0857-520e-4ce2-ab1d-6c67c3a3a0bd"
+              ],
+              "status": "SUCCESS",
+              "tool": "kubernetes_pods"
+            },
+            {
+              "argument_keys": [
+                "deployment"
+              ],
+              "argument_types": {
+                "deployment": "str"
+              },
+              "argument_value_hashes": {
+                "deployment": "927d29a7d1135ba5ceddf76e691fabf197e5a3715f731d5bdd1fd9b504789922"
+              },
+              "arguments": {
+                "deployment": "order-worker"
+              },
+              "evidence_ids": [
+                "00a7e8ba-e35f-4509-94e8-93b84abf7419"
+              ],
+              "status": "SUCCESS",
+              "tool": "kubernetes_events"
+            },
+            {
+              "argument_keys": [
+                "deployment"
+              ],
+              "argument_types": {
+                "deployment": "str"
+              },
+              "argument_value_hashes": {
+                "deployment": "927d29a7d1135ba5ceddf76e691fabf197e5a3715f731d5bdd1fd9b504789922"
+              },
+              "arguments": {
+                "deployment": "order-worker"
+              },
+              "backend": null,
+              "error_code": "INVALID_QUERY",
+              "evidence_ids": [],
+              "http_status": null,
+              "operation": null,
+              "status": "INVALID_QUERY",
+              "tool": "recent_deployment_changes"
+            },
+            {
+              "argument_keys": [
+                "deployment"
+              ],
+              "argument_types": {
+                "deployment": "str"
+              },
+              "argument_value_hashes": {
+                "deployment": "927d29a7d1135ba5ceddf76e691fabf197e5a3715f731d5bdd1fd9b504789922"
+              },
+              "arguments": {
+                "deployment": "order-worker"
+              },
+              "backend": null,
+              "error_code": "INVALID_QUERY",
+              "evidence_ids": [],
+              "http_status": null,
+              "operation": null,
+              "status": "INVALID_QUERY",
+              "tool": "recent_configuration_changes"
+            }
+          ],
           "turn": 2,
           "validation_result": "FAIL",
-          "validation_stage": "TOOL_ARGUMENTS"
+          "validation_stage": "TOOL_EXECUTION"
         }
       ],
-      "validation_path": "$.pattern",
-      "validation_stage": "TOOL_ARGUMENTS",
-      "validator": "RegisteredTool.argument_model"
+      "validation_path": "$.requests",
+      "validation_stage": "TOOL_EXECUTION",
+      "validator": "BoundedToolExecutor"
     }
   ],
-  "total_live_api_calls": 43
+  "total_live_api_calls": 2
 }

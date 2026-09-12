@@ -19,6 +19,7 @@ from packages.provider import (
     ProviderErrorCode,
 )
 from packages.provider.openai import (
+    DECISION_FUNCTION_DESCRIPTIONS,
     DECISION_FUNCTION_NAMES,
     LiveModelConfig,
     _compile_strict_schema,
@@ -508,6 +509,45 @@ def test_responses_request_exposes_only_three_decision_functions() -> None:
     assert all(tool["type"] == "function" for tool in tools)
     assert all(tool["strict"] is True for tool in tools)
     assert all(tool["parameters"]["additionalProperties"] is False for tool in tools)
+
+
+def test_final_turn_exposes_only_terminal_decision_functions() -> None:
+    """A final model turn cannot request evidence without a future interpreter."""
+    captured: dict[str, object] = {}
+
+    class Transport:
+        def create(self, **kwargs: object) -> object:
+            captured.update(kwargs)
+            return _envelope([_function_call(function_arguments("stop_investigation"))])
+
+    provider = OpenAIProvider(
+        budget=LiveModelBudget(1),
+        config=LiveModelConfig(enabled=True),
+        transport=Transport(),
+        max_retry=0,
+    )
+    provider.complete(
+        function_request().model_copy(
+            update={
+                "allowed_decision_functions": ("submit_root_cause_hypothesis", "stop_investigation")
+            }
+        )
+    )
+
+    tools = captured["tools"]
+    assert isinstance(tools, list)
+    assert [tool["name"] for tool in tools] == [
+        "submit_root_cause_hypothesis",
+        "stop_investigation",
+    ]
+
+
+def test_decision_function_descriptions_are_semantically_distinct() -> None:
+    """Each provider transport function describes its own decision meaning."""
+    assert "additional" in DECISION_FUNCTION_DESCRIPTIONS["request_investigation_tools"]
+    assert "terminal" in DECISION_FUNCTION_DESCRIPTIONS["submit_root_cause_hypothesis"]
+    assert "terminate" in DECISION_FUNCTION_DESCRIPTIONS["stop_investigation"]
+    assert len(set(DECISION_FUNCTION_DESCRIPTIONS.values())) == len(DECISION_FUNCTION_NAMES)
 
 
 @pytest.mark.parametrize(

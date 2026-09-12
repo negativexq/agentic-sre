@@ -8,8 +8,8 @@ import sys
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
-from packages.contracts import Incident
-from packages.evals import FROZEN_DATASET, grade_evidence, grade_hypothesis
+from packages.contracts import Alert, Incident
+from packages.evals import FROZEN_DATASET, capability_matrix, grade_evidence, grade_hypothesis
 from packages.investigation import InvestigationLimits, InvestigationRuntime
 from packages.investigation.registry import live_observability_registry
 from packages.provider import LiveModelBudget, OpenAIProvider
@@ -30,6 +30,20 @@ def _get_incidents() -> dict[str, Incident]:
     return {str(item.incident_id): item for item in incidents}
 
 
+def _get_alerts(incident_id: str) -> tuple[Alert, ...]:
+    """Load normalized alert scope without exposing evaluator metadata."""
+    try:
+        with urlopen(
+            f"{CONTROL_PLANE_URL}/api/v1/incidents/{incident_id}/alerts", timeout=10
+        ) as response:
+            payload = json.loads(response.read(1_000_001))
+    except (HTTPError, URLError, TimeoutError) as error:
+        raise RuntimeError("control plane alert lookup failed") from error
+    if not isinstance(payload, list):
+        raise RuntimeError("control plane returned an invalid alert list")
+    return tuple(Alert.model_validate(item) for item in payload)
+
+
 def main() -> int:
     """Refuse to start unless all ten worst-case scenario calls fit the budget."""
     raw_ids = os.getenv("SRE_BENCHMARK_INCIDENT_IDS", "")
@@ -44,12 +58,17 @@ def main() -> int:
     if len(selected) != len(FROZEN_DATASET):
         raise RuntimeError("benchmark-live incident IDs must all exist in the control plane")
 
-    provider = OpenAIProvider(budget=budget)
+    # The frozen benchmark disables retries so its worst-case is exactly 10 * 3 attempts.
+    provider = OpenAIProvider(budget=budget, max_retry=0)
     registry = live_observability_registry(
         "http://localhost:19090",
         "http://localhost:19300",
         "http://localhost:19320",
     )
+    matrix = capability_matrix(registry=registry)
+    if not all(item.available for item in matrix):
+        missing = [item.scenario_id for item in matrix if not item.available]
+        raise RuntimeError(f"benchmark capability matrix incomplete: {','.join(missing)}")
     hypothesis_grades = []
     evidence_grades = []
     results = []
@@ -61,7 +80,7 @@ def main() -> int:
             model="gpt-5.6-luna",
             reasoning_effort="none",
             limits=InvestigationLimits(),
-        ).run(incident)
+        ).run(incident, alerts=_get_alerts(str(incident.incident_id)))
         hypothesis_grades.append(grade_hypothesis(result.hypothesis, scenario))
         evidence_grades.append(grade_evidence(result))
         actual_api_calls.append(result.usage.actual_api_calls)

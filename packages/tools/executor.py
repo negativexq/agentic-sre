@@ -91,9 +91,15 @@ class BoundedToolExecutor:
             data = future.result(timeout=request.timeout_ms / 1000)
             if not isinstance(data, dict):
                 raise ValueError("tool backend returned a non-object result")
+            effective_window = data.get("__effective_time_window")
+            response_data = {
+                key: value for key, value in data.items() if key != "__effective_time_window"
+            }
             encoded = json.dumps(data, default=str, separators=(",", ":")).encode("utf-8")
             result_count = (
-                len(data.get("records", [])) if isinstance(data.get("records", []), list) else 1
+                len(response_data.get("records", []))
+                if isinstance(response_data.get("records", []), list)
+                else 1
             )
             if result_count > request.max_results or len(encoded) > request.max_bytes:
                 result: ToolResult = ToolFailure(
@@ -104,8 +110,9 @@ class BoundedToolExecutor:
             else:
                 result = ToolResponse(
                     tool_call_id=request.tool_call_id,
-                    data=data,
+                    data=response_data,
                     result_count=result_count,
+                    effective_time_window=effective_window,
                 )
         except TimeoutError:
             result = ToolFailure(

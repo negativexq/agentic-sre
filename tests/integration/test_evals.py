@@ -1,6 +1,12 @@
 """Frozen dataset and zero-credit grader tests."""
 
-from packages.evals import FROZEN_DATASET, frozen_dataset_hash, run_offline_benchmark
+from packages.evals import (
+    FROZEN_DATASET,
+    capability_matrix,
+    frozen_dataset_hash,
+    run_offline_benchmark,
+)
+from packages.investigation.registry import live_observability_registry
 
 
 def test_frozen_dataset_is_ten_cases_with_stable_hash() -> None:
@@ -19,3 +25,11 @@ def test_offline_benchmark_uses_zero_live_api_calls() -> None:
     assert report.composite_rca == 1
     assert report.valid_evidence_reference_rate == 1
     assert report.total_live_api_calls == 0
+
+
+def test_live_registry_covers_every_frozen_scenario_category() -> None:
+    """The live registry must expose evidence paths before paid benchmarking."""
+    registry = live_observability_registry("http://prometheus", "http://loki", "http://tempo")
+    matrix = capability_matrix(registry=registry)
+    assert len(matrix) == 10
+    assert all(item.available for item in matrix)

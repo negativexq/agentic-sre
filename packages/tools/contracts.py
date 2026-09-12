@@ -6,6 +6,8 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from packages.contracts import TimeWindow
+
 
 class ToolErrorCode(StrEnum):
     """Stable investigation tool failure codes."""
@@ -41,6 +43,7 @@ class ToolResponse(BaseModel):
     tool_call_id: UUID
     data: dict[str, Any]
     result_count: int = Field(ge=0)
+    effective_time_window: TimeWindow | None = None
 
 
 class ToolFailure(BaseModel):

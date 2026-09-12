@@ -149,10 +149,15 @@ def test_unknown_hypothesis_mechanism_has_a_typed_semantic_failure() -> None:
 
 def test_model_budget_stops_after_three_turns() -> None:
     """A scripted agent cannot continue beyond the hard three-turn limit."""
-    call_tools = {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "service_latency"}]}
-    provider = FakeModelProvider([call_tools, call_tools, call_tools, call_tools])
+    calls = [
+        {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "service_latency"}]},
+        {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "metric_1"}]},
+        {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "metric_2"}]},
+        {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "metric_3"}]},
+    ]
+    provider = FakeModelProvider(calls)
 
-    result = InvestigationRuntime(provider, registry()).run(incident())
+    result = InvestigationRuntime(provider, registry(4)).run(incident())
 
     assert result.termination_reason is TerminationReason.MODEL_CALL_LIMIT
     assert result.usage.model_calls == 3
@@ -176,8 +181,9 @@ def test_final_allowed_call_can_submit_a_hypothesis() -> None:
         }
 
     call_tools = {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "service_latency"}]}
+    second_call = {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "metric_1"}]}
     result = InvestigationRuntime(
-        FakeModelProvider([call_tools, call_tools, submit]), registry()
+        FakeModelProvider([call_tools, second_call, submit]), registry(2)
     ).run(incident())
 
     assert result.termination_reason is TerminationReason.HYPOTHESIS_SUBMITTED
@@ -189,13 +195,14 @@ def test_final_allowed_call_can_submit_a_hypothesis() -> None:
 def test_final_allowed_call_can_stop_with_a_valid_reason() -> None:
     """A terminal STOP on call three keeps its actual termination semantics."""
     call_tools = {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "service_latency"}]}
+    second_call = {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "metric_1"}]}
     stop = {
         "decision": DecisionType.STOP,
         "stop_reason": StopReason.INSUFFICIENT_EVIDENCE,
     }
     audit = InMemoryInvestigationAuditSink()
     result = InvestigationRuntime(
-        FakeModelProvider([call_tools, call_tools, stop]), registry(), audit_sink=audit
+        FakeModelProvider([call_tools, second_call, stop]), registry(2), audit_sink=audit
     ).run(incident())
 
     assert result.termination_reason is TerminationReason.AGENT_STOPPED
@@ -206,6 +213,31 @@ def test_final_allowed_call_can_stop_with_a_valid_reason() -> None:
     assert audit.records[0].terminal_decision is DecisionType.STOP
     assert audit.records[0].stop_reason is StopReason.INSUFFICIENT_EVIDENCE
     assert audit.records[0].termination_reason is TerminationReason.AGENT_STOPPED
+
+
+def test_final_model_request_exposes_only_terminal_decisions() -> None:
+    """The runtime removes CALL_TOOLS before the final provider invocation."""
+    call_tools = {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "service_latency"}]}
+    second_call = {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "metric_1"}]}
+    stop = {"decision": DecisionType.STOP, "stop_reason": StopReason.INSUFFICIENT_EVIDENCE}
+    provider = FakeModelProvider([call_tools, second_call, stop])
+
+    result = InvestigationRuntime(provider, registry(2)).run(incident())
+
+    assert result.termination_reason is TerminationReason.AGENT_STOPPED
+    assert provider.requests[0].allowed_decision_functions == (
+        "request_investigation_tools",
+        "submit_root_cause_hypothesis",
+        "stop_investigation",
+    )
+    assert (
+        provider.requests[1].allowed_decision_functions
+        == provider.requests[0].allowed_decision_functions
+    )
+    assert provider.requests[2].allowed_decision_functions == (
+        "submit_root_cause_hypothesis",
+        "stop_investigation",
+    )
 
 
 def test_provider_failure_on_final_call_is_not_model_exhaustion() -> None:
@@ -221,8 +253,9 @@ def test_provider_failure_on_final_call_is_not_model_exhaustion() -> None:
             return super().complete(request)
 
     call_tools = {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "service_latency"}]}
+    second_call = {"decision": DecisionType.CALL_TOOLS, "requests": [{"tool": "metric_1"}]}
     result = InvestigationRuntime(
-        FailingFinalProvider([call_tools, call_tools, call_tools]), registry()
+        FailingFinalProvider([call_tools, second_call, call_tools]), registry(2)
     ).run(incident())
 
     assert result.termination_reason is TerminationReason.PROVIDER_ERROR
@@ -271,7 +304,16 @@ def test_batches_use_remaining_total_tool_budget(first_count: int, second_count:
     ]
     if second_count:
         responses.append(
-            {"decision": DecisionType.CALL_TOOLS, "requests": _tool_requests(second_count)}
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [
+                    {
+                        "tool": "service_latency" if index == 0 else f"metric_{index}",
+                        "arguments": {"batch": "second"},
+                    }
+                    for index in range(second_count)
+                ],
+            }
         )
     responses.append(
         {"decision": DecisionType.STOP, "stop_reason": StopReason.INSUFFICIENT_EVIDENCE}

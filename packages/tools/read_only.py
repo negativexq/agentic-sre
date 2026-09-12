@@ -38,6 +38,7 @@ def metrics_tool(backend: Callable[[str, dict[str, Any]], dict[str, Any]]) -> Ba
                 "service_error_rate",
                 "service_latency",
                 "db_connection_pressure",
+                "db_query_latency",
                 "kafka_consumer_lag",
             }
         ),
@@ -72,5 +73,17 @@ def kubernetes_read_tool(
                 "get_resource_state",
             }
         ),
+        backend,
+    )
+
+
+def change_read_tool(
+    backend: Callable[[str, dict[str, Any]], dict[str, Any]],
+) -> BackendReadTool:
+    """Create a bounded change-observation tool with no mutation operations."""
+    return BackendReadTool(
+        "changes",
+        "1",
+        frozenset({"recent_deployment_changes", "recent_configuration_changes"}),
         backend,
     )

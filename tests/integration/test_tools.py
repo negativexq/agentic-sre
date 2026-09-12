@@ -12,6 +12,7 @@ from packages.tools import (
     kubernetes_read_tool,
     metrics_tool,
 )
+from packages.tools.live_backends import LokiBackend, PrometheusBackend, TempoBackend
 
 
 def make_request(tool_name: str, **parameters: object) -> ToolRequest:
@@ -73,3 +74,21 @@ def test_kubernetes_tool_is_read_only() -> None:
     assert not isinstance(read_result, ToolFailure)
     assert isinstance(write_result, ToolFailure)
     assert write_result.code is ToolErrorCode.PERMISSION_DENIED
+
+
+def test_live_backends_reject_implicit_service_or_consumer_scope() -> None:
+    """Agent-directed live queries cannot silently change investigation scope."""
+    prometheus = PrometheusBackend("http://127.0.0.1:1")
+    loki = LokiBackend("http://127.0.0.1:1")
+    tempo = TempoBackend("http://127.0.0.1:1")
+
+    import pytest
+
+    with pytest.raises(ValueError, match="service is invalid"):
+        prometheus.query("service_latency", {})
+    with pytest.raises(ValueError, match="consumer is invalid"):
+        prometheus.query("kafka_consumer_lag", {})
+    with pytest.raises(ValueError, match="service is invalid"):
+        loki.query("query_logs", {})
+    with pytest.raises(ValueError, match="service is invalid"):
+        tempo.query("search_traces", {})

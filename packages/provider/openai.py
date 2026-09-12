@@ -24,6 +24,27 @@ DECISION_FUNCTION_NAMES = (
     "submit_root_cause_hypothesis",
     "stop_investigation",
 )
+TERMINAL_DECISION_FUNCTION_NAMES = (
+    "submit_root_cause_hypothesis",
+    "stop_investigation",
+)
+DECISION_FUNCTION_DESCRIPTIONS = {
+    "request_investigation_tools": (
+        "Use only when additional bounded read-only evidence is necessary before a reliable "
+        "terminal decision. Do not use when the current turn is terminal-only or no future "
+        "model turn can interpret new evidence. Never request write actions."
+    ),
+    "submit_root_cause_hypothesis": (
+        "Use when the supplied incident context and evidence identify the most likely affected "
+        "component, mechanism, and trigger. Cite only evidence IDs supplied by the runtime. "
+        "This is a terminal decision."
+    ),
+    "stop_investigation": (
+        "Use to terminate without a root-cause hypothesis when evidence is insufficient, the "
+        "investigation is complete without a justified conclusion, or no conclusion is warranted. "
+        "This is a terminal decision."
+    ),
+}
 _STOP_REASON_VALUES = (
     "insufficient_evidence",
     "investigation_complete",
@@ -411,6 +432,13 @@ def _extract_decision_function(
             metadata=metadata,
         )
     function_name = _field(decision_calls[0], "name")
+    allowed_functions = request.allowed_decision_functions or DECISION_FUNCTION_NAMES
+    if function_name not in allowed_functions:
+        raise ProviderError(
+            ProviderErrorCode.UNEXPECTED_FUNCTION_CALL,
+            "provider response used a decision function not exposed for this turn",
+            metadata=metadata,
+        )
     schemas = _decision_function_schemas(request.response_schema)
     schema_error_path = _json_schema_error(structured_output, schemas[function_name])
     if schema_error_path is not None:
@@ -592,22 +620,25 @@ class OpenAIProvider:
         }
         if request.response_schema_name == "investigation_decision":
             schemas = _decision_function_schemas(request.response_schema)
+            allowed = request.allowed_decision_functions or DECISION_FUNCTION_NAMES
+            unknown = set(allowed) - set(DECISION_FUNCTION_NAMES)
+            if unknown:
+                raise ProviderError(
+                    ProviderErrorCode.INVALID_RESPONSE,
+                    "request contained an unknown decision function",
+                )
             parameters.update(
                 {
                     "tools": [
                         {
                             "type": "function",
                             "name": name,
-                            "description": (
-                                "Request one or more read-only investigation tools, not exceeding "
-                                "the remaining tool-call budget supplied in the incident context. "
-                                "Transport the decision to the deterministic runtime; do not execute "
-                                "infrastructure actions."
-                            ),
+                            "description": DECISION_FUNCTION_DESCRIPTIONS[name],
                             "parameters": schema,
                             "strict": True,
                         }
                         for name, schema in schemas.items()
+                        if name in allowed
                     ],
                     "parallel_tool_calls": False,
                     "tool_choice": "required",

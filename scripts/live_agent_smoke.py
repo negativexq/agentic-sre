@@ -8,7 +8,7 @@ import sys
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
-from packages.contracts import Incident
+from packages.contracts import Alert, Incident
 from packages.investigation import InvestigationLimits, InvestigationRuntime
 from packages.investigation.registry import live_observability_registry
 from packages.provider import LiveModelBudget, OpenAIProvider
@@ -28,8 +28,22 @@ def _get_incidents() -> list[Incident]:
     return [Incident.model_validate_json(json.dumps(item)) for item in payload]
 
 
+def _get_alerts(incident_id: str) -> tuple[Alert, ...]:
+    """Load normalized alert scope from the control plane for model context."""
+    try:
+        with urlopen(
+            f"{CONTROL_PLANE_URL}/api/v1/incidents/{incident_id}/alerts", timeout=10
+        ) as response:
+            payload = json.loads(response.read(1_000_001))
+    except (HTTPError, URLError, TimeoutError) as error:
+        raise RuntimeError("control plane alert lookup failed") from error
+    if not isinstance(payload, list):
+        raise RuntimeError("control plane returned an invalid alert list")
+    return tuple(Alert.model_validate(item) for item in payload)
+
+
 def _selected_incidents() -> list[Incident]:
-    """Select exactly three caller-provided or newest available incidents."""
+    """Select caller-provided incidents, or the historical three by default."""
     incidents = _get_incidents()
     requested = os.getenv("SRE_LIVE_INCIDENT_IDS")
     if requested:
@@ -38,30 +52,31 @@ def _selected_incidents() -> list[Incident]:
         selected = [by_id[item] for item in wanted if item in by_id]
     else:
         selected = sorted(incidents, key=lambda item: item.created_at, reverse=True)[:3]
-    if len(selected) != 3:
-        raise RuntimeError("agent-smoke-live requires exactly three existing incidents")
+    if len(selected) not in {1, 3}:
+        raise RuntimeError("agent-smoke-live requires one or three existing incidents")
     return selected
 
 
 def main() -> int:
     """Run at most nine live model calls after worst-case preflight."""
     budget = LiveModelBudget.from_environment()
-    budget.ensure_capacity(9)
-    provider = OpenAIProvider(budget=budget)
+    selected = _selected_incidents()
+    budget.ensure_capacity(len(selected) * 3)
+    provider = OpenAIProvider(budget=budget, max_retry=0)
     registry = live_observability_registry(
         "http://localhost:19090",
         "http://localhost:19300",
         "http://localhost:19320",
     )
     results = []
-    for incident in _selected_incidents():
+    for incident in selected:
         result = InvestigationRuntime(
             provider,
             registry,
             model="gpt-5.6-luna",
             reasoning_effort="none",
             limits=InvestigationLimits(),
-        ).run(incident)
+        ).run(incident, alerts=_get_alerts(str(incident.incident_id)))
         results.append(
             {
                 "incident_id": str(incident.incident_id),
@@ -80,8 +95,14 @@ def main() -> int:
                 "actual_api_calls": result.usage.actual_api_calls,
             }
         )
-    print(json.dumps({"scenarios": results, "total_live_api_calls": budget.snapshot().calls_used}))
-    return 0
+    payload = {"scenarios": results, "total_live_api_calls": budget.snapshot().calls_used}
+    print(json.dumps(payload, sort_keys=True))
+    successful = all(
+        item["termination_reason"] in {"HYPOTHESIS_SUBMITTED", "AGENT_STOPPED"}
+        and item["terminal_decision"] in {"SUBMIT_HYPOTHESIS", "STOP"}
+        for item in results
+    )
+    return 0 if successful else 1
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 from pydantic import ValidationError
 
-from packages.contracts import Evidence, Incident, TimeWindow
+from packages.contracts import Alert, Evidence, Incident, TimeWindow
 from packages.evidence import EvidenceService
 from packages.investigation.audit import InvestigationAuditRecord, InvestigationAuditSink
 from packages.investigation.context import CompactContextBuilder
@@ -106,10 +106,12 @@ class InvestigationRuntime:
         self._context_builder = CompactContextBuilder()
         self._audit_sink = audit_sink
 
-    def run(self, incident: Incident) -> InvestigationResult:
+    def run(self, incident: Incident, alerts: tuple[Alert, ...] = ()) -> InvestigationResult:
         """Investigate one incident while keeping evidence authority in the runtime."""
         run_id = uuid4()
         started = monotonic()
+        accounting_reader = getattr(self._provider, "accounting_snapshot", None)
+        accounting_before = accounting_reader() if callable(accounting_reader) else None
         evidence: list[Evidence] = []
         logical_model_turns = 0
         tool_calls = 0
@@ -120,6 +122,8 @@ class InvestigationRuntime:
         hypothesis = None
         terminal_decision: DecisionType | None = None
         stop_reason: StopReason | None = None
+        progress: list[dict[str, Any]] = []
+        requested_tool_keys: set[tuple[str, str]] = set()
 
         for _turn in range(self._limits.max_agent_turns):
             if monotonic() - started > self._limits.max_wall_time_seconds:
@@ -133,7 +137,13 @@ class InvestigationRuntime:
             response: Any = None
             try:
                 response = self._complete(
-                    run_id, incident, evidence, logical_model_turns - 1, tool_calls
+                    run_id,
+                    incident,
+                    alerts,
+                    evidence,
+                    logical_model_turns,
+                    tool_calls,
+                    progress,
                 )
                 input_tokens += response.input_tokens
                 output_tokens += response.output_tokens
@@ -173,13 +183,22 @@ class InvestigationRuntime:
                 termination = TerminationReason.TOOL_CALL_LIMIT
                 error_code = InvestigationErrorCode.TOOL_BUDGET_EXCEEDED.value
                 break
-            if _has_duplicate_tool_requests(decision.requests):
+            if _has_duplicate_tool_requests(decision.requests) or any(
+                (
+                    request.tool,
+                    json.dumps(
+                        request.arguments, sort_keys=True, separators=(",", ":"), default=str
+                    ),
+                )
+                in requested_tool_keys
+                for request in decision.requests
+            ):
                 termination = TerminationReason.INVALID_DECISION
                 error_code = InvestigationErrorCode.DUPLICATE_TOOL_REQUEST.value
                 break
 
             try:
-                new_evidence = self._execute_tools(incident, decision.requests)
+                new_evidence, summaries = self._execute_tools(incident, decision.requests)
             except PermissionError:
                 termination = TerminationReason.INVALID_DECISION
                 error_code = InvestigationErrorCode.UNKNOWN_INVESTIGATION_TOOL.value
@@ -190,6 +209,16 @@ class InvestigationRuntime:
                 break
             tool_calls += len(decision.requests)
             evidence.extend(new_evidence)
+            requested_tool_keys.update(
+                (
+                    request.tool,
+                    json.dumps(
+                        request.arguments, sort_keys=True, separators=(",", ":"), default=str
+                    ),
+                )
+                for request in decision.requests
+            )
+            progress.extend(summaries)
 
         if (
             termination is TerminationReason.AGENT_STOPPED
@@ -202,9 +231,17 @@ class InvestigationRuntime:
             terminal_decision is not None and logical_model_turns >= self._limits.max_model_calls
         )
 
-        accounting_reader = getattr(self._provider, "accounting_snapshot", None)
         if callable(accounting_reader):
-            accounting = accounting_reader()
+            current = accounting_reader()
+            baseline = accounting_before or ProviderAccountingSnapshot()
+            accounting = ProviderAccountingSnapshot(
+                provider_invocations=current.provider_invocations - baseline.provider_invocations,
+                outbound_api_attempts=current.outbound_api_attempts
+                - baseline.outbound_api_attempts,
+                provider_retries=current.provider_retries - baseline.provider_retries,
+                shared_ledger_consumed=current.shared_ledger_consumed
+                - baseline.shared_ledger_consumed,
+            )
         else:
             provider_name = getattr(self._provider, "provider_name", "unknown")
             outbound = logical_model_turns if provider_name == "openai" else 0
@@ -290,16 +327,22 @@ class InvestigationRuntime:
         self,
         run_id: UUID,
         incident: Incident,
+        alerts: tuple[Alert, ...],
         evidence: list[Evidence],
         model_calls: int,
         tool_calls: int,
+        progress: list[dict[str, Any]],
     ) -> Any:
         """Build a bounded request with the versioned structured-output schema."""
         context = self._context_builder.build(
             incident,
             evidence,
-            self._registry.names(),
-            model_calls_remaining=self._limits.max_model_calls - model_calls,
+            self._registry.descriptors(),
+            alerts=alerts,
+            progress=tuple(progress),
+            current_model_call=model_calls,
+            max_model_calls=self._limits.max_model_calls,
+            tool_calls_used=tool_calls,
             tool_calls_remaining=self._limits.max_tool_calls - tool_calls,
         )
         request = ModelRequest(
@@ -314,31 +357,54 @@ class InvestigationRuntime:
             reasoning_effort=self._reasoning_effort,  # type: ignore[arg-type]
             max_output_tokens=1_000,
             timeout_ms=10_000,
+            allowed_decision_functions=(
+                ("submit_root_cause_hypothesis", "stop_investigation")
+                if model_calls >= self._limits.max_model_calls
+                else (
+                    "request_investigation_tools",
+                    "submit_root_cause_hypothesis",
+                    "stop_investigation",
+                )
+            ),
         )
         return self._provider.complete(request)
 
-    def _execute_tools(self, incident: Incident, requests: list[Any]) -> list[Evidence]:
+    def _execute_tools(
+        self, incident: Incident, requests: list[Any]
+    ) -> tuple[list[Evidence], list[dict[str, Any]]]:
         """Resolve and execute a batch concurrently, then normalize successes."""
-        resolved: list[tuple[RegisteredTool, Any]] = []
+        resolved: list[tuple[RegisteredTool, Any, dict[str, Any]]] = []
         for request in requests:
             tool = self._registry.get(request.tool)
-            resolved.append((tool, tool.request(incident.incident_id, request.arguments)))
+            resolved.append(
+                (tool, tool.request(incident.incident_id, request.arguments), request.arguments)
+            )
 
-        outputs: list[tuple[RegisteredTool, Any]] = []
+        outputs: list[tuple[RegisteredTool, Any, dict[str, Any]]] = []
         with ThreadPoolExecutor(max_workers=len(resolved)) as pool:
             futures = [
-                pool.submit(self._tool_executor.execute, tool.tool, call) for tool, call in resolved
+                pool.submit(self._tool_executor.execute, tool.tool, call)
+                for tool, call, _arguments in resolved
             ]
             for future, pair in zip(futures, resolved, strict=True):
-                outputs.append((pair[0], future.result()))
+                outputs.append((pair[0], future.result(), pair[2]))
 
         collected_at = datetime.now(UTC)
         window = TimeWindow(starts_at=incident.created_at, ends_at=incident.updated_at)
         normalized: list[Evidence] = []
-        for tool, result in outputs:
+        summaries: list[dict[str, Any]] = []
+        for tool, result, arguments in outputs:
             call_id = result.tool_call_id
             self._evidence_service.register_tool_call(call_id, incident.incident_id)
             if isinstance(result, ToolFailure):
+                summaries.append(
+                    {
+                        "tool": tool.name,
+                        "arguments": arguments,
+                        "status": result.code.value,
+                        "evidence_ids": [],
+                    }
+                )
                 continue
             if not isinstance(result, ToolResponse):
                 continue
@@ -347,10 +413,18 @@ class InvestigationRuntime:
                 source_type=tool.source_type,
                 source_system=tool.name,
                 observation=result.data,
-                time_window=window,
+                time_window=result.effective_time_window or window,
                 tool_call_id=call_id,
                 raw_result_reference=f"{tool.name}://{call_id}",
                 collected_at=collected_at,
             )
             normalized.append(self._evidence_service.add(evidence))
-        return normalized
+            summaries.append(
+                {
+                    "tool": tool.name,
+                    "arguments": arguments,
+                    "status": "SUCCESS",
+                    "evidence_ids": [str(normalized[-1].evidence_id)],
+                }
+            )
+        return normalized, summaries

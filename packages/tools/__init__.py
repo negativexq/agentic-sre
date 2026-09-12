@@ -13,8 +13,20 @@ from packages.tools.executor import (
     StorageToolAuditSink,
     ToolAuditRecord,
 )
-from packages.tools.live_backends import LokiBackend, PrometheusBackend, TempoBackend
-from packages.tools.read_only import kubernetes_read_tool, logs_tool, metrics_tool, traces_tool
+from packages.tools.live_backends import (
+    KubernetesBackend,
+    KubernetesChangeBackend,
+    LokiBackend,
+    PrometheusBackend,
+    TempoBackend,
+)
+from packages.tools.read_only import (
+    change_read_tool,
+    kubernetes_read_tool,
+    logs_tool,
+    metrics_tool,
+    traces_tool,
+)
 
 __all__ = [
     "BoundedToolExecutor",
@@ -26,7 +38,10 @@ __all__ = [
     "ToolRequest",
     "ToolResponse",
     "ToolResult",
+    "change_read_tool",
     "kubernetes_read_tool",
+    "KubernetesBackend",
+    "KubernetesChangeBackend",
     "LokiBackend",
     "logs_tool",
     "metrics_tool",

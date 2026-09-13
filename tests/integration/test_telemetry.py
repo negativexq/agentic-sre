@@ -93,3 +93,7 @@ def test_configuration_latency_alert_has_distinct_bounded_signal() -> None:
     )
     assert expression in rules
     assert expression in manifest
+    assert not re.search(r"- alert: PaymentServiceLatencyCritical\n\s+expr: [^\n]+\n\s+for:", rules)
+    assert not re.search(
+        r"- alert: PaymentServiceLatencyCritical\n\s+expr: [^\n]+\n\s+for:", manifest
+    )

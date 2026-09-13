@@ -11,7 +11,7 @@
     "calls_consumed": 3,
     "ledger_path": ".local/a1-single-agent-live-budget.json"
   },
-  "runtime_code_sha": "499e919aaa71058b7af3f459f7f7744d3d38c117",
+  "runtime_code_sha": "75b5f3333bf2794f7ec21661e0a48a4ee73b3979",
   "baseline": {
     "release": "v0.2.0",
     "tag": "v0.2.0",

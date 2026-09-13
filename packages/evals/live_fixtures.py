@@ -281,8 +281,6 @@ class LiveBenchmarkEnvironment:
         self._wait_rollout(deployment)
 
     def _restore_env(self, deployment: str) -> None:
-        if deployment not in self._original_env:
-            return
         kubernetes = importlib.import_module("kubernetes")
         kubernetes_config = importlib.import_module("kubernetes.config")
         kubernetes_config.load_kube_config()
@@ -298,7 +296,11 @@ class LiveBenchmarkEnvironment:
             for item in (container.env or [])
             if item.name not in names and item.value is not None
         ]
-        env.extend(self._original_env[deployment])
+        # These variables are benchmark-only fault controls.  A healthy
+        # baseline must not inherit a stale fault value from a prior trial.
+        if len(env) == len(container.env or []):
+            self._original_env.pop(deployment, None)
+            return
         api.patch_namespaced_deployment(
             deployment,
             self.namespace,

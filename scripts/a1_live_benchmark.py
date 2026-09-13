@@ -24,7 +24,12 @@ from packages.evals import (
 from packages.evals.a1_graders import A1_GRADER_VERSION
 from packages.evals.a1_targets import A1EvaluationTarget
 from packages.evals.dataset import FROZEN_DATASET
-from packages.investigation import InvestigationLimits, InvestigationRuntime
+from packages.investigation import (
+    MAX_EVIDENCE_SUMMARY_CHARS,
+    InvestigationLimits,
+    InvestigationRuntime,
+    bounded_observation_summary,
+)
 from packages.investigation.artifacts import A1RunArtifact
 from packages.investigation.context import derive_observation_window
 from packages.investigation.registry import live_observability_registry
@@ -33,7 +38,7 @@ from packages.tools import ControlPlaneChangeReader
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = ROOT / "docs/benchmarks/a1-r1-evaluation-manifest.json"
-SMOKE_PATH = ROOT / ".local/a1-r1-live-smoke.json"
+SMOKE_PATH = ROOT / "docs/benchmarks/a1-r1-live-smoke.json"
 RESULT_PATH = ROOT / "docs/benchmarks/a1-r1-single-agent-live.json"
 RESULT_SHA_PATH = ROOT / "docs/benchmarks/a1-r1-single-agent-live.sha256"
 LEDGER_PATH = ROOT / ".local/a1-r1-single-agent-live-budget.json"
@@ -154,6 +159,14 @@ def _run_one(
         observation_window=observation_window,
         configuration_hashes=_configuration_hashes(manifest),
     )
+    canonical_summaries = [
+        bounded_observation_summary(item.observation) for item in result.evidence
+    ]
+    persisted_summaries = [item.bounded_observation_summary for item in artifact.evidence]
+    if any(len(item) > MAX_EVIDENCE_SUMMARY_CHARS for item in persisted_summaries):
+        raise RuntimeError("A1 smoke produced an oversized persisted evidence summary")
+    if canonical_summaries != persisted_summaries:
+        raise RuntimeError("A1 smoke canonical evidence summaries diverged before persistence")
     target = _target_for(scenario)
     grade = grade_a1_run(artifact, target)
     return {
@@ -209,6 +222,14 @@ def _smoke(manifest: dict[str, Any]) -> int:
         observation_window=observation_window,
         configuration_hashes=_configuration_hashes(manifest),
     )
+    canonical_summaries = [
+        bounded_observation_summary(item.observation) for item in result.evidence
+    ]
+    persisted_summaries = [item.bounded_observation_summary for item in artifact.evidence]
+    if any(len(item) > MAX_EVIDENCE_SUMMARY_CHARS for item in persisted_summaries):
+        raise RuntimeError("A1 smoke produced an oversized persisted evidence summary")
+    if canonical_summaries != persisted_summaries:
+        raise RuntimeError("A1 smoke canonical evidence summaries diverged before persistence")
     after = budget.snapshot()
     attempts = artifact.usage.outbound_api_attempts
     budget.verify_ledger_delta(before, after, attempts)
@@ -221,10 +242,28 @@ def _smoke(manifest: dict[str, Any]) -> int:
         "ledger_limit": after.limit,
         "transport_pass": artifact.usage.provider == "openai",
         "artifact_pass": True,
+        "artifact_json_reload_pass": False,
+        "evidence_summary_max_length": max((len(item) for item in persisted_summaries), default=0),
+        "canonical_summary_consistency": True,
+        "code_sha": _git_sha(),
+        "model": MODEL,
+        "reasoning_effort": REASONING_EFFORT,
+        "configuration_hashes": _configuration_hashes(manifest),
+        "limits": {
+            "max_model_calls": LIMITS.max_model_calls,
+            "max_tool_executions": LIMITS.max_tool_calls,
+            "max_agent_turns": LIMITS.max_agent_turns,
+            "max_wall_time_seconds": LIMITS.max_wall_time_seconds,
+            "provider_retries": 0,
+        },
         "usage_reconciled": after.calls_used - before.calls_used == attempts,
         "safety": artifact.safety.model_dump(mode="json"),
         "artifact": artifact.model_dump(mode="json"),
     }
+    SMOKE_PATH.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    reloaded = json.loads(SMOKE_PATH.read_text(encoding="utf-8"))
+    A1RunArtifact.model_validate(reloaded["artifact"])
+    payload["artifact_json_reload_pass"] = True
     SMOKE_PATH.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"smoke": payload}, sort_keys=True))
     return 0

@@ -81,3 +81,15 @@ def test_worker_failure_alert_uses_bounded_error_burst_signal() -> None:
     )
     assert old_expression not in rules
     assert old_expression not in manifest
+
+
+def test_configuration_latency_alert_has_distinct_bounded_signal() -> None:
+    rules = Path("infra/observability/prometheus-rules.yml").read_text(encoding="utf-8")
+    manifest = Path("infra/kubernetes/observability.yaml").read_text(encoding="utf-8")
+    expression = (
+        'sum(rate(http_request_duration_seconds_sum{service="payment-service",route="/payments"}'
+        '[30s])) / sum(rate(http_request_duration_seconds_count{service="payment-service",'
+        'route="/payments"}[30s])) > 4'
+    )
+    assert expression in rules
+    assert expression in manifest

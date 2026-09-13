@@ -501,7 +501,7 @@ class LiveBenchmarkEnvironment:
                 "change_type": "UPDATED",
                 "scope": "CONFIGURATION",
                 "before": {"FAULT_PAYMENT_DELAY_MS": "0"},
-                "after": {"FAULT_PAYMENT_DELAY_MS": "3500"},
+                "after": {"FAULT_PAYMENT_DELAY_MS": "5000"},
                 "revision": f"benchmark-{now.strftime('%Y%m%d%H%M%S%f')}",
                 "source": "benchmark-harness",
             }
@@ -538,7 +538,7 @@ class LiveBenchmarkEnvironment:
             if self._payment_process_start_baseline is None:
                 raise RuntimeError("Prometheus process-start baseline unavailable")
         elif fixture == "payment_config_change":
-            self._kubectl_patch_env("payment-service", {"FAULT_PAYMENT_DELAY_MS": "3500"})
+            self._kubectl_patch_env("payment-service", {"FAULT_PAYMENT_DELAY_MS": "5000"})
             self._record_payment_config_change()
         else:
             raise KeyError(fixture)

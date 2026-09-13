@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import re
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -418,6 +419,24 @@ class LiveBenchmarkEnvironment:
         except (TypeError, ValueError):
             return None
 
+    def _payment_local_process_start_time(self) -> float | None:
+        try:
+            with urlopen(f"{self.payment_url}/metrics", timeout=10) as response:
+                body = response.read(1_000_001).decode("utf-8")
+        except (HTTPError, URLError, TimeoutError, OSError):
+            return None
+        pattern = re.compile(
+            r'^service_process_start_time_seconds\{service="payment-service"\}\s+([^\s]+)$'
+        )
+        for line in body.splitlines():
+            match = pattern.match(line)
+            if match is not None:
+                try:
+                    return float(match.group(1))
+                except ValueError:
+                    return None
+        return None
+
     def _payment_request_count(self) -> float:
         query = (
             'sum(http_request_duration_seconds_count{job="payment-service",'
@@ -609,6 +628,14 @@ class LiveBenchmarkEnvironment:
                     ),
                     timeout_seconds=30,
                     description="Prometheus did not observe the configuration rollout",
+                )
+                expected_start = self._payment_process_start_time()
+                if expected_start is None:
+                    raise RuntimeError("Prometheus configuration rollout value disappeared")
+                self._wait_until(
+                    lambda: self._payment_local_process_start_time() == expected_start,
+                    timeout_seconds=30,
+                    description="payment port-forward did not attach to the new pod",
                 )
             self._payment_request_baseline = self._payment_request_count()
             self._record_payment_config_change()

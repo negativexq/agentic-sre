@@ -1,0 +1,128 @@
+{
+  "architecture": "real-fault-to-alertmanager-to-incident harness",
+  "openai_calls": 0,
+  "qualified": true,
+  "scenario_count": 10,
+  "scenarios": [
+    {
+      "cleanup": true,
+      "evidence": true,
+      "fault_injection": true,
+      "fixture": "payment_error_spike",
+      "openai_calls": 0,
+      "real_alert": true,
+      "real_incident": true,
+      "resolution": true,
+      "scenario_id": "V020-001",
+      "telemetry": true
+    },
+    {
+      "cleanup": true,
+      "evidence": true,
+      "fault_injection": true,
+      "fixture": "order_error_spike",
+      "openai_calls": 0,
+      "real_alert": true,
+      "real_incident": true,
+      "resolution": true,
+      "scenario_id": "V020-002",
+      "telemetry": true
+    },
+    {
+      "cleanup": true,
+      "evidence": true,
+      "fault_injection": true,
+      "fixture": "payment_dependency_latency",
+      "openai_calls": 0,
+      "real_alert": true,
+      "real_incident": true,
+      "resolution": true,
+      "scenario_id": "V020-003",
+      "telemetry": true
+    },
+    {
+      "cleanup": true,
+      "evidence": true,
+      "fault_injection": true,
+      "fixture": "order_latency_spike",
+      "openai_calls": 0,
+      "real_alert": true,
+      "real_incident": true,
+      "resolution": true,
+      "scenario_id": "V020-004",
+      "telemetry": true
+    },
+    {
+      "cleanup": true,
+      "evidence": true,
+      "fault_injection": true,
+      "fixture": "payment_db_pool_pressure",
+      "openai_calls": 0,
+      "real_alert": true,
+      "real_incident": true,
+      "resolution": true,
+      "scenario_id": "V020-005",
+      "telemetry": true
+    },
+    {
+      "cleanup": true,
+      "evidence": true,
+      "fault_injection": true,
+      "fixture": "order_db_query_latency",
+      "openai_calls": 0,
+      "real_alert": true,
+      "real_incident": true,
+      "resolution": true,
+      "scenario_id": "V020-006",
+      "telemetry": true
+    },
+    {
+      "cleanup": true,
+      "evidence": true,
+      "fault_injection": true,
+      "fixture": "order_worker_lag",
+      "openai_calls": 0,
+      "real_alert": true,
+      "real_incident": true,
+      "resolution": true,
+      "scenario_id": "V020-007",
+      "telemetry": true
+    },
+    {
+      "cleanup": true,
+      "evidence": true,
+      "fault_injection": true,
+      "fixture": "order_worker_failure",
+      "openai_calls": 0,
+      "real_alert": true,
+      "real_incident": true,
+      "resolution": true,
+      "scenario_id": "V020-008",
+      "telemetry": true
+    },
+    {
+      "cleanup": true,
+      "evidence": true,
+      "fault_injection": true,
+      "fixture": "payment_pod_crash",
+      "openai_calls": 0,
+      "real_alert": true,
+      "real_incident": true,
+      "resolution": true,
+      "scenario_id": "V020-009",
+      "telemetry": true
+    },
+    {
+      "cleanup": true,
+      "evidence": true,
+      "fault_injection": true,
+      "fixture": "payment_config_change",
+      "openai_calls": 0,
+      "real_alert": true,
+      "real_incident": true,
+      "resolution": true,
+      "scenario_id": "V020-010",
+      "telemetry": true
+    }
+  ]
+}

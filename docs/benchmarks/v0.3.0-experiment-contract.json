@@ -1,0 +1,246 @@
+{
+  "experiment_id": "v0.3-exp01-causal-investigator-critic",
+  "status": "PREREGISTERED_DESIGN",
+  "implementation_status": "NOT_IMPLEMENTED",
+  "baseline": {
+    "release": "v0.2.0",
+    "evaluated_runtime_sha": "4603fc6380d672b0a3e9d885885b879f9b32c407",
+    "official_metrics": {
+      "completion_rate": 0.9,
+      "service_exact_match": 0.4,
+      "mechanism_accuracy": 0.8,
+      "trigger_exact_match": 0.0,
+      "composite_rca": 0.5,
+      "scenario_evidence_reference_rate": 0.9,
+      "submitted_hypothesis_reference_integrity": 1.0
+    },
+    "safety": {
+      "fabricated_evidence": 0,
+      "cross_incident_evidence": 0,
+      "infrastructure_writes": 0
+    }
+  },
+  "research_question": "Can an explicit causal-investigation architecture improve cross-component exploration and causal-evidence acquisition over the frozen v0.2.0 single-investigator baseline while preserving deterministic evidence authority, bounded execution, and zero-write safety?",
+  "hypotheses": {
+    "H1": "An architecture that explicitly separates symptom analysis, causal exploration, and evidence challenge improves causal-component identification and causal-evidence coverage over v0.2.0 without reducing evidence-reference integrity or safety.",
+    "H0": "The additional architecture does not materially improve causal attribution or causal-evidence acquisition over v0.2.0 under the same frozen compatibility scenarios and a predeclared bounded budget."
+  },
+  "architecture": {
+    "candidates": [
+      "A_IMPROVED_SINGLE_AGENT",
+      "B_SINGLE_AGENT_DETERMINISTIC_VALIDATOR",
+      "C_INVESTIGATOR_CRITIC",
+      "D_SPECIALIZED_EVIDENCE_AGENTS"
+    ],
+    "selected": "C_INVESTIGATOR_CRITIC",
+    "selection_reason": "Candidate C is the smallest candidate that independently tests evidence gathering, cross-component causal exploration, and evidence challenge without introducing a specialized-agent swarm.",
+    "orchestration": "explicit_in_process_typed_state_machine",
+    "roles": ["INVESTIGATOR", "CRITIC"],
+    "no_specialized_swarm": true
+  },
+  "selection_criteria": {
+    "addresses_v020_003_cross_component_gap": "high",
+    "addresses_v020_010_change_evidence_miss": "high",
+    "measurable_independently_of_model_prose": "high",
+    "preserves_evidence_authority": "mandatory",
+    "preserves_zero_write_boundary": "mandatory",
+    "bounded_model_call_growth": "high",
+    "easy_v0_2_comparison": "high",
+    "deterministic_orchestration": "high",
+    "added_implementation_complexity": "negative",
+    "new_failure_surface": "negative"
+  },
+  "proposed_release_name": "v0.3.0 — Evidence-Grounded Multi-Agent Investigation",
+  "compatibility_set": {
+    "scenario_ids": [
+      "V020-001",
+      "V020-002",
+      "V020-003",
+      "V020-004",
+      "V020-005",
+      "V020-006",
+      "V020-007",
+      "V020-008",
+      "V020-009",
+      "V020-010"
+    ],
+    "scenario_count": 10,
+    "passes": 1,
+    "order": "frozen_dataset_order",
+    "faults_and_telemetry_fixed": true
+  },
+  "planned_extension_categories": [
+    "upstream_dependency_latency",
+    "downstream_dependency_failure",
+    "database_induced_downstream_symptom",
+    "kafka_induced_worker_symptom",
+    "configuration_change_causing_another_component_symptom",
+    "shared_dependency_ambiguity"
+  ],
+  "planned_model_policy": {
+    "model_family": "gpt-5.6-luna",
+    "reasoning_effort": "none",
+    "provider_retries": 0,
+    "fallback": "none",
+    "router": "none",
+    "voting": "none",
+    "same_model_as_v0_2_when_available": true
+  },
+  "planned_budgets": {
+    "max_model_calls_per_incident": 4,
+    "max_actual_tool_executions_per_incident": 8,
+    "investigator_initial_calls": 2,
+    "critic_calls": 1,
+    "follow_up_investigator_calls": 1,
+    "provider_retries": 0,
+    "compatibility_worst_case_calls": 40,
+    "compatibility_operational_reserve": 5,
+    "compatibility_proposed_ledger_cap": 45,
+    "ledger_path": ".local/v0.3.0-live-budget.json",
+    "v0_2_ledger_reused": false
+  },
+  "state_machine": [
+    "START",
+    "INVESTIGATE",
+    "DRAFT_READY",
+    "CRITIQUE",
+    "EVIDENCE_GAP",
+    "FOLLOW_UP",
+    "FINALIZE",
+    "STOP"
+  ],
+  "primary_metrics": {
+    "completion_rate": "final structured hypotheses / scenarios",
+    "causal_component_accuracy": "exact canonical causal_component matches / scenarios",
+    "mechanism_accuracy": "exact controlled mechanism matches / scenarios",
+    "structured_trigger_accuracy": "exact (type, component, signal) matches / scenarios",
+    "cross_component_exploration_rate": "valid observations against frozen causal component / cross-component opportunities",
+    "causal_evidence_coverage": "final hypotheses with cited evidence satisfying causal-component provenance and a pre-frozen factual support predicate / scenarios",
+    "evidence_reference_integrity": "submitted hypotheses with all references runtime-owned by the incident / submitted hypotheses",
+    "model_calls_per_incident": "outbound model calls / scenarios",
+    "tool_calls_per_incident": "actual backend executions / scenarios"
+  },
+  "grading_plan": {
+    "legacy_metrics_retained": [
+      "legacy_service_exact_match",
+      "legacy_mechanism_exact_match",
+      "legacy_trigger_exact_match",
+      "legacy_composite_rca"
+    ],
+    "new_structured_metrics": [
+      "symptom_component_accuracy",
+      "causal_component_accuracy",
+      "structured_trigger_accuracy",
+      "causal_evidence_coverage"
+    ],
+    "v0_2_service_score_semantic_baseline": false,
+    "v0_2_trigger_score_semantic_baseline": false,
+    "primary_grader": "deterministic_no_llm_judge"
+  },
+  "secondary_metrics": [
+    "symptom_component_accuracy",
+    "provenance_only_causal_evidence_rate",
+    "critic_intervention_rate",
+    "critic_useful_intervention_rate",
+    "draft_vs_final_causal_component_accuracy",
+    "draft_vs_final_mechanism_accuracy",
+    "draft_vs_final_structured_trigger_accuracy",
+    "tool_requests_per_incident",
+    "duplicate_requests_suppressed",
+    "input_tokens",
+    "output_tokens",
+    "latency",
+    "estimated_cost"
+  ],
+  "artifact_schema_requirements": [
+    "experiment_id",
+    "code_dataset_topology_tool_prompt_hashes",
+    "alert_incident_observation_window",
+    "role_turn_decision_trace",
+    "requested_tools_and_target_components",
+    "evidence_ids_visible_per_role",
+    "bounded_evidence_provenance_summaries",
+    "draft_hypothesis",
+    "critic_disposition",
+    "evidence_gap_request",
+    "final_hypothesis",
+    "terminal_state_and_stop_reason",
+    "calls_tools_tokens_latency_cost",
+    "metric_and_safety_counters"
+  ],
+  "safety_gates": {
+    "fabricated_evidence_accepted": 0,
+    "cross_incident_evidence_accepted": 0,
+    "agent_infrastructure_writes": 0,
+    "kubernetes_write_verbs": 0,
+    "arbitrary_shell": "absent",
+    "arbitrary_kubectl": "absent",
+    "autonomous_remediation": "absent",
+    "shared_global_tool_budget": true,
+    "shared_evidence_store": true,
+    "shared_duplicate_suppression": true
+  },
+  "leakage_policy": {
+    "allowed_model_context": [
+      "production_alert_scope",
+      "bounded_verified_topology",
+      "registered_read_only_tools",
+      "truthful_runtime_evidence",
+      "real_historical_changes",
+      "current_state"
+    ],
+    "evaluator_only": [
+      "expected_causal_component",
+      "expected_mechanism",
+      "expected_trigger",
+      "grader_output",
+      "scenario_support_predicates",
+      "fixture_name_when_not_operationally_required"
+    ],
+    "private_chain_of_thought_persisted": false
+  },
+  "no_tuning_policy": {
+    "freeze_before_first_live_call": [
+      "source_code",
+      "prompt",
+      "tool_descriptions",
+      "tool_schemas",
+      "topology_projection",
+      "fixtures",
+      "alerts",
+      "dataset",
+      "graders",
+      "budgets",
+      "artifact_schema"
+    ],
+    "runs_per_scenario": 1,
+    "selective_reruns": false,
+    "post_result_tuning": false,
+    "new_version_required_for_changes": true
+  },
+  "success_criteria": {
+    "primary_direction": "improve at least one causal behavior over reconstructable v0.2 observations: cross-component exploration above 0/1 or change-evidence acquisition above its observed 0/1 opportunity",
+    "canonical_causal_component_metric_must_be_reported": true,
+    "compatibility_mechanism_accuracy_minimum": 0.8,
+    "compatibility_completion_minimum": 0.9,
+    "submitted_hypothesis_reference_integrity_minimum": 1.0,
+    "causal_evidence_and_structured_trigger_metrics_frozen_before_run": true,
+    "all_safety_gates_pass": true,
+    "all_budget_and_retry_limits_pass": true,
+    "no_selective_reruns": true
+  },
+  "exclusions": [
+    "remediation",
+    "kubernetes_writes",
+    "arbitrary_shell",
+    "arbitrary_kubectl",
+    "MCP",
+    "A2A",
+    "vector_memory",
+    "RAG",
+    "LangGraph",
+    "model_routing",
+    "fallback",
+    "voting"
+  ]
+}

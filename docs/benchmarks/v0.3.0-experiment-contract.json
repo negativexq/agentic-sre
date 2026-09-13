@@ -1,8 +1,8 @@
 {
   "experiment_id": "v0.3-exp01-a1-improved-single-agent",
   "status": "PREREGISTERED_DESIGN",
-  "implementation_status": "PHASE_1_IMPLEMENTED_PHASE_2_PENDING",
-  "phase": "PHASE_1_FOUNDATION",
+  "implementation_status": "PHASE_2_IMPLEMENTED_PHASE_3_PENDING",
+  "phase": "PHASE_2_MODEL_VISIBLE_CAUSAL_PROTOCOL",
   "arm": "A1_CONTROL",
   "sequence": [
     {"arm": "A0", "name": "frozen v0.2.0 single-agent baseline", "status": "FROZEN"},
@@ -32,12 +32,13 @@
     "compatibility_dataset_sha256": "20288dfae850b07bc4a754cd6e15a465f6fe7984cc259aeb7bf4294d79b16650",
     "generalization_dataset_sha256": null,
     "combined_evaluation_sha256": null,
-    "topology_projection_sha256": "540481d186342b20ea9a15ba1c014a83df44c04bc5a03eb32526fee749518045",
-    "prompt_sha256": "5159d9384283bbc3e8f7a17ee515d3810a742356f7b16410781bc6f73b19d9cd",
-    "tool_registry_sha256": "9fb5ef6c753d9a941cdfafeb9f4225c2bfb838d8272b7a316edb398707bf0fa4",
+    "topology_projection_sha256": "f456231abdadf765a9069414cbf12ff132d844df3979f07b0fab22c8d8909fb8",
+    "prompt_sha256": "9c21bd17b5965545aa61c57a5eea788715570b52187447edfa94a3a871a3be20",
+    "prompt_version": "sre_investigator_v4",
+    "tool_registry_sha256": "28d109652cce49dac0d6ffcdb563d2c092959a27e75f4e803a710317d676f7cb",
     "tool_contracts_sha256": "9e0f7403b3ab1d503690908bd4da316b4616d3d112f898b0dfef7ec44f932f5b",
     "component_registry_sha256": "f72503e8a754c98e1425006e11daf66522f78059410afb882566e8d0bd0ddf0c",
-    "component_registry_status": "IMPLEMENTED_PHASE_1_NOT_LIVE_FROZEN"
+    "component_registry_status": "IMPLEMENTED_PHASE_2_NOT_LIVE_FROZEN"
   },
   "research_question": "Can the existing bounded single investigator improve causal exploration and causal diagnosis when given explicit production topology, canonical component identities, structured causal outputs, and better benchmark observability, without adding another model role?",
   "hypotheses": {
@@ -60,15 +61,16 @@
   },
   "verified_topology": {
     "component_identity_model": "SEPARATE_WORKLOAD_AND_DEPENDENCY_RESOURCE_IDENTITIES",
-    "workload_components": ["order-service", "payment-service", "order-worker"],
-    "dependency_resources": ["postgresql", "kafka", "redis"],
+    "workload_components": ["order-service", "order-worker", "payment-service"],
+    "dependency_resources": ["kafka", "postgresql", "redis"],
+    "edge_semantics": "source workload depends on target",
     "edges": [
-      {"source": "order-service", "target": "payment-service", "basis": "HttpPaymentGateway"},
-      {"source": "order-service", "target": "postgresql", "basis": "order persistence"},
       {"source": "order-service", "target": "kafka", "basis": "orders.created publisher"},
-      {"source": "payment-service", "target": "postgresql", "basis": "payment persistence"},
+      {"source": "order-service", "target": "postgresql", "basis": "order persistence"},
+      {"source": "order-service", "target": "payment-service", "basis": "HttpPaymentGateway"},
       {"source": "order-worker", "target": "kafka", "basis": "orders.created consumer"},
-      {"source": "order-worker", "target": "redis", "basis": "processed-event state"}
+      {"source": "order-worker", "target": "redis", "basis": "processed-event state"},
+      {"source": "payment-service", "target": "postgresql", "basis": "payment persistence"}
     ],
     "source_files": [
       "workload/common/adapters.py",
@@ -77,8 +79,8 @@
       "workload/payment_service/app.py",
       "infra/kubernetes/workload.yaml"
     ],
-    "topology_hash_status": "PHASE_1_IMPLEMENTED_HASHES_RECORDED",
-    "component_registry_hash_status": "PHASE_1_IMPLEMENTED_HASHES_RECORDED"
+    "topology_hash_status": "PHASE_2_IMPLEMENTED_HASHES_RECORDED",
+    "component_registry_hash_status": "PHASE_2_IMPLEMENTED_HASHES_RECORDED"
   },
   "compatibility_set": {
     "scenario_ids": ["V020-001", "V020-002", "V020-003", "V020-004", "V020-005", "V020-006", "V020-007", "V020-008", "V020-009", "V020-010"],
@@ -131,14 +133,24 @@
     "same_model_as_a0_when_available": true
   },
   "planned_budgets": {
-    "max_model_calls_per_incident": 3,
-    "max_actual_tool_executions_per_incident": 8,
+    "default_development_policy": {
+      "max_model_calls_per_incident": 3,
+      "max_actual_tool_executions_per_incident": 8,
+      "max_agent_turns": 3
+    },
+    "candidate_offline_envelopes": [
+      {"max_model_calls_per_incident": 3, "max_actual_tool_executions_per_incident": 8},
+      {"max_model_calls_per_incident": 4, "max_actual_tool_executions_per_incident": 10},
+      {"max_model_calls_per_incident": 5, "max_actual_tool_executions_per_incident": 12},
+      {"max_model_calls_per_incident": 6, "max_actual_tool_executions_per_incident": 16}
+    ],
+    "final_a1_policy_status": "PENDING_OFFLINE_PERFORMANCE_ANALYSIS",
     "provider_retries": 0,
     "compatibility_worst_case_calls": 30,
     "predeclared_smoke_reserve": 6,
     "generalization_allocation": "PENDING_FROZEN_SCENARIO_COUNT",
     "final_ledger_cap": "PENDING",
-    "final_cap_formula": "smoke reserve + (compatibility scenarios × 3) + (generalization scenarios × 3)",
+    "final_cap_formula": "smoke reserve + (compatibility scenarios × selected A1 max calls) + (generalization scenarios × selected A1 max calls)",
     "ledger_path": ".local/a1-single-agent-live-budget.json",
     "v0_2_ledger_reused": false
   },
@@ -161,7 +173,7 @@
     },
     "StructuredTrigger": {
       "trigger_type": "controlled TriggerType",
-      "trigger_component": "WorkloadComponentId",
+      "trigger_component": "WorkloadComponentId | null",
       "trigger_resource": "DependencyResourceId | null",
       "signal": "omitted; trigger type plus canonical target is sufficient"
     },

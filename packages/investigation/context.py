@@ -7,6 +7,7 @@ from typing import Any, cast
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from packages.contracts import Alert, AlertStatus, Evidence, Incident, TimeWindow
+from packages.investigation.topology import TopologyRegistry, target_from_tool_arguments
 
 
 class InvestigationObservationWindow(BaseModel):
@@ -116,6 +117,7 @@ class CompactContextBuilder:
         tool_calls_used: int = 0,
         tool_calls_remaining: int = 8,
         observation_window: InvestigationObservationWindow | None = None,
+        topology: TopologyRegistry | None = None,
     ) -> str:
         """Return deterministic, size-bounded context for a model turn."""
         payload: dict[str, Any] = {
@@ -149,6 +151,31 @@ class CompactContextBuilder:
                 "tool_calls_remaining": tool_calls_remaining,
             },
         }
+        if topology is not None:
+            payload["topology"] = topology.serialize()
+            queried_workloads = {
+                item.target_workload for item in evidence if item.target_workload is not None
+            }
+            queried_resources = {
+                item.target_resource for item in evidence if item.target_resource is not None
+            }
+            # Progress contains canonical arguments for successful, failed and
+            # reused requests. This keeps investigation state faithful to
+            # validated tool activity rather than only successful evidence.
+            for item in progress:
+                arguments = item.get("arguments") if isinstance(item, dict) else None
+                if not isinstance(arguments, dict):
+                    continue
+                target = target_from_tool_arguments(arguments)
+                if target.workload is not None:
+                    queried_workloads.add(target.workload.value)
+                if target.resource is not None:
+                    queried_resources.add(target.resource.value)
+            payload["investigation_state"] = {
+                "alert_scope": alerts[0].service if alerts else None,
+                "queried_workloads": sorted(queried_workloads),
+                "queried_resources": sorted(queried_resources),
+            }
         return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
 
     def _tool_descriptor(self, descriptor: Any) -> dict[str, Any]:

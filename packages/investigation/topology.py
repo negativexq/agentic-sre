@@ -134,6 +134,7 @@ class TopologyRegistry:
         return {
             "workloads": [item.value for item in self.workloads],
             "resources": [item.value for item in self.resources],
+            "edge_semantics": "source workload depends on target",
             "dependencies": [
                 {
                     "source": edge.source.value,

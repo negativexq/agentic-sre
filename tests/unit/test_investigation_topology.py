@@ -10,12 +10,15 @@ from packages.investigation import (
     derive_query_target_usage,
     target_from_tool_arguments,
 )
+from packages.investigation.registry import live_observability_registry
+from packages.investigation.tool_contracts import ToolArgumentValidationError
 
 
 def test_topology_is_deterministic_and_hashable() -> None:
     assert DEFAULT_TOPOLOGY.serialize() == {
         "workloads": ["order-service", "order-worker", "payment-service"],
         "resources": ["kafka", "postgresql", "redis"],
+        "edge_semantics": "source workload depends on target",
         "dependencies": [
             {"source": "order-service", "target_type": "resource", "target": "kafka"},
             {"source": "order-service", "target_type": "resource", "target": "postgresql"},
@@ -79,3 +82,19 @@ def test_unknown_target_is_not_promoted_to_canonical_identity() -> None:
     target = target_from_tool_arguments({"service": "not-registered"})
     assert target.workload is None
     assert target.resource is None
+
+
+def test_live_registry_validates_workload_targets_before_backend_execution() -> None:
+    """Production-facing tool descriptors and validators use canonical workloads."""
+    registry = live_observability_registry("prometheus", "loki", "tempo")
+    descriptor = next(item for item in registry.descriptors() if item["name"] == "service_latency")
+    assert descriptor["arguments"]["service"]["enum"] == [
+        "order-service",
+        "order-worker",
+        "payment-service",
+    ]
+    assert registry.validate("service_latency", {"service": "payment-service"}) == {
+        "service": "payment-service"
+    }
+    with pytest.raises(ToolArgumentValidationError):
+        registry.validate("service_latency", {"service": "unknown-service"})

@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pytest
 
-from packages.investigation import InvestigationDecision
+from packages.investigation import A1CausalDecision, InvestigationDecision
 from packages.investigation.registry import live_observability_registry
 from packages.provider import (
     FakeModelProvider,
@@ -21,6 +21,7 @@ from packages.provider import (
     ToolSchemaDescriptor,
 )
 from packages.provider.openai import (
+    A1_DECISION_FUNCTION_NAMES,
     DECISION_FUNCTION_DESCRIPTIONS,
     DECISION_FUNCTION_NAMES,
     LiveModelConfig,
@@ -49,6 +50,16 @@ def function_request() -> ModelRequest:
         update={
             "response_schema_name": "investigation_decision",
             "response_schema": InvestigationDecision.model_json_schema(),
+        }
+    )
+
+
+def a1_function_request() -> ModelRequest:
+    """Build a provider request using the structured A1 decision protocol."""
+    return request().model_copy(
+        update={
+            "response_schema_name": "a1_investigation_decision",
+            "response_schema": A1CausalDecision.model_json_schema(),
         }
     )
 
@@ -574,6 +585,76 @@ def test_responses_request_exposes_only_three_decision_functions() -> None:
     assert all(tool["type"] == "function" for tool in tools)
     assert all(tool["strict"] is True for tool in tools)
     assert all(tool["parameters"]["additionalProperties"] is False for tool in tools)
+
+
+def test_a1_transport_exposes_structured_terminal_functions() -> None:
+    """The A1 transport carries typed causal and STOP payloads."""
+    request = a1_function_request()
+    schemas = _decision_function_schemas(request.response_schema, a1_protocol=True)
+    assert tuple(schemas) == A1_DECISION_FUNCTION_NAMES
+    assert set(schemas["submit_causal_hypothesis"]["properties"]) == {
+        "reason",
+        "symptom_component",
+        "causal_component",
+        "causal_resource",
+        "mechanism",
+        "structured_trigger",
+        "causal_summary",
+        "evidence_ids",
+    }
+    normalized = _normalize_fixture(
+        _envelope(
+            [
+                _function_call(
+                    json.dumps(
+                        {
+                            "reason": "insufficient evidence",
+                            "stop_reason": "insufficient_evidence",
+                            "considered_components": ["order-service"],
+                            "considered_resources": [],
+                            "missing_evidence_categories": ["TRACES"],
+                        }
+                    ),
+                    name="stop_causal_investigation",
+                )
+            ]
+        ),
+        request,
+    )
+    assert normalized.structured_output["stop"]["considered_components"] == ["order-service"]  # type: ignore[attr-defined]
+
+    captured: dict[str, object] = {}
+
+    class Transport:
+        def create(self, **kwargs: object) -> object:
+            captured.update(kwargs)
+            return _envelope(
+                [
+                    _function_call(
+                        json.dumps(
+                            {
+                                "reason": "insufficient evidence",
+                                "stop_reason": "insufficient_evidence",
+                                "considered_components": [],
+                                "considered_resources": [],
+                                "missing_evidence_categories": [],
+                            }
+                        ),
+                        name="stop_causal_investigation",
+                    )
+                ]
+            )
+
+    response = OpenAIProvider(
+        budget=LiveModelBudget(1),
+        config=LiveModelConfig(enabled=True),
+        transport=Transport(),
+        max_retry=0,
+    ).complete(a1_function_request())
+    assert response.structured_output["stop"]["stop_reason"] == "insufficient_evidence"
+    tools = captured["tools"]
+    assert isinstance(tools, list)
+    assert [tool["name"] for tool in tools] == list(A1_DECISION_FUNCTION_NAMES)
 
 
 def test_provider_request_schema_is_specific_to_each_registered_tool() -> None:

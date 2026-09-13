@@ -7,6 +7,9 @@ from typing import Any
 import pytest
 
 from packages.contracts import (
+    Alert,
+    AlertSource,
+    AlertStatus,
     EvidenceSourceType,
     Incident,
     IncidentSeverity,
@@ -15,6 +18,7 @@ from packages.contracts import (
 )
 from packages.investigation import (
     A1InvestigationDecision,
+    A1RunArtifact,
     DecisionType,
     InvestigationDecision,
     InvestigationLimits,
@@ -25,8 +29,12 @@ from packages.investigation import (
     ToolRepeatPolicy,
 )
 from packages.investigation.audit import InMemoryInvestigationAuditSink
+from packages.investigation.causal_contracts import EvidenceCategory, TriggerType
+from packages.investigation.context import derive_observation_window
+from packages.investigation.prompt import investigator_prompt_v4_hash
 from packages.investigation.runtime import InvestigationRuntime
 from packages.investigation.tool_contracts import ServiceArgs
+from packages.investigation.topology import DEFAULT_TOPOLOGY, WorkloadComponentId
 from packages.provider import FakeModelProvider, ModelRequest
 from packages.tools import metrics_tool
 
@@ -41,6 +49,23 @@ def incident() -> Incident:
         title="Payment latency is elevated",
         created_at=now,
         updated_at=now,
+    )
+
+
+def latency_alert() -> Alert:
+    """Create an order-service symptom alert for A1 topology tests."""
+    now = datetime.now(UTC)
+    return Alert(
+        alert_name="OrderDependencyLatencyHigh",
+        service="order-service",
+        namespace="sre-demo",
+        cluster="agentic-sre",
+        starts_at=now,
+        labels={"severity": "critical", "service": "order-service"},
+        annotations={"description": "dependency latency is elevated"},
+        fingerprint="a1-topology-test",
+        status=AlertStatus.FIRING,
+        source=AlertSource.PROMETHEUS,
     )
 
 
@@ -111,6 +136,224 @@ def test_fake_provider_runtime_batches_tools_and_submits_real_evidence() -> None
     assert audit.records[0].terminal_decision is DecisionType.SUBMIT_HYPOTHESIS
 
 
+def test_a1_protocol_exposes_topology_and_supports_cross_component_hypothesis() -> None:
+    """A1 can inspect a dependency and return the structured causal result."""
+
+    def submit(model_request: ModelRequest) -> dict[str, object]:
+        context = json.loads(model_request.messages[1].content)
+        evidence_ids = [item["evidence_id"] for item in context["evidence"]]
+        return {
+            "decision": DecisionType.SUBMIT_HYPOTHESIS,
+            "hypothesis": {
+                "symptom_component": WorkloadComponentId.ORDER_SERVICE,
+                "causal_component": WorkloadComponentId.PAYMENT_SERVICE,
+                "causal_resource": None,
+                "mechanism": "dependency_latency",
+                "structured_trigger": {
+                    "trigger_type": TriggerType.DEPENDENCY_LATENCY_INCREASE,
+                    "trigger_component": WorkloadComponentId.PAYMENT_SERVICE,
+                    "trigger_resource": None,
+                },
+                "causal_summary": "payment dependency latency explains the order symptom",
+                "evidence_ids": evidence_ids,
+            },
+        }
+
+    provider = FakeModelProvider(
+        [
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [
+                    {"tool": "service_latency", "arguments": {"service": "order-service"}}
+                ],
+            },
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [
+                    {"tool": "service_latency", "arguments": {"service": "payment-service"}}
+                ],
+            },
+            submit,
+        ]
+    )
+
+    result = InvestigationRuntime(provider, registry(), a1_protocol=True).run(
+        incident(), (latency_alert(),)
+    )
+
+    assert result.termination_reason is TerminationReason.HYPOTHESIS_SUBMITTED
+    assert result.causal_hypothesis is not None
+    assert result.causal_hypothesis["causal_component"] == "payment-service"
+    assert result.hypothesis is not None
+    assert result.usage.prompt_hash == investigator_prompt_v4_hash()
+    assert result.usage.tool_calls == 2
+    assert result.usage.duplicate_requests_suppressed == 0
+    assert len(provider.requests) == 3
+    assert provider.requests[0].response_schema_name == "a1_investigation_decision"
+    first_context = json.loads(provider.requests[0].messages[1].content)
+    assert first_context["investigation_state"]["alert_scope"] == "order-service"
+    assert first_context["topology"]["dependencies"]
+    provider_payload = json.dumps(provider.requests[0].model_dump(mode="json"))
+    for evaluator_value in (
+        "V020-003",
+        "payment_dependency_latency",
+        "expected_causal_component",
+        "grader_support_predicate",
+    ):
+        assert evaluator_value not in provider_payload
+    second_context = json.loads(provider.requests[1].messages[1].content)
+    assert second_context["investigation_state"]["queried_workloads"] == ["order-service"]
+    terminal_context = json.loads(provider.requests[2].messages[1].content)
+    assert {item["target_workload"] for item in terminal_context["evidence"]} == {
+        "order-service",
+        "payment-service",
+    }
+    artifact = A1RunArtifact.from_result(
+        result,
+        experiment_id="a1-offline",
+        observation_window=derive_observation_window(incident(), (latency_alert(),)).time_window(),
+    )
+    assert artifact.hypothesis is not None
+    assert artifact.hypothesis.causal_component is WorkloadComponentId.PAYMENT_SERVICE
+    assert artifact.evidence[0].target_workload is WorkloadComponentId.ORDER_SERVICE
+
+
+def test_a1_protocol_persists_structured_stop_metadata() -> None:
+    """STOP remains valid and its bounded audit fields are retained."""
+    provider = FakeModelProvider(
+        [
+            {
+                "decision": DecisionType.STOP,
+                "stop": {
+                    "stop_reason": StopReason.INSUFFICIENT_EVIDENCE,
+                    "considered_components": [WorkloadComponentId.ORDER_SERVICE],
+                    "considered_resources": [],
+                    "missing_evidence_categories": [EvidenceCategory.TRACES],
+                },
+            }
+        ]
+    )
+
+    result = InvestigationRuntime(provider, registry(), a1_protocol=True).run(
+        incident(), (latency_alert(),)
+    )
+
+    assert result.termination_reason is TerminationReason.AGENT_STOPPED
+    assert result.causal_stop == {
+        "stop_reason": "insufficient_evidence",
+        "considered_components": ["order-service"],
+        "considered_resources": [],
+        "missing_evidence_categories": ["TRACES"],
+    }
+
+
+def test_a1_protocol_supports_resource_precision_without_mixing_domains() -> None:
+    """A workload cause may carry a distinct PostgreSQL resource target."""
+    backend = metrics_tool(lambda _operation, _parameters: {"records": [{"acquisition": 2.0}]})
+    db_registry = ReadOnlyToolRegistry(
+        (
+            RegisteredTool(
+                name="db_connection_pressure",
+                version="1",
+                operation="db_connection_pressure",
+                source_type=EvidenceSourceType.METRIC,
+                tool=backend,
+                argument_model=ServiceArgs,
+            ),
+        )
+    )
+
+    def submit(model_request: ModelRequest) -> dict[str, object]:
+        context = json.loads(model_request.messages[1].content)
+        return {
+            "decision": DecisionType.SUBMIT_HYPOTHESIS,
+            "hypothesis": {
+                "symptom_component": "payment-service",
+                "causal_component": "payment-service",
+                "causal_resource": "postgresql",
+                "mechanism": "database_connection_pressure",
+                "structured_trigger": {
+                    "trigger_type": "DB_CONNECTION_PRESSURE",
+                    "trigger_component": "payment-service",
+                    "trigger_resource": "postgresql",
+                },
+                "causal_summary": "payment workload is waiting on PostgreSQL connections",
+                "evidence_ids": [context["evidence"][0]["evidence_id"]],
+            },
+        }
+
+    provider = FakeModelProvider(
+        [
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [
+                    {
+                        "tool": "db_connection_pressure",
+                        "arguments": {"service": "payment-service"},
+                    }
+                ],
+            },
+            submit,
+        ]
+    )
+    result = InvestigationRuntime(provider, db_registry, a1_protocol=True).run(incident())
+
+    assert result.causal_hypothesis is not None
+    assert result.causal_hypothesis["causal_component"] == "payment-service"
+    assert result.causal_hypothesis["causal_resource"] == "postgresql"
+    assert result.evidence[0].target_workload == "payment-service"
+    assert result.evidence[0].target_resource is None
+
+
+@pytest.mark.parametrize("model_calls,tool_budget", [(3, 8), (4, 10), (5, 12), (6, 16)])
+def test_a1_budget_matrix_remains_bounded_and_terminal_only(
+    model_calls: int, tool_budget: int
+) -> None:
+    """Candidate A1 envelopes expose accurate budgets without overruns."""
+    responses: list[dict[str, Any]] = [
+        {
+            "decision": DecisionType.CALL_TOOLS,
+            "requests": [
+                {
+                    "tool": "service_latency" if index == 0 else f"metric_{index}",
+                    "arguments": {"service": "order-service"},
+                }
+            ],
+        }
+        for index in range(model_calls - 1)
+    ]
+    responses.append(
+        {
+            "decision": DecisionType.STOP,
+            "stop": {
+                "stop_reason": StopReason.INSUFFICIENT_EVIDENCE,
+                "considered_components": [WorkloadComponentId.ORDER_SERVICE],
+                "considered_resources": [],
+                "missing_evidence_categories": [],
+            },
+        }
+    )
+    provider = FakeModelProvider(responses)
+    result = InvestigationRuntime(
+        provider,
+        registry(count=model_calls - 1),
+        limits=InvestigationLimits(
+            max_model_calls=model_calls,
+            max_tool_calls=tool_budget,
+            max_agent_turns=model_calls,
+        ),
+        a1_protocol=True,
+    ).run(incident())
+
+    assert result.termination_reason is TerminationReason.AGENT_STOPPED
+    assert result.usage.model_calls == model_calls
+    assert result.usage.tool_calls == model_calls - 1
+    assert all(
+        request.allowed_decisions == ("SUBMIT_HYPOTHESIS", "STOP")
+        for request in provider.requests[-1:]
+    )
+
+
 def test_unknown_tool_fails_closed_without_backend_execution() -> None:
     """Unknown model tool names become a typed invalid decision result."""
     provider = FakeModelProvider(
@@ -125,6 +368,48 @@ def test_unknown_tool_fails_closed_without_backend_execution() -> None:
     assert result.validation_stage.value == "TOOL_REGISTRY"
     assert result.validation_path == "$.requests[].tool"
     assert result.usage.tool_calls == 0
+
+
+def test_a1_unknown_workload_target_fails_before_backend_execution() -> None:
+    """Canonical target validation rejects unknown workloads before dispatch."""
+    backend_calls = 0
+
+    def backend(_operation: str, _parameters: dict[str, Any]) -> dict[str, object]:
+        nonlocal backend_calls
+        backend_calls += 1
+        return {"records": [{"p95": 1.0}]}
+
+    target_tool = RegisteredTool(
+        name="service_latency",
+        version="1",
+        operation="service_latency",
+        source_type=EvidenceSourceType.METRIC,
+        tool=metrics_tool(backend),
+        argument_model=ServiceArgs,
+        target_argument="service",
+        target_topology=DEFAULT_TOPOLOGY,
+    )
+    provider = FakeModelProvider(
+        [
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [
+                    {"tool": "service_latency", "arguments": {"service": "unknown-service"}}
+                ],
+            }
+        ]
+    )
+
+    result = InvestigationRuntime(
+        provider,
+        ReadOnlyToolRegistry((target_tool,)),
+        a1_protocol=True,
+    ).run(incident())
+
+    assert result.termination_reason is TerminationReason.INVALID_DECISION
+    assert result.error_code == "TOOL_ARGUMENT_SCHEMA_INVALID"
+    assert result.usage.tool_calls == 0
+    assert backend_calls == 0
 
 
 def test_empty_tool_requests_have_a_typed_semantic_failure() -> None:

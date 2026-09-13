@@ -1,4 +1,4 @@
-"""Deterministic, credit-bounded single-agent investigation loop."""
+"""Configurable, bounded single-agent investigation loop."""
 
 import json
 from concurrent.futures import ThreadPoolExecutor
@@ -17,6 +17,11 @@ from packages.investigation.audit import (
     InvestigationAuditRecord,
     InvestigationAuditSink,
     InvestigationTurnAudit,
+)
+from packages.investigation.causal_contracts import (
+    A1CausalDecision,
+    CausalHypothesis,
+    CausalStopDecision,
 )
 from packages.investigation.context import (
     CompactContextBuilder,
@@ -42,10 +47,15 @@ from packages.investigation.duplicates import (
     ToolRequestIdentity,
     make_tool_request_identity,
 )
-from packages.investigation.prompt import INVESTIGATOR_PROMPT, investigator_prompt_hash
+from packages.investigation.prompt import (
+    INVESTIGATOR_PROMPT_V3,
+    INVESTIGATOR_PROMPT_V4,
+    investigator_prompt_v3_hash,
+    investigator_prompt_v4_hash,
+)
 from packages.investigation.registry import ReadOnlyToolRegistry, RegisteredTool
 from packages.investigation.tool_contracts import ToolArgumentValidationError
-from packages.investigation.topology import target_from_tool_arguments
+from packages.investigation.topology import DEFAULT_TOPOLOGY, target_from_tool_arguments
 from packages.provider import (
     ModelMessage,
     ModelProvider,
@@ -118,6 +128,7 @@ class InvestigationRuntime:
         reasoning_effort: str = "none",
         limits: InvestigationLimits | None = None,
         audit_sink: InvestigationAuditSink | None = None,
+        a1_protocol: bool = False,
     ) -> None:
         self._provider = provider
         self._registry = registry
@@ -126,8 +137,17 @@ class InvestigationRuntime:
         self._model = model
         self._reasoning_effort = reasoning_effort
         self._limits = limits or InvestigationLimits()
+        self._a1_protocol = a1_protocol
         self._decision_model = (
-            A1InvestigationDecision if self._limits.max_tool_calls > 8 else InvestigationDecision
+            A1CausalDecision
+            if a1_protocol
+            else A1InvestigationDecision
+            if self._limits.max_tool_calls > 8
+            else InvestigationDecision
+        )
+        self._prompt_text = INVESTIGATOR_PROMPT_V4 if a1_protocol else INVESTIGATOR_PROMPT_V3
+        self._prompt_hash = (
+            investigator_prompt_v4_hash if a1_protocol else investigator_prompt_v3_hash
         )
         self._context_builder = CompactContextBuilder()
         self._audit_sink = audit_sink
@@ -156,6 +176,8 @@ class InvestigationRuntime:
         tool_requests_total = 0
         duplicate_requests_suppressed = 0
         turns: list[dict[str, Any]] = []
+        causal_hypothesis: CausalHypothesis | None = None
+        causal_stop: CausalStopDecision | None = None
         observation_window = derive_observation_window(incident, alerts)
 
         for _turn in range(self._limits.max_agent_turns):
@@ -168,6 +190,7 @@ class InvestigationRuntime:
 
             logical_model_turns += 1
             response: Any = None
+            decision: Any = None
             try:
                 response = self._complete(
                     run_id,
@@ -233,7 +256,11 @@ class InvestigationRuntime:
                     validation_path = "$.hypothesis.evidence_ids"
                     validator = "EvidenceService"
                 else:
-                    hypothesis = decision.hypothesis
+                    if self._a1_protocol:
+                        causal_hypothesis = decision.hypothesis
+                        hypothesis = decision.hypothesis.to_legacy_submission()
+                    else:
+                        hypothesis = decision.hypothesis
                     terminal_decision = DecisionType.SUBMIT_HYPOTHESIS
                     termination = TerminationReason.HYPOTHESIS_SUBMITTED
                 turns.append(
@@ -250,7 +277,11 @@ class InvestigationRuntime:
 
             if decision.decision is DecisionType.STOP:
                 terminal_decision = DecisionType.STOP
-                stop_reason = decision.stop_reason
+                if self._a1_protocol:
+                    causal_stop = decision.stop
+                    stop_reason = decision.stop.stop_reason
+                else:
+                    stop_reason = decision.stop_reason
                 termination = TerminationReason.AGENT_STOPPED
                 turns.append(
                     self._turn_summary(
@@ -440,7 +471,7 @@ class InvestigationRuntime:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             latency_ms=int((monotonic() - started) * 1000),
-            prompt_hash=investigator_prompt_hash(),
+            prompt_hash=self._prompt_hash(),
             provider=provider_name,
             model=self._model,
             reasoning_effort=self._reasoning_effort,
@@ -454,6 +485,7 @@ class InvestigationRuntime:
             provider_retries=accounting.provider_retries,
             shared_ledger_consumed=accounting.shared_ledger_consumed,
             model_calls_limit=self._limits.max_model_calls,
+            tool_calls_limit=self._limits.max_tool_calls,
             terminal_decision=terminal_decision,
             stop_reason=stop_reason,
             model_budget_exhausted_after_terminal_decision=(
@@ -467,6 +499,10 @@ class InvestigationRuntime:
             run_id=run_id,
             incident_id=incident.incident_id,
             hypothesis=hypothesis,
+            causal_hypothesis=(
+                causal_hypothesis.model_dump(mode="json") if causal_hypothesis else None
+            ),
+            causal_stop=causal_stop.model_dump(mode="json") if causal_stop else None,
             evidence=evidence,
             usage=usage,
             termination_reason=termination,
@@ -603,14 +639,17 @@ class InvestigationRuntime:
             tool_calls_used=tool_calls,
             tool_calls_remaining=self._limits.max_tool_calls - tool_calls,
             observation_window=observation_window,
+            topology=DEFAULT_TOPOLOGY if self._a1_protocol else None,
         )
         request = ModelRequest(
             run_id=run_id,
             messages=[
-                ModelMessage(role="system", content=INVESTIGATOR_PROMPT),
+                ModelMessage(role="system", content=self._prompt_text),
                 ModelMessage(role="user", content=context),
             ],
-            response_schema_name="investigation_decision",
+            response_schema_name=(
+                "a1_investigation_decision" if self._a1_protocol else "investigation_decision"
+            ),
             response_schema=self._decision_model.model_json_schema(),
             model=self._model,
             reasoning_effort=self._reasoning_effort,  # type: ignore[arg-type]

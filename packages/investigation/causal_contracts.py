@@ -6,10 +6,12 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from packages.investigation.contracts import (
+    DecisionType,
     HypothesisMechanism,
     HypothesisSubmission,
     InvestigationModel,
     StopReason,
+    ToolRequestSpec,
 )
 from packages.investigation.topology import DependencyResourceId, WorkloadComponentId
 
@@ -85,7 +87,30 @@ class CausalStopDecision(InvestigationModel):
     missing_evidence_categories: list[EvidenceCategory] = Field(default_factory=list, max_length=8)
 
 
+class A1CausalDecision(InvestigationModel):
+    """Provider/runtime decision envelope for the A1 protocol."""
+
+    decision: DecisionType
+    requests: list[ToolRequestSpec] = Field(default_factory=list, max_length=20)
+    hypothesis: CausalHypothesis | None = None
+    stop: CausalStopDecision | None = None
+
+    @model_validator(mode="after")
+    def validate_payload(self) -> "A1CausalDecision":
+        """Ensure the A1 envelope contains only the selected decision payload."""
+        if self.decision is DecisionType.CALL_TOOLS:
+            if not self.requests or self.hypothesis is not None or self.stop is not None:
+                raise ValueError("CALL_TOOLS requires requests and no terminal payload")
+        elif self.decision is DecisionType.SUBMIT_HYPOTHESIS:
+            if self.requests or self.hypothesis is None or self.stop is not None:
+                raise ValueError("SUBMIT_HYPOTHESIS requires only a hypothesis payload")
+        elif self.requests or self.hypothesis is not None or self.stop is None:
+            raise ValueError("STOP requires only a stop payload")
+        return self
+
+
 __all__ = [
+    "A1CausalDecision",
     "CausalHypothesis",
     "CausalStopDecision",
     "EvidenceCategory",

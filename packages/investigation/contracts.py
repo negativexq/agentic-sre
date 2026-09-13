@@ -207,6 +207,7 @@ class InvestigationUsage(InvestigationModel):
     provider_retries: int = Field(ge=0, default=0)
     shared_ledger_consumed: int = Field(ge=0, default=0)
     model_calls_limit: int = Field(ge=0)
+    tool_calls_limit: int = Field(ge=0, default=8)
     terminal_decision: DecisionType | None = None
     stop_reason: StopReason | None = None
     model_budget_exhausted_after_terminal_decision: bool = False
@@ -221,6 +222,8 @@ class InvestigationResult(InvestigationModel):
     run_id: UUID = Field(default_factory=uuid4)
     incident_id: UUID
     hypothesis: HypothesisSubmission | None = None
+    causal_hypothesis: dict[str, Any] | None = None
+    causal_stop: dict[str, Any] | None = None
     evidence: list[Evidence] = Field(default_factory=list, max_length=12)
     usage: InvestigationUsage
     termination_reason: TerminationReason

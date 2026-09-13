@@ -8,6 +8,7 @@ from packages.investigation.artifacts import (
 )
 from packages.investigation.audit import InMemoryInvestigationAuditSink, InvestigationAuditRecord
 from packages.investigation.causal_contracts import (
+    A1CausalDecision,
     CausalHypothesis,
     CausalStopDecision,
     EvidenceCategory,
@@ -36,7 +37,14 @@ from packages.investigation.duplicates import (
     ToolRequestIdentity,
     make_tool_request_identity,
 )
-from packages.investigation.prompt import INVESTIGATOR_PROMPT_VERSION, investigator_prompt_hash
+from packages.investigation.prompt import (
+    INVESTIGATOR_PROMPT_V3,
+    INVESTIGATOR_PROMPT_V4,
+    INVESTIGATOR_PROMPT_VERSION,
+    investigator_prompt_hash,
+    investigator_prompt_v3_hash,
+    investigator_prompt_v4_hash,
+)
 from packages.investigation.registry import ReadOnlyToolRegistry, RegisteredTool
 from packages.investigation.runtime import InvestigationRuntime
 from packages.investigation.topology import (
@@ -60,6 +68,7 @@ __all__ = [
     "TurnRecord",
     "CausalHypothesis",
     "CausalStopDecision",
+    "A1CausalDecision",
     "EvidenceCategory",
     "StructuredTrigger",
     "TriggerType",
@@ -78,6 +87,8 @@ __all__ = [
     "InvestigationRuntime",
     "StopReason",
     "INVESTIGATOR_PROMPT_VERSION",
+    "INVESTIGATOR_PROMPT_V3",
+    "INVESTIGATOR_PROMPT_V4",
     "ReadOnlyToolRegistry",
     "RegisteredTool",
     "TerminationReason",
@@ -87,6 +98,8 @@ __all__ = [
     "ToolRequestSpec",
     "make_tool_request_identity",
     "investigator_prompt_hash",
+    "investigator_prompt_v3_hash",
+    "investigator_prompt_v4_hash",
     "DEFAULT_TOPOLOGY",
     "DependencyEdge",
     "DependencyResourceId",

@@ -20,6 +20,7 @@ from packages.investigation.tool_contracts import (
     TraceIdArgs,
     descriptor_schema,
 )
+from packages.investigation.topology import DEFAULT_TOPOLOGY, TopologyRegistry
 from packages.tools import (
     KubernetesBackend,
     KubernetesChangeBackend,
@@ -46,16 +47,23 @@ class RegisteredTool:
     argument_model: type[ToolArguments] = AnyToolArguments
     historical_change_source: bool = False
     repeat_policy: ToolRepeatPolicy = ToolRepeatPolicy.FIXED_WINDOW
+    target_argument: str | None = None
+    target_topology: TopologyRegistry | None = None
 
     def descriptor(self) -> dict[str, Any]:
         """Return the safe model-facing capability descriptor."""
+        arguments = descriptor_schema(self.argument_model)
+        if self.target_argument is not None and self.target_topology is not None:
+            field = arguments.get(self.target_argument)
+            if field is not None:
+                field["enum"] = [item.value for item in self.target_topology.workload_components()]
         return {
             "name": self.name,
             "version": self.version,
             "purpose": self.purpose or f"Read-only {self.operation} observation",
             "evidence_type": self.source_type.value,
             "repeat_policy": self.repeat_policy.value,
-            "arguments": descriptor_schema(self.argument_model),
+            "arguments": arguments,
         }
 
     def validate_arguments(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -69,7 +77,22 @@ class RegisteredTool:
                 f"$.{location}" if location else "$",
                 "tool arguments do not match the registered contract",
             ) from error
-        return parsed.model_dump(mode="json", exclude_none=True)
+        canonical = parsed.model_dump(mode="json", exclude_none=True)
+        if self.target_argument is not None and self.target_topology is not None:
+            value = canonical.get(self.target_argument)
+            if not isinstance(value, str):
+                raise ToolArgumentValidationError(
+                    f"$.{self.target_argument}", "target must be a registered workload"
+                )
+            try:
+                canonical[self.target_argument] = self.target_topology.validate_workload(
+                    value
+                ).value
+            except ValueError as error:
+                raise ToolArgumentValidationError(
+                    f"$.{self.target_argument}", "target must be a registered workload"
+                ) from error
+        return canonical
 
     def request(
         self,
@@ -176,6 +199,8 @@ def live_observability_registry(
                 metrics,
                 "Measure bounded HTTP error rate for an explicitly named service.",
                 ServiceArgs,
+                target_argument="service",
+                target_topology=DEFAULT_TOPOLOGY,
             ),
             RegisteredTool(
                 "service_latency",
@@ -185,6 +210,8 @@ def live_observability_registry(
                 metrics,
                 "Measure bounded HTTP latency for an explicitly named service.",
                 ServiceArgs,
+                target_argument="service",
+                target_topology=DEFAULT_TOPOLOGY,
             ),
             RegisteredTool(
                 "db_connection_pressure",
@@ -192,8 +219,10 @@ def live_observability_registry(
                 "db_connection_pressure",
                 EvidenceSourceType.METRIC,
                 metrics,
-                "Measure database connection acquisition pressure.",
+                "Measure bounded database connection-acquisition pressure for an explicitly named service.",
                 ServiceArgs,
+                target_argument="service",
+                target_topology=DEFAULT_TOPOLOGY,
             ),
             RegisteredTool(
                 "kafka_consumer_lag",
@@ -201,8 +230,10 @@ def live_observability_registry(
                 "kafka_consumer_lag",
                 EvidenceSourceType.METRIC,
                 metrics,
-                "Measure Kafka lag for an explicitly named consumer.",
+                "Measure bounded Kafka consumer lag for an explicitly named workload consumer.",
                 ConsumerArgs,
+                target_argument="consumer",
+                target_topology=DEFAULT_TOPOLOGY,
             ),
             RegisteredTool(
                 "db_query_latency",
@@ -212,6 +243,8 @@ def live_observability_registry(
                 metrics,
                 "Measure bounded database query latency for an explicitly named service.",
                 ServiceArgs,
+                target_argument="service",
+                target_topology=DEFAULT_TOPOLOGY,
             ),
             RegisteredTool(
                 "service_logs",
@@ -221,6 +254,8 @@ def live_observability_registry(
                 logs,
                 "Search bounded structured logs for an explicitly named service.",
                 ServiceWindowArgs,
+                target_argument="service",
+                target_topology=DEFAULT_TOPOLOGY,
             ),
             RegisteredTool(
                 "service_error_logs",
@@ -230,6 +265,8 @@ def live_observability_registry(
                 logs,
                 "Find bounded error patterns in an explicitly named service's logs.",
                 ServicePatternArgs,
+                target_argument="service",
+                target_topology=DEFAULT_TOPOLOGY,
             ),
             RegisteredTool(
                 "slow_traces",
@@ -239,6 +276,8 @@ def live_observability_registry(
                 traces,
                 "Search bounded slow traces for an explicitly named service.",
                 ServiceArgs,
+                target_argument="service",
+                target_topology=DEFAULT_TOPOLOGY,
             ),
             RegisteredTool(
                 "trace_detail",
@@ -258,6 +297,8 @@ def live_observability_registry(
                 "Inspect bounded pod health and restart state for a named deployment.",
                 DeploymentArgs,
                 repeat_policy=ToolRepeatPolicy.CURRENT_STATE,
+                target_argument="deployment",
+                target_topology=DEFAULT_TOPOLOGY,
             ),
             RegisteredTool(
                 "kubernetes_deployment",
@@ -268,6 +309,8 @@ def live_observability_registry(
                 "Inspect bounded deployment replica and image state.",
                 DeploymentArgs,
                 repeat_policy=ToolRepeatPolicy.CURRENT_STATE,
+                target_argument="deployment",
+                target_topology=DEFAULT_TOPOLOGY,
             ),
             RegisteredTool(
                 "kubernetes_events",
@@ -278,6 +321,8 @@ def live_observability_registry(
                 "Inspect bounded Kubernetes events for a named deployment.",
                 DeploymentArgs,
                 repeat_policy=ToolRepeatPolicy.FIXED_WINDOW,
+                target_argument="deployment",
+                target_topology=DEFAULT_TOPOLOGY,
             ),
             RegisteredTool(
                 "kubernetes_rollout_history",
@@ -288,6 +333,8 @@ def live_observability_registry(
                 "Inspect bounded deployment revision metadata.",
                 DeploymentArgs,
                 repeat_policy=ToolRepeatPolicy.FIXED_WINDOW,
+                target_argument="deployment",
+                target_topology=DEFAULT_TOPOLOGY,
             ),
             RegisteredTool(
                 "kubernetes_container_restarts",
@@ -298,6 +345,8 @@ def live_observability_registry(
                 "Inspect bounded container restart counts for a named deployment.",
                 DeploymentArgs,
                 repeat_policy=ToolRepeatPolicy.CURRENT_STATE,
+                target_argument="deployment",
+                target_topology=DEFAULT_TOPOLOGY,
             ),
             RegisteredTool(
                 "kubernetes_resource_state",
@@ -308,6 +357,8 @@ def live_observability_registry(
                 "Inspect bounded current deployment resource state.",
                 DeploymentArgs,
                 repeat_policy=ToolRepeatPolicy.CURRENT_STATE,
+                target_argument="deployment",
+                target_topology=DEFAULT_TOPOLOGY,
             ),
             RegisteredTool(
                 "recent_deployment_changes",
@@ -315,9 +366,11 @@ def live_observability_registry(
                 "recent_deployment_changes",
                 EvidenceSourceType.CHANGE,
                 changes,
-                "Inspect bounded observable deployment revision and image facts.",
+                "Inspect bounded historical deployment revision and image changes for a named workload.",
                 DeploymentArgs,
                 change_backend.has_historical_source,
+                target_argument="deployment",
+                target_topology=DEFAULT_TOPOLOGY,
             ),
             RegisteredTool(
                 "recent_configuration_changes",
@@ -325,9 +378,11 @@ def live_observability_registry(
                 "recent_configuration_changes",
                 EvidenceSourceType.CHANGE,
                 changes,
-                "Inspect bounded observable deployment configuration facts.",
+                "Inspect bounded historical configuration changes for a named workload deployment.",
                 DeploymentArgs,
                 change_backend.has_historical_source,
+                target_argument="deployment",
+                target_topology=DEFAULT_TOPOLOGY,
             ),
         )
     )

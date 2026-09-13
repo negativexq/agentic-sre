@@ -64,9 +64,11 @@ The implementation should proceed in this order, before any paid call:
 9. Freeze code, prompt, tools, topology, dataset, grader and budgets before a
    one-pass A1 compatibility run.
 
-Phase 1 now implements steps 1, 3, 4, 6 and the bounded audit/provenance parts
-of steps 5 and 7. It does not yet inject topology into the prompt or change
-the investigator's search behavior.
+Phase 1 implemented the identity, contract and bounded audit/provenance
+foundation. Phase 2 now injects the bounded topology/state projection, selects
+prompt v4 for explicit A1 runs, validates canonical workload targets and
+supports the structured A1 provider transport. Native A1 graders and the live
+harness remain Phase 3 work.
 
 No fixture-conditioned routing is permitted. In particular, the runtime must
 not turn V020-003 into a special case or force a change tool for V020-010.
@@ -168,6 +170,37 @@ safety and integrity counters
 
 This closes the v0.2 gaps around absent final component/trigger strings and
 insufficient post-hoc evidence summaries.
+
+## Phase 2 protocol and tool audit
+
+Prompt v4 is a new version; v3 remains byte-for-byte preserved for historical
+runtime use. The v4 changes are limited to generic behavior categories:
+
+```text
+alert scope is symptom scope, not necessarily causal scope
+production topology and workload/resource semantics
+selective causal discrimination across registered targets
+runtime-owned structured terminal outputs
+evidence reuse and STOP calibration
+```
+
+The model-visible A1 context contains the verified topology, its explicit edge
+semantics (`source workload depends on target`), alert scope, queried workload
+and resource identities, evidence provenance and remaining budgets. It does
+not contain evaluator truth or automatic neighbor queries.
+
+All 17 production tools were reviewed for purpose, target and bounded temporal
+behavior. Workload-targeting tools use canonical runtime-known workload values
+for `service`, `consumer` or `deployment`; `trace_detail` remains keyed only
+by its real trace identifier. No resource argument was added to tools that do
+not query a resource-specific backend. The target validation layer rejects an
+unknown workload before backend execution.
+
+The A1 provider transport keeps the structured tool-request decision and adds
+versioned `submit_causal_hypothesis` and `stop_causal_investigation` functions.
+The runtime validates their typed payloads and projects only the legacy result
+shape when compatibility output is needed. Different validated workload
+targets remain distinct duplicate identities.
 
 ## Leakage audit
 

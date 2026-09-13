@@ -25,6 +25,11 @@ DECISION_FUNCTION_NAMES = (
     "submit_root_cause_hypothesis",
     "stop_investigation",
 )
+A1_DECISION_FUNCTION_NAMES = (
+    "request_investigation_tools",
+    "submit_causal_hypothesis",
+    "stop_causal_investigation",
+)
 TERMINAL_DECISION_FUNCTION_NAMES = (
     "submit_root_cause_hypothesis",
     "stop_investigation",
@@ -46,10 +51,26 @@ DECISION_FUNCTION_DESCRIPTIONS = {
         "This is a terminal decision."
     ),
 }
+A1_DECISION_FUNCTION_DESCRIPTIONS = {
+    **DECISION_FUNCTION_DESCRIPTIONS,
+    "submit_causal_hypothesis": (
+        "Submit a structured causal hypothesis with symptom and causal workloads, an optional "
+        "dependency resource, a controlled mechanism and runtime-owned evidence IDs."
+    ),
+    "stop_causal_investigation": (
+        "Terminate without a causal hypothesis when the bounded runtime evidence is insufficient; "
+        "report considered workloads/resources and missing evidence categories."
+    ),
+}
 DECISION_TO_FUNCTION = {
     "CALL_TOOLS": "request_investigation_tools",
     "SUBMIT_HYPOTHESIS": "submit_root_cause_hypothesis",
     "STOP": "stop_investigation",
+}
+A1_DECISION_TO_FUNCTION = {
+    "CALL_TOOLS": "request_investigation_tools",
+    "SUBMIT_HYPOTHESIS": "submit_causal_hypothesis",
+    "STOP": "stop_causal_investigation",
 }
 _STOP_REASON_VALUES = (
     "insufficient_evidence",
@@ -145,14 +166,17 @@ def _decision_function_schemas(
     schema: dict[str, Any],
     allowed_tool_names: tuple[str, ...] | None = None,
     tool_schemas: tuple[ToolSchemaDescriptor, ...] | None = None,
+    *,
+    a1_protocol: bool = False,
 ) -> dict[str, dict[str, Any]]:
-    """Build three strict transport schemas from the existing decision contracts."""
+    """Build strict transport schemas for the legacy or A1 decision protocol."""
     compiled = _compile_strict_schema(schema)
     definitions = compiled.get("$defs", {})
     if not isinstance(definitions, dict):
         raise ValueError("investigation decision schema definitions are invalid")
     tool_request = definitions.get("ToolRequestSpec")
-    hypothesis = definitions.get("HypothesisSubmission")
+    hypothesis_name = "CausalHypothesis" if a1_protocol else "HypothesisSubmission"
+    hypothesis = definitions.get(hypothesis_name)
     if not isinstance(tool_request, dict) or not isinstance(hypothesis, dict):
         raise ValueError("investigation decision schema definitions are incomplete")
 
@@ -240,45 +264,105 @@ def _decision_function_schemas(
         "_provider_tool_request_item", {"$ref": "#/$defs/ToolRequestSpec"}
     )
     request_definitions = {} if tool_schemas is not None else {"ToolRequestSpec": tool_request}
-    schemas = {
-        "request_investigation_tools": object_schema(
-            {
-                "reason": reason,
-                "tool_requests": {
-                    "type": "array",
-                    "items": request_items,
+    if a1_protocol:
+        structured_trigger = definitions.get("StructuredTrigger")
+        stop = definitions.get("CausalStopDecision")
+        if not isinstance(structured_trigger, dict) or not isinstance(stop, dict):
+            raise ValueError("A1 causal decision schema definitions are incomplete")
+        terminal_definitions = {
+            name: value
+            for name, value in definitions.items()
+            if name
+            in {
+                "CausalStopDecision",
+                "DependencyResourceId",
+                "EvidenceCategory",
+                "HypothesisMechanism",
+                "StructuredTrigger",
+                "StopReason",
+                "TriggerType",
+                "WorkloadComponentId",
+            }
+        }
+        hypothesis_schema = {
+            "reason": reason,
+            "symptom_component": hypothesis["properties"]["symptom_component"],
+            "causal_component": hypothesis["properties"]["causal_component"],
+            "causal_resource": hypothesis["properties"]["causal_resource"],
+            "mechanism": hypothesis["properties"]["mechanism"],
+            "structured_trigger": hypothesis["properties"]["structured_trigger"],
+            "causal_summary": hypothesis["properties"]["causal_summary"],
+            "evidence_ids": hypothesis["properties"]["evidence_ids"],
+        }
+        hypothesis_required = list(hypothesis_schema)
+        stop_schema = {
+            "reason": reason,
+            "stop_reason": stop["properties"]["stop_reason"],
+            "considered_components": stop["properties"]["considered_components"],
+            "considered_resources": stop["properties"]["considered_resources"],
+            "missing_evidence_categories": stop["properties"]["missing_evidence_categories"],
+        }
+        stop_required = list(stop_schema)
+        schemas = {
+            "request_investigation_tools": object_schema(
+                {
+                    "reason": reason,
+                    "tool_requests": {"type": "array", "items": request_items},
                 },
-            },
-            ["reason", "tool_requests"],
-            request_definitions,
-        ),
-        "submit_root_cause_hypothesis": object_schema(
-            {
-                "reason": reason,
-                "affected_component": hypothesis["properties"]["affected_component"],
-                "mechanism": hypothesis["properties"]["mechanism"],
-                "suspected_trigger": hypothesis["properties"]["suspected_trigger"],
-                "evidence_ids": hypothesis["properties"]["evidence_ids"],
-            },
-            [
-                "reason",
-                "affected_component",
-                "mechanism",
-                "suspected_trigger",
-                "evidence_ids",
-            ],
-            {
-                "HypothesisMechanism": definitions["HypothesisMechanism"],
-            },
-        ),
-        "stop_investigation": object_schema(
-            {
-                "reason": reason,
-                "stop_reason": {"type": "string", "enum": list(_STOP_REASON_VALUES)},
-            },
-            ["reason", "stop_reason"],
-        ),
-    }
+                ["reason", "tool_requests"],
+                request_definitions,
+            ),
+            "submit_causal_hypothesis": object_schema(
+                hypothesis_schema,
+                hypothesis_required,
+                terminal_definitions,
+            ),
+            "stop_causal_investigation": object_schema(
+                stop_schema,
+                stop_required,
+                terminal_definitions,
+            ),
+        }
+    else:
+        schemas = {
+            "request_investigation_tools": object_schema(
+                {
+                    "reason": reason,
+                    "tool_requests": {
+                        "type": "array",
+                        "items": request_items,
+                    },
+                },
+                ["reason", "tool_requests"],
+                request_definitions,
+            ),
+            "submit_root_cause_hypothesis": object_schema(
+                {
+                    "reason": reason,
+                    "affected_component": hypothesis["properties"]["affected_component"],
+                    "mechanism": hypothesis["properties"]["mechanism"],
+                    "suspected_trigger": hypothesis["properties"]["suspected_trigger"],
+                    "evidence_ids": hypothesis["properties"]["evidence_ids"],
+                },
+                [
+                    "reason",
+                    "affected_component",
+                    "mechanism",
+                    "suspected_trigger",
+                    "evidence_ids",
+                ],
+                {
+                    "HypothesisMechanism": definitions["HypothesisMechanism"],
+                },
+            ),
+            "stop_investigation": object_schema(
+                {
+                    "reason": reason,
+                    "stop_reason": {"type": "string", "enum": list(_STOP_REASON_VALUES)},
+                },
+                ["reason", "stop_reason"],
+            ),
+        }
     return {name: _compile_strict_schema(value) for name, value in schemas.items()}
 
 
@@ -473,9 +557,9 @@ def _extract_decision_function(
     output = _field(raw, "output")
     items = output if isinstance(output, list) else []
     function_calls = [item for item in items if _field(item, "type") == "function_call"]
-    decision_calls = [
-        item for item in function_calls if _field(item, "name") in DECISION_FUNCTION_NAMES
-    ]
+    a1_protocol = request.response_schema_name == "a1_investigation_decision"
+    decision_names = A1_DECISION_FUNCTION_NAMES if a1_protocol else DECISION_FUNCTION_NAMES
+    decision_calls = [item for item in function_calls if _field(item, "name") in decision_names]
     if len(decision_calls) > 1:
         raise ProviderError(
             ProviderErrorCode.MULTIPLE_DECISION_FUNCTION_CALLS,
@@ -517,10 +601,11 @@ def _extract_decision_function(
             metadata=metadata,
         )
     function_name = _field(decision_calls[0], "name")
+    decision_mapping = A1_DECISION_TO_FUNCTION if a1_protocol else DECISION_TO_FUNCTION
     allowed_functions = (
-        tuple(DECISION_TO_FUNCTION[item] for item in request.allowed_decisions)
+        tuple(decision_mapping[item] for item in request.allowed_decisions)
         if request.allowed_decisions is not None
-        else DECISION_FUNCTION_NAMES
+        else decision_names
     )
     if function_name not in allowed_functions:
         raise ProviderError(
@@ -532,12 +617,14 @@ def _extract_decision_function(
         request.response_schema,
         request.allowed_tool_names,
         request.tool_schemas,
+        a1_protocol=a1_protocol,
     )
     schema_error_path = _json_schema_error(structured_output, schemas[function_name])
     if schema_error_path is not None:
         error_code = (
             ProviderErrorCode.INVALID_STOP_REASON
-            if function_name == "stop_investigation" and schema_error_path == "$.stop_reason"
+            if function_name in {"stop_investigation", "stop_causal_investigation"}
+            and schema_error_path == "$.stop_reason"
             else ProviderErrorCode.FUNCTION_ARGUMENTS_SCHEMA_INVALID
         )
         raise ProviderError(
@@ -561,7 +648,25 @@ def _extract_decision_function(
             ],
             "hypothesis": None,
         }, metadata
-    if function_name == "submit_root_cause_hypothesis":
+    if function_name in {"submit_root_cause_hypothesis", "submit_causal_hypothesis"}:
+        if a1_protocol:
+            return {
+                "decision": "SUBMIT_HYPOTHESIS",
+                "requests": [],
+                "hypothesis": {
+                    key: structured_output[key]
+                    for key in (
+                        "symptom_component",
+                        "causal_component",
+                        "causal_resource",
+                        "mechanism",
+                        "structured_trigger",
+                        "causal_summary",
+                        "evidence_ids",
+                    )
+                },
+                "stop": None,
+            }, metadata
         return {
             "decision": "SUBMIT_HYPOTHESIS",
             "requests": [],
@@ -575,7 +680,22 @@ def _extract_decision_function(
                 )
             },
         }, metadata
-    if function_name == "stop_investigation":
+    if function_name in {"stop_investigation", "stop_causal_investigation"}:
+        if a1_protocol:
+            return {
+                "decision": "STOP",
+                "requests": [],
+                "hypothesis": None,
+                "stop": {
+                    key: structured_output[key]
+                    for key in (
+                        "stop_reason",
+                        "considered_components",
+                        "considered_resources",
+                        "missing_evidence_categories",
+                    )
+                },
+            }, metadata
         return {
             "decision": "STOP",
             "requests": [],
@@ -721,18 +841,25 @@ class OpenAIProvider:
             "max_output_tokens": request.max_output_tokens,
             "timeout": request.timeout_ms / 1000,
         }
-        if request.response_schema_name == "investigation_decision":
+        if request.response_schema_name in {"investigation_decision", "a1_investigation_decision"}:
+            a1_protocol = request.response_schema_name == "a1_investigation_decision"
             schemas = _decision_function_schemas(
                 request.response_schema,
                 request.allowed_tool_names,
                 request.tool_schemas,
+                a1_protocol=a1_protocol,
+            )
+            decision_mapping = A1_DECISION_TO_FUNCTION if a1_protocol else DECISION_TO_FUNCTION
+            decision_names = A1_DECISION_FUNCTION_NAMES if a1_protocol else DECISION_FUNCTION_NAMES
+            descriptions = (
+                A1_DECISION_FUNCTION_DESCRIPTIONS if a1_protocol else DECISION_FUNCTION_DESCRIPTIONS
             )
             allowed = (
-                tuple(DECISION_TO_FUNCTION[item] for item in request.allowed_decisions)
+                tuple(decision_mapping[item] for item in request.allowed_decisions)
                 if request.allowed_decisions is not None
-                else DECISION_FUNCTION_NAMES
+                else decision_names
             )
-            unknown = set(allowed) - set(DECISION_FUNCTION_NAMES)
+            unknown = set(allowed) - set(decision_names)
             if unknown:
                 raise ProviderError(
                     ProviderErrorCode.INVALID_RESPONSE,
@@ -744,7 +871,7 @@ class OpenAIProvider:
                         {
                             "type": "function",
                             "name": name,
-                            "description": DECISION_FUNCTION_DESCRIPTIONS[name],
+                            "description": descriptions[name],
                             "parameters": schema,
                             "strict": True,
                         }
@@ -863,7 +990,7 @@ class OpenAIProvider:
         started: float,
     ) -> ModelResponse:
         """Parse structured JSON and usage without retaining raw provider output."""
-        if request.response_schema_name == "investigation_decision":
+        if request.response_schema_name in {"investigation_decision", "a1_investigation_decision"}:
             structured_output, metadata = _extract_decision_function(request, raw)
         else:
             output_text, metadata = _extract_structured_text(raw)

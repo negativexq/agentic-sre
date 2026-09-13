@@ -15,6 +15,7 @@ from packages.contracts import (
     IncidentStatus,
 )
 from packages.investigation.context import CompactContextBuilder
+from packages.investigation.topology import DEFAULT_TOPOLOGY
 
 
 def _incident() -> Incident:
@@ -83,3 +84,51 @@ def test_context_exposes_alert_catalog_progress_and_future_turns() -> None:
         assert context["alerts"][0]["service"] == "order-worker"
         assert context["tool_catalog"][0]["arguments"]["consumer"]["required"] is True
         assert context["progress"][0]["status"] == "SUCCESS"
+
+
+def test_a1_context_exposes_topology_and_separate_alert_scope() -> None:
+    """A1 receives production topology without causal-answer metadata."""
+    context = json.loads(
+        CompactContextBuilder().build(
+            _incident(),
+            [],
+            (),
+            alerts=(_alert(),),
+            topology=DEFAULT_TOPOLOGY,
+            current_model_call=1,
+            max_model_calls=5,
+            tool_calls_remaining=12,
+        )
+    )
+
+    assert context["topology"] == DEFAULT_TOPOLOGY.serialize()
+    assert context["investigation_state"] == {
+        "alert_scope": "order-worker",
+        "queried_workloads": [],
+        "queried_resources": [],
+    }
+    context_text = json.dumps(context)
+    assert "expected_causal_component" not in context_text
+    assert "ground_truth" not in context_text
+
+
+def test_a1_state_includes_validated_failed_and_reused_targets() -> None:
+    """Query state reflects tool activity, not only successful evidence."""
+    context = json.loads(
+        CompactContextBuilder().build(
+            _incident(),
+            [],
+            (),
+            alerts=(_alert(),),
+            topology=DEFAULT_TOPOLOGY,
+            progress=(
+                {
+                    "tool": "service_latency",
+                    "arguments": {"service": "payment-service"},
+                    "status": "BACKEND_UNAVAILABLE",
+                },
+            ),
+        )
+    )
+
+    assert context["investigation_state"]["queried_workloads"] == ["payment-service"]

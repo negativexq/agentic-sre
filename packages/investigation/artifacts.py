@@ -11,9 +11,14 @@ from packages.investigation.causal_contracts import CausalHypothesis, CausalStop
 from packages.investigation.contracts import (
     InvestigationLimits,
     InvestigationModel,
+    InvestigationResult,
     InvestigationUsage,
 )
-from packages.investigation.topology import DependencyResourceId, WorkloadComponentId
+from packages.investigation.topology import (
+    DependencyResourceId,
+    WorkloadComponentId,
+    target_from_tool_arguments,
+)
 
 
 class EvidenceSummary(InvestigationModel):
@@ -105,6 +110,101 @@ class A1RunArtifact(InvestigationModel):
     stop: CausalStopDecision | None = None
     usage: InvestigationUsage
     safety: A1SafetyCounters = Field(default_factory=A1SafetyCounters)
+
+    @classmethod
+    def from_result(
+        cls,
+        result: InvestigationResult,
+        *,
+        experiment_id: str,
+        observation_window: TimeWindow,
+        configuration_hashes: dict[str, str] | None = None,
+    ) -> "A1RunArtifact":
+        """Populate a bounded A1 artifact from one offline runtime result."""
+        tool_by_evidence: dict[str, str] = {}
+        for turn in result.turns:
+            for summary in turn.get("summaries", []):
+                if not isinstance(summary, dict):
+                    continue
+                tool = summary.get("tool")
+                if not isinstance(tool, str):
+                    continue
+                for evidence_id in summary.get("evidence_ids", []):
+                    if isinstance(evidence_id, str):
+                        tool_by_evidence[evidence_id] = tool
+
+        evidence = [
+            EvidenceSummary.from_evidence(
+                item,
+                tool=tool_by_evidence.get(str(item.evidence_id), item.source_system),
+            )
+            for item in result.evidence
+        ]
+        workloads: set[WorkloadComponentId] = set()
+        resources: set[DependencyResourceId] = set()
+        turns: list[TurnRecord] = []
+        tool_calls_used = 0
+        for turn in result.turns:
+            summaries = [item for item in turn.get("summaries", []) if isinstance(item, dict)]
+            arguments = [
+                item["arguments"] for item in summaries if isinstance(item.get("arguments"), dict)
+            ]
+            target_workloads: set[WorkloadComponentId] = set()
+            target_resources: set[DependencyResourceId] = set()
+            new_evidence_ids: list[UUID] = []
+            for summary in summaries:
+                target = target_from_tool_arguments(summary.get("arguments", {}))
+                if target.workload is not None:
+                    target_workloads.add(target.workload)
+                    workloads.add(target.workload)
+                if target.resource is not None:
+                    target_resources.add(target.resource)
+                    resources.add(target.resource)
+                new_evidence_ids.extend(
+                    UUID(item) for item in summary.get("evidence_ids", []) if isinstance(item, str)
+                )
+            tool_calls_used += int(turn.get("tool_calls_attempted", 0))
+            turns.append(
+                TurnRecord(
+                    turn=int(turn.get("turn", 1)),
+                    decision=str(turn.get("selected_decision") or "UNKNOWN"),
+                    requested_tools=[
+                        item
+                        for item in turn.get("requested_tool_names", [])
+                        if isinstance(item, str)
+                    ],
+                    canonical_arguments=arguments,
+                    target_workloads=sorted(target_workloads, key=str),
+                    target_resources=sorted(target_resources, key=str),
+                    new_evidence_ids=new_evidence_ids,
+                    workloads_queried_so_far=sorted(workloads, key=str),
+                    resources_queried_so_far=sorted(resources, key=str),
+                    remaining_model_calls=max(
+                        result.usage.model_calls_limit - int(turn.get("turn", 1)), 0
+                    ),
+                    remaining_tool_calls=max(result.usage.tool_calls_limit - tool_calls_used, 0),
+                )
+            )
+        return cls(
+            experiment_id=experiment_id,
+            run_id=result.run_id,
+            incident_id=result.incident_id,
+            configuration_hashes=configuration_hashes or {},
+            observation_window=observation_window,
+            turns=turns,
+            evidence=evidence,
+            hypothesis=(
+                CausalHypothesis.model_validate(result.causal_hypothesis, strict=False)
+                if result.causal_hypothesis is not None
+                else None
+            ),
+            stop=(
+                CausalStopDecision.model_validate(result.causal_stop, strict=False)
+                if result.causal_stop is not None
+                else None
+            ),
+            usage=result.usage,
+        )
 
 
 __all__ = ["A1RunArtifact", "A1SafetyCounters", "EvidenceSummary", "TurnRecord"]

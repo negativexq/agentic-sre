@@ -179,8 +179,19 @@ def _smoke(manifest: dict[str, Any]) -> int:
     budget.ensure_capacity(5)
     registry = _registry()
     provider = OpenAIProvider(budget=budget, max_retry=0)
-    lifecycle = FixtureLifecycle(LiveBenchmarkEnvironment(), definitions=_definition_map())
-    scenario = FROZEN_DATASET[0]
+    environment = LiveBenchmarkEnvironment()
+    incidents = sorted(
+        environment.control_plane.incidents(), key=lambda item: item.created_at, reverse=True
+    )
+    selected: tuple[Incident, tuple[Alert, ...]] | None = None
+    for incident in incidents:
+        alerts = environment.control_plane.alerts(incident.incident_id)
+        if alerts:
+            selected = incident, alerts
+            break
+    if selected is None:
+        raise RuntimeError("A1 smoke requires an existing incident with normalized alerts")
+    incident, alerts = selected
     runtime = InvestigationRuntime(
         provider,
         registry,
@@ -189,21 +200,29 @@ def _smoke(manifest: dict[str, Any]) -> int:
         limits=LIMITS,
         a1_protocol=True,
     )
-    result = _run_one(scenario, lifecycle=lifecycle, runtime=runtime, manifest=manifest)
+    result = runtime.run(incident, alerts=alerts)
+    observation_window = derive_observation_window(incident, alerts).time_window()
+    artifact = A1RunArtifact.from_result(
+        result,
+        experiment_id=manifest["experiment_id"],
+        observation_window=observation_window,
+        configuration_hashes=_configuration_hashes(manifest),
+    )
     after = budget.snapshot()
-    attempts = result["artifact"]["usage"]["outbound_api_attempts"]
+    attempts = artifact.usage.outbound_api_attempts
     budget.verify_ledger_delta(before, after, attempts)
     payload = {
         "experiment_id": manifest["experiment_id"],
         "purpose": "transport/schema/accounting smoke only; excluded from benchmark metrics",
-        "scenario_id": scenario.scenario_id,
+        "scenario_id": None,
+        "incident_id": str(incident.incident_id),
         "calls_consumed": after.calls_used,
         "ledger_limit": after.limit,
-        "transport_pass": result["artifact"]["usage"]["provider"] == "openai",
+        "transport_pass": artifact.usage.provider == "openai",
         "artifact_pass": True,
         "usage_reconciled": after.calls_used - before.calls_used == attempts,
-        "safety": result["artifact"]["safety"],
-        "result": result,
+        "safety": artifact.safety.model_dump(mode="json"),
+        "artifact": artifact.model_dump(mode="json"),
     }
     SMOKE_PATH.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"smoke": payload}, sort_keys=True))

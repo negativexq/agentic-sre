@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test check agent-check agent-smoke benchmark-offline a1-eval-check a1-generalization-check benchmark-harness-check model-smoke-live agent-smoke-live benchmark-live cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check release-check-live
+.PHONY: install lint typecheck test check agent-check agent-smoke benchmark-offline a1-eval-check a1-generalization-check benchmark-harness-check model-smoke-live agent-smoke-live benchmark-live a1-live-smoke a1-live-benchmark cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check release-check-live
 
 LIVE_BUDGET_FILE ?= .local/v0.2.0-live-budget.json
 HARNESS_SCENARIOS ?=
@@ -76,6 +76,28 @@ benchmark-live:
 	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/payment-service 18001:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-payment-forward.log 2>&1 & payment_pid=$$!; \
 	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" "$$order_pid" "$$payment_pid" 2>/dev/null || true' EXIT; \
 	sleep 3; SRE_LIVE_MODEL_ENABLED=true SRE_LIVE_MODEL_BUDGET_FILE="$(LIVE_BUDGET_FILE)" .venv/bin/python scripts/live_benchmark.py
+
+a1-live-smoke:
+	test -n "$$OPENAI_API_KEY"
+	kubectl port-forward -n observability svc/prometheus 19090:9090 >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \
+	kubectl port-forward -n observability svc/loki 19300:3100 >/tmp/agentic-sre-loki-forward.log 2>&1 & loki_pid=$$!; \
+	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
+	kubectl port-forward -n sre-demo svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/order-service 18000:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-order-forward.log 2>&1 & order_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/payment-service 18001:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-payment-forward.log 2>&1 & payment_pid=$$!; \
+	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" "$$order_pid" "$$payment_pid" 2>/dev/null || true' EXIT; \
+	sleep 3; SRE_LIVE_MODEL_ENABLED=true SRE_MODEL=gpt-5.6-luna SRE_REASONING_EFFORT=none SRE_LIVE_MODEL_CALL_BUDGET=80 SRE_LIVE_MODEL_BUDGET_FILE=.local/a1-single-agent-live-budget.json .venv/bin/python scripts/a1_live_benchmark.py smoke
+
+a1-live-benchmark:
+	test -n "$$OPENAI_API_KEY"
+	kubectl port-forward -n observability svc/prometheus 19090:9090 >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \
+	kubectl port-forward -n observability svc/loki 19300:3100 >/tmp/agentic-sre-loki-forward.log 2>&1 & loki_pid=$$!; \
+	kubectl port-forward -n observability svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
+	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/order-service 18000:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-order-forward.log 2>&1 & order_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/payment-service 18001:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-payment-forward.log 2>&1 & payment_pid=$$!; \
+	trap 'kill "$$prom_pid" "$$loki_pid" "$$control_pid" "$$tempo_pid" "$$order_pid" "$$payment_pid" 2>/dev/null || true' EXIT; \
+	sleep 3; SRE_LIVE_MODEL_ENABLED=true SRE_MODEL=gpt-5.6-luna SRE_REASONING_EFFORT=none SRE_LIVE_MODEL_CALL_BUDGET=80 SRE_LIVE_MODEL_BUDGET_FILE=.local/a1-single-agent-live-budget.json .venv/bin/python scripts/a1_live_benchmark.py benchmark
 
 cluster-up:
 	kind create cluster --config infra/kubernetes/kind-config.yaml

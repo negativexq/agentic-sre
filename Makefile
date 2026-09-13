@@ -38,9 +38,10 @@ a1-generalization-check:
 	kubectl port-forward -n observability svc/loki 19300:3100 >/tmp/agentic-sre-loki-forward.log 2>&1 & loki_pid=$$!; \
 	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
 	kubectl port-forward -n sre-demo svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
+	kubectl port-forward -n observability svc/alertmanager 19093:9093 >/tmp/agentic-sre-alertmanager-forward.log 2>&1 & alertmanager_pid=$$!; \
 	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/order-service 18000:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-order-forward.log 2>&1 & order_pid=$$!; \
 	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/payment-service 18001:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-payment-forward.log 2>&1 & payment_pid=$$!; \
-	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" "$$order_pid" "$$payment_pid" 2>/dev/null || true' EXIT; \
+	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" "$$alertmanager_pid" "$$order_pid" "$$payment_pid" 2>/dev/null || true' EXIT; \
 	sleep 10; .venv/bin/python scripts/a1_generalization_check.py
 
 benchmark-harness-check:
@@ -48,9 +49,10 @@ benchmark-harness-check:
 	kubectl port-forward -n observability svc/loki 19300:3100 >/tmp/agentic-sre-loki-forward.log 2>&1 & loki_pid=$$!; \
 	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
 	kubectl port-forward -n sre-demo svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
+	kubectl port-forward -n observability svc/alertmanager 19093:9093 >/tmp/agentic-sre-alertmanager-forward.log 2>&1 & alertmanager_pid=$$!; \
 	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/order-service 18000:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-order-forward.log 2>&1 & order_pid=$$!; \
 	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/payment-service 18001:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-payment-forward.log 2>&1 & payment_pid=$$!; \
-	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" "$$order_pid" "$$payment_pid" 2>/dev/null || true' EXIT; \
+	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" "$$alertmanager_pid" "$$order_pid" "$$payment_pid" 2>/dev/null || true' EXIT; \
 	sleep 10; SRE_HARNESS_SCENARIOS="$(HARNESS_SCENARIOS)" .venv/bin/python scripts/benchmark_harness_check.py
 
 model-smoke-live:
@@ -92,11 +94,12 @@ a1-live-benchmark:
 	test -n "$$OPENAI_API_KEY"
 	kubectl port-forward -n observability svc/prometheus 19090:9090 >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \
 	kubectl port-forward -n observability svc/loki 19300:3100 >/tmp/agentic-sre-loki-forward.log 2>&1 & loki_pid=$$!; \
-	kubectl port-forward -n observability svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
+	kubectl port-forward -n sre-demo svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
+	kubectl port-forward -n observability svc/alertmanager 19093:9093 >/tmp/agentic-sre-alertmanager-forward.log 2>&1 & alertmanager_pid=$$!; \
 	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
 	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/order-service 18000:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-order-forward.log 2>&1 & order_pid=$$!; \
 	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/payment-service 18001:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-payment-forward.log 2>&1 & payment_pid=$$!; \
-	trap 'kill "$$prom_pid" "$$loki_pid" "$$control_pid" "$$tempo_pid" "$$order_pid" "$$payment_pid" 2>/dev/null || true' EXIT; \
+	trap 'kill "$$prom_pid" "$$loki_pid" "$$control_pid" "$$alertmanager_pid" "$$tempo_pid" "$$order_pid" "$$payment_pid" 2>/dev/null || true' EXIT; \
 	sleep 3; SRE_LIVE_MODEL_ENABLED=true SRE_MODEL=gpt-5.6-luna SRE_REASONING_EFFORT=none SRE_LIVE_MODEL_CALL_BUDGET=80 SRE_LIVE_MODEL_BUDGET_FILE=.local/a1-r2-single-agent-live-budget.json .venv/bin/python scripts/a1_live_benchmark.py benchmark
 
 cluster-up:

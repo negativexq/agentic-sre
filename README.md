@@ -1,253 +1,320 @@
 # Agentic SRE
 
-Deterministic SRE foundations for a future agentic investigation platform.
+Evidence-grounded incident investigation with real observability, bounded LLM
+reasoning, read-only tools, provenance, and reproducible fault benchmarks.
 
 [![Version](https://img.shields.io/github/v/tag/negativexq/agentic-sre?sort=semver)](https://github.com/negativexq/agentic-sre/tags)
 [![CI](https://github.com/negativexq/agentic-sre/actions/workflows/checks.yml/badge.svg)](https://github.com/negativexq/agentic-sre/actions/workflows/checks.yml)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Kubernetes](https://img.shields.io/badge/runtime-kind-326CE5?logo=kubernetes&logoColor=white)](https://kind.sigs.k8s.io/)
 
-> Current release: **`v0.1.1` — Live Observability Hardening**  
-> Development target: **`v0.2.0` — Single-Agent Investigation Baseline**
+> Current release: **`v0.2.0` — Single-Agent Investigation Baseline**
 
-Agentic SRE is built in deliberate milestones. The current releases establish a
-measurable incident control plane before probabilistic decision-making is
-introduced:
+Agentic SRE turns a real production-shaped failure into a persistent incident,
+then lets one bounded investigator select read-only evidence and submit a
+structured root-cause hypothesis. The runtime, not the model, owns authority,
+budgets, evidence provenance, and termination.
 
-```text
-Workload
-   ↓
-OpenTelemetry → Collector → Prometheus / Loki / Tempo → Grafana
-                                      ↓
-                                 Alertmanager
-                                      ↓
-                              Incident Control Plane
-                                      ↓
-                       Read-only Tools → Evidence Provenance
-```
-
-The live pipeline is validated on a local `kind` cluster with a production-like
-order/payment workload, PostgreSQL, Redis, and Kafka.
-
-## What is included
-
-- Typed incident, alert, event, evidence, change, policy, action, and
-  verification contracts using Pydantic v2.
-- A deterministic incident lifecycle state machine with immutable timeline
-  events.
-- Persistent incident state and audit history through SQLAlchemy 2.x,
-  PostgreSQL, and Alembic.
-- FastAPI control-plane health, readiness, incident, timeline, alert, evidence,
-  and Alertmanager webhook endpoints.
-- A deterministic order/payment workload and seeded load generator.
-- Live OpenTelemetry metrics, structured logs, and distributed traces.
-- Prometheus, Loki, Tempo, Grafana, and Alertmanager running in `kind`.
-- Alert deduplication and resolution handling from real Alertmanager payloads.
-- Bounded, typed, audited, read-only investigation tools for metrics, logs,
-  traces, and Kubernetes state.
-- Fail-closed policy evaluation and provenance-backed evidence records.
-- A credit-aware single-agent baseline built around a deterministic
-  `FakeModelProvider` and explicit opt-in live model smoke.
-
-## Scope boundary
-
-Agentic reasoning is intentionally **not enabled** in `v0.1.1`. This repository
-currently has:
+## Current architecture
 
 ```text
-Default/CI live API calls  0
-Agent framework imports   0
-MCP / A2A                 absent
-Autonomous remediation    absent
-Kubernetes write verbs    0
-Arbitrary shell API       absent
+Order / Payment / Worker
+          │
+          ▼
+    OpenTelemetry
+          │
+          ▼
+Prometheus · Loki · Tempo
+          │
+          ▼
+     Alertmanager
+          │
+          ▼
+ Persistent Incident Control Plane
+          │
+          ▼
+ Deterministic Investigation Runtime
+          │
+          ▼
+   Single LLM Investigator
+          │
+          ▼
+   Typed Read-Only Tool Registry
+   │       │       │       │
+ Metrics  Logs   Traces  Kubernetes
+                              │
+                           Changes
+          │
+          ▼
+ Provenance-Backed Evidence
+          │
+          ▼
+ Structured RCA Hypothesis / STOP
 ```
 
-The project defines future-facing contracts, but no contract authorizes model
-calls, agent orchestration, infrastructure writes, or autonomous remediation.
-The next milestone may introduce a single investigator only after the live
-telemetry and provenance boundaries remain stable.
+The model-driven boundary is deliberately narrow: the investigator chooses
+what evidence to inspect and when to conclude. Deterministic code validates and
+executes every request.
 
-See [ADR-001](docs/adr/ADR-001-deterministic-first-architecture.md) for the
-deterministic-first decision and
-[ADR-002](docs/adr/ADR-002-live-observability-prerequisite.md) for the live
-observability prerequisite.
+## What v0.2.0 actually does
 
-## Technology
+The released baseline includes:
 
-| Area | Choice |
+- one bounded investigator using a fixed GPT-5.6 Luna evaluation configuration;
+- a three-model-call maximum and eight-actual-tool-execution maximum per incident;
+- typed decision functions for tool requests, hypotheses, and STOP outcomes;
+- 17 bounded read-only tools across metrics, logs, traces, Kubernetes, and changes;
+- cross-turn evidence and progress state with duplicate request suppression;
+- authoritative incident observation windows and backend-specific time encoding;
+- persistent historical change records;
+- deterministic argument, budget, provenance, and safety validation; and
+- a real fault → telemetry → Alertmanager → Incident benchmark harness.
+
+GPT-5.6 Luna describes the released benchmark configuration; it is not a claim
+that the platform requires one model implementation.
+
+## v0.2.0 frozen live benchmark
+
+| Metric | Result |
+| --- | ---: |
+| Frozen scenarios | 10 |
+| Completion | 90% |
+| Service accuracy | 40% |
+| Mechanism accuracy | 80% |
+| Trigger accuracy | 0% |
+| Composite RCA | 50% |
+| Valid evidence references | 90% |
+| Model calls / incident | 3.00 |
+| Tool executions / incident | 6.60 |
+| Fabricated evidence | 0 |
+| Cross-incident evidence | 0 |
+| Provider/runtime failures | 0 |
+
+Each frozen scenario ran exactly once against a real fault → telemetry →
+Alertmanager → Incident chain. No LLM judge was used and no failed scenario was
+rerun. The single-pass methodology bounds paid API usage and establishes a
+baseline; it does not estimate model variance.
+
+The measured baseline identifies mechanisms more reliably than causal service
+or trigger attribution. This is intentionally preserved as the comparison
+baseline for later investigation architectures.
+
+See the [live benchmark report](docs/benchmarks/v0.2.0-single-agent.md),
+[machine-readable benchmark](docs/benchmarks/v0.2.0-single-agent-live.json), and
+[zero-LLM harness qualification](docs/benchmarks/v0.2.0-harness-qualification.json).
+
+## Why this is not an agent demo
+
+The model chooses what to inspect. It does not control:
+
+- tool implementations or backend query syntax;
+- query bounds or authoritative observation windows;
+- evidence creation or incident ownership;
+- execution budgets or policy decisions;
+- Kubernetes permissions; or
+- infrastructure mutation and remediation.
+
+The runtime owns typed arguments, the tool allowlist, bounded execution,
+provenance, validation, termination, and read-only enforcement. The model never
+creates Evidence records and cannot turn telemetry text into instructions.
+
+## Safety boundary
+
+v0.2.0 includes live LLM investigation, but authority remains intentionally
+narrow.
+
+| Capability | v0.2.0 |
 | --- | --- |
-| Language | Python 3.12+ |
-| API | FastAPI |
-| Contracts | Pydantic v2 |
-| Persistence | SQLAlchemy 2.x, PostgreSQL, Alembic |
-| Testing | pytest |
-| Quality | Ruff, mypy, pre-commit |
-| Local runtime | kind, Docker, Kubernetes |
-| Telemetry | OpenTelemetry Collector |
-| Metrics | Prometheus |
-| Logs | Loki |
-| Traces | Tempo |
-| Dashboards | Grafana |
-| Alerts | Alertmanager |
-| Messaging | Kafka |
-| Cache | Redis |
+| Single investigator | Yes |
+| Read-only metrics, logs, and traces | Yes |
+| Read-only Kubernetes | Yes |
+| Historical change evidence | Yes |
+| Infrastructure writes | No |
+| Kubernetes write verbs | No |
+| Arbitrary shell | No |
+| Autonomous remediation | No |
+| Multi-agent orchestration | No |
+| MCP | No |
+| A2A | No |
+
+## Evidence surface
+
+The released registry contains 17 tools. Their descriptions and strict argument
+contracts are generated from the same registered definitions used for runtime
+validation.
+
+### Metrics
+
+`service_error_rate`, `service_latency`, `db_connection_pressure`,
+`db_query_latency`, `kafka_consumer_lag`
+
+### Logs
+
+`service_logs`, `service_error_logs`
+
+### Traces
+
+`slow_traces`, `trace_detail`
+
+### Kubernetes
+
+`kubernetes_pods`, `kubernetes_deployment`, `kubernetes_events`,
+`kubernetes_rollout_history`, `kubernetes_container_restarts`,
+`kubernetes_resource_state`
+
+### Change intelligence
+
+`recent_deployment_changes`, `recent_configuration_changes`
+
+Tool execution is normalized into evidence with incident ownership,
+source/backend, tool identity, canonical arguments, effective observation
+window, temporal mode, and collection time. Hypothesis evidence IDs are checked
+before acceptance. In the frozen live benchmark, fabricated evidence and
+cross-incident evidence were both `0`.
+
+Evidence may be classified as `FIXED_WINDOW`, `CURRENT_STATE`,
+`HISTORICAL_EVENT`, or `HISTORICAL_CHANGE`. Resolved incidents use their
+authoritative incident observation window rather than an unrelated current-time
+query; wire timestamp units are adapted separately for Prometheus, Loki, and
+Tempo.
+
+## Real fault benchmark harness
+
+Benchmark fixtures do not construct Incident objects directly. Each trial uses
+the real control-plane path:
+
+```text
+controlled fault
+→ workload effect
+→ real telemetry
+→ Prometheus alert
+→ Alertmanager webhook
+→ persistent Incident
+→ investigation
+→ cleanup and recovery
+```
+
+Trials are sequential so current-state evidence remains observable while the
+fault is under investigation. The harness qualification completed all ten
+lifecycles with zero model calls: **10/10 PASS**. Benchmark setup mutations are
+controlled test authority and are never exposed through the investigation
+registry.
+
+| Scenario | Frozen fixture |
+| --- | --- |
+| V020-001 | `payment_error_spike` |
+| V020-002 | `order_error_spike` |
+| V020-003 | `payment_dependency_latency` |
+| V020-004 | `order_latency_spike` |
+| V020-005 | `payment_db_pool_pressure` |
+| V020-006 | `order_db_query_latency` |
+| V020-007 | `order_worker_lag` |
+| V020-008 | `order_worker_failure` |
+| V020-009 | `payment_pod_crash` |
+| V020-010 | `payment_config_change` |
 
 ## Quick start
 
 ### Prerequisites
 
-For local development, install:
-
-- Python 3.12+
-- Docker
-- `kind`
-- `kubectl`
-
-Create the virtual environment and install development dependencies:
+Install Python 3.12+, Docker, `kind`, and `kubectl`.
 
 ```shell
 make install
-```
-
-Run the local quality checks:
-
-```shell
 make check
 ```
 
-`make check` runs Ruff, formatting validation, mypy, and the complete pytest
-suite.
-
-### Run the live runtime
-
-Create the cluster and deploy the workload, control plane, dependencies, and
-observability stack:
+### Run the local runtime
 
 ```shell
 make cluster-up
 make deploy
-```
-
-Then run the seeded workload and inspect the runtime:
-
-```shell
-make load
-make status
 make observability-check
 make evidence-check
 make rbac-check
 ```
 
-The local cluster can be removed with:
+Use `make load` and `make status` to stimulate and inspect the local runtime.
+Remove the cluster with `make cluster-down`.
 
-```shell
-make cluster-down
-```
+### Optional live model evaluation
+
+Live model commands are explicit, paid operations. They require an API key and
+the shared budget ledger; direct release commands fail closed without that
+ledger. The canonical release benchmark creates its own real incidents through
+the harness and runs once per frozen scenario. Review the [harness methodology](docs/benchmarks/v0.2.0-harness-methodology.md)
+and the [live benchmark report](docs/benchmarks/v0.2.0-single-agent.md) before
+running any live evaluation.
 
 ### Release validation
 
-Run the complete deterministic release gate:
-
 ```shell
 make release-check
+make release-check-live
 ```
 
-This includes static checks, unit and integration tests, live backend checks,
-evidence provenance validation, read-only Kubernetes RBAC checks, end-to-end
-smoke scenarios, and state-machine coverage enforcement.
-
-## Control-plane API
-
-The FastAPI application exposes:
-
-```text
-GET  /health
-GET  /ready
-
-GET  /api/v1/incidents
-GET  /api/v1/incidents/{incident_id}
-GET  /api/v1/incidents/{incident_id}/events
-GET  /api/v1/incidents/{incident_id}/alerts
-GET  /api/v1/incidents/{incident_id}/evidence
-
-POST /api/v1/webhooks/alertmanager
-```
-
-Errors use a typed response containing an error code, message, and correlation
-ID. The readiness endpoint reflects database availability.
+`make release-check` runs offline and local deterministic engineering gates.
+`make release-check-live` validates the committed live-release evidence,
+qualification, benchmark, safety, accounting, and configuration artifacts. It
+does not rerun the LLM benchmark or make a new model call.
 
 ## Repository layout
 
 ```text
-apps/control_plane/    FastAPI control plane
+apps/control_plane/    FastAPI incident control plane
 packages/contracts/    Pydantic domain contracts
-packages/incident/     Lifecycle state machine and alert ingestion
-packages/storage/      Database models and repositories
-packages/telemetry/    Metrics, logs, tracing, and context propagation
-packages/tools/        Bounded read-only investigation tools
+packages/incident/     Lifecycle state machine and ingestion
+packages/investigation/Decision protocol, context, registry, runtime
+packages/provider/     Fake/live provider boundaries and budget accounting
+packages/tools/        Bounded read-only tools and live backends
 packages/evidence/     Provenance-backed evidence service
-packages/policy/       Deterministic fail-closed policy boundary
-packages/changes/      Normalized infrastructure change records
-packages/e2e/          Deterministic smoke harness
-workload/              Seeded data and load generator
-infra/                 Docker, Kubernetes, and observability manifests
+packages/changes/      Historical change records
+packages/evals/        Frozen dataset, fixtures, harness, graders
+packages/telemetry/    Metrics, logs, tracing, context propagation
+packages/storage/      SQLAlchemy models and repositories
+infra/                 Kubernetes and observability manifests
 tests/                 Unit, contract, integration, and E2E tests
 docs/adr/              Architecture decision records
 ```
 
-## Release status
+## Evidence and design docs
+
+- [ADR-001: deterministic-first architecture](docs/adr/ADR-001-deterministic-first-architecture.md)
+- [ADR-002: live observability prerequisite](docs/adr/ADR-002-live-observability-prerequisite.md)
+- [ADR-003: credit-aware single-agent baseline](docs/adr/ADR-003-credit-aware-single-agent-baseline.md)
+- [ADR-004: bounded investigation protocol](docs/adr/ADR-004-bounded-investigation-protocol.md)
+- [v0.2.0 harness methodology](docs/benchmarks/v0.2.0-harness-methodology.md)
+- [v0.2.0 harness qualification](docs/benchmarks/v0.2.0-harness-qualification.json)
+- [v0.2.0 live benchmark](docs/benchmarks/v0.2.0-single-agent.md)
+- [v0.2.0 release evidence](docs/benchmarks/v0.2.0-release-evidence.json)
+
+## Release history
 
 ### `v0.1.0` — Deterministic SRE Foundation
 
 Established the contracts, lifecycle, persistence, control-plane API,
-read-only tool boundaries, evidence provenance, and fail-closed policy
-foundation.
+read-only boundaries, evidence provenance, and fail-closed policy foundation.
 
 ### `v0.1.1` — Live Observability Hardening
 
-Validated the workload-to-telemetry-to-incident pipeline against real runtime
-backends in `kind`, including alert deduplication, alert resolution, live
-investigation, backend failure handling, and provenance checks.
+Validated the workload-to-telemetry-to-incident pipeline against real local
+backends, including alert lifecycle, backend failures, and provenance checks.
 
-### Development target: `v0.2.0`
+### `v0.2.0` — Single-Agent Investigation Baseline — CURRENT
 
-The single-agent baseline consumes the existing read-only tools and evidence
-contracts. Daily checks and CI use the fake provider and make zero API calls.
-Live model execution is available only through explicit commands after the
-offline gates pass.
+Adds the bounded single investigator, 17 read-only tools, real-fault benchmark
+harness, deterministic decision protocol, and the frozen ten-scenario live
+baseline documented above.
 
-```shell
-make agent-check       # local agent tests, live API calls: 0
-make agent-smoke       # fake-provider smoke, live API calls: 0
-make model-smoke-live  # explicit provider smoke, exactly 1 live call
-make agent-smoke-live  # one or three existing incidents, max 3 calls each
-make benchmark-live    # ten mapped incidents, max 30 live calls, retries off
-make release-check-live # verifies committed live gate artifacts; no new calls
-```
+### `v0.3.0` — Evidence-Grounded Multi-Agent Investigation — NEXT / planned
 
-See [ADR-003](docs/adr/ADR-003-credit-aware-single-agent-baseline.md) for the
-credit and safety boundary. The current offline benchmark is documented in
-[docs/benchmarks/v0.2.0-single-agent.md](docs/benchmarks/v0.2.0-single-agent.md).
-The repaired bounded protocol is documented in
-[ADR-004](docs/adr/ADR-004-bounded-investigation-protocol.md).
-
-`agent-smoke-live` selects the three newest incidents by default. Set
-`SRE_LIVE_INCIDENT_IDS` to provide an explicit comma-separated set. The
-one-pass `benchmark-live` requires ten ordered IDs in
-`SRE_BENCHMARK_INCIDENT_IDS`; both commands perform a worst-case budget
-preflight before making a model request.
+Future architecture work only. Multi-agent investigation is not implemented in
+this release.
 
 ## Development conventions
 
-Commits follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/)
-and remain single-line by default:
-
-```text
-feat(incident): implement deterministic lifecycle state machine
-```
-
-Before committing a coherent change, run:
+Commits follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/).
+Before a code or documentation commit, run:
 
 ```shell
 make check

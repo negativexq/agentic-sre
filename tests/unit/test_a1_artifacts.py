@@ -1,7 +1,12 @@
 """Offline tests for bounded A1 evidence and run artifact contracts."""
 
+import json
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
+
+import pytest
+from pydantic import ValidationError
 
 from packages.contracts import Evidence, EvidenceSourceType, TimeWindow
 from packages.investigation import (
@@ -91,7 +96,44 @@ def test_evidence_summary_and_run_artifact_round_trip() -> None:
         safety=A1SafetyCounters(),
     )
 
-    restored = A1RunArtifact.model_validate_json(artifact.model_dump_json())
+    restored = A1RunArtifact.from_json(artifact.model_dump_json())
     assert restored == artifact
     assert restored.hypothesis is not None
     assert restored.hypothesis.causal_resource is DependencyResourceId.POSTGRESQL
+
+
+def test_historical_r1_smoke_artifact_uses_json_wire_reader() -> None:
+    """The persisted R1 shape reloads without changing the historical file."""
+    payload = json.loads(Path("docs/benchmarks/a1-r1-live-smoke.json").read_text())
+    restored = A1RunArtifact.from_json(
+        json.dumps(payload["artifact"], sort_keys=True, separators=(",", ":"))
+    )
+
+    assert len(restored.evidence) == 10
+    assert restored.termination_reason is TerminationReason.TOOL_CALL_LIMIT
+    assert all(len(item.bounded_observation_summary) <= 1000 for item in restored.evidence)
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    (
+        (("run_id",), "not-a-uuid"),
+        (("observation_window", "starts_at"), "not-a-datetime"),
+        (("termination_reason",), "NOT_A_TERMINATION"),
+        (("evidence", 0, "target_workload"), "unknown-service"),
+        (("evidence", 0, "target_resource"), "unknown-resource"),
+        (("evidence", 0, "unexpected"), True),
+    ),
+)
+def test_artifact_json_wire_reader_rejects_invalid_values(
+    path: tuple[object, ...], value: object
+) -> None:
+    """Wire parsing remains exact and rejects malformed or extra values."""
+    payload = json.loads(Path("docs/benchmarks/a1-r1-live-smoke.json").read_text())["artifact"]
+    current: object = payload
+    for part in path[:-1]:
+        current = current[part]  # type: ignore[index]
+    current[path[-1]] = value  # type: ignore[index]
+
+    with pytest.raises(ValidationError):
+        A1RunArtifact.from_json(json.dumps(payload, sort_keys=True, separators=(",", ":")))

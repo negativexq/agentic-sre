@@ -784,6 +784,45 @@ def test_novel_batch_above_remaining_budget_fails_closed() -> None:
     assert result.usage.tool_calls == 1
 
 
+def test_atomic_novel_batch_rejects_three_requests_with_two_calls_remaining() -> None:
+    """A remaining budget of two cannot partially execute a novel batch of three."""
+    provider = FakeModelProvider(
+        [
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [
+                    {
+                        "tool": "service_latency" if index == 0 else f"metric_{index}",
+                        "arguments": {"service": "order-worker"},
+                    }
+                    for index in range(10)
+                ],
+            },
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [
+                    {"tool": f"metric_{index}", "arguments": {"service": "order-worker"}}
+                    for index in range(10, 13)
+                ],
+            },
+        ]
+    )
+    limits = InvestigationLimits(
+        max_model_calls=5,
+        max_tool_calls=12,
+        max_agent_turns=5,
+    )
+
+    result = InvestigationRuntime(provider, registry(13), limits=limits).run(incident())
+
+    assert result.termination_reason is TerminationReason.TOOL_CALL_LIMIT
+    assert result.error_code == "TOOL_BUDGET_EXCEEDED"
+    assert result.usage.tool_calls == 10
+    assert result.usage.tool_requests_total == 13
+    assert result.turns[1]["tool_calls_attempted"] == 0
+    assert all(item["status"] == "REJECTED_BUDGET" for item in result.turns[1]["summaries"])
+
+
 def test_all_duplicate_batch_does_not_consume_remaining_budget() -> None:
     """A duplicate request is suppressed rather than treated as new work."""
     provider = FakeModelProvider(

@@ -37,11 +37,11 @@ from packages.provider import LiveModelBudget, OpenAIProvider
 from packages.tools import ControlPlaneChangeReader
 
 ROOT = Path(__file__).resolve().parents[1]
-MANIFEST_PATH = ROOT / "docs/benchmarks/a1-r1-evaluation-manifest.json"
-SMOKE_PATH = ROOT / "docs/benchmarks/a1-r1-live-smoke.json"
-RESULT_PATH = ROOT / "docs/benchmarks/a1-r1-single-agent-live.json"
-RESULT_SHA_PATH = ROOT / "docs/benchmarks/a1-r1-single-agent-live.sha256"
-LEDGER_PATH = ROOT / ".local/a1-r1-single-agent-live-budget.json"
+MANIFEST_PATH = ROOT / "docs/benchmarks/a1-r2-evaluation-manifest.json"
+SMOKE_PATH = ROOT / "docs/benchmarks/a1-r2-live-smoke.json"
+RESULT_PATH = ROOT / "docs/benchmarks/a1-r2-single-agent-live.json"
+RESULT_SHA_PATH = ROOT / "docs/benchmarks/a1-r2-single-agent-live.sha256"
+LEDGER_PATH = ROOT / ".local/a1-r2-single-agent-live-budget.json"
 MODEL = "gpt-5.6-luna"
 REASONING_EFFORT = "none"
 LIMITS = InvestigationLimits(
@@ -262,7 +262,7 @@ def _smoke(manifest: dict[str, Any]) -> int:
     }
     SMOKE_PATH.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     reloaded = json.loads(SMOKE_PATH.read_text(encoding="utf-8"))
-    A1RunArtifact.model_validate(reloaded["artifact"])
+    A1RunArtifact.from_json(json.dumps(reloaded["artifact"], sort_keys=True, separators=(",", ":")))
     payload["artifact_json_reload_pass"] = True
     SMOKE_PATH.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"smoke": payload}, sort_keys=True))

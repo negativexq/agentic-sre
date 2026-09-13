@@ -118,6 +118,11 @@ class A1RunArtifact(InvestigationModel):
     safety: A1SafetyCounters = Field(default_factory=A1SafetyCounters)
 
     @classmethod
+    def from_json(cls, payload: str | bytes) -> "A1RunArtifact":
+        """Restore an artifact through the JSON wire boundary."""
+        return cls.model_validate_json(payload)
+
+    @classmethod
     def from_result(
         cls,
         result: InvestigationResult,

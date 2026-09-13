@@ -1,18 +1,12 @@
 {
   "experiment": "v0.3-exp01-a1-improved-single-agent-r1",
-  "status": "NOT_STARTED",
+  "status": "INVALIDATED_BY_INTEGRATION_FAILURE",
+  "invalidation_reason": "A1RunArtifact JSON reload validation failed because strict model validation rejected JSON scalar representations after smoke persistence.",
   "hard_cap": 80,
-  "calls_used": 0,
-  "remaining": 80,
+  "calls_used": 4,
+  "remaining": 76,
   "previous_execution_status": "INVALIDATED_BY_INTEGRATION_FAILURE",
   "previous_execution_calls": 3,
-  "created_for": {
-    "per_incident_max_model_calls": 5,
-    "compatibility_scenarios": 10,
-    "generalization_scenarios": 4,
-    "smoke_reserve": 10,
-    "provider_retries": 0
-  },
   "reserve_before_network": true,
   "no_refunds_after_possible_transmission": true
 }

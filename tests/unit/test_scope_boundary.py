@@ -3,6 +3,8 @@
 import tomllib
 from pathlib import Path
 
+from packages.investigation.registry import live_observability_registry
+
 FORBIDDEN_PACKAGES = {
     "agent-framework",
     "agno",
@@ -32,3 +34,14 @@ def test_release_has_no_agent_orchestration_dependencies() -> None:
     }
 
     assert package_names.isdisjoint(FORBIDDEN_PACKAGES)
+
+
+def test_benchmark_state_preparation_is_not_model_accessible() -> None:
+    registry = live_observability_registry(
+        "http://prometheus",
+        "http://loki",
+        "http://tempo",
+    )
+
+    assert "/api/v1/benchmark/state/prepare" not in registry.names()
+    assert all("benchmark" not in name.lower() for name in registry.names())

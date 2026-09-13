@@ -22,6 +22,9 @@ spec:
           envFrom:
             - configMapRef:
                 name: workload-config
+          env:
+            - name: SRE_BENCHMARK_ENVIRONMENT
+              value: local-kind
           resources:
             requests:
               cpu: 100m

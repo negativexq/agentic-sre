@@ -3,6 +3,7 @@
 from packages.storage.database import create_database_engine, create_session_factory, session_scope
 from packages.storage.repositories import (
     AlertRepository,
+    BenchmarkStateRepository,
     ChangeRecordRepository,
     EvidenceRepository,
     EvidenceWriteRepository,
@@ -14,6 +15,7 @@ from packages.storage.repositories import (
 
 __all__ = [
     "AlertRepository",
+    "BenchmarkStateRepository",
     "ChangeRecordRepository",
     "EvidenceWriteRepository",
     "EvidenceRepository",

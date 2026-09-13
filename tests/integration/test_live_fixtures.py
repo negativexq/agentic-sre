@@ -20,6 +20,7 @@ from packages.evals.live_fixtures import (
     POOL_PRESSURE_CONCURRENCY,
     POOL_PRESSURE_HOLD_MS,
     POOL_PRESSURE_WAVES,
+    FixtureCorrelationError,
     FixtureDefinition,
     LiveBenchmarkEnvironment,
     fixture_registry_is_complete,
@@ -291,3 +292,45 @@ def test_recovery_waits_for_collateral_alerts_to_resolve(
 
     assert environment._wait_for_alerts_quiet(timeout_seconds=1)
     assert calls["count"] == 2
+
+
+def test_wait_for_incident_classifies_reused_canonical_fingerprint_as_stale(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pre-existing canonical incident is diagnostic, never a fresh trial result."""
+    environment = LiveBenchmarkEnvironment()
+    incident = _incident()
+    alert = Alert(
+        alert_name="PaymentErrorRateHigh",
+        service="payment-service",
+        namespace="sre-demo",
+        cluster="kind-agentic-sre",
+        starts_at=NOW,
+        ends_at=None,
+        fingerprint="canonical-payment-fingerprint",
+        status=AlertStatus.FIRING,
+        source=AlertSource.ALERTMANAGER,
+    )
+
+    class FakeControlPlane:
+        def matching_incidents(
+            self, _definition: FixtureDefinition
+        ) -> list[tuple[Incident, tuple[Alert, ...]]]:
+            return [(incident, (alert,))]
+
+    environment.control_plane = FakeControlPlane()  # type: ignore[assignment]
+    monkeypatch.setattr(environment, "_prometheus_alert_state", lambda _: "firing")
+    monkeypatch.setattr(environment, "_alertmanager_alert_state", lambda _: "firing")
+
+    with pytest.raises(FixtureCorrelationError) as raised:
+        environment.wait_for_incident(
+            FIXTURE_BY_NAME["payment_error_spike"],
+            {str(incident.incident_id)},
+            timeout_seconds=0,
+            poll_seconds=0,
+        )
+
+    assert raised.value.code == "STALE_REUSED_INCIDENT"
+    assert raised.value.details["stale_reused_incidents"][0]["fingerprints"] == [
+        "canonical-payment-fingerprint"
+    ]

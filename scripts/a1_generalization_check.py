@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -210,13 +211,15 @@ def _check_scenario(
 
 def main() -> int:
     """Run each frozen generalization fixture twice with no provider dependency."""
+    output_path = Path(os.getenv("A1_GENERALIZATION_QUALIFICATION_OUTPUT", str(OUTPUT)))
+    environment = LiveBenchmarkEnvironment()
+    environment.prepare_benchmark_state("a1-generalization-qualification")
     registry = live_observability_registry(
         "http://localhost:19090",
         "http://localhost:19300",
         "http://localhost:19320",
         change_reader=ControlPlaneChangeReader("http://localhost:18081/api/v1/changes").query,
     )
-    environment = LiveBenchmarkEnvironment()
     original_prometheus_rules = _prometheus_rules()
     qualification_token = uuid4().hex[:8]
     records: list[dict[str, Any]] = []
@@ -256,7 +259,7 @@ def main() -> int:
         "scenarios": records,
         "note": "Real fault-to-telemetry-to-alert-to-incident qualification only; no model quality result.",
     }
-    OUTPUT.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    output_path.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     print("A1 generalization qualification: PASS (real fault path, 0 OpenAI calls)")
     return 0
 

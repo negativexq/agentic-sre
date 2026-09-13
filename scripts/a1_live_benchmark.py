@@ -273,12 +273,14 @@ def _benchmark(manifest: dict[str, Any]) -> int:
     smoke = json.loads(SMOKE_PATH.read_text(encoding="utf-8")) if SMOKE_PATH.exists() else None
     if smoke is None or not smoke.get("transport_pass") or not smoke.get("artifact_pass"):
         raise RuntimeError("A1 benchmark requires a passing smoke artifact")
+    environment = LiveBenchmarkEnvironment()
+    environment.prepare_benchmark_state(manifest["experiment_id"])
     budget = LiveModelBudget.from_environment(require_shared_ledger=True)
     before = budget.snapshot()
     budget.ensure_capacity(70)
     registry = _registry()
     provider = OpenAIProvider(budget=budget, max_retry=0)
-    lifecycle = FixtureLifecycle(LiveBenchmarkEnvironment(), definitions=_definition_map())
+    lifecycle = FixtureLifecycle(environment, definitions=_definition_map())
     results: list[dict[str, Any]] = []
     for scenario in _scenarios():
         runtime = InvestigationRuntime(

@@ -32,6 +32,7 @@ def main() -> int:
     if not fixture_registry_is_complete():
         raise RuntimeError("benchmark fixture registry does not exactly match frozen dataset")
     environment = LiveBenchmarkEnvironment()
+    environment.prepare_benchmark_state("v0.2-harness-qualification")
     registry = live_observability_registry(
         "http://localhost:19090",
         "http://localhost:19300",

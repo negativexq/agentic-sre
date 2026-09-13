@@ -20,7 +20,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from workload.common.contracts import OrderCreateRequest, PaymentRequest
 
 from packages.contracts import Alert, AlertStatus, Incident, TimeWindow
@@ -33,6 +33,7 @@ CONTROL_PLANE_DEFAULT = "http://localhost:18081"
 ORDER_SERVICE_DEFAULT = "http://localhost:18000"
 PAYMENT_SERVICE_DEFAULT = "http://localhost:18001"
 PROMETHEUS_DEFAULT = "http://localhost:19090"
+ALERTMANAGER_DEFAULT = "http://localhost:19093"
 POOL_PRESSURE_CONCURRENCY = 18
 POOL_PRESSURE_HOLD_MS = 3_500
 POOL_PRESSURE_WAVES = 3
@@ -53,6 +54,35 @@ class FixtureDefinition:
     alert_name: str
     service: str
     primary_tools: tuple[str, ...]
+
+
+class BenchmarkStatePreparationResult(BaseModel):
+    """Typed response from the local benchmark state preparation operation."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    environment: str = Field(min_length=1, max_length=32)
+    scope: str = Field(min_length=1, max_length=64)
+    execution_id: str = Field(min_length=1, max_length=100)
+    deleted_incidents: int = Field(ge=0)
+    deleted_alerts: int = Field(ge=0)
+    remaining_incidents: int = Field(ge=0)
+    remaining_alerts: int = Field(ge=0)
+
+
+class BenchmarkStateContaminatedError(RuntimeError):
+    """Raised before investigation when local benchmark state is not isolated."""
+
+    code = "A1_BENCHMARK_STATE_CONTAMINATED"
+
+
+class FixtureCorrelationError(RuntimeError):
+    """Raised when alert/incident correlation fails with stage diagnostics."""
+
+    def __init__(self, code: str, details: dict[str, Any]) -> None:
+        self.code = code
+        self.details = details
+        super().__init__(f"{code}: {json.dumps(details, sort_keys=True)}")
 
 
 FIXTURE_DEFINITIONS: tuple[FixtureDefinition, ...] = (
@@ -214,6 +244,40 @@ class ControlPlaneClient:
     def record_change(self, record: dict[str, Any]) -> None:
         self._request("/api/v1/changes", payload=record)
 
+    def prepare_benchmark_state(self, execution_id: str) -> BenchmarkStatePreparationResult:
+        """Request the explicitly authorized local benchmark state reset."""
+        response = self._request(
+            "/api/v1/benchmark/state/prepare",
+            payload={
+                "environment": "local-kind",
+                "scope": "incident-alert-state",
+                "confirmation": "reset-local-benchmark-state",
+                "execution_id": execution_id,
+            },
+        )
+        try:
+            return BenchmarkStatePreparationResult.model_validate_json(json.dumps(response))
+        except (TypeError, ValueError, ValidationError) as error:
+            raise RuntimeError(
+                "control plane returned an invalid benchmark-state response"
+            ) from error
+
+    def matching_incidents(
+        self, definition: FixtureDefinition
+    ) -> list[tuple[Incident, tuple[Alert, ...]]]:
+        """Return incidents carrying the fixture's canonical alert identity."""
+        matches: list[tuple[Incident, tuple[Alert, ...]]] = []
+        for incident in self.incidents():
+            alerts = self.alerts(incident.incident_id)
+            matching = tuple(
+                item
+                for item in alerts
+                if item.alert_name == definition.alert_name and item.service == definition.service
+            )
+            if matching:
+                matches.append((incident, matching))
+        return matches
+
 
 class LiveBenchmarkEnvironment:
     """Real local-cluster environment used by fixture qualification and trials."""
@@ -225,12 +289,14 @@ class LiveBenchmarkEnvironment:
         order_url: str = ORDER_SERVICE_DEFAULT,
         payment_url: str = PAYMENT_SERVICE_DEFAULT,
         prometheus_url: str = PROMETHEUS_DEFAULT,
+        alertmanager_url: str = ALERTMANAGER_DEFAULT,
         namespace: str = "sre-demo",
     ) -> None:
         self.control_plane = ControlPlaneClient(control_plane_url)
         self.order_url = order_url.rstrip("/")
         self.payment_url = payment_url.rstrip("/")
         self.prometheus_url = prometheus_url.rstrip("/")
+        self.alertmanager_url = alertmanager_url.rstrip("/")
         self.namespace = namespace
         self._original_env: dict[str, list[dict[str, str]]] = {}
         self._payment_restart_baseline: int | None = None
@@ -269,6 +335,21 @@ class LiveBenchmarkEnvironment:
         self.control_plane.incidents()
         if not self._wait_for_alerts_quiet(timeout_seconds=60):
             raise RuntimeError("alert baseline is not quiet")
+
+    def prepare_benchmark_state(self, execution_id: str) -> BenchmarkStatePreparationResult:
+        """Reset local incident/alert state and fail closed if it remains populated."""
+        prepared = self.control_plane.prepare_benchmark_state(execution_id)
+        if prepared.remaining_incidents or prepared.remaining_alerts:
+            raise BenchmarkStateContaminatedError(
+                f"{BenchmarkStateContaminatedError.code}: preparation left state populated"
+            )
+        remaining = self.control_plane.incidents()
+        if remaining:
+            details = ",".join(f"{item.incident_id}:{item.title}" for item in remaining[:8])
+            raise BenchmarkStateContaminatedError(
+                f"{BenchmarkStateContaminatedError.code}: {details}"
+            )
+        return prepared
 
     def snapshot_incident_ids(self) -> set[str]:
         """Return the control-plane snapshot used for exact new-incident correlation."""
@@ -844,22 +925,86 @@ class LiveBenchmarkEnvironment:
     ) -> tuple[Incident, tuple[Alert, ...]]:
         deadline = time.monotonic() + timeout_seconds
         while time.monotonic() < deadline:
-            for incident in self.control_plane.incidents():
+            for incident, matching in self.control_plane.matching_incidents(definition):
                 if str(incident.incident_id) in before_ids:
                     continue
-                alerts = self.control_plane.alerts(incident.incident_id)
-                matching = tuple(
-                    item
-                    for item in alerts
-                    if item.alert_name == definition.alert_name
-                    and item.service == definition.service
-                )
                 if len(matching) == 1:
-                    return incident, alerts
+                    return incident, matching
                 if len(matching) > 1:
                     raise RuntimeError("scenario alert matched multiple alerts")
             time.sleep(poll_seconds)
-        raise TimeoutError(f"incident did not arrive: {definition.alert_name}")
+        matches = self.control_plane.matching_incidents(definition)
+        stale = [
+            {
+                "incident_id": str(incident.incident_id),
+                "alert_ids": [str(item.alert_id) for item in alerts],
+                "fingerprints": sorted({item.fingerprint for item in alerts}),
+                "statuses": sorted({item.status.value for item in alerts}),
+                "starts_at": sorted({item.starts_at.isoformat() for item in alerts}),
+            }
+            for incident, alerts in matches
+            if str(incident.incident_id) in before_ids
+        ]
+        diagnosis = {
+            "expected_alert": definition.alert_name,
+            "service": definition.service,
+            "prometheus": self._prometheus_alert_state(definition),
+            "alertmanager": self._alertmanager_alert_state(definition),
+            "control_plane_matches": [
+                {
+                    "incident_id": str(incident.incident_id),
+                    "alert_ids": [str(item.alert_id) for item in alerts],
+                    "fingerprints": sorted({item.fingerprint for item in alerts}),
+                }
+                for incident, alerts in matches[:8]
+            ],
+            "stale_reused_incidents": stale[:8],
+        }
+        if stale:
+            code = "STALE_REUSED_INCIDENT"
+        elif diagnosis["prometheus"] == "absent":
+            code = "PROMETHEUS_ALERT_NOT_OBSERVED"
+        elif diagnosis["alertmanager"] == "absent":
+            code = "ALERTMANAGER_ALERT_NOT_OBSERVED"
+        elif not matches:
+            code = "CONTROL_PLANE_INCIDENT_NOT_OBSERVED"
+        else:
+            code = "FRESH_INCIDENT_CORRELATION_FAILED"
+        raise FixtureCorrelationError(code, diagnosis)
+
+    def _prometheus_alert_state(self, definition: FixtureDefinition) -> str:
+        """Probe the current Prometheus alert state for failure diagnostics only."""
+        query = f'ALERTS{{alertname="{definition.alert_name}",service="{definition.service}"}}'
+        try:
+            payload = self._get_json(
+                f"{self.prometheus_url}/api/v1/query?{urlencode({'query': query})}"
+            )
+        except RuntimeError:
+            return "unavailable"
+        results = payload.get("data", {}).get("result", [])
+        states = {item.get("metric", {}).get("alertstate") for item in results}
+        if "firing" in states:
+            return "firing"
+        if "pending" in states:
+            return "pending"
+        return "absent"
+
+    def _alertmanager_alert_state(self, definition: FixtureDefinition) -> str:
+        """Probe Alertmanager's active alert list for failure diagnostics only."""
+        try:
+            payload = self._get_json(f"{self.alertmanager_url}/api/v2/alerts")
+        except RuntimeError:
+            return "unavailable"
+        if not isinstance(payload, list):
+            return "unavailable"
+        matches = [
+            item
+            for item in payload
+            if isinstance(item, dict)
+            and item.get("labels", {}).get("alertname") == definition.alert_name
+            and item.get("labels", {}).get("service") == definition.service
+        ]
+        return "firing" if matches else "absent"
 
     def verify_recovery(self, definition: FixtureDefinition, incident: Incident) -> bool:
         deadline = time.monotonic() + 120

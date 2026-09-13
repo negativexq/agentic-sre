@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from sqlalchemy import desc, select
+from sqlalchemy import delete, desc, func, select
 from sqlalchemy.orm import Session
 
 from packages.contracts import (
@@ -31,9 +31,13 @@ from packages.storage.models import (
     AlertRow,
     ChangeRecordRow,
     EvidenceRow,
+    HypothesisRow,
     IncidentEventRow,
     IncidentRow,
+    PolicyDecisionRow,
+    RemediationProposalRow,
     ToolCallRow,
+    VerificationResultRow,
 )
 
 if TYPE_CHECKING:
@@ -42,6 +46,40 @@ if TYPE_CHECKING:
 
 class IncidentNotFoundError(LookupError):
     """Raised when an incident is required but absent from storage."""
+
+
+class BenchmarkStateRepository:
+    """Narrow local-benchmark reset for incident and alert state only."""
+
+    _INCIDENT_CHILD_TABLES = (
+        IncidentEventRow,
+        EvidenceRow,
+        HypothesisRow,
+        RemediationProposalRow,
+        PolicyDecisionRow,
+        VerificationResultRow,
+        ToolCallRow,
+    )
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def reset_incident_alert_state(self) -> tuple[int, int]:
+        """Delete only incident/alert state, preserving change history."""
+        incident_count = self._session.scalar(select(func.count()).select_from(IncidentRow)) or 0
+        alert_count = self._session.scalar(select(func.count()).select_from(AlertRow)) or 0
+        for table in self._INCIDENT_CHILD_TABLES:
+            self._session.execute(delete(table))
+        self._session.execute(delete(AlertRow))
+        self._session.execute(delete(IncidentRow))
+        self._session.commit()
+        return int(incident_count), int(alert_count)
+
+    def incident_alert_counts(self) -> tuple[int, int]:
+        """Return current incident and alert counts for contamination checks."""
+        incidents = self._session.scalar(select(func.count()).select_from(IncidentRow)) or 0
+        alerts = self._session.scalar(select(func.count()).select_from(AlertRow)) or 0
+        return int(incidents), int(alerts)
 
 
 def _next_event_sequence(session: Session, incident_id: object) -> int:

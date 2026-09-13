@@ -65,6 +65,10 @@ class KafkaOrderWorker:
     def run_forever(self, topic: str) -> None:
         """Consume and acknowledge order-created events."""
         self._consumer.subscribe([topic])
+        if self._runtime is not None:
+            initialize = getattr(self._runtime, "initialize_kafka_error_series", None)
+            if callable(initialize):
+                initialize("order-worker", topic)
         while True:
             message = self._consumer.poll(1.0)
             if message is None:

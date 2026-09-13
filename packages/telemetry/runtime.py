@@ -128,6 +128,10 @@ class RuntimeMetrics:
         """Record one bounded consumer processing failure."""
         self._kafka_errors.add(1, {"service": service, "topic": topic})
 
+    def initialize_kafka_error_series(self, service: str, topic: str) -> None:
+        """Publish a zero baseline so bounded error increases are observable."""
+        self._kafka_errors.add(0, {"service": service, "topic": topic})
+
 
 class TelemetryRuntime:
     """Service-local telemetry providers and instruments."""
@@ -182,6 +186,11 @@ class TelemetryRuntime:
         """Record a consumer processing failure in both metric paths."""
         self.metrics.kafka_error(service, topic)
         self.prometheus_metrics.kafka_consumer_errors.labels(service, topic).inc()
+
+    def initialize_kafka_error_series(self, service: str, topic: str) -> None:
+        """Publish the initial zero error baseline in both telemetry paths."""
+        self.metrics.initialize_kafka_error_series(service, topic)
+        self.prometheus_metrics.kafka_consumer_errors.labels(service, topic).inc(0)
 
     def record_kafka_lag(self, service: str, topic: str, value: int) -> None:
         """Record current Kafka lag in both telemetry paths."""

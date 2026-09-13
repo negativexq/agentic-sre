@@ -96,8 +96,9 @@ def _target_for(scenario: Any) -> A1EvaluationTarget:
 
 def _definition_map() -> dict[str, Any]:
     definitions = {**FIXTURE_BY_NAME, **GENERALIZATION_FIXTURE_BY_NAME}
-    if len(definitions) != 14:
-        raise RuntimeError("A1 fixture definitions are incomplete")
+    required = {scenario.fixture for scenario in _scenarios()}
+    if not required.issubset(definitions):
+        raise RuntimeError("A1 frozen scenario fixture definitions are incomplete")
     return definitions
 
 

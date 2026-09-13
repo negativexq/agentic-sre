@@ -65,7 +65,7 @@ def _git_sha() -> str:
 
 def _load_manifest() -> dict[str, Any]:
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    if manifest.get("status") != "READY_FOR_LIVE_EVALUATION":
+    if manifest.get("status") not in {"READY_FOR_LIVE_EVALUATION", "READY_FOR_NEW_LIVE_SMOKE"}:
         raise RuntimeError("A1 evaluation manifest is not ready")
     if manifest.get("scenario_order") != [item.scenario_id for item in _scenarios()]:
         raise RuntimeError("A1 scenario order does not match the frozen manifest")

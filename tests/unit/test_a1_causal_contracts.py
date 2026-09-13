@@ -1,5 +1,6 @@
 """Offline tests for A1 causal identity and structured decision contracts."""
 
+import json
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -64,6 +65,27 @@ def test_causal_hypothesis_has_bounded_strict_structured_fields() -> None:
         CausalHypothesis.model_validate(
             {**hypothesis.model_dump(mode="json"), "causal_summary": "x" * 1_001}
         )
+
+
+def test_json_wire_rejects_unknown_mechanism_and_malformed_evidence_id() -> None:
+    """Nested A1 wire fields remain exact at the JSON boundary."""
+    hypothesis = CausalHypothesis(
+        symptom_component=WorkloadComponentId.PAYMENT_SERVICE,
+        causal_component=WorkloadComponentId.PAYMENT_SERVICE,
+        mechanism=HypothesisMechanism.DATABASE_QUERY_LATENCY,
+        structured_trigger=StructuredTrigger(
+            trigger_type=TriggerType.DB_QUERY_LATENCY_INCREASE,
+            trigger_component=WorkloadComponentId.PAYMENT_SERVICE,
+        ),
+        causal_summary="Database query latency increased.",
+        evidence_ids=[uuid4()],
+    )
+    payload = hypothesis.model_dump(mode="json")
+
+    for key, value in (("mechanism", "not-a-mechanism"), ("evidence_ids", ["bad-id"])):
+        invalid = {**payload, key: value}
+        with pytest.raises(ValidationError):
+            CausalHypothesis.model_validate_json(json.dumps(invalid))
 
 
 def test_structured_stop_is_bounded_and_round_trips() -> None:

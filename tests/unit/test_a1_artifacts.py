@@ -98,6 +98,7 @@ def test_evidence_summary_and_run_artifact_round_trip() -> None:
 
     restored = A1RunArtifact.from_json(artifact.model_dump_json())
     assert restored == artifact
+    assert json.loads(restored.model_dump_json()) == json.loads(artifact.model_dump_json())
     assert restored.hypothesis is not None
     assert restored.hypothesis.causal_resource is DependencyResourceId.POSTGRESQL
 
@@ -120,8 +121,10 @@ def test_historical_r1_smoke_artifact_uses_json_wire_reader() -> None:
         (("run_id",), "not-a-uuid"),
         (("observation_window", "starts_at"), "not-a-datetime"),
         (("termination_reason",), "NOT_A_TERMINATION"),
+        (("run_id",), 42),
         (("evidence", 0, "target_workload"), "unknown-service"),
         (("evidence", 0, "target_resource"), "unknown-resource"),
+        (("evidence", 0, "evidence_id"), "not-a-uuid"),
         (("evidence", 0, "unexpected"), True),
     ),
 )

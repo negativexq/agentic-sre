@@ -12,7 +12,7 @@
     "r2_smoke_calls_consumed": 3,
     "ledger_path": ".local/a1-r2-single-agent-live-budget.json"
   },
-  "runtime_code_sha": "d7c719f0d928e9ff558da277db7decae2dc007c0",
+  "runtime_code_sha": "85b86b438b117a4e48c6b955b024aec2c7a7a3cd",
   "project_historical_calls": 10,
   "recovery_change": "benchmark-only guarded local incident/alert state isolation with contamination preflight; no model-facing semantic change",
   "benchmark_state_isolation": {

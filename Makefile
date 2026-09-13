@@ -93,7 +93,7 @@ a1-live-smoke:
 	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/order-service 18000:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-order-forward.log 2>&1 & order_pid=$$!; \
 	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/payment-service 18001:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-payment-forward.log 2>&1 & payment_pid=$$!; \
 	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" "$$order_pid" "$$payment_pid" 2>/dev/null || true' EXIT; \
-	sleep 3; SRE_LIVE_MODEL_ENABLED=true SRE_MODEL=gpt-5.6-luna SRE_REASONING_EFFORT=none SRE_LIVE_MODEL_CALL_BUDGET=80 SRE_LIVE_MODEL_BUDGET_FILE="$(A1_LIVE_BUDGET_FILE)" SRE_A1_MANIFEST_PATH="$(A1_LIVE_MANIFEST)" SRE_A1_SMOKE_PATH="$(A1_LIVE_SMOKE)" SRE_A1_RESULT_PATH="$(A1_LIVE_RESULT)" SRE_A1_RESULT_SHA_PATH="$(A1_LIVE_RESULT_SHA)" .venv/bin/python scripts/a1_live_benchmark.py smoke
+	sleep 3; SRE_LIVE_MODEL_ENABLED=true SRE_MODEL=gpt-5.6-luna SRE_REASONING_EFFORT=none SRE_LIVE_MODEL_CALL_BUDGET=80 SRE_LIVE_MODEL_BUDGET_FILE="$(A1_LIVE_BUDGET_FILE)" SRE_A1_MANIFEST_PATH="$(A1_LIVE_MANIFEST)" SRE_A1_SMOKE_PATH="$(A1_LIVE_SMOKE)" SRE_A1_RESULT_PATH="$(A1_LIVE_RESULT)" SRE_A1_RESULT_SHA_PATH="$(A1_LIVE_RESULT_SHA)" SRE_A1_LEDGER_PATH="$(A1_LIVE_BUDGET_FILE)" .venv/bin/python scripts/a1_live_benchmark.py smoke
 
 a1-live-benchmark:
 	test -n "$$OPENAI_API_KEY"

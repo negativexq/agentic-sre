@@ -1,9 +1,16 @@
 {
-  "experiment_id": "v0.3-exp01-causal-investigator-critic",
+  "experiment_id": "v0.3-exp01-a1-improved-single-agent",
   "status": "PREREGISTERED_DESIGN",
   "implementation_status": "NOT_IMPLEMENTED",
+  "arm": "A1_CONTROL",
+  "sequence": [
+    {"arm": "A0", "name": "frozen v0.2.0 single-agent baseline", "status": "FROZEN"},
+    {"arm": "A1", "name": "improved single-agent causal investigation", "status": "THIS_CONTRACT"},
+    {"arm": "A2", "name": "Investigator + Critic", "status": "LATER_TREATMENT_NOT_IMPLEMENTED"}
+  ],
   "baseline": {
     "release": "v0.2.0",
+    "tag": "v0.2.0",
     "evaluated_runtime_sha": "4603fc6380d672b0a3e9d885885b879f9b32c407",
     "official_metrics": {
       "completion_rate": 0.9,
@@ -20,54 +27,65 @@
       "infrastructure_writes": 0
     }
   },
-  "research_question": "Can an explicit causal-investigation architecture improve cross-component exploration and causal-evidence acquisition over the frozen v0.2.0 single-investigator baseline while preserving deterministic evidence authority, bounded execution, and zero-write safety?",
+  "reference_hashes": {
+    "compatibility_dataset_sha256": "20288dfae850b07bc4a754cd6e15a465f6fe7984cc259aeb7bf4294d79b16650",
+    "generalization_dataset_sha256": null,
+    "combined_evaluation_sha256": null,
+    "topology_source_sha256": "cd0d41d1093171df412833dd648c423e9a84179251b60cfe2633d2345d5d8b11",
+    "prompt_sha256": "5159d9384283bbc3e8f7a17ee515d3810a742356f7b16410781bc6f73b19d9cd",
+    "tool_registry_sha256": "9fb5ef6c753d9a941cdfafeb9f4225c2bfb838d8272b7a316edb398707bf0fa4",
+    "tool_contracts_sha256": "9e0f7403b3ab1d503690908bd4da316b4616d3d112f898b0dfef7ec44f932f5b",
+    "component_registry_sha256": null,
+    "component_registry_status": "TO_BE_CREATED_AND_FROZEN_BEFORE_A1_IMPLEMENTATION"
+  },
+  "research_question": "Can the existing bounded single investigator improve causal exploration and causal diagnosis when given explicit production topology, canonical component identities, structured causal outputs, and better benchmark observability, without adding another model role?",
   "hypotheses": {
-    "H1": "An architecture that explicitly separates symptom analysis, causal exploration, and evidence challenge improves causal-component identification and causal-evidence coverage over v0.2.0 without reducing evidence-reference integrity or safety.",
-    "H0": "The additional architecture does not materially improve causal attribution or causal-evidence acquisition over v0.2.0 under the same frozen compatibility scenarios and a predeclared bounded budget."
+    "H1-A1": "A single bounded investigator with explicit component semantics, production topology, structured causal output, and auditable investigation telemetry will improve causal exploration and causal evidence acquisition over v0.2.0 while preserving evidence authority and zero-write safety.",
+    "H0-A1": "These representation, context, and protocol improvements do not materially improve causal investigation over the frozen v0.2.0 single-agent baseline.",
+    "A2_conditional": "If A1 exposes remaining synthesis or unsupported-attribution failures, one bounded independent Critic may improve final causal diagnosis over A1."
   },
   "architecture": {
-    "candidates": [
+    "selected": "A_IMPROVED_SINGLE_AGENT",
+    "roles": ["INVESTIGATOR"],
+    "orchestration": "explicit_deterministic_single_agent_state_machine",
+    "candidates_for_sequence": [
       "A_IMPROVED_SINGLE_AGENT",
       "B_SINGLE_AGENT_DETERMINISTIC_VALIDATOR",
       "C_INVESTIGATOR_CRITIC",
       "D_SPECIALIZED_EVIDENCE_AGENTS"
     ],
-    "selected": "C_INVESTIGATOR_CRITIC",
-    "selection_reason": "Candidate C is the smallest candidate that independently tests evidence gathering, cross-component causal exploration, and evidence challenge without introducing a specialized-agent swarm.",
-    "orchestration": "explicit_in_process_typed_state_machine",
-    "roles": ["INVESTIGATOR", "CRITIC"],
-    "no_specialized_swarm": true
+    "selection_reason": "A1 is the smallest fair control-arm change that tests representation, topology, causal output and observability before adding a second model role.",
+    "a2_treatment_variable": "one independent causal-challenge role only"
   },
-  "selection_criteria": {
-    "addresses_v020_003_cross_component_gap": "high",
-    "addresses_v020_010_change_evidence_miss": "high",
-    "measurable_independently_of_model_prose": "high",
-    "preserves_evidence_authority": "mandatory",
-    "preserves_zero_write_boundary": "mandatory",
-    "bounded_model_call_growth": "high",
-    "easy_v0_2_comparison": "high",
-    "deterministic_orchestration": "high",
-    "added_implementation_complexity": "negative",
-    "new_failure_surface": "negative"
-  },
-  "proposed_release_name": "v0.3.0 — Evidence-Grounded Multi-Agent Investigation",
-  "compatibility_set": {
-    "scenario_ids": [
-      "V020-001",
-      "V020-002",
-      "V020-003",
-      "V020-004",
-      "V020-005",
-      "V020-006",
-      "V020-007",
-      "V020-008",
-      "V020-009",
-      "V020-010"
+  "verified_topology": {
+    "component_identity_model": "SEPARATE_WORKLOAD_AND_DEPENDENCY_RESOURCE_IDENTITIES",
+    "workload_components": ["order-service", "payment-service", "order-worker"],
+    "dependency_resources": ["postgresql", "kafka", "redis"],
+    "edges": [
+      {"source": "order-service", "target": "payment-service", "basis": "HttpPaymentGateway"},
+      {"source": "order-service", "target": "postgresql", "basis": "order persistence"},
+      {"source": "order-service", "target": "kafka", "basis": "orders.created publisher"},
+      {"source": "payment-service", "target": "postgresql", "basis": "payment persistence"},
+      {"source": "order-worker", "target": "kafka", "basis": "orders.created consumer"},
+      {"source": "order-worker", "target": "redis", "basis": "processed-event state"}
     ],
+    "source_files": [
+      "workload/common/adapters.py",
+      "workload/order_service/app.py",
+      "workload/order_worker/worker.py",
+      "workload/payment_service/app.py",
+      "infra/kubernetes/workload.yaml"
+    ],
+    "topology_hash_status": "REFERENCE_TO_FREEZE_BEFORE_A1_IMPLEMENTATION",
+    "component_registry_hash_status": "REFERENCE_TO_FREEZE_BEFORE_A1_IMPLEMENTATION"
+  },
+  "compatibility_set": {
+    "scenario_ids": ["V020-001", "V020-002", "V020-003", "V020-004", "V020-005", "V020-006", "V020-007", "V020-008", "V020-009", "V020-010"],
     "scenario_count": 10,
     "passes": 1,
     "order": "frozen_dataset_order",
-    "faults_and_telemetry_fixed": true
+    "faults_and_telemetry_fixed": true,
+    "extension_set_before_compatibility_run": false
   },
   "planned_extension_categories": [
     "upstream_dependency_latency",
@@ -77,6 +95,31 @@
     "configuration_change_causing_another_component_symptom",
     "shared_dependency_ambiguity"
   ],
+  "generalization_policy": {
+    "status": "PLANNED_NOT_FROZEN",
+    "artifact": "docs/benchmarks/a1-generalization-set.json",
+    "final_scenario_count": null,
+    "target_count_range": "4-8 after fixture feasibility review",
+    "dataset_sha256": null,
+    "combined_evaluation_sha256": null,
+    "freeze_required_before_live": true,
+    "not_used_for_tuning": true,
+    "required_categories": [
+      "cross_service_dependency_failure",
+      "dependency_latency_with_different_alert_surface",
+      "database_resource_issue_service_symptom",
+      "kafka_resource_issue_worker_symptom",
+      "indirect_configuration_regression",
+      "shared_dependency_ambiguity",
+      "same_component_negative_control"
+    ],
+    "requirements": [
+      "real_fault_telemetry_alert_incident_chain",
+      "deterministic_ground_truth",
+      "model_context_excludes_evaluator_fields",
+      "cross_component_and_same_component_controls"
+    ]
+  },
   "planned_model_policy": {
     "model_family": "gpt-5.6-luna",
     "reasoning_effort": "none",
@@ -84,87 +127,94 @@
     "fallback": "none",
     "router": "none",
     "voting": "none",
-    "same_model_as_v0_2_when_available": true
+    "same_model_as_a0_when_available": true
   },
   "planned_budgets": {
-    "max_model_calls_per_incident": 4,
+    "max_model_calls_per_incident": 3,
     "max_actual_tool_executions_per_incident": 8,
-    "investigator_initial_calls": 2,
-    "critic_calls": 1,
-    "follow_up_investigator_calls": 1,
     "provider_retries": 0,
-    "compatibility_worst_case_calls": 40,
-    "compatibility_operational_reserve": 5,
-    "compatibility_proposed_ledger_cap": 45,
-    "ledger_path": ".local/v0.3.0-live-budget.json",
+    "compatibility_worst_case_calls": 30,
+    "predeclared_smoke_reserve": 6,
+    "generalization_allocation": "PENDING_FROZEN_SCENARIO_COUNT",
+    "final_ledger_cap": "PENDING",
+    "final_cap_formula": "smoke reserve + (compatibility scenarios × 3) + (generalization scenarios × 3)",
+    "ledger_path": ".local/a1-single-agent-live-budget.json",
     "v0_2_ledger_reused": false
   },
-  "state_machine": [
+  "a1_state_machine": [
     "START",
-    "INVESTIGATE",
-    "DRAFT_READY",
-    "CRITIQUE",
-    "EVIDENCE_GAP",
-    "FOLLOW_UP",
-    "FINALIZE",
-    "STOP"
+    "TURN_1_INITIAL_INVESTIGATION",
+    "TURN_2_CAUSAL_DISCRIMINATION",
+    "TURN_3_FINALIZE_OR_STOP",
+    "TERMINAL"
   ],
-  "primary_metrics": {
-    "completion_rate": "final structured hypotheses / scenarios",
-    "causal_component_accuracy": "exact canonical causal_component matches / scenarios",
-    "mechanism_accuracy": "exact controlled mechanism matches / scenarios",
-    "structured_trigger_accuracy": "exact (type, component, signal) matches / scenarios",
-    "cross_component_exploration_rate": "valid observations against frozen causal component / cross-component opportunities",
-    "causal_evidence_coverage": "final hypotheses with cited evidence satisfying causal-component provenance and a pre-frozen factual support predicate / scenarios",
-    "evidence_reference_integrity": "submitted hypotheses with all references runtime-owned by the incident / submitted hypotheses",
-    "model_calls_per_incident": "outbound model calls / scenarios",
-    "tool_calls_per_incident": "actual backend executions / scenarios"
+  "output_contract": {
+    "CausalHypothesis": {
+      "symptom_component": "WorkloadComponentId",
+      "causal_component": "WorkloadComponentId",
+      "causal_resource": "DependencyResourceId | null",
+      "mechanism": "controlled HypothesisMechanism",
+      "structured_trigger": "StructuredTrigger",
+      "causal_summary": "bounded string <= 1000 characters",
+      "evidence_ids": "list[UUID] <= 12"
+    },
+    "StructuredTrigger": {
+      "trigger_type": "controlled TriggerType",
+      "trigger_component": "WorkloadComponentId",
+      "trigger_resource": "DependencyResourceId | null",
+      "signal": "controlled TriggerSignal"
+    },
+    "StopDecision": {
+      "stop_reason": "controlled StopReason",
+      "considered_components": "list[WorkloadComponentId] <= 8",
+      "missing_evidence_categories": "list[EvidenceCategory] <= 8"
+    },
+    "validation": "strict types, extra=forbid, bounded fields, runtime-known workload/resource IDs"
   },
-  "grading_plan": {
-    "legacy_metrics_retained": [
-      "legacy_service_exact_match",
-      "legacy_mechanism_exact_match",
-      "legacy_trigger_exact_match",
-      "legacy_composite_rca"
-    ],
-    "new_structured_metrics": [
-      "symptom_component_accuracy",
-      "causal_component_accuracy",
-      "structured_trigger_accuracy",
-      "causal_evidence_coverage"
-    ],
-    "v0_2_service_score_semantic_baseline": false,
-    "v0_2_trigger_score_semantic_baseline": false,
-    "primary_grader": "deterministic_no_llm_judge"
+  "primary_metrics": {
+    "completion_rate": "submitted structured hypotheses / scenarios",
+    "causal_component_accuracy": "exact canonical WorkloadComponentId causal_component matches / scenarios",
+    "mechanism_accuracy": "exact controlled mechanism matches / scenarios",
+    "structured_trigger_accuracy": "exact (trigger_type, trigger_component, trigger_resource, signal) matches / scenarios",
+    "evidence_reference_integrity": "submitted hypotheses with all current-incident runtime-owned references / submitted hypotheses",
+    "ground_truth_causal_component_evidence_rate": "grader-only cited evidence target matches frozen causal component / scenarios"
+  },
+  "diagnostic_metrics": {
+    "cross_component_exploration_recall": "cross-component opportunities with a valid observation against frozen causal component / all cross-component opportunities",
+    "outside_alert_scope_execution_rate": "outside-alert-scope tool executions / all tool executions",
+    "unnecessary_outside_scope_exploration_rate": "same-component cases with outside-scope execution / same-component cases",
+    "change_evidence_acquisition_rate": "eligible cases with a valid change observation / eligible change cases",
+    "unique_components_queried": "distinct validated workload/resource targets per incident",
+    "components_considered": "bounded STOP metadata count"
   },
   "secondary_metrics": [
     "symptom_component_accuracy",
-    "provenance_only_causal_evidence_rate",
-    "critic_intervention_rate",
-    "critic_useful_intervention_rate",
-    "draft_vs_final_causal_component_accuracy",
-    "draft_vs_final_mechanism_accuracy",
-    "draft_vs_final_structured_trigger_accuracy",
+    "causal_resource_accuracy",
+    "causal_component_evidence_rate",
+    "unique_components_queried",
+    "components_queried_by_turn",
+    "outside_alert_scope_tool_calls",
+    "outside_alert_scope_component_count",
+    "change_tools_requested",
+    "model_calls_per_incident",
+    "tool_calls_per_incident",
     "tool_requests_per_incident",
     "duplicate_requests_suppressed",
     "input_tokens",
     "output_tokens",
     "latency",
-    "estimated_cost"
+    "estimated_cost",
+    "stop_rate"
   ],
   "artifact_schema_requirements": [
     "experiment_id",
-    "code_dataset_topology_tool_prompt_hashes",
+    "code_dataset_topology_component_registry_tool_prompt_hashes",
     "alert_incident_observation_window",
-    "role_turn_decision_trace",
-    "requested_tools_and_target_components",
-    "evidence_ids_visible_per_role",
+    "turn_decision_requested_tools_canonical_arguments_remaining_budget",
+    "target_components_and_components_queried_by_turn",
+    "evidence_ids_visible_and_returned",
     "bounded_evidence_provenance_summaries",
-    "draft_hypothesis",
-    "critic_disposition",
-    "evidence_gap_request",
-    "final_hypothesis",
-    "terminal_state_and_stop_reason",
+    "full_bounded_final_hypothesis_or_structured_stop",
     "calls_tools_tokens_latency_cost",
     "metric_and_safety_counters"
   ],
@@ -177,17 +227,18 @@
     "arbitrary_kubectl": "absent",
     "autonomous_remediation": "absent",
     "shared_global_tool_budget": true,
-    "shared_evidence_store": true,
-    "shared_duplicate_suppression": true
+    "runtime_owned_evidence": true
   },
   "leakage_policy": {
     "allowed_model_context": [
       "production_alert_scope",
-      "bounded_verified_topology",
+      "bounded_verified_production_topology",
+      "canonical_component_registry",
       "registered_read_only_tools",
       "truthful_runtime_evidence",
       "real_historical_changes",
-      "current_state"
+      "current_state",
+      "remaining_budgets"
     ],
     "evaluator_only": [
       "expected_causal_component",
@@ -195,52 +246,86 @@
       "expected_trigger",
       "grader_output",
       "scenario_support_predicates",
+      "scenario_id",
       "fixture_name_when_not_operationally_required"
     ],
     "private_chain_of_thought_persisted": false
   },
-  "no_tuning_policy": {
-    "freeze_before_first_live_call": [
+  "success_criteria": {
+    "safety_hard_gates": true,
+    "submitted_hypothesis_reference_integrity_minimum": 1.0,
+    "provider_retries": 0,
+    "tool_runtime_failure_rate": 0.0,
+    "compatibility_mechanism_accuracy_minimum": 0.8,
+    "compatibility_completion_minimum": 0.9,
+    "general_behavioral_improvement": "report causal exploration recall and unnecessary outside-scope exploration across the frozen generalization set; no scenario-specific gate",
+    "compatibility_diagnostics": ["V020-003 cross-component exploration", "V020-010 change-evidence acquisition"],
+    "no_named_scenario_gate": true,
+    "no_selective_reruns": true,
+    "no_post_result_tuning": true
+  },
+  "freeze_policy": {
+    "freeze_before_first_a1_live_call": [
       "source_code",
       "prompt",
       "tool_descriptions",
       "tool_schemas",
+      "component_registry",
       "topology_projection",
       "fixtures",
       "alerts",
       "dataset",
+      "generalization_set",
+      "generalization_grader",
       "graders",
       "budgets",
       "artifact_schema"
     ],
     "runs_per_scenario": 1,
     "selective_reruns": false,
-    "post_result_tuning": false,
     "new_version_required_for_changes": true
   },
-  "success_criteria": {
-    "primary_direction": "improve at least one causal behavior over reconstructable v0.2 observations: cross-component exploration above 0/1 or change-evidence acquisition above its observed 0/1 opportunity",
-    "canonical_causal_component_metric_must_be_reported": true,
-    "compatibility_mechanism_accuracy_minimum": 0.8,
-    "compatibility_completion_minimum": 0.9,
-    "submitted_hypothesis_reference_integrity_minimum": 1.0,
-    "causal_evidence_and_structured_trigger_metrics_frozen_before_run": true,
-    "all_safety_gates_pass": true,
-    "all_budget_and_retry_limits_pass": true,
-    "no_selective_reruns": true
+  "pre_live_blockers": [
+    "component_identity_model_frozen",
+    "structured_trigger_schema_frozen",
+    "compatibility_and_generalization_graders_frozen",
+    "generalization_set_frozen_and_hashed",
+    "prompt_frozen",
+    "tool_registry_and_schema_frozen",
+    "topology_frozen",
+    "offline_tests_pass",
+    "zero_llm_real_harness_qualification_pass",
+    "new_a1_budget_ledger_initialized",
+    "final_a1_ledger_cap_committed"
+  ],
+  "future_a2_constraints": {
+    "reuse_unchanged": [
+      "a1_component_identity_model",
+      "a1_topology",
+      "a1_structured_trigger_schema",
+      "a1_tool_descriptions",
+      "a1_compatibility_set",
+      "a1_generalization_set",
+      "a1_graders",
+      "a1_budgets"
+    ],
+    "only_new_treatment_variable": "independent Critic role"
   },
   "exclusions": [
+    "Critic implementation in A1",
+    "specialized agents",
     "remediation",
-    "kubernetes_writes",
-    "arbitrary_shell",
-    "arbitrary_kubectl",
+    "Kubernetes writes",
+    "arbitrary shell",
+    "arbitrary kubectl",
     "MCP",
     "A2A",
-    "vector_memory",
+    "vector memory",
     "RAG",
     "LangGraph",
-    "model_routing",
+    "model routing",
     "fallback",
-    "voting"
+    "voting",
+    "benchmark-conditioned tool selection"
   ]
 }

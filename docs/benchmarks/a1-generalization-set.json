@@ -1,0 +1,38 @@
+{
+  "experiment_id": "v0.3-exp01-a1-improved-single-agent",
+  "set_name": "A1_GENERALIZATION",
+  "status": "PLANNED_NOT_FROZEN",
+  "purpose": "Holdout-style evaluation beyond the forensic compatibility cases.",
+  "scenario_count": null,
+  "scenario_ids": [],
+  "dataset_sha256": null,
+  "freeze_required_before_live": true,
+  "planned_categories": [
+    "cross_service_dependency_failure",
+    "dependency_latency_with_different_alert_surface",
+    "database_resource_issue_service_symptom",
+    "kafka_resource_issue_worker_symptom",
+    "indirect_configuration_regression",
+    "shared_dependency_ambiguity",
+    "same_component_negative_control"
+  ],
+  "selection_requirements": [
+    "4-8 feasible scenarios after fixture review",
+    "same real fault to telemetry to alert to Incident pipeline",
+    "deterministic evaluator-side ground truth",
+    "both cross-component opportunities and same-component controls",
+    "no scenario-conditioned model context",
+    "no live performance inspection during tuning"
+  ],
+  "scenario_schema_when_frozen": [
+    "scenario_id",
+    "category",
+    "fixture",
+    "symptom_component",
+    "causal_component",
+    "causal_resource",
+    "mechanism",
+    "structured_trigger"
+  ],
+  "ground_truth_context_policy": "Evaluator-only; never included in model-facing context."
+}

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from packages.evals.dataset import FROZEN_DATASET, frozen_dataset_hash
+from packages.evals.live_fixtures import FIXTURE_BY_NAME
 
 BENCHMARK_PATH = Path("docs/benchmarks/v0.2.0-single-agent-live.json")
 JSON_OUTPUT = Path("docs/benchmarks/v0.2.0-failure-analysis.json")
@@ -50,17 +51,6 @@ def _family(tool: str) -> str:
     return "unknown"
 
 
-def _alert_service(alert_name: str) -> str | None:
-    """Derive the production alert scope from the persisted alert identity."""
-    if alert_name.startswith("Payment"):
-        return "payment-service"
-    if alert_name.startswith("OrderWorker"):
-        return "order-worker"
-    if alert_name.startswith("Order"):
-        return "order-service"
-    return None
-
-
 def _target(arguments: dict[str, Any]) -> str | None:
     for key in ("service", "consumer", "deployment"):
         value = arguments.get(key)
@@ -80,7 +70,9 @@ def _round(value: float) -> float:
     return round(value, 4)
 
 
-def analyze_benchmark(benchmark: dict[str, Any]) -> dict[str, Any]:
+def analyze_benchmark(
+    benchmark: dict[str, Any], *, benchmark_path: Path = BENCHMARK_PATH
+) -> dict[str, Any]:
     """Return only values reproducible from the benchmark and frozen dataset."""
     scenarios = benchmark.get("scenarios", [])
     if [item.get("scenario_id") for item in scenarios] != EXPECTED_IDS:
@@ -121,12 +113,24 @@ def analyze_benchmark(benchmark: dict[str, Any]) -> dict[str, Any]:
                     targets.append(value)
 
         alert_name = scenario["alert_name"]
-        alert_service = _alert_service(alert_name)
+        fixture = FIXTURE_BY_NAME.get(scenario["fixture"])
+        if fixture is None:
+            raise ValueError(f"unknown frozen fixture: {scenario['fixture']}")
+        if alert_name != fixture.alert_name:
+            raise ValueError(
+                f"persisted alert name does not match fixture definition for {scenario['fixture']}"
+            )
+        alert_service = fixture.service
+        ground_truth_component = expected[scenario_id].affected_component
+        alert_scope_matches = alert_service == ground_truth_component
         matching_targets = sum(target == alert_service for target in targets)
         service_targeting.append(
             {
                 "scenario_id": scenario_id,
                 "alert_service": alert_service,
+                "ground_truth_component": ground_truth_component,
+                "alert_scope_matches_ground_truth": alert_scope_matches,
+                "cross_component": not alert_scope_matches,
                 "target_count": len(targets),
                 "alert_service_target_count": matching_targets,
                 "alert_service_target_rate": _round(matching_targets / len(targets))
@@ -162,6 +166,12 @@ def analyze_benchmark(benchmark: dict[str, Any]) -> dict[str, Any]:
                     "trigger": expected[scenario_id].suspected_trigger,
                 },
                 "alert": scenario["alert_name"],
+                "component_scope": {
+                    "alert_scope_component": alert_service,
+                    "ground_truth_component": ground_truth_component,
+                    "alert_scope_matches_ground_truth": alert_scope_matches,
+                    "cross_component": not alert_scope_matches,
+                },
                 "terminal_outcome": {
                     "decision": scenario["terminal_decision"],
                     "termination": scenario["termination_reason"],
@@ -214,6 +224,7 @@ def analyze_benchmark(benchmark: dict[str, Any]) -> dict[str, Any]:
         "trigger": {
             "correct_count": int(trigger_correct),
             "submitted_hypotheses": submitted,
+            "miss_count_submitted": submitted - int(trigger_correct),
             "taxonomy_wrong_trigger": taxonomy["wrong_trigger"],
             "taxonomy_excludes_stop": taxonomy["wrong_trigger"] == submitted,
         },
@@ -241,29 +252,71 @@ def analyze_benchmark(benchmark: dict[str, Any]) -> dict[str, Any]:
     service_wrong_target_rates = [
         row["alert_service_target_rate"] for row in service_targeting if row["service_score"] == 0
     ]
+    cross_component_scenarios = [
+        row["scenario_id"] for row in service_targeting if row["cross_component"]
+    ]
+    cross_component_target_counts = {
+        row["scenario_id"]: {
+            "outside_alert_scope": sum(
+                count
+                for target, count in row["target_counts"].items()
+                if target != row["alert_service"]
+            ),
+            "total": row["target_count"],
+        }
+        for row in service_targeting
+        if row["cross_component"]
+    }
+    cross_component_explored_scenarios = [
+        scenario_id
+        for scenario_id, counts in cross_component_target_counts.items()
+        if counts["outside_alert_scope"] > 0
+    ]
 
     return {
         "source": {
-            "benchmark_path": str(BENCHMARK_PATH),
-            "benchmark_file_sha256": sha256(BENCHMARK_PATH.read_bytes()).hexdigest(),
+            "benchmark_path": str(benchmark_path),
+            "benchmark_file_sha256": sha256(benchmark_path.read_bytes()).hexdigest(),
             "benchmark_runtime_sha": benchmark["git_sha"],
             "dataset_hash": frozen_dataset_hash(),
         },
         "metric_interpretability": {
             "service_accuracy": {
-                "confidence": "HIGH",
-                "basis": "exact normalized component equality",
+                "confidence": "MEDIUM",
+                "basis": "exact free-text affected_component equality; no normalization",
+                "limitation": "submitted component strings are not persisted",
             },
             "mechanism_accuracy": {"confidence": "HIGH", "basis": "controlled enum equality"},
             "trigger_accuracy": {"confidence": "LOW", "basis": "free-text exact string equality"},
             "composite_rca": {
-                "confidence": "MEDIUM",
-                "basis": "weighted sum inherits component metric limitations",
+                "confidence": "MEDIUM_LOW",
+                "basis": "weighted sum inherits representation-sensitive service and trigger dimensions",
             },
             "valid_evidence_reference_rate": {
-                "confidence": "MEDIUM",
-                "basis": "runtime ownership/reference integrity only; semantic relevance is not graded",
+                "confidence": "HIGH",
+                "reference_integrity_confidence": "HIGH",
+                "causal_relevance_confidence": "LOW",
+                "basis": "scenario-level runtime-owned reference integrity; STOP contributes zero; semantic relevance is not graded",
             },
+        },
+        "evidence_integrity": {
+            "official_scenario_rate": benchmark["valid_evidence_reference_rate"],
+            "submitted_hypotheses": submitted,
+            "valid_submitted_hypotheses": sum(
+                item["terminal_decision"] == "SUBMIT_HYPOTHESIS"
+                and item["valid_evidence_reference_rate"] == 1
+                for item in scenarios
+            ),
+            "submitted_hypothesis_integrity_rate": _round(
+                sum(
+                    item["terminal_decision"] == "SUBMIT_HYPOTHESIS"
+                    and item["valid_evidence_reference_rate"] == 1
+                    for item in scenarios
+                )
+                / submitted
+            ),
+            "fabricated_evidence": benchmark["safety"]["fabricated_evidence"],
+            "cross_incident_evidence": benchmark["safety"]["cross_incident_evidence"],
         },
         "score_consistency": score_consistency,
         "per_scenario": per_scenario,
@@ -299,7 +352,8 @@ def analyze_benchmark(benchmark: dict[str, Any]) -> dict[str, Any]:
             ],
         },
         "component_targeting": {
-            "method": "alert service derived from persisted production alert name prefix; request target from persisted canonical arguments",
+            "alert_scope_method": "canonical FIXTURE_BY_NAME fixture service; persisted alert name validated against fixture definition",
+            "method": "canonical frozen fixture service; request target from persisted canonical arguments",
             "by_scenario": service_targeting,
             "total_targeted_requests": total_targets,
             "alert_service_targeted_requests": matching_targets,
@@ -316,46 +370,78 @@ def analyze_benchmark(benchmark: dict[str, Any]) -> dict[str, Any]:
             "service_wrong_runs_alert_service_target_rate": _round(
                 sum(service_wrong_target_rates) / len(service_wrong_target_rates)
             ),
+            "cross_component_scenarios": cross_component_scenarios,
+            "cross_component_target_counts": cross_component_target_counts,
+            "cross_component_explored_scenarios": cross_component_explored_scenarios,
         },
         "system_failure_modes": [
             {
-                "name": "mechanism_correct_service_wrong",
-                "affected_scenarios": mechanism_correct_service_wrong,
-                "count": len(mechanism_correct_service_wrong),
-                "fraction": _round(len(mechanism_correct_service_wrong) / len(scenarios)),
-                "confidence": "SUPPORTED",
-                "basis": "official mechanism score is 1 while official service score is 0",
+                "name": "alert_scope_search_anchoring",
+                "affected_scenarios": EXPECTED_IDS,
+                "count": len(EXPECTED_IDS),
+                "fraction": 1.0,
+                "confidence": "PROVEN",
+                "basis": "66/66 persisted target-bearing requests matched the canonical production alert scope; this is a search behavior, not proof of a correctness cause",
             },
             {
-                "name": "alert_service_anchoring",
+                "name": "cross_component_exploration_failure",
+                "affected_scenarios": cross_component_scenarios,
+                "count": len(cross_component_scenarios),
+                "fraction": _round(len(cross_component_scenarios) / len(scenarios)),
+                "confidence": "SUPPORTED",
+                "basis": "V020-003 alert scope was order-service, frozen causal component was payment-service, and no persisted target left order-service",
+            },
+            {
+                "name": "official_service_dimension_miss",
                 "affected_scenarios": wrong_service_ids,
                 "count": len(wrong_service_ids),
                 "fraction": _round(len(wrong_service_ids) / len(scenarios)),
+                "confidence": "PROVEN_SCORE_UNKNOWN_CAUSE",
+                "basis": "official exact-match score is 0 for six scenarios; submitted component strings are absent, so semantic cause is UNKNOWN",
+            },
+            {
+                "name": "change_evidence_acquisition_miss",
+                "affected_scenarios": ["V020-010"],
+                "count": 1,
+                "fraction": 0.1,
                 "confidence": "SUPPORTED",
-                "basis": "100% of persisted targeted requests match alert service; causal ownership is wrong in the listed cases",
+                "basis": "the frozen fixture identifies recent_configuration_changes as a primary evidence surface, but no change-intelligence request appears in V020-010",
             },
             {
-                "name": "valid_stop_without_hypothesis",
-                "affected_scenarios": [
-                    item["scenario_id"]
-                    for item in scenarios
-                    if item["termination_reason"] == "AGENT_STOPPED"
-                ],
-                "count": stop_count,
-                "fraction": _round(stop_count / len(scenarios)),
-                "confidence": "PROVEN",
-                "basis": "terminal decision and stop reason are persisted",
+                "name": "non_completion_valid_insufficient_evidence_stop",
+                "affected_scenarios": ["V020-008"],
+                "count": 1,
+                "fraction": 0.1,
+                "confidence": "PROVEN_OBSERVATION_UNKNOWN_CAUSE",
+                "basis": "V020-008 ended with a valid insufficient_evidence STOP; why it stopped is not reconstructable",
             },
             {
-                "name": "fixed_turn_search_envelope",
-                "affected_scenarios": [
-                    item["scenario_id"] for item in scenarios if item["model_calls"] == 3
-                ],
-                "count": len(scenarios),
+                "name": "three_call_envelope_observed",
+                "affected_scenarios": EXPECTED_IDS,
+                "count": len(EXPECTED_IDS),
                 "fraction": 1.0,
-                "confidence": "PROVEN",
-                "basis": "all runs consumed the configured three model calls; causal sufficiency is not inferable",
+                "confidence": "PROVEN_OBSERVATION_UNKNOWN_EFFECT",
+                "basis": "all runs used three model calls; whether the envelope caused any miss is UNKNOWN",
             },
+        ],
+        "system_observations": {
+            "all_target_requests_on_alert_scope": matching_targets == total_targets,
+            "all_runs_used_three_model_calls": all(item["model_calls"] == 3 for item in scenarios),
+            "cross_component_opportunities": cross_component_scenarios,
+            "cross_component_opportunities_explored_outside_scope": cross_component_explored_scenarios,
+            "change_tool_acquisition_miss": ["V020-010"],
+            "valid_insufficient_evidence_stop": ["V020-008"],
+        },
+        "supported_failure_modes": [
+            "cross_component_exploration_failure",
+            "change_evidence_acquisition_miss",
+        ],
+        "unknown_causes": [
+            "semantic cause of the six service-score misses",
+            "semantic correctness of the nine trigger strings",
+            "reason V020-008 stopped despite a frozen benchmark outcome",
+            "causal effect of the three-call envelope",
+            "causal relevance or sufficiency of retrieved evidence",
         ],
         "failure_layers": {
             "A_evidence_acquisition": {
@@ -374,34 +460,43 @@ def analyze_benchmark(benchmark: dict[str, Any]) -> dict[str, Any]:
                 "basis": "returned evidence contents and complete hypotheses are not persisted",
             },
             "D_component_attribution": {
-                "confidence": "SUPPORTED",
+                "observation_confidence": "PROVEN",
+                "semantic_attribution_confidence": "UNKNOWN",
                 "affected_scenarios": mechanism_correct_service_wrong,
-                "basis": "mechanism was correct while the official service dimension was wrong",
+                "basis": "mechanism was correct while exact free-text service scoring was wrong; predicted component strings are absent",
+            },
+            "D1_cross_component_search": {
+                "confidence": "SUPPORTED",
+                "affected_scenarios": cross_component_scenarios,
+                "basis": "the only cross-component scenario stayed entirely on alert scope and did not query its frozen causal component",
             },
             "E_trigger_representation": {
-                "confidence": "PROVEN",
+                "observation_confidence": "PROVEN",
+                "per_miss_cause": "UNKNOWN",
                 "affected_scenarios": [
                     item["scenario_id"]
                     for item in scenarios
                     if item["terminal_decision"] == "SUBMIT_HYPOTHESIS"
                 ],
-                "basis": "trigger grading is exact free-text equality and submitted strings are absent",
+                "basis": "all nine submitted trigger strings missed exact equality; individual semantic correctness is not reconstructable",
             },
             "F_termination_calibration": {
-                "confidence": "PROVEN",
+                "observation_confidence": "PROVEN",
+                "calibration_cause": "UNKNOWN",
                 "affected_scenarios": [
                     item["scenario_id"]
                     for item in scenarios
                     if item["termination_reason"] == "AGENT_STOPPED"
                 ],
-                "basis": "one run ended in a valid insufficient-evidence STOP despite a frozen benchmark outcome",
+                "basis": "one run ended in a valid insufficient-evidence STOP; whether that calibration was wrong is UNKNOWN",
             },
             "G_budget_search_strategy": {
-                "confidence": "PROVEN",
+                "observation_confidence": "PROVEN",
+                "causal_effect": "UNKNOWN",
                 "affected_scenarios": [
                     item["scenario_id"] for item in scenarios if item["model_calls"] == 3
                 ],
-                "basis": "all runs consumed the three-call envelope; causal impact of the limit is unknown",
+                "basis": "all runs consumed the three-call envelope; using the envelope is observed, but causal impact is UNKNOWN",
             },
             "H_benchmark_observability": {
                 "confidence": "PROVEN",
@@ -410,6 +505,7 @@ def analyze_benchmark(benchmark: dict[str, Any]) -> dict[str, Any]:
             },
         },
         "evaluation_limitations": [
+            "The service grader compares the submitted affected_component string directly against the frozen canonical service string; there is no normalization and the submitted component value is not persisted, so a zero cannot distinguish semantic misattribution from non-canonical representation.",
             "The trigger grader uses exact free-text equality; 0% proves no exact string match, not semantic trigger failure.",
             "The release artifact does not persist complete hypothesis submissions, so predicted service/mechanism/trigger strings cannot be reconstructed.",
             "Evidence IDs and ownership are persisted, but evidence contents and semantic relevance are not sufficient for post-hoc causal judgment.",
@@ -418,8 +514,9 @@ def analyze_benchmark(benchmark: dict[str, Any]) -> dict[str, Any]:
         ],
         "v03_requirements": [
             "Distinguish symptom service from causal component in structured investigation output.",
-            "Measure whether cross-component evidence was requested and whether it supports causal ownership.",
+            "Persist cross-component exploration and dependency traversal in bounded audit fields.",
             "Persist complete bounded structured hypothesis payloads and bounded evidence summaries for audit.",
+            "Use a canonical component vocabulary so service scoring is not representation-sensitive.",
             "Freeze a structured causal-trigger label or supplement free-text trigger scoring with a predeclared semantic rubric.",
             "Retain v0.2.0 safety and provenance floors: fabricated evidence 0, cross-incident evidence 0, writes 0.",
         ],
@@ -442,7 +539,11 @@ def _scenario_row(item: dict[str, Any]) -> str:
     outcome = item["terminal_outcome"]["termination"]
     return (
         f"| {item['scenario_id']} | `{item['fixture']}` | {item['ground_truth']['component']} | "
-        f"{item['ground_truth']['mechanism']} | {outcome} | "
+        f"{item['ground_truth']['mechanism']} | "
+        f"{item['component_scope']['alert_scope_component']} | "
+        f"{item['component_scope']['ground_truth_component']} | "
+        f"{'YES' if item['component_scope']['cross_component'] else 'NO'} | "
+        f"{outcome} | "
         f"{scores['service']:.0f}/{scores['mechanism']:.0f}/{scores['trigger']:.0f}/{scores['composite']:.2f} | "
         f"{', '.join(tools.get('1', [])) or '—'} | {', '.join(tools.get('2', [])) or '—'} | "
         f"{item['tools']['evidence_count']} |"
@@ -454,6 +555,7 @@ def render_markdown(analysis: dict[str, Any]) -> str:
     consistency = analysis["score_consistency"]
     usage = analysis["tool_usage"]
     targeting = analysis["component_targeting"]
+    integrity = analysis["evidence_integrity"]
     modes = analysis["system_failure_modes"]
     rows = "\n".join(_scenario_row(item) for item in analysis["per_scenario"])
     tool_lines = "\n".join(
@@ -490,15 +592,16 @@ evidence reference rate `90%`. There were 10 one-pass scenarios, 30 model calls,
 
 ## Grader audit
 
-`grade_hypothesis` compares normalized component identity and the controlled
-mechanism enum, but compares `suspected_trigger` using exact string equality.
-The official trigger score therefore proves `0/9` exact string matches; it does
-not prove that all submitted trigger statements were semantically wrong.
+`grade_hypothesis` compares `affected_component` using direct free-text equality
+with no normalization, compares the controlled mechanism enum, and compares
+`suspected_trigger` using exact string equality. The official trigger score
+therefore proves `0/9` exact string matches; it does not prove that all
+submitted trigger statements were semantically wrong.
 
 `grade_evidence` checks whether submitted evidence IDs are contained in the
-runtime-owned evidence set. The `90%` result is reference/ownership integrity;
-it does not establish that cited evidence was causally relevant, sufficient, or
-semantically supportive.
+runtime-owned evidence set. The `90%` result is scenario-level
+reference/ownership integrity; it does not establish that cited evidence was
+causally relevant, sufficient, or semantically supportive.
 
 Consistency results:
 
@@ -510,12 +613,39 @@ Consistency results:
 - Composite: scenario composite sum `{consistency["composite"]["sum"]:.2f}` / 10
   gives `{consistency["composite"]["mean"]:.0%}`.
 
+## Metric audit
+
+| Metric | Official semantics | Confidence |
+| --- | --- | --- |
+| `service_accuracy` | Exact free-text `affected_component` equality; no normalization | MEDIUM |
+| `mechanism_accuracy` | Controlled mechanism enum equality | HIGH |
+| `trigger_accuracy` | Exact free-text `suspected_trigger` equality | LOW |
+| `composite_rca` | 0.25 service + 0.50 mechanism + 0.25 trigger | MEDIUM/LOW |
+| `valid_evidence_reference_rate` | Runtime-owned reference integrity; STOP contributes zero | HIGH for integrity, LOW for relevance |
+
+## Service metric limitation
+
+The official service score remains `40%`, but the six zero scores are not six
+proven semantic misattributions. The submitted component strings are not
+persisted, so a zero cannot distinguish semantic misattribution from a
+non-canonical representation.
+
+## Evidence-integrity denominator
+
+- Official scenario-level evidence-reference rate: `{integrity["official_scenario_rate"]:.0%}`.
+- Submitted hypotheses: `{integrity["submitted_hypotheses"]}`.
+- Valid submitted hypotheses: `{integrity["valid_submitted_hypotheses"]}`.
+- Submitted-hypothesis integrity: `{integrity["submitted_hypothesis_integrity_rate"]:.0%}`.
+
+The official `90%` is reduced by the one hypothesis-less STOP, not by an
+invalid submitted reference. Causal relevance and sufficiency are not graded.
+
 ## Per-scenario investigation paths
 
 Scores are `service/mechanism/trigger/composite`.
 
-| Scenario | Fixture | Expected component | Expected mechanism | Termination | Scores | Turn 1 tools | Turn 2 tools | Evidence |
-| --- | --- | --- | --- | --- | --- | --- | --- | ---: |
+| Scenario | Fixture | Expected component | Expected mechanism | Alert scope | Ground-truth component | Cross-component? | Termination | Scores | Turn 1 tools | Turn 2 tools | Evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
 {rows}
 
 Predicted service, mechanism, and trigger values are not persisted in the
@@ -549,32 +679,32 @@ Discriminating-vs-confirmatory classification is `UNKNOWN` at run level because
 returned evidence contents are not persisted. Static tool semantics alone cannot
 prove information value.
 
-Layer assessment: evidence acquisition is `SUPPORTED` only for V020-010, where
-the available change tools were not requested; evidence availability and
-interpretation are `UNKNOWN`; component attribution is `SUPPORTED`; trigger
-representation and benchmark observability are `PROVEN`; and the fixed budget's
-causal effect remains `UNKNOWN` despite universal three-call utilization.
+## Alert-scope behavior
+
+Scope is reconstructed from canonical `FIXTURE_BY_NAME[fixture].service`; the
+persisted alert name is validated against that fixture. The persisted canonical
+arguments show `{targeting["alert_service_targeted_requests"]}/{targeting["total_targeted_requests"]}`
+(`{targeting["alert_service_target_rate"]:.0%}`) target-bearing requests on alert
+scope. This is a PROVEN search behavior, not a correctness explanation for six
+service-score misses. Service-correct and service-score-miss runs both had a
+`{targeting["service_wrong_runs_alert_service_target_rate"]:.0%}` alert-scope target rate.
+
+## Cross-component exploration
+
+There is `{len(targeting["cross_component_scenarios"])}` cross-component opportunity:
+`{", ".join(targeting["cross_component_scenarios"])}`. V020-003 had alert scope
+`order-service` and frozen causal component `payment-service`; all 8 persisted
+targets remained on `order-service`, with 0 outside-scope targets. Exploration
+was therefore `0/1` opportunities. This is SUPPORTED as an exploration gap and
+does not generalize to same-scope service-score misses.
 
 ## Service attribution analysis
 
-The persisted canonical arguments show `{targeting["alert_service_targeted_requests"]}/`
-`{targeting["total_targeted_requests"]}` (`{targeting["alert_service_target_rate"]:.0%}`)
-targeted requests matching the service implied by the production alert name.
-This includes the worker alert scope (`order-worker`). The five runs with
-mechanism correct/service wrong were:
-
-`{", ".join(targeting["mechanism_correct_service_wrong_scenarios"])}`.
-
-This supports alert-service anchoring as a system-level pattern, not a claim
-about hidden model reasoning. In particular, V020-003 has a dependency-latency
-alert scoped to order-service while the frozen causal component is
-payment-service; the artifact shows all requested targets on the alert scope,
-but does not persist the model's final component text.
-
-The alert-service targeting rate is `{targeting["service_correct_runs_alert_service_target_rate"]:.0%}`
-in service-correct runs and `{targeting["service_wrong_runs_alert_service_target_rate"]:.0%}`
-in service-wrong runs. The artifact therefore supports a uniform anchoring
-pattern, but cannot by itself establish that anchoring caused each miss.
+The official service misses are `{len(targeting["service_wrong_scenarios"])}/10`:
+`{", ".join(targeting["service_wrong_scenarios"])}`. The mechanism-correct /
+service-score-failed set is `{", ".join(targeting["mechanism_correct_service_wrong_scenarios"])}`.
+This score pattern is PROVEN. Its semantic cause is UNKNOWN because the grader
+uses exact free-text equality and submitted component values are absent.
 
 ## V020-008 STOP analysis
 
@@ -583,8 +713,9 @@ V020-008 (`order_worker_failure`) selected `stop_investigation` on turn 3 with
 proves a valid STOP and the exact tool sequence, but not the complete evidence
 contents or final hypothesis alternative. Therefore the choice among
 “necessary evidence not requested”, “weak evidence”, “lag/failure ambiguity”,
-and “three-call search envelope” remains `UNKNOWN`; the strongest supported
-classification is valid STOP without benchmark completion.
+and “three-call search envelope” remains `UNKNOWN`. The precise observation is
+non-completion via a valid insufficient-evidence STOP; whether calibration was
+wrong is UNKNOWN.
 
 ## V020-010 change-intelligence analysis
 
@@ -604,18 +735,26 @@ trigger strings. Semantic paraphrases cannot be distinguished retrospectively.
 
 ## Evidence-validity limitation
 
-The `90%` reference rate proves only that accepted hypothesis references were
-runtime-owned for the graded runs. It does not prove evidence sufficiency,
-causal relevance, or support for the conclusion. Fabricated and cross-incident
-references were both `0`, which is a safety/integrity result.
+The `90%` scenario-level reference rate includes the one hypothesis-less STOP.
+All 9 submitted hypotheses had valid runtime-owned references (`100%` submitted
+hypothesis integrity). It does not prove evidence sufficiency, causal relevance,
+or support for the conclusion. Fabricated and cross-incident references were
+both `0`, which is a safety/integrity result.
 
 ## Dominant system failure modes
 
 {mode_lines}
 
-The fixed search envelope is proven, but it is not proven to be the cause of any
-particular miss. The mechanism/service gap and alert-scope targeting are the
-strongest observed system patterns.
+These are observations and bounded interpretations; they do not establish that
+alert scope caused the six service misses.
+
+## Unknown causes
+
+- Semantic cause of the six service-score misses.
+- Semantic correctness of the nine trigger strings.
+- Why V020-008 stopped despite a frozen benchmark outcome.
+- Whether a larger search budget would have changed any result.
+- Whether retrieved evidence was causally relevant or sufficient.
 
 ## Evaluation observability gaps
 
@@ -625,16 +764,16 @@ strongest observed system patterns.
 - Mechanism confusion matrices cannot be reconstructed without predicted enums.
 - One pass per scenario gives no variance estimate.
 
-## Design requirements for v0.3.0
+## v0.3 measurable requirements
 
 These are requirements only, not an implementation plan:
 
 1. Distinguish symptom service from causal component in structured output.
-2. Measure cross-component causal evidence and ownership explicitly.
-3. Persist complete bounded hypothesis payloads and evidence summaries.
-4. Use a predeclared structured trigger label or semantic scoring rubric.
-5. Preserve v0.2.0 safety floors: fabricated evidence `0`, cross-incident
-   evidence `0`, and writes `0`.
+2. Persist cross-component exploration and dependency traversal in bounded audit fields.
+3. Persist complete bounded hypothesis payloads and bounded evidence summaries.
+4. Use a canonical component vocabulary so service scoring is not representation-sensitive.
+5. Use a predeclared structured causal-trigger label or semantic scoring rubric.
+6. Preserve v0.2.0 safety floors: fabricated evidence `0`, cross-incident evidence `0`, and writes `0`.
 
 ## Comparison target
 
@@ -652,7 +791,7 @@ def main() -> int:
     parser.add_argument("--markdown-output", type=Path, default=MARKDOWN_OUTPUT)
     args = parser.parse_args()
     benchmark = _load(args.benchmark)
-    analysis = analyze_benchmark(benchmark)
+    analysis = analyze_benchmark(benchmark, benchmark_path=args.benchmark)
     args.json_output.write_text(json.dumps(analysis, indent=2, sort_keys=True) + "\n")
     args.markdown_output.write_text(render_markdown(analysis))
     print(f"v0.2.0 forensic analysis: {len(analysis['per_scenario'])}/10 scenarios")

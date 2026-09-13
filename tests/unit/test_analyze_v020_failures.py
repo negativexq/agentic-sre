@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, cast
 
@@ -42,6 +43,16 @@ def test_analysis_parses_all_frozen_scenarios_and_reconciles_totals() -> None:
     assert analysis["score_consistency"]["trigger"]["submitted_hypotheses"] == 9
     assert len(analysis["component_targeting"]["service_wrong_scenarios"]) == 6
     assert len(analysis["failure_layers"]["F_termination_calibration"]["affected_scenarios"]) == 1
+    assert analysis["metric_interpretability"]["service_accuracy"]["confidence"] == "MEDIUM"
+    assert "exact free-text" in analysis["metric_interpretability"]["service_accuracy"]["basis"]
+    assert analysis["metric_interpretability"]["mechanism_accuracy"]["confidence"] == "HIGH"
+    assert analysis["metric_interpretability"]["trigger_accuracy"]["confidence"] == "LOW"
+    assert analysis["evidence_integrity"]["submitted_hypotheses"] == 9
+    assert analysis["evidence_integrity"]["valid_submitted_hypotheses"] == 9
+    assert analysis["evidence_integrity"]["submitted_hypothesis_integrity_rate"] == 1.0
+    assert analysis["evidence_integrity"]["official_scenario_rate"] == 0.9
+    assert analysis["score_consistency"]["trigger"]["miss_count_submitted"] == 9
+    assert analysis["score_consistency"]["trigger"]["taxonomy_excludes_stop"] is True
 
 
 def test_analysis_reports_tool_and_target_patterns_without_model_dependency() -> None:
@@ -54,10 +65,36 @@ def test_analysis_reports_tool_and_target_patterns_without_model_dependency() ->
     assert analysis["component_targeting"]["alert_service_target_rate"] == 1.0
     assert analysis["component_targeting"]["service_correct_runs_alert_service_target_rate"] == 1.0
     assert analysis["component_targeting"]["service_wrong_runs_alert_service_target_rate"] == 1.0
+    assert "alert_service_anchoring" not in {
+        item["name"] for item in analysis["system_failure_modes"]
+    }
+    targeting = analysis["component_targeting"]
+    assert targeting["cross_component_scenarios"] == ["V020-003"]
+    assert targeting["cross_component_explored_scenarios"] == []
+    assert targeting["cross_component_target_counts"]["V020-003"]["outside_alert_scope"] == 0
+    by_scenario = {item["scenario_id"]: item for item in targeting["by_scenario"]}
+    assert by_scenario["V020-003"]["alert_service"] == "order-service"
+    assert by_scenario["V020-003"]["ground_truth_component"] == "payment-service"
+    assert by_scenario["V020-003"]["alert_scope_matches_ground_truth"] is False
+    assert by_scenario["V020-005"]["alert_service"] == "payment-service"
+    assert by_scenario["V020-005"]["ground_truth_component"] == "payment-service"
+    assert by_scenario["V020-005"]["alert_scope_matches_ground_truth"] is True
+    assert by_scenario["V020-007"]["alert_service"] == "order-worker"
+    assert by_scenario["V020-007"]["ground_truth_component"] == "order-worker"
+    assert by_scenario["V020-009"]["alert_service"] == "payment-service"
+    assert by_scenario["V020-009"]["ground_truth_component"] == "payment-service"
     assert analysis["turn_usage"]["tool_budget_saturated_scenarios"] == [
         "V020-003",
         "V020-007",
         "V020-009",
+    ]
+    assert analysis["component_targeting"]["alert_scope_method"].startswith(
+        "canonical FIXTURE_BY_NAME"
+    )
+    assert analysis["system_observations"]["all_target_requests_on_alert_scope"] is True
+    assert analysis["supported_failure_modes"] == [
+        "cross_component_exploration_failure",
+        "change_evidence_acquisition_miss",
     ]
 
 
@@ -76,3 +113,38 @@ def test_analysis_rejects_wrong_scenario_order() -> None:
         assert "frozen dataset order" in str(exc)
     else:
         raise AssertionError("wrong scenario order was accepted")
+
+
+def test_analysis_hashes_supplied_benchmark_path(tmp_path: Path) -> None:
+    source = tmp_path / "custom-benchmark.json"
+    payload = _benchmark()
+    payload["custom_marker"] = "different source"
+    source.write_text(json.dumps(payload, sort_keys=True))
+
+    analysis = MODULE.analyze_benchmark(payload, benchmark_path=source)
+
+    assert analysis["source"]["benchmark_file_sha256"] == sha256(source.read_bytes()).hexdigest()
+    assert (
+        analysis["source"]["benchmark_file_sha256"]
+        != sha256((ROOT / "docs/benchmarks/v0.2.0-single-agent-live.json").read_bytes()).hexdigest()
+    )
+
+
+def test_analysis_rejects_unknown_fixture_and_alert_mismatch() -> None:
+    benchmark = _benchmark()
+    benchmark["scenarios"][0]["fixture"] = "not-a-frozen-fixture"
+    try:
+        MODULE.analyze_benchmark(benchmark)
+    except ValueError as exc:
+        assert "unknown frozen fixture" in str(exc)
+    else:
+        raise AssertionError("unknown fixture was accepted")
+
+    benchmark = _benchmark()
+    benchmark["scenarios"][0]["alert_name"] = "WrongAlert"
+    try:
+        MODULE.analyze_benchmark(benchmark)
+    except ValueError as exc:
+        assert "does not match fixture definition" in str(exc)
+    else:
+        raise AssertionError("alert/fixture mismatch was accepted")

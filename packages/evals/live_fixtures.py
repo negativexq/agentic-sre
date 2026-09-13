@@ -198,6 +198,8 @@ class LiveBenchmarkEnvironment:
         self._original_env: dict[str, list[dict[str, str]]] = {}
         self._payment_restart_baseline: int | None = None
         self._payment_process_start_baseline: float | None = None
+        self._payment_request_baseline: float | None = None
+        self._payment_process_start_before_config_rollout: float | None = None
 
     @staticmethod
     def _post_json(url: str, value: BaseModel | dict[str, Any]) -> Any:
@@ -346,15 +348,18 @@ class LiveBenchmarkEnvironment:
             time.sleep(2)
         raise TimeoutError(f"deployment rollout timed out: {deployment}")
 
-    def _payment_requests(self, count: int = 20, interval_seconds: float = 0.0) -> None:
+    def _payment_requests(self, count: int = 20, interval_seconds: float = 0.0) -> int:
+        succeeded = 0
         for _ in range(count):
             request = PaymentRequest(order_id=uuid4(), amount_cents=2_500, currency="USD")
             try:
                 self._post_json(f"{self.payment_url}/payments", request)
+                succeeded += 1
             except RuntimeError:
                 pass
             if interval_seconds > 0:
                 time.sleep(interval_seconds)
+        return succeeded
 
     def _order_requests(self, count: int = 20, interval_seconds: float = 0.0) -> None:
         for _ in range(count):
@@ -373,9 +378,9 @@ class LiveBenchmarkEnvironment:
         with ThreadPoolExecutor(max_workers=min(count, 30)) as executor:
             list(executor.map(lambda _: self._order_requests(1), range(count)))
 
-    def _concurrent_payments(self, count: int = POOL_PRESSURE_CONCURRENCY) -> None:
+    def _concurrent_payments(self, count: int = POOL_PRESSURE_CONCURRENCY) -> int:
         with ThreadPoolExecutor(max_workers=min(count, POOL_PRESSURE_CONCURRENCY)) as executor:
-            list(executor.map(lambda _: self._payment_requests(1), range(count)))
+            return sum(executor.map(lambda _: self._payment_requests(1), range(count)))
 
     def _payment_restart_count(self) -> int:
         kubernetes = importlib.import_module("kubernetes")
@@ -413,6 +418,31 @@ class LiveBenchmarkEnvironment:
         except (TypeError, ValueError):
             return None
 
+    def _payment_request_count(self) -> float:
+        query = (
+            'sum(http_request_duration_seconds_count{job="payment-service",'
+            'route="/payments",service="payment-service"})'
+        )
+        request = Request(
+            f"{self.prometheus_url}/api/v1/query?{urlencode({'query': query})}",
+            method="GET",
+        )
+        try:
+            with urlopen(request, timeout=10) as response:
+                payload = json.loads(response.read(1_000_001))
+        except (HTTPError, URLError, TimeoutError, OSError) as error:
+            raise RuntimeError("Prometheus payment request query failed") from error
+        results = payload.get("data", {}).get("result", [])
+        if not isinstance(results, list) or not results:
+            return 0.0
+        value = results[0].get("value")
+        if not isinstance(value, list) or len(value) < 2:
+            return 0.0
+        try:
+            return float(value[1])
+        except (TypeError, ValueError):
+            return 0.0
+
     @staticmethod
     def _wait_until(
         predicate: Callable[[], bool], *, timeout_seconds: float, description: str
@@ -437,6 +467,25 @@ class LiveBenchmarkEnvironment:
             timeout_seconds=POD_CRASH_HEALTH_TIMEOUT_SECONDS,
             description="payment health did not recover after restart",
         )
+
+    def _wait_for_payment_health_stable(self) -> None:
+        """Confirm the post-rollout port-forward remains attached to a healthy pod."""
+        deadline = time.monotonic() + POD_CRASH_HEALTH_TIMEOUT_SECONDS
+        consecutive = 0
+        while time.monotonic() < deadline:
+            try:
+                payload = self._get_json(f"{self.payment_url}/health")
+                healthy = isinstance(payload, dict) and payload.get("status") == "ok"
+            except (RuntimeError, OSError):
+                healthy = False
+            if healthy:
+                consecutive += 1
+                if consecutive == 3:
+                    return
+            else:
+                consecutive = 0
+            time.sleep(1)
+        raise TimeoutError("payment health was not stable after deployment rollout")
 
     def _restart_payment_container_once(self) -> None:
         kubernetes = importlib.import_module("kubernetes")
@@ -541,9 +590,27 @@ class LiveBenchmarkEnvironment:
             if self._payment_process_start_baseline is None:
                 raise RuntimeError("Prometheus process-start baseline unavailable")
         elif fixture == "payment_config_change":
+            self._payment_process_start_before_config_rollout = self._payment_process_start_time()
             self._kubectl_patch_env(
                 "payment-service", {"FAULT_PAYMENT_DELAY_MS": str(CONFIG_REGRESSION_DELAY_MS)}
             )
+            # A deployment rollout replaces the pod selected by the benchmark
+            # port-forward.  The rollout can be complete before the forwarding
+            # supervisor has attached to the new pod.  Establish the local
+            # workload handshake before sending the stimulus so request
+            # failures cannot be silently mistaken for missing telemetry.
+            self._wait_for_payment_health_stable()
+            previous_start = self._payment_process_start_before_config_rollout
+            if previous_start is not None:
+                self._wait_until(
+                    lambda: (
+                        (current := self._payment_process_start_time()) is not None
+                        and current != previous_start
+                    ),
+                    timeout_seconds=30,
+                    description="Prometheus did not observe the configuration rollout",
+                )
+            self._payment_request_baseline = self._payment_request_count()
             self._record_payment_config_change()
         else:
             raise KeyError(fixture)
@@ -566,6 +633,16 @@ class LiveBenchmarkEnvironment:
                     self._concurrent_payments(count=POOL_PRESSURE_CONCURRENCY)
             elif fixture == "payment_config_change":
                 self._concurrent_payments(count=CONFIG_REGRESSION_CONCURRENCY)
+                baseline = self._payment_request_baseline
+                if baseline is None:
+                    raise RuntimeError("payment request baseline was not captured")
+                self._wait_until(
+                    lambda: (
+                        self._payment_request_count() >= baseline + CONFIG_REGRESSION_CONCURRENCY
+                    ),
+                    timeout_seconds=30,
+                    description="Prometheus did not observe all configuration stimulus requests",
+                )
             else:
                 self._payment_requests(count=60, interval_seconds=0.5)
         elif fixture in {

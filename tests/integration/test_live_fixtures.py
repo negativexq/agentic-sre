@@ -230,6 +230,29 @@ def test_payment_health_poll_treats_port_forward_disconnect_as_transient(
     assert attempts["count"] == 2
 
 
+def test_configuration_prepare_waits_for_post_rollout_health(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    environment = LiveBenchmarkEnvironment()
+    calls: list[str] = []
+    monkeypatch.setattr(environment, "_payment_fault", lambda **_: None)
+    monkeypatch.setattr(environment, "_order_fault", lambda **_: None)
+    monkeypatch.setattr(environment, "_restore_env", lambda _: None)
+    monkeypatch.setattr(environment, "_kubectl_patch_env", lambda *_: calls.append("patch"))
+    monkeypatch.setattr(
+        environment, "_wait_for_payment_health_stable", lambda: calls.append("health")
+    )
+    monkeypatch.setattr(environment, "_payment_process_start_time", lambda: None)
+    monkeypatch.setattr(environment, "_payment_request_count", lambda: 0.0)
+    monkeypatch.setattr(
+        environment, "_record_payment_config_change", lambda: calls.append("record")
+    )
+
+    environment.prepare("payment_config_change")
+
+    assert calls == ["patch", "health", "record"]
+
+
 def test_payment_pod_crash_uses_runtime_instability_alert() -> None:
     definition = FIXTURE_BY_NAME["payment_pod_crash"]
 

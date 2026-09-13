@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from packages.investigation.contracts import (
     DecisionType,
+    InvestigationLimits,
     StopReason,
     TerminationReason,
     ValidationStage,
@@ -57,18 +58,30 @@ class InvestigationTurnAudit(BaseModel):
 
     run_id: UUID
     incident_id: UUID
-    turn_number: int = Field(gt=0, le=3)
-    current_model_call: int = Field(gt=0, le=3)
-    future_model_calls_after_decision: int = Field(ge=0, le=3)
+    turn_number: int = Field(gt=0, le=InvestigationLimits.HARD_MAX_AGENT_TURNS)
+    current_model_call: int = Field(gt=0, le=InvestigationLimits.HARD_MAX_MODEL_CALLS)
+    future_model_calls_after_decision: int = Field(
+        ge=0, le=InvestigationLimits.HARD_MAX_MODEL_CALLS
+    )
     is_final_model_turn: bool
     allowed_decisions: list[str] = Field(default_factory=list, max_length=3)
     selected_decision_function: str | None = None
-    requested_tool_count: int = Field(ge=0, le=8)
-    requested_tool_names: list[str] = Field(default_factory=list, max_length=8)
-    requested_tool_argument_keys: list[list[str]] = Field(default_factory=list, max_length=8)
-    requested_tool_argument_types: list[dict[str, str]] = Field(default_factory=list, max_length=8)
-    requested_tool_argument_hashes: list[dict[str, str]] = Field(default_factory=list, max_length=8)
-    request_audits: list[dict[str, Any]] = Field(default_factory=list, max_length=8)
+    requested_tool_count: int = Field(ge=0, le=InvestigationLimits.HARD_MAX_TOOL_CALLS)
+    requested_tool_names: list[str] = Field(
+        default_factory=list, max_length=InvestigationLimits.HARD_MAX_TOOL_CALLS
+    )
+    requested_tool_argument_keys: list[list[str]] = Field(
+        default_factory=list, max_length=InvestigationLimits.HARD_MAX_TOOL_CALLS
+    )
+    requested_tool_argument_types: list[dict[str, str]] = Field(
+        default_factory=list, max_length=InvestigationLimits.HARD_MAX_TOOL_CALLS
+    )
+    requested_tool_argument_hashes: list[dict[str, str]] = Field(
+        default_factory=list, max_length=InvestigationLimits.HARD_MAX_TOOL_CALLS
+    )
+    request_audits: list[dict[str, Any]] = Field(
+        default_factory=list, max_length=InvestigationLimits.HARD_MAX_TOOL_CALLS
+    )
     duplicate_requests_suppressed: int = Field(ge=0, default=0)
     validation_stage: ValidationStage | None = None
     validation_result: str = "NOT_EVALUATED"

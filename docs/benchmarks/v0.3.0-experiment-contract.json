@@ -1,7 +1,8 @@
 {
   "experiment_id": "v0.3-exp01-a1-improved-single-agent",
   "status": "PREREGISTERED_DESIGN",
-  "implementation_status": "NOT_IMPLEMENTED",
+  "implementation_status": "PHASE_1_IMPLEMENTED_PHASE_2_PENDING",
+  "phase": "PHASE_1_FOUNDATION",
   "arm": "A1_CONTROL",
   "sequence": [
     {"arm": "A0", "name": "frozen v0.2.0 single-agent baseline", "status": "FROZEN"},
@@ -31,12 +32,12 @@
     "compatibility_dataset_sha256": "20288dfae850b07bc4a754cd6e15a465f6fe7984cc259aeb7bf4294d79b16650",
     "generalization_dataset_sha256": null,
     "combined_evaluation_sha256": null,
-    "topology_source_sha256": "cd0d41d1093171df412833dd648c423e9a84179251b60cfe2633d2345d5d8b11",
+    "topology_projection_sha256": "540481d186342b20ea9a15ba1c014a83df44c04bc5a03eb32526fee749518045",
     "prompt_sha256": "5159d9384283bbc3e8f7a17ee515d3810a742356f7b16410781bc6f73b19d9cd",
     "tool_registry_sha256": "9fb5ef6c753d9a941cdfafeb9f4225c2bfb838d8272b7a316edb398707bf0fa4",
     "tool_contracts_sha256": "9e0f7403b3ab1d503690908bd4da316b4616d3d112f898b0dfef7ec44f932f5b",
-    "component_registry_sha256": null,
-    "component_registry_status": "TO_BE_CREATED_AND_FROZEN_BEFORE_A1_IMPLEMENTATION"
+    "component_registry_sha256": "f72503e8a754c98e1425006e11daf66522f78059410afb882566e8d0bd0ddf0c",
+    "component_registry_status": "IMPLEMENTED_PHASE_1_NOT_LIVE_FROZEN"
   },
   "research_question": "Can the existing bounded single investigator improve causal exploration and causal diagnosis when given explicit production topology, canonical component identities, structured causal outputs, and better benchmark observability, without adding another model role?",
   "hypotheses": {
@@ -76,8 +77,8 @@
       "workload/payment_service/app.py",
       "infra/kubernetes/workload.yaml"
     ],
-    "topology_hash_status": "REFERENCE_TO_FREEZE_BEFORE_A1_IMPLEMENTATION",
-    "component_registry_hash_status": "REFERENCE_TO_FREEZE_BEFORE_A1_IMPLEMENTATION"
+    "topology_hash_status": "PHASE_1_IMPLEMENTED_HASHES_RECORDED",
+    "component_registry_hash_status": "PHASE_1_IMPLEMENTED_HASHES_RECORDED"
   },
   "compatibility_set": {
     "scenario_ids": ["V020-001", "V020-002", "V020-003", "V020-004", "V020-005", "V020-006", "V020-007", "V020-008", "V020-009", "V020-010"],
@@ -162,11 +163,12 @@
       "trigger_type": "controlled TriggerType",
       "trigger_component": "WorkloadComponentId",
       "trigger_resource": "DependencyResourceId | null",
-      "signal": "controlled TriggerSignal"
+      "signal": "omitted; trigger type plus canonical target is sufficient"
     },
     "StopDecision": {
       "stop_reason": "controlled StopReason",
       "considered_components": "list[WorkloadComponentId] <= 8",
+      "considered_resources": "list[DependencyResourceId] <= 8",
       "missing_evidence_categories": "list[EvidenceCategory] <= 8"
     },
     "validation": "strict types, extra=forbid, bounded fields, runtime-known workload/resource IDs"
@@ -175,7 +177,7 @@
     "completion_rate": "submitted structured hypotheses / scenarios",
     "causal_component_accuracy": "exact canonical WorkloadComponentId causal_component matches / scenarios",
     "mechanism_accuracy": "exact controlled mechanism matches / scenarios",
-    "structured_trigger_accuracy": "exact (trigger_type, trigger_component, trigger_resource, signal) matches / scenarios",
+    "structured_trigger_accuracy": "exact (trigger_type, trigger_component, trigger_resource) matches / scenarios",
     "evidence_reference_integrity": "submitted hypotheses with all current-incident runtime-owned references / submitted hypotheses",
     "ground_truth_causal_component_evidence_rate": "grader-only cited evidence target matches frozen causal component / scenarios"
   },

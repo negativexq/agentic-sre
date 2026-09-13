@@ -1,7 +1,7 @@
 """Strict structured decisions and run records for the investigator."""
 
 from enum import StrEnum
-from typing import Any
+from typing import Any, ClassVar
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -133,12 +133,43 @@ class InvestigationDecision(InvestigationModel):
 
 
 class InvestigationLimits(InvestigationModel):
-    """Hard local limits independent of provider behavior."""
+    """Configurable bounded limits, separate from the v0.2 default policy."""
 
-    max_model_calls: int = Field(default=3, gt=0, le=3)
-    max_tool_calls: int = Field(default=8, gt=0, le=8)
-    max_agent_turns: int = Field(default=3, gt=0, le=3)
-    max_wall_time_seconds: int = Field(default=60, gt=0, le=300)
+    HARD_MAX_MODEL_CALLS: ClassVar[int] = 8
+    HARD_MAX_TOOL_CALLS: ClassVar[int] = 20
+    HARD_MAX_AGENT_TURNS: ClassVar[int] = 8
+    HARD_MAX_WALL_TIME_SECONDS: ClassVar[int] = 300
+
+    # These defaults preserve the v0.2 execution policy. A1 may pass a wider
+    # explicit configuration after offline performance evaluation.
+    max_model_calls: int = Field(default=3, gt=0, le=HARD_MAX_MODEL_CALLS)
+    max_tool_calls: int = Field(default=8, gt=0, le=HARD_MAX_TOOL_CALLS)
+    max_agent_turns: int = Field(default=3, gt=0, le=HARD_MAX_AGENT_TURNS)
+    max_wall_time_seconds: int = Field(default=60, gt=0, le=HARD_MAX_WALL_TIME_SECONDS)
+
+
+DEFAULT_DEVELOPMENT_LIMITS = {
+    "max_model_calls": 3,
+    "max_tool_calls": 8,
+    "max_agent_turns": 3,
+    "max_wall_time_seconds": 60,
+}
+
+
+HARD_RUNTIME_CEILINGS = {
+    "max_model_calls": InvestigationLimits.HARD_MAX_MODEL_CALLS,
+    "max_tool_calls": InvestigationLimits.HARD_MAX_TOOL_CALLS,
+    "max_agent_turns": InvestigationLimits.HARD_MAX_AGENT_TURNS,
+    "max_wall_time_seconds": InvestigationLimits.HARD_MAX_WALL_TIME_SECONDS,
+}
+
+
+class A1InvestigationDecision(InvestigationDecision):
+    """Wider versioned decision envelope reserved for the A1 experiment."""
+
+    requests: list[ToolRequestSpec] = Field(
+        default_factory=list, max_length=InvestigationLimits.HARD_MAX_TOOL_CALLS
+    )
 
 
 class TerminationReason(StrEnum):
@@ -199,4 +230,6 @@ class InvestigationResult(InvestigationModel):
     validation_stage: ValidationStage | None = None
     validation_path: str | None = None
     validator: str | None = None
-    turns: list[dict[str, Any]] = Field(default_factory=list, max_length=3)
+    turns: list[dict[str, Any]] = Field(
+        default_factory=list, max_length=InvestigationLimits.HARD_MAX_AGENT_TURNS
+    )

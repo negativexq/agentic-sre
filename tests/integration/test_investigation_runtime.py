@@ -14,6 +14,7 @@ from packages.contracts import (
     IncidentStatus,
 )
 from packages.investigation import (
+    A1InvestigationDecision,
     DecisionType,
     InvestigationDecision,
     InvestigationLimits,
@@ -97,6 +98,8 @@ def test_fake_provider_runtime_batches_tools_and_submits_real_evidence() -> None
     assert result.hypothesis is not None
     assert len(result.evidence) == 1
     assert result.hypothesis.evidence_ids == [result.evidence[0].evidence_id]
+    assert result.evidence[0].target_workload == "order-worker"
+    assert result.evidence[0].target_resource is None
     assert result.usage.model_calls == 2
     assert result.usage.tool_calls == 1
     assert result.terminal_decision is DecisionType.SUBMIT_HYPOTHESIS
@@ -376,6 +379,60 @@ def test_decision_rejects_more_than_the_incident_budget() -> None:
                 "requests": [{"tool": f"tool-{index}"} for index in range(9)],
             }
         )
+
+
+def test_a1_decision_envelope_accepts_wider_explicit_batches() -> None:
+    """A1 has a wider versioned envelope while the legacy envelope stays at eight."""
+    decision = A1InvestigationDecision.model_validate(
+        {
+            "decision": DecisionType.CALL_TOOLS,
+            "requests": [{"tool": f"tool-{index}"} for index in range(12)],
+        }
+    )
+    assert len(decision.requests) == 12
+
+    with pytest.raises(ValueError):
+        A1InvestigationDecision.model_validate(
+            {
+                "decision": DecisionType.CALL_TOOLS,
+                "requests": [{"tool": f"tool-{index}"} for index in range(21)],
+            }
+        )
+
+
+def test_investigation_limits_keep_v0_defaults_and_allow_a1_candidates() -> None:
+    """Limits are configurable within hard ceilings instead of encoding 3/8."""
+    assert InvestigationLimits().max_model_calls == 3
+    assert InvestigationLimits().max_tool_calls == 8
+    candidate = InvestigationLimits(max_model_calls=5, max_tool_calls=12, max_agent_turns=5)
+    assert candidate.max_model_calls == 5
+    assert candidate.max_tool_calls == 12
+    with pytest.raises(ValueError):
+        InvestigationLimits(max_model_calls=9)
+    with pytest.raises(ValueError):
+        InvestigationLimits(max_tool_calls=21)
+
+
+def test_runtime_uses_wider_decision_envelope_for_explicit_a1_tool_budget() -> None:
+    """An explicit wider A1 budget reaches the provider response schema."""
+    provider = FakeModelProvider(
+        [
+            {"decision": DecisionType.CALL_TOOLS, "requests": _tool_requests(12)},
+            {
+                "decision": DecisionType.STOP,
+                "stop_reason": StopReason.INSUFFICIENT_EVIDENCE,
+            },
+        ]
+    )
+
+    result = InvestigationRuntime(
+        provider,
+        registry(count=12),
+        limits=InvestigationLimits(max_model_calls=2, max_tool_calls=12),
+    ).run(incident())
+
+    assert result.usage.tool_calls == 12
+    assert provider.requests[0].response_schema["properties"]["requests"]["maxItems"] == 20
 
 
 def _tool_requests(count: int) -> list[dict[str, str]]:

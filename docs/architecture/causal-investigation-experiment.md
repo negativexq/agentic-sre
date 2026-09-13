@@ -1,8 +1,9 @@
 # A1 causal-investigation experiment
 
-This is the implementation-independent design for the improved single-agent
-control arm. It is deliberately separate from the later Investigator + Critic
-treatment.
+This is the Phase 1 design and implementation boundary for the improved
+single-agent control arm. It is deliberately separate from the later
+Investigator + Critic treatment. Phase 1 establishes contracts and auditability;
+Phase 2 will change model-visible context and search behavior.
 
 ## Background
 
@@ -51,7 +52,9 @@ The implementation should proceed in this order, before any paid call:
    `DependencyResourceId` registries from actual topology.
 2. Add a bounded topology projection to the normal incident context.
 3. Add strict symptom/causal workload, optional causal-resource and
-   structured-trigger output fields.
+   structured-trigger output fields. `StructuredTrigger` uses a controlled
+   trigger type plus optional workload/resource target; it does not add a
+   redundant free-form signal enum.
 4. Add bounded STOP metadata without hidden reasoning text.
 5. Validate cross-component tool targets against the registry.
 6. Persist complete bounded final outputs and evidence summaries.
@@ -60,6 +63,10 @@ The implementation should proceed in this order, before any paid call:
    harness with zero model calls.
 9. Freeze code, prompt, tools, topology, dataset, grader and budgets before a
    one-pass A1 compatibility run.
+
+Phase 1 now implements steps 1, 3, 4, 6 and the bounded audit/provenance parts
+of steps 5 and 7. It does not yet inject topology into the prompt or change
+the investigator's search behavior.
 
 No fixture-conditioned routing is permitted. In particular, the runtime must
 not turn V020-003 into a special case or force a change tool for V020-010.
@@ -90,7 +97,7 @@ mechanism_accuracy
   = exact controlled mechanism matches / scenarios
 
 structured_trigger_accuracy
-  = exact (trigger_type, trigger_component, trigger_resource, signal) matches /
+  = exact (trigger_type, trigger_component, trigger_resource) matches /
     scenarios
 
 cross_component_exploration_rate
@@ -210,7 +217,8 @@ changed. A change creates a new experiment version.
 
 ## Budget
 
-A1 keeps the same per-incident envelope as A0:
+A1 keeps the same per-incident envelope as A0 for the first fair comparison,
+but the runtime schema is no longer architecturally limited to that policy:
 
 ```text
 max model calls / incident = 3
@@ -222,12 +230,18 @@ The v0.2 ledger is exhausted and is not reused. A new versioned ledger such as
 `.local/a1-single-agent-live-budget.json` is required. The compatibility worst
 case is 30 calls (10 × 3). A smoke reserve of up to six calls is planned, but
 the final A1 cap is **PENDING** until the generalization scenario count is
-frozen:
+frozen. Phase 1 exposes safe configurable limits for offline budget studies;
+it does not select the final live policy:
 
 ```text
 final cap = smoke reserve
            + (compatibility scenario count × 3)
            + (generalization scenario count × 3)
+
+The Phase 1 runtime defaults remain 3 model calls, 8 tool executions, 3 turns
+and 60 seconds for compatibility. Explicit A1 configurations may use wider
+values within hard ceilings of 8 model calls, 20 tool executions, 8 turns and
+300 seconds. No A1 live ledger is initialized in this phase.
 ```
 
 The cap must be committed and the new ledger initialized before the first live

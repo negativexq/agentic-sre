@@ -24,6 +24,7 @@ from packages.investigation.context import (
     derive_observation_window,
 )
 from packages.investigation.contracts import (
+    A1InvestigationDecision,
     DecisionType,
     HypothesisMechanism,
     InvestigationDecision,
@@ -44,6 +45,7 @@ from packages.investigation.duplicates import (
 from packages.investigation.prompt import INVESTIGATOR_PROMPT, investigator_prompt_hash
 from packages.investigation.registry import ReadOnlyToolRegistry, RegisteredTool
 from packages.investigation.tool_contracts import ToolArgumentValidationError
+from packages.investigation.topology import target_from_tool_arguments
 from packages.provider import (
     ModelMessage,
     ModelProvider,
@@ -103,7 +105,7 @@ class _ToolBudgetExceeded(ValueError):
 
 
 class InvestigationRuntime:
-    """Run at most three model turns and eight bounded read-only tool calls."""
+    """Run a configurable number of bounded read-only investigation turns."""
 
     def __init__(
         self,
@@ -124,6 +126,9 @@ class InvestigationRuntime:
         self._model = model
         self._reasoning_effort = reasoning_effort
         self._limits = limits or InvestigationLimits()
+        self._decision_model = (
+            A1InvestigationDecision if self._limits.max_tool_calls > 8 else InvestigationDecision
+        )
         self._context_builder = CompactContextBuilder()
         self._audit_sink = audit_sink
 
@@ -176,7 +181,7 @@ class InvestigationRuntime:
                 )
                 input_tokens += response.input_tokens
                 output_tokens += response.output_tokens
-                decision = InvestigationDecision.model_validate_json(
+                decision = self._decision_model.model_validate_json(
                     json.dumps(response.structured_output)
                 )
             except ProviderError as error:
@@ -206,7 +211,7 @@ class InvestigationRuntime:
                 )
                 validation_stage = ValidationStage.DECISION_SCHEMA
                 validation_path = self._validation_path(error)
-                validator = "InvestigationDecision"
+                validator = self._decision_model.__name__
                 turns.append(
                     self._turn_summary(
                         logical_model_turns,
@@ -606,7 +611,7 @@ class InvestigationRuntime:
                 ModelMessage(role="user", content=context),
             ],
             response_schema_name="investigation_decision",
-            response_schema=InvestigationDecision.model_json_schema(),
+            response_schema=self._decision_model.model_json_schema(),
             model=self._model,
             reasoning_effort=self._reasoning_effort,  # type: ignore[arg-type]
             max_output_tokens=1_000,
@@ -739,6 +744,7 @@ class InvestigationRuntime:
                 continue
             if not isinstance(result, ToolResponse):
                 continue
+            target = target_from_tool_arguments(item.canonical_arguments)
             evidence = Evidence(
                 incident_id=incident.incident_id,
                 source_type=item.registered.source_type,
@@ -748,6 +754,8 @@ class InvestigationRuntime:
                 tool_call_id=call_id,
                 raw_result_reference=f"{item.registered.name}://{call_id}",
                 collected_at=collected_at,
+                target_workload=target.workload.value if target.workload is not None else None,
+                target_resource=target.resource.value if target.resource is not None else None,
             )
             if result.temporal_mode:
                 evidence.observation = {

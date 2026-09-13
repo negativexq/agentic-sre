@@ -172,6 +172,8 @@ class CompactContextBuilder:
             "evidence_id": str(evidence.evidence_id),
             "source_type": evidence.source_type.value,
             "source_system": evidence.source_system,
+            "target_workload": evidence.target_workload,
+            "target_resource": evidence.target_resource,
             "observation_summary": observation,
             "collected_at": evidence.collected_at.isoformat(),
             "time_window": evidence.time_window.model_dump(mode="json"),

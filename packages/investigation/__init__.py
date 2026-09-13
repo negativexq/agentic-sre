@@ -1,13 +1,31 @@
-"""Credit-bounded single-agent investigation runtime."""
+"""Configurable, bounded single-agent investigation runtime."""
 
+from packages.investigation.artifacts import (
+    A1RunArtifact,
+    A1SafetyCounters,
+    EvidenceSummary,
+    TurnRecord,
+)
 from packages.investigation.audit import InMemoryInvestigationAuditSink, InvestigationAuditRecord
+from packages.investigation.causal_contracts import (
+    CausalHypothesis,
+    CausalStopDecision,
+    EvidenceCategory,
+    StructuredTrigger,
+    TriggerType,
+)
 from packages.investigation.context import CompactContextBuilder
 from packages.investigation.contracts import (
+    DEFAULT_DEVELOPMENT_LIMITS,
+    HARD_RUNTIME_CEILINGS,
+    A1InvestigationDecision,
     DecisionType,
+    HypothesisMechanism,
     InvestigationDecision,
     InvestigationErrorCode,
     InvestigationLimits,
     InvestigationResult,
+    InvestigationUsage,
     StopReason,
     TerminationReason,
     ToolRepeatPolicy,
@@ -21,16 +39,42 @@ from packages.investigation.duplicates import (
 from packages.investigation.prompt import INVESTIGATOR_PROMPT_VERSION, investigator_prompt_hash
 from packages.investigation.registry import ReadOnlyToolRegistry, RegisteredTool
 from packages.investigation.runtime import InvestigationRuntime
+from packages.investigation.topology import (
+    DEFAULT_TOPOLOGY,
+    DependencyEdge,
+    DependencyResourceId,
+    DependencyTargetType,
+    QueryTarget,
+    QueryTargetUsage,
+    TopologyRegistry,
+    WorkloadComponentId,
+    derive_query_target_usage,
+    target_from_tool_arguments,
+)
 
 __all__ = [
     "CompactContextBuilder",
+    "A1RunArtifact",
+    "A1SafetyCounters",
+    "EvidenceSummary",
+    "TurnRecord",
+    "CausalHypothesis",
+    "CausalStopDecision",
+    "EvidenceCategory",
+    "StructuredTrigger",
+    "TriggerType",
     "InMemoryInvestigationAuditSink",
     "DecisionType",
     "InvestigationErrorCode",
     "InvestigationDecision",
+    "A1InvestigationDecision",
     "InvestigationAuditRecord",
     "InvestigationLimits",
+    "DEFAULT_DEVELOPMENT_LIMITS",
+    "HARD_RUNTIME_CEILINGS",
     "InvestigationResult",
+    "InvestigationUsage",
+    "HypothesisMechanism",
     "InvestigationRuntime",
     "StopReason",
     "INVESTIGATOR_PROMPT_VERSION",
@@ -43,4 +87,14 @@ __all__ = [
     "ToolRequestSpec",
     "make_tool_request_identity",
     "investigator_prompt_hash",
+    "DEFAULT_TOPOLOGY",
+    "DependencyEdge",
+    "DependencyResourceId",
+    "DependencyTargetType",
+    "QueryTarget",
+    "QueryTargetUsage",
+    "TopologyRegistry",
+    "WorkloadComponentId",
+    "derive_query_target_usage",
+    "target_from_tool_arguments",
 ]

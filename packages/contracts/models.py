@@ -141,6 +141,8 @@ class Evidence(ContractModel):
     tool_call_id: ToolCallId
     raw_result_reference: str = Field(min_length=1)
     collected_at: datetime
+    target_workload: str | None = Field(default=None, min_length=1)
+    target_resource: str | None = Field(default=None, min_length=1)
 
 
 class Hypothesis(ContractModel):

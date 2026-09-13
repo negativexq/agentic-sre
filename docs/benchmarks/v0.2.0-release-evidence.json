@@ -1,0 +1,42 @@
+{
+  "version": "v0.2.0",
+  "benchmark_sha": "4603fc6",
+  "benchmark_artifact_commit": "62cad78",
+  "live_smoke": {
+    "artifact": "docs/benchmarks/v0.2.0-live-smoke.json",
+    "persisted_terminal_scenarios": 1,
+    "historical_three_smoke_claim_complete": false,
+    "note": "Three smoke scenarios were executed during development, but only the final Kafka smoke was preserved as a structured repository artifact."
+  },
+  "harness_qualification": {
+    "artifact": "docs/benchmarks/v0.2.0-harness-qualification.json",
+    "qualified": true,
+    "scenarios": 10,
+    "openai_calls": 0
+  },
+  "live_benchmark": {
+    "artifact": "docs/benchmarks/v0.2.0-single-agent-live.json",
+    "scenarios": 10,
+    "executed_once": true,
+    "outbound_api_calls": 30,
+    "provider_retries": 0
+  },
+  "accounting": {
+    "start": 50,
+    "benchmark_delta": 30,
+    "final": 80,
+    "limit": 80,
+    "remaining": 0,
+    "invariant": true
+  },
+  "safety": {
+    "fabricated_evidence": 0,
+    "cross_incident_evidence": 0,
+    "agent_infrastructure_writes": 0,
+    "kubernetes_write_verbs": 0,
+    "budget_bypass": 0,
+    "secret_leakage": 0,
+    "shell": "absent",
+    "remediation_executor": "absent"
+  }
+}

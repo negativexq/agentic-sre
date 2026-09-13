@@ -291,24 +291,23 @@ class LiveBenchmarkEnvironment:
             "order-worker": {"FAULT_WORKER_DELAY_MS", "FAULT_WORKER_FAILURE"},
             "payment-service": {"FAULT_PAYMENT_DELAY_MS"},
         }.get(deployment, set())
-        env = [
-            {"name": item.name, "value": item.value}
-            for item in (container.env or [])
-            if item.name not in names and item.value is not None
+        remove_indexes = [
+            index for index, item in enumerate(container.env or []) if item.name in names
         ]
-        # These variables are benchmark-only fault controls.  A healthy
-        # baseline must not inherit a stale fault value from a prior trial.
-        if len(env) == len(container.env or []):
+        # A strategic-merge patch does not remove list entries that are absent
+        # from the replacement list.  Use explicit JSON Patch removals so a
+        # healthy baseline cannot inherit stale benchmark fault controls.
+        if not remove_indexes:
             self._original_env.pop(deployment, None)
             return
+        patch = [
+            {"op": "remove", "path": f"/spec/template/spec/containers/0/env/{index}"}
+            for index in reversed(remove_indexes)
+        ]
         api.patch_namespaced_deployment(
             deployment,
             self.namespace,
-            {
-                "spec": {
-                    "template": {"spec": {"containers": [{"name": container.name, "env": env}]}}
-                }
-            },
+            patch,
         )
         self._wait_rollout(deployment)
         self._original_env.pop(deployment, None)

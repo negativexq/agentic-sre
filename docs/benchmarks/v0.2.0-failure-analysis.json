@@ -1,13 +1,17 @@
 {
   "component_targeting": {
+    "alert_scope_method": "canonical FIXTURE_BY_NAME fixture service; persisted alert name validated against fixture definition",
     "alert_service_target_rate": 1.0,
     "alert_service_targeted_requests": 66,
     "all_requests_target_alert_service": true,
     "by_scenario": [
       {
+        "alert_scope_matches_ground_truth": true,
         "alert_service": "payment-service",
         "alert_service_target_count": 6,
         "alert_service_target_rate": 1.0,
+        "cross_component": false,
+        "ground_truth_component": "payment-service",
         "scenario_id": "V020-001",
         "service_score": 1.0,
         "target_count": 6,
@@ -16,9 +20,12 @@
         }
       },
       {
+        "alert_scope_matches_ground_truth": true,
         "alert_service": "order-service",
         "alert_service_target_count": 6,
         "alert_service_target_rate": 1.0,
+        "cross_component": false,
+        "ground_truth_component": "order-service",
         "scenario_id": "V020-002",
         "service_score": 1.0,
         "target_count": 6,
@@ -27,9 +34,12 @@
         }
       },
       {
+        "alert_scope_matches_ground_truth": false,
         "alert_service": "order-service",
         "alert_service_target_count": 8,
         "alert_service_target_rate": 1.0,
+        "cross_component": true,
+        "ground_truth_component": "payment-service",
         "scenario_id": "V020-003",
         "service_score": 0.0,
         "target_count": 8,
@@ -38,9 +48,12 @@
         }
       },
       {
+        "alert_scope_matches_ground_truth": true,
         "alert_service": "order-service",
         "alert_service_target_count": 7,
         "alert_service_target_rate": 1.0,
+        "cross_component": false,
+        "ground_truth_component": "order-service",
         "scenario_id": "V020-004",
         "service_score": 1.0,
         "target_count": 7,
@@ -49,9 +62,12 @@
         }
       },
       {
+        "alert_scope_matches_ground_truth": true,
         "alert_service": "payment-service",
         "alert_service_target_count": 5,
         "alert_service_target_rate": 1.0,
+        "cross_component": false,
+        "ground_truth_component": "payment-service",
         "scenario_id": "V020-005",
         "service_score": 0.0,
         "target_count": 5,
@@ -60,9 +76,12 @@
         }
       },
       {
+        "alert_scope_matches_ground_truth": true,
         "alert_service": "order-service",
         "alert_service_target_count": 6,
         "alert_service_target_rate": 1.0,
+        "cross_component": false,
+        "ground_truth_component": "order-service",
         "scenario_id": "V020-006",
         "service_score": 0.0,
         "target_count": 6,
@@ -71,9 +90,12 @@
         }
       },
       {
+        "alert_scope_matches_ground_truth": true,
         "alert_service": "order-worker",
         "alert_service_target_count": 8,
         "alert_service_target_rate": 1.0,
+        "cross_component": false,
+        "ground_truth_component": "order-worker",
         "scenario_id": "V020-007",
         "service_score": 0.0,
         "target_count": 8,
@@ -82,9 +104,12 @@
         }
       },
       {
+        "alert_scope_matches_ground_truth": true,
         "alert_service": "order-worker",
         "alert_service_target_count": 6,
         "alert_service_target_rate": 1.0,
+        "cross_component": false,
+        "ground_truth_component": "order-worker",
         "scenario_id": "V020-008",
         "service_score": 0.0,
         "target_count": 6,
@@ -93,9 +118,12 @@
         }
       },
       {
+        "alert_scope_matches_ground_truth": true,
         "alert_service": "payment-service",
         "alert_service_target_count": 8,
         "alert_service_target_rate": 1.0,
+        "cross_component": false,
+        "ground_truth_component": "payment-service",
         "scenario_id": "V020-009",
         "service_score": 0.0,
         "target_count": 8,
@@ -104,9 +132,12 @@
         }
       },
       {
+        "alert_scope_matches_ground_truth": true,
         "alert_service": "payment-service",
         "alert_service_target_count": 6,
         "alert_service_target_rate": 1.0,
+        "cross_component": false,
+        "ground_truth_component": "payment-service",
         "scenario_id": "V020-010",
         "service_score": 1.0,
         "target_count": 6,
@@ -115,6 +146,16 @@
         }
       }
     ],
+    "cross_component_explored_scenarios": [],
+    "cross_component_scenarios": [
+      "V020-003"
+    ],
+    "cross_component_target_counts": {
+      "V020-003": {
+        "outside_alert_scope": 0,
+        "total": 8
+      }
+    },
     "mechanism_correct_service_wrong_scenarios": [
       "V020-003",
       "V020-005",
@@ -122,7 +163,7 @@
       "V020-007",
       "V020-009"
     ],
-    "method": "alert service derived from persisted production alert name prefix; request target from persisted canonical arguments",
+    "method": "canonical frozen fixture service; request target from persisted canonical arguments",
     "service_correct_runs_alert_service_target_rate": 1.0,
     "service_correct_scenarios": [
       "V020-001",
@@ -142,12 +183,21 @@
     "total_targeted_requests": 66
   },
   "evaluation_limitations": [
+    "The service grader compares the submitted affected_component string directly against the frozen canonical service string; there is no normalization and the submitted component value is not persisted, so a zero cannot distinguish semantic misattribution from non-canonical representation.",
     "The trigger grader uses exact free-text equality; 0% proves no exact string match, not semantic trigger failure.",
     "The release artifact does not persist complete hypothesis submissions, so predicted service/mechanism/trigger strings cannot be reconstructed.",
     "Evidence IDs and ownership are persisted, but evidence contents and semantic relevance are not sufficient for post-hoc causal judgment.",
     "The mechanism taxonomy counts submitted-hypothesis misses and excludes the STOP; the aggregate mechanism score counts STOP as incorrect.",
     "One execution per scenario does not estimate model variance."
   ],
+  "evidence_integrity": {
+    "cross_incident_evidence": 0,
+    "fabricated_evidence": 0,
+    "official_scenario_rate": 0.9,
+    "submitted_hypotheses": 9,
+    "submitted_hypothesis_integrity_rate": 1.0,
+    "valid_submitted_hypotheses": 9
+  },
   "failure_layers": {
     "A_evidence_acquisition": {
       "affected_scenarios": [
@@ -166,6 +216,13 @@
       "basis": "returned evidence contents and complete hypotheses are not persisted",
       "confidence": "UNKNOWN"
     },
+    "D1_cross_component_search": {
+      "affected_scenarios": [
+        "V020-003"
+      ],
+      "basis": "the only cross-component scenario stayed entirely on alert scope and did not query its frozen causal component",
+      "confidence": "SUPPORTED"
+    },
     "D_component_attribution": {
       "affected_scenarios": [
         "V020-003",
@@ -174,8 +231,9 @@
         "V020-007",
         "V020-009"
       ],
-      "basis": "mechanism was correct while the official service dimension was wrong",
-      "confidence": "SUPPORTED"
+      "basis": "mechanism was correct while exact free-text service scoring was wrong; predicted component strings are absent",
+      "observation_confidence": "PROVEN",
+      "semantic_attribution_confidence": "UNKNOWN"
     },
     "E_trigger_representation": {
       "affected_scenarios": [
@@ -189,15 +247,17 @@
         "V020-009",
         "V020-010"
       ],
-      "basis": "trigger grading is exact free-text equality and submitted strings are absent",
-      "confidence": "PROVEN"
+      "basis": "all nine submitted trigger strings missed exact equality; individual semantic correctness is not reconstructable",
+      "observation_confidence": "PROVEN",
+      "per_miss_cause": "UNKNOWN"
     },
     "F_termination_calibration": {
       "affected_scenarios": [
         "V020-008"
       ],
-      "basis": "one run ended in a valid insufficient-evidence STOP despite a frozen benchmark outcome",
-      "confidence": "PROVEN"
+      "basis": "one run ended in a valid insufficient-evidence STOP; whether that calibration was wrong is UNKNOWN",
+      "calibration_cause": "UNKNOWN",
+      "observation_confidence": "PROVEN"
     },
     "G_budget_search_strategy": {
       "affected_scenarios": [
@@ -212,8 +272,9 @@
         "V020-009",
         "V020-010"
       ],
-      "basis": "all runs consumed the three-call envelope; causal impact of the limit is unknown",
-      "confidence": "PROVEN"
+      "basis": "all runs consumed the three-call envelope; using the envelope is observed, but causal impact is UNKNOWN",
+      "causal_effect": "UNKNOWN",
+      "observation_confidence": "PROVEN"
     },
     "H_benchmark_observability": {
       "affected_scenarios": [
@@ -234,24 +295,27 @@
   },
   "metric_interpretability": {
     "composite_rca": {
-      "basis": "weighted sum inherits component metric limitations",
-      "confidence": "MEDIUM"
+      "basis": "weighted sum inherits representation-sensitive service and trigger dimensions",
+      "confidence": "MEDIUM_LOW"
     },
     "mechanism_accuracy": {
       "basis": "controlled enum equality",
       "confidence": "HIGH"
     },
     "service_accuracy": {
-      "basis": "exact normalized component equality",
-      "confidence": "HIGH"
+      "basis": "exact free-text affected_component equality; no normalization",
+      "confidence": "MEDIUM",
+      "limitation": "submitted component strings are not persisted"
     },
     "trigger_accuracy": {
       "basis": "free-text exact string equality",
       "confidence": "LOW"
     },
     "valid_evidence_reference_rate": {
-      "basis": "runtime ownership/reference integrity only; semantic relevance is not graded",
-      "confidence": "MEDIUM"
+      "basis": "scenario-level runtime-owned reference integrity; STOP contributes zero; semantic relevance is not graded",
+      "causal_relevance_confidence": "LOW",
+      "confidence": "HIGH",
+      "reference_integrity_confidence": "HIGH"
     }
   },
   "official_benchmark_metrics": {
@@ -291,6 +355,12 @@
     {
       "alert": "PaymentErrorRateHigh",
       "analysis_confidence": "SUPPORTED",
+      "component_scope": {
+        "alert_scope_component": "payment-service",
+        "alert_scope_matches_ground_truth": true,
+        "cross_component": false,
+        "ground_truth_component": "payment-service"
+      },
       "failure_classification": [
         "exact_trigger_match_miss"
       ],
@@ -352,6 +422,12 @@
     {
       "alert": "OrderErrorRateHigh",
       "analysis_confidence": "SUPPORTED",
+      "component_scope": {
+        "alert_scope_component": "order-service",
+        "alert_scope_matches_ground_truth": true,
+        "cross_component": false,
+        "ground_truth_component": "order-service"
+      },
       "failure_classification": [
         "exact_trigger_match_miss"
       ],
@@ -413,6 +489,12 @@
     {
       "alert": "OrderDependencyLatencyHigh",
       "analysis_confidence": "SUPPORTED",
+      "component_scope": {
+        "alert_scope_component": "order-service",
+        "alert_scope_matches_ground_truth": false,
+        "cross_component": true,
+        "ground_truth_component": "payment-service"
+      },
       "failure_classification": [
         "official_service_dimension_miss",
         "exact_trigger_match_miss",
@@ -480,6 +562,12 @@
     {
       "alert": "OrderRequestLatencyHigh",
       "analysis_confidence": "SUPPORTED",
+      "component_scope": {
+        "alert_scope_component": "order-service",
+        "alert_scope_matches_ground_truth": true,
+        "cross_component": false,
+        "ground_truth_component": "order-service"
+      },
       "failure_classification": [
         "exact_trigger_match_miss"
       ],
@@ -542,6 +630,12 @@
     {
       "alert": "PaymentDbAcquisitionSlow",
       "analysis_confidence": "SUPPORTED",
+      "component_scope": {
+        "alert_scope_component": "payment-service",
+        "alert_scope_matches_ground_truth": true,
+        "cross_component": false,
+        "ground_truth_component": "payment-service"
+      },
       "failure_classification": [
         "official_service_dimension_miss",
         "exact_trigger_match_miss",
@@ -602,6 +696,12 @@
     {
       "alert": "OrderDbQueryLatencyHigh",
       "analysis_confidence": "SUPPORTED",
+      "component_scope": {
+        "alert_scope_component": "order-service",
+        "alert_scope_matches_ground_truth": true,
+        "cross_component": false,
+        "ground_truth_component": "order-service"
+      },
       "failure_classification": [
         "official_service_dimension_miss",
         "exact_trigger_match_miss",
@@ -665,6 +765,12 @@
     {
       "alert": "OrderWorkerLagHigh",
       "analysis_confidence": "SUPPORTED",
+      "component_scope": {
+        "alert_scope_component": "order-worker",
+        "alert_scope_matches_ground_truth": true,
+        "cross_component": false,
+        "ground_truth_component": "order-worker"
+      },
       "failure_classification": [
         "official_service_dimension_miss",
         "exact_trigger_match_miss",
@@ -732,6 +838,12 @@
     {
       "alert": "OrderWorkerConsumerErrorsHigh",
       "analysis_confidence": "SUPPORTED",
+      "component_scope": {
+        "alert_scope_component": "order-worker",
+        "alert_scope_matches_ground_truth": true,
+        "cross_component": false,
+        "ground_truth_component": "order-worker"
+      },
       "failure_classification": [
         "official_service_dimension_miss",
         "official_mechanism_dimension_miss",
@@ -794,6 +906,12 @@
     {
       "alert": "PaymentRuntimeInstability",
       "analysis_confidence": "SUPPORTED",
+      "component_scope": {
+        "alert_scope_component": "payment-service",
+        "alert_scope_matches_ground_truth": true,
+        "cross_component": false,
+        "ground_truth_component": "payment-service"
+      },
       "failure_classification": [
         "official_service_dimension_miss",
         "exact_trigger_match_miss",
@@ -861,6 +979,12 @@
     {
       "alert": "PaymentServiceLatencyCritical",
       "analysis_confidence": "SUPPORTED",
+      "component_scope": {
+        "alert_scope_component": "payment-service",
+        "alert_scope_matches_ground_truth": true,
+        "cross_component": false,
+        "ground_truth_component": "payment-service"
+      },
       "failure_classification": [
         "official_mechanism_dimension_miss",
         "exact_trigger_match_miss"
@@ -940,6 +1064,7 @@
     },
     "trigger": {
       "correct_count": 0,
+      "miss_count_submitted": 9,
       "submitted_hypotheses": 9,
       "taxonomy_excludes_stop": true,
       "taxonomy_wrong_trigger": 9
@@ -951,20 +1076,39 @@
     "benchmark_runtime_sha": "4603fc6380d672b0a3e9d885885b879f9b32c407",
     "dataset_hash": "20288dfae850b07bc4a754cd6e15a465f6fe7984cc259aeb7bf4294d79b16650"
   },
+  "supported_failure_modes": [
+    "cross_component_exploration_failure",
+    "change_evidence_acquisition_miss"
+  ],
   "system_failure_modes": [
     {
       "affected_scenarios": [
+        "V020-001",
+        "V020-002",
         "V020-003",
+        "V020-004",
         "V020-005",
         "V020-006",
         "V020-007",
-        "V020-009"
+        "V020-008",
+        "V020-009",
+        "V020-010"
       ],
-      "basis": "official mechanism score is 1 while official service score is 0",
+      "basis": "66/66 persisted target-bearing requests matched the canonical production alert scope; this is a search behavior, not proof of a correctness cause",
+      "confidence": "PROVEN",
+      "count": 10,
+      "fraction": 1.0,
+      "name": "alert_scope_search_anchoring"
+    },
+    {
+      "affected_scenarios": [
+        "V020-003"
+      ],
+      "basis": "V020-003 alert scope was order-service, frozen causal component was payment-service, and no persisted target left order-service",
       "confidence": "SUPPORTED",
-      "count": 5,
-      "fraction": 0.5,
-      "name": "mechanism_correct_service_wrong"
+      "count": 1,
+      "fraction": 0.1,
+      "name": "cross_component_exploration_failure"
     },
     {
       "affected_scenarios": [
@@ -975,21 +1119,31 @@
         "V020-008",
         "V020-009"
       ],
-      "basis": "100% of persisted targeted requests match alert service; causal ownership is wrong in the listed cases",
-      "confidence": "SUPPORTED",
+      "basis": "official exact-match score is 0 for six scenarios; submitted component strings are absent, so semantic cause is UNKNOWN",
+      "confidence": "PROVEN_SCORE_UNKNOWN_CAUSE",
       "count": 6,
       "fraction": 0.6,
-      "name": "alert_service_anchoring"
+      "name": "official_service_dimension_miss"
+    },
+    {
+      "affected_scenarios": [
+        "V020-010"
+      ],
+      "basis": "the frozen fixture identifies recent_configuration_changes as a primary evidence surface, but no change-intelligence request appears in V020-010",
+      "confidence": "SUPPORTED",
+      "count": 1,
+      "fraction": 0.1,
+      "name": "change_evidence_acquisition_miss"
     },
     {
       "affected_scenarios": [
         "V020-008"
       ],
-      "basis": "terminal decision and stop reason are persisted",
-      "confidence": "PROVEN",
+      "basis": "V020-008 ended with a valid insufficient_evidence STOP; why it stopped is not reconstructable",
+      "confidence": "PROVEN_OBSERVATION_UNKNOWN_CAUSE",
       "count": 1,
       "fraction": 0.1,
-      "name": "valid_stop_without_hypothesis"
+      "name": "non_completion_valid_insufficient_evidence_stop"
     },
     {
       "affected_scenarios": [
@@ -1004,13 +1158,27 @@
         "V020-009",
         "V020-010"
       ],
-      "basis": "all runs consumed the configured three model calls; causal sufficiency is not inferable",
-      "confidence": "PROVEN",
+      "basis": "all runs used three model calls; whether the envelope caused any miss is UNKNOWN",
+      "confidence": "PROVEN_OBSERVATION_UNKNOWN_EFFECT",
       "count": 10,
       "fraction": 1.0,
-      "name": "fixed_turn_search_envelope"
+      "name": "three_call_envelope_observed"
     }
   ],
+  "system_observations": {
+    "all_runs_used_three_model_calls": true,
+    "all_target_requests_on_alert_scope": true,
+    "change_tool_acquisition_miss": [
+      "V020-010"
+    ],
+    "cross_component_opportunities": [
+      "V020-003"
+    ],
+    "cross_component_opportunities_explored_outside_scope": [],
+    "valid_insufficient_evidence_stop": [
+      "V020-008"
+    ]
+  },
   "tool_usage": {
     "change_tool_scenario_count": 8,
     "change_tool_scenarios": [
@@ -1182,10 +1350,18 @@
     "tool_executions_total": 66,
     "tool_requests_total": 66
   },
+  "unknown_causes": [
+    "semantic cause of the six service-score misses",
+    "semantic correctness of the nine trigger strings",
+    "reason V020-008 stopped despite a frozen benchmark outcome",
+    "causal effect of the three-call envelope",
+    "causal relevance or sufficiency of retrieved evidence"
+  ],
   "v03_requirements": [
     "Distinguish symptom service from causal component in structured investigation output.",
-    "Measure whether cross-component evidence was requested and whether it supports causal ownership.",
+    "Persist cross-component exploration and dependency traversal in bounded audit fields.",
     "Persist complete bounded structured hypothesis payloads and bounded evidence summaries for audit.",
+    "Use a canonical component vocabulary so service scoring is not representation-sensitive.",
     "Freeze a structured causal-trigger label or supplement free-text trigger scoring with a predeclared semantic rubric.",
     "Retain v0.2.0 safety and provenance floors: fabricated evidence 0, cross-incident evidence 0, writes 0."
   ]

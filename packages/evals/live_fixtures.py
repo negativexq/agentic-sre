@@ -90,7 +90,7 @@ FIXTURE_DEFINITIONS: tuple[FixtureDefinition, ...] = (
     ),
     FixtureDefinition(
         "payment_config_change",
-        "PaymentRequestLatencyCritical",
+        "PaymentServiceLatencyCritical",
         "payment-service",
         ("recent_configuration_changes",),
     ),

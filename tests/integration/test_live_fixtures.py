@@ -14,7 +14,7 @@ from packages.contracts import (
     IncidentSource,
     IncidentStatus,
 )
-from packages.evals import FIXTURE_BY_NAME, FROZEN_DATASET, FixtureLifecycle
+from packages.evals import FIXTURE_BY_NAME, FIXTURE_DEFINITIONS, FROZEN_DATASET, FixtureLifecycle
 from packages.evals.live_fixtures import (
     POD_CRASH_RESTARTS,
     POOL_PRESSURE_CONCURRENCY,
@@ -37,6 +37,10 @@ def _incident() -> Incident:
         created_at=NOW,
         updated_at=NOW,
     )
+
+
+def test_fixture_alert_identities_are_unique() -> None:
+    assert len({item.alert_name for item in FIXTURE_DEFINITIONS}) == len(FIXTURE_DEFINITIONS)
 
 
 class FakeEnvironment:

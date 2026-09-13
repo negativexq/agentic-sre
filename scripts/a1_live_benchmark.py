@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from hashlib import sha256
@@ -37,11 +38,23 @@ from packages.provider import LiveModelBudget, OpenAIProvider
 from packages.tools import ControlPlaneChangeReader
 
 ROOT = Path(__file__).resolve().parents[1]
-MANIFEST_PATH = ROOT / "docs/benchmarks/a1-r2-evaluation-manifest.json"
-SMOKE_PATH = ROOT / "docs/benchmarks/a1-r2-live-smoke.json"
-RESULT_PATH = ROOT / "docs/benchmarks/a1-r2-single-agent-live.json"
-RESULT_SHA_PATH = ROOT / "docs/benchmarks/a1-r2-single-agent-live.sha256"
-LEDGER_PATH = ROOT / ".local/a1-r2-single-agent-live-budget.json"
+
+
+def _configured_path(environment_name: str, default: str) -> Path:
+    """Resolve an execution artifact path while preserving R2 defaults."""
+    configured = Path(os.getenv(environment_name, default))
+    return configured if configured.is_absolute() else ROOT / configured
+
+
+MANIFEST_PATH = _configured_path(
+    "SRE_A1_MANIFEST_PATH", "docs/benchmarks/a1-r2-evaluation-manifest.json"
+)
+SMOKE_PATH = _configured_path("SRE_A1_SMOKE_PATH", "docs/benchmarks/a1-r2-live-smoke.json")
+RESULT_PATH = _configured_path("SRE_A1_RESULT_PATH", "docs/benchmarks/a1-r2-single-agent-live.json")
+RESULT_SHA_PATH = _configured_path(
+    "SRE_A1_RESULT_SHA_PATH", "docs/benchmarks/a1-r2-single-agent-live.sha256"
+)
+LEDGER_PATH = _configured_path("SRE_A1_LEDGER_PATH", ".local/a1-r2-single-agent-live-budget.json")
 MODEL = "gpt-5.6-luna"
 REASONING_EFFORT = "none"
 LIMITS = InvestigationLimits(

@@ -7,6 +7,12 @@ from packages.investigation.artifacts import (
     TurnRecord,
 )
 from packages.investigation.audit import InMemoryInvestigationAuditSink, InvestigationAuditRecord
+from packages.investigation.bounds import (
+    MAX_EVIDENCE_SUMMARY_CHARS,
+    TRUNCATION_SUFFIX,
+    bound_text,
+    bounded_observation_summary,
+)
 from packages.investigation.causal_contracts import (
     A1CausalDecision,
     CausalHypothesis,
@@ -15,7 +21,7 @@ from packages.investigation.causal_contracts import (
     StructuredTrigger,
     TriggerType,
 )
-from packages.investigation.context import CompactContextBuilder
+from packages.investigation.context import EVIDENCE_CONTEXT_VERSION, CompactContextBuilder
 from packages.investigation.contracts import (
     DEFAULT_DEVELOPMENT_LIMITS,
     HARD_RUNTIME_CEILINGS,
@@ -62,11 +68,16 @@ from packages.investigation.topology import (
 
 __all__ = [
     "CompactContextBuilder",
+    "EVIDENCE_CONTEXT_VERSION",
     "A1RunArtifact",
     "A1SafetyCounters",
     "EvidenceSummary",
     "TurnRecord",
     "CausalHypothesis",
+    "MAX_EVIDENCE_SUMMARY_CHARS",
+    "TRUNCATION_SUFFIX",
+    "bound_text",
+    "bounded_observation_summary",
     "CausalStopDecision",
     "A1CausalDecision",
     "EvidenceCategory",

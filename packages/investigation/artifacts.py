@@ -7,6 +7,10 @@ from uuid import UUID
 from pydantic import Field
 
 from packages.contracts import Evidence, TimeWindow
+from packages.investigation.bounds import (
+    MAX_EVIDENCE_SUMMARY_CHARS,
+    bounded_observation_summary,
+)
 from packages.investigation.causal_contracts import CausalHypothesis, CausalStopDecision
 from packages.investigation.contracts import (
     InvestigationLimits,
@@ -35,16 +39,12 @@ class EvidenceSummary(InvestigationModel):
     time_window: TimeWindow
     temporal_mode: str = Field(min_length=1, max_length=64)
     collected_at: datetime
-    bounded_observation_summary: str = Field(min_length=1, max_length=1_000)
+    bounded_observation_summary: str = Field(min_length=1, max_length=MAX_EVIDENCE_SUMMARY_CHARS)
 
     @classmethod
     def from_evidence(cls, evidence: Evidence, *, tool: str) -> "EvidenceSummary":
         """Create a bounded summary without storing raw backend payloads."""
-        import json
-
-        summary = json.dumps(evidence.observation, sort_keys=True, default=str)
-        if len(summary) > 1_000:
-            summary = f"{summary[:1_000]}…"
+        summary = bounded_observation_summary(evidence.observation)
         return cls(
             incident_id=evidence.incident_id,
             evidence_id=evidence.evidence_id,

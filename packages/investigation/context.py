@@ -7,6 +7,10 @@ from typing import Any, cast
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from packages.contracts import Alert, AlertStatus, Evidence, Incident, TimeWindow
+from packages.investigation.bounds import (
+    MAX_EVIDENCE_SUMMARY_CHARS,
+    bounded_observation_summary,
+)
 from packages.investigation.topology import TopologyRegistry, target_from_tool_arguments
 
 
@@ -97,10 +101,18 @@ class AlertSummary(BaseModel):
         )
 
 
+EVIDENCE_CONTEXT_VERSION = "a1_evidence_context_v2"
+
+
 class CompactContextBuilder:
     """Create compact JSON context from incident facts and normalized evidence."""
 
-    def __init__(self, *, max_evidence_items: int = 12, max_observation_chars: int = 1_000) -> None:
+    def __init__(
+        self,
+        *,
+        max_evidence_items: int = 12,
+        max_observation_chars: int = MAX_EVIDENCE_SUMMARY_CHARS,
+    ) -> None:
         self._max_evidence_items = max_evidence_items
         self._max_observation_chars = max_observation_chars
 
@@ -192,9 +204,9 @@ class CompactContextBuilder:
 
     def _evidence_summary(self, evidence: Evidence) -> dict[str, Any]:
         """Keep provenance and a compact observation summary, not raw results."""
-        observation = json.dumps(evidence.observation, sort_keys=True, default=str)
-        if len(observation) > self._max_observation_chars:
-            observation = f"{observation[: self._max_observation_chars]}…"
+        observation = bounded_observation_summary(
+            evidence.observation, max_chars=self._max_observation_chars
+        )
         return {
             "evidence_id": str(evidence.evidence_id),
             "source_type": evidence.source_type.value,

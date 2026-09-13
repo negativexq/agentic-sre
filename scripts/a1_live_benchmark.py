@@ -32,11 +32,11 @@ from packages.provider import LiveModelBudget, OpenAIProvider
 from packages.tools import ControlPlaneChangeReader
 
 ROOT = Path(__file__).resolve().parents[1]
-MANIFEST_PATH = ROOT / "docs/benchmarks/a1-evaluation-manifest.json"
-SMOKE_PATH = ROOT / ".local/a1-live-smoke.json"
-RESULT_PATH = ROOT / "docs/benchmarks/a1-single-agent-live.json"
-RESULT_SHA_PATH = ROOT / "docs/benchmarks/a1-single-agent-live.sha256"
-LEDGER_PATH = ROOT / ".local/a1-single-agent-live-budget.json"
+MANIFEST_PATH = ROOT / "docs/benchmarks/a1-r1-evaluation-manifest.json"
+SMOKE_PATH = ROOT / ".local/a1-r1-live-smoke.json"
+RESULT_PATH = ROOT / "docs/benchmarks/a1-r1-single-agent-live.json"
+RESULT_SHA_PATH = ROOT / "docs/benchmarks/a1-r1-single-agent-live.sha256"
+LEDGER_PATH = ROOT / ".local/a1-r1-single-agent-live-budget.json"
 MODEL = "gpt-5.6-luna"
 REASONING_EFFORT = "none"
 LIMITS = InvestigationLimits(
@@ -120,6 +120,7 @@ def _configuration_hashes(manifest: dict[str, Any]) -> dict[str, str]:
         "tool_registry_sha256": identity["tool_registry_sha256"],
         "tool_contracts_sha256": identity["tool_contracts_sha256"],
         "grader_version": identity["grader_version"],
+        "evidence_context_version": identity["evidence_context_version"],
     }
 
 

@@ -199,13 +199,6 @@ def _run_one(
 
 
 def _smoke(manifest: dict[str, Any]) -> int:
-    budget = LiveModelBudget.from_environment(require_shared_ledger=True)
-    before = budget.snapshot()
-    if before.calls_used != 0 or before.limit != 80:
-        raise RuntimeError("A1 smoke requires a fresh 80-call ledger")
-    budget.ensure_capacity(5)
-    registry = _registry()
-    provider = OpenAIProvider(budget=budget, max_retry=0)
     environment = LiveBenchmarkEnvironment()
     incidents = sorted(
         environment.control_plane.incidents(), key=lambda item: item.created_at, reverse=True
@@ -219,6 +212,17 @@ def _smoke(manifest: dict[str, Any]) -> int:
     if selected is None:
         raise RuntimeError("A1 smoke requires an existing incident with normalized alerts")
     incident, alerts = selected
+    # The smoke uses the selected normalized incident in memory, then clears
+    # persistent benchmark state before any provider work.  The live benchmark
+    # trials perform the same preparation before creating fresh incidents.
+    environment.prepare_benchmark_state(manifest["experiment_id"])
+    budget = LiveModelBudget.from_environment(require_shared_ledger=True)
+    before = budget.snapshot()
+    if before.calls_used != 0 or before.limit != 80:
+        raise RuntimeError("A1 smoke requires a fresh 80-call ledger")
+    budget.ensure_capacity(5)
+    registry = _registry()
+    provider = OpenAIProvider(budget=budget, max_retry=0)
     runtime = InvestigationRuntime(
         provider,
         registry,

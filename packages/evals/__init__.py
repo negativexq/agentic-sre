@@ -1,5 +1,12 @@
 """Credit-free frozen scenarios and deterministic investigation graders."""
 
+from packages.evals.a1_generalization import (
+    A1_GENERALIZATION_SCENARIOS,
+    A1GeneralizationScenario,
+    ObservableEvidenceSurface,
+    generalization_dataset_hash,
+    generalization_target_hash,
+)
 from packages.evals.a1_graders import (
     A1_GRADER_VERSION,
     A1AggregateGrade,
@@ -22,6 +29,8 @@ from packages.evals.graders import EvidenceGrade, HypothesisGrade, grade_evidenc
 from packages.evals.live_fixtures import (
     FIXTURE_BY_NAME,
     FIXTURE_DEFINITIONS,
+    GENERALIZATION_FIXTURE_BY_NAME,
+    GENERALIZATION_FIXTURE_DEFINITIONS,
     BenchmarkTrial,
     FixtureDefinition,
     FixtureLifecycle,
@@ -36,6 +45,8 @@ __all__ = [
     "A1AggregateGrade",
     "A1EvaluationTarget",
     "A1FailureLabel",
+    "A1GeneralizationScenario",
+    "A1_GENERALIZATION_SCENARIOS",
     "A1_GRADER_VERSION",
     "A1Rate",
     "A1ScenarioGrade",
@@ -54,6 +65,9 @@ __all__ = [
     "aggregate_a1_grades",
     "grade_a1_run",
     "a1_compatibility_target_hash",
+    "generalization_dataset_hash",
+    "generalization_target_hash",
+    "ObservableEvidenceSurface",
     "a0_compatibility_baseline",
     "run_offline_benchmark",
     "BenchmarkTrial",
@@ -61,6 +75,8 @@ __all__ = [
     "FIXTURE_DEFINITIONS",
     "FixtureDefinition",
     "FixtureLifecycle",
+    "GENERALIZATION_FIXTURE_BY_NAME",
+    "GENERALIZATION_FIXTURE_DEFINITIONS",
     "LiveBenchmarkEnvironment",
     "fixture_registry_is_complete",
     "preflight_evidence",

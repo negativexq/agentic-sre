@@ -38,6 +38,7 @@ POOL_PRESSURE_HOLD_MS = 3_500
 POOL_PRESSURE_WAVES = 3
 CONFIG_REGRESSION_CONCURRENCY = 20
 CONFIG_REGRESSION_DELAY_MS = 10_000
+A1G_CONFIG_REGRESSION_DELAY_MS = 3_000
 POD_CRASH_RESTARTS = 2
 POD_CRASH_RESTART_TIMEOUT_SECONDS = 30
 POD_CRASH_HEALTH_TIMEOUT_SECONDS = 30
@@ -100,6 +101,41 @@ FIXTURE_DEFINITIONS: tuple[FixtureDefinition, ...] = (
 )
 
 FIXTURE_BY_NAME = {item.fixture: item for item in FIXTURE_DEFINITIONS}
+
+GENERALIZATION_FIXTURE_DEFINITIONS: tuple[FixtureDefinition, ...] = (
+    FixtureDefinition(
+        "a1g_order_payment_failure",
+        "A1GOrderPaymentFailureHigh",
+        "order-service",
+        ("service_error_rate", "service_error_logs"),
+    ),
+    FixtureDefinition(
+        "a1g_order_payment_db_pressure",
+        "A1GOrderPaymentDbPressureHigh",
+        "order-service",
+        ("service_latency", "db_connection_pressure"),
+    ),
+    FixtureDefinition(
+        "a1g_order_config_latency",
+        "A1GOrderConfigLatencyHigh",
+        "order-service",
+        ("service_latency", "recent_configuration_changes"),
+    ),
+    FixtureDefinition(
+        "a1g_order_payment_config_impact",
+        "A1GOrderPaymentConfigImpactHigh",
+        "order-service",
+        ("service_latency", "recent_configuration_changes"),
+    ),
+    FixtureDefinition(
+        "a1g_payment_db_query_latency",
+        "A1GPaymentDbQueryLatencyHigh",
+        "payment-service",
+        ("service_latency", "db_query_latency"),
+    ),
+)
+
+GENERALIZATION_FIXTURE_BY_NAME = {item.fixture: item for item in GENERALIZATION_FIXTURE_DEFINITIONS}
 
 
 class BenchmarkTrial(BaseModel):
@@ -228,11 +264,11 @@ class LiveBenchmarkEnvironment:
 
     def baseline(self) -> None:
         """Fail closed unless the two HTTP workloads and control plane are healthy."""
-        for url in (f"{self.order_url}/health", f"{self.payment_url}/health"):
-            payload = self._get_json(url)
-            if not isinstance(payload, dict) or payload.get("status") != "ok":
-                raise RuntimeError("workload baseline is not healthy")
+        self._wait_for_service_health_stable(self.order_url, "order workload")
+        self._wait_for_service_health_stable(self.payment_url, "payment workload")
         self.control_plane.incidents()
+        if not self._wait_for_alerts_quiet(timeout_seconds=60):
+            raise RuntimeError("alert baseline is not quiet")
 
     def snapshot_incident_ids(self) -> set[str]:
         """Return the control-plane snapshot used for exact new-incident correlation."""
@@ -243,7 +279,8 @@ class LiveBenchmarkEnvironment:
 
     def _payment_fault(self, **values: Any) -> None:
         self._set_fault(
-            self.payment_url, {"delay_ms": 0, "error": False, "db_hold_ms": 0, **values}
+            self.payment_url,
+            {"delay_ms": 0, "error": False, "db_hold_ms": 0, "db_query_delay_ms": 0, **values},
         )
 
     def _order_fault(self, **values: Any) -> None:
@@ -266,6 +303,7 @@ class LiveBenchmarkEnvironment:
         tracked_names = {
             "order-worker": {"FAULT_WORKER_DELAY_MS", "FAULT_WORKER_FAILURE"},
             "payment-service": {"FAULT_PAYMENT_DELAY_MS"},
+            "order-service": {"FAULT_ORDER_DELAY_MS"},
         }.get(deployment, set(values))
         self._original_env[deployment] = [
             {"name": item.name, "value": item.value}
@@ -295,6 +333,7 @@ class LiveBenchmarkEnvironment:
         names = {
             "order-worker": {"FAULT_WORKER_DELAY_MS", "FAULT_WORKER_FAILURE"},
             "payment-service": {"FAULT_PAYMENT_DELAY_MS"},
+            "order-service": {"FAULT_ORDER_DELAY_MS"},
         }.get(deployment, set())
         remove_indexes = [
             index for index, item in enumerate(container.env or []) if item.name in names
@@ -473,6 +512,27 @@ class LiveBenchmarkEnvironment:
             time.sleep(1)
         raise TimeoutError(description)
 
+    def _wait_for_service_health_stable(
+        self, service_url: str, description: str, timeout_seconds: float = 60
+    ) -> None:
+        """Wait through port-forward reconnection and require three healthy reads."""
+        deadline = time.monotonic() + timeout_seconds
+        consecutive = 0
+        while time.monotonic() < deadline:
+            try:
+                payload = self._get_json(f"{service_url}/health")
+                healthy = isinstance(payload, dict) and payload.get("status") == "ok"
+            except RuntimeError:
+                healthy = False
+            if healthy:
+                consecutive += 1
+                if consecutive == 3:
+                    return
+            else:
+                consecutive = 0
+            time.sleep(1)
+        raise TimeoutError(f"{description} was not stable")
+
     def _wait_for_payment_health(self) -> None:
         def healthy() -> bool:
             try:
@@ -562,20 +622,29 @@ class LiveBenchmarkEnvironment:
                 raise RuntimeError("Prometheus process-start observation disappeared")
             previous_process_start_value = observed
 
-    def _record_payment_config_change(self) -> None:
+    def _record_configuration_change(
+        self, deployment: str, before: dict[str, str], after: dict[str, str]
+    ) -> None:
         now = datetime.now(UTC)
         self.control_plane.record_change(
             {
                 "timestamp": now.isoformat(),
                 "resource_type": "deployment",
-                "resource_name": "payment-service",
+                "resource_name": deployment,
                 "change_type": "UPDATED",
                 "scope": "CONFIGURATION",
-                "before": {"FAULT_PAYMENT_DELAY_MS": "0"},
-                "after": {"FAULT_PAYMENT_DELAY_MS": str(CONFIG_REGRESSION_DELAY_MS)},
+                "before": before,
+                "after": after,
                 "revision": f"benchmark-{now.strftime('%Y%m%d%H%M%S%f')}",
                 "source": "benchmark-harness",
             }
+        )
+
+    def _record_payment_config_change(self) -> None:
+        self._record_configuration_change(
+            "payment-service",
+            {"FAULT_PAYMENT_DELAY_MS": "0"},
+            {"FAULT_PAYMENT_DELAY_MS": str(CONFIG_REGRESSION_DELAY_MS)},
         )
 
     def prepare(self, fixture: str) -> None:
@@ -583,6 +652,7 @@ class LiveBenchmarkEnvironment:
         self._order_fault()
         self._restore_env("order-worker")
         self._restore_env("payment-service")
+        self._restore_env("order-service")
         if fixture == "payment_error_spike":
             self._payment_fault(error=True)
         elif fixture == "order_error_spike":
@@ -639,6 +709,48 @@ class LiveBenchmarkEnvironment:
                 )
             self._payment_request_baseline = self._payment_request_count()
             self._record_payment_config_change()
+        elif fixture == "a1g_order_payment_failure":
+            self._payment_fault(error=True)
+        elif fixture == "a1g_order_payment_db_pressure":
+            self._payment_fault(db_hold_ms=POOL_PRESSURE_HOLD_MS)
+        elif fixture == "a1g_order_config_latency":
+            self._kubectl_patch_env("order-service", {"FAULT_ORDER_DELAY_MS": "700"})
+            self._record_configuration_change(
+                "order-service",
+                {"FAULT_ORDER_DELAY_MS": "0"},
+                {"FAULT_ORDER_DELAY_MS": "700"},
+            )
+        elif fixture == "a1g_order_payment_config_impact":
+            self._payment_process_start_before_config_rollout = self._payment_process_start_time()
+            self._kubectl_patch_env(
+                "payment-service", {"FAULT_PAYMENT_DELAY_MS": str(A1G_CONFIG_REGRESSION_DELAY_MS)}
+            )
+            self._wait_for_payment_health_stable()
+            previous_start = self._payment_process_start_before_config_rollout
+            if previous_start is not None:
+                self._wait_until(
+                    lambda: (
+                        (current := self._payment_process_start_time()) is not None
+                        and current != previous_start
+                    ),
+                    timeout_seconds=30,
+                    description="Prometheus did not observe the configuration rollout",
+                )
+                expected_start = self._payment_process_start_time()
+                if expected_start is None:
+                    raise RuntimeError("Prometheus configuration rollout value disappeared")
+                self._wait_until(
+                    lambda: self._payment_local_process_start_time() == expected_start,
+                    timeout_seconds=30,
+                    description="payment port-forward did not attach to the new pod",
+                )
+            self._record_configuration_change(
+                "payment-service",
+                {"FAULT_PAYMENT_DELAY_MS": "0"},
+                {"FAULT_PAYMENT_DELAY_MS": str(A1G_CONFIG_REGRESSION_DELAY_MS)},
+            )
+        elif fixture == "a1g_payment_db_query_latency":
+            self._payment_fault(db_query_delay_ms=700)
         else:
             raise KeyError(fixture)
 
@@ -648,6 +760,9 @@ class LiveBenchmarkEnvironment:
             "payment_db_pool_pressure",
             "payment_pod_crash",
             "payment_config_change",
+            "a1g_order_payment_failure",
+            "a1g_order_payment_db_pressure",
+            "a1g_order_payment_config_impact",
         }:
             if fixture == "payment_pod_crash":
                 # The crash itself is the controlled stimulus.  Sending a request
@@ -658,6 +773,10 @@ class LiveBenchmarkEnvironment:
             if fixture == "payment_db_pool_pressure":
                 for _ in range(POOL_PRESSURE_WAVES):
                     self._concurrent_payments(count=POOL_PRESSURE_CONCURRENCY)
+            elif fixture == "a1g_order_payment_config_impact":
+                for _ in range(4):
+                    self._concurrent_orders(count=30)
+                    time.sleep(5)
             elif fixture == "payment_config_change":
                 self._concurrent_payments(count=CONFIG_REGRESSION_CONCURRENCY)
                 baseline = self._payment_request_baseline
@@ -670,6 +789,16 @@ class LiveBenchmarkEnvironment:
                     timeout_seconds=30,
                     description="Prometheus did not observe all configuration stimulus requests",
                 )
+            elif fixture in {
+                "a1g_order_payment_failure",
+                "a1g_order_payment_db_pressure",
+            }:
+                if fixture == "a1g_order_payment_failure":
+                    self._order_requests(count=60, interval_seconds=0.5)
+                else:
+                    for _ in range(4):
+                        self._concurrent_orders(count=30)
+                        time.sleep(5)
             else:
                 self._payment_requests(count=60, interval_seconds=0.5)
         elif fixture in {
@@ -679,9 +808,15 @@ class LiveBenchmarkEnvironment:
             "order_db_query_latency",
             "order_worker_lag",
             "order_worker_failure",
+            "a1g_order_config_latency",
         }:
             if fixture == "order_worker_lag":
                 self._concurrent_orders(count=30)
+                return
+            if fixture == "a1g_order_config_latency":
+                for _ in range(4):
+                    self._order_requests(count=20, interval_seconds=0.25)
+                    time.sleep(5)
                 return
             self._order_requests(
                 count=60 if fixture in {"order_error_spike", "order_worker_failure"} else 30,
@@ -689,6 +824,13 @@ class LiveBenchmarkEnvironment:
                     0.5 if fixture in {"order_error_spike", "order_worker_failure"} else 0.0
                 ),
             )
+        elif fixture == "a1g_payment_db_query_latency":
+            # Keep the latency expression above threshold long enough for the
+            # alert's `for` clause to transition from pending to firing while
+            # retaining a bounded, repeatable stimulus.
+            for _ in range(4):
+                self._concurrent_payments(count=60)
+                time.sleep(5)
         else:
             raise KeyError(fixture)
 
@@ -697,7 +839,7 @@ class LiveBenchmarkEnvironment:
         definition: FixtureDefinition,
         before_ids: set[str],
         *,
-        timeout_seconds: float = 120,
+        timeout_seconds: float = 300,
         poll_seconds: float = 5,
     ) -> tuple[Incident, tuple[Alert, ...]]:
         deadline = time.monotonic() + timeout_seconds
@@ -750,16 +892,19 @@ class LiveBenchmarkEnvironment:
         errors: list[Exception] = []
         if fixture != "payment_pod_crash":
             try:
+                self._wait_for_service_health_stable(self.payment_url, "payment workload")
                 self._payment_fault()
             except Exception as error:  # pragma: no cover - live environment
                 errors.append(error)
         try:
+            self._wait_for_service_health_stable(self.order_url, "order workload")
             self._order_fault()
         except Exception as error:  # pragma: no cover - live environment
             errors.append(error)
         try:
             self._restore_env("order-worker")
             self._restore_env("payment-service")
+            self._restore_env("order-service")
         except Exception as error:  # pragma: no cover - live environment
             errors.append(error)
         if errors:
@@ -769,16 +914,22 @@ class LiveBenchmarkEnvironment:
 class FixtureLifecycle:
     """Sequential fixture runner with mandatory cleanup and correlation."""
 
-    def __init__(self, environment: FixtureEnvironment) -> None:
+    def __init__(
+        self,
+        environment: FixtureEnvironment,
+        definitions: dict[str, FixtureDefinition] | None = None,
+    ) -> None:
         self.environment = environment
+        self.definitions = definitions or FIXTURE_BY_NAME
 
     def run(
         self,
         scenario: FrozenIncident,
         *,
         investigate: Callable[[Incident, tuple[Alert, ...]], Any] | None = None,
+        snapshot_before_prepare: bool = False,
     ) -> tuple[BenchmarkTrial, Any | None]:
-        definition = FIXTURE_BY_NAME[scenario.fixture]
+        definition = self.definitions[scenario.fixture]
         trial = BenchmarkTrial(
             scenario_id=scenario.scenario_id,
             fixture=scenario.fixture,
@@ -787,10 +938,14 @@ class FixtureLifecycle:
         )
         result: Any | None = None
         incident: Incident | None = None
+        before_ids: set[str] = set()
         try:
             self.environment.baseline()
+            if snapshot_before_prepare:
+                before_ids = self.environment.snapshot_incident_ids()
             self.environment.prepare(scenario.fixture)
-            before_ids = self.environment.snapshot_incident_ids()
+            if not snapshot_before_prepare:
+                before_ids = self.environment.snapshot_incident_ids()
             trial = trial.model_copy(update={"fault_started_at": datetime.now(UTC)})
             self.environment.stimulate(scenario.fixture)
             incident, alerts = self.environment.wait_for_incident(definition, before_ids)
@@ -900,6 +1055,8 @@ __all__ = [
     "ControlPlaneClient",
     "FIXTURE_BY_NAME",
     "FIXTURE_DEFINITIONS",
+    "GENERALIZATION_FIXTURE_BY_NAME",
+    "GENERALIZATION_FIXTURE_DEFINITIONS",
     "FixtureDefinition",
     "FixtureLifecycle",
     "LiveBenchmarkEnvironment",

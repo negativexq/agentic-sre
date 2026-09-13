@@ -1,8 +1,8 @@
 {
   "experiment_id": "v0.3-exp01-a1-improved-single-agent",
-  "status": "PREREGISTERED_DESIGN",
-  "implementation_status": "PHASE_3_IMPLEMENTED_PHASE_4_PENDING",
-  "phase": "PHASE_3_NATIVE_A1_EVALUATION",
+  "status": "READY_FOR_LIVE_EVALUATION",
+  "implementation_status": "PHASE_4_IMPLEMENTED_READY_FOR_LIVE",
+  "phase": "PHASE_4_GENERALIZATION_AND_LIVE_FREEZE",
   "arm": "A1_CONTROL",
   "sequence": [
     {"arm": "A0", "name": "frozen v0.2.0 single-agent baseline", "status": "FROZEN"},
@@ -30,15 +30,17 @@
   },
   "reference_hashes": {
     "compatibility_dataset_sha256": "20288dfae850b07bc4a754cd6e15a465f6fe7984cc259aeb7bf4294d79b16650",
-    "generalization_dataset_sha256": null,
-    "combined_evaluation_sha256": null,
+    "generalization_dataset_sha256": "d191c96737ef3b0ad4384abaf075b3abbdc76eb186f3912393a8d005f1a51219",
+    "generalization_target_sha256": "0c99d31f115c4c498dd22cf404f500c50b8005d368e8e131705db30e765ee429",
+    "generalization_qualification_sha256": "d12780023869f340037683c1a0978384af2508dc1d891edfac24023cab7e9d07",
+    "combined_evaluation_sha256": "e4c268c429aeec268fb6e8c0a474211aa5e7d7af00bf205534334f9d723caf3e",
     "topology_projection_sha256": "f456231abdadf765a9069414cbf12ff132d844df3979f07b0fab22c8d8909fb8",
     "prompt_sha256": "9c21bd17b5965545aa61c57a5eea788715570b52187447edfa94a3a871a3be20",
     "prompt_version": "sre_investigator_v4",
     "tool_registry_sha256": "28d109652cce49dac0d6ffcdb563d2c092959a27e75f4e803a710317d676f7cb",
     "tool_contracts_sha256": "9e0f7403b3ab1d503690908bd4da316b4616d3d112f898b0dfef7ec44f932f5b",
     "component_registry_sha256": "f72503e8a754c98e1425006e11daf66522f78059410afb882566e8d0bd0ddf0c",
-    "component_registry_status": "IMPLEMENTED_PHASE_2_NOT_LIVE_FROZEN",
+    "component_registry_status": "FROZEN_FOR_A1_LIVE",
     "a1_compatibility_target_sha256": "55628a57741cb09672855d82cd2b00580e16a02a00a9c1ba04256f88c424bba3",
     "a1_grader_version": "a1_native_grader_v1"
   },
@@ -101,22 +103,25 @@
     "shared_dependency_ambiguity"
   ],
   "generalization_policy": {
-    "status": "PLANNED_NOT_FROZEN",
+    "status": "FROZEN",
     "artifact": "docs/benchmarks/a1-generalization-set.json",
-    "final_scenario_count": null,
+    "final_scenario_count": 4,
     "target_count_range": "4-8 after fixture feasibility review",
-    "dataset_sha256": null,
+    "dataset_sha256": "d191c96737ef3b0ad4384abaf075b3abbdc76eb186f3912393a8d005f1a51219",
+    "target_sha256": "0c99d31f115c4c498dd22cf404f500c50b8005d368e8e131705db30e765ee429",
+    "qualification_artifact": "docs/benchmarks/a1-generalization-qualification.json",
+    "qualification_sha256": "d12780023869f340037683c1a0978384af2508dc1d891edfac24023cab7e9d07",
+    "evaluation_manifest": "docs/benchmarks/a1-evaluation-manifest.json",
     "combined_evaluation_sha256": null,
     "freeze_required_before_live": true,
     "not_used_for_tuning": true,
+    "frozen_scenario_ids": ["A1G-001", "A1G-002", "A1G-003", "A1G-004"],
+    "frozen_dataset_artifact": "docs/benchmarks/a1-generalization-set.json",
     "required_categories": [
-      "cross_service_dependency_failure",
-      "dependency_latency_with_different_alert_surface",
-      "database_resource_issue_service_symptom",
-      "kafka_resource_issue_worker_symptom",
-      "indirect_configuration_regression",
-      "shared_dependency_ambiguity",
-      "same_component_negative_control"
+      "cross_component",
+      "same_component_negative_control",
+      "resource_driven",
+      "change_driven"
     ],
     "requirements": [
       "real_fault_telemetry_alert_incident_chain",
@@ -146,13 +151,20 @@
       {"max_model_calls_per_incident": 5, "max_actual_tool_executions_per_incident": 12},
       {"max_model_calls_per_incident": 6, "max_actual_tool_executions_per_incident": 16}
     ],
-    "final_a1_policy_status": "PENDING_OFFLINE_PERFORMANCE_ANALYSIS",
+    "final_a1_policy_status": "FROZEN_FOR_A1_LIVE",
+    "final_a1_limits": {
+      "max_model_calls_per_incident": 5,
+      "max_actual_tool_executions_per_incident": 12,
+      "max_agent_turns": 5,
+      "max_wall_time_seconds": 180,
+      "provider_retries": 0
+    },
     "provider_retries": 0,
-    "compatibility_worst_case_calls": 30,
-    "predeclared_smoke_reserve": 6,
-    "generalization_allocation": "PENDING_FROZEN_SCENARIO_COUNT",
-    "final_ledger_cap": "PENDING",
-    "final_cap_formula": "smoke reserve + (compatibility scenarios × selected A1 max calls) + (generalization scenarios × selected A1 max calls)",
+    "compatibility_worst_case_calls": 50,
+    "predeclared_smoke_reserve": 10,
+    "generalization_allocation": 20,
+    "final_ledger_cap": 80,
+    "final_cap_formula": "10 + (10 × 5) + (4 × 5) = 80",
     "ledger_path": ".local/a1-single-agent-live-budget.json",
     "v0_2_ledger_reused": false
   },
@@ -315,6 +327,7 @@
       "artifact_schema"
     ],
     "runs_per_scenario": 1,
+    "scenario_order": "compatibility_dataset_order_then_A1G-001_through_A1G-004",
     "selective_reruns": false,
     "new_version_required_for_changes": true
   },

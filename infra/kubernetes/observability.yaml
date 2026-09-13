@@ -235,6 +235,28 @@ data:
             expr: sum(rate(http_request_duration_seconds_sum{service="payment-service",route="/payments"}[30s])) / sum(rate(http_request_duration_seconds_count{service="payment-service",route="/payments"}[30s])) > 8
             labels: {severity: critical, namespace: sre-demo, service: payment-service}
             annotations: {summary: Payment request latency is critically high}
+          - alert: A1GOrderPaymentFailureHigh
+            expr: sum(rate(http_requests_total{service="order-service",status=~"5.."}[30s])) > 0.05
+            for: 15s
+            labels: {severity: critical, namespace: sre-demo, service: order-service}
+            annotations: {summary: Order payment dependency failures are high}
+          - alert: A1GOrderPaymentDbPressureHigh
+            expr: sum(rate(dependency_request_duration_seconds_sum{service="order-service",dependency="payment-service"}[30s])) / sum(rate(dependency_request_duration_seconds_count{service="order-service",dependency="payment-service"}[30s])) > 0.5
+            for: 15s
+            labels: {severity: warning, namespace: sre-demo, service: order-service}
+            annotations: {summary: Order payment dependency database pressure is high}
+          - alert: A1GOrderConfigLatencyHigh
+            expr: (sum(rate(http_request_duration_seconds_sum{service="order-service",route="/orders"}[30s])) / sum(rate(http_request_duration_seconds_count{service="order-service",route="/orders"}[30s])) > 0.5) and on() (sum(rate(dependency_request_duration_seconds_sum{service="order-service",dependency="payment-service"}[30s])) / sum(rate(dependency_request_duration_seconds_count{service="order-service",dependency="payment-service"}[30s])) < 0.5)
+            labels: {severity: warning, namespace: sre-demo, service: order-service}
+            annotations: {summary: Order configuration latency is high}
+          - alert: A1GOrderPaymentConfigImpactHigh
+            expr: sum(rate(dependency_request_duration_seconds_sum{service="order-service",dependency="payment-service"}[30s])) / sum(rate(dependency_request_duration_seconds_count{service="order-service",dependency="payment-service"}[30s])) > 0.5
+            labels: {severity: warning, namespace: sre-demo, service: order-service}
+            annotations: {summary: Order payment configuration impact is high}
+          - alert: A1GPaymentDbQueryLatencyHigh
+            expr: sum(rate(db_query_duration_seconds_sum{service="payment-service",operation="create"}[30s])) / sum(rate(db_query_duration_seconds_count{service="payment-service",operation="create"}[30s])) > 0.5
+            labels: {severity: warning, namespace: sre-demo, service: payment-service}
+            annotations: {summary: Payment database query latency is high}
 ---
 apiVersion: apps/v1
 kind: Deployment

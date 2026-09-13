@@ -133,25 +133,24 @@ semantic A1 baselines because both use representation-sensitive exact strings.
 
 ## Compatibility set and future extension
 
-A1 first uses V020-001 through V020-010 unchanged, in frozen order and with the
-same real-fault → telemetry → Alertmanager → Incident path. No extension cases
-are added before that compatibility measurement is frozen.
+A1 uses V020-001 through V020-010 unchanged, in frozen order, followed by the
+four frozen A1G holdout cases in the committed evaluation manifest. All cases
+use the same real-fault → telemetry → Alertmanager → Incident path.
 
-The generalization set is `PLANNED_NOT_FROZEN`. Before any A1 live call, freeze
-a separate evaluator-side artifact with a final count, scenario definitions,
-ground truth and hash. It must include both cross-component cases and negative
-controls where remaining on alert scope is correct. No model-facing context may
-contain its scenario IDs, fixtures or expected answers.
+The generalization set is now `FROZEN` with four scenarios, after two
+zero-LLM real-fault qualification passes per scenario. It includes two
+cross-component cases and two same-component cases, including a negative
+control. The evaluator-side artifact records targets and hashes; no
+model-facing context contains its scenario IDs, fixtures or expected answers.
 
-The current preregistration placeholder is
-[`a1-generalization-set.json`](../benchmarks/a1-generalization-set.json); it
-intentionally contains no scenario IDs or hashes yet.
+The frozen artifact is
+[`a1-generalization-set.json`](../benchmarks/a1-generalization-set.json). A
+configuration-impact candidate was rejected because its real incident
+delivery did not satisfy the repeatable qualification window.
 
-Afterwards, a separate extension set may be preregistered for the currently
-underrepresented cross-component space: upstream dependency latency, downstream
-dependency failure, database-induced downstream symptoms, Kafka-induced worker
-symptoms, configuration changes causing another component's symptom, and
-shared-dependency ambiguity. Each must use a real controlled fault chain.
+Future extension cases may cover underrepresented Kafka, shared-dependency and
+indirect-configuration spaces, but must use a new experiment version and the
+same real controlled fault chain.
 
 ## Artifact observability
 
@@ -303,32 +302,30 @@ changed. A change creates a new experiment version.
 
 ## Budget
 
-A1 keeps the same per-incident envelope as A0 for the first fair comparison,
-but the runtime schema is no longer architecturally limited to that policy:
+A1 uses a wider, explicitly frozen performance envelope while retaining the
+same bounded runtime authority:
 
 ```text
-max model calls / incident = 3
-max actual tool executions / incident = 8
+max model calls / incident = 5
+max actual tool executions / incident = 12
+max agent turns / incident = 5
+max wall time / incident = 180 seconds
 provider retries = 0
 ```
 
 The v0.2 ledger is exhausted and is not reused. A new versioned ledger such as
-`.local/a1-single-agent-live-budget.json` is required. The compatibility worst
-case is 30 calls (10 × 3). A smoke reserve of up to six calls is planned, but
-the final A1 cap is **PENDING** until the generalization scenario count is
-frozen. Phase 1 exposes safe configurable limits for offline budget studies;
-it does not select the final live policy:
+`.local/a1-single-agent-live-budget.json` is separate. The frozen A1 allocation
+is 50 compatibility calls (10 × 5), 20 generalization calls (4 × 5), and a
+10-call smoke reserve, for a hard cap of 80:
 
 ```text
-final cap = smoke reserve
-           + (compatibility scenario count × 3)
-           + (generalization scenario count × 3)
-
-The Phase 1 runtime defaults remain 3 model calls, 8 tool executions, 3 turns
-and 60 seconds for compatibility. Explicit A1 configurations may use wider
-values within hard ceilings of 8 model calls, 20 tool executions, 8 turns and
-300 seconds. No A1 live ledger is initialized in this phase.
+final cap = 10 + (10 × 5) + (4 × 5) = 80
 ```
+
+Repository defaults remain 3 model calls, 8 tool executions and 3 turns for
+backward compatibility. Explicit A1 configurations may use values within hard
+ceilings of 8 model calls, 20 tool executions, 8 turns and 300 seconds. The
+ledger is initialized at zero and no live call has been made.
 
 The cap must be committed and the new ledger initialized before the first live
 call. Qualification and offline replay use zero model calls. No reserve may be

@@ -1,0 +1,93 @@
+{
+  "manifest_version": "a1-evaluation-manifest-v1",
+  "experiment_id": "v0.3-exp01-a1-improved-single-agent",
+  "status": "READY_FOR_LIVE_EVALUATION",
+  "baseline": {
+    "release": "v0.2.0",
+    "tag": "v0.2.0",
+    "evaluated_runtime_sha": "4603fc6380d672b0a3e9d885885b879f9b32c407"
+  },
+  "scenario_order": [
+    "V020-001", "V020-002", "V020-003", "V020-004", "V020-005",
+    "V020-006", "V020-007", "V020-008", "V020-009", "V020-010",
+    "A1G-001", "A1G-002", "A1G-003", "A1G-004"
+  ],
+  "runs_per_scenario": 1,
+  "sets": {
+    "compatibility": {
+      "artifact": "docs/benchmarks/v0.2.0-single-agent-live.json",
+      "scenario_count": 10,
+      "dataset_sha256": "20288dfae850b07bc4a754cd6e15a465f6fe7984cc259aeb7bf4294d79b16650",
+      "target_sha256": "55628a57741cb09672855d82cd2b00580e16a02a00a9c1ba04256f88c424bba3"
+    },
+    "generalization": {
+      "artifact": "docs/benchmarks/a1-generalization-set.json",
+      "scenario_count": 4,
+      "dataset_sha256": "d191c96737ef3b0ad4384abaf075b3abbdc76eb186f3912393a8d005f1a51219",
+      "target_sha256": "0c99d31f115c4c498dd22cf404f500c50b8005d368e8e131705db30e765ee429",
+      "qualification_artifact": "docs/benchmarks/a1-generalization-qualification.json",
+      "qualification_sha256": "d12780023869f340037683c1a0978384af2508dc1d891edfac24023cab7e9d07"
+    }
+  },
+  "combined_evaluation_sha256": "e4c268c429aeec268fb6e8c0a474211aa5e7d7af00bf205534334f9d723caf3e",
+  "runtime_identity": {
+    "prompt_version": "sre_investigator_v4",
+    "prompt_sha256": "9c21bd17b5965545aa61c57a5eea788715570b52187447edfa94a3a871a3be20",
+    "topology_sha256": "f456231abdadf765a9069414cbf12ff132d844df3979f07b0fab22c8d8909fb8",
+    "component_registry_sha256": "f72503e8a754c98e1425006e11daf66522f78059410afb882566e8d0bd0ddf0c",
+    "tool_registry_sha256": "28d109652cce49dac0d6ffcdb563d2c092959a27e75f4e803a710317d676f7cb",
+    "tool_contracts_sha256": "9e0f7403b3ab1d503690908bd4da316b4616d3d112f898b0dfef7ec44f932f5b",
+    "grader_version": "a1_native_grader_v1"
+  },
+  "model": {
+    "model_family": "gpt-5.6-luna",
+    "reasoning_effort": "none",
+    "provider_retries": 0,
+    "fallback": "none",
+    "router": "none",
+    "voting": "none"
+  },
+  "limits": {
+    "max_model_calls_per_incident": 5,
+    "max_actual_tool_executions_per_incident": 12,
+    "max_agent_turns": 5,
+    "max_wall_time_seconds": 180,
+    "provider_retries": 0
+  },
+  "live_budget": {
+    "ledger_path": ".local/a1-single-agent-live-budget.json",
+    "compatibility_calls": 50,
+    "generalization_calls": 20,
+    "smoke_calls": 10,
+    "hard_cap": 80,
+    "formula": "10*5 + 4*5 + 10 = 80",
+    "status": "NOT_STARTED"
+  },
+  "run_policy": {
+    "order": "compatibility_then_generalization",
+    "selective_reruns": false,
+    "no_tuning_after_first_provider_request": true,
+    "invalidation_only_for_objective_infrastructure_failure": true,
+    "infrastructure_failure_examples": [
+      "fault_failed_to_activate",
+      "expected_alert_never_fired",
+      "backend_unavailable",
+      "provider_request_not_delivered",
+      "harness_corruption"
+    ],
+    "model_outcomes_are_not_invalidation_reasons": true
+  },
+  "artifact_requirements": [
+    "full_bounded_structured_hypothesis_or_structured_stop",
+    "turn_decisions_and_canonical_tool_arguments",
+    "runtime_owned_evidence_summaries",
+    "components_queried_by_turn",
+    "model_tool_token_latency_and_cost_usage",
+    "dynamic_and_static_safety_counters"
+  ],
+  "freeze_gate": {
+    "all_hashes_committed_before_first_provider_request": true,
+    "qualification_openai_calls": 0,
+    "generalization_set_status": "FROZEN"
+  }
+}

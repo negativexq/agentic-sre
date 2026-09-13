@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from prometheus_client import make_asgi_app
 from prometheus_client.registry import CollectorRegistry
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
 from packages.storage import create_database_engine, create_session_factory
@@ -28,6 +29,7 @@ class FaultConfig(BaseModel):
     delay_ms: int = Field(default=0, ge=0, le=30_000)
     error: bool = False
     db_hold_ms: int = Field(default=0, ge=0, le=5_000)
+    db_query_delay_ms: int = Field(default=0, ge=0, le=5_000)
 
 
 class PaymentService:
@@ -70,6 +72,11 @@ class PaymentService:
                 if self._fault_config is not None and self._fault_config.db_hold_ms:
                     time.sleep(self._fault_config.db_hold_ms / 1000)
                 query_started = time.perf_counter()
+                if self._fault_config is not None and self._fault_config.db_query_delay_ms:
+                    session.execute(
+                        text("SELECT pg_sleep(:delay_seconds)"),
+                        {"delay_seconds": self._fault_config.db_query_delay_ms / 1000},
+                    )
                 span_context = (
                     self._runtime.tracer.start_as_current_span("postgres payment create")
                     if self._runtime is not None
@@ -110,6 +117,7 @@ def create_app(
         delay_ms=int(os.getenv("FAULT_PAYMENT_DELAY_MS", "0")),
         error=os.getenv("FAULT_PAYMENT_ERROR", "false").lower() == "true",
         db_hold_ms=int(os.getenv("FAULT_PAYMENT_DB_HOLD_MS", "0")),
+        db_query_delay_ms=int(os.getenv("FAULT_PAYMENT_DB_QUERY_DELAY_MS", "0")),
     )
     faults_enabled = os.getenv("ENABLE_TEST_FAULTS", "false").lower() == "true"
     payment_service = service or PaymentService(
@@ -136,6 +144,7 @@ def create_app(
         fault_config.delay_ms = config.delay_ms
         fault_config.error = config.error
         fault_config.db_hold_ms = config.db_hold_ms
+        fault_config.db_query_delay_ms = config.db_query_delay_ms
         return fault_config
 
     @app.get("/health")

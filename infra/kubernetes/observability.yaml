@@ -184,7 +184,7 @@ data:
             annotations:
               summary: Payment service latency is high
           - alert: KafkaConsumerLag
-            expr: clamp_min(sum(kafka_messages_total{service="order-service",topic="orders.created",direction="produced"}) - sum(kafka_messages_total{service="order-worker",topic="orders.created",direction="consumed"}), 0) > 10
+            expr: clamp_min(sum(increase(kafka_messages_total{service="order-service",topic="orders.created",direction="produced"}[2m])) - sum(increase(kafka_messages_total{service="order-worker",topic="orders.created",direction="consumed"}[2m])), 0) > 10
             for: 15s
             labels:
               severity: critical
@@ -214,7 +214,7 @@ data:
             labels: {severity: warning, namespace: sre-demo, service: order-service}
             annotations: {summary: Order database query latency is high}
           - alert: OrderWorkerLagHigh
-            expr: clamp_min(sum(kafka_messages_total{service="order-service",topic="orders.created",direction="produced"}) - sum(kafka_messages_total{service="order-worker",topic="orders.created",direction="consumed"}), 0) > 10
+            expr: clamp_min(sum(increase(kafka_messages_total{service="order-service",topic="orders.created",direction="produced"}[2m])) - sum(increase(kafka_messages_total{service="order-worker",topic="orders.created",direction="consumed"}[2m])), 0) > 10
             for: 15s
             labels: {severity: critical, namespace: sre-demo, service: order-worker}
             annotations: {summary: Order worker consumer lag is high}

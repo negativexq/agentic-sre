@@ -195,10 +195,10 @@ class PrometheusBackend(LiveBackend):
             consumer = _consumer(parameters)
             queries[operation] = (
                 "clamp_min("
-                f'sum(kafka_messages_total{{service="order-service",'
-                f'topic="{ORDERS_CREATED_TOPIC}",direction="produced"}}) - '
-                f'sum(kafka_messages_total{{service="{consumer}",'
-                f'topic="{ORDERS_CREATED_TOPIC}",direction="consumed"}}), 0)'
+                f'sum(increase(kafka_messages_total{{service="order-service",'
+                f'topic="{ORDERS_CREATED_TOPIC}",direction="produced"}}[2m])) - '
+                f'sum(increase(kafka_messages_total{{service="{consumer}",'
+                f'topic="{ORDERS_CREATED_TOPIC}",direction="consumed"}}[2m])), 0)'
             )
         if operation not in queries:
             raise ValueError("unsupported Prometheus operation")

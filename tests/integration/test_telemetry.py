@@ -83,6 +83,16 @@ def test_worker_failure_alert_uses_bounded_error_burst_signal() -> None:
     assert old_expression not in manifest
 
 
+def test_worker_lag_alerts_are_counter_reset_safe() -> None:
+    rules = Path("infra/observability/prometheus-rules.yml").read_text(encoding="utf-8")
+    manifest = Path("infra/kubernetes/observability.yaml").read_text(encoding="utf-8")
+    for text in (rules, manifest):
+        assert "- alert: KafkaConsumerLag" in text
+        assert "- alert: OrderWorkerLagHigh" in text
+        assert text.count("increase(kafka_messages_total") >= 4
+        assert text.count("expr: clamp_min(sum(kafka_messages_total") == 0
+
+
 def test_configuration_latency_alert_has_distinct_bounded_signal() -> None:
     rules = Path("infra/observability/prometheus-rules.yml").read_text(encoding="utf-8")
     manifest = Path("infra/kubernetes/observability.yaml").read_text(encoding="utf-8")

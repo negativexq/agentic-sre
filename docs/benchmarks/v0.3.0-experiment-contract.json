@@ -214,7 +214,7 @@
   },
   "diagnostic_metrics": {
     "cross_component_exploration_recall": "cross-component opportunities with a valid observation against frozen causal component / all cross-component opportunities",
-    "outside_alert_scope_execution_rate": "outside-alert-scope tool executions / all tool executions",
+    "outside_alert_scope_execution_rate": "successful outside-alert-scope workload executions / successful workload-targeted executions",
     "unnecessary_outside_scope_exploration_rate": "same-component cases with outside-scope execution / same-component cases",
     "change_evidence_acquisition_rate": "eligible cases with a valid change observation / eligible change cases",
     "unique_components_queried": "distinct validated workload/resource targets per incident",

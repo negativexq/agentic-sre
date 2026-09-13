@@ -65,10 +65,11 @@ The implementation should proceed in this order, before any paid call:
    one-pass A1 compatibility run.
 
 Phase 1 implemented the identity, contract and bounded audit/provenance
-foundation. Phase 2 now injects the bounded topology/state projection, selects
-prompt v4 for explicit A1 runs, validates canonical workload targets and
-supports the structured A1 provider transport. Native A1 graders and the live
-harness remain Phase 3 work.
+foundation. Phase 2 injected the bounded topology/state projection, selected
+prompt v4 for explicit A1 runs, validated canonical workload targets and
+supported the structured A1 provider transport. Phase 3 now provides pure
+native A1 graders and a FakeModelProvider-only qualification harness. No live
+model result is implied by that qualification.
 
 No fixture-conditioned routing is permitted. In particular, the runtime must
 not turn V020-003 into a special case or force a change tool for V020-010.
@@ -214,6 +215,57 @@ which edge is causal for the current benchmark incident.
 
 The public frozen dataset remains evaluator input. The live A1 context is built
 from the real Incident/Alerts and runtime evidence, not from evaluator fields.
+
+## Phase 3 native evaluation
+
+The evaluator consumes a persisted `A1RunArtifact`; it does not call a model,
+network, cluster, database or clock. Compatibility targets are evaluator-only
+and are kept in `packages/evals/a1_targets.py`, with a deterministic target hash
+(`55628a57741cb09672855d82cd2b00580e16a02a00a9c1ba04256f88c424bba3`). The
+native grader version is `a1_native_grader_v1`.
+
+Primary metrics use canonical workload/resource identities and controlled
+mechanism/trigger values:
+
+```text
+completion = hypotheses / all scenarios
+symptom and causal component accuracy = exact canonical workload matches / all scenarios
+causal_resource_accuracy = exact resource match, including None / all scenarios
+causal_resource_required_accuracy = exact resource match / resource-required scenarios
+mechanism and structured-trigger accuracy = exact controlled matches / all scenarios
+evidence_reference_integrity = fully local runtime-owned hypotheses / submitted hypotheses
+ground_truth_causal_component_evidence_rate = hypotheses citing local evidence
+  targeted at the evaluator's causal workload / submitted hypotheses
+ground_truth_causal_resource_evidence_rate = resource-required hypotheses citing
+  local evidence targeted at the evaluator's causal resource / resource-required hypotheses
+```
+
+STOP quality dimensions are zero for scenario-level aggregates, while STOP
+records are excluded from the hypothesis-only evidence-reference denominator.
+When a subset has no eligible scenarios, its rate is `null`, with numerator and
+denominator retained. A cited target match is provenance support, not proof that
+the observation semantically caused the incident; the current bounded evidence
+summary does not attempt to grade causal relevance.
+
+Exploration and change acquisition are diagnostic behavior metrics, not
+scenario-specific gates. Cross-component exploration is counted only from
+runtime-owned evidence or a successful validated execution against the expected
+causal workload; model prose, failed requests and unknown targets do not count.
+The evaluator also reports outside-alert-scope execution, unique targets,
+change-tool acquisition, duplicate suppression, failure labels and usage.
+
+Safety totals remain explicit: fabricated and cross-incident references,
+infrastructure writes, Kubernetes write verbs, budget bypass and secret leakage
+are carried separately from static checks such as the absence of shell or
+remediation tools.
+
+The offline command `make a1-eval-check` runs the scripted qualification and
+focused grader tests. Its generated
+[`a1-evaluator-qualification.json`](../benchmarks/a1-evaluator-qualification.json)
+is `OFFLINE`/`NOT MODEL PERFORMANCE` evidence only. A0's completion, mechanism,
+exploration and submitted-hypothesis reference-integrity facts can be shown
+alongside A1. A0's free-text service and trigger scores remain legacy,
+representation-sensitive facts rather than canonical A1 baselines.
 
 ## Success criteria and freeze policy
 

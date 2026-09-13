@@ -13,6 +13,7 @@ from packages.investigation.contracts import (
     InvestigationModel,
     InvestigationResult,
     InvestigationUsage,
+    TerminationReason,
 )
 from packages.investigation.topology import (
     DependencyResourceId,
@@ -24,6 +25,7 @@ from packages.investigation.topology import (
 class EvidenceSummary(InvestigationModel):
     """Safe bounded evidence projection for future benchmark artifacts."""
 
+    incident_id: UUID
     evidence_id: UUID
     tool: str = Field(min_length=1, max_length=100)
     target_workload: WorkloadComponentId | None = None
@@ -44,6 +46,7 @@ class EvidenceSummary(InvestigationModel):
         if len(summary) > 1_000:
             summary = f"{summary[:1_000]}…"
         return cls(
+            incident_id=evidence.incident_id,
             evidence_id=evidence.evidence_id,
             tool=tool,
             target_workload=(
@@ -72,6 +75,7 @@ class TurnRecord(InvestigationModel):
     decision: str = Field(min_length=1, max_length=64)
     requested_tools: list[str] = Field(default_factory=list, max_length=20)
     canonical_arguments: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
+    request_statuses: list[str] = Field(default_factory=list, max_length=20)
     target_workloads: list[WorkloadComponentId] = Field(default_factory=list, max_length=20)
     target_resources: list[DependencyResourceId] = Field(default_factory=list, max_length=20)
     new_evidence_ids: list[UUID] = Field(default_factory=list, max_length=12)
@@ -108,6 +112,8 @@ class A1RunArtifact(InvestigationModel):
     evidence: list[EvidenceSummary] = Field(default_factory=list, max_length=12)
     hypothesis: CausalHypothesis | None = None
     stop: CausalStopDecision | None = None
+    termination_reason: TerminationReason
+    error_code: str | None = None
     usage: InvestigationUsage
     safety: A1SafetyCounters = Field(default_factory=A1SafetyCounters)
 
@@ -149,6 +155,9 @@ class A1RunArtifact(InvestigationModel):
             arguments = [
                 item["arguments"] for item in summaries if isinstance(item.get("arguments"), dict)
             ]
+            request_statuses = [
+                item["status"] for item in summaries if isinstance(item.get("status"), str)
+            ]
             target_workloads: set[WorkloadComponentId] = set()
             target_resources: set[DependencyResourceId] = set()
             new_evidence_ids: list[UUID] = []
@@ -174,6 +183,7 @@ class A1RunArtifact(InvestigationModel):
                         if isinstance(item, str)
                     ],
                     canonical_arguments=arguments,
+                    request_statuses=request_statuses,
                     target_workloads=sorted(target_workloads, key=str),
                     target_resources=sorted(target_resources, key=str),
                     new_evidence_ids=new_evidence_ids,
@@ -203,7 +213,12 @@ class A1RunArtifact(InvestigationModel):
                 if result.causal_stop is not None
                 else None
             ),
+            termination_reason=result.termination_reason,
+            error_code=result.error_code,
             usage=result.usage,
+            safety=A1SafetyCounters(
+                fabricated_evidence=int(result.error_code == "FABRICATED_EVIDENCE_REFERENCE")
+            ),
         )
 
 

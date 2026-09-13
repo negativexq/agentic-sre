@@ -1,8 +1,8 @@
 {
   "experiment_id": "v0.3-exp01-a1-improved-single-agent",
   "status": "PREREGISTERED_DESIGN",
-  "implementation_status": "PHASE_2_IMPLEMENTED_PHASE_3_PENDING",
-  "phase": "PHASE_2_MODEL_VISIBLE_CAUSAL_PROTOCOL",
+  "implementation_status": "PHASE_3_IMPLEMENTED_PHASE_4_PENDING",
+  "phase": "PHASE_3_NATIVE_A1_EVALUATION",
   "arm": "A1_CONTROL",
   "sequence": [
     {"arm": "A0", "name": "frozen v0.2.0 single-agent baseline", "status": "FROZEN"},
@@ -38,7 +38,9 @@
     "tool_registry_sha256": "28d109652cce49dac0d6ffcdb563d2c092959a27e75f4e803a710317d676f7cb",
     "tool_contracts_sha256": "9e0f7403b3ab1d503690908bd4da316b4616d3d112f898b0dfef7ec44f932f5b",
     "component_registry_sha256": "f72503e8a754c98e1425006e11daf66522f78059410afb882566e8d0bd0ddf0c",
-    "component_registry_status": "IMPLEMENTED_PHASE_2_NOT_LIVE_FROZEN"
+    "component_registry_status": "IMPLEMENTED_PHASE_2_NOT_LIVE_FROZEN",
+    "a1_compatibility_target_sha256": "55628a57741cb09672855d82cd2b00580e16a02a00a9c1ba04256f88c424bba3",
+    "a1_grader_version": "a1_native_grader_v1"
   },
   "research_question": "Can the existing bounded single investigator improve causal exploration and causal diagnosis when given explicit production topology, canonical component identities, structured causal outputs, and better benchmark observability, without adding another model role?",
   "hypotheses": {
@@ -185,13 +187,30 @@
     },
     "validation": "strict types, extra=forbid, bounded fields, runtime-known workload/resource IDs"
   },
+  "evaluator": {
+    "version": "a1_native_grader_v1",
+    "target_mapping_sha256": "55628a57741cb09672855d82cd2b00580e16a02a00a9c1ba04256f88c424bba3",
+    "pure": true,
+    "network": false,
+    "llm_judge": false,
+    "artifact_input": "A1RunArtifact",
+    "zero_denominator_rate": null,
+    "reference_integrity_denominator": "submitted hypotheses only",
+    "stop_dimensions": "zero for quality dimensions; excluded from reference-integrity denominator",
+    "resource_required_denominator": "scenarios with non-null expected causal_resource",
+    "exploration_rule": "runtime-owned evidence or successful execution against target; prose and failed requests do not count"
+  },
   "primary_metrics": {
     "completion_rate": "submitted structured hypotheses / scenarios",
+    "symptom_component_accuracy": "exact canonical WorkloadComponentId symptom_component matches / scenarios",
     "causal_component_accuracy": "exact canonical WorkloadComponentId causal_component matches / scenarios",
+    "causal_resource_accuracy": "exact causal_resource match including None / scenarios",
+    "causal_resource_required_accuracy": "exact causal_resource match / scenarios with non-null expected resource",
     "mechanism_accuracy": "exact controlled mechanism matches / scenarios",
     "structured_trigger_accuracy": "exact (trigger_type, trigger_component, trigger_resource) matches / scenarios",
     "evidence_reference_integrity": "submitted hypotheses with all current-incident runtime-owned references / submitted hypotheses",
-    "ground_truth_causal_component_evidence_rate": "grader-only cited evidence target matches frozen causal component / scenarios"
+    "ground_truth_causal_component_evidence_rate": "hypotheses citing local evidence targeted at frozen causal component / submitted hypotheses",
+    "ground_truth_causal_resource_evidence_rate": "resource-required hypotheses citing local evidence targeted at frozen causal resource / resource-required hypotheses"
   },
   "diagnostic_metrics": {
     "cross_component_exploration_recall": "cross-component opportunities with a valid observation against frozen causal component / all cross-component opportunities",

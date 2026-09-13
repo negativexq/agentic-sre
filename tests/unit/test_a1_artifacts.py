@@ -13,6 +13,7 @@ from packages.investigation import (
     HypothesisMechanism,
     InvestigationUsage,
     StructuredTrigger,
+    TerminationReason,
     TriggerType,
     TurnRecord,
     WorkloadComponentId,
@@ -85,6 +86,7 @@ def test_evidence_summary_and_run_artifact_round_trip() -> None:
         ],
         evidence=[summary],
         hypothesis=hypothesis,
+        termination_reason=TerminationReason.HYPOTHESIS_SUBMITTED,
         usage=_usage(),
         safety=A1SafetyCounters(),
     )

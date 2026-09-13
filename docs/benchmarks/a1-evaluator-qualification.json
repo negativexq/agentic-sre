@@ -1,0 +1,22 @@
+{
+  "artifact_type": "A1_EVALUATOR_QUALIFICATION",
+  "status": "PASS",
+  "model_quality_claim": false,
+  "openai_calls": 0,
+  "network_calls": 0,
+  "cases": {
+    "correct_structured_hypothesis": "PASS",
+    "cross_component_exploration": "PASS",
+    "missed_cross_component_exploration": "PASS",
+    "structured_stop": "PASS",
+    "reference_integrity": "PASS",
+    "denominator_transparency": "PASS"
+  },
+  "aggregate_checks": {
+    "cross_component_exploration_numerator": 1,
+    "cross_component_exploration_denominator": 2,
+    "submitted_hypothesis_integrity_numerator": 2,
+    "submitted_hypothesis_integrity_denominator": 2
+  },
+  "note": "Scripted FakeModelProvider qualification only; not model performance."
+}

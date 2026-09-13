@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test check agent-check agent-smoke benchmark-offline benchmark-harness-check model-smoke-live agent-smoke-live benchmark-live cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check release-check-live
+.PHONY: install lint typecheck test check agent-check agent-smoke benchmark-offline a1-eval-check benchmark-harness-check model-smoke-live agent-smoke-live benchmark-live cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check release-check-live
 
 LIVE_BUDGET_FILE ?= .local/v0.2.0-live-budget.json
 HARNESS_SCENARIOS ?=
@@ -28,6 +28,10 @@ agent-smoke: agent-check
 
 benchmark-offline:
 	.venv/bin/python scripts/offline_benchmark.py
+
+a1-eval-check:
+	.venv/bin/python scripts/a1_offline_check.py
+	.venv/bin/python -m pytest tests/unit/test_a1_targets.py tests/unit/test_a1_graders.py
 
 benchmark-harness-check:
 	kubectl port-forward -n observability svc/prometheus 19090:9090 >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \

@@ -234,3 +234,37 @@ def test_payment_pod_crash_uses_runtime_instability_alert() -> None:
     definition = FIXTURE_BY_NAME["payment_pod_crash"]
 
     assert definition.alert_name == "PaymentRuntimeInstability"
+
+
+def test_recovery_waits_for_collateral_alerts_to_resolve(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    environment = LiveBenchmarkEnvironment()
+    calls = {"count": 0}
+    collateral = Alert(
+        alert_name="PaymentServiceLatencyCritical",
+        service="payment-service",
+        namespace="sre-demo",
+        cluster="kind-agentic-sre",
+        starts_at=NOW,
+        ends_at=None,
+        fingerprint="collateral-fingerprint",
+        status=AlertStatus.FIRING,
+        source=AlertSource.ALERTMANAGER,
+    )
+
+    class FakeControlPlane:
+        def incidents(self) -> list[Incident]:
+            return [_incident()]
+
+        def alerts(self, _incident_id: object) -> tuple[Alert, ...]:
+            calls["count"] += 1
+            if calls["count"] == 1:
+                return (collateral,)
+            return (collateral.model_copy(update={"status": AlertStatus.RESOLVED}),)
+
+    environment.control_plane = FakeControlPlane()  # type: ignore[assignment]
+    monkeypatch.setattr("packages.evals.live_fixtures.time.sleep", lambda _: None)
+
+    assert environment._wait_for_alerts_quiet(timeout_seconds=1)
+    assert calls["count"] == 2

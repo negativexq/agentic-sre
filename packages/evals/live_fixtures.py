@@ -616,6 +616,21 @@ class LiveBenchmarkEnvironment:
                 item.alert_name == definition.alert_name and item.status.value == "RESOLVED"
                 for item in alerts
             ):
+                return self._wait_for_alerts_quiet()
+            time.sleep(5)
+        return False
+
+    def _wait_for_alerts_quiet(self, timeout_seconds: float = 120) -> bool:
+        """Require all alerts from prior trials to be resolved before the next trial."""
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            active = False
+            for incident in self.control_plane.incidents():
+                alerts = self.control_plane.alerts(incident.incident_id)
+                if any(item.status is AlertStatus.FIRING for item in alerts):
+                    active = True
+                    break
+            if not active:
                 return True
             time.sleep(5)
         return False

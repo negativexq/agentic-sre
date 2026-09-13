@@ -89,7 +89,7 @@ def test_configuration_latency_alert_has_distinct_bounded_signal() -> None:
     expression = (
         'sum(rate(http_request_duration_seconds_sum{service="payment-service",route="/payments"}'
         '[30s])) / sum(rate(http_request_duration_seconds_count{service="payment-service",'
-        'route="/payments"}[30s])) > 4'
+        'route="/payments"}[30s])) > 8'
     )
     assert expression in rules
     assert expression in manifest

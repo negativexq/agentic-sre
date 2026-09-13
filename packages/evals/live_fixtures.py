@@ -35,6 +35,8 @@ PROMETHEUS_DEFAULT = "http://localhost:19090"
 POOL_PRESSURE_CONCURRENCY = 18
 POOL_PRESSURE_HOLD_MS = 5_000
 POOL_PRESSURE_WAVES = 3
+CONFIG_REGRESSION_CONCURRENCY = 20
+CONFIG_REGRESSION_DELAY_MS = 10_000
 POD_CRASH_RESTARTS = 2
 POD_CRASH_RESTART_TIMEOUT_SECONDS = 30
 POD_CRASH_HEALTH_TIMEOUT_SECONDS = 30
@@ -502,7 +504,7 @@ class LiveBenchmarkEnvironment:
                 "change_type": "UPDATED",
                 "scope": "CONFIGURATION",
                 "before": {"FAULT_PAYMENT_DELAY_MS": "0"},
-                "after": {"FAULT_PAYMENT_DELAY_MS": "5000"},
+                "after": {"FAULT_PAYMENT_DELAY_MS": str(CONFIG_REGRESSION_DELAY_MS)},
                 "revision": f"benchmark-{now.strftime('%Y%m%d%H%M%S%f')}",
                 "source": "benchmark-harness",
             }
@@ -539,7 +541,9 @@ class LiveBenchmarkEnvironment:
             if self._payment_process_start_baseline is None:
                 raise RuntimeError("Prometheus process-start baseline unavailable")
         elif fixture == "payment_config_change":
-            self._kubectl_patch_env("payment-service", {"FAULT_PAYMENT_DELAY_MS": "5000"})
+            self._kubectl_patch_env(
+                "payment-service", {"FAULT_PAYMENT_DELAY_MS": str(CONFIG_REGRESSION_DELAY_MS)}
+            )
             self._record_payment_config_change()
         else:
             raise KeyError(fixture)
@@ -560,6 +564,8 @@ class LiveBenchmarkEnvironment:
             if fixture == "payment_db_pool_pressure":
                 for _ in range(POOL_PRESSURE_WAVES):
                     self._concurrent_payments(count=POOL_PRESSURE_CONCURRENCY)
+            elif fixture == "payment_config_change":
+                self._concurrent_payments(count=CONFIG_REGRESSION_CONCURRENCY)
             else:
                 self._payment_requests(count=60, interval_seconds=0.5)
         elif fixture in {

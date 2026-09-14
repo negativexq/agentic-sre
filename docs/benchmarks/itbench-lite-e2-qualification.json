@@ -1,0 +1,951 @@
+{
+  "artifact_type": "ITBENCH_LITE_E2_OFFLINE_QUALIFICATION",
+  "dataset_revision": "d0916b08ba421ce5e672e9ad68aa947d938dfef0",
+  "fake_runtime_passes": 35,
+  "fake_terminal_counts": {
+    "MODEL_CALL_LIMIT": 0,
+    "STOP": 35
+  },
+  "ground_truth_loaded": false,
+  "openai_calls": 0,
+  "performance": {
+    "itbench_alert_summary": {
+      "max_ms": 24.142582900822163,
+      "median_ms": 4.051875323057175,
+      "p95_ms": 24.142582900822163,
+      "scenario_samples": 35
+    },
+    "itbench_entity_context": {
+      "max_ms": 499.86695824190974,
+      "median_ms": 397.3838333040476,
+      "p95_ms": 499.86695824190974,
+      "scenario_samples": 35
+    },
+    "itbench_entity_search": {
+      "max_ms": 630.7532913051546,
+      "median_ms": 465.0670001283288,
+      "p95_ms": 630.7532913051546,
+      "scenario_samples": 35
+    },
+    "itbench_kubernetes_events": {
+      "max_ms": 62.39416589960456,
+      "median_ms": 21.671084221452475,
+      "p95_ms": 62.39416589960456,
+      "scenario_samples": 35
+    },
+    "itbench_kubernetes_objects": {
+      "max_ms": 491.85641715303063,
+      "median_ms": 390.08312532678246,
+      "p95_ms": 491.85641715303063,
+      "scenario_samples": 35
+    },
+    "itbench_logs": {
+      "max_ms": 4470.612750388682,
+      "median_ms": 1804.171500261873,
+      "p95_ms": 4470.612750388682,
+      "scenario_samples": 35
+    },
+    "itbench_metric_analysis": {
+      "max_ms": 13644.295999780297,
+      "median_ms": 8482.87070915103,
+      "p95_ms": 13644.295999780297,
+      "scenario_samples": 35
+    },
+    "itbench_topology": {
+      "max_ms": 570.0789163820446,
+      "median_ms": 438.60604194924235,
+      "p95_ms": 570.0789163820446,
+      "scenario_samples": 35
+    },
+    "itbench_trace_search": {
+      "max_ms": 7336.480457801372,
+      "median_ms": 3527.5272498838603,
+      "p95_ms": 7336.480457801372,
+      "scenario_samples": 35
+    }
+  },
+  "provider_constructed": false,
+  "request_build_passes": 35,
+  "scenario_count": 35,
+  "scenario_order": [
+    "Scenario-1",
+    "Scenario-2",
+    "Scenario-4",
+    "Scenario-5",
+    "Scenario-6",
+    "Scenario-7",
+    "Scenario-8",
+    "Scenario-9",
+    "Scenario-11",
+    "Scenario-12",
+    "Scenario-13",
+    "Scenario-14",
+    "Scenario-15",
+    "Scenario-16",
+    "Scenario-17",
+    "Scenario-18",
+    "Scenario-19",
+    "Scenario-20",
+    "Scenario-21",
+    "Scenario-22",
+    "Scenario-23",
+    "Scenario-24",
+    "Scenario-25",
+    "Scenario-29",
+    "Scenario-31",
+    "Scenario-33",
+    "Scenario-34",
+    "Scenario-35",
+    "Scenario-38",
+    "Scenario-80",
+    "Scenario-81",
+    "Scenario-83",
+    "Scenario-91",
+    "Scenario-102",
+    "Scenario-105"
+  ],
+  "scenarios": [
+    {
+      "category_row_counts": {
+        "alerts": 539,
+        "k8s_events": 868,
+        "k8s_objects": 4607,
+        "logs": 239850,
+        "metrics": 862470,
+        "traces": 120000
+      },
+      "context": {
+        "context_bytes": 32539,
+        "context_chars": 32539,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 539,
+      "scenario_id": "Scenario-1",
+      "unique_alerts": 17
+    },
+    {
+      "category_row_counts": {
+        "alerts": 239,
+        "k8s_events": 886,
+        "k8s_objects": 3944,
+        "logs": 97430,
+        "metrics": 567375,
+        "traces": 70000
+      },
+      "context": {
+        "context_bytes": 36989,
+        "context_chars": 36989,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 239,
+      "scenario_id": "Scenario-2",
+      "unique_alerts": 22
+    },
+    {
+      "category_row_counts": {
+        "alerts": 311,
+        "k8s_events": 886,
+        "k8s_objects": 5276,
+        "logs": 124106,
+        "metrics": 638574,
+        "traces": 180000
+      },
+      "context": {
+        "context_bytes": 34764,
+        "context_chars": 34764,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 311,
+      "scenario_id": "Scenario-4",
+      "unique_alerts": 17
+    },
+    {
+      "category_row_counts": {
+        "alerts": 286,
+        "k8s_events": 894,
+        "k8s_objects": 3941,
+        "logs": 101014,
+        "metrics": 502914,
+        "traces": 321554
+      },
+      "context": {
+        "context_bytes": 37898,
+        "context_chars": 37898,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 286,
+      "scenario_id": "Scenario-5",
+      "unique_alerts": 23
+    },
+    {
+      "category_row_counts": {
+        "alerts": 264,
+        "k8s_events": 878,
+        "k8s_objects": 4615,
+        "logs": 90000,
+        "metrics": 654548,
+        "traces": 200000
+      },
+      "context": {
+        "context_bytes": 34081,
+        "context_chars": 34081,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 264,
+      "scenario_id": "Scenario-6",
+      "unique_alerts": 17
+    },
+    {
+      "category_row_counts": {
+        "alerts": 271,
+        "k8s_events": 872,
+        "k8s_objects": 3943,
+        "logs": 101103,
+        "metrics": 470284,
+        "traces": 110000
+      },
+      "context": {
+        "context_bytes": 36663,
+        "context_chars": 36663,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 271,
+      "scenario_id": "Scenario-7",
+      "unique_alerts": 22
+    },
+    {
+      "category_row_counts": {
+        "alerts": 290,
+        "k8s_events": 872,
+        "k8s_objects": 4610,
+        "logs": 109238,
+        "metrics": 707068,
+        "traces": 160000
+      },
+      "context": {
+        "context_bytes": 36825,
+        "context_chars": 36825,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 290,
+      "scenario_id": "Scenario-8",
+      "unique_alerts": 19
+    },
+    {
+      "category_row_counts": {
+        "alerts": 248,
+        "k8s_events": 880,
+        "k8s_objects": 4614,
+        "logs": 111778,
+        "metrics": 626244,
+        "traces": 50000
+      },
+      "context": {
+        "context_bytes": 33163,
+        "context_chars": 33163,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 248,
+      "scenario_id": "Scenario-9",
+      "unique_alerts": 15
+    },
+    {
+      "category_row_counts": {
+        "alerts": 3,
+        "k8s_events": 826,
+        "k8s_objects": 3963,
+        "logs": 99192,
+        "metrics": 642805,
+        "traces": 309021
+      },
+      "context": {
+        "context_bytes": 21690,
+        "context_chars": 21690,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 3,
+      "scenario_id": "Scenario-11",
+      "unique_alerts": 3
+    },
+    {
+      "category_row_counts": {
+        "alerts": 243,
+        "k8s_events": 886,
+        "k8s_objects": 5282,
+        "logs": 120636,
+        "metrics": 636548,
+        "traces": 200000
+      },
+      "context": {
+        "context_bytes": 32509,
+        "context_chars": 32509,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 243,
+      "scenario_id": "Scenario-12",
+      "unique_alerts": 14
+    },
+    {
+      "category_row_counts": {
+        "alerts": 261,
+        "k8s_events": 870,
+        "k8s_objects": 3944,
+        "logs": 98188,
+        "metrics": 655736,
+        "traces": 120000
+      },
+      "context": {
+        "context_bytes": 36992,
+        "context_chars": 36992,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 261,
+      "scenario_id": "Scenario-13",
+      "unique_alerts": 22
+    },
+    {
+      "category_row_counts": {
+        "alerts": 250,
+        "k8s_events": 908,
+        "k8s_objects": 3946,
+        "logs": 96578,
+        "metrics": 416490,
+        "traces": 220000
+      },
+      "context": {
+        "context_bytes": 34804,
+        "context_chars": 34804,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 250,
+      "scenario_id": "Scenario-14",
+      "unique_alerts": 18
+    },
+    {
+      "category_row_counts": {
+        "alerts": 239,
+        "k8s_events": 890,
+        "k8s_objects": 3952,
+        "logs": 94506,
+        "metrics": 511695,
+        "traces": 60000
+      },
+      "context": {
+        "context_bytes": 36151,
+        "context_chars": 36151,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 239,
+      "scenario_id": "Scenario-15",
+      "unique_alerts": 23
+    },
+    {
+      "category_row_counts": {
+        "alerts": 445,
+        "k8s_events": 872,
+        "k8s_objects": 4601,
+        "logs": 101696,
+        "metrics": 727073,
+        "traces": 331560
+      },
+      "context": {
+        "context_bytes": 36024,
+        "context_chars": 36024,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 445,
+      "scenario_id": "Scenario-16",
+      "unique_alerts": 24
+    },
+    {
+      "category_row_counts": {
+        "alerts": 302,
+        "k8s_events": 1738,
+        "k8s_objects": 4278,
+        "logs": 78830,
+        "metrics": 796316,
+        "traces": 241386
+      },
+      "context": {
+        "context_bytes": 35714,
+        "context_chars": 35714,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 302,
+      "scenario_id": "Scenario-17",
+      "unique_alerts": 22
+    },
+    {
+      "category_row_counts": {
+        "alerts": 322,
+        "k8s_events": 1700,
+        "k8s_objects": 4990,
+        "logs": 31401,
+        "metrics": 531759,
+        "traces": 170000
+      },
+      "context": {
+        "context_bytes": 39362,
+        "context_chars": 39362,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 322,
+      "scenario_id": "Scenario-18",
+      "unique_alerts": 29
+    },
+    {
+      "category_row_counts": {
+        "alerts": 381,
+        "k8s_events": 2102,
+        "k8s_objects": 4993,
+        "logs": 99059,
+        "metrics": 718452,
+        "traces": 321226
+      },
+      "context": {
+        "context_bytes": 36074,
+        "context_chars": 36074,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 381,
+      "scenario_id": "Scenario-19",
+      "unique_alerts": 22
+    },
+    {
+      "category_row_counts": {
+        "alerts": 2030,
+        "k8s_events": 942,
+        "k8s_objects": 3962,
+        "logs": 85880,
+        "metrics": 583860,
+        "traces": 284700
+      },
+      "context": {
+        "context_bytes": 59043,
+        "context_chars": 59043,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 2030,
+      "scenario_id": "Scenario-20",
+      "unique_alerts": 50
+    },
+    {
+      "category_row_counts": {
+        "alerts": 329,
+        "k8s_events": 1976,
+        "k8s_objects": 4278,
+        "logs": 92524,
+        "metrics": 583758,
+        "traces": 40000
+      },
+      "context": {
+        "context_bytes": 36237,
+        "context_chars": 36237,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 329,
+      "scenario_id": "Scenario-21",
+      "unique_alerts": 23
+    },
+    {
+      "category_row_counts": {
+        "alerts": 288,
+        "k8s_events": 2214,
+        "k8s_objects": 4278,
+        "logs": 104255,
+        "metrics": 698913,
+        "traces": 160000
+      },
+      "context": {
+        "context_bytes": 36379,
+        "context_chars": 36379,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 288,
+      "scenario_id": "Scenario-22",
+      "unique_alerts": 20
+    },
+    {
+      "category_row_counts": {
+        "alerts": 421,
+        "k8s_events": 958,
+        "k8s_objects": 3946,
+        "logs": 83750,
+        "metrics": 630701,
+        "traces": 80000
+      },
+      "context": {
+        "context_bytes": 38133,
+        "context_chars": 38133,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 421,
+      "scenario_id": "Scenario-23",
+      "unique_alerts": 28
+    },
+    {
+      "category_row_counts": {
+        "alerts": 1359,
+        "k8s_events": 838,
+        "k8s_objects": 3962,
+        "logs": 87313,
+        "metrics": 533338,
+        "traces": 100000
+      },
+      "context": {
+        "context_bytes": 59043,
+        "context_chars": 59043,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 1359,
+      "scenario_id": "Scenario-24",
+      "unique_alerts": 49
+    },
+    {
+      "category_row_counts": {
+        "alerts": 278,
+        "k8s_events": 1532,
+        "k8s_objects": 4272,
+        "logs": 92408,
+        "metrics": 777738,
+        "traces": 296823
+      },
+      "context": {
+        "context_bytes": 34606,
+        "context_chars": 34606,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 278,
+      "scenario_id": "Scenario-25",
+      "unique_alerts": 18
+    },
+    {
+      "category_row_counts": {
+        "alerts": 304,
+        "k8s_events": 1770,
+        "k8s_objects": 4269,
+        "logs": 102194,
+        "metrics": 717008,
+        "traces": 20000
+      },
+      "context": {
+        "context_bytes": 36572,
+        "context_chars": 36572,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 304,
+      "scenario_id": "Scenario-29",
+      "unique_alerts": 21
+    },
+    {
+      "category_row_counts": {
+        "alerts": 267,
+        "k8s_events": 858,
+        "k8s_objects": 3944,
+        "logs": 97678,
+        "metrics": 745920,
+        "traces": 20000
+      },
+      "context": {
+        "context_bytes": 32054,
+        "context_chars": 32054,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 267,
+      "scenario_id": "Scenario-31",
+      "unique_alerts": 14
+    },
+    {
+      "category_row_counts": {
+        "alerts": 257,
+        "k8s_events": 870,
+        "k8s_objects": 4598,
+        "logs": 109981,
+        "metrics": 723651,
+        "traces": 50000
+      },
+      "context": {
+        "context_bytes": 33692,
+        "context_chars": 33692,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 257,
+      "scenario_id": "Scenario-33",
+      "unique_alerts": 17
+    },
+    {
+      "category_row_counts": {
+        "alerts": 366,
+        "k8s_events": 876,
+        "k8s_objects": 3856,
+        "logs": 70876,
+        "metrics": 586946,
+        "traces": 215100
+      },
+      "context": {
+        "context_bytes": 40128,
+        "context_chars": 40128,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 366,
+      "scenario_id": "Scenario-34",
+      "unique_alerts": 31
+    },
+    {
+      "category_row_counts": {
+        "alerts": 266,
+        "k8s_events": 1712,
+        "k8s_objects": 4257,
+        "logs": 90000,
+        "metrics": 583081,
+        "traces": 10000
+      },
+      "context": {
+        "context_bytes": 34803,
+        "context_chars": 34803,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 266,
+      "scenario_id": "Scenario-35",
+      "unique_alerts": 18
+    },
+    {
+      "category_row_counts": {
+        "alerts": 815,
+        "k8s_events": 2185,
+        "k8s_objects": 784,
+        "logs": 93923,
+        "metrics": 983185,
+        "traces": 37744
+      },
+      "context": {
+        "context_bytes": 44494,
+        "context_chars": 44494,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 815,
+      "scenario_id": "Scenario-38",
+      "unique_alerts": 31
+    },
+    {
+      "category_row_counts": {
+        "alerts": 395,
+        "k8s_events": 2006,
+        "k8s_objects": 4291,
+        "logs": 113631,
+        "metrics": 636562,
+        "traces": 130000
+      },
+      "context": {
+        "context_bytes": 32379,
+        "context_chars": 32379,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 395,
+      "scenario_id": "Scenario-80",
+      "unique_alerts": 18
+    },
+    {
+      "category_row_counts": {
+        "alerts": 297,
+        "k8s_events": 2258,
+        "k8s_objects": 4283,
+        "logs": 90805,
+        "metrics": 500787,
+        "traces": 73566
+      },
+      "context": {
+        "context_bytes": 33123,
+        "context_chars": 33123,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 297,
+      "scenario_id": "Scenario-81",
+      "unique_alerts": 18
+    },
+    {
+      "category_row_counts": {
+        "alerts": 269,
+        "k8s_events": 1974,
+        "k8s_objects": 3559,
+        "logs": 79612,
+        "metrics": 616111,
+        "traces": 249300
+      },
+      "context": {
+        "context_bytes": 34363,
+        "context_chars": 34363,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 269,
+      "scenario_id": "Scenario-83",
+      "unique_alerts": 19
+    },
+    {
+      "category_row_counts": {
+        "alerts": 281,
+        "k8s_events": 2618,
+        "k8s_objects": 5000,
+        "logs": 113714,
+        "metrics": 1033060,
+        "traces": 190000
+      },
+      "context": {
+        "context_bytes": 35112,
+        "context_chars": 35112,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 281,
+      "scenario_id": "Scenario-91",
+      "unique_alerts": 19
+    },
+    {
+      "category_row_counts": {
+        "alerts": 1128,
+        "k8s_events": 832,
+        "k8s_objects": 3299,
+        "logs": 83988,
+        "metrics": 396903,
+        "traces": 180000
+      },
+      "context": {
+        "context_bytes": 54570,
+        "context_chars": 54570,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 1128,
+      "scenario_id": "Scenario-102",
+      "unique_alerts": 40
+    },
+    {
+      "category_row_counts": {
+        "alerts": 1887,
+        "k8s_events": 920,
+        "k8s_objects": 3299,
+        "logs": 73099,
+        "metrics": 497792,
+        "traces": 40000
+      },
+      "context": {
+        "context_bytes": 61648,
+        "context_chars": 61648,
+        "model": "gpt-5.6-luna",
+        "provider_request_build": true,
+        "reasoning": "none",
+        "request_valid": true,
+        "tool_schema_bytes": 6058
+      },
+      "fake_provider_invocations": 2,
+      "fake_runtime_terminal": "STOP",
+      "raw_alerts": 1887,
+      "scenario_id": "Scenario-105",
+      "unique_alerts": 51
+    }
+  ],
+  "source_completeness_manifest": ".local/itbench-lite/.itbench-source-completeness.json",
+  "sre_version": "v0.2-B96DF826-4BB2-4B62-97AB-6D84254C53D7"
+}

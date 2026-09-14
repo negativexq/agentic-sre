@@ -162,6 +162,79 @@ class ITBenchSnapshotBackend:
         ).encode("utf-8")
         return sha256(encoded).hexdigest()
 
+    def observable_entities(self) -> tuple[dict[str, str], ...]:
+        """Return the complete deduplicated Kubernetes entity catalog."""
+        entities: dict[str, dict[str, str]] = {}
+        for category in (ITBenchEvidenceCategory.K8S_OBJECTS, ITBenchEvidenceCategory.K8S_EVENTS):
+            for item in self._iter_records(category):
+                record = item.get("record", {})
+                body = record.get("Body") if isinstance(record, dict) else None
+                parsed = _json_object(body)
+                if not parsed:
+                    parsed = record if isinstance(record, dict) else {}
+                candidates = [parsed]
+                obj = parsed.get("object") if isinstance(parsed, dict) else None
+                if isinstance(obj, dict):
+                    candidates.append(obj)
+                involved = parsed.get("involvedObject") if isinstance(parsed, dict) else None
+                if isinstance(involved, dict):
+                    candidates.append({"kind": involved.get("kind"), "metadata": involved})
+                for candidate in candidates:
+                    metadata = candidate.get("metadata")
+                    if not isinstance(metadata, dict):
+                        continue
+                    kind, name = candidate.get("kind"), metadata.get("name")
+                    if not isinstance(kind, str) or not isinstance(name, str):
+                        continue
+                    namespace = metadata.get("namespace")
+                    entity = {
+                        "namespace": namespace if isinstance(namespace, str) else "_cluster",
+                        "kind": kind,
+                        "name": name,
+                    }
+                    entities[f"{entity['namespace']}/{kind}/{name}"] = entity
+        return tuple(entities[key] for key in sorted(entities))
+
+    def topology(self, *, limit: int = 100) -> tuple[dict[str, Any], ...]:
+        """Derive bounded structural edges from observable Kubernetes objects only."""
+        edges: set[tuple[str, str, str]] = set()
+        for item in self._iter_records(ITBenchEvidenceCategory.K8S_OBJECTS):
+            record = item.get("record", {})
+            body = _json_object(record.get("Body")) if isinstance(record, dict) else None
+            if not body:
+                continue
+            metadata = body.get("metadata")
+            if not isinstance(metadata, dict):
+                continue
+            kind, name = body.get("kind"), metadata.get("name")
+            if not isinstance(kind, str) or not isinstance(name, str):
+                continue
+            namespace = (
+                metadata.get("namespace")
+                if isinstance(metadata.get("namespace"), str)
+                else "_cluster"
+            )
+            source = f"{namespace}/{kind}/{name}"
+            owners = metadata.get("ownerReferences", [])
+            if isinstance(owners, list):
+                for owner in owners:
+                    if (
+                        isinstance(owner, dict)
+                        and isinstance(owner.get("kind"), str)
+                        and isinstance(owner.get("name"), str)
+                    ):
+                        edges.add(
+                            (
+                                source,
+                                f"{namespace}/{owner['kind']}/{owner['name']}",
+                                "owner_reference",
+                            )
+                        )
+        return tuple(
+            {"source": source, "target": target, "relationship": relationship}
+            for source, target, relationship in sorted(edges)[:limit]
+        )
+
     def _iter_records(self, category: ITBenchEvidenceCategory) -> Iterator[dict[str, Any]]:
         root = Path(self.scenario.snapshot_path)
         for relative_path in self.scenario.evidence_files[category]:
@@ -200,6 +273,19 @@ class ITBenchSnapshotBackend:
                 continue
             result.append(item)
         return result
+
+
+def _json_object(value: Any) -> dict[str, Any] | None:
+    """Decode an embedded JSON object without accepting executable content."""
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def _matches(

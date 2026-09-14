@@ -52,6 +52,22 @@ def incident() -> Incident:
     )
 
 
+def test_pre_provider_validation_failure_is_not_invalid_decision() -> None:
+    """A local provider-request validation error is not a model decision."""
+
+    def fail_before_network(_request: ModelRequest) -> dict[str, object]:
+        ModelRequest.model_validate({"not": "a request"})
+        return {"decision": "STOP"}
+
+    provider = FakeModelProvider([fail_before_network])
+    result = InvestigationRuntime(provider, ReadOnlyToolRegistry()).run(incident())
+
+    assert result.termination_reason is TerminationReason.PROVIDER_REQUEST_BUILD_FAILURE
+    assert result.validation_stage == "PROVIDER_REQUEST_BUILD"
+    assert result.usage.outbound_api_attempts == 0
+    assert result.usage.provider_invocations == 1
+
+
 def latency_alert() -> Alert:
     """Create an order-service symptom alert for A1 topology tests."""
     now = datetime.now(UTC)

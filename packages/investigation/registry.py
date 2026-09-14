@@ -49,6 +49,7 @@ class RegisteredTool:
     repeat_policy: ToolRepeatPolicy = ToolRepeatPolicy.FIXED_WINDOW
     target_argument: str | None = None
     target_topology: TopologyRegistry | None = None
+    timeout_ms: int = 5_000
 
     def descriptor(self) -> dict[str, Any]:
         """Return the safe model-facing capability descriptor."""
@@ -116,7 +117,7 @@ class RegisteredTool:
             tool_version=self.tool.version,
             incident_id=incident_id,
             tool_call_id=uuid4(),
-            timeout_ms=5_000,
+            timeout_ms=self.timeout_ms,
             max_results=100,
             max_bytes=100_000,
             parameters=parameters,

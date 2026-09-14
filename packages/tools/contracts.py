@@ -33,7 +33,7 @@ class ToolRequest(BaseModel):
     tool_version: str = Field(min_length=1)
     incident_id: UUID
     tool_call_id: UUID = Field(default_factory=uuid4)
-    timeout_ms: int = Field(gt=0, le=10_000)
+    timeout_ms: int = Field(gt=0, le=20_000)
     max_results: int = Field(gt=0, le=10_000)
     max_bytes: int = Field(gt=0, le=10_000_000)
     parameters: dict[str, Any] = Field(default_factory=dict)

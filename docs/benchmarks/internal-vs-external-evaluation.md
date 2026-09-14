@@ -1,25 +1,17 @@
 # Internal vs external evaluation
 
-Agentic SRE keeps two evaluation surfaces deliberately separate.
+The internal A1 evaluation uses 14 frozen live scenarios to test real fault
+activation, telemetry integration, control-plane lifecycle, authority
+containment, and platform safety.
 
-## Internal A1 evaluation
+The external ITBench-Lite evaluation uses 35 immutable IBM Research SRE
+snapshots to test diagnosis and generalization against third-party scenarios.
+It uses an ITBench-native Kubernetes entity contract while preserving
+Agentic-SRE's single investigator, bounded read-only tools, runtime-owned
+evidence, strict decisions, and no-remediation policy.
 
-The internal A1 harness uses 14 frozen live scenarios, a local Kubernetes fault
-lifecycle, Prometheus, Alertmanager, OTel, control-plane incident correlation,
-and read-only authority checks. It validates product integration, telemetry
-causality, state isolation, and safety boundaries. Its historical revisions and
-ledgers remain immutable.
-
-## External ITBench-Lite evaluation
-
-The external path uses the pinned IBM Research ITBench-Lite SRE snapshot: 35
-immutable third-party scenarios with snapshot evidence and evaluator-only
-ground truth. It validates diagnosis against an independently designed public
-benchmark without reproducing the internal fault-injection environment.
-
-The external adapter exposes only bounded alerts, metrics, Kubernetes events and
-objects, logs, and traces through named read-only tools. Ground truth is loaded
-only by the evaluator. Native Agentic-SRE artifacts remain authoritative; an
-ITBench-compatible output is a deterministic export. The official
-ITBench-Evaluations repository is a secondary evaluator and is not run during
-the zero-model adapter qualification.
+The official ITBench reference tooling uses semantic operations such as alert
+summary, context/entity analysis, topology analysis, metric analysis, and
+trace analysis. This adapter follows those concepts without adding shell,
+filesystem browsing, arbitrary Python, arbitrary SQL, or arbitrary PromQL to
+the model authority boundary.

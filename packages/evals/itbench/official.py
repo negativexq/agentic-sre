@@ -26,7 +26,7 @@ class OfficialITBenchEvaluatorSpec(BaseModel):
 
 
 def official_evaluator_spec() -> OfficialITBenchEvaluatorSpec:
-    """Return the pinned official evaluator contract used for future E1 runs."""
+    """Return the pinned official evaluator contract for future external runs."""
     return OfficialITBenchEvaluatorSpec(revision=OFFICIAL_EVALUATOR_REVISION)
 
 

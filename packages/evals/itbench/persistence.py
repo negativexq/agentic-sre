@@ -89,11 +89,49 @@ class ITBenchRunStore:
                 raise ValueError(f"ITBench trial field is missing: {required}")
         return payload
 
+    def write_failure(
+        self,
+        scenario_id: str,
+        trial: int,
+        *,
+        failure_stage: str,
+        error_code: str,
+        details: dict[str, Any] | None = None,
+        usage: Any = None,
+        ledger: Any = None,
+    ) -> str:
+        """Persist a bounded scenario failure without making it a completed trial."""
+        if not scenario_id.startswith("Scenario-") or trial < 1:
+            raise ValueError("invalid ITBench scenario/trial identity")
+        path = self.root / scenario_id / str(trial) / "failure_artifact.json"
+        if path.exists():
+            raise FileExistsError(f"ITBench failure already exists: {path}")
+        payload = {
+            "execution_id": self.execution_id,
+            "scenario_id": scenario_id,
+            "trial": trial,
+            "status": "INVALIDATED",
+            "failure_stage": failure_stage[:128],
+            "error_code": error_code[:128],
+            "details": _bounded_failure_details(details or {}),
+            "usage": _json_value(usage),
+            "ledger": _json_value(ledger),
+        }
+        return atomic_json_write(path, payload)
+
 
 def _json_value(value: Any) -> Any:
     """Convert supported strict models at the persistence boundary."""
     model_dump = getattr(value, "model_dump", None)
     return model_dump(mode="json") if callable(model_dump) else value
+
+
+def _bounded_failure_details(details: dict[str, Any]) -> dict[str, Any]:
+    """Keep invalidation diagnostics useful without retaining provider payloads."""
+    encoded = json.dumps(details, sort_keys=True, default=str)
+    if len(encoded) <= 4_000:
+        return details
+    return {"truncated": True, "summary": encoded[:3_900]}
 
 
 __all__ = ["ITBenchRunStore", "atomic_json_write"]

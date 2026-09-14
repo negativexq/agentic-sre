@@ -19,6 +19,26 @@ from packages.evals.itbench.dataset import (
     ITBenchDatasetError,
     ITBenchLiteDataset,
 )
+from packages.evals.itbench.external_context import (
+    ITBENCH_EXTERNAL_CONTEXT_VERSION,
+    MAX_EXTERNAL_CONTEXT_CHARS,
+    build_external_context,
+    normalize_alerts,
+)
+from packages.evals.itbench.external_contracts import (
+    ExternalRootCause,
+    ExternalStop,
+    ITBenchDecisionType,
+    ITBenchExternalResult,
+    ITBenchInvestigationDecisionV1,
+)
+from packages.evals.itbench.external_registry import ITBenchExternalToolRegistry
+from packages.evals.itbench.external_runtime import (
+    ITBENCH_EXTERNAL_PROMPT,
+    ITBENCH_EXTERNAL_PROMPT_VERSION,
+    ExternalInvestigationRuntime,
+    external_prompt_hash,
+)
 from packages.evals.itbench.grader import (
     ITBenchEntityGrade,
     grade_root_cause_entities,
@@ -34,6 +54,7 @@ from packages.evals.itbench.official import (
 )
 from packages.evals.itbench.output_adapter import (
     adapt_a1_output,
+    adapt_external_output,
     entities_from_k8s_records,
     write_official_output,
 )
@@ -57,6 +78,20 @@ __all__ = [
     "ITBenchGroundTruth",
     "ITBenchGroundTruthGroup",
     "ITBenchScenarioQualification",
+    "ExternalRootCause",
+    "ExternalStop",
+    "ITBenchDecisionType",
+    "ITBenchExternalResult",
+    "ITBenchInvestigationDecisionV1",
+    "ITBenchExternalToolRegistry",
+    "ExternalInvestigationRuntime",
+    "ITBENCH_EXTERNAL_CONTEXT_VERSION",
+    "MAX_EXTERNAL_CONTEXT_CHARS",
+    "ITBENCH_EXTERNAL_PROMPT",
+    "ITBENCH_EXTERNAL_PROMPT_VERSION",
+    "build_external_context",
+    "normalize_alerts",
+    "external_prompt_hash",
     "ITBenchLiteDataset",
     "ITBenchRunStore",
     "ITBenchScenario",
@@ -68,6 +103,7 @@ __all__ = [
     "OFFICIAL_OUTPUT_RELATIVE_PATH",
     "OfficialITBenchEvaluatorSpec",
     "adapt_a1_output",
+    "adapt_external_output",
     "atomic_json_write",
     "build_observable_incident",
     "entities_from_k8s_records",

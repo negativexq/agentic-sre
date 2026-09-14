@@ -12,6 +12,7 @@ from packages.evals.itbench.contracts import (
     ITBenchEntity,
     ITBenchEntityPrediction,
 )
+from packages.evals.itbench.external_contracts import ITBenchDecisionType, ITBenchExternalResult
 
 
 def entities_from_k8s_records(records: Iterable[dict[str, Any]]) -> tuple[ITBenchEntity, ...]:
@@ -104,6 +105,35 @@ def adapt_a1_output(
     )
 
 
+def adapt_external_output(result: ITBenchExternalResult) -> ITBenchAgentOutput:
+    """Export the external diagnosis mechanically, without A1 ontology mapping."""
+    predictions: list[ITBenchEntityPrediction] = []
+    decision = result.decision
+    if decision is not None and decision.decision is ITBenchDecisionType.SUBMIT_DIAGNOSIS:
+        for rank, root_cause in enumerate(decision.root_causes, start=1):
+            predictions.append(
+                ITBenchEntityPrediction(
+                    entity=ITBenchEntity(
+                        namespace=root_cause.entity.split("/", 2)[0],
+                        kind=root_cause.entity.split("/", 2)[1],
+                        name=root_cause.entity.split("/", 2)[2],
+                    ),
+                    rank=rank,
+                    condition=root_cause.causal_summary,
+                )
+            )
+    reasoning = ""
+    if decision is not None and decision.decision is ITBenchDecisionType.SUBMIT_DIAGNOSIS:
+        reasoning = " ".join(item.causal_summary for item in decision.root_causes)[:1000]
+    return ITBenchAgentOutput(
+        incident_id=str(result.incident_id),
+        scenario_id=result.scenario_id,
+        contributing_factor=tuple(predictions),
+        reasoning=reasoning,
+        native_terminal=result.terminal,
+    )
+
+
 def write_official_output(path: Path, output: ITBenchAgentOutput) -> None:
     """Write the shape consumed by the official loader, atomically."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -122,4 +152,9 @@ def write_official_output(path: Path, output: ITBenchAgentOutput) -> None:
             temporary.unlink()
 
 
-__all__ = ["adapt_a1_output", "entities_from_k8s_records", "write_official_output"]
+__all__ = [
+    "adapt_a1_output",
+    "adapt_external_output",
+    "entities_from_k8s_records",
+    "write_official_output",
+]

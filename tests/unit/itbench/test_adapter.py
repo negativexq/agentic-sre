@@ -238,6 +238,30 @@ def test_atomic_external_trial_store_rejects_duplicate(tmp_path: Path) -> None:
         )
 
 
+def test_external_trial_store_persists_failure_without_completed_trial(tmp_path: Path) -> None:
+    store = ITBenchRunStore(tmp_path, execution_id="ITB-E2")
+    digest = store.write_failure(
+        "Scenario-11",
+        1,
+        failure_stage="TOOL_EXECUTION",
+        error_code="TOOL_TIMEOUT",
+        details={"tool": "itbench_metric_analysis", "outbound_api_attempts": 0},
+        usage={"model_calls": 0},
+        ledger={"before": 0, "after": 0},
+    )
+    assert len(digest) == 64
+    failure = json.loads(
+        (tmp_path / "Scenario-11" / "1" / "failure_artifact.json").read_text(encoding="utf-8")
+    )
+    assert failure["status"] == "INVALIDATED"
+    assert failure["error_code"] == "TOOL_TIMEOUT"
+    assert not (tmp_path / "Scenario-11" / "1" / "itbench_output.json").exists()
+    with pytest.raises(FileExistsError):
+        store.write_failure(
+            "Scenario-11", 1, failure_stage="TOOL_EXECUTION", error_code="TOOL_TIMEOUT"
+        )
+
+
 def test_dataset_discovery_requires_pinned_35_scenario_manifest(tmp_path: Path) -> None:
     manifest = {
         "source": "ibm-research/ITBench-Lite",

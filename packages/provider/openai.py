@@ -30,6 +30,11 @@ A1_DECISION_FUNCTION_NAMES = (
     "submit_causal_hypothesis",
     "stop_causal_investigation",
 )
+ITBENCH_DECISION_FUNCTION_NAMES = (
+    "request_itbench_tools",
+    "submit_itbench_diagnosis",
+    "stop_itbench_investigation",
+)
 TERMINAL_DECISION_FUNCTION_NAMES = (
     "submit_root_cause_hypothesis",
     "stop_investigation",
@@ -71,6 +76,11 @@ A1_DECISION_TO_FUNCTION = {
     "CALL_TOOLS": "request_investigation_tools",
     "SUBMIT_HYPOTHESIS": "submit_causal_hypothesis",
     "STOP": "stop_causal_investigation",
+}
+ITBENCH_DECISION_TO_FUNCTION = {
+    "CALL_TOOLS": "request_itbench_tools",
+    "SUBMIT_DIAGNOSIS": "submit_itbench_diagnosis",
+    "STOP": "stop_itbench_investigation",
 }
 _STOP_REASON_VALUES = (
     "insufficient_evidence",
@@ -366,6 +376,87 @@ def _decision_function_schemas(
     return {name: _compile_strict_schema(value) for name, value in schemas.items()}
 
 
+def _itbench_decision_function_schemas(
+    schema: dict[str, Any],
+    allowed_tool_names: tuple[str, ...] | None = None,
+    tool_schemas: tuple[ToolSchemaDescriptor, ...] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Build strict Responses functions for the external ITBench ontology."""
+    compiled = _compile_strict_schema(schema)
+    definitions = compiled.get("$defs", {})
+    if not isinstance(definitions, dict):
+        raise ValueError("ITBench decision schema definitions are invalid")
+    request = definitions.get("ToolRequestSpec")
+    root_cause = definitions.get("ExternalRootCause")
+    stop = definitions.get("ExternalStop")
+    if not all(isinstance(item, dict) for item in (request, root_cause, stop)):
+        raise ValueError("ITBench decision schema definitions are incomplete")
+    assert isinstance(request, dict) and isinstance(root_cause, dict) and isinstance(stop, dict)
+
+    def obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": properties,
+            "required": required,
+            "additionalProperties": False,
+        }
+
+    request_item: dict[str, Any] = request
+    if tool_schemas is not None:
+        branches: list[dict[str, Any]] = []
+        allowed = set(allowed_tool_names) if allowed_tool_names is not None else None
+        for descriptor in tool_schemas:
+            if allowed is not None and descriptor.name not in allowed:
+                continue
+            properties: dict[str, Any] = {}
+            required: list[str] = []
+            for key, field in descriptor.arguments.items():
+                if not isinstance(field, dict):
+                    continue
+                projected = {
+                    name: field[name]
+                    for name in ("type", "enum", "minimum", "maximum", "minLength", "maxLength")
+                    if name in field
+                }
+                if field.get("required") is False:
+                    kind = projected.get("type", "string")
+                    projected["type"] = [kind, "null"] if isinstance(kind, str) else kind
+                properties[key] = projected
+                required.append(key)
+            branches.append(
+                obj(
+                    {
+                        "tool": {"type": "string", "enum": [descriptor.name]},
+                        "arguments": obj(properties, required),
+                    },
+                    ["tool", "arguments"],
+                )
+            )
+        request_item = {"anyOf": branches}
+
+    tool_requests = obj(
+        {"reason": {"type": "string"}, "tool_requests": {"type": "array", "items": request_item}},
+        ["reason", "tool_requests"],
+    )
+    root_props = {
+        "reason": {"type": "string"},
+        "root_causes": {"type": "array", "items": root_cause, "maxItems": 5},
+    }
+    stop_schema = {
+        "type": "object",
+        "properties": stop["properties"],
+        "required": list(stop["properties"]),
+        "additionalProperties": False,
+    }
+    stop_props = {"reason": {"type": "string"}, "stop": stop_schema}
+    result = {
+        "request_itbench_tools": tool_requests,
+        "submit_itbench_diagnosis": obj(root_props, ["reason", "root_causes"]),
+        "stop_itbench_investigation": obj(stop_props, ["reason", "stop"]),
+    }
+    return {name: _compile_strict_schema(value) for name, value in result.items()}
+
+
 def _field(value: Any, name: str, default: Any = None) -> Any:
     """Read a field from either an SDK object or a JSON-like fixture."""
     if isinstance(value, dict):
@@ -432,7 +523,13 @@ def _response_metadata(raw: Any) -> ResponseEnvelopeMetadata:
         output_text_hashes=[sha256(item.encode("utf-8")).hexdigest() for item in output_texts[:32]],
         function_call_count=len(function_calls),
         decision_function_call_count=sum(
-            _field(item, "name") in DECISION_FUNCTION_NAMES for item in function_calls
+            _field(item, "name")
+            in (
+                *DECISION_FUNCTION_NAMES,
+                *A1_DECISION_FUNCTION_NAMES,
+                *ITBENCH_DECISION_FUNCTION_NAMES,
+            )
+            for item in function_calls
         ),
         function_call_names=_safe_strings(function_call_names[:32]),
         function_call_argument_lengths=[
@@ -558,7 +655,14 @@ def _extract_decision_function(
     items = output if isinstance(output, list) else []
     function_calls = [item for item in items if _field(item, "type") == "function_call"]
     a1_protocol = request.response_schema_name == "a1_investigation_decision"
-    decision_names = A1_DECISION_FUNCTION_NAMES if a1_protocol else DECISION_FUNCTION_NAMES
+    external_protocol = request.response_schema_name == "itbench_investigation_decision_v1"
+    decision_names = (
+        ITBENCH_DECISION_FUNCTION_NAMES
+        if external_protocol
+        else A1_DECISION_FUNCTION_NAMES
+        if a1_protocol
+        else DECISION_FUNCTION_NAMES
+    )
     decision_calls = [item for item in function_calls if _field(item, "name") in decision_names]
     if len(decision_calls) > 1:
         raise ProviderError(
@@ -601,7 +705,13 @@ def _extract_decision_function(
             metadata=metadata,
         )
     function_name = _field(decision_calls[0], "name")
-    decision_mapping = A1_DECISION_TO_FUNCTION if a1_protocol else DECISION_TO_FUNCTION
+    decision_mapping = (
+        ITBENCH_DECISION_TO_FUNCTION
+        if external_protocol
+        else A1_DECISION_TO_FUNCTION
+        if a1_protocol
+        else DECISION_TO_FUNCTION
+    )
     allowed_functions = (
         tuple(decision_mapping[item] for item in request.allowed_decisions)
         if request.allowed_decisions is not None
@@ -613,11 +723,17 @@ def _extract_decision_function(
             "provider response used a decision function not exposed for this turn",
             metadata=metadata,
         )
-    schemas = _decision_function_schemas(
-        request.response_schema,
-        request.allowed_tool_names,
-        request.tool_schemas,
-        a1_protocol=a1_protocol,
+    schemas = (
+        _itbench_decision_function_schemas(
+            request.response_schema, request.allowed_tool_names, request.tool_schemas
+        )
+        if external_protocol
+        else _decision_function_schemas(
+            request.response_schema,
+            request.allowed_tool_names,
+            request.tool_schemas,
+            a1_protocol=a1_protocol,
+        )
     )
     schema_error_path = _json_schema_error(structured_output, schemas[function_name])
     if schema_error_path is not None:
@@ -632,7 +748,7 @@ def _extract_decision_function(
             "decision function arguments did not match response schema",
             metadata=metadata.model_copy(update={"schema_error_path": schema_error_path}),
         )
-    if function_name == "request_investigation_tools":
+    if function_name in {"request_investigation_tools", "request_itbench_tools"}:
         return {
             "decision": "CALL_TOOLS",
             "requests": [
@@ -647,6 +763,13 @@ def _extract_decision_function(
                 for request in structured_output["tool_requests"]
             ],
             "hypothesis": None,
+        }, metadata
+    if function_name == "submit_itbench_diagnosis":
+        return {
+            "decision": "SUBMIT_DIAGNOSIS",
+            "requests": [],
+            "root_causes": structured_output["root_causes"],
+            "stop": None,
         }, metadata
     if function_name in {"submit_root_cause_hypothesis", "submit_causal_hypothesis"}:
         if a1_protocol:
@@ -679,6 +802,13 @@ def _extract_decision_function(
                     "evidence_ids",
                 )
             },
+        }, metadata
+    if function_name == "stop_itbench_investigation":
+        return {
+            "decision": "STOP",
+            "requests": [],
+            "root_causes": [],
+            "stop": structured_output["stop"],
         }, metadata
     if function_name in {"stop_investigation", "stop_causal_investigation"}:
         if a1_protocol:
@@ -841,19 +971,51 @@ class OpenAIProvider:
             "max_output_tokens": request.max_output_tokens,
             "timeout": request.timeout_ms / 1000,
         }
-        if request.response_schema_name in {"investigation_decision", "a1_investigation_decision"}:
+        if request.response_schema_name in {
+            "investigation_decision",
+            "a1_investigation_decision",
+            "itbench_investigation_decision_v1",
+        }:
             a1_protocol = request.response_schema_name == "a1_investigation_decision"
-            schemas = _decision_function_schemas(
-                request.response_schema,
-                request.allowed_tool_names,
-                request.tool_schemas,
-                a1_protocol=a1_protocol,
+            external_protocol = request.response_schema_name == "itbench_investigation_decision_v1"
+            schemas = (
+                _itbench_decision_function_schemas(
+                    request.response_schema,
+                    request.allowed_tool_names,
+                    request.tool_schemas,
+                )
+                if external_protocol
+                else _decision_function_schemas(
+                    request.response_schema,
+                    request.allowed_tool_names,
+                    request.tool_schemas,
+                    a1_protocol=a1_protocol,
+                )
             )
-            decision_mapping = A1_DECISION_TO_FUNCTION if a1_protocol else DECISION_TO_FUNCTION
-            decision_names = A1_DECISION_FUNCTION_NAMES if a1_protocol else DECISION_FUNCTION_NAMES
+            decision_mapping = (
+                ITBENCH_DECISION_TO_FUNCTION
+                if external_protocol
+                else A1_DECISION_TO_FUNCTION
+                if a1_protocol
+                else DECISION_TO_FUNCTION
+            )
+            decision_names = (
+                ITBENCH_DECISION_FUNCTION_NAMES
+                if external_protocol
+                else A1_DECISION_FUNCTION_NAMES
+                if a1_protocol
+                else DECISION_FUNCTION_NAMES
+            )
             descriptions = (
                 A1_DECISION_FUNCTION_DESCRIPTIONS if a1_protocol else DECISION_FUNCTION_DESCRIPTIONS
             )
+            if external_protocol:
+                descriptions = {
+                    **DECISION_FUNCTION_DESCRIPTIONS,
+                    "request_itbench_tools": "Request bounded read-only ITBench evidence.",
+                    "submit_itbench_diagnosis": "Submit supported ITBench root-cause entities with runtime-owned evidence IDs.",
+                    "stop_itbench_investigation": "Stop when observable evidence cannot support a reliable diagnosis.",
+                }
             allowed = (
                 tuple(decision_mapping[item] for item in request.allowed_decisions)
                 if request.allowed_decisions is not None
@@ -990,7 +1152,11 @@ class OpenAIProvider:
         started: float,
     ) -> ModelResponse:
         """Parse structured JSON and usage without retaining raw provider output."""
-        if request.response_schema_name in {"investigation_decision", "a1_investigation_decision"}:
+        if request.response_schema_name in {
+            "investigation_decision",
+            "a1_investigation_decision",
+            "itbench_investigation_decision_v1",
+        }:
             structured_output, metadata = _extract_decision_function(request, raw)
         else:
             output_text, metadata = _extract_structured_text(raw)

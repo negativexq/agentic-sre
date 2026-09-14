@@ -114,6 +114,16 @@ class _ToolBudgetExceeded(ValueError):
         self.audits = audits
 
 
+class _RequestBuildFailure(RuntimeError):
+    """A local request/context failure that occurred before provider output."""
+
+    def __init__(self, stage: ValidationStage, path: str | None, validator: str) -> None:
+        super().__init__(stage.value)
+        self.stage = stage
+        self.path = path
+        self.validator = validator
+
+
 class InvestigationRuntime:
     """Run a configurable number of bounded read-only investigation turns."""
 
@@ -207,6 +217,22 @@ class InvestigationRuntime:
                 decision = self._decision_model.model_validate_json(
                     json.dumps(response.structured_output)
                 )
+            except _RequestBuildFailure as error:
+                termination = TerminationReason(f"{error.stage.value}_FAILURE")
+                error_code = termination.value
+                validation_stage = error.stage
+                validation_path = error.path
+                validator = error.validator
+                turns.append(
+                    self._turn_summary(
+                        logical_model_turns,
+                        response,
+                        "FAIL",
+                        validation_stage,
+                        validation_path,
+                    )
+                )
+                break
             except ProviderError as error:
                 termination = TerminationReason.PROVIDER_ERROR
                 error_code = error.code.value
@@ -228,13 +254,23 @@ class InvestigationRuntime:
                 )
                 break
             except ValidationError as error:
-                termination = TerminationReason.INVALID_DECISION
+                termination = (
+                    TerminationReason.INVALID_DECISION
+                    if response is not None
+                    else TerminationReason.REQUEST_BUILD_FAILURE
+                )
                 error_code = _semantic_error_code(
                     getattr(response, "structured_output", None), self._limits
                 )
-                validation_stage = ValidationStage.DECISION_SCHEMA
+                validation_stage = (
+                    ValidationStage.DECISION_SCHEMA
+                    if response is not None
+                    else ValidationStage.REQUEST_BUILD
+                )
                 validation_path = self._validation_path(error)
-                validator = self._decision_model.__name__
+                validator = (
+                    self._decision_model.__name__ if response is not None else "ModelRequest"
+                )
                 turns.append(
                     self._turn_summary(
                         logical_model_turns,
@@ -628,52 +664,69 @@ class InvestigationRuntime:
         observation_window: InvestigationObservationWindow,
     ) -> Any:
         """Build a bounded request with the versioned structured-output schema."""
-        context = self._context_builder.build(
-            incident,
-            evidence,
-            self._registry.descriptors(),
-            alerts=alerts,
-            progress=tuple(progress),
-            current_model_call=model_calls,
-            max_model_calls=self._limits.max_model_calls,
-            tool_calls_used=tool_calls,
-            tool_calls_remaining=self._limits.max_tool_calls - tool_calls,
-            observation_window=observation_window,
-            topology=DEFAULT_TOPOLOGY if self._a1_protocol else None,
-        )
-        request = ModelRequest(
-            run_id=run_id,
-            messages=[
-                ModelMessage(role="system", content=self._prompt_text),
-                ModelMessage(role="user", content=context),
-            ],
-            response_schema_name=(
-                "a1_investigation_decision" if self._a1_protocol else "investigation_decision"
-            ),
-            response_schema=self._decision_model.model_json_schema(),
-            model=self._model,
-            reasoning_effort=self._reasoning_effort,  # type: ignore[arg-type]
-            max_output_tokens=1_000,
-            timeout_ms=10_000,
-            allowed_decisions=(
-                ("SUBMIT_HYPOTHESIS", "STOP")
-                if model_calls >= self._limits.max_model_calls
-                else (
-                    "CALL_TOOLS",
-                    "SUBMIT_HYPOTHESIS",
-                    "STOP",
-                )
-            ),
-            allowed_tool_names=self._registry.names(),
-            tool_schemas=tuple(
-                ToolSchemaDescriptor(
-                    name=descriptor["name"],
-                    arguments=descriptor["arguments"],
-                )
-                for descriptor in self._registry.descriptors()
-            ),
-        )
-        return self._provider.complete(request)
+        try:
+            context = self._context_builder.build(
+                incident,
+                evidence,
+                self._registry.descriptors(),
+                alerts=alerts,
+                progress=tuple(progress),
+                current_model_call=model_calls,
+                max_model_calls=self._limits.max_model_calls,
+                tool_calls_used=tool_calls,
+                tool_calls_remaining=self._limits.max_tool_calls - tool_calls,
+                observation_window=observation_window,
+                topology=DEFAULT_TOPOLOGY if self._a1_protocol else None,
+            )
+        except ValidationError as error:
+            raise _RequestBuildFailure(
+                ValidationStage.CONTEXT_BUILD, self._validation_path(error), "ContextBuilder"
+            ) from error
+        try:
+            request = ModelRequest(
+                run_id=run_id,
+                messages=[
+                    ModelMessage(role="system", content=self._prompt_text),
+                    ModelMessage(role="user", content=context),
+                ],
+                response_schema_name=(
+                    "a1_investigation_decision" if self._a1_protocol else "investigation_decision"
+                ),
+                response_schema=self._decision_model.model_json_schema(),
+                model=self._model,
+                reasoning_effort=self._reasoning_effort,  # type: ignore[arg-type]
+                max_output_tokens=1_000,
+                timeout_ms=10_000,
+                allowed_decisions=(
+                    ("SUBMIT_HYPOTHESIS", "STOP")
+                    if model_calls >= self._limits.max_model_calls
+                    else (
+                        "CALL_TOOLS",
+                        "SUBMIT_HYPOTHESIS",
+                        "STOP",
+                    )
+                ),
+                allowed_tool_names=self._registry.names(),
+                tool_schemas=tuple(
+                    ToolSchemaDescriptor(
+                        name=descriptor["name"],
+                        arguments=descriptor["arguments"],
+                    )
+                    for descriptor in self._registry.descriptors()
+                ),
+            )
+        except ValidationError as error:
+            raise _RequestBuildFailure(
+                ValidationStage.REQUEST_BUILD, self._validation_path(error), "ModelRequest"
+            ) from error
+        try:
+            return self._provider.complete(request)
+        except ValidationError as error:
+            raise _RequestBuildFailure(
+                ValidationStage.PROVIDER_REQUEST_BUILD,
+                self._validation_path(error),
+                "ProviderRequestBuilder",
+            ) from error
 
     def _execute_tools(
         self,

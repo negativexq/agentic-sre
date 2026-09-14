@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
@@ -62,6 +63,9 @@ RESULT_PATH = _configured_path("SRE_A1_RESULT_PATH", "docs/benchmarks/a1-r2-sing
 RESULT_SHA_PATH = _configured_path(
     "SRE_A1_RESULT_SHA_PATH", "docs/benchmarks/a1-r2-single-agent-live.sha256"
 )
+SMOKE_PHASE_LEDGER_PATH = _configured_path(
+    "SRE_A1_SMOKE_PHASE_LEDGER", ".local/a1-r4-live-smoke/phases.jsonl"
+)
 LEDGER_PATH = _configured_path("SRE_A1_LEDGER_PATH", ".local/a1-r2-single-agent-live-budget.json")
 CHECKPOINT_DIR = _configured_path("SRE_A1_CHECKPOINT_DIR", ".local/a1-r2-benchmark")
 PARTIAL_PATH = _configured_path(
@@ -79,6 +83,31 @@ LIMITS = InvestigationLimits(
 
 def _hash_bytes(path: Path) -> str:
     return sha256(path.read_bytes()).hexdigest()
+
+
+def _atomic_write_text(path: Path, payload: str) -> None:
+    """Persist a smoke artifact using a same-directory atomic replacement."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary_name, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except BaseException:
+        try:
+            os.unlink(temporary_name)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def _git_sha() -> str:
@@ -228,10 +257,19 @@ def _smoke(manifest: dict[str, Any]) -> int:
     if selected is None:
         raise RuntimeError("A1 smoke requires an existing incident with normalized alerts")
     incident, alerts = selected
+    smoke_scenario_id = "SMOKE"
+    if SMOKE_PHASE_LEDGER_PATH.exists() and SMOKE_PHASE_LEDGER_PATH.stat().st_size:
+        raise RuntimeError(f"A1 smoke phase ledger already exists: {SMOKE_PHASE_LEDGER_PATH}")
+    phase_ledger = PhaseLedger(SMOKE_PHASE_LEDGER_PATH, execution_id=manifest["experiment_id"])
     # The smoke uses the selected normalized incident in memory, then clears
     # persistent benchmark state before any provider work.  The live benchmark
     # trials perform the same preparation before creating fresh incidents.
-    environment.prepare_benchmark_state(manifest["experiment_id"])
+    with phase_ledger.phase(smoke_scenario_id, BenchmarkPhase.PREPARE_ENVIRONMENT):
+        environment.prepare_benchmark_state(manifest["experiment_id"])
+    with phase_ledger.phase(smoke_scenario_id, BenchmarkPhase.VERIFY_BASELINE):
+        baseline = environment.baseline_oracle()
+        if not baseline.passed:
+            raise RuntimeError(f"A1 smoke baseline oracle failed: {baseline.model_dump_json()}")
     budget = LiveModelBudget.from_environment(require_shared_ledger=True)
     before = budget.snapshot()
     if before.calls_used != 0 or before.limit != 80:
@@ -247,7 +285,8 @@ def _smoke(manifest: dict[str, Any]) -> int:
         limits=LIMITS,
         a1_protocol=True,
     )
-    result = runtime.run(incident, alerts=alerts)
+    with phase_ledger.phase(smoke_scenario_id, BenchmarkPhase.RUN_AGENT):
+        result = runtime.run(incident, alerts=alerts)
     observation_window = derive_observation_window(incident, alerts).time_window()
     artifact = A1RunArtifact.from_result(
         result,
@@ -267,8 +306,11 @@ def _smoke(manifest: dict[str, Any]) -> int:
     attempts = artifact.usage.outbound_api_attempts
     budget.verify_ledger_delta(before, after, attempts)
     payload = {
+        "artifact_type": "A1_R4_LIVE_SMOKE",
         "experiment_id": manifest["experiment_id"],
         "purpose": "transport/schema/accounting smoke only; excluded from benchmark metrics",
+        "excluded_from_benchmark_metrics": True,
+        "model_quality_evaluation": False,
         "scenario_id": None,
         "incident_id": str(incident.incident_id),
         "calls_consumed": after.calls_used,
@@ -292,12 +334,42 @@ def _smoke(manifest: dict[str, Any]) -> int:
         "usage_reconciled": after.calls_used - before.calls_used == attempts,
         "safety": artifact.safety.model_dump(mode="json"),
         "artifact": artifact.model_dump(mode="json"),
+        "phase_ledger_path": str(SMOKE_PHASE_LEDGER_PATH.relative_to(ROOT)),
     }
-    SMOKE_PATH.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    reloaded = json.loads(SMOKE_PATH.read_text(encoding="utf-8"))
-    A1RunArtifact.from_json(json.dumps(reloaded["artifact"], sort_keys=True, separators=(",", ":")))
-    payload["artifact_json_reload_pass"] = True
-    SMOKE_PATH.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    with phase_ledger.phase(smoke_scenario_id, BenchmarkPhase.PERSIST_RESULT):
+        _atomic_write_text(SMOKE_PATH, json.dumps(payload, sort_keys=True, indent=2) + "\n")
+        reloaded = json.loads(SMOKE_PATH.read_text(encoding="utf-8"))
+        reloaded_artifact = A1RunArtifact.from_json(
+            json.dumps(reloaded["artifact"], sort_keys=True, separators=(",", ":"))
+        )
+        if artifact.model_dump(mode="json") != reloaded_artifact.model_dump(mode="json"):
+            raise RuntimeError("A1 smoke artifact semantic round-trip diverged")
+        if artifact.model_dump_json() != reloaded_artifact.model_dump_json():
+            raise RuntimeError("A1 smoke artifact JSON round-trip diverged")
+        payload["artifact_json_reload_pass"] = True
+        payload["artifact_semantic_equality_pass"] = True
+        payload["artifact_json_deterministic_pass"] = True
+        _atomic_write_text(SMOKE_PATH, json.dumps(payload, sort_keys=True, indent=2) + "\n")
+    with phase_ledger.phase(smoke_scenario_id, BenchmarkPhase.VERIFY_RECOVERY):
+        environment.prepare_benchmark_state(manifest["experiment_id"])
+        recovery = environment.baseline_oracle()
+        if not recovery.passed:
+            raise RuntimeError(f"A1 smoke recovery oracle failed: {recovery.model_dump_json()}")
+    with phase_ledger.phase(smoke_scenario_id, BenchmarkPhase.RECONCILE_BASELINE):
+        final_baseline = environment.baseline_oracle()
+        if not final_baseline.passed:
+            raise RuntimeError(
+                f"A1 smoke final baseline oracle failed: {final_baseline.model_dump_json()}"
+            )
+    records = phase_ledger.read()
+    open_phases = {
+        (record.scenario_id, record.phase) for record in records if record.event == "start"
+    }
+    for record in records:
+        if record.event == "end":
+            open_phases.discard((record.scenario_id, record.phase))
+    if open_phases:
+        raise RuntimeError(f"A1 smoke phase ledger has incomplete phases: {open_phases}")
     print(json.dumps({"smoke": payload}, sort_keys=True))
     return 0
 

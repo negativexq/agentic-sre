@@ -42,6 +42,7 @@ def test_a1_smoke_paths_are_configurable_for_new_execution_revisions() -> None:
 
     assert "A1_LIVE_MANIFEST" in target
     assert "A1_LIVE_SMOKE" in target
+    assert "A1_LIVE_SMOKE_PHASE_LEDGER" in target
     assert "A1_LIVE_BUDGET_FILE" in target
     assert "SRE_A1_LEDGER_PATH" in target
 

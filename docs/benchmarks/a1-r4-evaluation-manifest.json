@@ -5,7 +5,7 @@
   "status": "READY_FOR_R4_LIVE_SMOKE",
   "runtime_code_sha": "08c4bcb4ba85d57995c5b9f0555f8ba0b3edd3ea",
   "benchmark_harness_version": "a1_live_harness_v2",
-  "benchmark_harness_sha256": "a34d40451f90527933484cfb1ebfb06591c81e09b0784b6318bcbbd869be4790",
+  "benchmark_harness_sha256": "4479e7208f142bc73ad9d80b0b85521c7da0dd4e983503f1bfbd3f32ada6bf27",
   "previous_execution": {
     "execution": "A1-R3",
     "experiment_id": "v0.3-exp01-a1-improved-single-agent-r3",

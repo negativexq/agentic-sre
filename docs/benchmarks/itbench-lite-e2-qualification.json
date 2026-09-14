@@ -4,63 +4,64 @@
   "fake_runtime_passes": 35,
   "fake_terminal_counts": {
     "MODEL_CALL_LIMIT": 0,
-    "STOP": 35
+    "STOP": 17,
+    "SUBMIT_DIAGNOSIS": 18
   },
   "ground_truth_loaded": false,
   "openai_calls": 0,
   "performance": {
     "itbench_alert_summary": {
-      "max_ms": 24.142582900822163,
-      "median_ms": 4.051875323057175,
-      "p95_ms": 24.142582900822163,
+      "max_ms": 22.62683305889368,
+      "median_ms": 4.033917095512152,
+      "p95_ms": 22.62683305889368,
       "scenario_samples": 35
     },
     "itbench_entity_context": {
-      "max_ms": 499.86695824190974,
-      "median_ms": 397.3838333040476,
-      "p95_ms": 499.86695824190974,
+      "max_ms": 509.3873329460621,
+      "median_ms": 397.29370828717947,
+      "p95_ms": 509.3873329460621,
       "scenario_samples": 35
     },
     "itbench_entity_search": {
-      "max_ms": 630.7532913051546,
-      "median_ms": 465.0670001283288,
-      "p95_ms": 630.7532913051546,
+      "max_ms": 641.6474999859929,
+      "median_ms": 459.6207090653479,
+      "p95_ms": 641.6474999859929,
       "scenario_samples": 35
     },
     "itbench_kubernetes_events": {
-      "max_ms": 62.39416589960456,
-      "median_ms": 21.671084221452475,
-      "p95_ms": 62.39416589960456,
+      "max_ms": 63.44150006771088,
+      "median_ms": 21.530500147491693,
+      "p95_ms": 63.44150006771088,
       "scenario_samples": 35
     },
     "itbench_kubernetes_objects": {
-      "max_ms": 491.85641715303063,
-      "median_ms": 390.08312532678246,
-      "p95_ms": 491.85641715303063,
+      "max_ms": 499.1736658848822,
+      "median_ms": 389.8780415765941,
+      "p95_ms": 499.1736658848822,
       "scenario_samples": 35
     },
     "itbench_logs": {
-      "max_ms": 4470.612750388682,
-      "median_ms": 1804.171500261873,
-      "p95_ms": 4470.612750388682,
+      "max_ms": 4461.215416900814,
+      "median_ms": 1810.187625233084,
+      "p95_ms": 4461.215416900814,
       "scenario_samples": 35
     },
     "itbench_metric_analysis": {
-      "max_ms": 13644.295999780297,
-      "median_ms": 8482.87070915103,
-      "p95_ms": 13644.295999780297,
+      "max_ms": 13939.919875003397,
+      "median_ms": 8520.833459217101,
+      "p95_ms": 13939.919875003397,
       "scenario_samples": 35
     },
     "itbench_topology": {
-      "max_ms": 570.0789163820446,
-      "median_ms": 438.60604194924235,
-      "p95_ms": 570.0789163820446,
+      "max_ms": 575.9152080863714,
+      "median_ms": 442.2917920164764,
+      "p95_ms": 575.9152080863714,
       "scenario_samples": 35
     },
     "itbench_trace_search": {
-      "max_ms": 7336.480457801372,
-      "median_ms": 3527.5272498838603,
-      "p95_ms": 7336.480457801372,
+      "max_ms": 7267.910707741976,
+      "median_ms": 3535.4719581082463,
+      "p95_ms": 7267.910707741976,
       "scenario_samples": 35
     }
   },
@@ -124,7 +125,7 @@
         "tool_schema_bytes": 6058
       },
       "fake_provider_invocations": 2,
-      "fake_runtime_terminal": "STOP",
+      "fake_runtime_terminal": "SUBMIT_DIAGNOSIS",
       "raw_alerts": 539,
       "scenario_id": "Scenario-1",
       "unique_alerts": 17
@@ -172,7 +173,7 @@
         "tool_schema_bytes": 6058
       },
       "fake_provider_invocations": 2,
-      "fake_runtime_terminal": "STOP",
+      "fake_runtime_terminal": "SUBMIT_DIAGNOSIS",
       "raw_alerts": 311,
       "scenario_id": "Scenario-4",
       "unique_alerts": 17
@@ -220,7 +221,7 @@
         "tool_schema_bytes": 6058
       },
       "fake_provider_invocations": 2,
-      "fake_runtime_terminal": "STOP",
+      "fake_runtime_terminal": "SUBMIT_DIAGNOSIS",
       "raw_alerts": 264,
       "scenario_id": "Scenario-6",
       "unique_alerts": 17
@@ -268,7 +269,7 @@
         "tool_schema_bytes": 6058
       },
       "fake_provider_invocations": 2,
-      "fake_runtime_terminal": "STOP",
+      "fake_runtime_terminal": "SUBMIT_DIAGNOSIS",
       "raw_alerts": 290,
       "scenario_id": "Scenario-8",
       "unique_alerts": 19
@@ -316,7 +317,7 @@
         "tool_schema_bytes": 6058
       },
       "fake_provider_invocations": 2,
-      "fake_runtime_terminal": "STOP",
+      "fake_runtime_terminal": "SUBMIT_DIAGNOSIS",
       "raw_alerts": 3,
       "scenario_id": "Scenario-11",
       "unique_alerts": 3
@@ -364,7 +365,7 @@
         "tool_schema_bytes": 6058
       },
       "fake_provider_invocations": 2,
-      "fake_runtime_terminal": "STOP",
+      "fake_runtime_terminal": "SUBMIT_DIAGNOSIS",
       "raw_alerts": 261,
       "scenario_id": "Scenario-13",
       "unique_alerts": 22
@@ -412,7 +413,7 @@
         "tool_schema_bytes": 6058
       },
       "fake_provider_invocations": 2,
-      "fake_runtime_terminal": "STOP",
+      "fake_runtime_terminal": "SUBMIT_DIAGNOSIS",
       "raw_alerts": 239,
       "scenario_id": "Scenario-15",
       "unique_alerts": 23
@@ -460,7 +461,7 @@
         "tool_schema_bytes": 6058
       },
       "fake_provider_invocations": 2,
-      "fake_runtime_terminal": "STOP",
+      "fake_runtime_terminal": "SUBMIT_DIAGNOSIS",
       "raw_alerts": 302,
       "scenario_id": "Scenario-17",
       "unique_alerts": 22
@@ -508,7 +509,7 @@
         "tool_schema_bytes": 6058
       },
       "fake_provider_invocations": 2,
-      "fake_runtime_terminal": "STOP",
+      "fake_runtime_terminal": "SUBMIT_DIAGNOSIS",
       "raw_alerts": 381,
       "scenario_id": "Scenario-19",
       "unique_alerts": 22
@@ -556,7 +557,7 @@
         "tool_schema_bytes": 6058
       },
       "fake_provider_invocations": 2,
-      "fake_runtime_terminal": "STOP",
+      "fake_runtime_terminal": "SUBMIT_DIAGNOSIS",
       "raw_alerts": 329,
       "scenario_id": "Scenario-21",
       "unique_alerts": 23
@@ -604,7 +605,7 @@
         "tool_schema_bytes": 6058
       },
       "fake_provider_invocations": 2,
-      "fake_runtime_terminal": "STOP",
+      "fake_runtime_terminal": "SUBMIT_DIAGNOSIS",
       "raw_alerts": 421,
       "scenario_id": "Scenario-23",
       "unique_alerts": 28
@@ -652,7 +653,7 @@
         "tool_schema_bytes": 6058
       },
       "fake_provider_invocations": 2,
-      "fake_runtime_terminal": "STOP",
+      "fake_runtime_terminal": "SUBMIT_DIAGNOSIS",
       "raw_alerts": 278,
       "scenario_id": "Scenario-25",
       "unique_alerts": 18
@@ -700,7 +701,7 @@
         "tool_schema_bytes": 6058
       },
       "fake_provider_invocations": 2,
-      "fake_runtime_terminal": "STOP",
+      "fake_runtime_terminal": "SUBMIT_DIAGNOSIS",
       "raw_alerts": 267,
       "scenario_id": "Scenario-31",
       "unique_alerts": 14
@@ -748,7 +749,7 @@
         "tool_schema_bytes": 6058
       },
       "fake_provider_invocations": 2,
-      "fake_runtime_terminal": "STOP",
+      "fake_runtime_terminal": "SUBMIT_DIAGNOSIS",
       "raw_alerts": 366,
       "scenario_id": "Scenario-34",
       "unique_alerts": 31
@@ -796,7 +797,7 @@
         "tool_schema_bytes": 6058
       },
       "fake_provider_invocations": 2,
-      "fake_runtime_terminal": "STOP",
+      "fake_runtime_terminal": "SUBMIT_DIAGNOSIS",
       "raw_alerts": 815,
       "scenario_id": "Scenario-38",
       "unique_alerts": 31
@@ -844,7 +845,7 @@
         "tool_schema_bytes": 6058
       },
       "fake_provider_invocations": 2,
-      "fake_runtime_terminal": "STOP",
+      "fake_runtime_terminal": "SUBMIT_DIAGNOSIS",
       "raw_alerts": 297,
       "scenario_id": "Scenario-81",
       "unique_alerts": 18
@@ -892,7 +893,7 @@
         "tool_schema_bytes": 6058
       },
       "fake_provider_invocations": 2,
-      "fake_runtime_terminal": "STOP",
+      "fake_runtime_terminal": "SUBMIT_DIAGNOSIS",
       "raw_alerts": 281,
       "scenario_id": "Scenario-91",
       "unique_alerts": 19
@@ -940,7 +941,7 @@
         "tool_schema_bytes": 6058
       },
       "fake_provider_invocations": 2,
-      "fake_runtime_terminal": "STOP",
+      "fake_runtime_terminal": "SUBMIT_DIAGNOSIS",
       "raw_alerts": 1887,
       "scenario_id": "Scenario-105",
       "unique_alerts": 51

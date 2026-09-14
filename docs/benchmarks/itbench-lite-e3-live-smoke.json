@@ -1,0 +1,111 @@
+{
+  "classification": "ITB_E3_SMOKE_INVALIDATED_BY_INTEGRATION_FAILURE",
+  "purpose": "external integration smoke",
+  "synthetic_fixture": true,
+  "excluded_from_official_benchmark_metrics": true,
+  "execution": "ITB-E3",
+  "experiment": "itbench-lite-sre-external-eval-v3",
+  "runtime_source_freeze_sha": "4895aeb369662091661d55d24f85d9d171967f0d",
+  "manifest_sha256": "2e52b9d584dba249d00d3ca3d3ba84ec9f018264d76fa7b8b0ee7921f64522b8",
+  "dataset_revision": "d0916b08ba421ce5e672e9ad68aa947d938dfef0",
+  "adapter": "itbench_lite_snapshot_adapter_v3",
+  "prompt_version": "itbench_sre_investigator_v1",
+  "prompt_sha256": "41d712f834276b6a70b150b9a4ac98638e96824894f6c4388afbf5aed6e73625",
+  "protocol": "itbench_investigation_decision_v1",
+  "protocol_sha256": "2e7dc650de25da6bb0270239263f3b90851eadb85c7ddebdf2144d562c840f79",
+  "tool_registry_sha256": "5962a189e7fb7db7f0e8fb397e3e91e3f8d6b15a70ee447c8b8a026afb354956",
+  "entity_schema_sha256": "e4da92fca523a835c2dc822553a188b5a97df21b86bf07c55c60bcebc126b0dc",
+  "fixture_id": "ITB-E3-SMOKE-001",
+  "scenario_id": "Scenario-999",
+  "incident_id": "5a23fa10-8edf-5f72-8cf6-52e4213a0c23",
+  "model": "gpt-5.6-luna",
+  "reasoning": "none",
+  "limits": {
+    "model_calls": 5,
+    "tool_executions": 12,
+    "turns": 5,
+    "wall_seconds": 180,
+    "provider_retries": 0
+  },
+  "preflight": {
+    "status": "PASS",
+    "context_chars": 4912,
+    "ground_truth_isolation": "PASS",
+    "default_topology_exposed": false,
+    "provider_request_build": "PASS",
+    "normalized_contract_guard": "PASS"
+  },
+  "live_provider_path": [
+    {
+      "turn": 1,
+      "function": "request_itbench_tools",
+      "normalized_decision": "CALL_TOOLS",
+      "normalized_fields": ["decision", "requests", "root_causes", "stop"],
+      "schema_validation": "PASS",
+      "hypothesis_emitted": false
+    },
+    {
+      "turn": 2,
+      "function": "request_itbench_tools",
+      "normalized_decision": "CALL_TOOLS",
+      "normalized_fields": ["decision", "requests", "root_causes", "stop"],
+      "schema_validation": "PASS",
+      "hypothesis_emitted": false
+    },
+    {
+      "turn": 3,
+      "function": "submit_itbench_diagnosis",
+      "normalized_decision": "SUBMIT_DIAGNOSIS",
+      "normalized_fields": ["decision", "requests", "root_causes", "stop"],
+      "schema_validation": "PROVIDER_NORMALIZED_PASS",
+      "runtime_validation": "MODEL_DECISION_INVALID",
+      "hypothesis_emitted": false
+    }
+  ],
+  "provider_calls": 3,
+  "outbound_attempts": 3,
+  "ledger": {
+    "before": {"consumed": 0, "remaining": 180},
+    "smoke_consumed": 3,
+    "after": {"consumed": 3, "remaining": 177}
+  },
+  "terminal": "MODEL_DECISION_INVALID",
+  "diagnosis": {
+    "submitted": false,
+    "invalid_entity": "checkout-db",
+    "validation_error": "entity must use namespace/Kind/name syntax"
+  },
+  "failure": {
+    "stage": "EXTERNAL_RUNTIME_DECISION_VALIDATION",
+    "classification_reason": "runtime did not convert a model-generated invalid semantic entity into a durable MODEL_DECISION_INVALID result",
+    "provider_normalization_defect": false,
+    "artifact_persistence_completed": false
+  },
+  "tools": {
+    "call_tools_turns": 2,
+    "requests_and_execution_accounting": "not returned because runtime raised while validating terminal response",
+    "backend_failures": 0,
+    "timeouts": 0
+  },
+  "evidence": {
+    "ground_truth_exposure": 0,
+    "fabricated_ids_accepted": 0,
+    "cross_scenario_ids": 0
+  },
+  "native_artifact": {
+    "construction": "NOT COMPLETED",
+    "strict_reload": "NOT COMPLETED"
+  },
+  "itbench_output": {
+    "construction": "NOT COMPLETED",
+    "official_gt_grading": "NOT RUN"
+  },
+  "official_benchmark_scenarios_executed": "0 / 35",
+  "official_judge": "NOT RUN",
+  "safety": {
+    "ground_truth_exposure": 0,
+    "arbitrary_shell": 0,
+    "arbitrary_filesystem": 0,
+    "writes_or_remediation": 0
+  }
+}

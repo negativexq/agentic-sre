@@ -13,15 +13,19 @@ from packages.evals.itbench import (
     ExternalInvestigationRuntime,
     ITBenchDecisionType,
     ITBenchEvidenceCategory,
+    ITBenchExternalResult,
     ITBenchExternalToolRegistry,
     ITBenchInvestigationDecisionV1,
     ITBenchLiteDataset,
     ITBenchScenario,
     ITBenchSnapshotBackend,
+    adapt_external_output,
     build_observable_incident,
 )
 from packages.evals.itbench.external_context import build_external_context
+from packages.evals.itbench.external_runtime import ITBENCH_EXTERNAL_PROMPT_VERSION
 from packages.investigation.contracts import InvestigationLimits
+from packages.investigation.tool_contracts import ToolArgumentValidationError
 from packages.provider import (
     FakeModelProvider,
     LiveModelBudget,
@@ -211,7 +215,8 @@ def test_external_runtime_rejects_any_fabricated_root_cause_evidence_id(tmp_path
     result = ExternalInvestigationRuntime(provider, registry.investigation_registry(), backend).run(
         incident, alerts
     )
-    assert result.terminal == "INVALID_DECISION"
+    assert result.terminal == "MODEL_DECISION_INVALID"
+    assert result.decision is None
 
 
 def test_external_provider_schema_builds_without_provider_construction(tmp_path: Path) -> None:
@@ -762,3 +767,288 @@ def test_real_openai_provider_external_call_tools_to_diagnosis(tmp_path: Path) -
     assert len(result.decision.root_causes) == 1
     assert len(result.evidence) == 1
     assert len(transport.calls) == 2
+
+
+def _three_turn_external_runtime(
+    tmp_path: Path, *, entity: str, fabricated_evidence: bool = False
+) -> tuple[ExternalInvestigationRuntime, _QueueResponsesTransport, Path]:
+    """Build the real OpenAIProvider path for E4 invalid/valid terminal tests."""
+    scenario = _scenario(tmp_path)
+    backend = ITBenchSnapshotBackend(
+        cast(ITBenchLiteDataset, object()), scenario, max_rows=5, max_bytes=10_000
+    )
+    registry = ITBenchExternalToolRegistry(backend)
+    incident, alerts = build_observable_incident(backend)
+
+    def diagnosis_response(request: dict[str, object]) -> SimpleNamespace:
+        messages = request["input"]
+        assert isinstance(messages, list)
+        context = json.loads(str(messages[-1]["content"]))
+        evidence_id = str(uuid4()) if fabricated_evidence else context["evidence"][0]["evidence_id"]
+        return _external_envelope(
+            _external_function_call(
+                "submit_itbench_diagnosis",
+                {
+                    "reason": "terminal evidence",
+                    "root_causes": [
+                        {
+                            "entity": entity,
+                            "causal_summary": "observable evidence",
+                            "evidence_ids": [evidence_id],
+                        }
+                    ],
+                },
+            )
+        )
+
+    transport = _QueueResponsesTransport(
+        [
+            _external_envelope(
+                _external_function_call("request_itbench_tools", _call_tools_arguments())
+            ),
+            _external_envelope(
+                _external_function_call(
+                    "request_itbench_tools",
+                    _call_tools_arguments(pattern="frontend"),
+                )
+            ),
+            diagnosis_response,
+        ]
+    )
+    provider = _live_external_provider(tmp_path, transport)
+    return (
+        ExternalInvestigationRuntime(
+            provider,
+            registry.investigation_registry(),
+            backend,
+            limits=InvestigationLimits(
+                max_model_calls=3,
+                max_tool_calls=12,
+                max_agent_turns=3,
+                max_wall_time_seconds=180,
+            ),
+        ),
+        transport,
+        tmp_path / "provider-ledger.json",
+    )
+
+
+def test_e4_exact_invalid_entity_trajectory_is_durable(tmp_path: Path) -> None:
+    """The E3 trajectory becomes a model outcome without losing prior evidence."""
+    runtime, transport, ledger = _three_turn_external_runtime(tmp_path, entity="checkout-db")
+    result = runtime.run(*build_observable_incident(runtime.backend))
+    assert result.terminal == "MODEL_DECISION_INVALID"
+    assert result.decision is None
+    assert len(result.evidence) == 2
+    assert result.turns[-1] == {
+        "turn": 3,
+        "decision": "MODEL_DECISION_INVALID",
+        "validation_stage": "DECISION_SCHEMA",
+        "validation_path": "$.root_causes[0].entity",
+        "validation_type": "value_error",
+        "provider_response_received": True,
+    }
+    assert len(transport.calls) == 3
+    assert result.usage["model_calls"] == 3
+    assert result.usage["input_tokens_total"] == 33
+    assert result.usage["output_tokens_total"] == 21
+    assert result.usage["provider_invocations"] == 3
+    assert result.usage["outbound_api_attempts"] == 3
+    assert json.loads(ledger.read_text()) == {"calls_used": 3}
+    payload = result.model_dump(mode="json")
+    reloaded = ITBenchExternalResult.model_validate_json(json.dumps(payload))
+    assert reloaded.model_dump(mode="json") == payload
+    output = adapt_external_output(result)
+    assert output.contributing_factor == ()
+    assert output.native_terminal == "MODEL_DECISION_INVALID"
+
+
+def test_e4_valid_diagnosis_trajectory_exports_entity(tmp_path: Path) -> None:
+    runtime, transport, _ledger = _three_turn_external_runtime(
+        tmp_path, entity="demo/ConfigMap/checkout-config"
+    )
+    incident, alerts = build_observable_incident(runtime.backend)
+    result = runtime.run(incident, alerts)
+    assert result.terminal == "SUBMIT_DIAGNOSIS"
+    assert result.decision is not None
+    assert result.decision.root_causes[0].entity == "demo/ConfigMap/checkout-config"
+    output = adapt_external_output(result)
+    assert len(output.contributing_factor) == 1
+    assert output.contributing_factor[0].entity.canonical == "demo/ConfigMap/checkout-config"
+    assert len(transport.calls) == 3
+
+
+def test_e4_fabricated_evidence_is_model_invalid_not_exception(tmp_path: Path) -> None:
+    runtime, _transport, _ledger = _three_turn_external_runtime(
+        tmp_path, entity="demo/ConfigMap/checkout-config", fabricated_evidence=True
+    )
+    incident, alerts = build_observable_incident(runtime.backend)
+    result = runtime.run(incident, alerts)
+    assert result.terminal == "MODEL_DECISION_INVALID"
+    assert result.decision is None
+    assert result.turns[-1]["validation_stage"] == "EVIDENCE_REFERENCE"
+    assert adapt_external_output(result).contributing_factor == ()
+
+
+def test_e4_external_entity_contract_and_prompt_are_explicit() -> None:
+    from packages.evals.itbench.external_runtime import ITBENCH_EXTERNAL_PROMPT
+
+    schema = ITBenchInvestigationDecisionV1.model_json_schema()
+    description = schema["$defs"]["ExternalRootCause"]["properties"]["entity"]["description"]
+    assert "namespace/Kind/name" in description
+    assert "_cluster/Kind/name" in description
+    assert "namespace/Kind/name" in ITBENCH_EXTERNAL_PROMPT
+    assert "checkout-db" in ITBENCH_EXTERNAL_PROMPT
+    assert ITBENCH_EXTERNAL_PROMPT_VERSION == "itbench_sre_investigator_v2"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "checkout-db",
+        "frontend",
+        "Deployment/frontend",
+        "otel-demo/frontend",
+        "/foo/bar",
+        "otel-demo//frontend",
+    ],
+)
+def test_e4_invalid_entity_syntax_is_rejected(value: str) -> None:
+    with pytest.raises(ValidationError):
+        ITBenchInvestigationDecisionV1.model_validate(
+            {
+                "decision": "SUBMIT_DIAGNOSIS",
+                "root_causes": [
+                    {"entity": value, "causal_summary": "x", "evidence_ids": [uuid4()]}
+                ],
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "otel-demo/Deployment/frontend",
+        "otel-demo/ConfigMap/checkout-config",
+        "_cluster/Node/node-a",
+    ],
+)
+def test_e4_valid_entity_syntax_is_accepted(value: str) -> None:
+    decision = ITBenchInvestigationDecisionV1.model_validate(
+        {
+            "decision": ITBenchDecisionType.SUBMIT_DIAGNOSIS,
+            "root_causes": [{"entity": value, "causal_summary": "x", "evidence_ids": [uuid4()]}],
+        }
+    )
+    assert decision.root_causes[0].entity == value
+
+
+class _InvalidArgumentRegistry:
+    """Test proxy that creates a local semantic validation failure after wire validation."""
+
+    def __init__(self, base: Any) -> None:
+        self.base = base
+
+    def descriptors(self) -> tuple[dict[str, Any], ...]:
+        return cast(tuple[dict[str, Any], ...], self.base.descriptors())
+
+    def names(self) -> tuple[str, ...]:
+        return cast(tuple[str, ...], self.base.names())
+
+    def get(self, name: str) -> Any:
+        registered = self.base.get(name)
+        if name != "itbench_alert_summary":
+            return registered
+
+        class Proxy:
+            name = registered.name
+            tool = registered.tool
+            timeout_ms = registered.timeout_ms
+
+            def validate_arguments(self, _arguments: dict[str, Any]) -> dict[str, Any]:
+                raise ToolArgumentValidationError("$.pattern", "semantic test rejection")
+
+        return Proxy()
+
+
+def test_e4_invalid_tool_argument_is_durable_without_execution(tmp_path: Path) -> None:
+    scenario = _scenario(tmp_path)
+    backend = ITBenchSnapshotBackend(
+        cast(ITBenchLiteDataset, object()), scenario, max_rows=5, max_bytes=10_000
+    )
+    external = ITBenchExternalToolRegistry(backend)
+    incident, alerts = build_observable_incident(backend)
+    transport = _QueueResponsesTransport(
+        [
+            _external_envelope(
+                _external_function_call("request_itbench_tools", _call_tools_arguments())
+            )
+        ]
+    )
+    runtime = ExternalInvestigationRuntime(
+        _live_external_provider(tmp_path, transport),
+        cast(Any, _InvalidArgumentRegistry(external.investigation_registry())),
+        backend,
+        limits=InvestigationLimits(
+            max_model_calls=2, max_tool_calls=12, max_agent_turns=2, max_wall_time_seconds=180
+        ),
+    )
+    result = runtime.run(incident, alerts)
+    assert result.terminal == "MODEL_DECISION_INVALID"
+    assert result.decision is None
+    assert result.usage["tool_calls"] == 0
+    assert result.turns[-1]["decision"] == "INVALID_TOOL_REQUEST"
+    assert result.turns[-1]["tool_request"]["executed"] is False
+
+
+def test_e4_wall_time_limit_is_enforced(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import packages.evals.itbench.external_runtime as runtime_module
+
+    scenario = _scenario(tmp_path)
+    backend = ITBenchSnapshotBackend(
+        cast(ITBenchLiteDataset, object()), scenario, max_rows=5, max_bytes=10_000
+    )
+    registry = ITBenchExternalToolRegistry(backend)
+    incident, alerts = build_observable_incident(backend)
+    clock = iter((0.0, 0.0, 181.0, 181.0))
+    monkeypatch.setattr(runtime_module, "monotonic", lambda: next(clock))
+    result = ExternalInvestigationRuntime(
+        FakeModelProvider(
+            [
+                {
+                    "decision": "CALL_TOOLS",
+                    "requests": [{"tool": "itbench_alert_summary", "arguments": {"limit": 1}}],
+                }
+            ]
+        ),
+        registry.investigation_registry(),
+        backend,
+        limits=InvestigationLimits(
+            max_model_calls=5, max_tool_calls=12, max_agent_turns=5, max_wall_time_seconds=180
+        ),
+    ).run(incident, alerts)
+    assert result.terminal == "WALL_TIME_LIMIT"
+    assert result.decision is None
+
+
+@pytest.mark.parametrize(
+    "terminal",
+    ["MODEL_DECISION_INVALID", "MODEL_CALL_LIMIT", "TOOL_CALL_LIMIT", "WALL_TIME_LIMIT"],
+)
+def test_e4_model_outcome_terminals_are_serializable_and_exportable(terminal: str) -> None:
+    """All non-provider model/runtime terminals remain valid native outcomes."""
+    result = ITBenchExternalResult(
+        scenario_id="Scenario-1",
+        incident_id=uuid4(),
+        decision=None,
+        evidence=[],
+        turns=[{"decision": terminal}],
+        usage={"model_calls": 0, "input_tokens_total": 0, "output_tokens_total": 0},
+        terminal=terminal,
+    )
+    payload = result.model_dump(mode="json")
+    reloaded = ITBenchExternalResult.model_validate_json(json.dumps(payload))
+    assert reloaded.model_dump(mode="json") == payload
+    output = adapt_external_output(result)
+    assert output.contributing_factor == ()
+    assert output.native_terminal == terminal

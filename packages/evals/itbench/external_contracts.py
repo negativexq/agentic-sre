@@ -6,7 +6,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from packages.investigation.contracts import InvestigationModel, ToolRequestSpec
 
@@ -24,17 +24,25 @@ class ITBenchDecisionType(StrEnum):
 class ExternalRootCause(InvestigationModel):
     """One independently supported ITBench Kubernetes root-cause entity."""
 
-    entity: str = Field(min_length=3, max_length=512)
+    entity: str = Field(
+        min_length=3,
+        max_length=512,
+        description=(
+            "Canonical ITBench Kubernetes identity in namespace/Kind/name format. "
+            "Use _cluster/Kind/name for cluster-scoped resources."
+        ),
+    )
     causal_summary: str = Field(min_length=1, max_length=1_000)
     evidence_ids: list[UUID] = Field(min_length=1, max_length=12)
 
-    @model_validator(mode="after")
-    def validate_entity_syntax(self) -> ExternalRootCause:
+    @field_validator("entity")
+    @classmethod
+    def validate_entity_syntax(cls, value: str) -> str:
         """Require namespace/Kind/name without restricting observable kinds."""
-        parts = self.entity.split("/")
+        parts = value.split("/")
         if len(parts) != 3 or not all(parts) or any(len(part) > 255 for part in parts):
             raise ValueError("entity must use namespace/Kind/name syntax")
-        return self
+        return value
 
 
 class ExternalStop(InvestigationModel):

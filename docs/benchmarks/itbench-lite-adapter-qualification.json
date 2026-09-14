@@ -1,0 +1,591 @@
+{
+  "artifact_type": "ITBENCH_LITE_ADAPTER_QUALIFICATION",
+  "benchmark": "ITBench-Lite",
+  "investigator_ground_truth_access": false,
+  "network_calls": 0,
+  "note": "E0 adapter qualification only; no provider or official judge evaluation was run.",
+  "official_evaluator_revision": "14f026fc9cc348c4ecec5ab32714de954c95c1b1",
+  "openai_calls": 0,
+  "revision": "d0916b08ba421ce5e672e9ad68aa947d938dfef0",
+  "root_cause_entity_kind_counts": {
+    "ConfigMap": 12,
+    "Deployment": 5,
+    "HorizontalPodAutoscaler": 1,
+    "JVMChaos": 2,
+    "Namespace": 1,
+    "NetworkChaos": 6,
+    "NetworkPolicy": 1,
+    "Pod": 3,
+    "PodChaos": 1,
+    "Schedule": 1,
+    "StressChaos": 2
+  },
+  "scenario_count": 35,
+  "scenario_failures": 0,
+  "scenario_passes": 35,
+  "scenarios": [
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 4,
+        "k8s_events": 41,
+        "k8s_objects": 33,
+        "logs": 46,
+        "metrics": 50,
+        "traces": 47
+      },
+      "generated_evidence_ids": 221,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-1",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 2,
+        "k8s_events": 41,
+        "k8s_objects": 50,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 24
+      },
+      "generated_evidence_ids": 217,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-2",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 1,
+        "k8s_events": 41,
+        "k8s_objects": 48,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 24
+      },
+      "generated_evidence_ids": 214,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-4",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 2,
+        "k8s_events": 41,
+        "k8s_objects": 50,
+        "logs": 49,
+        "metrics": 50,
+        "traces": 32
+      },
+      "generated_evidence_ids": 224,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-5",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 2,
+        "k8s_events": 41,
+        "k8s_objects": 10,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 37
+      },
+      "generated_evidence_ids": 190,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-6",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 1,
+        "k8s_events": 41,
+        "k8s_objects": 50,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 24
+      },
+      "generated_evidence_ids": 216,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-7",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 1,
+        "k8s_events": 41,
+        "k8s_objects": 29,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 25
+      },
+      "generated_evidence_ids": 196,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-8",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 1,
+        "k8s_events": 41,
+        "k8s_objects": 47,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 34
+      },
+      "generated_evidence_ids": 223,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-9",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 3,
+        "k8s_events": 41,
+        "k8s_objects": 19,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 32
+      },
+      "generated_evidence_ids": 195,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-11",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 4,
+        "k8s_events": 41,
+        "k8s_objects": 38,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 24
+      },
+      "generated_evidence_ids": 207,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-12",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 2,
+        "k8s_events": 41,
+        "k8s_objects": 50,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 22
+      },
+      "generated_evidence_ids": 215,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-13",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 2,
+        "k8s_events": 40,
+        "k8s_objects": 27,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 22
+      },
+      "generated_evidence_ids": 191,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-14",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 3,
+        "k8s_events": 41,
+        "k8s_objects": 10,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 25
+      },
+      "generated_evidence_ids": 179,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-15",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 4,
+        "k8s_events": 41,
+        "k8s_objects": 37,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 34
+      },
+      "generated_evidence_ids": 216,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-16",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 4,
+        "k8s_events": 38,
+        "k8s_objects": 50,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 38
+      },
+      "generated_evidence_ids": 230,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-17",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 2,
+        "k8s_events": 38,
+        "k8s_objects": 42,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 19
+      },
+      "generated_evidence_ids": 201,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-18",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 6,
+        "k8s_events": 37,
+        "k8s_objects": 50,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 39
+      },
+      "generated_evidence_ids": 232,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-19",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 5,
+        "k8s_events": 41,
+        "k8s_objects": 33,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 24
+      },
+      "generated_evidence_ids": 203,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-20",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 6,
+        "k8s_events": 38,
+        "k8s_objects": 35,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 35
+      },
+      "generated_evidence_ids": 214,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-21",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 2,
+        "k8s_events": 37,
+        "k8s_objects": 42,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 30
+      },
+      "generated_evidence_ids": 211,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-22",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 4,
+        "k8s_events": 41,
+        "k8s_objects": 50,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 27
+      },
+      "generated_evidence_ids": 222,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-23",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 2,
+        "k8s_events": 41,
+        "k8s_objects": 50,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 24
+      },
+      "generated_evidence_ids": 217,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-24",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 3,
+        "k8s_events": 38,
+        "k8s_objects": 50,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 40
+      },
+      "generated_evidence_ids": 231,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-25",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 3,
+        "k8s_events": 39,
+        "k8s_objects": 50,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 38
+      },
+      "generated_evidence_ids": 230,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-29",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 1,
+        "k8s_events": 41,
+        "k8s_objects": 26,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 33
+      },
+      "generated_evidence_ids": 201,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-31",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 1,
+        "k8s_events": 41,
+        "k8s_objects": 50,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 35
+      },
+      "generated_evidence_ids": 227,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-33",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 4,
+        "k8s_events": 41,
+        "k8s_objects": 27,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 32
+      },
+      "generated_evidence_ids": 204,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-34",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 2,
+        "k8s_events": 39,
+        "k8s_objects": 16,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 33
+      },
+      "generated_evidence_ids": 190,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-35",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 1,
+        "k8s_events": 41,
+        "k8s_objects": 9,
+        "logs": 40,
+        "metrics": 50,
+        "traces": 14
+      },
+      "generated_evidence_ids": 155,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-38",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 2,
+        "k8s_events": 38,
+        "k8s_objects": 50,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 28
+      },
+      "generated_evidence_ids": 218,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-80",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 6,
+        "k8s_events": 38,
+        "k8s_objects": 16,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 39
+      },
+      "generated_evidence_ids": 199,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-81",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 4,
+        "k8s_events": 38,
+        "k8s_objects": 43,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 35
+      },
+      "generated_evidence_ids": 220,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-83",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 2,
+        "k8s_events": 38,
+        "k8s_objects": 14,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 29
+      },
+      "generated_evidence_ids": 183,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-91",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 2,
+        "k8s_events": 41,
+        "k8s_objects": 40,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 35
+      },
+      "generated_evidence_ids": 218,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-102",
+      "unsupported_evidence_categories": []
+    },
+    {
+      "error": null,
+      "evidence_category_counts": {
+        "alerts": 4,
+        "k8s_events": 41,
+        "k8s_objects": 33,
+        "logs": 50,
+        "metrics": 50,
+        "traces": 24
+      },
+      "generated_evidence_ids": 202,
+      "ground_truth_loaded_separately": true,
+      "loaded": true,
+      "scenario_id": "Scenario-105",
+      "unsupported_evidence_categories": []
+    }
+  ],
+  "source": "ibm-research/ITBench-Lite",
+  "sre_version": "v0.2-B96DF826-4BB2-4B62-97AB-6D84254C53D7",
+  "status": "PASS"
+}

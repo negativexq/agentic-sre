@@ -1,0 +1,60 @@
+{
+  "benchmark": "ITBench-Lite",
+  "organization": "IBM Research",
+  "domain": "SRE",
+  "source": "ibm-research/ITBench-Lite",
+  "source_url": "https://huggingface.co/datasets/ibm-research/ITBench-Lite",
+  "dataset_revision": "d0916b08ba421ce5e672e9ad68aa947d938dfef0",
+  "dataset_version": "v0.2-B96DF826-4BB2-4B62-97AB-6D84254C53D7",
+  "scenario_count": 35,
+  "scenario_order": [
+    "Scenario-1", "Scenario-2", "Scenario-4", "Scenario-5", "Scenario-6",
+    "Scenario-7", "Scenario-8", "Scenario-9", "Scenario-11", "Scenario-12",
+    "Scenario-13", "Scenario-14", "Scenario-15", "Scenario-16", "Scenario-17",
+    "Scenario-18", "Scenario-19", "Scenario-20", "Scenario-21", "Scenario-22",
+    "Scenario-23", "Scenario-24", "Scenario-25", "Scenario-29", "Scenario-31",
+    "Scenario-33", "Scenario-34", "Scenario-35", "Scenario-38", "Scenario-80",
+    "Scenario-81", "Scenario-83", "Scenario-91", "Scenario-102", "Scenario-105"
+  ],
+  "license": "Apache-2.0",
+  "official_evaluator": {
+    "source": "itbench-hub/ITBench-Evaluations",
+    "source_url": "https://github.com/itbench-hub/ITBench-Evaluations",
+    "revision": "14f026fc9cc348c4ecec5ab32714de954c95c1b1",
+    "role": "secondary evaluator; not run during E0"
+  },
+  "adapter": {
+    "identity": "itbench_lite_snapshot_adapter_v1",
+    "investigator_tools": "itbench_snapshot_tools_v1",
+    "output_adapter": "itbench_output_adapter_v1",
+    "deterministic_grader": "itbench_root_cause_entity_v1"
+  },
+  "experiment": {
+    "execution": "ITB-E1",
+    "name": "itbench-lite-sre-external-eval-v1",
+    "status": "READY_FOR_EXTERNAL_LIVE_SMOKE",
+    "model": "gpt-5.6-luna",
+    "reasoning_effort": "none",
+    "prompt": "sre_investigator_v4",
+    "evidence_context": "a1_evidence_context_v2",
+    "max_model_calls": 5,
+    "max_tool_executions": 12,
+    "max_agent_turns": 5,
+    "max_wall_time_seconds": 180,
+    "provider_retries": 0,
+    "runs_per_scenario": 1,
+    "scenario_order": "pinned manifest order",
+    "ground_truth_visible_to_investigator": false,
+    "official_judge_run": false
+  },
+  "ledger": {
+    "path": ".local/itbench-lite-e1-budget.json",
+    "hard_cap": 180,
+    "smoke_reserve": 5,
+    "scenario_capacity": 175,
+    "consumed": 0,
+    "remaining": 180,
+    "status": "NOT_STARTED"
+  },
+  "internal_evaluation": "A1-R4 remains separate and unchanged."
+}

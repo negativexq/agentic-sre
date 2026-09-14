@@ -703,12 +703,19 @@ class LiveBenchmarkEnvironment:
             if fixture == "order_worker_failure":
                 values = self._deployment_fault_values("order-worker")
                 expected = {"FAULT_WORKER_DELAY_MS": "0", "FAULT_WORKER_FAILURE": "true"}
-                passed = values == expected and self._deployment_is_stable("order-worker")
+                # A failure fault is active precisely while the worker is
+                # restarting. Requiring a stable pod here races the intended
+                # fault and rejects valid activation before workload stimulus.
+                passed = values == expected
                 return FaultOracleResult(
                     passed=passed,
                     fixture=fixture,
                     code="FAULT_ACTIVE" if passed else "FAULT_NOT_ACTIVE",
-                    details={"deployment": "order-worker", "values": values},
+                    details={
+                        "deployment": "order-worker",
+                        "values": values,
+                        "stability_required": False,
+                    },
                 )
             return FaultOracleResult(
                 passed=True,
@@ -1354,7 +1361,7 @@ class LiveBenchmarkEnvironment:
         self._restore_env("order-worker")
         self._restore_env("payment-service")
         self._restore_env("order-service")
-        if fixture == "payment_error_spike":
+        if fixture in {"payment_error_spike", "a1_smoke_payment_error"}:
             self._payment_fault(error=True)
         elif fixture == "order_error_spike":
             self._order_fault(error=True)
@@ -1468,6 +1475,7 @@ class LiveBenchmarkEnvironment:
         workload_started = datetime.now(UTC)
         if fixture in {
             "payment_error_spike",
+            "a1_smoke_payment_error",
             "payment_db_pool_pressure",
             "payment_pod_crash",
             "payment_config_change",
@@ -1879,7 +1887,7 @@ class FixtureLifecycle:
 
     def run(
         self,
-        scenario: FrozenIncident,
+        scenario: Any,
         *,
         investigate: Callable[[Incident, tuple[Alert, ...]], Any] | None = None,
         snapshot_before_prepare: bool = False,

@@ -22,18 +22,22 @@ def test_harness_filter_rejects_unknown_scenario(monkeypatch: pytest.MonkeyPatch
 
 def test_a1_benchmark_forwards_control_plane_in_sre_demo_namespace() -> None:
     makefile = Path("Makefile").read_text(encoding="utf-8")
+    supervisor = Path("scripts/live_forward_supervisor.py").read_text(encoding="utf-8")
     target = makefile.split("a1-live-benchmark:\n", 1)[1].split("\n\n", 1)[0]
 
-    assert "kubectl port-forward -n sre-demo svc/control-plane" in target
-    assert "kubectl port-forward -n observability svc/control-plane" not in target
+    assert "live_forward_supervisor.py --profile a1" in target
+    assert '"control-plane",\n        "sre-demo",\n        "control-plane"' in supervisor
+    assert '"prometheus", "observability", "prometheus"' in supervisor
 
 
 def test_a1_generalization_uses_reconnecting_observability_forwards() -> None:
     makefile = Path("Makefile").read_text(encoding="utf-8")
     target = makefile.split("a1-generalization-check:\n", 1)[1].split("\n\n", 1)[0]
+    supervisor = Path("scripts/live_forward_supervisor.py").read_text(encoding="utf-8")
 
-    assert "while true; do kubectl port-forward -n observability svc/prometheus" in target
-    assert "while true; do kubectl port-forward -n observability svc/alertmanager" in target
+    assert "live_forward_supervisor.py --profile a1" in target
+    assert "def _restart_dead" in supervisor
+    assert "wait_until_ready" in supervisor
 
 
 def test_a1_smoke_paths_are_configurable_for_new_execution_revisions() -> None:
@@ -62,7 +66,27 @@ def test_a1_live_targets_reconnect_observability_forwards(target_name: str) -> N
     makefile = Path("Makefile").read_text(encoding="utf-8")
     target = makefile.split(f"{target_name}:\n", 1)[1].split("\n\n", 1)[0]
 
-    assert "while true; do kubectl port-forward -n observability svc/prometheus" in target
+    assert "scripts/live_forward_supervisor.py --profile a1" in target
+
+
+def test_smoke_is_self_contained_and_excluded_from_frozen_targets() -> None:
+    from packages.evals import A1_TARGET_BY_SCENARIO, FROZEN_DATASET
+    from packages.evals.live_fixtures import FIXTURE_DEFINITIONS
+    from packages.evals.smoke import SMOKE_ALERT_NAME, SMOKE_SCENARIO
+
+    assert SMOKE_SCENARIO.scenario_id not in {item.scenario_id for item in FROZEN_DATASET}
+    assert SMOKE_SCENARIO.scenario_id not in A1_TARGET_BY_SCENARIO
+    assert SMOKE_ALERT_NAME not in {item.alert_name for item in FIXTURE_DEFINITIONS}
+
+
+def test_zero_model_smoke_has_no_provider_construction_before_lifecycle() -> None:
+    source = Path("scripts/a1_r4_smoke_qualification.py").read_text(encoding="utf-8")
+    live_source = Path("scripts/a1_live_benchmark.py").read_text(encoding="utf-8")
+
+    assert "OpenAIProvider" not in source
+    assert "FixtureLifecycle" in source
+    assert "SMOKE_SCENARIO" in live_source
+    assert "existing incident" not in live_source
 
 
 def test_a1_benchmark_prepares_state_before_budget_or_provider(

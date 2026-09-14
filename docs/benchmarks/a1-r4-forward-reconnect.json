@@ -1,0 +1,105 @@
+{
+  "artifact_type": "A1_R4_FORWARD_RECONNECT_QUALIFICATION",
+  "generated_at": "2026-09-14T11:46:23.011647+00:00",
+  "openai_calls": 0,
+  "pass_count": 5,
+  "record_count": 5,
+  "records": [
+    {
+      "alertmanager_reconnect": true,
+      "baseline": {
+        "active_benchmark_alerts": [],
+        "alertmanager_ready": true,
+        "canonical_incident_count": 0,
+        "fault_env_clean": true,
+        "otel_ready": true,
+        "passed": true,
+        "prometheus_ready": true,
+        "telemetry_baseline_valid": true,
+        "worker_rollout_stable": true,
+        "workloads_healthy": true
+      },
+      "cycle": 1,
+      "prometheus_reconnect": true,
+      "readiness_seconds": 8.709956374950707,
+      "status": "PASS"
+    },
+    {
+      "alertmanager_reconnect": true,
+      "baseline": {
+        "active_benchmark_alerts": [],
+        "alertmanager_ready": true,
+        "canonical_incident_count": 0,
+        "fault_env_clean": true,
+        "otel_ready": true,
+        "passed": true,
+        "prometheus_ready": true,
+        "telemetry_baseline_valid": true,
+        "worker_rollout_stable": true,
+        "workloads_healthy": true
+      },
+      "cycle": 2,
+      "prometheus_reconnect": true,
+      "readiness_seconds": 8.332285500131547,
+      "status": "PASS"
+    },
+    {
+      "alertmanager_reconnect": true,
+      "baseline": {
+        "active_benchmark_alerts": [],
+        "alertmanager_ready": true,
+        "canonical_incident_count": 0,
+        "fault_env_clean": true,
+        "otel_ready": true,
+        "passed": true,
+        "prometheus_ready": true,
+        "telemetry_baseline_valid": true,
+        "worker_rollout_stable": true,
+        "workloads_healthy": true
+      },
+      "cycle": 3,
+      "prometheus_reconnect": true,
+      "readiness_seconds": 8.307933582924306,
+      "status": "PASS"
+    },
+    {
+      "alertmanager_reconnect": true,
+      "baseline": {
+        "active_benchmark_alerts": [],
+        "alertmanager_ready": true,
+        "canonical_incident_count": 0,
+        "fault_env_clean": true,
+        "otel_ready": true,
+        "passed": true,
+        "prometheus_ready": true,
+        "telemetry_baseline_valid": true,
+        "worker_rollout_stable": true,
+        "workloads_healthy": true
+      },
+      "cycle": 4,
+      "prometheus_reconnect": true,
+      "readiness_seconds": 8.369931957684457,
+      "status": "PASS"
+    },
+    {
+      "alertmanager_reconnect": true,
+      "baseline": {
+        "active_benchmark_alerts": [],
+        "alertmanager_ready": true,
+        "canonical_incident_count": 0,
+        "fault_env_clean": true,
+        "otel_ready": true,
+        "passed": true,
+        "prometheus_ready": true,
+        "telemetry_baseline_valid": true,
+        "worker_rollout_stable": true,
+        "workloads_healthy": true
+      },
+      "cycle": 5,
+      "prometheus_reconnect": true,
+      "readiness_seconds": 8.3206668747589,
+      "status": "PASS"
+    }
+  ],
+  "repeat_count": 5
+}

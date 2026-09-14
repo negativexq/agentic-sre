@@ -34,6 +34,7 @@ from packages.evals.a1_graders import A1_GRADER_VERSION
 from packages.evals.a1_targets import A1EvaluationTarget
 from packages.evals.benchmark_store import BenchmarkPhase, PhaseLedger
 from packages.evals.dataset import FROZEN_DATASET
+from packages.evals.smoke import SMOKE_FIXTURE_DEFINITION, SMOKE_SCENARIO, SMOKE_SCENARIO_ID
 from packages.investigation import (
     MAX_EVIDENCE_SUMMARY_CHARS,
     InvestigationLimits,
@@ -245,48 +246,62 @@ def _run_one(
 
 def _smoke(manifest: dict[str, Any]) -> int:
     environment = LiveBenchmarkEnvironment()
-    incidents = sorted(
-        environment.control_plane.incidents(), key=lambda item: item.created_at, reverse=True
-    )
-    selected: tuple[Incident, tuple[Alert, ...]] | None = None
-    for incident in incidents:
-        alerts = environment.control_plane.alerts(incident.incident_id)
-        if alerts:
-            selected = incident, alerts
-            break
-    if selected is None:
-        raise RuntimeError("A1 smoke requires an existing incident with normalized alerts")
-    incident, alerts = selected
-    smoke_scenario_id = "SMOKE"
+    smoke_scenario_id = SMOKE_SCENARIO.scenario_id
     if SMOKE_PHASE_LEDGER_PATH.exists() and SMOKE_PHASE_LEDGER_PATH.stat().st_size:
         raise RuntimeError(f"A1 smoke phase ledger already exists: {SMOKE_PHASE_LEDGER_PATH}")
     phase_ledger = PhaseLedger(SMOKE_PHASE_LEDGER_PATH, execution_id=manifest["experiment_id"])
-    # The smoke uses the selected normalized incident in memory, then clears
-    # persistent benchmark state before any provider work.  The live benchmark
-    # trials perform the same preparation before creating fresh incidents.
+    # Smoke is a self-contained real incident.  It never consumes a historical
+    # incident and is intentionally absent from the frozen A1 target mapping.
     with phase_ledger.phase(smoke_scenario_id, BenchmarkPhase.PREPARE_ENVIRONMENT):
         environment.prepare_benchmark_state(manifest["experiment_id"])
     with phase_ledger.phase(smoke_scenario_id, BenchmarkPhase.VERIFY_BASELINE):
         baseline = environment.baseline_oracle()
         if not baseline.passed:
             raise RuntimeError(f"A1 smoke baseline oracle failed: {baseline.model_dump_json()}")
-    budget = LiveModelBudget.from_environment(require_shared_ledger=True)
-    before = budget.snapshot()
-    if before.calls_used != 0 or before.limit != 80:
-        raise RuntimeError("A1 smoke requires a fresh 80-call ledger")
-    budget.ensure_capacity(5)
-    registry = _registry()
-    provider = OpenAIProvider(budget=budget, max_retry=0)
-    runtime = InvestigationRuntime(
-        provider,
-        registry,
-        model=MODEL,
-        reasoning_effort=REASONING_EFFORT,
-        limits=LIMITS,
-        a1_protocol=True,
+    budget: LiveModelBudget | None = None
+    before: Any | None = None
+    observed_incident: Incident | None = None
+    observed_alerts: tuple[Alert, ...] = ()
+
+    def investigate(incident: Incident, alerts: tuple[Alert, ...]) -> Any:
+        nonlocal budget, before, observed_incident, observed_alerts
+        observed_incident = incident
+        observed_alerts = alerts
+        # Provider construction is deliberately downstream of fresh incident
+        # correlation, so all pre-provider infrastructure failures are cheap.
+        budget = LiveModelBudget.from_environment(require_shared_ledger=True)
+        before = budget.snapshot()
+        if before.calls_used != 0 or before.limit != 80:
+            raise RuntimeError("A1 smoke requires a fresh 80-call ledger")
+        budget.ensure_capacity(5)
+        registry = _registry()
+        provider = OpenAIProvider(budget=budget, max_retry=0)
+        runtime = InvestigationRuntime(
+            provider,
+            registry,
+            model=MODEL,
+            reasoning_effort=REASONING_EFFORT,
+            limits=LIMITS,
+            a1_protocol=True,
+        )
+        return runtime.run(incident, alerts=alerts)
+
+    lifecycle = FixtureLifecycle(
+        environment,
+        definitions={SMOKE_FIXTURE_DEFINITION.fixture: SMOKE_FIXTURE_DEFINITION},
+        phase_ledger=phase_ledger,
     )
-    with phase_ledger.phase(smoke_scenario_id, BenchmarkPhase.RUN_AGENT):
-        result = runtime.run(incident, alerts=alerts)
+    trial, result = lifecycle.run(
+        SMOKE_SCENARIO,
+        investigate=investigate,
+        snapshot_before_prepare=True,
+    )
+    if result is None or observed_incident is None:
+        raise RuntimeError("A1 smoke did not produce a provider-backed investigation")
+    incident = observed_incident
+    alerts = observed_alerts
+    if budget is None or before is None:
+        raise RuntimeError("A1 smoke provider accounting was not initialized")
     observation_window = derive_observation_window(incident, alerts).time_window()
     artifact = A1RunArtifact.from_result(
         result,
@@ -311,7 +326,7 @@ def _smoke(manifest: dict[str, Any]) -> int:
         "purpose": "transport/schema/accounting smoke only; excluded from benchmark metrics",
         "excluded_from_benchmark_metrics": True,
         "model_quality_evaluation": False,
-        "scenario_id": None,
+        "scenario_id": SMOKE_SCENARIO_ID,
         "incident_id": str(incident.incident_id),
         "calls_consumed": after.calls_used,
         "ledger_limit": after.limit,

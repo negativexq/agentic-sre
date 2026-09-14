@@ -23,7 +23,7 @@ from packages.investigation.registry import live_observability_registry
 from packages.tools import ControlPlaneChangeReader
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "docs/benchmarks/a1-r4-harness-reliability.json"
+OUTPUT = ROOT / "docs/benchmarks/a1-r4-harness-reliability-v2.json"
 SCENARIOS: tuple[Any, ...] = (*FROZEN_DATASET, *A1_GENERALIZATION_SCENARIOS)
 DEFINITIONS: dict[str, Any] = {**FIXTURE_BY_NAME, **GENERALIZATION_FIXTURE_BY_NAME}
 

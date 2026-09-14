@@ -52,7 +52,7 @@ class ITBenchSnapshotBackend:
         for relative_path in self.scenario.evidence_files[category]:
             path = root / relative_path
             if category is ITBenchEvidenceCategory.ALERTS:
-                records.extend(self._read_alerts(path))
+                records.extend(self._read_alerts(path, relative_path))
             else:
                 for index, row in enumerate(
                     parse_tsv_prefix(path, max_rows=self.max_rows, max_bytes=self.max_bytes)
@@ -109,8 +109,7 @@ class ITBenchSnapshotBackend:
         ).encode("utf-8")
         return sha256(encoded).hexdigest()
 
-    @staticmethod
-    def _read_alerts(path: Path) -> list[dict[str, Any]]:
+    def _read_alerts(self, path: Path, source_file: str) -> list[dict[str, Any]]:
         value = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(value, list):
             source = value
@@ -130,9 +129,14 @@ class ITBenchSnapshotBackend:
                 continue
             result.append(
                 {
-                    "evidence_id": str(uuid5(_EVIDENCE_NAMESPACE, f"alert|{path}|{index}")),
+                    "evidence_id": str(
+                        uuid5(
+                            _EVIDENCE_NAMESPACE,
+                            f"{self.scenario.scenario_id}|alerts|{source_file}|{index}",
+                        )
+                    ),
                     "category": ITBenchEvidenceCategory.ALERTS.value,
-                    "source_file": path.name,
+                    "source_file": source_file,
                     "row_index": index,
                     "record": item,
                 }

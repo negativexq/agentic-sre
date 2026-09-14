@@ -109,6 +109,10 @@ def test_evidence_ids_are_deterministic_and_k8s_entities_are_canonical(tmp_path:
         cast(ITBenchLiteDataset, object()), scenario, max_rows=5, max_bytes=10_000
     ).records(ITBenchEvidenceCategory.LOGS)
     assert first[0]["evidence_id"] == second[0]["evidence_id"]
+    alert = backend.records(ITBenchEvidenceCategory.ALERTS)[0]
+    assert alert["evidence_id"] == backend.evidence_id(
+        ITBenchEvidenceCategory.ALERTS, "alerts.json", 0
+    )
     entities = entities_from_k8s_records(backend.records(ITBenchEvidenceCategory.K8S_OBJECTS))
     assert entities[0].canonical == "otel-demo/Service/frontend"
 

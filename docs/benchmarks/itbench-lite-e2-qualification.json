@@ -11,57 +11,63 @@
   "openai_calls": 0,
   "performance": {
     "itbench_alert_summary": {
-      "max_ms": 22.62683305889368,
-      "median_ms": 4.033917095512152,
-      "p95_ms": 22.62683305889368,
+      "max_ms": 22.887249942868948,
+      "median_ms": 4.181124735623598,
+      "p95_ms": 22.887249942868948,
       "scenario_samples": 35
     },
     "itbench_entity_context": {
-      "max_ms": 509.3873329460621,
-      "median_ms": 397.29370828717947,
-      "p95_ms": 509.3873329460621,
+      "max_ms": 507.0874998345971,
+      "median_ms": 402.7222921140492,
+      "p95_ms": 507.0874998345971,
       "scenario_samples": 35
     },
     "itbench_entity_search": {
-      "max_ms": 641.6474999859929,
-      "median_ms": 459.6207090653479,
-      "p95_ms": 641.6474999859929,
+      "max_ms": 634.8337917588651,
+      "median_ms": 475.8028332144022,
+      "p95_ms": 634.8337917588651,
       "scenario_samples": 35
     },
     "itbench_kubernetes_events": {
-      "max_ms": 63.44150006771088,
-      "median_ms": 21.530500147491693,
-      "p95_ms": 63.44150006771088,
+      "max_ms": 63.53300018236041,
+      "median_ms": 22.138957865536213,
+      "p95_ms": 63.53300018236041,
       "scenario_samples": 35
     },
     "itbench_kubernetes_objects": {
-      "max_ms": 499.1736658848822,
-      "median_ms": 389.8780415765941,
-      "p95_ms": 499.1736658848822,
+      "max_ms": 500.22333301603794,
+      "median_ms": 395.1156251132488,
+      "p95_ms": 500.22333301603794,
       "scenario_samples": 35
     },
     "itbench_logs": {
-      "max_ms": 4461.215416900814,
-      "median_ms": 1810.187625233084,
-      "p95_ms": 4461.215416900814,
+      "max_ms": 4539.226333145052,
+      "median_ms": 1840.1376656256616,
+      "p95_ms": 4539.226333145052,
       "scenario_samples": 35
     },
     "itbench_metric_analysis": {
-      "max_ms": 13939.919875003397,
-      "median_ms": 8520.833459217101,
-      "p95_ms": 13939.919875003397,
+      "max_ms": 13862.837959080935,
+      "median_ms": 8573.503999970853,
+      "p95_ms": 13862.837959080935,
       "scenario_samples": 35
     },
     "itbench_topology": {
-      "max_ms": 575.9152080863714,
-      "median_ms": 442.2917920164764,
-      "p95_ms": 575.9152080863714,
+      "max_ms": 587.6402091234922,
+      "median_ms": 452.4200828745961,
+      "p95_ms": 587.6402091234922,
+      "scenario_samples": 35
+    },
+    "itbench_trace_detail": {
+      "max_ms": 2.473415806889534,
+      "median_ms": 1.4308751560747623,
+      "p95_ms": 2.473415806889534,
       "scenario_samples": 35
     },
     "itbench_trace_search": {
-      "max_ms": 7267.910707741976,
-      "median_ms": 3535.4719581082463,
-      "p95_ms": 7267.910707741976,
+      "max_ms": 7447.022582869977,
+      "median_ms": 3573.8595412112772,
+      "p95_ms": 7447.022582869977,
       "scenario_samples": 35
     }
   },

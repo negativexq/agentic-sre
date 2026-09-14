@@ -41,11 +41,11 @@
     "deterministic_grader": "itbench_root_cause_entity_v1"
   },
   "implementation": {
-    "qualification_checkout_sha": "e3d91f4aaebbdda8c365b8cee3ec06bc618c565a",
+    "qualification_checkout_sha": "16b94392e577d815bb9e92e0accdced6049a858f",
     "source_manifest": ".local/itbench-lite/.itbench-source-completeness.json",
     "source_manifest_sha256": "bffa2b12512cd8421587821a8cb4a5df77ccf9e4417055523c409e86e2f6a1ea",
     "qualification_artifact": "docs/benchmarks/itbench-lite-e2-qualification.json",
-    "qualification_sha256": "083cc995c8b1e5d4a70df4b080a97076df0b1c1462f5e7f683b2aeee8c46c453"
+    "qualification_sha256": "6881f07054dfa4fb38d7f441a75615f7aefa975e939efc6905353d078e9a34b2"
   },
   "external_protocol": {
     "version": "itbench_investigation_decision_v1",

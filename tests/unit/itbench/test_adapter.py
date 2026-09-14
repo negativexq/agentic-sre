@@ -263,10 +263,12 @@ def test_complete_source_queries_reach_middle_and_tail_records(tmp_path: Path) -
     middle = backend.query(ITBenchEvidenceCategory.LOGS, {"pattern": "middle-diagnostic"})
     tail = backend.query(ITBenchEvidenceCategory.LOGS, {"pattern": "tail-diagnostic"})
     early = backend.query(ITBenchEvidenceCategory.METRICS, {"pattern": "benign-0"})
+    metric_middle = backend.query(ITBenchEvidenceCategory.METRICS, {"pattern": "middle-diagnostic"})
     metric_tail = backend.query(ITBenchEvidenceCategory.METRICS, {"pattern": "tail-diagnostic"})
     assert middle["matching_count"] == middle["returned_count"] == 1
     assert tail["matching_count"] == tail["returned_count"] == 1
     assert early["matching_count"] == early["returned_count"] == 1
+    assert metric_middle["matching_count"] == metric_middle["returned_count"] == 1
     assert metric_tail["matching_count"] == metric_tail["returned_count"] == 1
 
 

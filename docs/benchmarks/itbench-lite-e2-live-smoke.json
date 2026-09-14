@@ -1,0 +1,104 @@
+{
+  "purpose": "external integration smoke",
+  "excluded_from_official_benchmark_metrics": true,
+  "synthetic_fixture": true,
+  "classification": "ITB_E2_SMOKE_INVALIDATED_BY_INTEGRATION_FAILURE",
+  "execution": "ITB-E2",
+  "experiment": "itbench-lite-sre-external-eval-v2",
+  "source_freeze_sha": "a44ce02c78b6e03e7571eaf545aea8454cc8c4e0",
+  "dataset_revision": "d0916b08ba421ce5e672e9ad68aa947d938dfef0",
+  "sre_version": "v0.2-B96DF826-4BB2-4B62-97AB-6D84254C53D7",
+  "adapter": "itbench_lite_snapshot_adapter_v3",
+  "external_prompt_version": "itbench_sre_investigator_v1",
+  "external_prompt_sha256": "41d712f834276b6a70b150b9a4ac98638e96824894f6c4388afbf5aed6e73625",
+  "protocol": "itbench_investigation_decision_v1",
+  "protocol_sha256": "2e7dc650de25da6bb0270239263f3b90851eadb85c7ddebdf2144d562c840f79",
+  "tool_registry_sha256": "5962a189e7fb7db7f0e8fb397e3e91e3f8d6b15a70ee447c8b8a026afb354956",
+  "entity_schema_sha256": "e4da92fca523a835c2dc822553a188b5a97df21b86bf07c55c60bcebc126b0dc",
+  "manifest_sha256": "aa2e494ea8f61aa48e09c9383958b3353f5e13f6b7a6cce91dce256cbe5eb1a",
+  "fixture_id": "ITB-E2-SMOKE-001",
+  "scenario_id": "Scenario-999",
+  "incident_id": "5a23fa10-8edf-5f72-8cf6-52e4213a0c23",
+  "model": "gpt-5.6-luna",
+  "reasoning": "none",
+  "limits": {
+    "model_calls": 5,
+    "tool_executions": 12,
+    "turns": 5,
+    "wall_seconds": 180,
+    "provider_retries": 0
+  },
+  "preflight": {
+    "status": "PASS",
+    "context_chars": 4912,
+    "context_bytes": 4912,
+    "provider_request_build": "PASS",
+    "ground_truth_isolation": "PASS",
+    "default_topology_exposed": false,
+    "source_categories_readable": true
+  },
+  "provider": {
+    "calls": 1,
+    "outbound_attempts": 1,
+    "input_tokens": null,
+    "output_tokens": null,
+    "latency_ms": null,
+    "terminal": "LIVE_EXTERNAL_TERMINAL_NOT_REACHED"
+  },
+  "failure": {
+    "stage": "PROVIDER_RESPONSE_VALIDATION",
+    "error_code": "PROVIDER_RESPONSE_INVALID",
+    "validation_path": "ITBenchInvestigationDecisionV1.model_validate_json",
+    "details": "Provider-normalized request_itbench_tools payload contained forbidden extra field hypothesis=null.",
+    "failure_artifact": ".local/itbench-lite-e2-runs/ITB-E2-SMOKE-001/smoke/failure_artifact.json"
+  },
+  "tools": {
+    "requests": 0,
+    "valid": 0,
+    "invalid": 0,
+    "duplicate_reused": 0,
+    "executions": 0,
+    "backend_failures": 0,
+    "timeouts": 0
+  },
+  "evidence": {
+    "count": 0,
+    "bounded_output_violations": 0,
+    "fabricated_ids": 0,
+    "cross_scenario_ids": 0,
+    "ground_truth_exposure": 0
+  },
+  "native_artifact": {
+    "construction": false,
+    "serialization": false,
+    "write": false,
+    "strict_reload": false,
+    "semantic_equality": false
+  },
+  "itbench_output": {
+    "construction": false,
+    "persistence": false,
+    "strict_reload": false,
+    "official_gt_grading": "NOT RUN"
+  },
+  "ledger": {
+    "before": {"consumed": 0, "remaining": 180},
+    "smoke_consumed": 1,
+    "after": {"consumed": 1, "remaining": 179}
+  },
+  "safety": {
+    "ground_truth_exposure": 0,
+    "fabricated_evidence_accepted": 0,
+    "cross_scenario_evidence_accepted": 0,
+    "writes": 0,
+    "arbitrary_shell": 0,
+    "arbitrary_filesystem": 0,
+    "sql": 0,
+    "arbitrary_promql": 0
+  },
+  "official_benchmark": {
+    "scenarios_executed": 0,
+    "scenario_total": 35,
+    "official_judge": "NOT RUN"
+  }
+}

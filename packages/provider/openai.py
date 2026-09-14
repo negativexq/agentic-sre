@@ -748,20 +748,17 @@ def _extract_decision_function(
             "decision function arguments did not match response schema",
             metadata=metadata.model_copy(update={"schema_error_path": schema_error_path}),
         )
-    if function_name in {"request_investigation_tools", "request_itbench_tools"}:
+    if function_name == "request_itbench_tools":
         return {
             "decision": "CALL_TOOLS",
-            "requests": [
-                {
-                    **request,
-                    "arguments": {
-                        key: value
-                        for key, value in request.get("arguments", {}).items()
-                        if value is not None
-                    },
-                }
-                for request in structured_output["tool_requests"]
-            ],
+            "requests": _normalize_tool_requests(structured_output["tool_requests"]),
+            "root_causes": [],
+            "stop": None,
+        }, metadata
+    if function_name == "request_investigation_tools":
+        return {
+            "decision": "CALL_TOOLS",
+            "requests": _normalize_tool_requests(structured_output["tool_requests"]),
             "hypothesis": None,
         }, metadata
     if function_name == "submit_itbench_diagnosis":
@@ -837,6 +834,21 @@ def _extract_decision_function(
         "provider response contained an unexpected decision function",
         metadata=metadata,
     )
+
+
+def _normalize_tool_requests(requests: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize nullable wire arguments without selecting a protocol envelope."""
+    return [
+        {
+            **request,
+            "arguments": {
+                key: value
+                for key, value in request.get("arguments", {}).items()
+                if value is not None
+            },
+        }
+        for request in requests
+    ]
 
 
 def _json_schema_error(
@@ -1158,6 +1170,13 @@ class OpenAIProvider:
             "itbench_investigation_decision_v1",
         }:
             structured_output, metadata = _extract_decision_function(request, raw)
+            schema_error_path = _json_schema_error(structured_output, request.response_schema)
+            if schema_error_path is not None:
+                raise ProviderError(
+                    ProviderErrorCode.SCHEMA_VALIDATION_FAILED,
+                    "normalized provider decision did not match the declared response schema",
+                    metadata=metadata.model_copy(update={"schema_error_path": schema_error_path}),
+                )
         else:
             output_text, metadata = _extract_structured_text(raw)
             try:

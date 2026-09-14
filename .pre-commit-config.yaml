@@ -21,3 +21,4 @@ repos:
           - prometheus-client>=0.22,<1.0
           - pytest>=8.4,<9.0
           - sqlalchemy>=2.0,<3.0
+          - types-PyYAML>=6.0,<7.0

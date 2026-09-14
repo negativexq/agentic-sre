@@ -75,7 +75,7 @@ itbench-lite-index:
 	.venv/bin/python scripts/itbench_lite_build_index.py
 
 itbench-lite-check:
-	.venv/bin/python scripts/itbench_lite_check.py
+	.venv/bin/python scripts/itbench_lite_check.py --report /tmp/itbench-lite-adapter-qualification-check.json
 
 itbench-e2-check:
 	.venv/bin/python scripts/itbench_e2_check.py

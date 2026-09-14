@@ -24,12 +24,19 @@ from packages.evals import (
     generalization_target_hash,
 )
 from packages.investigation.registry import live_observability_registry
-from packages.tools import BoundedToolExecutor, ControlPlaneChangeReader, ToolFailure, ToolResponse
+from packages.tools import (
+    BoundedToolExecutor,
+    ControlPlaneChangeReader,
+    ToolErrorCode,
+    ToolFailure,
+    ToolResponse,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs/benchmarks/a1-generalization-qualification.json"
 REPEAT_COUNT = 2
 PROMETHEUS_CONFIGMAP = ("kubectl", "get", "configmap", "prometheus-config", "-n", "observability")
+EVIDENCE_RETRIES = 5
 
 
 def _prometheus_rules() -> str:
@@ -142,19 +149,27 @@ def _preflight(
                 "ends_at": window.ends_at.isoformat(),
             },
         )
-        result = executor.execute(registered.tool, request)
-        if isinstance(result, ToolFailure):
-            raise RuntimeError(f"surface failed: {surface.tool}:{result.code.value}")
-        if not isinstance(result, ToolResponse) or result.result_count < 1:
-            raise RuntimeError(f"surface returned no observable result: {surface.tool}")
-        results.append(
-            {
-                "tool": surface.tool,
-                "arguments": surface.arguments,
-                "result_count": result.result_count,
-                "temporal_mode": result.temporal_mode,
+        for attempt in range(EVIDENCE_RETRIES + 1):
+            result = executor.execute(registered.tool, request)
+            if isinstance(result, ToolResponse):
+                if result.result_count < 1:
+                    raise RuntimeError(f"surface returned no observable result: {surface.tool}")
+                results.append(
+                    {
+                        "tool": surface.tool,
+                        "arguments": surface.arguments,
+                        "result_count": result.result_count,
+                        "temporal_mode": result.temporal_mode,
+                    }
+                )
+                break
+            transient = isinstance(result, ToolFailure) and result.code in {
+                ToolErrorCode.BACKEND_UNAVAILABLE,
+                ToolErrorCode.BACKEND_TIMEOUT,
             }
-        )
+            if not transient or attempt == EVIDENCE_RETRIES:
+                raise RuntimeError(f"surface failed: {surface.tool}:{result.code.value}")
+            time.sleep(1)
     return results
 
 

@@ -21,6 +21,9 @@ from packages.evals import (
 from packages.investigation.registry import live_observability_registry
 from packages.tools import ControlPlaneChangeReader
 
+ROOT = Path(__file__).resolve().parents[1]
+OUTPUT = ROOT / "docs/benchmarks/v0.2.0-harness-qualification.json"
+
 
 def selected_scenarios() -> tuple[Any, ...]:
     """Return validated development selections without changing the frozen dataset."""
@@ -91,7 +94,7 @@ def main() -> int:
         "qualified": len(records) == len(FIXTURE_DEFINITIONS) == 10,
         "openai_calls": 0,
     }
-    path = Path("docs/benchmarks/v0.2.0-harness-qualification.json")
+    path = Path(os.getenv("A1_HARNESS_OUTPUT", str(OUTPUT)))
     path.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, sort_keys=True))
     return 0

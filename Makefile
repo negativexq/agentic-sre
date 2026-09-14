@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test check agent-check agent-smoke benchmark-offline a1-eval-check a1-generalization-check benchmark-harness-check model-smoke-live agent-smoke-live benchmark-live a1-live-smoke a1-live-benchmark cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check release-check-live
+.PHONY: install lint typecheck test check agent-check agent-smoke benchmark-offline a1-eval-check a1-generalization-check benchmark-harness-check a1-r4-fixture-check a1-fixture-check a1-harness-check a1-harness-repeatability a1-order-independence-check model-smoke-live agent-smoke-live benchmark-live a1-live-smoke a1-live-benchmark cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check release-check-live
 
 LIVE_BUDGET_FILE ?= .local/v0.2.0-live-budget.json
 HARNESS_SCENARIOS ?=
@@ -7,6 +7,8 @@ A1_LIVE_SMOKE ?= docs/benchmarks/a1-r2-live-smoke.json
 A1_LIVE_RESULT ?= docs/benchmarks/a1-r2-single-agent-live.json
 A1_LIVE_RESULT_SHA ?= docs/benchmarks/a1-r2-single-agent-live.sha256
 A1_LIVE_BUDGET_FILE ?= .local/a1-r2-single-agent-live-budget.json
+A1_HARNESS_SUITE_REPEATS ?= 3
+A1_R4_REPEATABILITY_MODE ?= all
 
 install:
 	python3.12 -m venv .venv
@@ -43,22 +45,61 @@ a1-generalization-check:
 	kubectl port-forward -n observability svc/loki 19300:3100 >/tmp/agentic-sre-loki-forward.log 2>&1 & loki_pid=$$!; \
 	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
 	kubectl port-forward -n sre-demo svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
-	kubectl port-forward -n observability svc/alertmanager 19093:9093 >/tmp/agentic-sre-alertmanager-forward.log 2>&1 & alertmanager_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n observability svc/alertmanager 19093:9093 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-alertmanager-forward.log 2>&1 & alertmanager_pid=$$!; \
 	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/order-service 18000:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-order-forward.log 2>&1 & order_pid=$$!; \
 	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/payment-service 18001:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-payment-forward.log 2>&1 & payment_pid=$$!; \
 	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" "$$alertmanager_pid" "$$order_pid" "$$payment_pid" 2>/dev/null || true' EXIT; \
 	sleep 10; .venv/bin/python scripts/a1_generalization_check.py
 
 benchmark-harness-check:
-	kubectl port-forward -n observability svc/prometheus 19090:9090 >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n observability svc/prometheus 19090:9090 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \
 	kubectl port-forward -n observability svc/loki 19300:3100 >/tmp/agentic-sre-loki-forward.log 2>&1 & loki_pid=$$!; \
 	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
 	kubectl port-forward -n sre-demo svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
-	kubectl port-forward -n observability svc/alertmanager 19093:9093 >/tmp/agentic-sre-alertmanager-forward.log 2>&1 & alertmanager_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n observability svc/alertmanager 19093:9093 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-alertmanager-forward.log 2>&1 & alertmanager_pid=$$!; \
 	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/order-service 18000:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-order-forward.log 2>&1 & order_pid=$$!; \
 	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/payment-service 18001:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-payment-forward.log 2>&1 & payment_pid=$$!; \
 	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" "$$alertmanager_pid" "$$order_pid" "$$payment_pid" 2>/dev/null || true' EXIT; \
 	sleep 10; SRE_HARNESS_SCENARIOS="$(HARNESS_SCENARIOS)" .venv/bin/python scripts/benchmark_harness_check.py
+
+a1-r4-fixture-check:
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n observability svc/prometheus 19090:9090 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \
+	kubectl port-forward -n observability svc/loki 19300:3100 >/tmp/agentic-sre-loki-forward.log 2>&1 & loki_pid=$$!; \
+	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
+	kubectl port-forward -n sre-demo svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n observability svc/alertmanager 19093:9093 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-alertmanager-forward.log 2>&1 & alertmanager_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/order-service 18000:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-order-forward.log 2>&1 & order_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/payment-service 18001:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-payment-forward.log 2>&1 & payment_pid=$$!; \
+	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" "$$alertmanager_pid" "$$order_pid" "$$payment_pid" 2>/dev/null || true' EXIT; \
+	sleep 10; A1_R4_REPEATABILITY_MODE="$(A1_R4_REPEATABILITY_MODE)" .venv/bin/python scripts/a1_r4_fixture_repeatability.py
+
+a1-fixture-check: A1_R4_REPEATABILITY_MODE=v007
+a1-fixture-check: a1-r4-fixture-check
+
+a1-harness-check: A1_HARNESS_SUITE_REPEATS=1
+a1-harness-check: a1-harness-repeatability
+
+a1-harness-repeatability:
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n observability svc/prometheus 19090:9090 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \
+	kubectl port-forward -n observability svc/loki 19300:3100 >/tmp/agentic-sre-loki-forward.log 2>&1 & loki_pid=$$!; \
+	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
+	kubectl port-forward -n sre-demo svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n observability svc/alertmanager 19093:9093 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-alertmanager-forward.log 2>&1 & alertmanager_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/order-service 18000:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-order-forward.log 2>&1 & order_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/payment-service 18001:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-payment-forward.log 2>&1 & payment_pid=$$!; \
+	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" "$$alertmanager_pid" "$$order_pid" "$$payment_pid" 2>/dev/null || true' EXIT; \
+	sleep 10; A1_HARNESS_SUITE_REPEATS="$(A1_HARNESS_SUITE_REPEATS)" .venv/bin/python scripts/a1_harness_repeatability.py
+
+a1-order-independence-check:
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n observability svc/prometheus 19090:9090 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \
+	kubectl port-forward -n observability svc/loki 19300:3100 >/tmp/agentic-sre-loki-forward.log 2>&1 & loki_pid=$$!; \
+	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
+	kubectl port-forward -n sre-demo svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n observability svc/alertmanager 19093:9093 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-alertmanager-forward.log 2>&1 & alertmanager_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/order-service 18000:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-order-forward.log 2>&1 & order_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/payment-service 18001:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-payment-forward.log 2>&1 & payment_pid=$$!; \
+	trap 'kill "$$prom_pid" "$$loki_pid" "$$tempo_pid" "$$control_pid" "$$alertmanager_pid" "$$order_pid" "$$payment_pid" 2>/dev/null || true' EXIT; \
+	sleep 10; .venv/bin/python scripts/a1_order_independence_check.py
 
 model-smoke-live:
 	test -n "$$OPENAI_API_KEY"
@@ -86,7 +127,7 @@ benchmark-live:
 
 a1-live-smoke:
 	test -n "$$OPENAI_API_KEY"
-	kubectl port-forward -n observability svc/prometheus 19090:9090 >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n observability svc/prometheus 19090:9090 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \
 	kubectl port-forward -n observability svc/loki 19300:3100 >/tmp/agentic-sre-loki-forward.log 2>&1 & loki_pid=$$!; \
 	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
 	kubectl port-forward -n sre-demo svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
@@ -97,10 +138,10 @@ a1-live-smoke:
 
 a1-live-benchmark:
 	test -n "$$OPENAI_API_KEY"
-	kubectl port-forward -n observability svc/prometheus 19090:9090 >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n observability svc/prometheus 19090:9090 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-prometheus-forward.log 2>&1 & prom_pid=$$!; \
 	kubectl port-forward -n observability svc/loki 19300:3100 >/tmp/agentic-sre-loki-forward.log 2>&1 & loki_pid=$$!; \
 	kubectl port-forward -n sre-demo svc/control-plane 18081:8000 >/tmp/agentic-sre-control-forward.log 2>&1 & control_pid=$$!; \
-	kubectl port-forward -n observability svc/alertmanager 19093:9093 >/tmp/agentic-sre-alertmanager-forward.log 2>&1 & alertmanager_pid=$$!; \
+	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n observability svc/alertmanager 19093:9093 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-alertmanager-forward.log 2>&1 & alertmanager_pid=$$!; \
 	kubectl port-forward -n observability svc/tempo 19320:3200 >/tmp/agentic-sre-tempo-forward.log 2>&1 & tempo_pid=$$!; \
 	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/order-service 18000:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-order-forward.log 2>&1 & order_pid=$$!; \
 	( trap 'kill "$$child" 2>/dev/null || true; exit 0' TERM INT EXIT; while true; do kubectl port-forward -n sre-demo svc/payment-service 18001:8000 & child=$$!; wait "$$child"; sleep 1; done ) >/tmp/agentic-sre-payment-forward.log 2>&1 & payment_pid=$$!; \

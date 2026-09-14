@@ -1,5 +1,11 @@
 """Credit-free frozen scenarios and deterministic investigation graders."""
 
+from packages.evals.a1_checkpoints import (
+    A1CheckpointReference,
+    A1CheckpointStore,
+    A1PartialRun,
+    A1ScenarioCheckpoint,
+)
 from packages.evals.a1_generalization import (
     A1_GENERALIZATION_SCENARIOS,
     A1GeneralizationScenario,
@@ -23,6 +29,12 @@ from packages.evals.a1_targets import (
     A1EvaluationTarget,
     a1_compatibility_target_hash,
 )
+from packages.evals.benchmark_store import (
+    BenchmarkPhase,
+    BenchmarkRunStore,
+    PhaseLedger,
+    PhaseLedgerRecord,
+)
 from packages.evals.capabilities import ScenarioCapability, capability_matrix
 from packages.evals.dataset import FROZEN_DATASET, FrozenIncident, frozen_dataset_hash
 from packages.evals.graders import EvidenceGrade, HypothesisGrade, grade_evidence, grade_hypothesis
@@ -31,10 +43,15 @@ from packages.evals.live_fixtures import (
     FIXTURE_DEFINITIONS,
     GENERALIZATION_FIXTURE_BY_NAME,
     GENERALIZATION_FIXTURE_DEFINITIONS,
+    BaselineOracleResult,
     BenchmarkTrial,
+    FaultOracleResult,
     FixtureDefinition,
     FixtureLifecycle,
+    FixtureStimulusObservation,
     LiveBenchmarkEnvironment,
+    TriggerOracleResult,
+    WorkloadResult,
     fixture_registry_is_complete,
     preflight_evidence,
     select_harness_scenarios,
@@ -43,7 +60,11 @@ from packages.evals.runner import OfflineBenchmarkReport, run_offline_benchmark
 
 __all__ = [
     "A1AggregateGrade",
+    "A1CheckpointReference",
+    "A1CheckpointStore",
     "A1EvaluationTarget",
+    "A1PartialRun",
+    "A1ScenarioCheckpoint",
     "A1FailureLabel",
     "A1GeneralizationScenario",
     "A1_GENERALIZATION_SCENARIOS",
@@ -52,6 +73,10 @@ __all__ = [
     "A1ScenarioGrade",
     "A1_COMPATIBILITY_TARGETS",
     "A1_TARGET_BY_SCENARIO",
+    "BenchmarkPhase",
+    "BenchmarkRunStore",
+    "PhaseLedger",
+    "PhaseLedgerRecord",
     "EvidenceGrade",
     "FROZEN_DATASET",
     "FrozenIncident",
@@ -71,6 +96,11 @@ __all__ = [
     "a0_compatibility_baseline",
     "run_offline_benchmark",
     "BenchmarkTrial",
+    "BaselineOracleResult",
+    "FaultOracleResult",
+    "FixtureStimulusObservation",
+    "TriggerOracleResult",
+    "WorkloadResult",
     "FIXTURE_BY_NAME",
     "FIXTURE_DEFINITIONS",
     "FixtureDefinition",

@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, cast
@@ -22,8 +23,15 @@ from packages.evals import (
     aggregate_a1_grades,
     grade_a1_run,
 )
+from packages.evals.a1_checkpoints import (
+    A1CheckpointStore,
+    A1PartialRun,
+    A1ScenarioCheckpoint,
+    write_partial_run,
+)
 from packages.evals.a1_graders import A1_GRADER_VERSION
 from packages.evals.a1_targets import A1EvaluationTarget
+from packages.evals.benchmark_store import BenchmarkPhase, PhaseLedger
 from packages.evals.dataset import FROZEN_DATASET
 from packages.investigation import (
     MAX_EVIDENCE_SUMMARY_CHARS,
@@ -55,6 +63,10 @@ RESULT_SHA_PATH = _configured_path(
     "SRE_A1_RESULT_SHA_PATH", "docs/benchmarks/a1-r2-single-agent-live.sha256"
 )
 LEDGER_PATH = _configured_path("SRE_A1_LEDGER_PATH", ".local/a1-r2-single-agent-live-budget.json")
+CHECKPOINT_DIR = _configured_path("SRE_A1_CHECKPOINT_DIR", ".local/a1-r2-benchmark")
+PARTIAL_PATH = _configured_path(
+    "SRE_A1_PARTIAL_PATH", "docs/benchmarks/a1-r2-single-agent-live-partial.json"
+)
 MODEL = "gpt-5.6-luna"
 REASONING_EFFORT = "none"
 LIMITS = InvestigationLimits(
@@ -297,8 +309,24 @@ def _benchmark(manifest: dict[str, Any]) -> int:
     budget.ensure_capacity(70)
     registry = _registry()
     provider = OpenAIProvider(budget=budget, max_retry=0)
-    lifecycle = FixtureLifecycle(environment, definitions=_definition_map())
+    phase_ledger = PhaseLedger(
+        CHECKPOINT_DIR / "phases.jsonl", execution_id=manifest["experiment_id"]
+    )
+    checkpoint_store = A1CheckpointStore(
+        CHECKPOINT_DIR,
+        execution_id=manifest["experiment_id"],
+        configuration_hashes=_configuration_hashes(manifest),
+    )
+    checkpoint_store.prepare_new_run()
+    if phase_ledger.path.exists() and phase_ledger.path.stat().st_size:
+        raise RuntimeError(f"A1 phase ledger already exists: {phase_ledger.path}")
+    lifecycle = FixtureLifecycle(
+        environment, definitions=_definition_map(), phase_ledger=phase_ledger
+    )
+    if PARTIAL_PATH.exists():
+        raise RuntimeError(f"A1 partial-run artifact already exists: {PARTIAL_PATH}")
     results: list[dict[str, Any]] = []
+    completed_scenario_ids: list[str] = []
     for scenario in _scenarios():
         runtime = InvestigationRuntime(
             provider,
@@ -308,7 +336,98 @@ def _benchmark(manifest: dict[str, Any]) -> int:
             limits=LIMITS,
             a1_protocol=True,
         )
-        results.append(_run_one(scenario, lifecycle=lifecycle, runtime=runtime, manifest=manifest))
+        calls_before = budget.snapshot().calls_used
+        try:
+            result = _run_one(scenario, lifecycle=lifecycle, runtime=runtime, manifest=manifest)
+            calls_after = budget.snapshot().calls_used
+            artifact = A1RunArtifact.from_json(
+                json.dumps(result["artifact"], sort_keys=True, separators=(",", ":"))
+            )
+            from packages.evals.a1_graders import A1ScenarioGrade
+            from packages.evals.live_fixtures import BenchmarkTrial
+
+            trial = BenchmarkTrial.model_validate_json(json.dumps(result["trial"]))
+            grade = A1ScenarioGrade.model_validate_json(json.dumps(result["grade"]))
+            expected_hashes = _configuration_hashes(manifest)
+            if artifact.configuration_hashes != expected_hashes:
+                raise RuntimeError("scenario configuration hashes differ from frozen manifest")
+            calls_consumed = calls_after - calls_before
+            if calls_consumed != artifact.usage.outbound_api_attempts:
+                raise RuntimeError("scenario ledger delta differs from artifact outbound attempts")
+            with phase_ledger.phase(scenario.scenario_id, BenchmarkPhase.PERSIST_RESULT):
+                checkpoint_store.write(
+                    A1ScenarioCheckpoint(
+                        execution_id=manifest["experiment_id"],
+                        scenario_id=scenario.scenario_id,
+                        set=(
+                            "compatibility"
+                            if scenario.scenario_id.startswith("V020-")
+                            else "generalization"
+                        ),
+                        fixture=scenario.fixture,
+                        scenario_hash=result["scenario_hash"],
+                        trial=trial,
+                        artifact=artifact,
+                        grade=grade,
+                        configuration_hashes=artifact.configuration_hashes,
+                        calls_before=calls_before,
+                        calls_after=calls_after,
+                        calls_consumed=calls_consumed,
+                        completed_at=datetime.now(UTC).isoformat(),
+                    )
+                )
+            with phase_ledger.phase(scenario.scenario_id, BenchmarkPhase.GRADE):
+                A1ScenarioGrade.model_validate_json(json.dumps(result["grade"]))
+            with phase_ledger.phase(scenario.scenario_id, BenchmarkPhase.COMPLETE):
+                completed_scenario_ids.append(scenario.scenario_id)
+        except Exception as error:
+            after_failure = budget.snapshot()
+            details = getattr(error, "details", {})
+            if not isinstance(details, dict):
+                details = {"value": str(details)}
+            write_partial_run(
+                PARTIAL_PATH,
+                A1PartialRun(
+                    artifact_type="A1_SINGLE_AGENT_LIVE_PARTIAL",
+                    execution_id=manifest["experiment_id"],
+                    status="INVALIDATED",
+                    scenario_order=[item.scenario_id for item in _scenarios()],
+                    completed_scenario_ids=completed_scenario_ids,
+                    invalidation_scenario=scenario.scenario_id,
+                    invalidation_code=str(getattr(error, "code", type(error).__name__)),
+                    invalidation_reason=str(error),
+                    invalidation_details=details,
+                    ledger_path=str(LEDGER_PATH.relative_to(ROOT)),
+                    ledger_before=before.calls_used,
+                    ledger_after=after_failure.calls_used,
+                    outbound_attempts=after_failure.calls_used - before.calls_used,
+                    checkpoint_references=[
+                        checkpoint_store.reference(item) for item in completed_scenario_ids
+                    ],
+                    phase_ledger_path=str(phase_ledger.path),
+                ),
+            )
+            raise
+    ordered_checkpoints = checkpoint_store.load_ordered([item.scenario_id for item in _scenarios()])
+    scenario_by_id = {item.scenario_id: item for item in _scenarios()}
+    results = []
+    for checkpoint in ordered_checkpoints:
+        scenario = scenario_by_id[checkpoint.scenario_id]
+        results.append(
+            {
+                "scenario_id": checkpoint.scenario_id,
+                "set": checkpoint.set,
+                "fixture": checkpoint.fixture,
+                "scenario_hash": checkpoint.scenario_hash,
+                "target": _target_for(scenario).model_dump(mode="json"),
+                "trial": checkpoint.trial.model_dump(mode="json"),
+                "artifact": checkpoint.artifact.model_dump(mode="json"),
+                "grade": checkpoint.grade.model_dump(mode="json"),
+                "checkpoint": checkpoint_store.reference(checkpoint.scenario_id).model_dump(
+                    mode="json"
+                ),
+            }
+        )
     after = budget.snapshot()
     attempts = sum(item["artifact"]["usage"]["outbound_api_attempts"] for item in results)
     budget.verify_ledger_delta(before, after, attempts)
@@ -355,6 +474,7 @@ def _benchmark(manifest: dict[str, Any]) -> int:
             "provider_retries": 0,
         },
         "smoke": smoke,
+        "checkpoint_directory": str(CHECKPOINT_DIR.relative_to(ROOT)),
         "ledger": {
             "path": str(LEDGER_PATH.relative_to(ROOT)),
             "hard_cap": after.limit,

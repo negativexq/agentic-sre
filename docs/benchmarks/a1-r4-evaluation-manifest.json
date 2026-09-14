@@ -1,0 +1,142 @@
+{
+  "manifest_version": "a1-evaluation-manifest-v5",
+  "experiment_id": "v0.3-exp01-a1-improved-single-agent-r4",
+  "execution": "A1-R4",
+  "status": "READY_FOR_R4_LIVE_SMOKE",
+  "runtime_code_sha": "08c4bcb4ba85d57995c5b9f0555f8ba0b3edd3ea",
+  "benchmark_harness_version": "a1_live_harness_v2",
+  "benchmark_harness_sha256": "a34d40451f90527933484cfb1ebfb06591c81e09b0784b6318bcbbd869be4790",
+  "previous_execution": {
+    "execution": "A1-R3",
+    "experiment_id": "v0.3-exp01-a1-improved-single-agent-r3",
+    "code_sha": "087086df292a7f0df19cf75d3ea0837c67e7fd3a",
+    "status": "A1_INVALID",
+    "reason": "V020-007 / PROMETHEUS_ALERT_NOT_OBSERVED",
+    "calls_consumed": 30,
+    "ledger_path": ".local/a1-r3-single-agent-live-budget.json"
+  },
+  "project_historical_calls_before_r4": 40,
+  "r4_changes": [
+    "scenario baseline isolation hardening",
+    "explicit environment, fault, workload, trigger, alert, incident, evidence, recovery oracles",
+    "V020-007 deterministic stimulus verification",
+    "zero-model harness repeatability qualification",
+    "crash-safe scenario checkpoint persistence",
+    "durable benchmark phase ledger",
+    "partial-run artifact persistence"
+  ],
+  "benchmark_state_isolation": {
+    "strategy": "guarded local-kind control-plane reset plus Prometheus/Alertmanager ephemeral-store reset and workload-runtime reconciliation",
+    "contamination_preflight": true,
+    "environment_guard": "kind-agentic-sre",
+    "production_incident_manager_semantics_changed": false,
+    "model_accessible": false
+  },
+  "scenario_order": [
+    "V020-001", "V020-002", "V020-003", "V020-004", "V020-005",
+    "V020-006", "V020-007", "V020-008", "V020-009", "V020-010",
+    "A1G-001", "A1G-002", "A1G-003", "A1G-004"
+  ],
+  "runs_per_scenario": 1,
+  "sets": {
+    "compatibility": {
+      "artifact": "docs/benchmarks/v0.2.0-single-agent-live.json",
+      "scenario_count": 10,
+      "dataset_sha256": "20288dfae850b07bc4a754cd6e15a465f6fe7984cc259aeb7bf4294d79b16650",
+      "target_sha256": "55628a57741cb09672855d82cd2b00580e16a02a00a9c1ba04256f88c424bba3"
+    },
+    "generalization": {
+      "artifact": "docs/benchmarks/a1-generalization-set.json",
+      "scenario_count": 4,
+      "dataset_sha256": "d191c96737ef3b0ad4384abf075b3abbdc76eb186f3912393a8d005f1a51219",
+      "target_sha256": "0c99d31f115c4c498dd22cf404f500c50b8005d368e8e131705db30e765ee429",
+      "qualification_artifact": "docs/benchmarks/a1-generalization-qualification.json",
+      "qualification_sha256": "d12780023869f340037683c1a0978384af2508dc1d891edfac24023cab7e9d07"
+    }
+  },
+  "runtime_identity": {
+    "prompt_version": "sre_investigator_v4",
+    "prompt_sha256": "9c21bd17b5965545aa61c57a5eea788715570b52187447edfa94a3a871a3be20",
+    "topology_sha256": "f456231abdadf765a9069414cbf12ff132d844df3979f07b0fab22c8d8909fb8",
+    "component_registry_sha256": "f72503e8a754c98e1425006e11daf66522f78059410afb882566e8d0bd0ddf0c",
+    "tool_registry_sha256": "28d109652cce49dac0d6ffcdb563d2c092959a27e75f4e803a710317d676f7cb",
+    "tool_contracts_sha256": "9e0f7403b3ab1d503690908bd4da316b4616d3d112f898b0dfef7ec44f932f5b",
+    "tool_description_hash_status": "included_in_tool_registry_sha256",
+    "evidence_context_version": "a1_evidence_context_v2",
+    "grader_version": "a1_native_grader_v1",
+    "artifact_reader": "A1RunArtifact.from_json/model_validate_json"
+  },
+  "model": {
+    "model_family": "gpt-5.6-luna",
+    "reasoning_effort": "none",
+    "provider_retries": 0,
+    "fallback": "none",
+    "router": "none",
+    "voting": "none",
+    "best_of_n": "none"
+  },
+  "limits": {
+    "max_model_calls_per_incident": 5,
+    "max_actual_tool_executions_per_incident": 12,
+    "max_agent_turns": 5,
+    "max_wall_time_seconds": 180,
+    "provider_retries": 0
+  },
+  "live_budget": {
+    "ledger_path": ".local/a1-r4-single-agent-live-budget.json",
+    "compatibility_calls": 50,
+    "generalization_calls": 20,
+    "smoke_calls": 10,
+    "hard_cap": 80,
+    "formula": "10*5 + 4*5 + 10 = 80",
+    "status": "NOT_STARTED"
+  },
+  "qualification": {
+    "model_calls": 0,
+    "infrastructure_failures": 0,
+    "full_suite": {
+      "artifact": "docs/benchmarks/a1-r4-harness-reliability.json",
+      "suite_repeats": 3,
+      "scenario_executions": 42,
+      "passes": 42
+    },
+    "v007": {
+      "artifact": "docs/benchmarks/a1-r4-v007-repeatability.json",
+      "repeats": 10,
+      "passes": 10
+    },
+    "timing_sensitive": {
+      "artifact": "docs/benchmarks/a1-r4-timing-repeatability.json",
+      "fixture_repeats": 10,
+      "passes": 10
+    },
+    "order_independence": {
+      "artifact": "docs/benchmarks/a1-r4-order-independence.json",
+      "sequences": 4,
+      "scenario_executions": 8,
+      "passes": 8
+    }
+  },
+  "run_policy": {
+    "order": "compatibility_then_generalization",
+    "selective_reruns": false,
+    "no_tuning_after_first_provider_request": true,
+    "one_run_per_scenario": true,
+    "invalidation_only_for_objective_infrastructure_failure": true,
+    "provider_request_retries": 0,
+    "model_outcomes_are_not_invalidation_reasons": true,
+    "resume_after_invalidation": false,
+    "historical_calls_before_r4": 40
+  },
+  "change_record_policy": "preserve operational history and use bounded incident-derived change windows",
+  "kafka_lag_semantics": "current produced-minus-consumed increase proxy; true consumer-group lag is post-A1",
+  "post_a1_lag_adr": "docs/architecture/post-a1-kafka-lag-adr.md",
+  "freeze_gate": {
+    "all_hashes_committed_before_first_provider_request": true,
+    "generalization_set_status": "FROZEN",
+    "new_ledger_initialized_before_first_provider_request": true,
+    "live_execution_not_started": true,
+    "provider_calls": 0,
+    "ready_for_r4_live_smoke": true
+  }
+}

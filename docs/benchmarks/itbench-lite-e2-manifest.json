@@ -41,7 +41,7 @@
     "deterministic_grader": "itbench_root_cause_entity_v1"
   },
   "implementation": {
-    "qualification_checkout_sha": "16b94392e577d815bb9e92e0accdced6049a858f",
+    "qualification_checkout_sha": "ef552a5883e17fbc891a14eb5c53b7178c7d481b",
     "source_manifest": ".local/itbench-lite/.itbench-source-completeness.json",
     "source_manifest_sha256": "bffa2b12512cd8421587821a8cb4a5df77ccf9e4417055523c409e86e2f6a1ea",
     "qualification_artifact": "docs/benchmarks/itbench-lite-e2-qualification.json",

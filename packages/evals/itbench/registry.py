@@ -127,9 +127,12 @@ class ITBenchSnapshotToolRegistry:
 
     def public_context(self) -> str:
         """Serialize only investigator-safe context and tool descriptors."""
+        alert_context = self.backend.query(
+            ITBenchEvidenceCategory.ALERTS, {"limit": min(20, self.backend.max_rows)}
+        )
         payload = {
             "scenario": self.backend.scenario.public_context(),
-            "alerts": list(self.backend.records(ITBenchEvidenceCategory.ALERTS)[:20]),
+            "alerts": alert_context["records"],
             "tool_catalog": list(self.descriptors()),
             "evidence_context_version": "itbench_lite_snapshot_v1",
         }

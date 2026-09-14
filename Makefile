@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test check agent-check agent-smoke benchmark-offline a1-eval-check a1-generalization-check benchmark-harness-check a1-r4-fixture-check a1-fixture-check a1-harness-check a1-harness-repeatability a1-order-independence-check a1-r4-smoke-fixture-check a1-r4-forward-reconnect-check itbench-lite-setup itbench-lite-check model-smoke-live agent-smoke-live benchmark-live a1-live-smoke a1-live-benchmark cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check release-check-live
+.PHONY: install lint typecheck test check agent-check agent-smoke benchmark-offline a1-eval-check a1-generalization-check benchmark-harness-check a1-r4-fixture-check a1-fixture-check a1-harness-check a1-harness-repeatability a1-order-independence-check a1-r4-smoke-fixture-check a1-r4-forward-reconnect-check itbench-lite-setup itbench-lite-index itbench-lite-check model-smoke-live agent-smoke-live benchmark-live a1-live-smoke a1-live-benchmark cluster-up build-images deploy load status cluster-down observability-check evidence-check rbac-check release-check release-check-live
 
 LIVE_BUDGET_FILE ?= .local/v0.2.0-live-budget.json
 HARNESS_SCENARIOS ?=
@@ -70,6 +70,9 @@ a1-r4-forward-reconnect-check:
 
 itbench-lite-setup:
 	.venv/bin/python scripts/itbench_lite_setup.py
+
+itbench-lite-index:
+	.venv/bin/python scripts/itbench_lite_build_index.py
 
 itbench-lite-check:
 	.venv/bin/python scripts/itbench_lite_check.py

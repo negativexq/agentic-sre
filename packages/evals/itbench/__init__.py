@@ -40,6 +40,7 @@ from packages.evals.itbench.output_adapter import (
 from packages.evals.itbench.persistence import ITBenchRunStore, atomic_json_write
 from packages.evals.itbench.registry import ITBenchSnapshotToolRegistry
 from packages.evals.itbench.snapshot_backend import ITBenchSnapshotBackend
+from packages.evals.itbench.sparse_index import build_trace_indexes, trace_index_path
 
 __all__ = [
     "ITBENCH_DATASET_REVISION",
@@ -61,6 +62,7 @@ __all__ = [
     "ITBenchScenario",
     "ITBenchSnapshotBackend",
     "ITBenchSnapshotToolRegistry",
+    "build_trace_indexes",
     "OFFICIAL_EVALUATOR_REVISION",
     "OFFICIAL_EVALUATOR_SOURCE",
     "OFFICIAL_OUTPUT_RELATIVE_PATH",
@@ -73,4 +75,5 @@ __all__ = [
     "macro_average",
     "official_evaluator_spec",
     "write_official_output",
+    "trace_index_path",
 ]

@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import csv
 import json
+import sqlite3
+from collections.abc import Iterator
 from hashlib import sha256
+from itertools import islice
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid5
 
 from packages.evals.itbench.contracts import InvestigatorData, ITBenchEvidenceCategory
-from packages.evals.itbench.dataset import ITBenchLiteDataset, parse_tsv_prefix
+from packages.evals.itbench.dataset import ITBenchLiteDataset, iter_tsv
+from packages.evals.itbench.sparse_index import trace_index_path
 
 _EVIDENCE_NAMESPACE = UUID("2e6bbd95-4c2a-47d5-8b7c-cf19ccf9a3c4")
 
@@ -47,54 +52,102 @@ class ITBenchSnapshotBackend:
         """Return bounded normalized records for one published evidence category."""
         if category in self._cache:
             return self._cache[category]
-        records: list[dict[str, Any]] = []
-        root = Path(self.scenario.snapshot_path)
-        for relative_path in self.scenario.evidence_files[category]:
-            path = root / relative_path
-            if category is ITBenchEvidenceCategory.ALERTS:
-                records.extend(self._read_alerts(path, relative_path))
-            else:
-                for index, row in enumerate(
-                    parse_tsv_prefix(path, max_rows=self.max_rows, max_bytes=self.max_bytes)
-                ):
-                    records.append(
-                        {
-                            "evidence_id": str(self.evidence_id(category, relative_path, index)),
-                            "category": category.value,
-                            "source_file": relative_path,
-                            "row_index": index,
-                            "record": row,
-                        }
-                    )
-                    if len(records) >= self.max_rows:
-                        break
-            if len(records) >= self.max_rows:
-                break
-        result = tuple(records[: self.max_rows])
+        result = tuple(islice(self._iter_records(category), self.max_rows))
         self._cache[category] = result
         return result
 
     def query(self, category: ITBenchEvidenceCategory, arguments: dict[str, Any]) -> dict[str, Any]:
         """Execute a named, bounded query; arbitrary filesystem access is impossible."""
-        records = self.records(category)
+        selected: list[dict[str, Any]] = []
+        matching_count = 0
         pattern = arguments.get("pattern")
         service = arguments.get("service")
         namespace = arguments.get("namespace")
-        filtered = tuple(
-            item
-            for item in records
-            if _matches(item, pattern=pattern, service=service, namespace=namespace)
-        )
+        trace_id = arguments.get("trace_id")
         limit = arguments.get("limit", self.max_rows)
         if not isinstance(limit, int) or not 1 <= limit <= self.max_rows:
             raise ValueError("limit must be within the bounded snapshot query limit")
-        selected = _fit_bounded_records(filtered[:limit], self.max_bytes)
-        return {
-            "records": list(selected),
+        if (
+            category is ITBenchEvidenceCategory.TRACES
+            and isinstance(trace_id, str)
+            and not any(isinstance(arguments.get(key), str) for key in ("pattern", "service"))
+        ):
+            indexed = self._query_trace_index(trace_id, limit)
+            if indexed is not None:
+                return indexed
+        for item in self._iter_records(category):
+            if _matches(
+                item, pattern=pattern, service=service, namespace=namespace, trace_id=trace_id
+            ):
+                matching_count += 1
+                if len(selected) < limit:
+                    selected.append(item)
+        bounded = _fit_bounded_records(tuple(selected), self.max_bytes)
+        response = {
+            "records": list(bounded),
             "category": category.value,
             "scenario_id": self.scenario.scenario_id,
-            "result_count": len(selected),
+            "matching_count": matching_count,
+            "returned_count": len(bounded),
+            "truncated": matching_count > len(bounded),
         }
+        if len(json.dumps(response, ensure_ascii=False).encode("utf-8")) > self.max_bytes:
+            response["records"] = [{"evidence_id": item.get("evidence_id")} for item in bounded[:1]]
+            response["returned_count"] = len(response["records"])
+        return response
+
+    def _query_trace_index(self, trace_id: str, limit: int) -> dict[str, Any] | None:
+        index_path = trace_index_path(self.scenario.snapshot_path)
+        if not index_path.exists():
+            return None
+        source_file = self.scenario.evidence_files[ITBenchEvidenceCategory.TRACES][0]
+        source_path = Path(self.scenario.snapshot_path) / source_file
+        with sqlite3.connect(f"file:{index_path}?mode=ro", uri=True) as connection:
+            rows = connection.execute(
+                "SELECT row_index, byte_offset, byte_length FROM trace_index "
+                "WHERE trace_id = ? ORDER BY row_index LIMIT ?",
+                (trace_id, limit),
+            ).fetchall()
+            matching_count = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM trace_index WHERE trace_id = ?", (trace_id,)
+                ).fetchone()[0]
+            )
+        with source_path.open("rb") as stream:
+            header = next(csv.reader([stream.readline().decode("utf-8")], delimiter="\t"))
+            selected: list[dict[str, Any]] = []
+            for row_index, offset, length in rows:
+                stream.seek(offset)
+                values = next(csv.reader([stream.read(length).decode("utf-8")], delimiter="\t"))
+                record = dict(zip(header, values, strict=False))
+                selected.append(
+                    {
+                        "evidence_id": str(
+                            self.evidence_id(
+                                ITBenchEvidenceCategory.TRACES, source_file, int(row_index)
+                            )
+                        ),
+                        "category": ITBenchEvidenceCategory.TRACES.value,
+                        "source_file": source_file,
+                        "row_index": int(row_index),
+                        "record": record,
+                    }
+                )
+        bounded = _fit_bounded_records(tuple(selected), self.max_bytes)
+        return {
+            "records": list(bounded),
+            "category": ITBenchEvidenceCategory.TRACES.value,
+            "scenario_id": self.scenario.scenario_id,
+            "matching_count": matching_count,
+            "returned_count": len(bounded),
+            "truncated": matching_count > len(bounded),
+        }
+
+    def complete_source_records(
+        self, category: ITBenchEvidenceCategory
+    ) -> Iterator[dict[str, Any]]:
+        """Iterate every valid source record for qualification and bounded queries."""
+        return self._iter_records(category)
 
     def evidence_id(self, category: ITBenchEvidenceCategory, source_file: str, row: int) -> str:
         """Return an ID derived from pinned scenario content location, not ground truth."""
@@ -109,7 +162,25 @@ class ITBenchSnapshotBackend:
         ).encode("utf-8")
         return sha256(encoded).hexdigest()
 
-    def _read_alerts(self, path: Path, source_file: str) -> list[dict[str, Any]]:
+    def _iter_records(self, category: ITBenchEvidenceCategory) -> Iterator[dict[str, Any]]:
+        root = Path(self.scenario.snapshot_path)
+        for relative_path in self.scenario.evidence_files[category]:
+            path = root / relative_path
+            if category is ITBenchEvidenceCategory.ALERTS:
+                source: Iterator[dict[str, Any]] = iter(self._read_alerts(path))
+            else:
+                source = iter_tsv(path)
+            for index, row in enumerate(source):
+                yield {
+                    "evidence_id": str(self.evidence_id(category, relative_path, index)),
+                    "category": category.value,
+                    "source_file": relative_path,
+                    "row_index": index,
+                    "record": row,
+                }
+
+    def _read_alerts(self, path: Path) -> list[dict[str, Any]]:
+        """Read raw alert objects; evidence envelopes are added exactly once."""
         value = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(value, list):
             source = value
@@ -124,27 +195,20 @@ class ITBenchSnapshotBackend:
         else:
             source = [value]
         result: list[dict[str, Any]] = []
-        for index, item in enumerate(source):
+        for item in source:
             if not isinstance(item, dict):
                 continue
-            result.append(
-                {
-                    "evidence_id": str(
-                        uuid5(
-                            _EVIDENCE_NAMESPACE,
-                            f"{self.scenario.scenario_id}|alerts|{source_file}|{index}",
-                        )
-                    ),
-                    "category": ITBenchEvidenceCategory.ALERTS.value,
-                    "source_file": source_file,
-                    "row_index": index,
-                    "record": item,
-                }
-            )
+            result.append(item)
         return result
 
 
-def _matches(item: dict[str, Any], *, pattern: Any, service: Any, namespace: Any) -> bool:
+def _matches(
+    item: dict[str, Any], *, pattern: Any, service: Any, namespace: Any, trace_id: Any
+) -> bool:
+    record = item.get("record")
+    if isinstance(trace_id, str):
+        if not isinstance(record, dict) or str(record.get("TraceId", "")) != trace_id:
+            return False
     encoded = json.dumps(item, sort_keys=True, default=str).casefold()
     if isinstance(pattern, str) and pattern.casefold() not in encoded:
         return False

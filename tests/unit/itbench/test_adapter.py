@@ -1,6 +1,8 @@
 """Offline tests for the ITBench-Lite snapshot boundary."""
 
 import json
+import shutil
+import sqlite3
 from pathlib import Path
 from typing import cast
 
@@ -21,16 +23,18 @@ from packages.evals.itbench import (
     ITBenchSnapshotToolRegistry,
     adapt_a1_output,
     atomic_json_write,
+    build_trace_indexes,
     grade_root_cause_entities,
     official_evaluator_spec,
     write_official_output,
 )
 from packages.evals.itbench.output_adapter import entities_from_k8s_records
+from packages.evals.itbench.sparse_index import trace_index_path
 
 
 def _scenario(tmp_path: Path) -> ITBenchScenario:
     scenario_dir = tmp_path / "Scenario-1"
-    scenario_dir.mkdir()
+    scenario_dir.mkdir(parents=True)
     (scenario_dir / "alerts.json").write_text(
         json.dumps(
             {
@@ -213,6 +217,9 @@ def test_dataset_discovery_requires_pinned_35_scenario_manifest(tmp_path: Path) 
         "scenario_ids": list(ITBENCH_SCENARIO_IDS),
     }
     (tmp_path / ".itbench-lite-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (tmp_path / ".itbench-source-completeness.json").write_text(
+        json.dumps({"status": "PASS", "files": [], "source_file_count": 0}), encoding="utf-8"
+    )
     with pytest.raises(ValueError, match="SRE snapshot directory"):
         ITBenchLiteDataset.open(tmp_path).scenarios()
 
@@ -238,6 +245,93 @@ def test_snapshot_tool_output_is_bounded_for_large_observation(tmp_path: Path) -
     response = backend.query(ITBenchEvidenceCategory.LOGS, {"limit": 1})
     assert len(json.dumps(response, ensure_ascii=False).encode("utf-8")) <= 300
     assert response["records"][0]["evidence_id"]
+
+
+def test_complete_source_queries_reach_middle_and_tail_records(tmp_path: Path) -> None:
+    scenario = _scenario(tmp_path)
+    rows = [f"2025\tfrontend\tbenign-{index}\n" for index in range(10_000)]
+    rows[5_000] = "2025\tfrontend\tmiddle-diagnostic-canary\n"
+    rows[-1] = "2025\tfrontend\ttail-diagnostic-canary\n"
+    logs_path = Path(scenario.snapshot_path) / "otel_logs_raw.tsv"
+    logs_path.write_text("Timestamp\tServiceName\tBody\n" + "".join(rows), encoding="utf-8")
+    metric_path = Path(scenario.snapshot_path) / "metric.tsv"
+    metric_path.write_text("Timestamp\tServiceName\tBody\n" + "".join(rows), encoding="utf-8")
+    backend = ITBenchSnapshotBackend(
+        cast(ITBenchLiteDataset, object()), scenario, max_rows=5, max_bytes=10_000
+    )
+
+    middle = backend.query(ITBenchEvidenceCategory.LOGS, {"pattern": "middle-diagnostic"})
+    tail = backend.query(ITBenchEvidenceCategory.LOGS, {"pattern": "tail-diagnostic"})
+    early = backend.query(ITBenchEvidenceCategory.METRICS, {"pattern": "benign-0"})
+    metric_tail = backend.query(ITBenchEvidenceCategory.METRICS, {"pattern": "tail-diagnostic"})
+    assert middle["matching_count"] == middle["returned_count"] == 1
+    assert tail["matching_count"] == tail["returned_count"] == 1
+    assert early["matching_count"] == early["returned_count"] == 1
+    assert metric_tail["matching_count"] == metric_tail["returned_count"] == 1
+
+
+def test_evidence_ids_are_stable_when_snapshot_is_relocated(tmp_path: Path) -> None:
+    first = _scenario(tmp_path / "first")
+    relocated_root = tmp_path / "second"
+    relocated_root.mkdir()
+    relocated_path = relocated_root / "Scenario-1"
+    shutil.copytree(first.snapshot_path, relocated_path)
+    second = first.model_copy(update={"snapshot_path": str(relocated_path)})
+    first_backend = ITBenchSnapshotBackend(
+        cast(ITBenchLiteDataset, object()), first, max_rows=5, max_bytes=10_000
+    )
+    second_backend = ITBenchSnapshotBackend(
+        cast(ITBenchLiteDataset, object()), second, max_rows=5, max_bytes=10_000
+    )
+    for category in ITBenchEvidenceCategory:
+        assert [item["evidence_id"] for item in first_backend.records(category)] == [
+            item["evidence_id"] for item in second_backend.records(category)
+        ]
+
+
+def test_trace_id_filter_is_exact_and_bounded(tmp_path: Path) -> None:
+    scenario = _scenario(tmp_path)
+    trace_path = Path(scenario.snapshot_path) / "otel_traces_raw.tsv"
+    trace_path.write_text(
+        "Timestamp\tTraceId\tServiceName\tBody\n"
+        "2025\ttrace-a\tfrontend\tfirst\n"
+        "2025\ttrace-b\tfrontend\tsecond\n",
+        encoding="utf-8",
+    )
+    backend = ITBenchSnapshotBackend(
+        cast(ITBenchLiteDataset, object()), scenario, max_rows=5, max_bytes=10_000
+    )
+    response = backend.query(ITBenchEvidenceCategory.TRACES, {"trace_id": "trace-b"})
+    assert response["matching_count"] == response["returned_count"] == 1
+    assert response["records"][0]["record"]["TraceId"] == "trace-b"
+
+
+def test_trace_offset_index_is_sparse_and_handles_multiline_rows(tmp_path: Path) -> None:
+    scenario = _scenario(tmp_path)
+    trace_path = Path(scenario.snapshot_path) / "otel_traces_raw.tsv"
+    trace_path.write_text(
+        "Timestamp\tTraceId\tServiceName\tBody\n"
+        '2025\ttrace-a\tfrontend\t"first line\\nsecond line"\n'
+        "2025\ttrace-b\tfrontend\tlate\n",
+        encoding="utf-8",
+    )
+
+    class FakeDataset:
+        def scenarios(self) -> tuple[ITBenchScenario, ...]:
+            return (scenario,)
+
+    dataset = cast(ITBenchLiteDataset, FakeDataset())
+    result = build_trace_indexes(dataset)
+    assert result["status"] == "PASS"
+    index_path = trace_index_path(scenario.snapshot_path)
+    with sqlite3.connect(index_path) as connection:
+        columns = [row[1] for row in connection.execute("PRAGMA table_info(trace_index)")]
+        assert columns == ["trace_id", "row_index", "byte_offset", "byte_length"]
+        assert connection.execute("SELECT COUNT(*) FROM trace_index").fetchone()[0] == 2
+    backend = ITBenchSnapshotBackend(dataset, scenario, max_rows=5, max_bytes=10_000)
+    response = backend.query(ITBenchEvidenceCategory.TRACES, {"trace_id": "trace-b"})
+    assert response["matching_count"] == response["returned_count"] == 1
+    assert response["records"][0]["record"]["TraceId"] == "trace-b"
 
 
 def test_official_evaluator_is_pinned_and_output_is_separate(tmp_path: Path) -> None:

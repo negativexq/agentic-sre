@@ -24,7 +24,10 @@ def build_observable_incident(
     backend: ITBenchSnapshotBackend,
 ) -> tuple[Incident, tuple[Alert, ...]]:
     """Build alert context from snapshot observations only."""
-    alert_items = backend.records(ITBenchEvidenceCategory.ALERTS)
+    # Alert snapshots are small relative to raw telemetry.  Scan all alert
+    # files so incident construction does not accidentally depend on the
+    # bounded model-facing record window.
+    alert_items = backend.complete_source_records(ITBenchEvidenceCategory.ALERTS)
     normalized: list[Alert] = []
     for index, item in enumerate(alert_items):
         record = item.get("record", {})

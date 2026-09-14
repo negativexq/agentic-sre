@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
+import sys
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -17,6 +20,8 @@ from packages.evals.itbench.contracts import (
     ITBenchGroundTruthGroup,
     ITBenchScenario,
 )
+
+csv.field_size_limit(sys.maxsize)
 
 ITBENCH_SOURCE = "ibm-research/ITBench-Lite"
 ITBENCH_LICENSE = "Apache-2.0"
@@ -83,6 +88,7 @@ class ITBenchLiteDataset:
         self.root = root
         self.snapshot_root = root / "snapshots" / "sre" / ITBENCH_SRE_VERSION
         self.manifest_path = root / ".itbench-lite-manifest.json"
+        self.completeness_path = root / ".itbench-source-completeness.json"
 
     @classmethod
     def open(cls, root: str | Path) -> ITBenchLiteDataset:
@@ -102,6 +108,11 @@ class ITBenchLiteDataset:
             raise ITBenchDatasetError("SRE snapshot version does not match the pinned version")
         if tuple(manifest.get("scenario_ids", ())) != ITBENCH_SCENARIO_IDS:
             raise ITBenchDatasetError("scenario list does not match the pinned 35-scenario set")
+        if not dataset.completeness_path.exists():
+            raise ITBenchDatasetError("complete observable-source manifest is missing")
+        completeness = json.loads(dataset.completeness_path.read_text(encoding="utf-8"))
+        if completeness.get("status") != "PASS":
+            raise ITBenchDatasetError("observable-source completeness qualification is not PASS")
         return dataset
 
     def scenarios(self) -> tuple[ITBenchScenario, ...]:
@@ -120,9 +131,10 @@ class ITBenchLiteDataset:
         evidence_files: dict[ITBenchEvidenceCategory, tuple[str, ...]] = {}
         alert_files = sorted((path / "alerts").glob("*.json")) if (path / "alerts").is_dir() else []
         single_alerts = sorted(path.glob("alerts_in_alerting_state_*.json"))
-        if alert_files or single_alerts:
+        all_alerts = sorted({*alert_files, *single_alerts})
+        if all_alerts:
             evidence_files[ITBenchEvidenceCategory.ALERTS] = tuple(
-                str(item.relative_to(path)) for item in (single_alerts[-1:] or alert_files[-1:])
+                str(item.relative_to(path)) for item in all_alerts
             )
         metrics = sorted((path / "metrics").glob("*.tsv")) if (path / "metrics").is_dir() else []
         if metrics:
@@ -188,6 +200,33 @@ class ITBenchLiteDataset:
         backend = ITBenchSnapshotBackend(self, scenario, max_rows=max_rows, max_bytes=max_bytes)
         return backend.investigator_data()
 
+    def source_completeness(self) -> dict[str, Any]:
+        """Return the verified full-source manifest for evaluator diagnostics."""
+        value = json.loads(self.completeness_path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            raise ITBenchDatasetError("observable-source manifest is not an object")
+        return cast(dict[str, Any], value)
+
+    def verify_complete_sources(self) -> dict[str, Any]:
+        """Verify every acquired file against its pinned byte count and digest."""
+        manifest = self.source_completeness()
+        for entry in manifest.get("files", ()):
+            path = self.root / str(entry["source_file"])
+            if not path.exists():
+                raise ITBenchDatasetError(f"acquired source file is missing: {path}")
+            digest, byte_count = source_file_digest(path)
+            if digest != entry.get("sha256") or byte_count != entry.get("byte_count"):
+                raise ITBenchDatasetError(f"acquired source file changed: {path}")
+            if path.suffix == ".tsv":
+                indexed_rows = sum(1 for _ in iter_tsv(path))
+                if indexed_rows != entry.get("indexed_rows"):
+                    raise ITBenchDatasetError(f"indexed row count changed: {path}")
+            if entry.get("source_rows") != entry.get("indexed_rows", 0) + entry.get(
+                "parse_failures", 0
+            ):
+                raise ITBenchDatasetError(f"source row accounting is inconsistent: {path}")
+        return manifest
+
 
 def _bounded_objects(value: Any, maximum: int) -> tuple[dict[str, Any], ...]:
     if not isinstance(value, list):
@@ -227,22 +266,25 @@ def _parse_group(value: Any) -> ITBenchGroundTruthGroup:
     )
 
 
-def parse_tsv_prefix(path: Path, *, max_rows: int, max_bytes: int) -> tuple[dict[str, Any], ...]:
-    """Parse a bounded TSV prefix without loading multi-gigabyte snapshots."""
-    raw = path.read_bytes()[:max_bytes]
-    if not raw:
-        return ()
-    text = raw.decode("utf-8", errors="replace")
-    lines = text.splitlines()
-    if not lines:
-        return ()
-    reader = csv.DictReader(lines, delimiter="\t")
-    records: list[dict[str, Any]] = []
-    for row in reader:
-        if len(records) >= max_rows:
-            break
-        records.append({str(key): value for key, value in row.items() if key is not None})
-    return tuple(records)
+def iter_tsv(path: Path) -> Iterator[dict[str, Any]]:
+    """Stream every valid TSV row without loading the source into memory."""
+    with path.open("r", encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream, delimiter="\t")
+        for row in reader:
+            if None in row or any(value is None for value in row.values()):
+                continue
+            yield {str(key): value for key, value in row.items() if key is not None}
+
+
+def source_file_digest(path: Path) -> tuple[str, int]:
+    """Hash one complete source file and return SHA256 plus byte count."""
+    digest = hashlib.sha256()
+    size = 0
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+            size += len(chunk)
+    return digest.hexdigest(), size
 
 
 def parse_timestamp(value: Any) -> datetime | None:
@@ -264,5 +306,6 @@ __all__ = [
     "ITBenchDatasetError",
     "ITBenchLiteDataset",
     "parse_timestamp",
-    "parse_tsv_prefix",
+    "iter_tsv",
+    "source_file_digest",
 ]

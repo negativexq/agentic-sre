@@ -24,15 +24,25 @@
     "role": "secondary evaluator; not run during E0"
   },
   "adapter": {
-    "identity": "itbench_lite_snapshot_adapter_v1",
+    "identity": "itbench_lite_snapshot_adapter_v2",
     "investigator_tools": "itbench_snapshot_tools_v1",
     "output_adapter": "itbench_output_adapter_v1",
     "deterministic_grader": "itbench_root_cause_entity_v1"
   },
+  "qualification_artifact": "docs/benchmarks/itbench-lite-adapter-qualification-e0.1.json",
+  "qualification_sha256": "6c2093d79d941275d664cfbeb5420817e8a2df05fd8daa4df3b9ddf6d4c723c6",
+  "source_completeness_manifest": ".local/itbench-lite/.itbench-source-completeness.json",
+  "source_completeness_sha256": "bffa2b12512cd8421587821a8cb4a5df77ccf9e4417055523c409e86e2f6a1ea",
+  "source_file_count": 3454,
+  "source_bytes": 31020202291,
+  "sparse_index_manifest": ".local/itbench-lite/.itbench-sparse-index.json",
+  "sparse_index_sha256": "10de2f71031f3e53168e6b3ffb9e22848db519388853e77f7c8397b91635f8cb",
+  "sparse_index_kind": "trace_id_to_byte_offset",
+  "sparse_index_bytes": 537235456,
   "experiment": {
     "execution": "ITB-E1",
     "name": "itbench-lite-sre-external-eval-v1",
-    "status": "READY_FOR_EXTERNAL_LIVE_SMOKE",
+    "status": "READY_FOR_ITBENCH_LITE_EXTERNAL_SMOKE",
     "model": "gpt-5.6-luna",
     "reasoning_effort": "none",
     "prompt": "sre_investigator_v4",

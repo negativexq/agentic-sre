@@ -52,6 +52,13 @@ def _request_payload(
 
 
 def _performance(registry: ITBenchExternalToolRegistry) -> dict[str, dict[str, float | int]]:
+    trace_probe = registry.invoke("itbench_trace_search", {"limit": 1})
+    trace_id = None
+    for item in trace_probe.get("records", []):
+        record = item.get("record", {}) if isinstance(item, dict) else {}
+        if isinstance(record, dict) and isinstance(record.get("TraceId"), str):
+            trace_id = record["TraceId"]
+            break
     probes: dict[str, dict[str, Any]] = {
         "itbench_alert_summary": {},
         "itbench_entity_search": {"limit": 5},
@@ -63,6 +70,9 @@ def _performance(registry: ITBenchExternalToolRegistry) -> dict[str, dict[str, f
         "itbench_kubernetes_events": {"limit": 5},
         "itbench_kubernetes_objects": {"limit": 5},
     }
+    if trace_id is None:
+        raise RuntimeError("trace search did not return a usable trace identifier")
+    probes["itbench_trace_detail"] = {"trace_id": trace_id, "limit": 5}
     result: dict[str, dict[str, float | int]] = {}
     for name, args in probes.items():
         timings: list[float] = []

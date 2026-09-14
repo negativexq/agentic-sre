@@ -46,6 +46,16 @@ def test_a1_smoke_paths_are_configurable_for_new_execution_revisions() -> None:
     assert "SRE_A1_LEDGER_PATH" in target
 
 
+def test_a1_benchmark_paths_are_configurable_for_new_execution_revisions() -> None:
+    makefile = Path("Makefile").read_text(encoding="utf-8")
+    target = makefile.split("a1-live-benchmark:\n", 1)[1].split("\n\n", 1)[0]
+
+    assert "A1_LIVE_MANIFEST" in target
+    assert "A1_LIVE_RESULT" in target
+    assert "A1_LIVE_BUDGET_FILE" in target
+    assert "SRE_A1_LEDGER_PATH" in target
+
+
 @pytest.mark.parametrize("target_name", ["a1-live-smoke", "a1-live-benchmark"])
 def test_a1_live_targets_reconnect_observability_forwards(target_name: str) -> None:
     makefile = Path("Makefile").read_text(encoding="utf-8")

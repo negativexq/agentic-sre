@@ -1,0 +1,2 @@
+Timestamp	ServiceName	Severity	Body
+2025-12-15T17:25:20Z	checkout-api	ERROR	database connection timeout while acquiring connection

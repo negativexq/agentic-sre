@@ -1,0 +1,2 @@
+Timestamp	TraceId	ServiceName	SpanName	StatusCode	Body
+2025-12-15T17:25:20Z	0123456789abcdef0123456789abcdef	checkout-api	POST /checkout	ERROR	{"db.system":"postgresql","error":"connection timeout"}

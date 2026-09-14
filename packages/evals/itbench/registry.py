@@ -6,8 +6,15 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import Field
+
+from packages.contracts import EvidenceSourceType
 from packages.evals.itbench.contracts import ITBenchEvidenceCategory
 from packages.evals.itbench.snapshot_backend import ITBenchSnapshotBackend
+from packages.investigation.contracts import ToolRepeatPolicy
+from packages.investigation.registry import ReadOnlyToolRegistry, RegisteredTool
+from packages.investigation.tool_contracts import ToolArguments
+from packages.tools import ToolRequest
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,6 +144,88 @@ class ITBenchSnapshotToolRegistry:
             "evidence_context_version": "itbench_lite_snapshot_v1",
         }
         return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+    def investigation_registry(self) -> ReadOnlyToolRegistry:
+        """Adapt these external tools to the existing read-only runtime."""
+        return ReadOnlyToolRegistry(
+            tuple(
+                RegisteredTool(
+                    name=tool.name,
+                    version="1",
+                    operation=tool.name,
+                    source_type=_SOURCE_TYPES[tool.category],
+                    tool=_SnapshotRuntimeTool(tool.name, tool.category, self.backend),
+                    purpose=tool.purpose,
+                    argument_model=_ARGUMENT_MODELS[tool.category],
+                    repeat_policy=ToolRepeatPolicy.FIXED_WINDOW,
+                )
+                for tool in self._TOOLS
+            )
+        )
+
+
+class _SnapshotQueryArguments(ToolArguments):
+    """Shared bounded filter fields for snapshot-backed runtime tools."""
+
+    pattern: str | None = Field(default=None, min_length=1, max_length=100)
+    limit: int = Field(default=50, ge=1, le=50)
+
+
+class _SnapshotServiceArguments(_SnapshotQueryArguments):
+    service: str | None = Field(default=None, min_length=1, max_length=100)
+
+
+class _SnapshotNamespaceArguments(_SnapshotQueryArguments):
+    namespace: str | None = Field(default=None, min_length=1, max_length=100)
+
+
+class _SnapshotTraceArguments(_SnapshotServiceArguments):
+    trace_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class _SnapshotRuntimeTool:
+    """Runtime Tool implementation over one fixed observable category."""
+
+    def __init__(
+        self, name: str, category: ITBenchEvidenceCategory, backend: ITBenchSnapshotBackend
+    ) -> None:
+        self.name = name
+        self.version = "1"
+        self._category = category
+        self._backend = backend
+
+    def run(self, request: ToolRequest) -> dict[str, Any]:
+        """Execute only the selected typed snapshot query."""
+        query_arguments = {
+            key: value
+            for key, value in request.parameters.items()
+            if key not in {"operation", "temporal_mode", "observation_window"}
+        }
+        result = self._backend.query(self._category, query_arguments)
+        result["__temporal_mode"] = request.parameters.get("temporal_mode", "INCIDENT_WINDOW")
+        observation_window = request.parameters.get("observation_window")
+        if isinstance(observation_window, dict):
+            result["__effective_time_window"] = observation_window
+        return result
+
+
+_SOURCE_TYPES = {
+    ITBenchEvidenceCategory.ALERTS: EvidenceSourceType.ALERT,
+    ITBenchEvidenceCategory.METRICS: EvidenceSourceType.METRIC,
+    ITBenchEvidenceCategory.K8S_EVENTS: EvidenceSourceType.KUBERNETES,
+    ITBenchEvidenceCategory.K8S_OBJECTS: EvidenceSourceType.KUBERNETES,
+    ITBenchEvidenceCategory.LOGS: EvidenceSourceType.LOG,
+    ITBenchEvidenceCategory.TRACES: EvidenceSourceType.TRACE,
+}
+
+_ARGUMENT_MODELS: dict[ITBenchEvidenceCategory, type[ToolArguments]] = {
+    ITBenchEvidenceCategory.ALERTS: _SnapshotQueryArguments,
+    ITBenchEvidenceCategory.METRICS: _SnapshotServiceArguments,
+    ITBenchEvidenceCategory.K8S_EVENTS: _SnapshotNamespaceArguments,
+    ITBenchEvidenceCategory.K8S_OBJECTS: _SnapshotNamespaceArguments,
+    ITBenchEvidenceCategory.LOGS: _SnapshotServiceArguments,
+    ITBenchEvidenceCategory.TRACES: _SnapshotTraceArguments,
+}
 
 
 __all__ = ["ITBenchSnapshotToolRegistry", "ITBenchTool"]

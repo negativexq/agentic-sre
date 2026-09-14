@@ -1,0 +1,2 @@
+Timestamp	ServiceName	Body
+2025-12-15T17:25:19Z	checkout-api	{"type":"Normal","reason":"Scheduled","involvedObject":{"kind":"Pod","name":"checkout-api-7d9","namespace":"otel-demo"}}

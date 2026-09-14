@@ -1,0 +1,3 @@
+Timestamp	MetricName	ServiceName	Value	ResourceName
+2025-12-15T17:25:19Z	http.server.request.error_rate	checkout-api	0.42	checkout-api
+2025-12-15T17:25:20Z	db.client.connection.pressure	checkout-api	0.91	checkout-db

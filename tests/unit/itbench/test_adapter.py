@@ -5,6 +5,7 @@ import shutil
 import sqlite3
 from pathlib import Path
 from typing import cast
+from uuid import UUID
 
 import pytest
 
@@ -30,6 +31,7 @@ from packages.evals.itbench import (
 )
 from packages.evals.itbench.output_adapter import entities_from_k8s_records
 from packages.evals.itbench.sparse_index import trace_index_path
+from packages.tools import BoundedToolExecutor
 
 
 def _scenario(tmp_path: Path) -> ITBenchScenario:
@@ -101,6 +103,33 @@ def test_snapshot_registry_is_observable_only(tmp_path: Path) -> None:
     assert len(registry.invoke("itbench_logs", {"limit": 1})["records"]) == 1
     with pytest.raises(PermissionError):
         registry.invoke("ground_truth", {})
+
+
+def test_snapshot_registry_adapts_to_runtime_read_only_contract(tmp_path: Path) -> None:
+    scenario = _scenario(tmp_path)
+    backend = ITBenchSnapshotBackend(
+        cast(ITBenchLiteDataset, object()), scenario, max_rows=5, max_bytes=10_000
+    )
+    runtime_registry = ITBenchSnapshotToolRegistry(backend).investigation_registry()
+
+    assert runtime_registry.names() == (
+        "itbench_alerts",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_logs",
+        "itbench_metrics",
+        "itbench_traces",
+    )
+    assert all(
+        "ground_truth" not in json.dumps(item).casefold() for item in runtime_registry.descriptors()
+    )
+    registered = runtime_registry.get("itbench_logs")
+    request = registered.request(
+        UUID("00000000-0000-0000-0000-000000000001"),
+        {"service": "frontend", "limit": 1},
+    )
+    result = BoundedToolExecutor().execute(registered.tool, request)
+    assert getattr(result, "result_count", 0) == 1
 
 
 def test_evidence_ids_are_deterministic_and_k8s_entities_are_canonical(tmp_path: Path) -> None:

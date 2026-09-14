@@ -1,0 +1,364 @@
+{
+  "adapter": "itbench_lite_snapshot_adapter_v3",
+  "classification": "ITB_E4_SMOKE_PASS",
+  "context_chars": 4912,
+  "dataset_revision": "d0916b08ba421ce5e672e9ad68aa947d938dfef0",
+  "decision": {
+    "decision": "SUBMIT_DIAGNOSIS",
+    "requests": [],
+    "root_causes": [
+      {
+        "causal_summary": "Checkout requests are failing because the service cannot acquire database connections: db.client.connection.pressure reached 0.91, while logs and traces report PostgreSQL connection timeouts. The Deployment is the observable Kubernetes workload serving the affected service.",
+        "entity": "otel-demo/Deployment/checkout-api",
+        "evidence_ids": [
+          "b2c439c7-75a3-4ab6-aaa5-69d770385754",
+          "dc967ddd-b76e-406a-907b-79076ff50bc6",
+          "1745d43b-5b55-4d89-a7f5-e018f011a12e",
+          "8838e826-fbcd-42cd-b93a-9c957980f2e5"
+        ]
+      }
+    ],
+    "stop": null
+  },
+  "entity_schema_sha256": "e4da92fca523a835c2dc822553a188b5a97df21b86bf07c55c60bcebc126b0dc",
+  "evidence": {
+    "bounded_output_violations": 0,
+    "count": 12,
+    "cross_scenario_ids": 0,
+    "fabricated_ids": 0,
+    "ground_truth_exposure": 0,
+    "max_summary_chars": 925
+  },
+  "excluded_from_official_benchmark_metrics": true,
+  "execution": "ITB-E4",
+  "experiment": "itbench-lite-sre-external-eval-v4",
+  "external_call_tools_normalization": "PASS",
+  "fixture_id": "ITB-E4-SMOKE-001",
+  "incident_id": "5a23fa10-8edf-5f72-8cf6-52e4213a0c23",
+  "input_tokens": 18473,
+  "itbench_output": {
+    "construction": true,
+    "official_gt_grading": "NOT RUN",
+    "path": "/Users/ofk/agentic-sre/.local/itbench-lite-e4-runs/ITB-E4-SMOKE-001/smoke/Scenario-999/1/outputs/agent_output.json",
+    "persistence": true,
+    "predicted_entity_count": 1,
+    "strict_reload": true
+  },
+  "ledger": {
+    "after": {
+      "cap": 180,
+      "consumed": 5,
+      "remaining": 175
+    },
+    "before": {
+      "cap": 180,
+      "consumed": 0,
+      "remaining": 180
+    },
+    "smoke_consumed": 5
+  },
+  "limits": {
+    "model_calls": 5,
+    "provider_retries": 0,
+    "tool_executions": 12,
+    "turns": 5,
+    "wall_seconds": 180
+  },
+  "live_provider_path": [
+    {
+      "argument_length": 630,
+      "argument_sha256": "97986523b4bcb79715ba3f9f6dcd89ff31fa923aacac9909bebfb44dd0b50bcb",
+      "decision": "CALL_TOOLS",
+      "function": "request_itbench_tools",
+      "input_tokens": 2106,
+      "latency_ms": 4132,
+      "normalized_fields": [
+        "decision",
+        "requests",
+        "root_causes",
+        "stop"
+      ],
+      "output_tokens": 188,
+      "schema_validation": "PASS"
+    },
+    {
+      "argument_length": 414,
+      "argument_sha256": "6df55fe4129ecd4490bf0c835d5941c74713a926f9b02a359fcc837d36d6bab8",
+      "decision": "CALL_TOOLS",
+      "function": "request_itbench_tools",
+      "input_tokens": 3360,
+      "latency_ms": 2913,
+      "normalized_fields": [
+        "decision",
+        "requests",
+        "root_causes",
+        "stop"
+      ],
+      "output_tokens": 155,
+      "schema_validation": "PASS"
+    },
+    {
+      "argument_length": 303,
+      "argument_sha256": "1e2256ce773f85461842f948d7f800ab82ae599c7a4b74a5d691d500bf28c0b5",
+      "decision": "CALL_TOOLS",
+      "function": "request_itbench_tools",
+      "input_tokens": 4299,
+      "latency_ms": 2994,
+      "normalized_fields": [
+        "decision",
+        "requests",
+        "root_causes",
+        "stop"
+      ],
+      "output_tokens": 120,
+      "schema_validation": "PASS"
+    },
+    {
+      "argument_length": 300,
+      "argument_sha256": "fbe22f81099d426803d2654a17691770805782035d21314e13c3a9735bf9506a",
+      "decision": "CALL_TOOLS",
+      "function": "request_itbench_tools",
+      "input_tokens": 4483,
+      "latency_ms": 3285,
+      "normalized_fields": [
+        "decision",
+        "requests",
+        "root_causes",
+        "stop"
+      ],
+      "output_tokens": 123,
+      "schema_validation": "PASS"
+    },
+    {
+      "argument_length": 602,
+      "argument_sha256": "6d804a4088f51fae461d35149f7d5006b8a06f8ec79e122f11cbc3684a63c6fe",
+      "decision": "SUBMIT_DIAGNOSIS",
+      "function": "submit_itbench_diagnosis",
+      "input_tokens": 4225,
+      "latency_ms": 3459,
+      "normalized_fields": [
+        "decision",
+        "requests",
+        "root_causes",
+        "stop"
+      ],
+      "output_tokens": 253,
+      "schema_validation": "PASS"
+    }
+  ],
+  "manifest_sha256": "adba9f612fd000991a9159afeea33e438175e53301f001b88c92a51092c3b757",
+  "model": "gpt-5.6-luna",
+  "native_artifact": {
+    "construction": true,
+    "path": "/Users/ofk/agentic-sre/.local/itbench-lite-e4-runs/ITB-E4-SMOKE-001/smoke/Scenario-999/1/native_artifact.json",
+    "persistence": true,
+    "semantic_equality": true,
+    "serialization": true,
+    "strict_reload": true
+  },
+  "outbound_attempts": 5,
+  "output_tokens": 839,
+  "prompt_sha256": "1a3a05a56edba7ec748852d54797792aab04bf97373a18853b72d4eb1945a89e",
+  "prompt_version": "itbench_sre_investigator_v2",
+  "protocol": "itbench_investigation_decision_v1",
+  "protocol_sha256": "16f5a3c6b3fee3d7fb0646fefc515e7d11df7b63cb70052e00e795422690b3f6",
+  "provider_calls": 5,
+  "provider_latency_ms": 16783,
+  "purpose": "external integration smoke",
+  "reasoning": "none",
+  "runtime_source_freeze_sha": "de20777aee0fed17c2b1d1f8e09deafbd154eaef",
+  "safety": {
+    "arbitrary_filesystem": 0,
+    "arbitrary_promql": 0,
+    "arbitrary_shell": 0,
+    "cross_scenario_evidence_accepted": 0,
+    "fabricated_evidence_accepted": 0,
+    "ground_truth_exposure": 0,
+    "sql": 0,
+    "writes": 0
+  },
+  "scenario_id": "Scenario-999",
+  "synthetic_fixture": true,
+  "terminal": "SUBMIT_DIAGNOSIS",
+  "tool_registry_sha256": "5962a189e7fb7db7f0e8fb397e3e91e3f8d6b15a70ee447c8b8a026afb354956",
+  "tools": {
+    "executions": 12,
+    "failures": 0,
+    "invalid": 0,
+    "requests": 13,
+    "timeouts": 0,
+    "turns": [
+      {
+        "decision": "CALL_TOOLS",
+        "requested_tools": [
+          "itbench_metric_analysis",
+          "itbench_logs",
+          "itbench_trace_search",
+          "itbench_entity_search",
+          "itbench_kubernetes_events",
+          "itbench_topology"
+        ],
+        "summaries": [
+          {
+            "evidence_ids": [
+              "b2c439c7-75a3-4ab6-aaa5-69d770385754"
+            ],
+            "status": "SUCCESS",
+            "tool": "itbench_metric_analysis"
+          },
+          {
+            "evidence_ids": [
+              "dc967ddd-b76e-406a-907b-79076ff50bc6"
+            ],
+            "status": "SUCCESS",
+            "tool": "itbench_logs"
+          },
+          {
+            "evidence_ids": [
+              "1745d43b-5b55-4d89-a7f5-e018f011a12e"
+            ],
+            "status": "SUCCESS",
+            "tool": "itbench_trace_search"
+          },
+          {
+            "evidence_ids": [
+              "d7b441f4-0d96-4670-acd6-3a3ee483fdaa"
+            ],
+            "status": "SUCCESS",
+            "tool": "itbench_entity_search"
+          },
+          {
+            "evidence_ids": [
+              "a4c0be70-6f3e-4239-acba-b311142438f9"
+            ],
+            "status": "SUCCESS",
+            "tool": "itbench_kubernetes_events"
+          },
+          {
+            "evidence_ids": [
+              "ffe73c99-aed7-4d18-bb18-7b46e9a9d36f"
+            ],
+            "status": "SUCCESS",
+            "tool": "itbench_topology"
+          }
+        ],
+        "tool_calls": 6,
+        "turn": 1
+      },
+      {
+        "decision": "CALL_TOOLS",
+        "requested_tools": [
+          "itbench_entity_search",
+          "itbench_entity_context",
+          "itbench_kubernetes_objects"
+        ],
+        "summaries": [
+          {
+            "evidence_ids": [
+              "e834d67e-241e-423d-9457-d059820519a5"
+            ],
+            "status": "SUCCESS",
+            "tool": "itbench_entity_search"
+          },
+          {
+            "evidence_ids": [
+              "8838e826-fbcd-42cd-b93a-9c957980f2e5"
+            ],
+            "status": "SUCCESS",
+            "tool": "itbench_entity_context"
+          },
+          {
+            "evidence_ids": [
+              "b78b598d-d6d7-42e1-9fe8-3d03b5ef3eab"
+            ],
+            "status": "SUCCESS",
+            "tool": "itbench_kubernetes_objects"
+          }
+        ],
+        "tool_calls": 9,
+        "turn": 2
+      },
+      {
+        "decision": "CALL_TOOLS",
+        "requested_tools": [
+          "itbench_entity_search",
+          "itbench_entity_context"
+        ],
+        "summaries": [
+          {
+            "evidence_ids": [
+              "4115676a-c8a8-4c78-ad50-a2664b00331b"
+            ],
+            "status": "SUCCESS",
+            "tool": "itbench_entity_search"
+          },
+          {
+            "evidence_ids": [
+              "49038720-5fd2-45f8-8012-4eaf0e55b61b"
+            ],
+            "status": "SUCCESS",
+            "tool": "itbench_entity_context"
+          }
+        ],
+        "tool_calls": 11,
+        "turn": 3
+      },
+      {
+        "decision": "CALL_TOOLS",
+        "requested_tools": [
+          "itbench_entity_search",
+          "itbench_entity_search"
+        ],
+        "summaries": [
+          {
+            "status": "SKIPPED_DUPLICATE",
+            "tool": "itbench_entity_search"
+          },
+          {
+            "evidence_ids": [
+              "f40c09e0-04ab-40a7-b158-5709327fa207"
+            ],
+            "status": "SUCCESS",
+            "tool": "itbench_entity_search"
+          }
+        ],
+        "tool_calls": 12,
+        "turn": 4
+      },
+      {
+        "decision": "SUBMIT_DIAGNOSIS",
+        "root_cause_count": 1,
+        "turn": 5
+      }
+    ]
+  },
+  "total_duration_ms": 16854,
+  "usage_reconciliation": {
+    "ledger_delta": 5,
+    "provider_invocation_delta": 5,
+    "provider_outbound_delta": 5,
+    "runtime": {
+      "duration_ms": 16844,
+      "input_tokens": 18473,
+      "input_tokens_total": 18473,
+      "latency_ms": 16783,
+      "model": "gpt-5.6-luna",
+      "model_calls": 5,
+      "outbound_api_attempts": 5,
+      "output_tokens": 839,
+      "output_tokens_total": 839,
+      "provider": "openai",
+      "provider_invocations": 5,
+      "provider_latency_ms_total": 16783,
+      "provider_retries": 0,
+      "reasoning_effort": "none",
+      "shared_ledger_consumed": 5,
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_calls": 12,
+      "tool_requests_total": 13,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    }
+  }
+}

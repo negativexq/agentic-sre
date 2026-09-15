@@ -1,7 +1,7 @@
 {
   "execution": "ITB-E7",
   "experiment": "itbench-lite-sre-external-eval-v7",
-  "runtime_source_sha": "d7ea43cbd61412495d80043a192bdbb53e3602f2",
+  "runtime_source_sha": "87038086817817cdd48c94a68b3befbf48b27c60",
   "benchmark": "ITBench-Lite",
   "organization": "IBM Research",
   "dataset_revision": "d0916b08ba421ce5e672e9ad68aa947d938dfef0",

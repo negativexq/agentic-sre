@@ -1,0 +1,254 @@
+{
+  "execution": "ITB-E7-pre",
+  "ground_truth_access": false,
+  "openai_calls": 0,
+  "scenario_count": 35,
+  "scenarios": [
+    {
+      "context_chars": 36012,
+      "duration_ms": 5049,
+      "entities": 1034,
+      "scenario": "Scenario-1",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 40429,
+      "duration_ms": 4385,
+      "entities": 1040,
+      "scenario": "Scenario-2",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 38116,
+      "duration_ms": 5936,
+      "entities": 1043,
+      "scenario": "Scenario-4",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 41291,
+      "duration_ms": 4298,
+      "entities": 1043,
+      "scenario": "Scenario-5",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 37432,
+      "duration_ms": 5120,
+      "entities": 1041,
+      "scenario": "Scenario-6",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 40114,
+      "duration_ms": 4319,
+      "entities": 1034,
+      "scenario": "Scenario-7",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 40234,
+      "duration_ms": 5094,
+      "entities": 1036,
+      "scenario": "Scenario-8",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 36500,
+      "duration_ms": 5068,
+      "entities": 1038,
+      "scenario": "Scenario-9",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 25174,
+      "duration_ms": 4289,
+      "entities": 1010,
+      "scenario": "Scenario-11",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 35967,
+      "duration_ms": 5828,
+      "entities": 1050,
+      "scenario": "Scenario-12",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 40350,
+      "duration_ms": 4510,
+      "entities": 1032,
+      "scenario": "Scenario-13",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 38180,
+      "duration_ms": 4325,
+      "entities": 1048,
+      "scenario": "Scenario-14",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 39547,
+      "duration_ms": 4379,
+      "entities": 1047,
+      "scenario": "Scenario-15",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 39377,
+      "duration_ms": 5113,
+      "entities": 1034,
+      "scenario": "Scenario-16",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 39151,
+      "duration_ms": 5634,
+      "entities": 1517,
+      "scenario": "Scenario-17",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 42504,
+      "duration_ms": 6582,
+      "entities": 1452,
+      "scenario": "Scenario-18",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 39483,
+      "duration_ms": 6663,
+      "entities": 1701,
+      "scenario": "Scenario-19",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 62156,
+      "duration_ms": 4583,
+      "entities": 1023,
+      "scenario": "Scenario-20",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 39615,
+      "duration_ms": 5663,
+      "entities": 1604,
+      "scenario": "Scenario-21",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 39751,
+      "duration_ms": 5649,
+      "entities": 1717,
+      "scenario": "Scenario-22",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 41489,
+      "duration_ms": 4302,
+      "entities": 1051,
+      "scenario": "Scenario-23",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 62474,
+      "duration_ms": 4376,
+      "entities": 1015,
+      "scenario": "Scenario-24",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 37746,
+      "duration_ms": 5551,
+      "entities": 1409,
+      "scenario": "Scenario-25",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 39753,
+      "duration_ms": 6180,
+      "entities": 1530,
+      "scenario": "Scenario-29",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 35507,
+      "duration_ms": 4302,
+      "entities": 1027,
+      "scenario": "Scenario-31",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 37072,
+      "duration_ms": 5001,
+      "entities": 1026,
+      "scenario": "Scenario-33",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 43510,
+      "duration_ms": 3908,
+      "entities": 1033,
+      "scenario": "Scenario-34",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 38020,
+      "duration_ms": 5556,
+      "entities": 1491,
+      "scenario": "Scenario-35",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 48076,
+      "duration_ms": 1106,
+      "entities": 1713,
+      "scenario": "Scenario-38",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 35774,
+      "duration_ms": 5605,
+      "entities": 1654,
+      "scenario": "Scenario-80",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 36339,
+      "duration_ms": 5703,
+      "entities": 1779,
+      "scenario": "Scenario-81",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 37774,
+      "duration_ms": 4656,
+      "entities": 1630,
+      "scenario": "Scenario-83",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 38280,
+      "duration_ms": 6627,
+      "entities": 1955,
+      "scenario": "Scenario-91",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 58015,
+      "duration_ms": 3642,
+      "entities": 1003,
+      "scenario": "Scenario-102",
+      "status": "PASS"
+    },
+    {
+      "context_chars": 65135,
+      "duration_ms": 3651,
+      "entities": 1013,
+      "scenario": "Scenario-105",
+      "status": "PASS"
+    }
+  ],
+  "status": "PASS"
+}

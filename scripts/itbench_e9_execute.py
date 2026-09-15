@@ -57,9 +57,26 @@ def _sha256(path: Path) -> str:
 
 def _ledger(path: Path, cap: int, *, status: str = "NOT_STARTED") -> dict[str, Any]:
     if path.exists():
-        value = json.loads(path.read_text(encoding="utf-8"))
+        contents = path.read_text(encoding="utf-8").strip()
+        if not contents:
+            value = {}
+        else:
+            value = json.loads(contents)
         if not isinstance(value, dict):
             raise RuntimeError(f"invalid E9 ledger: {path}")
+        if not value:
+            value = {
+                "execution": EXECUTION,
+                "purpose": "AGENT",
+                "cap": cap,
+                "calls_used": 0,
+                "remaining": cap,
+                "status": status,
+                "scenario_ids": [],
+                "model": "gpt-5.6-luna",
+                "reasoning": "none",
+            }
+            atomic_json_write(path, value)
         return value
     value = {
         "execution": EXECUTION,

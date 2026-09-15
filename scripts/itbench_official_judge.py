@@ -75,6 +75,19 @@ def _safe_plan_record(identity: ModelExecutionIdentity, plan: JudgePlan) -> dict
     }
 
 
+def _reserve_judge_attempts(ledger: dict[str, Any], expected_calls: int) -> dict[str, Any]:
+    """Reserve attempts before evaluator startup, including legacy ledgers."""
+    ledger["consumed"] += expected_calls
+    # Older repository-owned judge ledgers only carried the core budget
+    # counters. Treat absent audit counters as zero rather than allowing a
+    # pre-transport KeyError; the reservation remains the source of truth.
+    ledger["provider_invocations"] = int(ledger.get("provider_invocations", 0)) + expected_calls
+    ledger["outbound_attempts"] = int(ledger.get("outbound_attempts", 0)) + expected_calls
+    ledger["remaining"] = ledger["cap"] - ledger["consumed"]
+    ledger["status"] = "RUNNING"
+    return ledger
+
+
 def _prepare_luna_compatible_evaluator(source: Path) -> tuple[Path, str]:
     """Make an ephemeral compatibility copy of the pinned evaluator.
 
@@ -142,11 +155,7 @@ def main(argv: list[str] | None = None) -> int:
 
         # Reserve before starting the upstream process.  There is deliberately
         # no refund path: a transmitted request remains charged on failure.
-        ledger["consumed"] += plan.expected_calls
-        ledger["provider_invocations"] += plan.expected_calls
-        ledger["outbound_attempts"] += plan.expected_calls
-        ledger["remaining"] = ledger["cap"] - ledger["consumed"]
-        ledger["status"] = "RUNNING"
+        ledger = _reserve_judge_attempts(ledger, plan.expected_calls)
         _atomic_json_write(plan.ledger_path, ledger)
 
         env = os.environ.copy()

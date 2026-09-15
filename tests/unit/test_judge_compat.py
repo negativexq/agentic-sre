@@ -51,3 +51,21 @@ def test_compatibility_copy_scopes_temperature_and_retries() -> None:
     assert "max_retries: int = 1" in copied_agent
     assert "max_calc_retries = 1" in copied_agent
     assert "max_retries=0," in copied_client
+
+
+def test_legacy_judge_ledger_is_reserved_before_transport() -> None:
+    spec = importlib.util.spec_from_file_location(
+        "judge_wrapper_reservation", "scripts/itbench_official_judge.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    ledger = {"cap": 35, "consumed": 0, "remaining": 35, "status": "NOT_STARTED"}
+    reserved = module._reserve_judge_attempts(ledger, 1)
+
+    assert reserved["consumed"] == 1
+    assert reserved["remaining"] == 34
+    assert reserved["provider_invocations"] == 1
+    assert reserved["outbound_attempts"] == 1
+    assert reserved["status"] == "RUNNING"

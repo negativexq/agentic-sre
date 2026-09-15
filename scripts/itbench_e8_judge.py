@@ -74,6 +74,7 @@ def _run_one(*, scenario: str, args: argparse.Namespace, checkpoint_root: Path) 
     path = checkpoint_path(checkpoint_root, scenario)
     if checkpoint_is_durable(path):
         return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
+    path.parent.mkdir(parents=True, exist_ok=True)
     gt_dir, outputs_dir, gt_sha, prediction_sha = _stage_case(
         ground_truth_root=args.ground_truth_root,
         outputs_root=args.outputs_root,

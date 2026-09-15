@@ -42,6 +42,7 @@ class ITBenchSnapshotBackend:
         self.max_bytes = max_bytes
         self._cache: dict[ITBenchEvidenceCategory, tuple[dict[str, Any], ...]] = {}
         self._candidate_cache: tuple[dict[str, Any], ...] | None = None
+        self._topology_cache: dict[tuple[Any, ...], tuple[dict[str, Any], ...]] = {}
 
     def investigator_data(self) -> InvestigatorData:
         """Build a bounded public data object with no ground-truth reference."""
@@ -670,6 +671,9 @@ class ITBenchSnapshotBackend:
             not isinstance(limit, int) or not 1 <= limit <= max(self.max_rows * 4, 100)
         ):
             raise ValueError("limit must be within the bounded topology limit")
+        cache_key = (entity, namespace, kind, pattern, relationship, limit)
+        if cache_key in self._topology_cache:
+            return self._topology_cache[cache_key]
         parsed_entity = parse_canonical_entity(entity) if entity is not None else None
         edges: set[tuple[str, str, str]] = set()
         objects: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
@@ -818,7 +822,9 @@ class ITBenchSnapshotBackend:
                 ):
                     continue
             filtered.append({"source": source, "target": target, "relationship": edge_relationship})
-        return tuple(filtered if limit is None else filtered[:limit])
+        result = tuple(filtered if limit is None else filtered[:limit])
+        self._topology_cache[cache_key] = result
+        return result
 
     def _iter_records(self, category: ITBenchEvidenceCategory) -> Iterator[dict[str, Any]]:
         root = Path(self.scenario.snapshot_path)

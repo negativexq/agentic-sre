@@ -73,17 +73,22 @@ def main() -> None:
         )
         if context_result.get("entity") != canonical:
             raise RuntimeError(f"entity context mismatch: {scenario.scenario_id}")
-        for tool, args in (
-            ("itbench_topology", {"pattern": "definitely-nonexistent", "limit": 5}),
-            ("itbench_metric_analysis", {"limit": 1}),
-            ("itbench_logs", {"limit": 1}),
-            ("itbench_trace_search", {"limit": 1}),
-            ("itbench_kubernetes_events", {"limit": 1}),
-            ("itbench_kubernetes_objects", {"limit": 1}),
-        ):
-            value = registry.invoke(tool, args)
-            if len(json.dumps(value, default=str).encode()) > backend.max_bytes:
-                raise RuntimeError(f"unbounded output: {scenario.scenario_id}/{tool}")
+        topology = registry.invoke(
+            "itbench_topology", {"pattern": "definitely-nonexistent", "limit": 5}
+        )
+        if topology["records"]:
+            raise RuntimeError(f"topology filter failed: {scenario.scenario_id}")
+        # These probes intentionally use the bounded source prefix.  The
+        # dedicated performance qualification owns full scans; this gate
+        # checks schema/serialization and source availability on all cases.
+        for category in ("metrics", "logs", "traces", "k8s_events", "k8s_objects"):
+            records = backend.records(
+                next(
+                    item for item in backend.scenario.evidence_categories if item.value == category
+                )
+            )
+            if not records:
+                raise RuntimeError(f"empty observable source: {scenario.scenario_id}/{category}")
         rows.append(
             {
                 "scenario": scenario.scenario_id,

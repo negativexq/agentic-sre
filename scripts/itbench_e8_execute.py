@@ -47,8 +47,9 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA_ROOT = ROOT / ".local/itbench-lite"
 RUN_ROOT = ROOT / ".local/itbench-lite-e8-runs"
 OFFICIAL_ROOT = RUN_ROOT / "official"
-SMOKE_ROOT = RUN_ROOT / "ITB-E8-SMOKE-001" / "smoke"
-SMOKE_RESULT = ROOT / "docs/benchmarks/itbench-e8-live-smoke-001.json"
+SMOKE_ID = "ITB-E8-SMOKE-002"
+SMOKE_ROOT = RUN_ROOT / SMOKE_ID / "smoke"
+SMOKE_RESULT = ROOT / "docs/benchmarks/itbench-e8-live-smoke-002.json"
 OFFICIAL_PARTIAL = ROOT / "docs/benchmarks/itbench-e8-official-partial.json"
 OFFICIAL_RESULT = ROOT / "docs/benchmarks/itbench-e8-results.json"
 OFFICIAL_RESULT_SHA = ROOT / "docs/benchmarks/itbench-e8-results.sha256"
@@ -191,7 +192,7 @@ def _persist_smoke(provider: OpenAIProvider, manifest: dict[str, Any]) -> dict[s
     smoke = {
         "execution": EXECUTION,
         "experiment": EXPERIMENT,
-        "smoke_id": "ITB-E8-SMOKE-001",
+        "smoke_id": SMOKE_ID,
         "scenario_id": scenario.scenario_id,
         "runtime_source_freeze": RUNTIME_SOURCE_SHA,
         "provider": "openai",
@@ -365,8 +366,11 @@ def run_smoke() -> int:
     _validate_live_agent()
     preflight = _preflight_context(ITBenchLiteDataset.open(DATA_ROOT), manifest)
     budget = LiveModelBudget(5, ledger_path=str(SMOKE_LEDGER))
-    if budget.snapshot().calls_used != 0:
-        raise RuntimeError("E8 smoke ledger is not fresh")
+    current = budget.snapshot()
+    if current.calls_used != 1:
+        raise RuntimeError("E8 smoke ledger must preserve exactly one failed pre-repair attempt")
+    if current.calls_remaining < 1:
+        raise RuntimeError("E8 smoke ledger has no capacity for the repaired smoke")
     provider = OpenAIProvider(budget=budget, max_retry=0)
     smoke = _persist_smoke(provider, manifest)
     smoke["preflight"] = preflight
@@ -374,7 +378,7 @@ def run_smoke() -> int:
         "cap": budget.snapshot().limit,
         "consumed": budget.snapshot().calls_used,
         "remaining": budget.snapshot().calls_remaining,
-        "historical_failed_attempts": 0,
+        "historical_failed_attempts": 1,
     }
     atomic_json_write(SMOKE_RESULT, smoke)
     print(json.dumps({"status": "ITB_E8_SMOKE_PASS", "attempts": smoke["outbound_attempts"]}))

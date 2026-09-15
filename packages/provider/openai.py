@@ -173,6 +173,33 @@ def _compile_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _inline_schema_refs(
+    value: Any, definitions: dict[str, Any], stack: tuple[str, ...] = ()
+) -> Any:
+    """Inline local Pydantic definitions before sending a function schema.
+
+    The Responses strict function subset does not resolve the repository's
+    ``$defs`` references.  Keeping a reference in a projected function
+    schema makes the request provider-invalid even when the local Pydantic
+    model is valid.  This resolver is deliberately limited to local
+    ``#/$defs/<name>`` references and fails closed on cycles.
+    """
+    if isinstance(value, list):
+        return [_inline_schema_refs(item, definitions, stack) for item in value]
+    if not isinstance(value, dict):
+        return value
+    reference = value.get("$ref")
+    if isinstance(reference, str) and reference.startswith("#/$defs/"):
+        name = reference.removeprefix("#/$defs/")
+        if name in stack:
+            raise ValueError(f"cyclic local schema reference: {name}")
+        target = definitions.get(name)
+        if not isinstance(target, dict):
+            raise ValueError(f"unknown local schema reference: {name}")
+        return _inline_schema_refs(target, definitions, (*stack, name))
+    return {key: _inline_schema_refs(item, definitions, stack) for key, item in value.items()}
+
+
 def _decision_function_schemas(
     schema: dict[str, Any],
     allowed_tool_names: tuple[str, ...] | None = None,
@@ -399,6 +426,11 @@ def _itbench_decision_function_schemas(
     if not all(isinstance(item, dict) for item in (request, root_cause, stop)):
         raise ValueError("ITBench decision schema definitions are incomplete")
     assert isinstance(request, dict) and isinstance(root_cause, dict) and isinstance(stop, dict)
+    request = _inline_schema_refs(request, definitions)
+    root_cause = _inline_schema_refs(root_cause, definitions)
+    stop = _inline_schema_refs(stop, definitions)
+    if isinstance(candidate_update, dict):
+        candidate_update = _inline_schema_refs(candidate_update, definitions)
 
     def obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
         return {

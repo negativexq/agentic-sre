@@ -87,6 +87,28 @@ def test_wire_schema_requires_primary_slot_and_allows_only_three() -> None:
     assert "additional_request_4" not in request_schema["properties"]
 
 
+def test_v4_provider_functions_inline_all_local_definition_references() -> None:
+    schemas = _itbench_decision_function_schemas(
+        ITBenchInvestigationDecisionV4.model_json_schema(),
+        ("itbench_logs",),
+        _request().tool_schemas,
+    )
+
+    def refs(value: object) -> list[str]:
+        if isinstance(value, dict):
+            found = []
+            if "$ref" in value:
+                found.append(str(value["$ref"]))
+            for child in value.values():
+                found.extend(refs(child))
+            return found
+        if isinstance(value, list):
+            return [ref for child in value for ref in refs(child)]
+        return []
+
+    assert all(refs(schema) == [] for schema in schemas.values())
+
+
 def test_provider_normalizes_wire_v4_to_local_v4() -> None:
     request = _request()
     raw = _raw("request_itbench_tools", _wire_request(primary=_slot()))

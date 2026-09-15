@@ -2,9 +2,18 @@
   "execution": "ITB-E8",
   "purpose": "SMOKE",
   "cap": 5,
-  "calls_used": 0,
-  "remaining": 5,
-  "status": "NOT_STARTED",
-  "historical_failed_attempts": 0,
-  "note": "Separate from the official 35-scenario agent ledger; no judge usage."
+  "calls_used": 1,
+  "remaining": 4,
+  "status": "REPAIR_REQUIRED",
+  "historical_failed_attempts": 1,
+  "failed_attempts": [
+    {
+      "smoke_id": "ITB-E8-SMOKE-001",
+      "outbound_attempts": 1,
+      "provider_status": 400,
+      "failure": "provider rejected an unresolved local $defs reference in the V4 function schema",
+      "refund": false
+    }
+  ],
+  "note": "Separate from the official 35-scenario agent ledger; no judge usage. The repaired smoke is ITB-E8-SMOKE-002."
 }

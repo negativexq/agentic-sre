@@ -1,0 +1,18 @@
+{
+  "execution": "ITB-E8",
+  "experiment": "itbench-lite-sre-external-eval-v8",
+  "smoke_id": "ITB-E8-SMOKE-001",
+  "status": "OBJECTIVE_INTEGRATION_FAILURE",
+  "provider": "openai",
+  "model": "gpt-5.6-luna",
+  "outbound_attempts": 1,
+  "ledger_consumed": 1,
+  "http_status": 400,
+  "error_type": "invalid_function_parameters",
+  "error": "Provider rejected unresolved #/$defs/CandidateStatus reference in the V4 function schema.",
+  "root_cause": "provider-facing strict schema projection did not inline local Pydantic definitions",
+  "repair_revision_required": true,
+  "official_scenarios_executed": 0,
+  "ground_truth_exposure": 0,
+  "refund": false
+}

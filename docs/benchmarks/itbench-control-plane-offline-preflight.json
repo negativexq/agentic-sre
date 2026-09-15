@@ -1,0 +1,30 @@
+{
+  "execution": "E9_OFFLINE_PREFLIGHT",
+  "purpose": "CONTROL_PLANE_REPAIR_ONLY",
+  "historical_e9_immutable": true,
+  "historical_e9": {"official_scenarios": 35, "protocol_stalls": 32, "model_step_limits": 2, "stop": 1, "submit": 0, "luna_f1": 0.0},
+  "architecture": {"control_state_source_count": 1, "source": "E9CaseMemory reducer projection", "provider_runtime_context_policy_equality": "PASS", "event_log_source_of_truth": true, "vector_retrieval": false, "multi_agent": false},
+  "ablation": {"artifact": "itbench-e9-internal-ablations-v2.json", "variants": 8, "trajectories_per_variant": 12, "hard_coded_metrics": false, "openai_calls": 0, "judge_calls": 0},
+  "canary": {"artifact": "itbench-e9-control-plane-canary.json", "scenarios": 35, "terminal_counts": {"SUBMIT": 35}, "control_plane_terminal_rate": 1.0, "protocol_stall_count": 0, "state_divergence_count": 0, "missing_executor_count": 0, "stale_capability_count": 0, "replay_mismatch_count": 0, "trace_completeness": 1.0, "ground_truth_in_runtime": false, "openai_calls": 0, "judge_calls": 0},
+  "context_qualification": {"historical_artifact": "itbench-e9-zero-network-qualification.json", "historical_initial_chars": {"min": 10190, "median": 11676, "p95": 12200, "max": 12338}, "repaired_canary_artifact": "itbench-e9-control-plane-canary.json", "repaired_first_step_chars": {"min": 6718, "median": 8482, "p95": 8844, "max": 8924}, "openai_calls": 0, "judge_calls": 0},
+  "identity_preflight": {"collector": "packages/evals/itbench/e9_identity.py", "manual_runtime_sha": false, "mismatch_fails_before_transport": true},
+  "event_replay": {"mismatches": 0, "runtime_direct_operational_mutations": 0, "reducer_is_projection_owner": true},
+  "operation_matrix": [
+    {"operation":"INCIDENT_OVERVIEW","phase":"OBSERVE","requires_target":false,"executor":"E9SemanticOperations.execute","bounded":true,"tested":true},
+    {"operation":"ALERT_ANALYSIS","phase":"OBSERVE","requires_target":false,"executor":"E9SemanticOperations.execute","bounded":true,"tested":true},
+    {"operation":"TOPOLOGY_ANALYSIS","phase":"OBSERVE","requires_target":false,"executor":"E9SemanticOperations.execute","bounded":true,"tested":true},
+    {"operation":"RECENT_CHANGE_ANALYSIS","phase":"OBSERVE","requires_target":false,"executor":"E9SemanticOperations.execute","bounded":true,"tested":true},
+    {"operation":"ENTITY_CONTEXT","phase":"VERIFY","requires_target":true,"executor":"E9SemanticOperations.execute","bounded":true,"tested":true},
+    {"operation":"EVENT_ANALYSIS","phase":"VERIFY","requires_target":true,"executor":"E9SemanticOperations.execute","bounded":true,"tested":true},
+    {"operation":"METRIC_ANOMALIES","phase":"VERIFY","requires_target":true,"executor":"E9SemanticOperations.execute","bounded":true,"tested":true},
+    {"operation":"TRACE_ERROR_TREE","phase":"VERIFY","requires_target":false,"executor":"E9SemanticOperations.execute","bounded":true,"tested":true},
+    {"operation":"SPEC_ANALYSIS","phase":"VERIFY","requires_target":true,"executor":"E9SemanticOperations.execute","bounded":true,"tested":true},
+    {"operation":"COMPARE_REPLICAS","phase":"VERIFY","requires_target":true,"executor":"E9SemanticOperations.execute","bounded":true,"tested":true},
+    {"operation":"VERIFY_TEMPORAL_ALIGNMENT","phase":"VERIFY","requires_target":true,"executor":"E9SemanticOperations.execute","bounded":true,"tested":true}
+  ],
+  "control_matrix": {"OBSERVE": {"valid_actions":["OBSERVE","HYPOTHESIZE","STOP"],"provider_request_actions":["OBSERVE","HYPOTHESIZE"],"runtime_actions":["OBSERVE","HYPOTHESIZE","STOP"]},"VERIFY": {"valid_actions":["OBSERVE","INVESTIGATE","REVISE","SUBMIT","STOP"],"provider_request_actions":["OBSERVE","INVESTIGATE","REVISE"],"runtime_actions":["OBSERVE","INVESTIGATE","REVISE","SUBMIT","STOP"]},"FINAL": {"valid_actions":["SUBMIT","STOP"],"provider_request_actions":["SUBMIT","STOP"],"runtime_actions":["SUBMIT","STOP"]}},
+  "safety": {"ground_truth_exposure": 0, "cross_scenario_evidence": 0, "writes": 0, "remediation": 0, "shell": 0, "filesystem_arbitrary_access": 0, "sql": 0, "arbitrary_promql": 0, "fabricated_evidence_accepted": 0},
+  "live_smoke": "NOT_RUN_AWAITING_HUMAN_REVIEW",
+  "official_benchmark": "NOT_RUN",
+  "status": "READY_FOR_LIVE_SMOKE_REVIEW"
+}

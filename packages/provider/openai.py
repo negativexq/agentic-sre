@@ -557,30 +557,39 @@ def _itbench_decision_function_schemas(
     return {name: _compile_strict_schema(value) for name, value in result.items()}
 
 
-def _itbench_v5_decision_function_schemas() -> dict[str, dict[str, Any]]:
-    """Build the small E9 action wire contract without V4 bookkeeping fields."""
+def _itbench_v5_decision_function_schemas(
+    allowed_actions: tuple[str, ...] | None = None,
+    allowed_operations: tuple[str, ...] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Build V5 functions from the same dynamic surface used by the runtime."""
     nullable_string = {"anyOf": [{"type": "string"}, {"type": "null"}]}
-    common = {
-        "target": nullable_string,
-        "targets": {"type": "array", "items": {"type": "string"}},
-        "operation": nullable_string,
-        "rationale": nullable_string,
-        "stop_reason": nullable_string,
-    }
+    action_values = list(allowed_actions or ("OBSERVE", "HYPOTHESIZE", "INVESTIGATE", "REVISE"))
+    operation_values = list(allowed_operations or [])
+    operation = {"type": "string", "enum": operation_values}
 
-    def envelope(action_values: list[str]) -> dict[str, Any]:
-        properties = {"action": {"type": "string", "enum": action_values}, **common}
+    def obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": properties,
-            "required": list(properties),
+            "required": required,
             "additionalProperties": False,
         }
 
     return {
-        "request_itbench_tools": envelope(["OBSERVE", "HYPOTHESIZE", "INVESTIGATE", "REVISE"]),
-        "submit_itbench_diagnosis": envelope(["SUBMIT"]),
-        "stop_itbench_investigation": envelope(["STOP"]),
+        "request_itbench_tools": obj(
+            {
+                "action": {"type": "string", "enum": action_values},
+                "target": nullable_string,
+                "targets": {"type": "array", "items": {"type": "string"}},
+                "operation": {"anyOf": [operation, {"type": "null"}]},
+                "rationale": nullable_string,
+            },
+            ["action", "target", "targets", "operation", "rationale"],
+        ),
+        "submit_itbench_diagnosis": obj(
+            {"targets": {"type": "array", "items": {"type": "string"}}}, ["targets"]
+        ),
+        "stop_itbench_investigation": obj({"stop_reason": {"type": "string"}}, ["stop_reason"]),
     }
 
 
@@ -861,7 +870,9 @@ def _extract_decision_function(
             metadata=metadata,
         )
     schemas = (
-        _itbench_v5_decision_function_schemas()
+        _itbench_v5_decision_function_schemas(
+            request.allowed_v5_actions, request.allowed_v5_operations
+        )
         if external_protocol_v5
         else _itbench_decision_function_schemas(
             request.response_schema, request.allowed_tool_names, request.tool_schemas
@@ -888,6 +899,24 @@ def _extract_decision_function(
             metadata=metadata.model_copy(update={"schema_error_path": schema_error_path}),
         )
     if external_protocol_v5:
+        if function_name == "submit_itbench_diagnosis":
+            structured_output = {
+                "action": "SUBMIT",
+                "target": None,
+                "targets": structured_output.get("targets", []),
+                "operation": None,
+                "rationale": None,
+                "stop_reason": None,
+            }
+        elif function_name == "stop_itbench_investigation":
+            structured_output = {
+                "action": "STOP",
+                "target": None,
+                "targets": [],
+                "operation": None,
+                "rationale": None,
+                "stop_reason": structured_output.get("stop_reason"),
+            }
         return structured_output, metadata
     if function_name == "request_itbench_tools":
         if "CandidateUpdateV4" in request.response_schema.get("$defs", {}):
@@ -1211,7 +1240,9 @@ class OpenAIProvider:
                 or external_protocol_v5
             )
             schemas = (
-                _itbench_v5_decision_function_schemas()
+                _itbench_v5_decision_function_schemas(
+                    request.allowed_v5_actions, request.allowed_v5_operations
+                )
                 if external_protocol_v5
                 else _itbench_decision_function_schemas(
                     request.response_schema,

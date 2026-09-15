@@ -75,6 +75,8 @@ class ModelRequest(BaseModel):
     allowed_decisions: (
         tuple[Literal["CALL_TOOLS", "SUBMIT_HYPOTHESIS", "SUBMIT_DIAGNOSIS", "STOP"], ...] | None
     ) = None
+    allowed_v5_actions: tuple[str, ...] | None = None
+    allowed_v5_operations: tuple[str, ...] | None = None
     allowed_tool_names: tuple[str, ...] | None = None
     tool_schemas: tuple[ToolSchemaDescriptor, ...] | None = None
 

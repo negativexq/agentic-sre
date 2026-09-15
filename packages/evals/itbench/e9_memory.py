@@ -58,6 +58,7 @@ class E9CaseMemory:
             "consecutive_rejections": 0,
             "action_rejections": 0,
             "recovered_action_rejections": 0,
+            "last_rejection": None,
             "evidence": {},
         }
         self.append("CASE_STARTED", 0, {"execution_id": execution_id, "scenario_id": scenario_id})
@@ -106,6 +107,7 @@ class E9CaseMemory:
         supporting_refs: tuple[str, ...] = (),
         contradicting_refs: tuple[str, ...] = (),
         rationale: str = "",
+        reconsider: bool = False,
     ) -> None:
         """Apply one bounded, auditable candidate transition."""
         if self.resolve(handle) is None:
@@ -117,7 +119,7 @@ class E9CaseMemory:
         ):
             raise ValueError("candidate status references unknown evidence")
         previous = self.state["candidate_state"].get(handle, {}).get("status")
-        if previous == "REJECTED" and status != "REJECTED":
+        if previous == "REJECTED" and status != "REJECTED" and not reconsider:
             raise ValueError("rejected candidates cannot be silently reactivated")
         if status == "SUPPORTED" and not supporting_refs:
             raise ValueError("SUPPORTED requires supporting evidence")
@@ -198,7 +200,9 @@ class E9CaseMemory:
             "model_steps_used": self.state["model_steps_used"],
             "semantic_actions_used": self.state["semantic_actions_used"],
             "action_rejections": self.state["action_rejections"],
+            "recovered_action_rejections": self.state["recovered_action_rejections"],
             "consecutive_rejections": self.state["consecutive_rejections"],
+            "last_rejection": self.state["last_rejection"],
             "evidence": list(self.state["evidence"].values())[-12:],
         }
 
@@ -239,6 +243,7 @@ class E9CaseMemory:
             "consecutive_rejections": 0,
             "action_rejections": 0,
             "recovered_action_rejections": 0,
+            "last_rejection": None,
             "evidence": {},
         }
         for raw in payload.get("events", []):
@@ -278,6 +283,12 @@ class E9CaseMemory:
                     "short_rationale": payload.get("rationale", ""),
                 }
             return
+        if event.event_type == "ACTION_ACCEPTED":
+            if self.state["consecutive_rejections"]:
+                self.state["recovered_action_rejections"] += 1
+            self.state["consecutive_rejections"] = 0
+            self.state["last_rejection"] = None
+            return
         if event.event_type == "HYPOTHESIS_PROPOSED":
             hypothesis = {
                 "entity_handle": payload.get("entity_handle"),
@@ -291,7 +302,7 @@ class E9CaseMemory:
             self.state["hypothesis_history"].append(
                 {"revised": payload.get("hypothesis"), "event_id": event.event_id}
             )
-            self.state["current_phase"] = "REVISE"
+            self.state["current_phase"] = "VERIFY"
         elif event.event_type == "EVIDENCE_CREATED":
             handle = payload.get("evidence_handle")
             if isinstance(handle, str):
@@ -306,15 +317,20 @@ class E9CaseMemory:
             self.state["action_rejections"] += 1
             self.state["rejection_count"] += 1
             self.state["consecutive_rejections"] += 1
-        elif event.event_type in {
-            "OBSERVATION_COMPLETED",
-            "HYPOTHESIS_PROPOSED",
-            "HYPOTHESIS_REVISED",
-            "EVIDENCE_CREATED",
-        }:
-            self.state["consecutive_rejections"] = 0
+            self.state["last_rejection"] = {
+                "turn": event.turn,
+                "attempted_action": payload.get("attempted_action"),
+                "attempted_target": payload.get("attempted_target"),
+                "attempted_operation": payload.get("attempted_operation"),
+                "code": payload.get("code", "OTHER"),
+                "reason": payload.get("reason", "safe action rejected"),
+                "valid_actions": list(payload.get("valid_actions", []))[:8],
+                "valid_operations": list(payload.get("valid_operations", []))[:12],
+            }
         elif event.event_type == "MODEL_STEP":
             self.state["model_steps_used"] += 1
+        elif event.event_type in {"DIAGNOSIS_SUBMITTED", "CASE_STOPPED"}:
+            self.state["current_phase"] = "CONCLUDE"
         elif event.event_type == "OPERATION_REQUESTED":
             item = {
                 "entity_handle": payload.get("entity_handle"),

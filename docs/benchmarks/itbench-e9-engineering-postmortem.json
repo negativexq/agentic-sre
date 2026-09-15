@@ -1,0 +1,32 @@
+{
+  "execution": "ITB-E9",
+  "historical_artifacts_immutable": true,
+  "historical_official_terminal_counts": {"SUBMIT": 0, "STOP": 1, "PROTOCOL_STALLED": 32, "MODEL_STEP_LIMIT": 2},
+  "prompt_consistency_note": "The prompt's 21 MODEL_DECISION_INVALID cases describe E8; durable E9 official artifacts contain 32 PROTOCOL_STALLED, 2 MODEL_STEP_LIMIT, 1 STOP and 0 SUBMIT.",
+  "findings": [
+    {"id":"A","classification":"CONFIRMED","location":"historical e9_runtime._reject / e9_context.E9ContextPlanner.plan","behavior":"rejection reason and code were not projected into the next model context","repair":"CaseState.last_rejection is event-derived and included in context"},
+    {"id":"B","classification":"CONFIRMED","location":"historical e9_fsm.E9FSM and e9_memory._project","behavior":"FSM phase and memory phase diverged after hypothesis events","repair":"control_surface derives policy from CaseState; FSM is compatibility-only"},
+    {"id":"C","classification":"CONFIRMED","location":"historical e9_runtime and e9_fsm","behavior":"rejection counters had independent runtime/FSM/memory paths","repair":"memory projection owns counters and stall calculation reads it"},
+    {"id":"D","classification":"CONFIRMED","location":"historical provider.openai._itbench_v5_decision_function_schemas","behavior":"provider request function exposed actions without current phase gating","repair":"provider schema receives runtime-derived action and operation enums"},
+    {"id":"E","classification":"CONFIRMED","location":"historical e9_semantic.E9SemanticOperations.execute","behavior":"RECENT_CHANGE_ANALYSIS fell through to temporal behavior","repair":"explicit bounded recent-change executor"},
+    {"id":"F","classification":"PARTIALLY_CONFIRMED","location":"historical e9_semantic.E9SemanticOperations.execute","behavior":"SPEC_ANALYSIS returned generic entity context rather than a structured spec view","repair":"structured images, references, resources, replicas, selectors, scheduling and ownership"},
+    {"id":"G","classification":"CONFIRMED","location":"historical e9_semantic.E9SemanticOperations.execute","behavior":"COMPARE_REPLICAS returned samples, not a comparison","repair":"honest comparison_available result and bounded comparison surface"},
+    {"id":"H","classification":"CONFIRMED","location":"historical e9_semantic.E9SemanticOperations.execute","behavior":"TRACE_ERROR_TREE returned samples rather than grouped error edges","repair":"bounded grouped source/destination/status edges"},
+    {"id":"I","classification":"CONFIRMED","location":"historical e9_semantic.E9SemanticOperations.execute","behavior":"temporal operation did not calculate alignment","repair":"deterministic timestamp delta and tri-state result"},
+    {"id":"J","classification":"CONFIRMED","location":"historical e9_context and e9_semantic","behavior":"initial candidate set behaved as a closed world","repair":"observable related entities can receive immutable handles"},
+    {"id":"K","classification":"PARTIALLY_CONFIRMED","location":"historical e9_context.E9ContextPlanner.plan","behavior":"selection was mostly fixed shortlist/topology serialization","repair":"phase-aware bounded projection; richer question ranking remains a risk"},
+    {"id":"L","classification":"CONFIRMED","location":"historical e9_memory and e9_runtime","behavior":"runtime directly mutated operational memory fields","repair":"runtime appends events; reducer materializes state"},
+    {"id":"M","classification":"CONFIRMED","location":"historical e9_memory._project","behavior":"some reset handling was unreachable after earlier event branches","repair":"ACTION_ACCEPTED reset and replay tests"},
+    {"id":"N","classification":"CONFIRMED","location":"historical e9_runtime rejection branches","behavior":"stall checks were scattered","repair":"central rejection event path and one projection counter"},
+    {"id":"O","classification":"CONFIRMED","location":"historical e9_runtime turn collection","behavior":"accepted model steps were incompletely represented in traces","repair":"one structured trace record per model step"},
+    {"id":"P","classification":"CONFIRMED","location":"historical scripts/itbench_e9_internal_ablation.py","behavior":"A0-A6 results were literal tuples, not measured executions","repair":"v2 executes 8 FakeModelProvider variants over 12 trajectories"},
+    {"id":"Q","classification":"CONFIRMED","location":"historical Smoke-003 artifact","behavior":"transport smoke passed but behavioral readiness was too weak","repair":"offline canary includes replay, trace, stale-capability, and recovery checks"},
+    {"id":"R","classification":"CONFIRMED","location":"historical e9_semantic._bounded","behavior":"semantic output used blind JSON-prefix truncation","repair":"recursive bounded dict/list packing"},
+    {"id":"S","classification":"PARTIALLY_CONFIRMED","location":"historical e9_memory.set_candidate_status and runtime","behavior":"candidate status paths were rigid or could bypass limits","repair":"central bounded status checks with explicit auditable reconsideration"},
+    {"id":"T","classification":"CONFIRMED","location":"historical e9_runtime submit validation","behavior":"submission did not require per-target evidence","repair":"current hypothesis plus evidence for every submitted handle"},
+    {"id":"U","classification":"CONFIRMED","location":"historical e9_context and e9_semantic","behavior":"context/evidence path repeated avoidable work","repair":"compact digest, relevant topology, bounded summaries and indexes"},
+    {"id":"V","classification":"CONFIRMED","location":"docs/benchmarks/itbench-lite-e9-manifest.json; git history","behavior":"recorded runtime SHA does not match resolved source commit","repair":"provenance errata plus automatic future identity collection"}
+  ],
+  "historical_e9_action_rejection_codes": {"string_too_long": 42, "too_long": 35, "value_error": 37, "SEMANTIC_ACTION_REJECTED": 32, "DUPLICATE_OPERATION": 21},
+  "network": {"live_agent_calls": 0, "openai_calls": 0, "luna_calls": 0, "judge_calls": 0, "official_benchmark_scenarios": 0}
+}

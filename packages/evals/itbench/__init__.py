@@ -22,6 +22,11 @@ from packages.evals.itbench.dataset import (
 )
 from packages.evals.itbench.e9_context import E9_CONTEXT_VERSION, E9ContextPlanner
 from packages.evals.itbench.e9_fsm import E9FSM, E9Phase
+from packages.evals.itbench.e9_identity import (
+    E9IdentityMismatch,
+    collect_e9_identity,
+    validate_e9_identity,
+)
 from packages.evals.itbench.e9_memory import E9CaseMemory, E9Event
 from packages.evals.itbench.e9_runtime import (
     ITBENCH_E9_PROMPT_VERSION,
@@ -133,6 +138,7 @@ __all__ = [
     "E9ContextPlanner",
     "E9Event",
     "E9FSM",
+    "E9IdentityMismatch",
     "E9InvestigationRuntime",
     "E9Limits",
     "E9Phase",
@@ -157,6 +163,7 @@ __all__ = [
     "external_prompt_hash",
     "external_prompt_v6_hash",
     "e9_prompt_hash",
+    "collect_e9_identity",
     "ITBenchLiteDataset",
     "ITBenchRunStore",
     "ITBenchScenario",
@@ -176,6 +183,7 @@ __all__ = [
     "grade_root_cause_entities",
     "macro_average",
     "official_evaluator_spec",
+    "validate_e9_identity",
     "write_official_output",
     "trace_index_path",
 ]

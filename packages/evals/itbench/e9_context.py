@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from packages.contracts import Alert, Incident
+from packages.evals.itbench.e9_control import control_surface
 from packages.evals.itbench.e9_fsm import E9FSM
 from packages.evals.itbench.e9_memory import E9CaseMemory
 from packages.evals.itbench.external_context import normalize_alerts
@@ -24,7 +25,7 @@ class E9ContextPlanner:
         incident: Incident,
         alerts: tuple[Alert, ...],
         memory: E9CaseMemory,
-        fsm: E9FSM,
+        fsm: E9FSM | None,
         *,
         turn: int,
         max_steps: int,
@@ -35,6 +36,13 @@ class E9ContextPlanner:
         handles = list(memory.state["discovered_entities"].values())[:10]
         alert_items = normalize_alerts(backend)
         digest = _alert_digest(alert_items)
+        surface = control_surface(
+            memory.state,
+            turn=turn,
+            max_steps=max_steps,
+            max_rejections=(fsm.max_consecutive_rejections if fsm else 2),
+            semantic_limit=semantic_limit,
+        )
         topology: list[dict[str, Any]] = []
         target = memory.state.get("current_hypothesis", {})
         target_handle = target.get("entity_handle") if isinstance(target, dict) else None
@@ -45,6 +53,8 @@ class E9ContextPlanner:
         if not topology:
             for item in handles[:3]:
                 topology.extend(backend.topology(entity=item["canonical"], limit=4))
+        case_state = memory.projection()
+        case_state.pop("discovered_entities", None)
         payload: dict[str, Any] = {
             "context_version": E9_CONTEXT_VERSION,
             "incident": {
@@ -63,30 +73,27 @@ class E9ContextPlanner:
                 for item in handles
             ],
             "relevant_topology": topology[:16],
-            "case_state": memory.projection(),
+            "case_state": case_state,
             "workflow": {
-                "phase": fsm.phase.value,
-                "valid_actions": fsm.valid_actions(
-                    has_hypothesis=memory.state.get("current_hypothesis") is not None,
-                    evidence_count=len(memory.state.get("evidence", {})),
-                    final_turn=turn >= max_steps,
-                ),
+                "phase": surface.phase,
+                "valid_actions": surface.actions,
                 "turn": turn,
                 "model_steps_remaining": max(max_steps - turn, 0),
                 "semantic_actions_remaining": max(
                     semantic_limit - int(memory.state["semantic_actions_used"]), 0
                 ),
-                "rejection_budget_remaining": max(
-                    fsm.max_consecutive_rejections - fsm.consecutive_rejections, 0
-                ),
+                "rejection_budget_remaining": surface.rejection_budget_remaining,
+                "valid_operations": surface.operations,
+                "target_handles": surface.target_handles,
             },
-            "semantic_operations": _operations_for_phase(fsm.phase.value, turn >= max_steps),
+            "semantic_operations": surface.operations,
             "rules": [
                 "Candidate handles are runtime-owned; do not invent C### handles.",
                 "Evidence provenance is runtime-owned; do not copy evidence handles into SUBMIT.",
                 "contains is a literal substring, not regex or a query language.",
                 "Use one discriminating operation for the current causal question.",
                 "The runtime can reject safe actions and provide valid next actions.",
+                "A rejected action is explained in last_rejection; do not repeat it unchanged.",
                 "Submit the smallest independently causal candidate set or STOP.",
             ],
         }

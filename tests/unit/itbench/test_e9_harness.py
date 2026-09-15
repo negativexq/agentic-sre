@@ -11,9 +11,17 @@ from packages.evals.itbench import (
     ITBenchSnapshotBackend,
     build_observable_incident,
 )
+from packages.evals.itbench.e9_context import E9ContextPlanner
+from packages.evals.itbench.e9_control import control_surface
 from packages.evals.itbench.e9_fsm import E9FSM, E9Phase
+from packages.evals.itbench.e9_identity import (
+    E9IdentityMismatch,
+    collect_e9_identity,
+    validate_e9_identity,
+)
 from packages.evals.itbench.e9_memory import E9CaseMemory
 from packages.evals.itbench.e9_runtime import E9InvestigationRuntime
+from packages.evals.itbench.e9_semantic import E9_SEMANTIC_OPERATIONS, E9SemanticOperations
 from packages.evals.itbench.external_contracts import (
     E9Action,
     ITBenchInvestigationDecisionV5,
@@ -206,7 +214,6 @@ def test_v5_provider_schema_is_ref_free_and_has_terminal_split(tmp_path: Path) -
     assert all("$ref" not in json.dumps(item) for item in parameters["tools"])
     assert {item["name"] for item in parameters["tools"]} == {
         "request_itbench_tools",
-        "submit_itbench_diagnosis",
         "stop_itbench_investigation",
     }
     final_request, _ = runtime.build_request(
@@ -219,9 +226,116 @@ def test_v5_provider_schema_is_ref_free_and_has_terminal_split(tmp_path: Path) -
     )
     final_parameters = OpenAIProvider.__new__(OpenAIProvider)._request_parameters(final_request)
     assert {item["name"] for item in final_parameters["tools"]} == {
+        "stop_itbench_investigation",
+    }
+
+
+def test_v5_provider_surface_matches_control_policy(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path, [])
+    incident, alerts = build_observable_incident(runtime.backend)
+    memory = E9CaseMemory(execution_id="ITB-E9", scenario_id="Scenario-1")
+    memory.discover_entities(({"canonical": "otel-demo/Service/frontend"},))
+    request, _ = runtime.build_request(
+        incident, alerts, memory, run_id=incident.incident_id, turn=1
+    )
+    parameters = OpenAIProvider.__new__(OpenAIProvider)._request_parameters(request)
+    request_schema = next(
+        item["parameters"]
+        for item in parameters["tools"]
+        if item["name"] == "request_itbench_tools"
+    )
+    assert request_schema["properties"]["action"]["enum"] == [
+        "OBSERVE",
+        "HYPOTHESIZE",
+    ]
+    operation_schema = request_schema["properties"]["operation"]["anyOf"][0]
+    assert "RECENT_CHANGE_ANALYSIS" in operation_schema["enum"]
+    memory.append(
+        "HYPOTHESIS_PROPOSED",
+        1,
+        {"entity_handle": "C001", "rationale": "verify"},
+    )
+    memory.add_evidence(
+        turn=2, handle="C001", operation="ENTITY_CONTEXT", category="entity", summary={"ok": True}
+    )
+    final_request, _ = runtime.build_request(
+        incident, alerts, memory, run_id=incident.incident_id, turn=12
+    )
+    final_parameters = OpenAIProvider.__new__(OpenAIProvider)._request_parameters(final_request)
+    assert {item["name"] for item in final_parameters["tools"]} == {
         "submit_itbench_diagnosis",
         "stop_itbench_investigation",
     }
+
+
+def test_rejection_feedback_is_visible_in_next_context(tmp_path: Path) -> None:
+    scenario = _scenario(tmp_path)
+    backend = ITBenchSnapshotBackend(
+        cast(ITBenchLiteDataset, object()), scenario, max_rows=5, max_bytes=10_000
+    )
+    incident, alerts = build_observable_incident(backend)
+    memory = E9CaseMemory(execution_id="ITB-E9", scenario_id="Scenario-1")
+    memory.discover_entities(({"canonical": "otel-demo/Service/frontend"},))
+    memory.append(
+        "ACTION_REJECTED",
+        2,
+        {
+            "attempted_action": "INVESTIGATE",
+            "attempted_target": "C001",
+            "attempted_operation": "METRIC_ANOMALIES",
+            "code": "DUPLICATE_OPERATION",
+            "reason": "operation already completed",
+            "valid_actions": ["INVESTIGATE", "REVISE", "STOP"],
+            "valid_operations": ["SPEC_ANALYSIS"],
+        },
+    )
+    context, _ = E9ContextPlanner().plan(
+        backend, incident, alerts, memory, None, turn=3, max_steps=12, semantic_limit=24
+    )
+    assert "DUPLICATE_OPERATION" in context
+    assert "METRIC_ANOMALIES" in context
+    assert "operation already completed" in context
+    assert "SPEC_ANALYSIS" in context
+
+
+def test_replay_equality_after_rejection_recovery_and_terminal() -> None:
+    memory = E9CaseMemory(execution_id="ITB-E9", scenario_id="Scenario-1")
+    memory.discover_entities(({"canonical": "otel-demo/Service/frontend"},))
+    memory.append(
+        "ACTION_REJECTED",
+        1,
+        {"code": "UNKNOWN_CANDIDATE", "reason": "unknown", "valid_actions": ["HYPOTHESIZE"]},
+    )
+    memory.append("ACTION_ACCEPTED", 2, {"action": "HYPOTHESIZE", "target": "C001"})
+    memory.set_candidate_status(turn=2, handle="C001", status="ACTIVE")
+    memory.append("HYPOTHESIS_PROPOSED", 2, {"entity_handle": "C001", "rationale": "test"})
+    memory.add_evidence(
+        turn=3, handle="C001", operation="ENTITY_CONTEXT", category="entity", summary={"ok": True}
+    )
+    memory.append("ACTION_ACCEPTED", 4, {"action": "SUBMIT", "targets": ["C001"]})
+    memory.append("DIAGNOSIS_SUBMITTED", 4, {"targets": ["C001"]})
+    payload = {
+        "execution_id": memory.execution_id,
+        "scenario_id": memory.scenario_id,
+        "case_id": memory.case_id,
+        "events": [event.as_dict() for event in memory.events],
+    }
+    assert E9CaseMemory.replay(payload).projection() == memory.projection()
+
+
+def test_runtime_identity_collector_and_fail_closed_validation(tmp_path: Path) -> None:
+    source = tmp_path / "identity.txt"
+    source.write_text("stable", encoding="utf-8")
+    actual = collect_e9_identity(Path.cwd(), ("packages/evals/itbench/e9_control.py",))
+    clean_actual = {**actual, "relevant_worktree_dirty": False}
+    validate_e9_identity(clean_actual, {"runtime_identity": clean_actual})
+    mismatched = {"runtime_identity": {**clean_actual, "bundle_sha256": "wrong"}}
+    try:
+        validate_e9_identity(actual, mismatched)
+    except E9IdentityMismatch:
+        pass
+    else:
+        raise AssertionError("identity mismatch was not rejected")
 
 
 def test_v5_function_call_is_dispatched_by_response_normalizer(tmp_path: Path) -> None:
@@ -241,18 +355,74 @@ def test_v5_function_call_is_dispatched_by_response_normalizer(tmp_path: Path) -
             {
                 "type": "function_call",
                 "name": "stop_itbench_investigation",
-                "arguments": json.dumps(
-                    {
-                        "action": "STOP",
-                        "target": None,
-                        "targets": [],
-                        "operation": None,
-                        "rationale": None,
-                        "stop_reason": "insufficient evidence",
-                    }
-                ),
+                "arguments": json.dumps({"stop_reason": "insufficient evidence"}),
             }
         ],
     }
     response = OpenAIProvider.__new__(OpenAIProvider)._normalize_response(request, raw, 0.0)
     assert response.structured_output["action"] == "STOP"
+
+
+def test_rejection_feedback_is_visible_and_replayable() -> None:
+    memory = E9CaseMemory(execution_id="ITB-E9", scenario_id="Scenario-1")
+    memory.append(
+        "ACTION_REJECTED",
+        2,
+        {
+            "attempted_action": "INVESTIGATE",
+            "attempted_target": "C001",
+            "attempted_operation": "METRIC_ANOMALIES",
+            "code": "DUPLICATE_OPERATION",
+            "reason": "operation already completed",
+            "valid_actions": ["INVESTIGATE", "REVISE", "STOP"],
+            "valid_operations": ["SPEC_ANALYSIS"],
+        },
+    )
+    projection = memory.projection()
+    assert projection["last_rejection"]["code"] == "DUPLICATE_OPERATION"
+    assert projection["last_rejection"]["attempted_operation"] == "METRIC_ANOMALIES"
+    replayed = E9CaseMemory.replay(
+        {
+            "execution_id": memory.execution_id,
+            "scenario_id": memory.scenario_id,
+            "case_id": memory.case_id,
+            "events": [event.as_dict() for event in memory.events],
+        }
+    )
+    assert replayed.projection() == projection
+
+
+def test_control_surface_is_dynamic_and_removes_completed_operation() -> None:
+    memory = E9CaseMemory(execution_id="ITB-E9", scenario_id="Scenario-1")
+    memory.discover_entities(({"canonical": "otel-demo/Service/frontend"},))
+    first = control_surface(memory.state, turn=1, max_steps=12, max_rejections=2, semantic_limit=24)
+    assert "HYPOTHESIZE" in first.actions
+    assert "RECENT_CHANGE_ANALYSIS" in first.operations
+    memory.append(
+        "OPERATION_REQUESTED", 1, {"entity_handle": None, "operation": "RECENT_CHANGE_ANALYSIS"}
+    )
+    second = control_surface(
+        memory.state, turn=2, max_steps=12, max_rejections=2, semantic_limit=24
+    )
+    assert "RECENT_CHANGE_ANALYSIS" not in second.operations
+
+
+def test_every_registered_semantic_operation_has_a_real_bounded_executor(tmp_path: Path) -> None:
+    scenario = _scenario(tmp_path)
+    backend = ITBenchSnapshotBackend(
+        cast(ITBenchLiteDataset, object()), scenario, max_rows=5, max_bytes=10_000
+    )
+    incident, _ = build_observable_incident(backend)
+    memory = E9CaseMemory(execution_id="ITB-E9", scenario_id="Scenario-1")
+    memory.discover_entities(({"canonical": "otel-demo/Service/frontend"},))
+    operations = E9SemanticOperations(backend, memory, incident)
+    for index, operation in enumerate(E9_SEMANTIC_OPERATIONS, start=1):
+        target = (
+            None
+            if operation in {"INCIDENT_OVERVIEW", "ALERT_ANALYSIS", "TOPOLOGY_ANALYSIS"}
+            else "C001"
+        )
+        result = operations.execute(operation, target, index)
+        assert result["operation"] == operation
+        assert result["evidence_ref"].startswith("E")
+        assert len(json.dumps(result["summary"], default=str)) <= 5_500

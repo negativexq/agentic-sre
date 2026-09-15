@@ -60,9 +60,10 @@ def main() -> int:
     if attempts != smoke["outbound_attempts"]:
         raise RuntimeError("E7 smoke ledger/provider accounting mismatch")
 
-    staged = STAGING_ROOT / "ITB-E7-SMOKE-001" / "smoke"
     TARGET_DIR.parent.mkdir(parents=True, exist_ok=True)
-    staged.parent.parent.rename(TARGET_DIR.parent)
+    # Move the staged smoke directory itself into the new smoke identity.
+    # Moving its parent leaves an extra SMOKE-001 path component.
+    (STAGING_ROOT / "ITB-E7-SMOKE-001").rename(TARGET_DIR.parent)
     native = ITBenchExternalResult.model_validate_json(
         (TARGET_DIR / "native_artifact.json").read_bytes()
     )

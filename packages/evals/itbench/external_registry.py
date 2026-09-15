@@ -34,6 +34,13 @@ class ExternalTraceArguments(ExternalQueryArguments):
     trace_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
+class ExternalMetricArguments(ExternalQueryArguments):
+    """Typed metric filters supported by the snapshot columns."""
+
+    service: str | None = Field(default=None, min_length=1, max_length=255)
+    namespace: str | None = Field(default=None, min_length=1, max_length=255)
+
+
 class ITBenchExternalToolRegistry:
     """External allow-list, independent of the internal A1 tool ontology."""
 
@@ -70,7 +77,7 @@ class ITBenchExternalToolRegistry:
             "itbench_metric_analysis",
             "Read bounded metric observations and generic aggregates.",
             ITBenchEvidenceCategory.METRICS,
-            ExternalQueryArguments,
+            ExternalMetricArguments,
             20_000,
         ),
         (
@@ -146,11 +153,10 @@ class ITBenchExternalToolRegistry:
             entity = args.get("entity")
             if not isinstance(entity, str):
                 raise ValueError("entity is required")
-            response = self.backend.query(
-                ITBenchEvidenceCategory.K8S_OBJECTS,
-                {"pattern": entity, "limit": args.get("limit", 20)},
-            )
-            return {"entity": entity, "context": response}
+            return {
+                "tool": name,
+                **self.backend.query_entity_context(entity, args.get("limit", 20)),
+            }
         if name == "itbench_topology":
             return _bounded_records(
                 name,
@@ -214,6 +220,16 @@ def _descriptor(model: type[ToolArguments]) -> dict[str, Any]:
 
 
 def _entity_matches(item: dict[str, str], args: dict[str, Any]) -> bool:
+    requested = args.get("entity")
+    if isinstance(requested, str):
+        try:
+            if (
+                requested.casefold()
+                != f"{item['namespace']}/{item['kind']}/{item['name']}".casefold()
+            ):
+                return False
+        except KeyError:
+            return False
     for key in ("namespace", "kind"):
         value = args.get(key)
         if isinstance(value, str) and item[key].casefold() != value.casefold():
@@ -242,6 +258,7 @@ def _bounded_records(
 def _metric_analysis(backend: ITBenchSnapshotBackend, args: dict[str, Any]) -> dict[str, Any]:
     response = backend.query(ITBenchEvidenceCategory.METRICS, args)
     records = response.get("records", [])
+    aggregate = backend.metric_aggregate(args)
     values: list[float] = []
     for item in records:
         record = item.get("record", {}) if isinstance(item, dict) else {}
@@ -252,14 +269,9 @@ def _metric_analysis(backend: ITBenchSnapshotBackend, args: dict[str, Any]) -> d
                     break
             except (TypeError, ValueError):
                 pass
-    response["aggregate"] = {
-        "count": len(values),
-        "min": min(values) if values else None,
-        "max": max(values) if values else None,
-        "first": values[0] if values else None,
-        "last": values[-1] if values else None,
-        "delta": values[-1] - values[0] if len(values) > 1 else None,
-    }
+    response["aggregate"] = aggregate
+    response["sample_count"] = len(values)
+    response["sample_truncated"] = response.get("matching_count", 0) > len(values)
     return response
 
 

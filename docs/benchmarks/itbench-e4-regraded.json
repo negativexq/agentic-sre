@@ -1,0 +1,752 @@
+{
+  "artifact_type": "ITBENCH_E4_POSTHOC_REGRADE",
+  "changed_scenario_count": 0,
+  "entity_hits": 1,
+  "identity": "ITB-E4-R",
+  "macro_entity_metrics": {
+    "f1": 0.019047619047619046,
+    "precision": 0.014285714285714285,
+    "recall": 0.02857142857142857,
+    "scenario_count": 35
+  },
+  "official_evaluator": "NOT RUN; pinned official evaluator remains secondary",
+  "scenarios": [
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-1",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-1"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-2",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-2"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 1,
+        "predictions": [
+          {
+            "entity": "otel-demo/Pod/frontend-675fd7b5c5-chsmw",
+            "matched_to": null,
+            "matches_gt": false
+          }
+        ],
+        "recall": 0.0,
+        "scenario_id": "Scenario-4",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-4"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-5",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-5"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-6",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-6"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-7",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-7"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-8",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-8"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-9",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-9"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-11",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-11"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-12",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-12"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-13",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-13"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-14",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-14"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-15",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-15"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-16",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-16"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-17",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-17"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.6666666666666666,
+        "ground_truth_count": 1,
+        "precision": 0.5,
+        "predicted_count": 2,
+        "predictions": [
+          {
+            "entity": "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-q5s8b",
+            "matched_to": "otel-demo-product-catalog-network-delay-1",
+            "matches_gt": true
+          },
+          {
+            "entity": "otel-demo/Pod/checkout-5dccddf8bb-9dn2q",
+            "matched_to": null,
+            "matches_gt": false
+          }
+        ],
+        "recall": 1.0,
+        "scenario_id": "Scenario-18",
+        "true_positive": 1
+      },
+      "old": {
+        "f1": 0.6666666666666666,
+        "precision": 0.5,
+        "recall": 1.0,
+        "true_positive": 1
+      },
+      "scenario": "Scenario-18"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-19",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-19"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-20",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-20"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-21",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-21"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-22",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-22"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-23",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-23"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-24",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-24"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-25",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-25"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-29",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-29"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-31",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-31"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 2,
+        "predictions": [
+          {
+            "entity": "_cluster/Node/i-01a47734339426210",
+            "matched_to": null,
+            "matches_gt": false
+          },
+          {
+            "entity": "otel-demo/Pod/frontend-675fd7b5c5-ljs28",
+            "matched_to": null,
+            "matches_gt": false
+          }
+        ],
+        "recall": 0.0,
+        "scenario_id": "Scenario-33",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-33"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-34",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-34"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 1,
+        "predictions": [
+          {
+            "entity": "otel-demo/Pod/ad-554b849958-fcl25",
+            "matched_to": null,
+            "matches_gt": false
+          }
+        ],
+        "recall": 0.0,
+        "scenario_id": "Scenario-35",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-35"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-38",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-38"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-80",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-80"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-81",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-81"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-83",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-83"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-91",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-91"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-102",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-102"
+    },
+    {
+      "changed": false,
+      "corrected": {
+        "f1": 0.0,
+        "ground_truth_count": 1,
+        "precision": 0.0,
+        "predicted_count": 0,
+        "predictions": [],
+        "recall": 0.0,
+        "scenario_id": "Scenario-105",
+        "true_positive": 0
+      },
+      "old": {
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-105"
+    }
+  ],
+  "scorer": "corrected deterministic local scorer",
+  "source_execution_unchanged": true,
+  "source_result": "docs/benchmarks/itbench-lite-e4-results.json"
+}

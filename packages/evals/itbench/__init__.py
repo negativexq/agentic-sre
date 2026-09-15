@@ -9,6 +9,7 @@ from packages.evals.itbench.contracts import (
     ITBenchGroundTruthGroup,
     ITBenchScenario,
     ITBenchScenarioQualification,
+    parse_canonical_entity,
 )
 from packages.evals.itbench.dataset import (
     ITBENCH_DATASET_REVISION,
@@ -26,15 +27,18 @@ from packages.evals.itbench.external_context import (
     normalize_alerts,
 )
 from packages.evals.itbench.external_contracts import (
+    ITBENCH_EXTERNAL_PROTOCOL_V2,
     ExternalRootCause,
     ExternalStop,
     ITBenchDecisionType,
     ITBenchExternalResult,
     ITBenchInvestigationDecisionV1,
+    ITBenchInvestigationDecisionV2,
 )
 from packages.evals.itbench.external_registry import ITBenchExternalToolRegistry
 from packages.evals.itbench.external_runtime import (
     ITBENCH_EXTERNAL_PROMPT,
+    ITBENCH_EXTERNAL_PROMPT_ACTIVE_VERSION,
     ITBENCH_EXTERNAL_PROMPT_VERSION,
     ExternalInvestigationRuntime,
     external_prompt_hash,
@@ -72,6 +76,7 @@ __all__ = [
     "ITBenchAgentOutput",
     "ITBenchDatasetError",
     "ITBenchEntity",
+    "parse_canonical_entity",
     "ITBenchEntityGrade",
     "ITBenchEntityPrediction",
     "ITBenchEvidenceCategory",
@@ -83,12 +88,15 @@ __all__ = [
     "ITBenchDecisionType",
     "ITBenchExternalResult",
     "ITBenchInvestigationDecisionV1",
+    "ITBenchInvestigationDecisionV2",
+    "ITBENCH_EXTERNAL_PROTOCOL_V2",
     "ITBenchExternalToolRegistry",
     "ExternalInvestigationRuntime",
     "ITBENCH_EXTERNAL_CONTEXT_VERSION",
     "MAX_EXTERNAL_CONTEXT_CHARS",
     "ITBENCH_EXTERNAL_PROMPT",
     "ITBENCH_EXTERNAL_PROMPT_VERSION",
+    "ITBENCH_EXTERNAL_PROMPT_ACTIVE_VERSION",
     "build_external_context",
     "normalize_alerts",
     "external_prompt_hash",

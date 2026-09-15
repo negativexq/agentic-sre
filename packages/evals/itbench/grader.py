@@ -85,15 +85,18 @@ def _match_group(
     gt: ITBenchGroundTruth,
 ) -> str | None:
     """Return the root group ID matching an entity, or ``None``."""
+    groups_by_id = {group.group_id: group for group in gt.root_cause_groups}
     for group in groups:
         if _entity_matches_group(entity, group):
             return group.group_id
+        # Every non-root group mapped to this root is an equally valid
+        # representation of the same causal entity.  The previous traversal
+        # only considered aliases when the current root group's ID happened
+        # to be the alias key, which made alias predictions score as misses.
         for alias_group_id, root_id in aliases.items():
-            if alias_group_id != group.group_id:
+            if root_id != group.group_id:
                 continue
-            alias_group = next(
-                (item for item in gt.root_cause_groups if item.group_id == alias_group_id), None
-            )
+            alias_group = groups_by_id.get(alias_group_id)
             if alias_group is not None and _entity_matches_group(entity, alias_group):
                 return root_id
     return None

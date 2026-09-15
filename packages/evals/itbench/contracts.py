@@ -40,6 +40,20 @@ class ITBenchEntity(BaseModel):
         return f"{namespace}/{self.kind}/{self.name}"
 
 
+def parse_canonical_entity(value: str) -> ITBenchEntity:
+    """Parse one observable ITBench Kubernetes identity without lookup or GT."""
+    if not isinstance(value, str):
+        raise ValueError("entity must be a string")
+    parts = value.split("/")
+    if len(parts) != 3 or not all(parts):
+        raise ValueError("entity must use namespace/Kind/name syntax")
+    return ITBenchEntity(
+        namespace=None if parts[0] == "_cluster" else parts[0],
+        kind=parts[1],
+        name=parts[2],
+    )
+
+
 class ITBenchScenario(BaseModel):
     """Investigator-safe description of one pinned external scenario."""
 

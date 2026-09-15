@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from packages.evals.itbench.contracts import (
     ITBenchAgentOutput,
     ITBenchEntity,
     ITBenchEntityPrediction,
+    parse_canonical_entity,
 )
 from packages.evals.itbench.external_contracts import ITBenchDecisionType, ITBenchExternalResult
 
@@ -111,20 +112,17 @@ def adapt_external_output(result: ITBenchExternalResult) -> ITBenchAgentOutput:
     decision = result.decision
     if decision is not None and decision.decision is ITBenchDecisionType.SUBMIT_DIAGNOSIS:
         for rank, root_cause in enumerate(decision.root_causes, start=1):
+            cause = cast(Any, root_cause)
             predictions.append(
                 ITBenchEntityPrediction(
-                    entity=ITBenchEntity(
-                        namespace=root_cause.entity.split("/", 2)[0],
-                        kind=root_cause.entity.split("/", 2)[1],
-                        name=root_cause.entity.split("/", 2)[2],
-                    ),
+                    entity=parse_canonical_entity(cause.entity),
                     rank=rank,
-                    condition=root_cause.causal_summary,
+                    condition=cause.causal_summary,
                 )
             )
     reasoning = ""
     if decision is not None and decision.decision is ITBenchDecisionType.SUBMIT_DIAGNOSIS:
-        reasoning = " ".join(item.causal_summary for item in decision.root_causes)[:1000]
+        reasoning = " ".join(cast(Any, item).causal_summary for item in decision.root_causes)[:1000]
     return ITBenchAgentOutput(
         incident_id=str(result.incident_id),
         scenario_id=result.scenario_id,

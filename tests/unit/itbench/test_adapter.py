@@ -183,6 +183,100 @@ def test_ground_truth_alias_entity_grading_is_deterministic() -> None:
     assert (grade.true_positive, grade.precision, grade.recall, grade.f1) == (1, 1.0, 1.0, 1.0)
 
 
+@pytest.mark.parametrize(
+    ("kind", "name", "expected"),
+    (
+        ("Pod", "pod-a", True),
+        ("Service", "service-a", True),
+        ("Deployment", "deployment-a", True),
+        ("Service", "unrelated-b", False),
+    ),
+)
+def test_alias_entities_all_match_the_root_group(kind: str, name: str, expected: bool) -> None:
+    ground_truth = ITBenchGroundTruth(
+        scenario_id="Scenario-1",
+        root_cause_groups=(
+            ITBenchGroundTruthGroup(
+                group_id="pod-a", kind="Pod", namespace="ns", name="pod-a", root_cause=True
+            ),
+            ITBenchGroundTruthGroup(
+                group_id="service-a", kind="Service", namespace="ns", name="service-a"
+            ),
+            ITBenchGroundTruthGroup(
+                group_id="deployment-a",
+                kind="Deployment",
+                namespace="ns",
+                name="deployment-a",
+            ),
+        ),
+        aliases=(("pod-a", "service-a", "deployment-a"),),
+    )
+    output = ITBenchAgentOutput(
+        incident_id="incident-1",
+        scenario_id="Scenario-1",
+        contributing_factor=(
+            ITBenchEntityPrediction(
+                entity=ITBenchEntity(namespace="ns", kind=kind, name=name),
+                rank=1,
+                condition="observable evidence",
+            ),
+        ),
+        native_terminal="SUBMIT_DIAGNOSIS",
+    )
+    assert grade_root_cause_entities(output, ground_truth).true_positive == int(expected)
+
+
+def test_alias_grading_preserves_independent_root_groups_and_kind_namespace() -> None:
+    ground_truth = ITBenchGroundTruth(
+        scenario_id="Scenario-1",
+        root_cause_groups=(
+            ITBenchGroundTruthGroup(
+                group_id="root-a", kind="Pod", namespace="ns-a", name="pod-a", root_cause=True
+            ),
+            ITBenchGroundTruthGroup(
+                group_id="alias-a", kind="Service", namespace="ns-a", name="svc-a"
+            ),
+            ITBenchGroundTruthGroup(
+                group_id="root-b",
+                kind="Pod",
+                namespace="ns-b",
+                filters=("worker-.*",),
+                root_cause=True,
+            ),
+            ITBenchGroundTruthGroup(
+                group_id="alias-b", kind="Deployment", namespace="ns-b", name="worker-deploy"
+            ),
+        ),
+        aliases=(("root-a", "alias-a"), ("root-b", "alias-b")),
+    )
+    output = ITBenchAgentOutput(
+        incident_id="incident-1",
+        scenario_id="Scenario-1",
+        contributing_factor=(
+            ITBenchEntityPrediction(
+                entity=ITBenchEntity(namespace="ns-a", kind="Service", name="svc-a"),
+                rank=1,
+                condition="a",
+            ),
+            ITBenchEntityPrediction(
+                entity=ITBenchEntity(namespace="ns-b", kind="Deployment", name="worker-deploy"),
+                rank=2,
+                condition="b",
+            ),
+            ITBenchEntityPrediction(
+                entity=ITBenchEntity(namespace="ns-a", kind="Service", name="worker-deploy"),
+                rank=3,
+                condition="wrong namespace",
+            ),
+        ),
+        native_terminal="SUBMIT_DIAGNOSIS",
+    )
+    grade = grade_root_cause_entities(output, ground_truth)
+    assert grade.true_positive == 2
+    assert grade.predicted_count == 3
+    assert grade.ground_truth_count == 2
+
+
 def test_native_output_adapter_never_needs_ground_truth(tmp_path: Path) -> None:
     scenario = _scenario(tmp_path)
     backend = ITBenchSnapshotBackend(

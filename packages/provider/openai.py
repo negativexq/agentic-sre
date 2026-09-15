@@ -387,7 +387,7 @@ def _itbench_decision_function_schemas(
     if not isinstance(definitions, dict):
         raise ValueError("ITBench decision schema definitions are invalid")
     request = definitions.get("ToolRequestSpec")
-    root_cause = definitions.get("ExternalRootCause")
+    root_cause = definitions.get("ExternalRootCauseV2") or definitions.get("ExternalRootCause")
     stop = definitions.get("ExternalStop")
     if not all(isinstance(item, dict) for item in (request, root_cause, stop)):
         raise ValueError("ITBench decision schema definitions are incomplete")
@@ -435,7 +435,14 @@ def _itbench_decision_function_schemas(
         request_item = {"anyOf": branches}
 
     tool_requests = obj(
-        {"reason": {"type": "string"}, "tool_requests": {"type": "array", "items": request_item}},
+        {
+            "reason": {"type": "string"},
+            "tool_requests": {
+                "type": "array",
+                "items": request_item,
+                "maxItems": 3 if "ExternalRootCauseV2" in definitions else 12,
+            },
+        },
         ["reason", "tool_requests"],
     )
     root_props = {
@@ -655,7 +662,10 @@ def _extract_decision_function(
     items = output if isinstance(output, list) else []
     function_calls = [item for item in items if _field(item, "type") == "function_call"]
     a1_protocol = request.response_schema_name == "a1_investigation_decision"
-    external_protocol = request.response_schema_name == "itbench_investigation_decision_v1"
+    external_protocol = request.response_schema_name in {
+        "itbench_investigation_decision_v1",
+        "itbench_investigation_decision_v2",
+    }
     decision_names = (
         ITBENCH_DECISION_FUNCTION_NAMES
         if external_protocol
@@ -987,9 +997,13 @@ class OpenAIProvider:
             "investigation_decision",
             "a1_investigation_decision",
             "itbench_investigation_decision_v1",
+            "itbench_investigation_decision_v2",
         }:
             a1_protocol = request.response_schema_name == "a1_investigation_decision"
-            external_protocol = request.response_schema_name == "itbench_investigation_decision_v1"
+            external_protocol = request.response_schema_name in {
+                "itbench_investigation_decision_v1",
+                "itbench_investigation_decision_v2",
+            }
             schemas = (
                 _itbench_decision_function_schemas(
                     request.response_schema,
@@ -1025,7 +1039,7 @@ class OpenAIProvider:
                 descriptions = {
                     **DECISION_FUNCTION_DESCRIPTIONS,
                     "request_itbench_tools": "Request bounded read-only ITBench evidence.",
-                    "submit_itbench_diagnosis": "Submit supported ITBench root-cause entities with runtime-owned evidence IDs.",
+                    "submit_itbench_diagnosis": "Submit supported ITBench root-cause entities using namespace/Kind/name and runtime-issued evidence handles.",
                     "stop_itbench_investigation": "Stop when observable evidence cannot support a reliable diagnosis.",
                 }
             allowed = (
@@ -1168,6 +1182,7 @@ class OpenAIProvider:
             "investigation_decision",
             "a1_investigation_decision",
             "itbench_investigation_decision_v1",
+            "itbench_investigation_decision_v2",
         }:
             structured_output, metadata = _extract_decision_function(request, raw)
             schema_error_path = _json_schema_error(structured_output, request.response_schema)

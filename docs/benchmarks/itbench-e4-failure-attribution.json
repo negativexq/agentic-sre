@@ -1,0 +1,1026 @@
+{
+  "artifact_type": "ITBENCH_E4_FAILURE_ATTRIBUTION",
+  "ground_truth_used_for": "existing frozen grade fields only; no behavior changes",
+  "interpretation": {
+    "model": "residual wrong entities after valid terminal remain model/causal outcomes",
+    "policy": "tool budget and duplicate request behavior are diagnostic, not score filters",
+    "scoring": "alias-aware scorer requires post-hoc audit; never changes investigation",
+    "tool_semantics": "entity_context/entity lookup and typed aggregates are audited independently"
+  },
+  "primary_failure_class_counts": {
+    "A_TOOL_BUDGET_EXHAUSTION": 21,
+    "B_MODEL_DECISION_SCHEMA_FAILURE": 5,
+    "C_EVIDENCE_REFERENCE_FAILURE": 1,
+    "D_VOLUNTARY_STOP": 4,
+    "E_DIAGNOSIS_WRONG_CAUSE": 3,
+    "F_DIAGNOSIS_PARTIAL_CORRECTNESS": 1
+  },
+  "scenario_count": 35,
+  "scenarios": [
+    {
+      "duplicate_reused": 3,
+      "evidence_count": 12,
+      "input_tokens": 32967,
+      "model_calls": 3,
+      "outbound_api_attempts": 3,
+      "output_tokens": 656,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-1",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 16,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 12,
+      "input_tokens": 34383,
+      "model_calls": 3,
+      "outbound_api_attempts": 3,
+      "output_tokens": 631,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-2",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 15,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 2,
+      "evidence_count": 11,
+      "input_tokens": 46315,
+      "model_calls": 4,
+      "outbound_api_attempts": 4,
+      "output_tokens": 774,
+      "predicted_entities": 1,
+      "primary_failure_class": "E_DIAGNOSIS_WRONG_CAUSE",
+      "scenario": "Scenario-4",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 14,
+      "true_positive": 0,
+      "typed_tool_failures": 1,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 12,
+      "input_tokens": 47037,
+      "model_calls": 4,
+      "outbound_api_attempts": 4,
+      "output_tokens": 837,
+      "predicted_entities": 0,
+      "primary_failure_class": "D_VOLUNTARY_STOP",
+      "scenario": "Scenario-5",
+      "terminal": "STOP",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_logs",
+        "itbench_metric_analysis"
+      ],
+      "tool_requests": 12,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 12,
+      "input_tokens": 44335,
+      "model_calls": 4,
+      "outbound_api_attempts": 4,
+      "output_tokens": 847,
+      "predicted_entities": 0,
+      "primary_failure_class": "C_EVIDENCE_REFERENCE_FAILURE",
+      "scenario": "Scenario-6",
+      "terminal": "MODEL_DECISION_INVALID",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 12,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": "$.root_causes[].evidence_ids",
+        "stage": "EVIDENCE_REFERENCE",
+        "type": "FABRICATED_EVIDENCE_REFERENCE"
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 12,
+      "input_tokens": 46345,
+      "model_calls": 4,
+      "outbound_api_attempts": 4,
+      "output_tokens": 877,
+      "predicted_entities": 0,
+      "primary_failure_class": "D_VOLUNTARY_STOP",
+      "scenario": "Scenario-7",
+      "terminal": "STOP",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 12,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 2,
+      "evidence_count": 12,
+      "input_tokens": 35154,
+      "model_calls": 3,
+      "outbound_api_attempts": 3,
+      "output_tokens": 659,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-8",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 16,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 12,
+      "input_tokens": 31929,
+      "model_calls": 3,
+      "outbound_api_attempts": 3,
+      "output_tokens": 604,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-9",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 13,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 12,
+      "input_tokens": 23489,
+      "model_calls": 3,
+      "outbound_api_attempts": 3,
+      "output_tokens": 563,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-11",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 15,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 12,
+      "input_tokens": 33763,
+      "model_calls": 3,
+      "outbound_api_attempts": 3,
+      "output_tokens": 680,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-12",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_alert_summary",
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 15,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 12,
+      "input_tokens": 34530,
+      "model_calls": 3,
+      "outbound_api_attempts": 3,
+      "output_tokens": 662,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-13",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_alert_summary",
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_topology",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 15,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 12,
+      "input_tokens": 31524,
+      "model_calls": 3,
+      "outbound_api_attempts": 3,
+      "output_tokens": 793,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-14",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 18,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 2,
+      "evidence_count": 12,
+      "input_tokens": 46541,
+      "model_calls": 4,
+      "outbound_api_attempts": 4,
+      "output_tokens": 839,
+      "predicted_entities": 0,
+      "primary_failure_class": "D_VOLUNTARY_STOP",
+      "scenario": "Scenario-15",
+      "terminal": "STOP",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 14,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 1,
+      "evidence_count": 12,
+      "input_tokens": 48611,
+      "model_calls": 4,
+      "outbound_api_attempts": 4,
+      "output_tokens": 872,
+      "predicted_entities": 0,
+      "primary_failure_class": "D_VOLUNTARY_STOP",
+      "scenario": "Scenario-16",
+      "terminal": "STOP",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_logs",
+        "itbench_metric_analysis"
+      ],
+      "tool_requests": 13,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 12,
+      "input_tokens": 22669,
+      "model_calls": 2,
+      "outbound_api_attempts": 2,
+      "output_tokens": 537,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-17",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 14,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 3,
+      "evidence_count": 12,
+      "input_tokens": 66708,
+      "model_calls": 5,
+      "outbound_api_attempts": 5,
+      "output_tokens": 1035,
+      "predicted_entities": 2,
+      "primary_failure_class": "F_DIAGNOSIS_PARTIAL_CORRECTNESS",
+      "scenario": "Scenario-18",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis"
+      ],
+      "tool_requests": 15,
+      "true_positive": 1,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 9,
+      "input_tokens": 32988,
+      "model_calls": 3,
+      "outbound_api_attempts": 3,
+      "output_tokens": 563,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-19",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 14,
+      "true_positive": 0,
+      "typed_tool_failures": 3,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 9,
+      "evidence_count": 8,
+      "input_tokens": 91211,
+      "model_calls": 5,
+      "outbound_api_attempts": 5,
+      "output_tokens": 1187,
+      "predicted_entities": 0,
+      "primary_failure_class": "B_MODEL_DECISION_SCHEMA_FAILURE",
+      "scenario": "Scenario-20",
+      "terminal": "MODEL_DECISION_INVALID",
+      "tool_executions": 9,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis"
+      ],
+      "tool_requests": 18,
+      "true_positive": 0,
+      "typed_tool_failures": 1,
+      "validation": {
+        "path": "$.root_causes[0].evidence_ids[0]",
+        "stage": "DECISION_SCHEMA",
+        "type": "uuid_parsing"
+      }
+    },
+    {
+      "duplicate_reused": 6,
+      "evidence_count": 11,
+      "input_tokens": 63223,
+      "model_calls": 5,
+      "outbound_api_attempts": 5,
+      "output_tokens": 990,
+      "predicted_entities": 0,
+      "primary_failure_class": "B_MODEL_DECISION_SCHEMA_FAILURE",
+      "scenario": "Scenario-21",
+      "terminal": "MODEL_DECISION_INVALID",
+      "tool_executions": 11,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis"
+      ],
+      "tool_requests": 17,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": "$.root_causes[0].evidence_ids[0]",
+        "stage": "DECISION_SCHEMA",
+        "type": "uuid_parsing"
+      }
+    },
+    {
+      "duplicate_reused": 8,
+      "evidence_count": 8,
+      "input_tokens": 59116,
+      "model_calls": 5,
+      "outbound_api_attempts": 5,
+      "output_tokens": 953,
+      "predicted_entities": 0,
+      "primary_failure_class": "B_MODEL_DECISION_SCHEMA_FAILURE",
+      "scenario": "Scenario-22",
+      "terminal": "MODEL_DECISION_INVALID",
+      "tool_executions": 8,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_logs"
+      ],
+      "tool_requests": 16,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": "$.root_causes[0].evidence_ids[0]",
+        "stage": "DECISION_SCHEMA",
+        "type": "uuid_parsing"
+      }
+    },
+    {
+      "duplicate_reused": 2,
+      "evidence_count": 12,
+      "input_tokens": 51182,
+      "model_calls": 4,
+      "outbound_api_attempts": 4,
+      "output_tokens": 724,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-23",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_logs",
+        "itbench_metric_analysis"
+      ],
+      "tool_requests": 16,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 7,
+      "evidence_count": 11,
+      "input_tokens": 93812,
+      "model_calls": 5,
+      "outbound_api_attempts": 5,
+      "output_tokens": 935,
+      "predicted_entities": 0,
+      "primary_failure_class": "B_MODEL_DECISION_SCHEMA_FAILURE",
+      "scenario": "Scenario-24",
+      "terminal": "MODEL_DECISION_INVALID",
+      "tool_executions": 11,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 18,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": "$.root_causes[0].evidence_ids[0]",
+        "stage": "DECISION_SCHEMA",
+        "type": "uuid_parsing"
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 10,
+      "input_tokens": 33271,
+      "model_calls": 3,
+      "outbound_api_attempts": 3,
+      "output_tokens": 531,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-25",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 13,
+      "true_positive": 0,
+      "typed_tool_failures": 2,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 12,
+      "input_tokens": 34427,
+      "model_calls": 3,
+      "outbound_api_attempts": 3,
+      "output_tokens": 523,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-29",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis"
+      ],
+      "tool_requests": 13,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 5,
+      "evidence_count": 12,
+      "input_tokens": 43931,
+      "model_calls": 4,
+      "outbound_api_attempts": 4,
+      "output_tokens": 777,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-31",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 18,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 11,
+      "input_tokens": 34310,
+      "model_calls": 3,
+      "outbound_api_attempts": 3,
+      "output_tokens": 862,
+      "predicted_entities": 2,
+      "primary_failure_class": "E_DIAGNOSIS_WRONG_CAUSE",
+      "scenario": "Scenario-33",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_logs",
+        "itbench_metric_analysis"
+      ],
+      "tool_requests": 12,
+      "true_positive": 0,
+      "typed_tool_failures": 1,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 1,
+      "evidence_count": 9,
+      "input_tokens": 39705,
+      "model_calls": 3,
+      "outbound_api_attempts": 3,
+      "output_tokens": 563,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-34",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 15,
+      "true_positive": 0,
+      "typed_tool_failures": 3,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 12,
+      "input_tokens": 43079,
+      "model_calls": 4,
+      "outbound_api_attempts": 4,
+      "output_tokens": 760,
+      "predicted_entities": 1,
+      "primary_failure_class": "E_DIAGNOSIS_WRONG_CAUSE",
+      "scenario": "Scenario-35",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 12,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 10,
+      "input_tokens": 53668,
+      "model_calls": 4,
+      "outbound_api_attempts": 4,
+      "output_tokens": 730,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-38",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_logs",
+        "itbench_metric_analysis"
+      ],
+      "tool_requests": 15,
+      "true_positive": 0,
+      "typed_tool_failures": 2,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 12,
+      "input_tokens": 31210,
+      "model_calls": 3,
+      "outbound_api_attempts": 3,
+      "output_tokens": 519,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-80",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 13,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 12,
+      "input_tokens": 32136,
+      "model_calls": 3,
+      "outbound_api_attempts": 3,
+      "output_tokens": 607,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-81",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 16,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 6,
+      "evidence_count": 12,
+      "input_tokens": 48340,
+      "model_calls": 4,
+      "outbound_api_attempts": 4,
+      "output_tokens": 785,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-83",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 19,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 0,
+      "evidence_count": 10,
+      "input_tokens": 31687,
+      "model_calls": 3,
+      "outbound_api_attempts": 3,
+      "output_tokens": 833,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-91",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 17,
+      "true_positive": 0,
+      "typed_tool_failures": 2,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 2,
+      "evidence_count": 12,
+      "input_tokens": 65528,
+      "model_calls": 4,
+      "outbound_api_attempts": 4,
+      "output_tokens": 715,
+      "predicted_entities": 0,
+      "primary_failure_class": "A_TOOL_BUDGET_EXHAUSTION",
+      "scenario": "Scenario-102",
+      "terminal": "TOOL_CALL_LIMIT",
+      "tool_executions": 12,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_logs",
+        "itbench_metric_analysis"
+      ],
+      "tool_requests": 17,
+      "true_positive": 0,
+      "typed_tool_failures": 0,
+      "validation": {
+        "path": null,
+        "stage": null,
+        "type": null
+      }
+    },
+    {
+      "duplicate_reused": 5,
+      "evidence_count": 9,
+      "input_tokens": 92082,
+      "model_calls": 5,
+      "outbound_api_attempts": 5,
+      "output_tokens": 1101,
+      "predicted_entities": 0,
+      "primary_failure_class": "B_MODEL_DECISION_SCHEMA_FAILURE",
+      "scenario": "Scenario-105",
+      "terminal": "MODEL_DECISION_INVALID",
+      "tool_executions": 11,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_logs",
+        "itbench_metric_analysis"
+      ],
+      "tool_requests": 16,
+      "true_positive": 0,
+      "typed_tool_failures": 2,
+      "validation": {
+        "path": "$.root_causes[0].evidence_ids[0]",
+        "stage": "DECISION_SCHEMA",
+        "type": "uuid_parsing"
+      }
+    }
+  ],
+  "source_execution": "ITB-E4",
+  "source_result_sha256": "28cb8f35a8a73c929ba368ccbf85b102018a1617"
+}

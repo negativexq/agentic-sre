@@ -12,7 +12,12 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid5
 
-from packages.evals.itbench.contracts import InvestigatorData, ITBenchEvidenceCategory
+from packages.evals.itbench.contracts import (
+    InvestigatorData,
+    ITBenchEntity,
+    ITBenchEvidenceCategory,
+    parse_canonical_entity,
+)
 from packages.evals.itbench.dataset import ITBenchLiteDataset, iter_tsv
 from packages.evals.itbench.sparse_index import trace_index_path
 
@@ -95,6 +100,71 @@ class ITBenchSnapshotBackend:
             response["records"] = [{"evidence_id": item.get("evidence_id")} for item in bounded[:1]]
             response["returned_count"] = len(response["records"])
         return response
+
+    def query_entity_context(self, entity: str, limit: int) -> dict[str, Any]:
+        """Resolve one canonical entity using structured observable fields."""
+        parsed = parse_canonical_entity(entity)
+        objects = [
+            item
+            for item in self._iter_records(ITBenchEvidenceCategory.K8S_OBJECTS)
+            if _record_entity(item) == parsed
+        ]
+        events = [
+            item
+            for item in self._iter_records(ITBenchEvidenceCategory.K8S_EVENTS)
+            if _record_entity(item) == parsed
+        ]
+        object_records = _fit_bounded_records(tuple(objects[:limit]), self.max_bytes)
+        event_records = _fit_bounded_records(tuple(events[:limit]), self.max_bytes)
+        return {
+            "entity": parsed.canonical,
+            "object_records": list(object_records),
+            "event_records": list(event_records),
+            "object_matching_count": len(objects),
+            "event_matching_count": len(events),
+            "truncated": len(objects) > len(object_records) or len(events) > len(event_records),
+            "topology": [
+                edge
+                for edge in self.topology(limit=limit * 2)
+                if edge.get("source") == parsed.canonical or edge.get("target") == parsed.canonical
+            ],
+        }
+
+    def metric_aggregate(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Compute numeric metric statistics over every matching source row.
+
+        Model responses remain bounded by :meth:`query`; aggregation is a
+        backend operation and never exposes a query language to the model.
+        """
+        values: list[float] = []
+        for item in self._iter_records(ITBenchEvidenceCategory.METRICS):
+            if not _matches(
+                item,
+                pattern=arguments.get("pattern"),
+                service=arguments.get("service"),
+                namespace=arguments.get("namespace"),
+                trace_id=None,
+            ):
+                continue
+            record = item.get("record", {})
+            if not isinstance(record, dict):
+                continue
+            for key in ("Value", "value", "metric_value"):
+                try:
+                    if key in record:
+                        values.append(float(record[key]))
+                        break
+                except (TypeError, ValueError):
+                    continue
+        return {
+            "count": len(values),
+            "min": min(values) if values else None,
+            "max": max(values) if values else None,
+            "mean": sum(values) / len(values) if values else None,
+            "first": values[0] if values else None,
+            "last": values[-1] if values else None,
+            "delta": values[-1] - values[0] if len(values) > 1 else None,
+        }
 
     def _query_trace_index(self, trace_id: str, limit: int) -> dict[str, Any] | None:
         index_path = trace_index_path(self.scenario.snapshot_path)
@@ -198,6 +268,7 @@ class ITBenchSnapshotBackend:
     def topology(self, *, limit: int = 100) -> tuple[dict[str, Any], ...]:
         """Derive bounded structural edges from observable Kubernetes objects only."""
         edges: set[tuple[str, str, str]] = set()
+        objects: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
         for item in self._iter_records(ITBenchEvidenceCategory.K8S_OBJECTS):
             record = item.get("record", {})
             body = _json_object(record.get("Body")) if isinstance(record, dict) else None
@@ -215,6 +286,7 @@ class ITBenchSnapshotBackend:
                 else "_cluster"
             )
             source = f"{namespace}/{kind}/{name}"
+            objects.append((source, body, metadata))
             owners = metadata.get("ownerReferences", [])
             if isinstance(owners, list):
                 for owner in owners:
@@ -227,9 +299,69 @@ class ITBenchSnapshotBackend:
                             (
                                 source,
                                 f"{namespace}/{owner['kind']}/{owner['name']}",
-                                "owner_reference",
+                                "owner",
                             )
                         )
+        services = [
+            (source, body, metadata)
+            for source, body, metadata in objects
+            if body.get("kind") == "Service"
+            and isinstance(body.get("spec"), dict)
+            and isinstance(body["spec"].get("selector"), dict)
+        ]
+        pods_by_namespace: dict[str, list[tuple[str, dict[str, Any]]]] = {}
+        for pod_source, pod_body, pod_metadata in objects:
+            if pod_body.get("kind") != "Pod":
+                continue
+            namespace = str(pod_metadata.get("namespace", "_cluster"))
+            labels = pod_metadata.get("labels", {})
+            if isinstance(labels, dict):
+                pods_by_namespace.setdefault(namespace, []).append((pod_source, labels))
+        for service_source, service_body, service_metadata in services:
+            selector = service_body["spec"].get("selector", {})
+            service_namespace = service_metadata.get("namespace", "_cluster")
+            candidates = pods_by_namespace.get(str(service_namespace), [])
+            for pod_source, labels in candidates:
+                if all(labels.get(key) == value for key, value in selector.items()):
+                    edges.add((service_source, pod_source, "selector"))
+        for source, body, metadata in objects:
+            if body.get("kind") == "Pod":
+                node_name = (
+                    body.get("spec", {}).get("nodeName")
+                    if isinstance(body.get("spec"), dict)
+                    else None
+                )
+                if isinstance(node_name, str):
+                    namespace = metadata.get("namespace", "_cluster")
+                    edges.add((source, f"_cluster/Node/{node_name}", "scheduled_on"))
+            spec = body.get("spec")
+            if not isinstance(spec, dict):
+                continue
+            template = spec.get("template") if isinstance(spec.get("template"), dict) else {}
+            pod_spec = template.get("spec") if isinstance(template, dict) else None
+            if isinstance(pod_spec, dict):
+                for ref in (*pod_spec.get("volumes", []), *pod_spec.get("containers", [])):
+                    if not isinstance(ref, dict):
+                        continue
+                    refs = []
+                    config = ref.get("configMap")
+                    if isinstance(config, dict):
+                        refs.append(("ConfigMap", config.get("name")))
+                    for env_from in ref.get("envFrom", []):
+                        if isinstance(env_from, dict) and isinstance(
+                            env_from.get("configMapRef"), dict
+                        ):
+                            refs.append(("ConfigMap", env_from["configMapRef"].get("name")))
+                    for ref_kind, ref_name in refs:
+                        if isinstance(ref_name, str):
+                            namespace = metadata.get("namespace", "_cluster")
+                            edges.add(
+                                (
+                                    source,
+                                    f"{namespace}/{ref_kind}/{ref_name}",
+                                    "configuration_reference",
+                                )
+                            )
         return tuple(
             {"source": source, "target": target, "relationship": relationship}
             for source, target, relationship in sorted(edges)[:limit]
@@ -288,19 +420,76 @@ def _json_object(value: Any) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def _record_entity(item: dict[str, Any]) -> ITBenchEntity | None:
+    """Extract an entity from an observable object or event record."""
+    record = item.get("record", {})
+    if not isinstance(record, dict):
+        return None
+    body = _json_object(record.get("Body"))
+    if body is None:
+        body = record
+    candidate = body.get("object") if isinstance(body.get("object"), dict) else body
+    involved = body.get("involvedObject") if isinstance(body.get("involvedObject"), dict) else None
+    if involved is not None:
+        candidate = {"kind": involved.get("kind"), "metadata": involved}
+    if not isinstance(candidate, dict):
+        return None
+    metadata = candidate.get("metadata")
+    kind = candidate.get("kind")
+    if not isinstance(metadata, dict) or not isinstance(kind, str):
+        return None
+    name = metadata.get("name")
+    if not isinstance(name, str):
+        return None
+    namespace = metadata.get("namespace")
+    try:
+        return ITBenchEntity(
+            namespace=namespace if isinstance(namespace, str) else None,
+            kind=kind,
+            name=name,
+        )
+    except ValueError:
+        return None
+
+
 def _matches(
     item: dict[str, Any], *, pattern: Any, service: Any, namespace: Any, trace_id: Any
 ) -> bool:
     record = item.get("record")
+    if not any(isinstance(value, str) for value in (pattern, service, namespace, trace_id)):
+        return True
     if isinstance(trace_id, str):
         if not isinstance(record, dict) or str(record.get("TraceId", "")) != trace_id:
             return False
-    encoded = json.dumps(item, sort_keys=True, default=str).casefold()
-    if isinstance(pattern, str) and pattern.casefold() not in encoded:
+    if isinstance(record, dict):
+        if isinstance(service, str):
+            service_values = [record.get(key) for key in ("ServiceName", "service", "service.name")]
+            if any(
+                isinstance(value, str) and service.casefold() == value.casefold()
+                for value in service_values
+            ):
+                service = None
+            elif any(value is not None for value in service_values):
+                return False
+        if isinstance(namespace, str):
+            namespace_values = [
+                record.get(key) for key in ("Namespace", "namespace", "k8s.namespace.name")
+            ]
+            if any(
+                isinstance(value, str) and namespace.casefold() == value.casefold()
+                for value in namespace_values
+            ):
+                namespace = None
+            elif any(value is not None for value in namespace_values):
+                return False
+        if not any(isinstance(value, str) for value in (pattern, service, namespace)):
+            return True
+    record_text = json.dumps(record, sort_keys=True, default=str).casefold()
+    if isinstance(pattern, str) and pattern.casefold() not in record_text:
         return False
-    if isinstance(service, str) and service.casefold() not in encoded:
+    if isinstance(service, str) and service.casefold() not in record_text:
         return False
-    if isinstance(namespace, str) and namespace.casefold() not in encoded:
+    if isinstance(namespace, str) and namespace.casefold() not in record_text:
         return False
     return True
 

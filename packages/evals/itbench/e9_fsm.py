@@ -16,8 +16,6 @@ class E9Phase(StrEnum):
 class E9FSM:
     """Stateless compatibility facade; CaseState owns the actual phase."""
 
-    phase = E9Phase.OBSERVE
-
     def __init__(self, *, max_consecutive_rejections: int = 2) -> None:
         self.max_consecutive_rejections = max_consecutive_rejections
 
@@ -29,7 +27,7 @@ class E9FSM:
         final_turn: bool,
         phase: str | None = None,
     ) -> tuple[str, ...]:
-        current = phase or self.phase.value
+        current = phase or E9Phase.OBSERVE.value
         if final_turn:
             return ("SUBMIT", "STOP") if has_hypothesis and evidence_count else ("STOP",)
         if current == E9Phase.OBSERVE:

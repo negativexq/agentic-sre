@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from packages.evals.itbench.e9_packing import bounded_pack
+
 
 @dataclass(frozen=True, slots=True)
 class E9Event:
@@ -45,6 +47,7 @@ class E9CaseMemory:
         self.state: dict[str, Any] = {
             "current_phase": "OBSERVE",
             "current_hypothesis": None,
+            "alternative_candidates": [],
             "hypothesis_history": [],
             "discovered_entities": {},
             "candidate_state": {},
@@ -77,7 +80,9 @@ class E9CaseMemory:
         self._project(event)
         return event
 
-    def discover_entities(self, entities: tuple[dict[str, Any], ...]) -> dict[str, str]:
+    def discover_entities(
+        self, entities: tuple[dict[str, Any], ...], *, turn: int = 0
+    ) -> dict[str, str]:
         """Assign immutable C### handles to observable canonical identities."""
         mapping = self.state["discovered_entities"]
         for item in entities:
@@ -93,8 +98,13 @@ class E9CaseMemory:
                 handle = f"C{len(mapping) + 1:03d}"
                 self.append(
                     "ENTITY_DISCOVERED",
-                    0,
-                    {"entity_handle": handle, "canonical": canonical, "metadata": _compact(item)},
+                    turn,
+                    {
+                        "entity_handle": handle,
+                        "canonical": canonical,
+                        "metadata": _compact(item),
+                        "discovered_turn": turn,
+                    },
                 )
         return {value["handle"]: canonical for canonical, value in mapping.items()}
 
@@ -118,16 +128,8 @@ class E9CaseMemory:
             ref not in self.state["evidence"] for ref in (*supporting_refs, *contradicting_refs)
         ):
             raise ValueError("candidate status references unknown evidence")
-        previous = self.state["candidate_state"].get(handle, {}).get("status")
-        if previous == "REJECTED" and status != "REJECTED" and not reconsider:
-            raise ValueError("rejected candidates cannot be silently reactivated")
         if status == "SUPPORTED" and not supporting_refs:
             raise ValueError("SUPPORTED requires supporting evidence")
-        active_count = sum(
-            item.get("status") == "ACTIVE" for item in self.state["candidate_state"].values()
-        )
-        if status == "ACTIVE" and previous != "ACTIVE" and active_count >= 3:
-            raise ValueError("maximum active candidates exceeded")
         self.append(
             "CANDIDATE_STATUS_CHANGED",
             turn,
@@ -185,14 +187,13 @@ class E9CaseMemory:
         return {
             "current_phase": self.state["current_phase"],
             "current_hypothesis": self.state["current_hypothesis"],
+            "alternative_candidates": self.state["alternative_candidates"][-8:],
             "hypothesis_history": self.state["hypothesis_history"][-6:],
             "discovered_entities": list(self.state["discovered_entities"].values())[:20],
             "candidate_state": self.state["candidate_state"],
-            "active_candidates": [
-                handle
-                for handle, item in self.state["candidate_state"].items()
-                if item.get("status") == "ACTIVE"
-            ],
+            "active_candidates": [self.state["current_hypothesis"].get("entity_handle")]
+            if isinstance(self.state.get("current_hypothesis"), dict)
+            else [],
             "tested_candidates": self.state["tested_candidates"][-12:],
             "evidence_by_candidate": self.state["evidence_by_candidate"],
             "operations_already_run": self.state["operations_already_run"][-20:],
@@ -230,6 +231,7 @@ class E9CaseMemory:
         memory.state = {
             "current_phase": "OBSERVE",
             "current_hypothesis": None,
+            "alternative_candidates": [],
             "hypothesis_history": [],
             "discovered_entities": {},
             "candidate_state": {},
@@ -270,6 +272,7 @@ class E9CaseMemory:
                     "handle": handle,
                     "canonical": canonical,
                     "metadata": payload.get("metadata", {}),
+                    "discovered_turn": int(payload.get("discovered_turn", event.turn)),
                 }
             return
         if event.event_type == "CANDIDATE_STATUS_CHANGED":
@@ -294,15 +297,27 @@ class E9CaseMemory:
                 "entity_handle": payload.get("entity_handle"),
                 "rationale": payload.get("rationale", ""),
             }
+            previous = self.state.get("current_hypothesis")
+            if isinstance(previous, dict) and previous.get("entity_handle") != hypothesis.get(
+                "entity_handle"
+            ):
+                self.state["alternative_candidates"].append(previous)
             self.state["current_hypothesis"] = hypothesis
             self.state["hypothesis_history"].append({**hypothesis, "event_id": event.event_id})
             self.state["current_phase"] = "VERIFY"
+            self.state["unresolved_question"] = _question_for(hypothesis)
         elif event.event_type == "HYPOTHESIS_REVISED":
+            previous = self.state.get("current_hypothesis")
+            if isinstance(previous, dict):
+                self.state["alternative_candidates"].append(previous)
             self.state["current_hypothesis"] = payload.get("hypothesis")
             self.state["hypothesis_history"].append(
                 {"revised": payload.get("hypothesis"), "event_id": event.event_id}
             )
             self.state["current_phase"] = "VERIFY"
+            revised_hypothesis: Any = payload.get("hypothesis")
+            if isinstance(revised_hypothesis, dict):
+                self.state["unresolved_question"] = _question_for(revised_hypothesis)
         elif event.event_type == "EVIDENCE_CREATED":
             handle = payload.get("evidence_handle")
             if isinstance(handle, str):
@@ -338,17 +353,28 @@ class E9CaseMemory:
             }
             if item not in self.state["operations_already_run"]:
                 self.state["operations_already_run"].append(item)
+            if self.state.get("current_hypothesis"):
+                self.state["unresolved_question"] = (
+                    f"Does {self.state['current_hypothesis'].get('entity_handle')} "
+                    f"explain the incident under {payload.get('operation')}?"
+                )[:300]
+        elif event.event_type == "QUESTION_SET":
+            question = payload.get("question")
+            self.state["unresolved_question"] = (
+                question[:300] if isinstance(question, str) else None
+            )
 
 
 def _compact(value: Any, limit: int = 900) -> Any:
-    encoded = json.dumps(value, ensure_ascii=False, default=str)
-    if len(encoded) <= limit:
-        return value
-    return {"summary": encoded[: max(1, limit - 40)], "truncated": True}
+    return bounded_pack(value, limit)
 
 
 def _bounded_payload(value: dict[str, Any]) -> dict[str, Any]:
     return {str(key): _compact(item, 600) for key, item in value.items()}
+
+
+def _question_for(hypothesis: dict[str, Any]) -> str:
+    return f"Which observable evidence verifies {hypothesis.get('entity_handle')} as causal?"[:300]
 
 
 __all__ = ["E9CaseMemory", "E9Event"]

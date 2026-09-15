@@ -12,7 +12,7 @@ from pydantic import ValidationError
 
 from packages.contracts import Alert, Incident
 from packages.evals.itbench.e9_context import E9ContextPlanner
-from packages.evals.itbench.e9_control import control_surface
+from packages.evals.itbench.e9_control import E9ControlPlaneVariant, control_surface
 from packages.evals.itbench.e9_memory import E9CaseMemory
 from packages.evals.itbench.e9_semantic import E9SemanticOperations
 from packages.evals.itbench.external_contracts import (
@@ -71,12 +71,14 @@ class E9InvestigationRuntime:
         limits: E9Limits | None = None,
         execution_id: str = "ITB-E9",
         max_consecutive_rejected_actions: int = 2,
+        variant: E9ControlPlaneVariant | None = None,
     ) -> None:
         self.provider = provider
         self.backend = backend
         self.limits = limits or E9Limits()
         self.execution_id = execution_id
         self.max_consecutive_rejected_actions = max_consecutive_rejected_actions
+        self.variant = variant or E9ControlPlaneVariant()
         self.planner = E9ContextPlanner()
 
     def build_request(
@@ -98,6 +100,10 @@ class E9InvestigationRuntime:
             turn=turn,
             max_steps=self.limits.max_model_calls,
             semantic_limit=self.limits.max_tool_calls,
+            visible_rejection_feedback=self.variant.visible_rejection_feedback,
+            dynamic_action_gating=self.variant.dynamic_action_gating,
+            dynamic_operation_gating=self.variant.dynamic_operation_gating,
+            selective_context=self.variant.selective_context,
         )
         surface = control_surface(
             memory.state,
@@ -105,6 +111,10 @@ class E9InvestigationRuntime:
             max_steps=self.limits.max_model_calls,
             max_rejections=self.max_consecutive_rejected_actions,
             semantic_limit=self.limits.max_tool_calls,
+            visible_rejection_feedback=self.variant.visible_rejection_feedback,
+            dynamic_action_gating=self.variant.dynamic_action_gating,
+            dynamic_operation_gating=self.variant.dynamic_operation_gating,
+            selective_context=self.variant.selective_context,
         )
         allowed_decisions: list[Any] = []
         if any(
@@ -116,6 +126,24 @@ class E9InvestigationRuntime:
             allowed_decisions.append("SUBMIT_DIAGNOSIS")
         if "STOP" in surface.actions:
             allowed_decisions.append("STOP")
+        provider_actions = surface.actions
+        provider_operations = surface.operations
+        if not self.variant.dynamic_action_gating:
+            provider_actions = ("OBSERVE", "HYPOTHESIZE", "INVESTIGATE", "REVISE", "SUBMIT", "STOP")
+        if not self.variant.dynamic_operation_gating:
+            provider_operations = (
+                "INCIDENT_OVERVIEW",
+                "ALERT_ANALYSIS",
+                "TOPOLOGY_ANALYSIS",
+                "RECENT_CHANGE_ANALYSIS",
+                "ENTITY_CONTEXT",
+                "EVENT_ANALYSIS",
+                "METRIC_ANOMALIES",
+                "TRACE_ERROR_TREE",
+                "SPEC_ANALYSIS",
+                "COMPARE_REPLICAS",
+                "VERIFY_TEMPORAL_ALIGNMENT",
+            )
         request = ModelRequest(
             run_id=run_id,
             messages=[
@@ -130,9 +158,9 @@ class E9InvestigationRuntime:
             timeout_ms=20_000,
             allowed_decisions=tuple(allowed_decisions),
             allowed_v5_actions=tuple(
-                action for action in surface.actions if action not in {"SUBMIT", "STOP"}
+                action for action in provider_actions if action not in {"SUBMIT", "STOP"}
             ),
-            allowed_v5_operations=surface.operations,
+            allowed_v5_operations=provider_operations,
             allowed_tool_names=(),
             tool_schemas=(),
         )
@@ -143,8 +171,14 @@ class E9InvestigationRuntime:
         started = monotonic()
         scenario_id = getattr(self.backend.scenario, "scenario_id", "Scenario-1")
         memory = E9CaseMemory(execution_id=self.execution_id, scenario_id=scenario_id)
-        memory.discover_entities(self.backend.candidate_entities(limit=10))
-        operations = E9SemanticOperations(self.backend, memory, incident)
+        memory.discover_entities(self.backend.candidate_entities(limit=10), turn=0)
+        operations = E9SemanticOperations(
+            self.backend,
+            memory,
+            incident,
+            enable_discovery=self.variant.dynamic_candidate_discovery,
+            semantic_facade=self.variant.semantic_facade,
+        )
         turns: list[dict[str, Any]] = []
         context_metrics: list[dict[str, Any]] = []
         model_calls = input_tokens = output_tokens = provider_latency = 0
@@ -172,6 +206,12 @@ class E9InvestigationRuntime:
                 "accepted": False,
                 "evidence_created": [],
                 "context_chars": sections.get("total", 0),
+                "provider_exposed_actions": list(request.allowed_v5_actions or ())
+                + (["SUBMIT"] if "SUBMIT_DIAGNOSIS" in (request.allowed_decisions or ()) else [])
+                + (["STOP"] if "STOP" in (request.allowed_decisions or ()) else []),
+                "provider_exposed_operations": list(request.allowed_v5_operations or ()),
+                "runtime_accepted_actions": list(self._surface(memory, turn).actions),
+                "runtime_accepted_operations": list(self._surface(memory, turn).operations),
             }
             try:
                 response = self.provider.complete(request)
@@ -378,7 +418,33 @@ class E9InvestigationRuntime:
                 )
                 trace["decision"] = action
             else:
-                observation = operations.execute(operation, decision.target, turn)
+                try:
+                    observation = operations.execute(operation, decision.target, turn)
+                except (TypeError, ValueError) as error:
+                    self._reject(
+                        memory,
+                        turn,
+                        f"semantic operation was unavailable: {error}",
+                        "SEMANTIC_ACTION_REJECTED",
+                        action=action,
+                        target=decision.target,
+                        operation=operation,
+                        valid_actions=surface.actions,
+                        valid_operations=surface.operations,
+                    )
+                    trace.update(
+                        {
+                            "decision": "ACTION_REJECTED",
+                            "accepted": False,
+                            "rejection_code": "SEMANTIC_ACTION_REJECTED",
+                            "rejection_reason": str(error)[:300],
+                        }
+                    )
+                    turns.append(trace)
+                    if self._stalled(memory):
+                        terminal = "PROTOCOL_STALLED"
+                        break
+                    continue
                 trace.update(
                     {"decision": action, "evidence_created": [observation["evidence_ref"]]}
                 )
@@ -432,6 +498,8 @@ class E9InvestigationRuntime:
                 "source_performance": self.backend.performance_snapshot(),
                 "provider_invocations": provider_invocations,
                 "outbound_api_attempts": outbound_attempts,
+                "variant": self.variant.as_dict(),
+                "variant_hash": self.variant.config_hash(),
             },
             "safety": {
                 "ground_truth_exposure": 0,

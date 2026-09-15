@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from packages.evals.itbench import (
     ITBenchEvidenceCategory,
@@ -11,17 +11,22 @@ from packages.evals.itbench import (
     ITBenchSnapshotBackend,
     build_observable_incident,
 )
-from packages.evals.itbench.e9_context import E9ContextPlanner
+from packages.evals.itbench.e9_context import E9ContextPlanner, _fit_alert_digest
 from packages.evals.itbench.e9_control import control_surface
-from packages.evals.itbench.e9_fsm import E9FSM, E9Phase
+from packages.evals.itbench.e9_fsm import E9FSM
 from packages.evals.itbench.e9_identity import (
     E9IdentityMismatch,
     collect_e9_identity,
     validate_e9_identity,
 )
 from packages.evals.itbench.e9_memory import E9CaseMemory
+from packages.evals.itbench.e9_packing import bounded_pack
 from packages.evals.itbench.e9_runtime import E9InvestigationRuntime
-from packages.evals.itbench.e9_semantic import E9_SEMANTIC_OPERATIONS, E9SemanticOperations
+from packages.evals.itbench.e9_semantic import (
+    E9_SEMANTIC_OPERATIONS,
+    E9SemanticOperations,
+    _temporal_assessment,
+)
 from packages.evals.itbench.external_contracts import (
     E9Action,
     ITBenchInvestigationDecisionV5,
@@ -148,32 +153,97 @@ def test_memory_replay_reconstructs_projection(tmp_path: Path) -> None:
     assert replayed.resolve("C001") == "otel-demo/Service/frontend"
 
 
-def test_rejected_candidate_cannot_reactivate_and_active_limit_is_centralized() -> None:
+def test_candidate_history_allows_reconsideration_without_active_overflow() -> None:
     memory = E9CaseMemory(execution_id="ITB-E9", scenario_id="Scenario-1")
     memory.discover_entities(
         tuple({"canonical": f"otel-demo/Service/service-{index}"} for index in range(1, 6))
     )
     memory.set_candidate_status(turn=1, handle="C001", status="REJECTED")
-    try:
-        memory.set_candidate_status(turn=2, handle="C001", status="ACTIVE")
-    except ValueError as error:
-        assert "reactivated" in str(error)
-    else:
-        raise AssertionError("rejected candidate was reactivated")
-    for index in range(1, 4):
+    memory.set_candidate_status(turn=2, handle="C001", status="ACTIVE")
+    for index in range(1, 5):
         memory.set_candidate_status(turn=3, handle=f"C00{index + 1}", status="ACTIVE")
-    try:
-        memory.set_candidate_status(turn=4, handle="C005", status="ACTIVE")
-    except ValueError as error:
-        assert "maximum active" in str(error)
-    else:
-        raise AssertionError("active candidate limit was bypassed")
-    assert len(memory.projection()["active_candidates"]) == 3
+    assert memory.projection()["candidate_state"]["C005"]["status"] == "ACTIVE"
+
+
+def test_five_hypothesis_revisions_are_reversible_and_replayable() -> None:
+    memory = E9CaseMemory(execution_id="ITB-E9", scenario_id="Scenario-1")
+    memory.discover_entities(
+        tuple({"canonical": f"otel-demo/Service/service-{index}"} for index in range(1, 6))
+    )
+    for turn in range(1, 6):
+        event_type = "HYPOTHESIS_PROPOSED" if turn == 1 else "HYPOTHESIS_REVISED"
+        payload: dict[str, Any] = (
+            {"entity_handle": f"C00{turn}", "rationale": "bounded test"}
+            if turn == 1
+            else {"hypothesis": {"entity_handle": f"C00{turn}", "rationale": "revised"}}
+        )
+        memory.append(event_type, turn, payload)
+    replay = E9CaseMemory.replay(
+        {
+            "execution_id": memory.execution_id,
+            "scenario_id": memory.scenario_id,
+            "case_id": memory.case_id,
+            "events": [event.as_dict() for event in memory.events],
+        }
+    )
+    assert memory.state["current_hypothesis"]["entity_handle"] == "C005"
+    assert len(memory.state["hypothesis_history"]) == 5
+    assert replay.projection() == memory.projection()
+
+
+def test_structured_packer_preserves_late_fields_without_string_prefix() -> None:
+    value = {
+        "noise": ["x" * 400] * 8,
+        "critical_field": "must survive",
+        "data_quality": {"ok": True},
+    }
+    packed = bounded_pack(value, 500)
+    encoded = json.dumps(packed, ensure_ascii=False)
+    assert len(encoded) <= 500
+    assert isinstance(packed, dict)
+    assert not isinstance(packed.get("summary"), str)
+    assert packed.get("section_truncated") is True
+
+
+def test_temporal_assessment_is_not_timestamp_sign_only() -> None:
+    assert _temporal_assessment(-120, "unknown") == ("NEAR_ONSET", "SUPPORTS")
+    assert _temporal_assessment(1200, "failure") == ("AFTER", "INCONCLUSIVE")
+    assert _temporal_assessment(-1200, "unknown") == ("BEFORE", "INCONCLUSIVE")
+
+
+def test_newly_discovered_candidate_is_visible_and_targetable() -> None:
+    memory = E9CaseMemory(execution_id="ITB-E9", scenario_id="Scenario-1")
+    memory.discover_entities(({"canonical": "otel-demo/Service/first"},), turn=1)
+    memory.append("HYPOTHESIS_PROPOSED", 2, {"entity_handle": "C001", "rationale": "seed"})
+    memory.discover_entities(({"canonical": "otel-demo/ConfigMap/related"},), turn=3)
+    surface = control_surface(
+        memory.state, turn=3, max_steps=12, max_rejections=2, semantic_limit=24
+    )
+    assert "C002" in surface.target_handles
+    assert "C002" in memory.projection()["discovered_entities"][-1]["handle"]
+
+
+def test_alert_digest_keeps_multiple_sections_when_bounded() -> None:
+    digest = _fit_alert_digest(
+        {
+            "high_signal_alerts": [
+                {"alertname": "Failure", "detail": "x" * 600} for _ in range(30)
+            ],
+            "affected_services": ["checkout", "frontend"],
+            "affected_namespaces": ["otel-demo"],
+            "alert_counts_by_name": {"Failure": 30, "Watchdog": 2},
+            "background": {"Watchdog": 2},
+        },
+        900,
+    )
+    assert "high_signal_alerts" in digest
+    assert "affected_services" in digest
+    assert "alert_counts_by_name" in digest
+    assert json.dumps(digest, ensure_ascii=False).__len__() <= 900
 
 
 def test_fsm_final_turn_exposes_only_terminal_actions() -> None:
     fsm = E9FSM()
-    assert fsm.phase is E9Phase.OBSERVE
     assert fsm.valid_actions(has_hypothesis=True, evidence_count=1, final_turn=True) == (
         "SUBMIT",
         "STOP",

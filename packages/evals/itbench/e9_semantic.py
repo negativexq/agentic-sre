@@ -10,6 +10,7 @@ from typing import Any
 from packages.contracts import Incident
 from packages.evals.itbench.contracts import ITBenchEvidenceCategory
 from packages.evals.itbench.e9_memory import E9CaseMemory
+from packages.evals.itbench.e9_packing import bounded_pack
 from packages.evals.itbench.external_context import normalize_alerts
 from packages.evals.itbench.snapshot_backend import ITBenchSnapshotBackend
 
@@ -36,8 +37,13 @@ class E9SemanticOperations:
         backend: ITBenchSnapshotBackend,
         memory: E9CaseMemory,
         incident: Incident | None = None,
+        *,
+        enable_discovery: bool = True,
+        semantic_facade: bool = True,
     ) -> None:
         self.backend, self.memory, self.incident = backend, memory, incident
+        self.enable_discovery = enable_discovery
+        self.semantic_facade = semantic_facade
 
     def execute(self, operation: str, target_handle: str | None, turn: int) -> dict[str, Any]:
         if operation not in E9_SEMANTIC_OPERATIONS:
@@ -113,7 +119,10 @@ class E9SemanticOperations:
                 raise ValueError("temporal verification requires a candidate handle")
             data, category = self._temporal_alignment(canonical), "temporal"
         summary = _bounded(data)
-        self._discover_related(summary)
+        if not self.semantic_facade:
+            summary = {"legacy_result": summary}
+        if self.enable_discovery:
+            self._discover_related(summary, turn)
         evidence_handle = self.memory.add_evidence(
             turn=turn, handle=target_handle, operation=operation, category=category, summary=summary
         )
@@ -175,21 +184,27 @@ class E9SemanticOperations:
             body = _json_body(record.get("Body")) if isinstance(record, dict) else None
             if body:
                 spec = body.get("spec", {}) if isinstance(body.get("spec"), dict) else {}
+                workload_spec = (
+                    spec.get("template", {}).get("spec", {})
+                    if isinstance(spec.get("template"), dict)
+                    and isinstance(spec.get("template", {}).get("spec"), dict)
+                    else spec
+                )
                 specs.append(
                     {
                         "evidence_id": item.get("evidence_id"),
                         "kind": body.get("kind"),
                         "image": _images(spec),
                         "env_references": _env_refs(spec),
-                        "resources": spec.get("resources"),
+                        "resources": _resources(spec, workload_spec),
                         "replicas": spec.get("replicas"),
                         "selector": spec.get("selector"),
                         "config_references": _config_refs(spec),
-                        "service_account": spec.get("serviceAccountName"),
+                        "service_account": workload_spec.get("serviceAccountName"),
                         "scheduling": {
                             key: spec.get(key)
                             for key in ("nodeName", "nodeSelector", "affinity", "tolerations")
-                            if spec.get(key) is not None
+                            if workload_spec.get(key) is not None
                         },
                     }
                 )
@@ -202,7 +217,13 @@ class E9SemanticOperations:
 
     def _compare_replicas(self, canonical: str) -> dict[str, Any]:
         context = self.backend.query_entity_context(canonical, 20, include_telemetry=False)
-        peers = context.get("object_records", [])[1:]
+        peers = []
+        for item in context.get("object_records", []):
+            record = item.get("record", {})
+            body = _json_body(record.get("Body")) if isinstance(record, dict) else None
+            peer = _canonical_from_body(body or {})
+            if peer and peer != canonical:
+                peers.append(item)
         return {
             "comparison_available": bool(peers),
             "peer_count": len(peers),
@@ -233,6 +254,8 @@ class E9SemanticOperations:
                         )
                     ),
                 )
+                if key[0] == "unknown" and key[1] == "unknown":
+                    continue
                 edges[key] = edges.get(key, 0) + 1
         return {
             "error_tree_available": bool(edges),
@@ -247,7 +270,7 @@ class E9SemanticOperations:
         events = self.backend.query(
             ITBenchEvidenceCategory.K8S_EVENTS, {"entity": canonical, "limit": self._limit(20)}
         )
-        times = []
+        times: list[dict[str, Any]] = []
         for item in events.get("records", []):
             body = (
                 _json_body(item.get("record", {}).get("Body"))
@@ -259,23 +282,27 @@ class E9SemanticOperations:
             )
             parsed = _parse_time(value)
             if parsed:
-                times.append(parsed)
+                times.append({"time": parsed, "kind": _event_kind(body or {})})
         incident_time = self.incident.created_at if self.incident else None
         if incident_time is None or not times:
-            delta, support = None, "INCONCLUSIVE"
+            delta, relation, support = None, "UNKNOWN", "INCONCLUSIVE"
         else:
-            nearest = min(times, key=lambda value: abs((value - incident_time).total_seconds()))
-            delta = (nearest - incident_time).total_seconds()
-            support = "SUPPORTS" if delta >= 0 else "CONTRADICTS"
+            nearest = min(
+                times, key=lambda value: abs((value["time"] - incident_time).total_seconds())
+            )
+            delta = (nearest["time"] - incident_time).total_seconds()
+            relation, support = _temporal_assessment(delta, nearest["kind"])
         return {
             "entity": canonical,
             "incident_start": incident_time.isoformat() if incident_time else None,
-            "candidate_event_times": [value.isoformat() for value in times[:12]],
+            "candidate_event_times": [value["time"].isoformat() for value in times[:12]],
             "delta_seconds": delta,
+            "temporal_relation": relation,
+            "causal_temporal_assessment": support,
             "temporal_support": support,
         }
 
-    def _discover_related(self, value: Any) -> None:
+    def _discover_related(self, value: Any, turn: int = 0) -> None:
         found = []
 
         def walk(item: Any) -> None:
@@ -294,69 +321,38 @@ class E9SemanticOperations:
 
         walk(value)
         if found:
-            self.memory.discover_entities(tuple(found[:5]))
+            self.memory.discover_entities(tuple(found[:5]), turn=turn)
 
     def _limit(self, desired: int) -> int:
         return max(1, min(desired, self.backend.max_rows))
 
 
 def _bounded(value: Any, limit: int = 5_500) -> Any:
-    if len(json.dumps(value, ensure_ascii=False, default=str)) <= limit:
-        return value
-    if isinstance(value, dict):
-        priority = (
-            "entity",
-            "identity",
-            "object_state",
-            "specs",
-            "ownership",
-            "configuration_dependencies",
-            "events",
-            "edges",
-            "temporal_support",
-            "data_quality",
-        )
-        keys = [key for key in priority if key in value] + [
-            key for key in value if key not in priority
-        ]
-        packed: dict[str, Any] = {}
-        for key in keys:
-            child = _bounded(value[key], max(80, limit // max(2, len(keys))))
-            candidate = {
-                "items": {**packed, key: child},
-                "source_key_count": len(value),
-                "returned_key_count": len(packed) + 1,
-                "section_truncated": True,
-            }
-            if len(json.dumps(candidate, ensure_ascii=False, default=str)) > limit and packed:
-                break
-            packed[key] = child
-        return {
-            "items": packed,
-            "source_key_count": len(value),
-            "returned_key_count": len(packed),
-            "section_truncated": True,
-        }
-    if isinstance(value, list):
-        packed_list: list[Any] = []
-        for item in value:
-            child = _bounded(item, max(80, limit // max(2, len(value))))
-            candidate = {
-                "items": [*packed_list, child],
-                "source_count": len(value),
-                "returned_count": len(packed_list) + 1,
-                "section_truncated": True,
-            }
-            if len(json.dumps(candidate, ensure_ascii=False, default=str)) > limit and packed_list:
-                break
-            packed_list.append(child)
-        return {
-            "items": packed_list,
-            "source_count": len(value),
-            "returned_count": len(packed_list),
-            "section_truncated": True,
-        }
-    return {"value": str(value)[: max(1, limit - 80)], "section_truncated": True}
+    return bounded_pack(value, limit)
+
+
+def _event_kind(body: dict[str, Any]) -> str:
+    text = " ".join(str(body.get(key, "")) for key in ("reason", "type", "message")).casefold()
+    if any(token in text for token in ("config", "change", "update", "patch", "rollout")):
+        return "change"
+    if any(token in text for token in ("fail", "error", "crash", "restart", "backoff")):
+        return "failure"
+    return "unknown"
+
+
+def _temporal_assessment(delta: float, event_kind: str) -> tuple[str, str]:
+    """Conservative temporal interpretation; sign alone is not causality."""
+    if -300 <= delta < 0:
+        return "NEAR_ONSET", "SUPPORTS"
+    if 0 <= delta <= 300:
+        return ("NEAR_ONSET" if delta <= 120 else "DURING"), "SUPPORTS"
+    if delta < -300:
+        return "BEFORE", "SUPPORTS" if event_kind == "change" else "INCONCLUSIVE"
+    return "AFTER", "INCONCLUSIVE"
+
+
+def _resources(spec: dict[str, Any], workload_spec: dict[str, Any]) -> Any:
+    return workload_spec.get("resources", spec.get("resources"))
 
 
 def _json_body(value: Any) -> dict[str, Any] | None:

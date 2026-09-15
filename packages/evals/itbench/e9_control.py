@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from hashlib import sha256
 from typing import Any
 
 from packages.evals.itbench.e9_semantic import E9_SEMANTIC_OPERATIONS
@@ -19,6 +21,38 @@ class E9ControlSurface:
     final_turn: bool
     rejection_budget_remaining: int
 
+    @property
+    def all_actions(self) -> tuple[str, ...]:
+        return self.actions
+
+
+@dataclass(frozen=True, slots=True)
+class E9ControlPlaneVariant:
+    """Explicit switches used by the offline control-plane ablation."""
+
+    recoverable_rejections: bool = True
+    visible_rejection_feedback: bool = True
+    dynamic_action_gating: bool = True
+    dynamic_operation_gating: bool = True
+    semantic_facade: bool = True
+    selective_context: bool = True
+    dynamic_candidate_discovery: bool = True
+
+    def as_dict(self) -> dict[str, bool]:
+        return {
+            "recoverable_rejections": self.recoverable_rejections,
+            "visible_rejection_feedback": self.visible_rejection_feedback,
+            "dynamic_action_gating": self.dynamic_action_gating,
+            "dynamic_operation_gating": self.dynamic_operation_gating,
+            "semantic_facade": self.semantic_facade,
+            "selective_context": self.selective_context,
+            "dynamic_candidate_discovery": self.dynamic_candidate_discovery,
+        }
+
+    def config_hash(self) -> str:
+        encoded = json.dumps(self.as_dict(), sort_keys=True, separators=(",", ":"))
+        return sha256(encoded.encode("utf-8")).hexdigest()
+
 
 def control_surface(
     state: dict[str, Any],
@@ -27,6 +61,7 @@ def control_surface(
     max_steps: int,
     max_rejections: int,
     semantic_limit: int,
+    **_: Any,
 ) -> E9ControlSurface:
     """Derive all capabilities from the materialized CaseState only."""
     phase = str(state.get("current_phase", "OBSERVE"))
@@ -68,14 +103,19 @@ def control_surface(
     target = state.get("current_hypothesis")
     current_target = target.get("entity_handle") if isinstance(target, dict) else None
     target_handles: tuple[str, ...]
-    if current_target is not None:
-        target_handles = (str(current_target),)
-    else:
-        target_handles = tuple(
-            str(item.get("handle"))
-            for item in state.get("discovered_entities", {}).values()
-            if isinstance(item, dict) and isinstance(item.get("handle"), str)
+    discovered = [
+        item
+        for item in state.get("discovered_entities", {}).values()
+        if isinstance(item, dict) and isinstance(item.get("handle"), str)
+    ]
+    discovered.sort(
+        key=lambda item: (
+            item.get("handle") != current_target,
+            -int(item.get("discovered_turn", 0)),
+            str(item.get("handle")),
         )
+    )
+    target_handles = tuple(str(item["handle"]) for item in discovered[:12])
     available_operations: tuple[str, ...] = tuple(
         operation
         for operation in operations
@@ -94,4 +134,4 @@ def control_surface(
     )
 
 
-__all__ = ["E9ControlSurface", "control_surface"]
+__all__ = ["E9ControlPlaneVariant", "E9ControlSurface", "control_surface"]

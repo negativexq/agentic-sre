@@ -1,0 +1,27 @@
+{
+  "execution": "E9_OFFLINE_REPAIR_ROUND2",
+  "historical_e9_immutable": true,
+  "network": {"live_agent_calls": 0, "openai_outbound_attempts": 0, "luna_calls": 0, "judge_calls": 0, "official_scenarios": 0, "live_smoke_scenarios": 0},
+  "findings": {
+    "distinct_ablations": {"status": "CONFIRMED_AND_FIXED", "evidence": "R1-R7 previously shared one runtime configuration; v3 now uses typed feature flags and hashes"},
+    "canary_counters": {"status": "CONFIRMED_AND_FIXED", "evidence": "v2 computes provider/runtime surface differences and executor checks"},
+    "candidate_state": {"status": "CONFIRMED_AND_FIXED", "evidence": "no active-count exception or irreversible reactivation guard; current hypothesis is the projected active candidate"},
+    "dynamic_discovery": {"status": "CONFIRMED_AND_FIXED", "evidence": "discovered_turn is persisted and newest candidates enter target surface"},
+    "temporal_semantics": {"status": "CONFIRMED_AND_FIXED", "evidence": "relation and conservative assessment distinguish near-onset, before and after"},
+    "semantic_operation_honesty": {"status": "PARTIAL", "evidence": "spec extraction and trace filtering were repaired; unavailable change history/replica comparison remain explicit"},
+    "memory_structured_packing": {"status": "CONFIRMED_AND_FIXED", "evidence": "memory and semantic summaries share bounded_pack; no structured prefix string"},
+    "context_selectivity": {"status": "PARTIAL", "evidence": "newest/current candidates and rejection feedback are selected; deeper question ranking remains limited"},
+    "provider_schema_complexity": {"status": "PARTIAL", "evidence": "dynamic V5 schema is retained and measured; action-specific schemas were not introduced"},
+    "identity_preflight": {"status": "CONFIRMED_AND_FIXED", "evidence": "future preflight validates identity, dataset, readiness, model and fresh budget before provider construction"}
+  },
+  "tests": {"targeted": "PASS", "full_pytest": "PASS", "pytest_count": 425, "ruff": "PASS"},
+  "artifacts": {
+    "ablation": "itbench-control-plane-ablation-v3.json",
+    "canary": "itbench-control-plane-canary-v2.json",
+    "semantic_coverage": "itbench-semantic-operation-coverage.json"
+  },
+  "canary": {"scenarios": 35, "terminal_counts": {"SUBMIT": 35}, "stale_capability_count": 0, "missing_executor_count": 0, "replay_mismatch_count": 0, "trace_completeness": 1.0, "semantic_matrix_errors": 0},
+  "semantic_coverage": {"operations": 11, "scenarios_per_operation": 35, "structured_errors": 0, "ground_truth_used": false},
+  "historical_e9_classification": "ITB_E9_COMPLETE_REGRESSED",
+  "live_readiness": "READY_FOR_LIVE_SMOKE_REVIEW"
+}

@@ -1,0 +1,3171 @@
+{
+  "execution": "E9_OFFLINE_PREFLIGHT",
+  "hard_coded_metrics": false,
+  "judge_calls": 0,
+  "method": "real FakeModelProvider trajectories over the E9 runtime; no network, no judge, no official GT",
+  "openai_calls": 0,
+  "trajectory_count_per_variant": 12,
+  "variants": [
+    {
+      "completion_rate": 0.4166666666666667,
+      "configuration": {
+        "max_consecutive_rejected_actions": 0
+      },
+      "configuration_hash": "2623f2ae5dddf65640154f831381608504ee1064f44bef694cddbd82e4f62df1",
+      "feature_flags": {
+        "dynamic_action_gating": false,
+        "dynamic_candidate_discovery": false,
+        "dynamic_operation_gating": false,
+        "recoverable_rejections": false,
+        "selective_context": false,
+        "semantic_facade": false,
+        "visible_rejection_feedback": false
+      },
+      "mean_context_chars": 6799.75,
+      "mean_exposed_actions": 6.566666666666666,
+      "mean_exposed_operations": 11.0,
+      "mean_model_steps": 2.5,
+      "protocol_stall_count": 7,
+      "recovered_rejection_count": 0,
+      "rejection_count": 7,
+      "rejection_feedback_visible_runs": 0,
+      "replay_mismatches": 0,
+      "runs": [
+        {
+          "context_chars": [
+            2371,
+            2662,
+            3371
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": false,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 1
+        },
+        {
+          "context_chars": [
+            2371
+          ],
+          "exposed_action_counts": [
+            6
+          ],
+          "exposed_operation_counts": [
+            11
+          ],
+          "model_steps": 1,
+          "provider_schema_chars": 1059,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": false,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "PROTOCOL_STALLED",
+          "trace_complete": true,
+          "trajectory": 2
+        },
+        {
+          "context_chars": [
+            2371,
+            2662,
+            3371
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": false,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "PROTOCOL_STALLED",
+          "trace_complete": true,
+          "trajectory": 3
+        },
+        {
+          "context_chars": [
+            2371
+          ],
+          "exposed_action_counts": [
+            6
+          ],
+          "exposed_operation_counts": [
+            11
+          ],
+          "model_steps": 1,
+          "provider_schema_chars": 1059,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": false,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "PROTOCOL_STALLED",
+          "trace_complete": true,
+          "trajectory": 4
+        },
+        {
+          "context_chars": [
+            2371,
+            2662,
+            2889,
+            3382
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": false,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 5
+        },
+        {
+          "context_chars": [
+            2371
+          ],
+          "exposed_action_counts": [
+            6
+          ],
+          "exposed_operation_counts": [
+            11
+          ],
+          "model_steps": 1,
+          "provider_schema_chars": 1059,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": false,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 6
+        },
+        {
+          "context_chars": [
+            2371,
+            2971,
+            3261
+          ],
+          "exposed_action_counts": [
+            6,
+            6,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": false,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "PROTOCOL_STALLED",
+          "trace_complete": true,
+          "trajectory": 7
+        },
+        {
+          "context_chars": [
+            2371,
+            2662,
+            3027,
+            3164
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": false,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 8
+        },
+        {
+          "context_chars": [
+            2371,
+            2662,
+            3047
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": false,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "PROTOCOL_STALLED",
+          "trace_complete": true,
+          "trajectory": 9
+        },
+        {
+          "context_chars": [
+            2371,
+            2662,
+            3366
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": false,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 10
+        },
+        {
+          "context_chars": [
+            2371,
+            2662
+          ],
+          "exposed_action_counts": [
+            6,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11
+          ],
+          "model_steps": 2,
+          "provider_schema_chars": 2118,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": false,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "PROTOCOL_STALLED",
+          "trace_complete": true,
+          "trajectory": 11
+        },
+        {
+          "context_chars": [
+            2371,
+            2662
+          ],
+          "exposed_action_counts": [
+            6,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11
+          ],
+          "model_steps": 2,
+          "provider_schema_chars": 2118,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": false,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "PROTOCOL_STALLED",
+          "trace_complete": true,
+          "trajectory": 12
+        }
+      ],
+      "synthetic_correct_count": 0,
+      "terminal_counts": {
+        "PROTOCOL_STALLED": 7,
+        "STOP": 1,
+        "SUBMIT": 4
+      },
+      "trace_incomplete": 0,
+      "trajectory_count": 12,
+      "variant": "R0"
+    },
+    {
+      "completion_rate": 1.0,
+      "configuration": {
+        "max_consecutive_rejected_actions": 2
+      },
+      "configuration_hash": "e56fb9a2120fd462ff635a50c82c6563f58d5f9200bc31862d75acad22057df0",
+      "feature_flags": {
+        "dynamic_action_gating": false,
+        "dynamic_candidate_discovery": false,
+        "dynamic_operation_gating": false,
+        "recoverable_rejections": true,
+        "selective_context": false,
+        "semantic_facade": false,
+        "visible_rejection_feedback": false
+      },
+      "mean_context_chars": 10738.416666666666,
+      "mean_exposed_actions": 6.673913043478261,
+      "mean_exposed_operations": 11.0,
+      "mean_model_steps": 3.8333333333333335,
+      "protocol_stall_count": 0,
+      "recovered_rejection_count": 8,
+      "rejection_count": 10,
+      "rejection_feedback_visible_runs": 0,
+      "replay_mismatches": 0,
+      "runs": [
+        {
+          "context_chars": [
+            2371,
+            2662,
+            3371
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": false,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 1
+        },
+        {
+          "context_chars": [
+            2371,
+            2371,
+            2661,
+            3183
+          ],
+          "exposed_action_counts": [
+            6,
+            6,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": false,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 2
+        },
+        {
+          "context_chars": [
+            2371,
+            2662,
+            3371,
+            3371,
+            3879
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": false,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 2,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 3
+        },
+        {
+          "context_chars": [
+            2371,
+            2371,
+            2661,
+            2661,
+            2661
+          ],
+          "exposed_action_counts": [
+            6,
+            6,
+            7,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 2,
+          "rejection_feedback_visible": false,
+          "rejections": 3,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 4
+        },
+        {
+          "context_chars": [
+            2371,
+            2662,
+            2889,
+            3382
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": false,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 5
+        },
+        {
+          "context_chars": [
+            2371
+          ],
+          "exposed_action_counts": [
+            6
+          ],
+          "exposed_operation_counts": [
+            11
+          ],
+          "model_steps": 1,
+          "provider_schema_chars": 1059,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": false,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 6
+        },
+        {
+          "context_chars": [
+            2371,
+            2971,
+            3261,
+            3261,
+            3261
+          ],
+          "exposed_action_counts": [
+            6,
+            6,
+            7,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": false,
+          "rejections": 2,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 7
+        },
+        {
+          "context_chars": [
+            2371,
+            2662,
+            3027,
+            3164
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": false,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 8
+        },
+        {
+          "context_chars": [
+            2371,
+            2662,
+            3047,
+            3047
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": false,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 9
+        },
+        {
+          "context_chars": [
+            2371,
+            2662,
+            3366
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": false,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 10
+        },
+        {
+          "context_chars": [
+            2371,
+            2662,
+            2661,
+            3183
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": false,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 11
+        },
+        {
+          "context_chars": [
+            2371,
+            2662,
+            2661,
+            3371
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": false,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 12
+        }
+      ],
+      "synthetic_correct_count": 0,
+      "terminal_counts": {
+        "STOP": 4,
+        "SUBMIT": 8
+      },
+      "trace_incomplete": 0,
+      "trajectory_count": 12,
+      "variant": "R1"
+    },
+    {
+      "completion_rate": 1.0,
+      "configuration": {
+        "max_consecutive_rejected_actions": 2
+      },
+      "configuration_hash": "918ef0a5536afe741d2c46c5a45413e13a0acdaed7f38f003328f68bb1417ea6",
+      "feature_flags": {
+        "dynamic_action_gating": false,
+        "dynamic_candidate_discovery": false,
+        "dynamic_operation_gating": false,
+        "recoverable_rejections": true,
+        "selective_context": false,
+        "semantic_facade": false,
+        "visible_rejection_feedback": true
+      },
+      "mean_context_chars": 11148.916666666666,
+      "mean_exposed_actions": 6.673913043478261,
+      "mean_exposed_operations": 11.0,
+      "mean_model_steps": 3.8333333333333335,
+      "protocol_stall_count": 0,
+      "recovered_rejection_count": 8,
+      "rejection_count": 10,
+      "rejection_feedback_visible_runs": 12,
+      "replay_mismatches": 0,
+      "runs": [
+        {
+          "context_chars": [
+            2393,
+            2684,
+            3393
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 1
+        },
+        {
+          "context_chars": [
+            2393,
+            2735,
+            2683,
+            3205
+          ],
+          "exposed_action_counts": [
+            6,
+            6,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 2
+        },
+        {
+          "context_chars": [
+            2393,
+            2684,
+            3393,
+            3785,
+            3901
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 2,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 3
+        },
+        {
+          "context_chars": [
+            2393,
+            2756,
+            2683,
+            3092,
+            3076
+          ],
+          "exposed_action_counts": [
+            6,
+            6,
+            7,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 2,
+          "rejection_feedback_visible": true,
+          "rejections": 3,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 4
+        },
+        {
+          "context_chars": [
+            2393,
+            2684,
+            2911,
+            3404
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 5
+        },
+        {
+          "context_chars": [
+            2393
+          ],
+          "exposed_action_counts": [
+            6
+          ],
+          "exposed_operation_counts": [
+            11
+          ],
+          "model_steps": 1,
+          "provider_schema_chars": 1059,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 6
+        },
+        {
+          "context_chars": [
+            2393,
+            2993,
+            3283,
+            3700,
+            3676
+          ],
+          "exposed_action_counts": [
+            6,
+            6,
+            7,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 2,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 7
+        },
+        {
+          "context_chars": [
+            2393,
+            2684,
+            3049,
+            3186
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 8
+        },
+        {
+          "context_chars": [
+            2393,
+            2684,
+            3069,
+            3459
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 9
+        },
+        {
+          "context_chars": [
+            2393,
+            2684,
+            3388
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 10
+        },
+        {
+          "context_chars": [
+            2393,
+            2684,
+            3092,
+            3205
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 11
+        },
+        {
+          "context_chars": [
+            2393,
+            2684,
+            3089,
+            3393
+          ],
+          "exposed_action_counts": [
+            6,
+            7,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 12
+        }
+      ],
+      "synthetic_correct_count": 0,
+      "terminal_counts": {
+        "STOP": 4,
+        "SUBMIT": 8
+      },
+      "trace_incomplete": 0,
+      "trajectory_count": 12,
+      "variant": "R2"
+    },
+    {
+      "completion_rate": 1.0,
+      "configuration": {
+        "max_consecutive_rejected_actions": 2
+      },
+      "configuration_hash": "02dcb5c087f41de33261307f91f50bbddfd121251e33f6a5418af15078b58b58",
+      "feature_flags": {
+        "dynamic_action_gating": true,
+        "dynamic_candidate_discovery": false,
+        "dynamic_operation_gating": false,
+        "recoverable_rejections": true,
+        "selective_context": false,
+        "semantic_facade": false,
+        "visible_rejection_feedback": true
+      },
+      "mean_context_chars": 11072.75,
+      "mean_exposed_actions": 5.3478260869565215,
+      "mean_exposed_operations": 11.0,
+      "mean_model_steps": 3.8333333333333335,
+      "protocol_stall_count": 0,
+      "recovered_rejection_count": 8,
+      "rejection_count": 10,
+      "rejection_feedback_visible_runs": 12,
+      "replay_mismatches": 0,
+      "runs": [
+        {
+          "context_chars": [
+            2361,
+            2670,
+            3379
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 1
+        },
+        {
+          "context_chars": [
+            2361,
+            2703,
+            2669,
+            3191
+          ],
+          "exposed_action_counts": [
+            4,
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 2
+        },
+        {
+          "context_chars": [
+            2361,
+            2670,
+            3379,
+            3771,
+            3887
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 2,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 3
+        },
+        {
+          "context_chars": [
+            2361,
+            2724,
+            2669,
+            3078,
+            3062
+          ],
+          "exposed_action_counts": [
+            4,
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 2,
+          "rejection_feedback_visible": true,
+          "rejections": 3,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 4
+        },
+        {
+          "context_chars": [
+            2361,
+            2670,
+            2897,
+            3390
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 5
+        },
+        {
+          "context_chars": [
+            2361
+          ],
+          "exposed_action_counts": [
+            4
+          ],
+          "exposed_operation_counts": [
+            11
+          ],
+          "model_steps": 1,
+          "provider_schema_chars": 1059,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 6
+        },
+        {
+          "context_chars": [
+            2361,
+            2961,
+            3269,
+            3686,
+            3662
+          ],
+          "exposed_action_counts": [
+            4,
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 2,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 7
+        },
+        {
+          "context_chars": [
+            2361,
+            2670,
+            3035,
+            3172
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 8
+        },
+        {
+          "context_chars": [
+            2361,
+            2670,
+            3055,
+            3445
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 9
+        },
+        {
+          "context_chars": [
+            2361,
+            2670,
+            3374
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 10
+        },
+        {
+          "context_chars": [
+            2361,
+            2670,
+            3078,
+            3191
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 11
+        },
+        {
+          "context_chars": [
+            2361,
+            2670,
+            3075,
+            3379
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11,
+            11
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 12
+        }
+      ],
+      "synthetic_correct_count": 0,
+      "terminal_counts": {
+        "STOP": 4,
+        "SUBMIT": 8
+      },
+      "trace_incomplete": 0,
+      "trajectory_count": 12,
+      "variant": "R3"
+    },
+    {
+      "completion_rate": 1.0,
+      "configuration": {
+        "max_consecutive_rejected_actions": 2
+      },
+      "configuration_hash": "3a9835e79eff01b4c29a2ff922e744e643a3d53351a7e5684f52c9e2e9928933",
+      "feature_flags": {
+        "dynamic_action_gating": true,
+        "dynamic_candidate_discovery": false,
+        "dynamic_operation_gating": true,
+        "recoverable_rejections": true,
+        "selective_context": false,
+        "semantic_facade": false,
+        "visible_rejection_feedback": true
+      },
+      "mean_context_chars": 10646.5,
+      "mean_exposed_actions": 5.3478260869565215,
+      "mean_exposed_operations": 5.3478260869565215,
+      "mean_model_steps": 3.8333333333333335,
+      "protocol_stall_count": 0,
+      "recovered_rejection_count": 8,
+      "rejection_count": 10,
+      "rejection_feedback_visible_runs": 12,
+      "replay_mismatches": 0,
+      "runs": [
+        {
+          "context_chars": [
+            2243,
+            2571,
+            3263
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 1
+        },
+        {
+          "context_chars": [
+            2243,
+            2585,
+            2570,
+            3076
+          ],
+          "exposed_action_counts": [
+            4,
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            5,
+            6,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 2
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            3263,
+            3655,
+            3755
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5,
+            5,
+            4
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 2,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 3
+        },
+        {
+          "context_chars": [
+            2243,
+            2606,
+            2570,
+            2979,
+            2963
+          ],
+          "exposed_action_counts": [
+            4,
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            5,
+            6,
+            6,
+            6
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 2,
+          "rejection_feedback_visible": true,
+          "rejections": 3,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 4
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2798,
+            3263
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            6,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 5
+        },
+        {
+          "context_chars": [
+            2243
+          ],
+          "exposed_action_counts": [
+            4
+          ],
+          "exposed_operation_counts": [
+            5
+          ],
+          "model_steps": 1,
+          "provider_schema_chars": 1059,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 6
+        },
+        {
+          "context_chars": [
+            2243,
+            2823,
+            3170,
+            3587,
+            3563
+          ],
+          "exposed_action_counts": [
+            4,
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            4,
+            6,
+            6,
+            6
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 2,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 7
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2917,
+            3054
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 8
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2937,
+            3327
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 9
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            3256
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 10
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2979,
+            3076
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            6,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 11
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2976,
+            3263
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            6,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 12
+        }
+      ],
+      "synthetic_correct_count": 0,
+      "terminal_counts": {
+        "STOP": 4,
+        "SUBMIT": 8
+      },
+      "trace_incomplete": 0,
+      "trajectory_count": 12,
+      "variant": "R4"
+    },
+    {
+      "completion_rate": 1.0,
+      "configuration": {
+        "max_consecutive_rejected_actions": 2
+      },
+      "configuration_hash": "040e9aaee690729d1d5a33842771f76739ce91561600d5147d937e8977641165",
+      "feature_flags": {
+        "dynamic_action_gating": true,
+        "dynamic_candidate_discovery": false,
+        "dynamic_operation_gating": true,
+        "recoverable_rejections": true,
+        "selective_context": false,
+        "semantic_facade": true,
+        "visible_rejection_feedback": true
+      },
+      "mean_context_chars": 10471.583333333334,
+      "mean_exposed_actions": 5.3478260869565215,
+      "mean_exposed_operations": 5.3478260869565215,
+      "mean_model_steps": 3.8333333333333335,
+      "protocol_stall_count": 0,
+      "recovered_rejection_count": 8,
+      "rejection_count": 10,
+      "rejection_feedback_visible_runs": 12,
+      "replay_mismatches": 0,
+      "runs": [
+        {
+          "context_chars": [
+            2243,
+            2571,
+            3054
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 1
+        },
+        {
+          "context_chars": [
+            2243,
+            2585,
+            2570,
+            3058
+          ],
+          "exposed_action_counts": [
+            4,
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            5,
+            6,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 2
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            3054,
+            3446,
+            3528
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5,
+            5,
+            4
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 2,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 3
+        },
+        {
+          "context_chars": [
+            2243,
+            2606,
+            2570,
+            2979,
+            2963
+          ],
+          "exposed_action_counts": [
+            4,
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            5,
+            6,
+            6,
+            6
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 2,
+          "rejection_feedback_visible": true,
+          "rejections": 3,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 4
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2798,
+            3245
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            6,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 5
+        },
+        {
+          "context_chars": [
+            2243
+          ],
+          "exposed_action_counts": [
+            4
+          ],
+          "exposed_operation_counts": [
+            5
+          ],
+          "model_steps": 1,
+          "provider_schema_chars": 1059,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 6
+        },
+        {
+          "context_chars": [
+            2243,
+            2649,
+            2996,
+            3413,
+            3389
+          ],
+          "exposed_action_counts": [
+            4,
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            4,
+            6,
+            6,
+            6
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 2,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 7
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2899,
+            3036
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 8
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2919,
+            3309
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 9
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            3042
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 10
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2979,
+            3058
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            6,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 11
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2976,
+            3054
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            6,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 12
+        }
+      ],
+      "synthetic_correct_count": 0,
+      "terminal_counts": {
+        "STOP": 4,
+        "SUBMIT": 8
+      },
+      "trace_incomplete": 0,
+      "trajectory_count": 12,
+      "variant": "R5"
+    },
+    {
+      "completion_rate": 1.0,
+      "configuration": {
+        "max_consecutive_rejected_actions": 2
+      },
+      "configuration_hash": "0a92f8f1354cc0837faf01fd6e7f83e0c5606eaccf18b36e9a8ce6749ddcea60",
+      "feature_flags": {
+        "dynamic_action_gating": true,
+        "dynamic_candidate_discovery": false,
+        "dynamic_operation_gating": true,
+        "recoverable_rejections": true,
+        "selective_context": true,
+        "semantic_facade": true,
+        "visible_rejection_feedback": true
+      },
+      "mean_context_chars": 10471.583333333334,
+      "mean_exposed_actions": 5.3478260869565215,
+      "mean_exposed_operations": 5.3478260869565215,
+      "mean_model_steps": 3.8333333333333335,
+      "protocol_stall_count": 0,
+      "recovered_rejection_count": 8,
+      "rejection_count": 10,
+      "rejection_feedback_visible_runs": 12,
+      "replay_mismatches": 0,
+      "runs": [
+        {
+          "context_chars": [
+            2243,
+            2571,
+            3054
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 1
+        },
+        {
+          "context_chars": [
+            2243,
+            2585,
+            2570,
+            3058
+          ],
+          "exposed_action_counts": [
+            4,
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            5,
+            6,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 2
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            3054,
+            3446,
+            3528
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5,
+            5,
+            4
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 2,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 3
+        },
+        {
+          "context_chars": [
+            2243,
+            2606,
+            2570,
+            2979,
+            2963
+          ],
+          "exposed_action_counts": [
+            4,
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            5,
+            6,
+            6,
+            6
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 2,
+          "rejection_feedback_visible": true,
+          "rejections": 3,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 4
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2798,
+            3245
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            6,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 5
+        },
+        {
+          "context_chars": [
+            2243
+          ],
+          "exposed_action_counts": [
+            4
+          ],
+          "exposed_operation_counts": [
+            5
+          ],
+          "model_steps": 1,
+          "provider_schema_chars": 1059,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 6
+        },
+        {
+          "context_chars": [
+            2243,
+            2649,
+            2996,
+            3413,
+            3389
+          ],
+          "exposed_action_counts": [
+            4,
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            4,
+            6,
+            6,
+            6
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 2,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 7
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2899,
+            3036
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 8
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2919,
+            3309
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 9
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            3042
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 10
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2979,
+            3058
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            6,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 11
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2976,
+            3054
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            6,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 12
+        }
+      ],
+      "synthetic_correct_count": 0,
+      "terminal_counts": {
+        "STOP": 4,
+        "SUBMIT": 8
+      },
+      "trace_incomplete": 0,
+      "trajectory_count": 12,
+      "variant": "R6"
+    },
+    {
+      "completion_rate": 1.0,
+      "configuration": {
+        "max_consecutive_rejected_actions": 2
+      },
+      "configuration_hash": "ad1a73c7cee155bd4ae0a2da3c33f77846d44719a87071f329f2f164777ecd26",
+      "feature_flags": {
+        "dynamic_action_gating": true,
+        "dynamic_candidate_discovery": true,
+        "dynamic_operation_gating": true,
+        "recoverable_rejections": true,
+        "selective_context": true,
+        "semantic_facade": true,
+        "visible_rejection_feedback": true
+      },
+      "mean_context_chars": 10471.583333333334,
+      "mean_exposed_actions": 5.3478260869565215,
+      "mean_exposed_operations": 5.3478260869565215,
+      "mean_model_steps": 3.8333333333333335,
+      "protocol_stall_count": 0,
+      "recovered_rejection_count": 8,
+      "rejection_count": 10,
+      "rejection_feedback_visible_runs": 12,
+      "replay_mismatches": 0,
+      "runs": [
+        {
+          "context_chars": [
+            2243,
+            2571,
+            3054
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 1
+        },
+        {
+          "context_chars": [
+            2243,
+            2585,
+            2570,
+            3058
+          ],
+          "exposed_action_counts": [
+            4,
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            5,
+            6,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 2
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            3054,
+            3446,
+            3528
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5,
+            5,
+            4
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 2,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 3
+        },
+        {
+          "context_chars": [
+            2243,
+            2606,
+            2570,
+            2979,
+            2963
+          ],
+          "exposed_action_counts": [
+            4,
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            5,
+            6,
+            6,
+            6
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 2,
+          "rejection_feedback_visible": true,
+          "rejections": 3,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 4
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2798,
+            3245
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            6,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 5
+        },
+        {
+          "context_chars": [
+            2243
+          ],
+          "exposed_action_counts": [
+            4
+          ],
+          "exposed_operation_counts": [
+            5
+          ],
+          "model_steps": 1,
+          "provider_schema_chars": 1059,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 6
+        },
+        {
+          "context_chars": [
+            2243,
+            2649,
+            2996,
+            3413,
+            3389
+          ],
+          "exposed_action_counts": [
+            4,
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            4,
+            6,
+            6,
+            6
+          ],
+          "model_steps": 5,
+          "provider_schema_chars": 5295,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 2,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 7
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2899,
+            3036
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 8
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2919,
+            3309
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 9
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            3042
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            5
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": true,
+          "rejections": 0,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 10
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2979,
+            3058
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            6,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 11
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2976,
+            3054
+          ],
+          "exposed_action_counts": [
+            4,
+            6,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            6,
+            5
+          ],
+          "model_steps": 4,
+          "provider_schema_chars": 4236,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 1,
+          "synthetic_correct": false,
+          "terminal": "SUBMIT",
+          "trace_complete": true,
+          "trajectory": 12
+        }
+      ],
+      "synthetic_correct_count": 0,
+      "terminal_counts": {
+        "STOP": 4,
+        "SUBMIT": 8
+      },
+      "trace_incomplete": 0,
+      "trajectory_count": 12,
+      "variant": "R7"
+    }
+  ]
+}

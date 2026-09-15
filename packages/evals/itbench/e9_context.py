@@ -9,6 +9,7 @@ from packages.contracts import Alert, Incident
 from packages.evals.itbench.e9_control import control_surface
 from packages.evals.itbench.e9_fsm import E9FSM
 from packages.evals.itbench.e9_memory import E9CaseMemory
+from packages.evals.itbench.e9_packing import bounded_pack
 from packages.evals.itbench.external_context import normalize_alerts
 from packages.evals.itbench.snapshot_backend import ITBenchSnapshotBackend
 
@@ -30,10 +31,24 @@ class E9ContextPlanner:
         turn: int,
         max_steps: int,
         semantic_limit: int,
+        visible_rejection_feedback: bool = True,
+        dynamic_action_gating: bool = True,
+        dynamic_operation_gating: bool = True,
+        selective_context: bool = True,
     ) -> tuple[str, dict[str, int]]:
         candidates = backend.candidate_entities(limit=10)
-        memory.discover_entities(candidates)
-        handles = list(memory.state["discovered_entities"].values())[:10]
+        memory.discover_entities(candidates, turn=turn)
+        target = memory.state.get("current_hypothesis", {})
+        target_handle = target.get("entity_handle") if isinstance(target, dict) else None
+        handles = list(memory.state["discovered_entities"].values())
+        handles.sort(
+            key=lambda item: (
+                item.get("handle") != target_handle,
+                -int(item.get("discovered_turn", 0)),
+                str(item.get("handle")),
+            )
+        )
+        handles = handles[:10]
         alert_items = normalize_alerts(backend)
         digest = _alert_digest(alert_items)
         surface = control_surface(
@@ -44,8 +59,6 @@ class E9ContextPlanner:
             semantic_limit=semantic_limit,
         )
         topology: list[dict[str, Any]] = []
-        target = memory.state.get("current_hypothesis", {})
-        target_handle = target.get("entity_handle") if isinstance(target, dict) else None
         if isinstance(target_handle, str):
             canonical = memory.resolve(target_handle)
             if canonical:
@@ -55,6 +68,8 @@ class E9ContextPlanner:
                 topology.extend(backend.topology(entity=item["canonical"], limit=4))
         case_state = memory.projection()
         case_state.pop("discovered_entities", None)
+        if not visible_rejection_feedback:
+            case_state.pop("last_rejection", None)
         payload: dict[str, Any] = {
             "context_version": E9_CONTEXT_VERSION,
             "incident": {
@@ -86,7 +101,6 @@ class E9ContextPlanner:
                 "valid_operations": surface.operations,
                 "target_handles": surface.target_handles,
             },
-            "semantic_operations": surface.operations,
             "rules": [
                 "Candidate handles are runtime-owned; do not invent C### handles.",
                 "Evidence provenance is runtime-owned; do not copy evidence handles into SUBMIT.",
@@ -97,6 +111,33 @@ class E9ContextPlanner:
                 "Submit the smallest independently causal candidate set or STOP.",
             ],
         }
+        if not dynamic_action_gating:
+            payload["workflow"]["valid_actions"] = (
+                "OBSERVE",
+                "HYPOTHESIZE",
+                "INVESTIGATE",
+                "REVISE",
+                "SUBMIT",
+                "STOP",
+            )
+        if not dynamic_operation_gating:
+            payload["workflow"]["valid_operations"] = tuple(
+                (
+                    "INCIDENT_OVERVIEW",
+                    "ALERT_ANALYSIS",
+                    "TOPOLOGY_ANALYSIS",
+                    "RECENT_CHANGE_ANALYSIS",
+                    "ENTITY_CONTEXT",
+                    "EVENT_ANALYSIS",
+                    "METRIC_ANOMALIES",
+                    "TRACE_ERROR_TREE",
+                    "SPEC_ANALYSIS",
+                    "COMPARE_REPLICAS",
+                    "VERIFY_TEMPORAL_ALIGNMENT",
+                )
+            )
+        if not selective_context:
+            payload["case_state"]["evidence"] = list(memory.state["evidence"].values())
         encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
         if len(encoded) > E9_CONTEXT_MAX_CHARS:
             payload["case_state"]["evidence"] = payload["case_state"].get("evidence", [])[-6:]
@@ -142,15 +183,34 @@ def _alert_digest(alerts: tuple[dict[str, Any], ...]) -> dict[str, Any]:
                     "last_observed": item.get("last_observed"),
                 }
             )
-    return {
-        "high_signal_alerts": high_signal[:12],
-        "affected_services": sorted(services)[:20],
-        "affected_namespaces": sorted(namespaces)[:20],
-        "alert_counts_by_name": dict(sorted(counts.items())[:20]),
-        "background": {
-            key: value for key, value in counts.items() if key in {"Watchdog", "InfoInhibitor"}
-        },
-    }
+    return _fit_alert_digest(
+        {
+            "high_signal_alerts": high_signal[:12],
+            "affected_services": sorted(services)[:20],
+            "affected_namespaces": sorted(namespaces)[:20],
+            "alert_counts_by_name": dict(sorted(counts.items())[:20]),
+            "background": {
+                key: value for key, value in counts.items() if key in {"Watchdog", "InfoInhibitor"}
+            },
+        }
+    )
+
+
+def _fit_alert_digest(value: dict[str, Any], limit: int = 4_000) -> dict[str, Any]:
+    """Pack alert sections independently so one noisy list cannot erase all signal."""
+    packed: dict[str, Any] = {}
+    for key in (
+        "high_signal_alerts",
+        "affected_services",
+        "affected_namespaces",
+        "alert_counts_by_name",
+        "background",
+    ):
+        child = value.get(key, [] if key != "alert_counts_by_name" and key != "background" else {})
+        child_limit = max(180, limit // 5)
+        child_packed = bounded_pack(child, child_limit)
+        packed[key] = child_packed
+    return packed
 
 
 def _operations_for_phase(phase: str, final_turn: bool) -> tuple[str, ...]:

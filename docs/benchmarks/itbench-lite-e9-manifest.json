@@ -1,8 +1,8 @@
 {
   "execution": "ITB-E9",
   "experiment": "itbench-lite-sre-external-eval-v9",
-  "status": "PREREGISTERED_FINAL_ARCHITECTURE",
-  "runtime_source_sha": "6494d9f6758c7bf06df32df0892ab115ae5895d4",
+  "status": "PREREGISTERED_FINAL_REPAIR_REVISION",
+  "runtime_source_sha": "b468922acd4e4b8a098fc521af33ce11f774add0",
   "dataset_revision": "d0916b08ba421ce5e672e9ad68aa947d938dfef0",
   "sre_version": "v0.2-B96DF826-4BB2-4B62-97AB-6D84254C53D7",
   "adapter": "itbench_lite_snapshot_adapter_v8_e9",

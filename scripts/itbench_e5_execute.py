@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import time
 from datetime import UTC, datetime
@@ -291,7 +290,7 @@ def main() -> int:
     provider = OpenAIProvider(budget=budget, max_retry=0)
     smoke = run_smoke(provider)
     manifest_sha = digest(MANIFEST)
-    source_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    source_sha = json.loads(MANIFEST.read_text(encoding="utf-8"))["runtime_source_sha"]
     completed = run_official(provider, dataset, manifest_sha, source_sha)
     grades = []
     for item in completed:

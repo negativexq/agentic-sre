@@ -389,10 +389,12 @@ def _itbench_decision_function_schemas(
         raise ValueError("ITBench decision schema definitions are invalid")
     request = definitions.get("ToolRequestSpec")
     root_cause = (
-        definitions.get("ExternalRootCauseV3")
+        definitions.get("ExternalRootCauseV4")
+        or definitions.get("ExternalRootCauseV3")
         or definitions.get("ExternalRootCauseV2")
         or definitions.get("ExternalRootCause")
     )
+    candidate_update = definitions.get("CandidateUpdateV4")
     stop = definitions.get("ExternalStop")
     if not all(isinstance(item, dict) for item in (request, root_cause, stop)):
         raise ValueError("ITBench decision schema definitions are incomplete")
@@ -420,7 +422,15 @@ def _itbench_decision_function_schemas(
                     continue
                 projected = {
                     name: field[name]
-                    for name in ("type", "enum", "minimum", "maximum", "minLength", "maxLength")
+                    for name in (
+                        "type",
+                        "enum",
+                        "minimum",
+                        "maximum",
+                        "minLength",
+                        "maxLength",
+                        "description",
+                    )
                     if name in field
                 }
                 if field.get("required") is False:
@@ -438,6 +448,51 @@ def _itbench_decision_function_schemas(
                 )
             )
         request_item = {"anyOf": branches}
+
+    if candidate_update is not None:
+        if not isinstance(candidate_update, dict):
+            raise ValueError("ITBench candidate update definition is invalid")
+
+        def nullable(value: dict[str, Any]) -> dict[str, Any]:
+            return {"anyOf": [value, {"type": "null"}]}
+
+        candidate_slot = nullable(candidate_update)
+        request_props = {
+            "reason": {"type": "string"},
+            "primary_request": request_item,
+            "additional_request_2": nullable(request_item),
+            "additional_request_3": nullable(request_item),
+            "candidate_update_1": candidate_slot,
+            "candidate_update_2": candidate_slot,
+            "candidate_update_3": candidate_slot,
+        }
+        submit_props = {
+            "reason": {"type": "string"},
+            "primary_root_cause": root_cause,
+            "additional_root_cause_2": nullable(root_cause),
+            "additional_root_cause_3": nullable(root_cause),
+            "candidate_update_1": candidate_slot,
+            "candidate_update_2": candidate_slot,
+            "candidate_update_3": candidate_slot,
+        }
+        stop_props = {
+            "reason": {"type": "string"},
+            "stop": {
+                "type": "object",
+                "properties": stop["properties"],
+                "required": list(stop["properties"]),
+                "additionalProperties": False,
+            },
+            "candidate_update_1": candidate_slot,
+            "candidate_update_2": candidate_slot,
+            "candidate_update_3": candidate_slot,
+        }
+        result = {
+            "request_itbench_tools": obj(request_props, list(request_props)),
+            "submit_itbench_diagnosis": obj(submit_props, list(submit_props)),
+            "stop_itbench_investigation": obj(stop_props, list(stop_props)),
+        }
+        return {name: _compile_strict_schema(value) for name, value in result.items()}
 
     tool_requests = obj(
         {
@@ -671,6 +726,7 @@ def _extract_decision_function(
         "itbench_investigation_decision_v1",
         "itbench_investigation_decision_v2",
         "itbench_investigation_decision_v3",
+        "itbench_investigation_decision_v4",
     }
     decision_names = (
         ITBENCH_DECISION_FUNCTION_NAMES
@@ -765,6 +821,26 @@ def _extract_decision_function(
             metadata=metadata.model_copy(update={"schema_error_path": schema_error_path}),
         )
     if function_name == "request_itbench_tools":
+        if "CandidateUpdateV4" in request.response_schema.get("$defs", {}):
+            return {
+                "decision": "CALL_TOOLS",
+                "primary_request": _normalize_tool_request_slot(
+                    structured_output.get("primary_request")
+                ),
+                "additional_request_2": _normalize_tool_request_slot(
+                    structured_output.get("additional_request_2")
+                ),
+                "additional_request_3": _normalize_tool_request_slot(
+                    structured_output.get("additional_request_3")
+                ),
+                "primary_root_cause": None,
+                "additional_root_cause_2": None,
+                "additional_root_cause_3": None,
+                "candidate_update_1": structured_output.get("candidate_update_1"),
+                "candidate_update_2": structured_output.get("candidate_update_2"),
+                "candidate_update_3": structured_output.get("candidate_update_3"),
+                "stop": None,
+            }, metadata
         return {
             "decision": "CALL_TOOLS",
             "requests": _normalize_tool_requests(structured_output["tool_requests"]),
@@ -778,6 +854,20 @@ def _extract_decision_function(
             "hypothesis": None,
         }, metadata
     if function_name == "submit_itbench_diagnosis":
+        if "CandidateUpdateV4" in request.response_schema.get("$defs", {}):
+            return {
+                "decision": "SUBMIT_DIAGNOSIS",
+                "primary_request": None,
+                "additional_request_2": None,
+                "additional_request_3": None,
+                "primary_root_cause": structured_output.get("primary_root_cause"),
+                "additional_root_cause_2": structured_output.get("additional_root_cause_2"),
+                "additional_root_cause_3": structured_output.get("additional_root_cause_3"),
+                "candidate_update_1": structured_output.get("candidate_update_1"),
+                "candidate_update_2": structured_output.get("candidate_update_2"),
+                "candidate_update_3": structured_output.get("candidate_update_3"),
+                "stop": None,
+            }, metadata
         return {
             "decision": "SUBMIT_DIAGNOSIS",
             "requests": [],
@@ -817,6 +907,20 @@ def _extract_decision_function(
             },
         }, metadata
     if function_name == "stop_itbench_investigation":
+        if "CandidateUpdateV4" in request.response_schema.get("$defs", {}):
+            return {
+                "decision": "STOP",
+                "primary_request": None,
+                "additional_request_2": None,
+                "additional_request_3": None,
+                "primary_root_cause": None,
+                "additional_root_cause_2": None,
+                "additional_root_cause_3": None,
+                "candidate_update_1": structured_output.get("candidate_update_1"),
+                "candidate_update_2": structured_output.get("candidate_update_2"),
+                "candidate_update_3": structured_output.get("candidate_update_3"),
+                "stop": structured_output["stop"],
+            }, metadata
         return {
             "decision": "STOP",
             "requests": [],
@@ -865,6 +969,15 @@ def _normalize_tool_requests(requests: list[dict[str, Any]]) -> list[dict[str, A
         }
         for request in requests
     ]
+
+
+def _normalize_tool_request_slot(request: Any) -> dict[str, Any] | None:
+    """Normalize one V4 nullable request slot without changing cardinality."""
+    if request is None:
+        return None
+    if not isinstance(request, dict):
+        raise TypeError("V4 request slot must be an object or null")
+    return _normalize_tool_requests([request])[0]
 
 
 def _json_schema_error(
@@ -1013,12 +1126,14 @@ class OpenAIProvider:
             "itbench_investigation_decision_v1",
             "itbench_investigation_decision_v2",
             "itbench_investigation_decision_v3",
+            "itbench_investigation_decision_v4",
         }:
             a1_protocol = request.response_schema_name == "a1_investigation_decision"
             external_protocol = request.response_schema_name in {
                 "itbench_investigation_decision_v1",
                 "itbench_investigation_decision_v2",
                 "itbench_investigation_decision_v3",
+                "itbench_investigation_decision_v4",
             }
             schemas = (
                 _itbench_decision_function_schemas(
@@ -1054,8 +1169,14 @@ class OpenAIProvider:
             if external_protocol:
                 descriptions = {
                     **DECISION_FUNCTION_DESCRIPTIONS,
-                    "request_itbench_tools": "Request bounded read-only ITBench evidence.",
-                    "submit_itbench_diagnosis": "Submit supported ITBench root-cause entities using namespace/Kind/name and runtime-issued evidence handles.",
+                    "request_itbench_tools": (
+                        "Request up to three bounded read-only semantic evidence operations. "
+                        "The primary_request is required; nullable additional slots are optional."
+                    ),
+                    "submit_itbench_diagnosis": (
+                        "Submit only independently causal namespace/Kind/name entities with "
+                        "runtime-issued evidence handles."
+                    ),
                     "stop_itbench_investigation": "Stop when observable evidence cannot support a reliable diagnosis.",
                 }
             allowed = (
@@ -1200,6 +1321,7 @@ class OpenAIProvider:
             "itbench_investigation_decision_v1",
             "itbench_investigation_decision_v2",
             "itbench_investigation_decision_v3",
+            "itbench_investigation_decision_v4",
         }:
             structured_output, metadata = _extract_decision_function(request, raw)
             schema_error_path = _json_schema_error(structured_output, request.response_schema)

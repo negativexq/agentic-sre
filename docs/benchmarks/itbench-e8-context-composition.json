@@ -1,0 +1,105 @@
+{
+  "context_version": "itbench_external_context_v3",
+  "execution": "ITB-E8-pre",
+  "ground_truth_access": false,
+  "openai_calls": 0,
+  "scenario_105": {
+    "backend_performance": {
+      "cache_hits": 5,
+      "cache_misses": 2,
+      "entity_index_lookups": 1,
+      "records_scanned": 636252,
+      "source_file_scans": 214
+    },
+    "candidate_shortlist": 10,
+    "context_chars": 9005,
+    "context_composition": {
+      "alert_digest": 18,
+      "candidate_shortlist": 2713,
+      "case_state": 195,
+      "evidence": 2,
+      "execution": 98,
+      "incident": 221,
+      "relevant_topology": 3962,
+      "tool_hints": 1580,
+      "total": 9005
+    },
+    "duration_ms": 11343,
+    "observable_entities": 1013,
+    "probe_status": {
+      "entity_context": "PASS",
+      "entity_search": "PASS",
+      "events": "PASS",
+      "logs": "PASS",
+      "metrics": "PASS",
+      "objects": "PASS",
+      "topology": "PASS",
+      "traces": "PASS"
+    },
+    "scenario": "Scenario-105",
+    "status": "PASS"
+  },
+  "scenario_count": 35,
+  "sections": {
+    "alert_digest": {
+      "max": 4013,
+      "median": 2660,
+      "min": 18,
+      "p95": 3994
+    },
+    "candidate_shortlist": {
+      "max": 2750,
+      "median": 2597,
+      "min": 2308,
+      "p95": 2720
+    },
+    "case_state": {
+      "max": 195,
+      "median": 195,
+      "min": 195,
+      "p95": 195
+    },
+    "evidence": {
+      "max": 2,
+      "median": 2,
+      "min": 2,
+      "p95": 2
+    },
+    "execution": {
+      "max": 98,
+      "median": 98,
+      "min": 98,
+      "p95": 98
+    },
+    "incident": {
+      "max": 221,
+      "median": 220,
+      "min": 219,
+      "p95": 221
+    },
+    "relevant_topology": {
+      "max": 4065,
+      "median": 3994,
+      "min": 3910,
+      "p95": 4062
+    },
+    "tool_hints": {
+      "max": 1580,
+      "median": 1580,
+      "min": 1580,
+      "p95": 1580
+    },
+    "total": {
+      "max": 13015,
+      "median": 11550,
+      "min": 8610,
+      "p95": 12845
+    }
+  },
+  "total_chars": {
+    "max": 13015,
+    "median": 11550,
+    "min": 8610,
+    "p95": 12845
+  }
+}

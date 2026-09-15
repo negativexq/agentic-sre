@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from datetime import UTC, datetime
 from hashlib import sha256
 from time import monotonic
@@ -12,15 +13,21 @@ from uuid import UUID, uuid4
 from pydantic import ValidationError
 
 from packages.contracts import Alert, Evidence, Incident
-from packages.evals.itbench.external_context import build_external_context
+from packages.evals.itbench.external_context import (
+    build_external_context,
+    build_external_context_v3,
+)
 from packages.evals.itbench.external_contracts import (
     ITBENCH_EXTERNAL_PROTOCOL_V2,
     ITBENCH_EXTERNAL_PROTOCOL_V3,
+    ITBENCH_EXTERNAL_PROTOCOL_V4,
+    CandidateStatus,
     ITBenchDecisionType,
     ITBenchExternalResult,
     ITBenchInvestigationDecisionV1,
     ITBenchInvestigationDecisionV2,
     ITBenchInvestigationDecisionV3,
+    ITBenchInvestigationDecisionV4,
 )
 from packages.evidence import EvidenceService
 from packages.investigation.bounds import bound_text
@@ -54,10 +61,31 @@ ITBENCH_EXTERNAL_PROMPT_VERSION = "itbench_sre_investigator_v2"
 ITBENCH_EXTERNAL_PROMPT_ACTIVE_VERSION = "itbench_sre_investigator_v3"
 ITBENCH_EXTERNAL_PROMPT_E6_VERSION = "itbench_sre_investigator_v4"
 ITBENCH_EXTERNAL_PROMPT_E7_VERSION = "itbench_sre_investigator_v5"
+ITBENCH_EXTERNAL_PROMPT_E8_VERSION = "itbench_sre_investigator_v6"
+ITBENCH_EXTERNAL_PROMPT_V6 = """Investigate this SRE incident with bounded, read-only observable evidence.
+Goal: submit the smallest independently causal Kubernetes entity set that explains the incident.
+
+Use canonical namespace/Kind/name identities (or _cluster/Kind/name). The strongest symptom is not automatically
+the cause: prefer an upstream entity only when its direct, temporal, configuration, dependency, or differential
+evidence explains the downstream symptoms. Existence of a ConfigMap, chaos object, restart, or policy is not proof
+of causality; verify target and time compatibility. Keep at most three ACTIVE candidates, use candidate_updates to
+mark candidates ACTIVE, SUPPORTED, or REJECTED, and cite only runtime-issued E### handles.
+
+Each query must discriminate an unresolved causal question. Do not repeat or narrow an already satisfied fixed-window
+query. Tool `contains` arguments are case-insensitive literal substrings; regex and glob syntax are not supported.
+Use `entity` for canonical identity filters instead of free-text contains. Submit when minimum sufficient evidence
+supports every submitted entity; do not add speculative alternatives. On the final turn choose SUBMIT or STOP,
+never request more tools. Never write, remediate, use shell/filesystem/SQL/PromQL, or use ground truth.
+"""
 
 
 def external_prompt_hash() -> str:
     return sha256(ITBENCH_EXTERNAL_PROMPT.encode("utf-8")).hexdigest()
+
+
+def external_prompt_v6_hash() -> str:
+    """Hash the E8 V6 prompt without changing the frozen E7 hash helper."""
+    return sha256(ITBENCH_EXTERNAL_PROMPT_V6.encode("utf-8")).hexdigest()
 
 
 class ExternalInvestigationRuntime:
@@ -87,6 +115,7 @@ class ExternalInvestigationRuntime:
         self.model = model
         self.reasoning_effort = reasoning_effort
         self.protocol_version = protocol_version
+        self._last_context_metrics: dict[str, Any] = {}
 
     def build_request(
         self,
@@ -101,7 +130,12 @@ class ExternalInvestigationRuntime:
         candidate_entities: tuple[dict[str, Any], ...] = (),
     ) -> ModelRequest:
         """Construct a provider request without invoking the provider."""
-        context = build_external_context(
+        context_builder = (
+            build_external_context_v3
+            if self.protocol_version == ITBENCH_EXTERNAL_PROTOCOL_V4
+            else build_external_context
+        )
+        context = context_builder(
             self.backend,
             incident,
             alerts,
@@ -114,15 +148,34 @@ class ExternalInvestigationRuntime:
             case_state=case_state,
             candidate_entities=candidate_entities,
         )
+        try:
+            context_payload = json.loads(context)
+            self._last_context_metrics = {
+                "context_chars_total": len(context),
+                "context_chars_by_section": {
+                    key: len(json.dumps(value, ensure_ascii=False, default=str))
+                    for key, value in context_payload.items()
+                    if key not in {"benchmark", "domain", "context_version"}
+                },
+            }
+        except (TypeError, json.JSONDecodeError):
+            self._last_context_metrics = {"context_chars_total": len(context)}
+        prompt = (
+            ITBENCH_EXTERNAL_PROMPT_V6
+            if self.protocol_version == ITBENCH_EXTERNAL_PROTOCOL_V4
+            else ITBENCH_EXTERNAL_PROMPT
+        )
         return ModelRequest(
             run_id=run_id,
             messages=[
-                ModelMessage(role="system", content=ITBENCH_EXTERNAL_PROMPT),
+                ModelMessage(role="system", content=prompt),
                 ModelMessage(role="user", content=context),
             ],
             response_schema_name=self.protocol_version,
             response_schema=(
-                ITBenchInvestigationDecisionV3.model_json_schema()
+                ITBenchInvestigationDecisionV4.model_json_schema()
+                if self.protocol_version == ITBENCH_EXTERNAL_PROTOCOL_V4
+                else ITBenchInvestigationDecisionV3.model_json_schema()
                 if self.protocol_version == ITBENCH_EXTERNAL_PROTOCOL_V3
                 else ITBenchInvestigationDecisionV2.model_json_schema()
                 if self.protocol_version == ITBENCH_EXTERNAL_PROTOCOL_V2
@@ -159,6 +212,12 @@ class ExternalInvestigationRuntime:
             "contradictions_by_candidate": {},
             "queries_already_run": [],
             "entities_contextualized": [],
+            "candidate_questions": {},
+            "query_redundancy": {
+                "exact_duplicate_requests": 0,
+                "subsumed_duplicate_requests": 0,
+                "zero_result_requests": 0,
+            },
             "budget": {
                 "model_calls_used": 0,
                 "model_calls_remaining": self.limits.max_model_calls,
@@ -174,12 +233,14 @@ class ExternalInvestigationRuntime:
             ITBenchInvestigationDecisionV1
             | ITBenchInvestigationDecisionV2
             | ITBenchInvestigationDecisionV3
+            | ITBenchInvestigationDecisionV4
             | None
         ) = None
         evidence_handles: dict[str, str] = {}
         input_tokens_total = 0
         output_tokens_total = 0
         provider_latency_ms_total = 0
+        context_metrics: list[dict[str, Any]] = []
         accounting_reader = getattr(self.provider, "accounting_snapshot", None)
         accounting_before = accounting_reader() if callable(accounting_reader) else None
         validation_stage: str | None = None
@@ -213,6 +274,7 @@ class ExternalInvestigationRuntime:
                     else ()
                 ),
             )
+            context_metrics.append({"turn": turn, **self._last_context_metrics})
             response = self.provider.complete(request)
             case_state["budget"]["model_calls_used"] = calls
             case_state["budget"]["model_calls_remaining"] = max(
@@ -223,7 +285,9 @@ class ExternalInvestigationRuntime:
             provider_latency_ms_total += response.latency_ms
             try:
                 decision_model = (
-                    ITBenchInvestigationDecisionV3
+                    ITBenchInvestigationDecisionV4
+                    if self.protocol_version == ITBENCH_EXTERNAL_PROTOCOL_V4
+                    else ITBenchInvestigationDecisionV3
                     if self.protocol_version == ITBENCH_EXTERNAL_PROTOCOL_V3
                     else ITBenchInvestigationDecisionV2
                     if self.protocol_version == ITBENCH_EXTERNAL_PROTOCOL_V2
@@ -248,15 +312,38 @@ class ExternalInvestigationRuntime:
                     }
                 )
                 break
-            if (
-                decision.decision is ITBenchDecisionType.SUBMIT_DIAGNOSIS
-                and len(decision.root_causes) > 5
-            ):
+            if decision.decision is ITBenchDecisionType.SUBMIT_DIAGNOSIS and len(
+                decision.root_causes
+            ) > (3 if self.protocol_version == ITBENCH_EXTERNAL_PROTOCOL_V4 else 5):
                 terminal = "MODEL_DECISION_INVALID"
                 decision = None
                 validation_stage = "DECISION_SEMANTICS"
                 validation_path = "$.root_causes"
                 validation_type = "too_many_root_causes"
+                turns.append(
+                    {
+                        "turn": turn,
+                        "decision": terminal,
+                        "validation_stage": validation_stage,
+                        "validation_path": validation_path,
+                        "validation_type": validation_type,
+                        "provider_response_received": True,
+                    }
+                )
+                break
+            try:
+                _apply_candidate_updates(
+                    case_state,
+                    getattr(decision, "candidate_updates", ()),
+                    set(evidence_handles),
+                    self.backend,
+                )
+            except ValueError as error:
+                terminal = "MODEL_DECISION_INVALID"
+                decision = None
+                validation_stage = "DECISION_SEMANTICS"
+                validation_path = "$.candidate_updates"
+                validation_type = str(error)
                 turns.append(
                     {
                         "turn": turn,
@@ -310,6 +397,26 @@ class ExternalInvestigationRuntime:
                                 "evidence_refs": list(prior.evidence_ids),
                             }
                         )
+                        case_state["query_redundancy"]["exact_duplicate_requests"] += 1
+                        continue
+                    subsuming = _find_subsuming_history(registered.name, canonical, history)
+                    if subsuming is not None:
+                        summaries.append(
+                            {
+                                "tool": registered.name,
+                                "status": "SKIPPED_SUBSUMED",
+                                "evidence_refs": list(subsuming.evidence_ids),
+                            }
+                        )
+                        case_state["query_redundancy"]["subsumed_duplicate_requests"] += 1
+                        case_state["queries_already_run"].append(
+                            {
+                                "tool": registered.name,
+                                "arguments": canonical,
+                                "status": "SKIPPED_SUBSUMED",
+                                "evidence_refs": list(subsuming.evidence_ids),
+                            }
+                        )
                         continue
                     if tool_calls >= self.limits.max_tool_calls:
                         terminal = "TOOL_CALL_LIMIT"
@@ -346,11 +453,16 @@ class ExternalInvestigationRuntime:
                     evidence_handles[handle] = str(item.evidence_id)
                     visible_item = {
                         "source": registered.name,
-                        "summary": _format_external_observation(registered.name, observation),
+                        "summary": _format_external_observation(
+                            registered.name,
+                            observation,
+                            semantic_v4=self.protocol_version == ITBENCH_EXTERNAL_PROTOCOL_V4,
+                        ),
                     }
                     if self.protocol_version in {
                         ITBENCH_EXTERNAL_PROTOCOL_V2,
                         ITBENCH_EXTERNAL_PROTOCOL_V3,
+                        ITBENCH_EXTERNAL_PROTOCOL_V4,
                     }:
                         visible_item["evidence_ref"] = handle
                     else:
@@ -364,6 +476,8 @@ class ExternalInvestigationRuntime:
                             "evidence_refs": [handle],
                         }
                     )
+                    if result.result_count == 0:
+                        case_state["query_redundancy"]["zero_result_requests"] += 1
                     candidate = canonical.get("entity")
                     if isinstance(candidate, str):
                         if candidate not in case_state["active_candidates"]:
@@ -388,6 +502,7 @@ class ExternalInvestigationRuntime:
                             in {
                                 ITBENCH_EXTERNAL_PROTOCOL_V2,
                                 ITBENCH_EXTERNAL_PROTOCOL_V3,
+                                ITBENCH_EXTERNAL_PROTOCOL_V4,
                             }
                             else (str(item.evidence_id),)
                         ),
@@ -403,6 +518,7 @@ class ExternalInvestigationRuntime:
                             in {
                                 ITBENCH_EXTERNAL_PROTOCOL_V2,
                                 ITBENCH_EXTERNAL_PROTOCOL_V3,
+                                ITBENCH_EXTERNAL_PROTOCOL_V4,
                             }
                             else "evidence_ids": [handle],
                         }
@@ -432,7 +548,7 @@ class ExternalInvestigationRuntime:
                         "requested_tools": [item.tool for item in decision.requests],
                         "summaries": summaries,
                         "tool_calls": tool_calls,
-                        "case_state": case_state,
+                        "case_state": deepcopy(case_state),
                     }
                 )
                 if terminal == "TOOL_CALL_LIMIT":
@@ -447,6 +563,7 @@ class ExternalInvestigationRuntime:
                 if self.protocol_version in {
                     ITBENCH_EXTERNAL_PROTOCOL_V2,
                     ITBENCH_EXTERNAL_PROTOCOL_V3,
+                    ITBENCH_EXTERNAL_PROTOCOL_V4,
                 }:
                     references = [
                         ref
@@ -471,6 +588,7 @@ class ExternalInvestigationRuntime:
                         in {
                             ITBENCH_EXTERNAL_PROTOCOL_V2,
                             ITBENCH_EXTERNAL_PROTOCOL_V3,
+                            ITBENCH_EXTERNAL_PROTOCOL_V4,
                         }
                         else "$.root_causes[].evidence_ids"
                     )
@@ -533,6 +651,13 @@ class ExternalInvestigationRuntime:
             "provider_latency_ms_total": provider_latency_ms_total,
             "tool_calls": tool_calls,
             "tool_requests_total": sum(len(item.get("requested_tools", [])) for item in turns),
+            "semantic_tool_requests": sum(len(item.get("requested_tools", [])) for item in turns),
+            "semantic_tool_executions": tool_calls,
+            "exact_duplicate_requests": case_state["query_redundancy"]["exact_duplicate_requests"],
+            "subsumed_duplicate_requests": case_state["query_redundancy"][
+                "subsumed_duplicate_requests"
+            ],
+            "zero_result_requests": case_state["query_redundancy"]["zero_result_requests"],
             "provider": getattr(self.provider, "provider_name", "unknown"),
             "model": self.model,
             "reasoning_effort": self.reasoning_effort,
@@ -544,6 +669,7 @@ class ExternalInvestigationRuntime:
             "validation_path": validation_path,
             "validation_type": validation_type,
             "duration_ms": int((monotonic() - started) * 1000),
+            "context_metrics": context_metrics,
         }
         return ITBenchExternalResult(
             protocol=self.protocol_version,
@@ -574,8 +700,110 @@ def _validation_diagnostic(error: ValidationError) -> tuple[str, str]:
     return path, str(first.get("type", "validation_error"))
 
 
-def _format_external_observation(tool: str, observation: dict[str, Any]) -> str:
-    """Format semantic fields first, avoiding blind JSON-prefix truncation."""
+def _apply_candidate_updates(
+    case_state: dict[str, Any],
+    updates: Any,
+    available_evidence: set[str],
+    backend: Any,
+) -> None:
+    """Apply bounded, auditable V4 candidate transitions without storing private CoT."""
+    if not updates:
+        return
+    observable = None
+    observable_entities = getattr(backend, "observable_entities", None)
+    if callable(observable_entities):
+        observable = {
+            f"{item['namespace']}/{item['kind']}/{item['name']}"
+            for item in observable_entities()
+            if isinstance(item, dict)
+            and all(isinstance(item.get(key), str) for key in ("namespace", "kind", "name"))
+        }
+    for update in updates:
+        entity = update.entity
+        if observable is not None and entity not in observable:
+            raise ValueError("candidate entity is not observable")
+        supporting = list(update.supporting_refs)
+        contradicting = list(update.contradicting_refs)
+        if any(ref not in available_evidence for ref in (*supporting, *contradicting)):
+            raise ValueError("candidate update cites unavailable evidence")
+        current_status = None
+        for status_key in ("active_candidates", "supported_candidates", "rejected_candidates"):
+            if entity in case_state.get(status_key, []):
+                current_status = status_key
+                break
+        if (
+            current_status == "rejected_candidates"
+            and update.status is not CandidateStatus.REJECTED
+        ):
+            raise ValueError("rejected candidate cannot be silently reactivated")
+        if update.status is CandidateStatus.SUPPORTED and not supporting:
+            raise ValueError("supported candidate requires supporting evidence")
+        for status_key in ("active_candidates", "supported_candidates", "rejected_candidates"):
+            values = case_state.setdefault(status_key, [])
+            if entity in values:
+                values.remove(entity)
+        target_key = {
+            CandidateStatus.ACTIVE: "active_candidates",
+            CandidateStatus.SUPPORTED: "supported_candidates",
+            CandidateStatus.REJECTED: "rejected_candidates",
+        }[update.status]
+        target = case_state.setdefault(target_key, [])
+        if entity not in target:
+            target.append(entity)
+        if len(case_state.get("active_candidates", [])) > 3:
+            raise ValueError("maximum active candidates exceeded")
+        if supporting:
+            bucket = case_state.setdefault("evidence_by_candidate", {}).setdefault(entity, [])
+            bucket.extend(ref for ref in supporting if ref not in bucket)
+        if contradicting:
+            bucket = case_state.setdefault("contradictions_by_candidate", {}).setdefault(entity, [])
+            bucket.extend(ref for ref in contradicting if ref not in bucket)
+        if update.last_tested_question:
+            case_state.setdefault("candidate_questions", {})[entity] = update.last_tested_question
+
+
+def _find_subsuming_history(
+    tool_name: str,
+    canonical: dict[str, Any],
+    history: dict[str, ToolObservationHistory],
+) -> ToolObservationHistory | None:
+    """Find a safe larger fixed-window query that already contains this request."""
+    if tool_name not in {
+        "itbench_entity_context",
+        "itbench_logs",
+        "itbench_trace_search",
+        "itbench_topology",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_metric_analysis",
+    }:
+        return None
+    current_limit = canonical.get("limit")
+    if not isinstance(current_limit, int):
+        return None
+    current_filters = {key: value for key, value in canonical.items() if key != "limit"}
+    for prior in history.values():
+        if prior.status != "SUCCESS" or prior.identity.tool_name != tool_name:
+            continue
+        try:
+            previous = json.loads(prior.identity.canonical_arguments_json)
+        except json.JSONDecodeError:
+            continue
+        previous_limit = previous.get("limit")
+        previous_filters = {key: value for key, value in previous.items() if key != "limit"}
+        if (
+            isinstance(previous_limit, int)
+            and previous_limit >= current_limit
+            and previous_filters == current_filters
+        ):
+            return prior
+    return None
+
+
+def _format_external_observation(
+    tool: str, observation: dict[str, Any], *, semantic_v4: bool = False
+) -> str:
+    """Format semantic fields first, with independent V4 section budgets."""
     preferred: dict[str, tuple[str, ...]] = {
         "itbench_entity_context": (
             "entity",
@@ -608,7 +836,55 @@ def _format_external_observation(tool: str, observation: dict[str, Any]) -> str:
     }
     fields = preferred.get(tool, tuple(observation))
     selected = {key: observation[key] for key in fields if key in observation}
-    return bound_text(json.dumps(selected, sort_keys=True, default=str), max_chars=1_000)
+    if not semantic_v4:
+        return bound_text(json.dumps(selected, sort_keys=True, default=str), max_chars=1_000)
+    budgets = {
+        "entity": 120,
+        "identity": 220,
+        "object_state": 500,
+        "ownership": 500,
+        "configuration_dependencies": 500,
+        "events_summary": 500,
+        "related_alerts": 500,
+        "metric_anomalies": 700,
+        "aggregates_by_metric": 900,
+        "log_error_patterns": 700,
+        "trace_error_summary": 700,
+        "topology": 700,
+        "records": 900,
+        "data_quality": 300,
+        "telemetry_availability": 250,
+        "matching_count": 80,
+        "returned_count": 80,
+        "truncated": 80,
+    }
+    packed: dict[str, Any] = {}
+    for key, value in selected.items():
+        budget = budgets.get(key, 300)
+        encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
+        if len(encoded) <= budget:
+            packed[key] = value
+            continue
+        if isinstance(value, list):
+            items: list[Any] = []
+            for item in value:
+                candidate = items + [item]
+                if (
+                    len(
+                        json.dumps(
+                            candidate, ensure_ascii=False, separators=(",", ":"), default=str
+                        )
+                    )
+                    > budget - 40
+                ):
+                    break
+                items.append(item)
+            packed[key] = {"items": items, "source_count": len(value), "truncated": True}
+        elif isinstance(value, dict):
+            packed[key] = {"summary": value, "section_truncated": True}
+        else:
+            packed[key] = {"value": str(value)[: max(1, budget - 40)], "section_truncated": True}
+    return json.dumps(packed, ensure_ascii=False, separators=(",", ":"), default=str)
 
 
 __all__ = [
@@ -617,5 +893,8 @@ __all__ = [
     "ITBENCH_EXTERNAL_PROMPT_VERSION",
     "ITBENCH_EXTERNAL_PROMPT_E6_VERSION",
     "ITBENCH_EXTERNAL_PROMPT_E7_VERSION",
+    "ITBENCH_EXTERNAL_PROMPT_E8_VERSION",
+    "ITBENCH_EXTERNAL_PROMPT_V6",
     "external_prompt_hash",
+    "external_prompt_v6_hash",
 ]

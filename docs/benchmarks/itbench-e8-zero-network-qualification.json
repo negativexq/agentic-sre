@@ -1,0 +1,1298 @@
+{
+  "execution": "ITB-E8-pre",
+  "ground_truth_access": false,
+  "judge_calls": 0,
+  "latency_ms": {
+    "context": {
+      "max": 19.031124655157328,
+      "median": 8.162624668329954,
+      "p95": 16.098250169306993
+    },
+    "entity_context": {
+      "max": 2022.9974170215428,
+      "median": 1127.5864583440125,
+      "p95": 1480.8516670018435
+    },
+    "logs": {
+      "max": 4810.722333844751,
+      "median": 1940.2432502247393,
+      "p95": 2588.5414578951895
+    },
+    "metrics": {
+      "max": 14087.779333814979,
+      "median": 8770.443165674806,
+      "p95": 13438.629125244915
+    },
+    "traces": {
+      "max": 5088.688415940851,
+      "median": 2405.702000018209,
+      "p95": 4925.863500218838
+    }
+  },
+  "openai_calls": 0,
+  "protocol": "itbench_investigation_decision_v4",
+  "scenario_count": 35,
+  "scenarios": [
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 1253973,
+        "source_file_scans": 98
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 11690,
+      "context_composition": {
+        "alert_digest": 2655,
+        "candidate_shortlist": 2702,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 219,
+        "relevant_topology": 4023,
+        "tool_hints": 1580,
+        "total": 11690
+      },
+      "duration_ms": 22028,
+      "observable_entities": 1034,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-1",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 762252,
+        "source_file_scans": 84
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 12302,
+      "context_composition": {
+        "alert_digest": 3349,
+        "candidate_shortlist": 2649,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 219,
+        "relevant_topology": 3994,
+        "tool_hints": 1580,
+        "total": 12302
+      },
+      "duration_ms": 13736,
+      "observable_entities": 1040,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-2",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 978191,
+        "source_file_scans": 98
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 11119,
+      "context_composition": {
+        "alert_digest": 2176,
+        "candidate_shortlist": 2612,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 219,
+        "relevant_topology": 4021,
+        "tool_hints": 1580,
+        "total": 11119
+      },
+      "duration_ms": 18024,
+      "observable_entities": 1043,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-4",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 952990,
+        "source_file_scans": 90
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 12336,
+      "context_composition": {
+        "alert_digest": 3372,
+        "candidate_shortlist": 2589,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 219,
+        "relevant_topology": 4065,
+        "tool_hints": 1580,
+        "total": 12336
+      },
+      "duration_ms": 16759,
+      "observable_entities": 1043,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-5",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 976014,
+        "source_file_scans": 91
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 11306,
+      "context_composition": {
+        "alert_digest": 2429,
+        "candidate_shortlist": 2563,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 219,
+        "relevant_topology": 4004,
+        "tool_hints": 1580,
+        "total": 11306
+      },
+      "duration_ms": 17611,
+      "observable_entities": 1041,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-6",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 708804,
+        "source_file_scans": 90
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 12322,
+      "context_composition": {
+        "alert_digest": 3354,
+        "candidate_shortlist": 2694,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 219,
+        "relevant_topology": 3964,
+        "tool_hints": 1580,
+        "total": 12322
+      },
+      "duration_ms": 13246,
+      "observable_entities": 1034,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-7",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 1007744,
+        "source_file_scans": 91
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 11148,
+      "context_composition": {
+        "alert_digest": 2177,
+        "candidate_shortlist": 2638,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 219,
+        "relevant_topology": 4023,
+        "tool_hints": 1580,
+        "total": 11148
+      },
+      "duration_ms": 17867,
+      "observable_entities": 1036,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-8",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 819474,
+        "source_file_scans": 90
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 10925,
+      "context_composition": {
+        "alert_digest": 1940,
+        "candidate_shortlist": 2613,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 219,
+        "relevant_topology": 4062,
+        "tool_hints": 1580,
+        "total": 10925
+      },
+      "duration_ms": 15054,
+      "observable_entities": 1038,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-9",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 1078103,
+        "source_file_scans": 50
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 9946,
+      "context_composition": {
+        "alert_digest": 863,
+        "candidate_shortlist": 2750,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 4022,
+        "tool_hints": 1580,
+        "total": 9946
+      },
+      "duration_ms": 18953,
+      "observable_entities": 1010,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-11",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 992663,
+        "source_file_scans": 97
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 10898,
+      "context_composition": {
+        "alert_digest": 1894,
+        "candidate_shortlist": 2720,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 3973,
+        "tool_hints": 1580,
+        "total": 10898
+      },
+      "duration_ms": 19612,
+      "observable_entities": 1050,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-12",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 901329,
+        "source_file_scans": 89
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 12172,
+      "context_composition": {
+        "alert_digest": 3344,
+        "candidate_shortlist": 2571,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 3946,
+        "tool_hints": 1580,
+        "total": 12172
+      },
+      "duration_ms": 15934,
+      "observable_entities": 1032,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-13",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 760626,
+        "source_file_scans": 88
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 11482,
+      "context_composition": {
+        "alert_digest": 2619,
+        "candidate_shortlist": 2597,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 3955,
+        "tool_hints": 1580,
+        "total": 11482
+      },
+      "duration_ms": 13976,
+      "observable_entities": 1048,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-14",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 693712,
+        "source_file_scans": 88
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 13015,
+      "context_composition": {
+        "alert_digest": 4013,
+        "candidate_shortlist": 2639,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 4052,
+        "tool_hints": 1580,
+        "total": 13015
+      },
+      "duration_ms": 12847,
+      "observable_entities": 1047,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-15",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 1191868,
+        "source_file_scans": 94
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 12845,
+      "context_composition": {
+        "alert_digest": 3994,
+        "candidate_shortlist": 2570,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 3970,
+        "tool_hints": 1580,
+        "total": 12845
+      },
+      "duration_ms": 20451,
+      "observable_entities": 1034,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-16",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 1149454,
+        "source_file_scans": 87
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 12807,
+      "context_composition": {
+        "alert_digest": 3863,
+        "candidate_shortlist": 2616,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 4017,
+        "tool_hints": 1580,
+        "total": 12807
+      },
+      "duration_ms": 19894,
+      "observable_entities": 1517,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-17",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 770222,
+        "source_file_scans": 85
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 8610,
+      "context_composition": {
+        "alert_digest": 18,
+        "candidate_shortlist": 2308,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 3973,
+        "tool_hints": 1580,
+        "total": 8610
+      },
+      "duration_ms": 14997,
+      "observable_entities": 1452,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-18",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 1177484,
+        "source_file_scans": 90
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 12482,
+      "context_composition": {
+        "alert_digest": 3553,
+        "candidate_shortlist": 2580,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 4038,
+        "tool_hints": 1580,
+        "total": 12482
+      },
+      "duration_ms": 21155,
+      "observable_entities": 1701,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-19",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 984010,
+        "source_file_scans": 222
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 8685,
+      "context_composition": {
+        "alert_digest": 18,
+        "candidate_shortlist": 2342,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 4014,
+        "tool_hints": 1580,
+        "total": 8685
+      },
+      "duration_ms": 17123,
+      "observable_entities": 1023,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-20",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 750183,
+        "source_file_scans": 87
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 12576,
+      "context_composition": {
+        "alert_digest": 3759,
+        "candidate_shortlist": 2558,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 3948,
+        "tool_hints": 1580,
+        "total": 12576
+      },
+      "duration_ms": 14273,
+      "observable_entities": 1604,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-21",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 997980,
+        "source_file_scans": 87
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 11821,
+      "context_composition": {
+        "alert_digest": 3014,
+        "candidate_shortlist": 2554,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 3942,
+        "tool_hints": 1580,
+        "total": 11821
+      },
+      "duration_ms": 17813,
+      "observable_entities": 1717,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-22",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 822380,
+        "source_file_scans": 87
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 8810,
+      "context_composition": {
+        "alert_digest": 18,
+        "candidate_shortlist": 2571,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 3910,
+        "tool_hints": 1580,
+        "total": 8810
+      },
+      "duration_ms": 14705,
+      "observable_entities": 1051,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-23",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 749134,
+        "source_file_scans": 214
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 8955,
+      "context_composition": {
+        "alert_digest": 18,
+        "candidate_shortlist": 2648,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 3978,
+        "tool_hints": 1580,
+        "total": 8955
+      },
+      "duration_ms": 13453,
+      "observable_entities": 1015,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-24",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 1199007,
+        "source_file_scans": 87
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 11258,
+      "context_composition": {
+        "alert_digest": 2682,
+        "candidate_shortlist": 2308,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 3957,
+        "tool_hints": 1580,
+        "total": 11258
+      },
+      "duration_ms": 20862,
+      "observable_entities": 1409,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-25",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 872200,
+        "source_file_scans": 85
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 11600,
+      "context_composition": {
+        "alert_digest": 2889,
+        "candidate_shortlist": 2376,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 4024,
+        "tool_hints": 1580,
+        "total": 11600
+      },
+      "duration_ms": 15971,
+      "observable_entities": 1530,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-29",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 890961,
+        "source_file_scans": 87
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 10897,
+      "context_composition": {
+        "alert_digest": 1940,
+        "candidate_shortlist": 2652,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 3994,
+        "tool_hints": 1580,
+        "total": 10897
+      },
+      "duration_ms": 15638,
+      "observable_entities": 1027,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-31",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 914957,
+        "source_file_scans": 89
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 11556,
+      "context_composition": {
+        "alert_digest": 2660,
+        "candidate_shortlist": 2588,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 3997,
+        "tool_hints": 1580,
+        "total": 11556
+      },
+      "duration_ms": 16418,
+      "observable_entities": 1026,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-33",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 899928,
+        "source_file_scans": 84
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 8915,
+      "context_composition": {
+        "alert_digest": 18,
+        "candidate_shortlist": 2649,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 3937,
+        "tool_hints": 1580,
+        "total": 8915
+      },
+      "duration_ms": 15586,
+      "observable_entities": 1033,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-34",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 715737,
+        "source_file_scans": 83
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 11171,
+      "context_composition": {
+        "alert_digest": 2418,
+        "candidate_shortlist": 2457,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 3985,
+        "tool_hints": 1580,
+        "total": 11171
+      },
+      "duration_ms": 13721,
+      "observable_entities": 1491,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-35",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 1129111,
+        "source_file_scans": 216
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 8951,
+      "context_composition": {
+        "alert_digest": 18,
+        "candidate_shortlist": 2606,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 4016,
+        "tool_hints": 1580,
+        "total": 8951
+      },
+      "duration_ms": 17265,
+      "observable_entities": 1713,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-38",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 914358,
+        "source_file_scans": 88
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 12215,
+      "context_composition": {
+        "alert_digest": 3368,
+        "candidate_shortlist": 2556,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 3980,
+        "tool_hints": 1580,
+        "total": 12215
+      },
+      "duration_ms": 17102,
+      "observable_entities": 1654,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-80",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 700185,
+        "source_file_scans": 85
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 12041,
+      "context_composition": {
+        "alert_digest": 3270,
+        "candidate_shortlist": 2431,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 4029,
+        "tool_hints": 1580,
+        "total": 12041
+      },
+      "duration_ms": 13817,
+      "observable_entities": 1779,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-81",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 974542,
+        "source_file_scans": 85
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 12080,
+      "context_composition": {
+        "alert_digest": 3131,
+        "candidate_shortlist": 2628,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 4010,
+        "tool_hints": 1580,
+        "total": 12080
+      },
+      "duration_ms": 17098,
+      "observable_entities": 1630,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-83",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 1377527,
+        "source_file_scans": 88
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 11550,
+      "context_composition": {
+        "alert_digest": 2912,
+        "candidate_shortlist": 2376,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 220,
+        "relevant_topology": 3951,
+        "tool_hints": 1580,
+        "total": 11550
+      },
+      "duration_ms": 23716,
+      "observable_entities": 1955,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-91",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 685141,
+        "source_file_scans": 211
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 12776,
+      "context_composition": {
+        "alert_digest": 3821,
+        "candidate_shortlist": 2649,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 221,
+        "relevant_topology": 3994,
+        "tool_hints": 1580,
+        "total": 12776
+      },
+      "duration_ms": 12393,
+      "observable_entities": 1003,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-102",
+      "status": "PASS"
+    },
+    {
+      "backend_performance": {
+        "cache_hits": 5,
+        "cache_misses": 2,
+        "entity_index_lookups": 1,
+        "records_scanned": 636252,
+        "source_file_scans": 214
+      },
+      "candidate_shortlist": 10,
+      "context_chars": 9005,
+      "context_composition": {
+        "alert_digest": 18,
+        "candidate_shortlist": 2713,
+        "case_state": 195,
+        "evidence": 2,
+        "execution": 98,
+        "incident": 221,
+        "relevant_topology": 3962,
+        "tool_hints": 1580,
+        "total": 9005
+      },
+      "duration_ms": 11343,
+      "observable_entities": 1013,
+      "probe_status": {
+        "entity_context": "PASS",
+        "entity_search": "PASS",
+        "events": "PASS",
+        "logs": "PASS",
+        "metrics": "PASS",
+        "objects": "PASS",
+        "topology": "PASS",
+        "traces": "PASS"
+      },
+      "scenario": "Scenario-105",
+      "status": "PASS"
+    }
+  ],
+  "status": "PASS"
+}

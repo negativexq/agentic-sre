@@ -20,8 +20,31 @@ from packages.tools import ToolRequest
 class ExternalQueryArguments(ToolArguments):
     """Common bounded string filters; no query language is accepted."""
 
-    pattern: str | None = Field(default=None, min_length=1, max_length=100)
+    pattern: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        description="Case-insensitive literal substring; regex and glob syntax are not supported.",
+    )
     limit: int = Field(default=20, ge=1, le=50)
+
+
+class ExternalContainsArguments(ToolArguments):
+    """E8 literal substring contract; regex and glob syntax are not accepted."""
+
+    contains: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        description="Case-insensitive literal substring; regex and glob syntax are not supported.",
+    )
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class ExternalContainsEntityArguments(ExternalContainsArguments):
+    namespace: str | None = Field(default=None, min_length=1, max_length=255)
+    kind: str | None = Field(default=None, min_length=1, max_length=128)
+    entity: str | None = Field(default=None, min_length=3, max_length=512)
 
 
 class ExternalEntityArguments(ExternalQueryArguments):
@@ -51,6 +74,35 @@ class ExternalMetricArguments(ExternalQueryArguments):
     service: str | None = Field(default=None, min_length=1, max_length=255)
     namespace: str | None = Field(default=None, min_length=1, max_length=255)
     metric_name: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class ExternalV4MetricArguments(ExternalContainsArguments):
+    service: str | None = Field(default=None, min_length=1, max_length=255)
+    namespace: str | None = Field(default=None, min_length=1, max_length=255)
+    metric_name: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class ExternalV4TelemetryArguments(ExternalContainsEntityArguments):
+    severity: str | None = Field(default=None, min_length=1, max_length=32)
+
+
+class ExternalV4TraceArguments(ExternalContainsArguments):
+    trace_id: str | None = Field(default=None, min_length=1, max_length=128)
+    service: str | None = Field(default=None, min_length=1, max_length=255)
+    namespace: str | None = Field(default=None, min_length=1, max_length=255)
+    entity: str | None = Field(default=None, min_length=3, max_length=512)
+    status: str | None = Field(default=None, min_length=1, max_length=32)
+
+
+class ExternalV4AlertArguments(ExternalContainsArguments):
+    alertname: str | None = Field(default=None, min_length=1, max_length=255)
+    severity: str | None = Field(default=None, min_length=1, max_length=32)
+    namespace: str | None = Field(default=None, min_length=1, max_length=255)
+    service: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class ExternalV4TopologyArguments(ExternalContainsEntityArguments):
+    relationship: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class ExternalTopologyArguments(ExternalEntityArguments):
@@ -135,11 +187,89 @@ class ITBenchExternalToolRegistry:
         ),
     )
 
-    def __init__(self, backend: ITBenchSnapshotBackend) -> None:
+    _SPECS_V4 = (
+        (
+            "itbench_alert_summary",
+            "Focused normalized alert signatures.",
+            ITBenchEvidenceCategory.ALERTS,
+            ExternalV4AlertArguments,
+            10_000,
+        ),
+        (
+            "itbench_entity_search",
+            "Search canonical observable Kubernetes identities.",
+            ITBenchEvidenceCategory.K8S_OBJECTS,
+            ExternalContainsEntityArguments,
+            5_000,
+        ),
+        (
+            "itbench_entity_context",
+            "Read semantic context for one canonical entity.",
+            ITBenchEvidenceCategory.K8S_OBJECTS,
+            ExternalEntityContextArguments,
+            10_000,
+        ),
+        (
+            "itbench_topology",
+            "Read bounded filtered observable relationships.",
+            ITBenchEvidenceCategory.K8S_OBJECTS,
+            ExternalV4TopologyArguments,
+            5_000,
+        ),
+        (
+            "itbench_metric_analysis",
+            "Read grouped metric-family aggregates and samples.",
+            ITBenchEvidenceCategory.METRICS,
+            ExternalV4MetricArguments,
+            20_000,
+        ),
+        (
+            "itbench_logs",
+            "Read grouped logs with typed literal filters.",
+            ITBenchEvidenceCategory.LOGS,
+            ExternalV4TelemetryArguments,
+            20_000,
+        ),
+        (
+            "itbench_trace_search",
+            "Read grouped traces with typed filters.",
+            ITBenchEvidenceCategory.TRACES,
+            ExternalV4TraceArguments,
+            20_000,
+        ),
+        (
+            "itbench_trace_detail",
+            "Read bounded records for an exact trace ID.",
+            ITBenchEvidenceCategory.TRACES,
+            ExternalV4TraceArguments,
+            20_000,
+        ),
+        (
+            "itbench_kubernetes_events",
+            "Read filtered Kubernetes events.",
+            ITBenchEvidenceCategory.K8S_EVENTS,
+            ExternalV4TelemetryArguments,
+            10_000,
+        ),
+        (
+            "itbench_kubernetes_objects",
+            "Read canonical or filtered Kubernetes objects.",
+            ITBenchEvidenceCategory.K8S_OBJECTS,
+            ExternalContainsEntityArguments,
+            10_000,
+        ),
+    )
+
+    def __init__(self, backend: ITBenchSnapshotBackend, *, contract_version: str = "v3") -> None:
         self.backend = backend
+        self.contract_version = contract_version
+
+    @property
+    def _active_specs(self) -> tuple[Any, ...]:
+        return self._SPECS_V4 if self.contract_version == "v4" else self._SPECS
 
     def names(self) -> tuple[str, ...]:
-        return tuple(item[0] for item in self._SPECS)
+        return tuple(item[0] for item in self._active_specs)
 
     def descriptors(self) -> tuple[dict[str, Any], ...]:
         return tuple(
@@ -150,11 +280,11 @@ class ITBenchExternalToolRegistry:
                 "evidence_type": category.value,
                 "arguments": _descriptor(argument_model),
             }
-            for name, purpose, category, argument_model, _timeout in self._SPECS
+            for name, purpose, category, argument_model, _timeout in self._active_specs
         )
 
     def invoke(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        spec = next((item for item in self._SPECS if item[0] == name), None)
+        spec = next((item for item in self._active_specs if item[0] == name), None)
         if spec is None:
             raise PermissionError("external tool is not registered")
         _name, _purpose, category, argument_model, _timeout = spec
@@ -162,6 +292,7 @@ class ITBenchExternalToolRegistry:
         args = parsed.model_dump(mode="json", exclude_none=True)
         if name == "itbench_alert_summary":
             records = list(normalize_alerts(self.backend))
+            records = [item for item in records if _alert_matches(item, args)]
             return _bounded_records(name, records, args.get("limit", 20), self.backend.max_bytes)
         if name == "itbench_entity_search":
             records = list(self.backend.observable_entities())
@@ -173,7 +304,11 @@ class ITBenchExternalToolRegistry:
                 raise ValueError("entity is required")
             return {
                 "tool": name,
-                **self.backend.query_entity_context(entity, args.get("limit", 20)),
+                **self.backend.query_entity_context(
+                    entity,
+                    args.get("limit", 20),
+                    include_telemetry=self.contract_version != "v4",
+                ),
             }
         if name == "itbench_topology":
             return _bounded_records(
@@ -183,7 +318,11 @@ class ITBenchExternalToolRegistry:
                         entity=args.get("entity"),
                         namespace=args.get("namespace"),
                         kind=args.get("kind"),
-                        pattern=args.get("pattern"),
+                        pattern=(
+                            args.get("contains")
+                            if self.contract_version == "v4"
+                            else args.get("pattern")
+                        ),
                         relationship=args.get("relationship"),
                         limit=args.get("limit", 20),
                     )
@@ -192,11 +331,20 @@ class ITBenchExternalToolRegistry:
                 self.backend.max_bytes,
             )
         if name == "itbench_metric_analysis":
-            return self.backend.metric_analysis(args)
+            result = self.backend.metric_analysis({**args, "pattern": args.get("contains")})
+            if self.contract_version == "v4":
+                result.pop("aggregate", None)
+            return result
         if name == "itbench_logs":
-            return {"tool": name, **self.backend.log_analysis(args)}
+            return {
+                "tool": name,
+                **self.backend.log_analysis({**args, "pattern": args.get("contains")}),
+            }
         if name == "itbench_trace_search":
-            return {"tool": name, **self.backend.trace_analysis(args)}
+            return {
+                "tool": name,
+                **self.backend.trace_analysis({**args, "pattern": args.get("contains")}),
+            }
         if name == "itbench_trace_detail" and isinstance(args.get("trace_id"), str):
             return self.backend.query(
                 ITBenchEvidenceCategory.TRACES,
@@ -206,7 +354,7 @@ class ITBenchExternalToolRegistry:
 
     def investigation_registry(self) -> ReadOnlyToolRegistry:
         tools = []
-        for name, purpose, category, argument_model, timeout_ms in self._SPECS:
+        for name, purpose, category, argument_model, timeout_ms in self._active_specs:
             tools.append(
                 RegisteredTool(
                     name=name,
@@ -265,8 +413,24 @@ def _entity_matches(item: dict[str, str], args: dict[str, Any]) -> bool:
         value = args.get(key)
         if isinstance(value, str) and item[key].casefold() != value.casefold():
             return False
-    pattern = args.get("pattern")
+    pattern = args.get("contains", args.get("pattern"))
     return not isinstance(pattern, str) or pattern.casefold() in json.dumps(item).casefold()
+
+
+def _alert_matches(item: dict[str, Any], args: dict[str, Any]) -> bool:
+    labels = item.get("labels", {}) if isinstance(item.get("labels"), dict) else {}
+    for key in ("alertname", "severity", "namespace", "service"):
+        expected = args.get(key)
+        if (
+            isinstance(expected, str)
+            and expected.casefold()
+            not in str(
+                item.get("alertname") if key == "alertname" else labels.get(key, "")
+            ).casefold()
+        ):
+            return False
+    contains = args.get("contains")
+    return not isinstance(contains, str) or contains.casefold() in json.dumps(item).casefold()
 
 
 def _bounded_records(

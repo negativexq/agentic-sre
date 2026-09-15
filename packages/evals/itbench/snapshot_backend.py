@@ -43,6 +43,20 @@ class ITBenchSnapshotBackend:
         self._cache: dict[ITBenchEvidenceCategory, tuple[dict[str, Any], ...]] = {}
         self._candidate_cache: tuple[dict[str, Any], ...] | None = None
         self._topology_cache: dict[tuple[Any, ...], tuple[dict[str, Any], ...]] = {}
+        self._entity_record_index: dict[str, tuple[dict[str, Any], ...]] | None = None
+        self._observable_entities_cache: tuple[dict[str, str], ...] | None = None
+        self._complete_alert_cache: tuple[dict[str, Any], ...] | None = None
+        self._performance = {
+            "source_file_scans": 0,
+            "records_scanned": 0,
+            "entity_index_lookups": 0,
+            "cache_hits": 0,
+            "cache_misses": 0,
+        }
+
+    def performance_snapshot(self) -> dict[str, int]:
+        """Return bounded deterministic backend-work counters for qualification."""
+        return dict(self._performance)
 
     def investigator_data(self) -> InvestigatorData:
         """Build a bounded public data object with no ground-truth reference."""
@@ -68,7 +82,7 @@ class ITBenchSnapshotBackend:
         """Execute a named, bounded query; arbitrary filesystem access is impossible."""
         selected: list[dict[str, Any]] = []
         matching_count = 0
-        pattern = arguments.get("pattern")
+        pattern = arguments.get("pattern", arguments.get("contains"))
         service = arguments.get("service")
         namespace = arguments.get("namespace")
         trace_id = arguments.get("trace_id")
@@ -114,19 +128,19 @@ class ITBenchSnapshotBackend:
             response["returned_count"] = len(response["records"])
         return response
 
-    def query_entity_context(self, entity: str, limit: int) -> dict[str, Any]:
+    def query_entity_context(
+        self, entity: str, limit: int, *, include_telemetry: bool = True
+    ) -> dict[str, Any]:
         """Resolve one canonical entity using structured observable fields."""
         parsed = parse_canonical_entity(entity)
-        objects = [
-            item
-            for item in self._iter_records(ITBenchEvidenceCategory.K8S_OBJECTS)
-            if _record_entity(item) == parsed
-        ]
-        events = [
-            item
-            for item in self._iter_records(ITBenchEvidenceCategory.K8S_EVENTS)
-            if _record_entity(item) == parsed
-        ]
+        index = self._get_entity_record_index()
+        self._performance["entity_index_lookups"] += 1
+        objects = list(
+            index.get(f"{ITBenchEvidenceCategory.K8S_OBJECTS.value}:{parsed.canonical}", ())
+        )
+        events = list(
+            index.get(f"{ITBenchEvidenceCategory.K8S_EVENTS.value}:{parsed.canonical}", ())
+        )
         object_records = _fit_bounded_records(tuple(objects[:limit]), self.max_bytes)
         event_records = _fit_bounded_records(tuple(events[:limit]), self.max_bytes)
         topology = list(self.topology(entity=parsed.canonical, limit=limit))
@@ -149,8 +163,16 @@ class ITBenchSnapshotBackend:
             metric_anomalies = self.metric_analysis(
                 {"namespace": parsed.namespace, "service": parsed.name, "limit": min(limit, 10)}
             ).get("aggregates_by_metric", {})
-        log_summary = self._sample_log_summary(parsed, min(limit, 8))
-        trace_summary = self._sample_trace_summary(parsed, min(limit, 8))
+        log_summary = (
+            self._sample_log_summary(parsed, min(limit, 8))
+            if include_telemetry
+            else {"patterns": [], "data_available": "unknown", "query_scope": "not_scanned"}
+        )
+        trace_summary = (
+            self._sample_trace_summary(parsed, min(limit, 8))
+            if include_telemetry
+            else {"records": [], "data_available": "unknown", "query_scope": "not_scanned"}
+        )
         return {
             "entity": parsed.canonical,
             "object_records": list(object_records),
@@ -176,8 +198,7 @@ class ITBenchSnapshotBackend:
                 "event_lookup",
                 "topology",
                 "metric_summary",
-                "log_summary",
-                "trace_summary",
+                *(("log_summary", "trace_summary") if include_telemetry else ()),
             ],
             "data_quality": {
                 "data_available": bool(object_records or event_records or topology),
@@ -189,7 +210,25 @@ class ITBenchSnapshotBackend:
             "object_matching_count": len(objects),
             "event_matching_count": len(events),
             "truncated": len(objects) > len(object_records) or len(events) > len(event_records),
+            "telemetry_availability": {
+                "logs": log_summary.get("data_available"),
+                "traces": trace_summary.get("data_available"),
+            },
         }
+
+    def _get_entity_record_index(self) -> dict[str, tuple[dict[str, Any], ...]]:
+        if self._entity_record_index is not None:
+            self._performance["cache_hits"] += 1
+            return self._entity_record_index
+        self._performance["cache_misses"] += 1
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for category in (ITBenchEvidenceCategory.K8S_OBJECTS, ITBenchEvidenceCategory.K8S_EVENTS):
+            for item in self._iter_records(category):
+                entity = _record_entity(item)
+                if entity is not None:
+                    grouped.setdefault(f"{category.value}:{entity.canonical}", []).append(item)
+        self._entity_record_index = {key: tuple(value) for key, value in grouped.items()}
+        return self._entity_record_index
 
     def _sample_log_summary(self, parsed: ITBenchEntity, limit: int) -> dict[str, Any]:
         items = [
@@ -271,12 +310,16 @@ class ITBenchSnapshotBackend:
                             )
                         )
                         metric_namespace = str(record.get("namespace", record.get("Namespace", "")))
-                        metric_key = "|".join((metric_name, metric_service, metric_namespace))
+                        label_identity = _metric_label_identity(record)
+                        metric_key = "|".join(
+                            (metric_name, metric_service, metric_namespace, label_identity)
+                        )
                         values_by_metric.setdefault(metric_key, []).append(value)
                         metric_identity_fields[metric_key] = {
                             "metric_name": metric_name,
                             "service": metric_service or None,
                             "namespace": metric_namespace or None,
+                            "label_identity": label_identity,
                         }
                         timestamp = record.get("timestamp", record.get("Timestamp"))
                         if isinstance(timestamp, str):
@@ -285,12 +328,24 @@ class ITBenchSnapshotBackend:
                 except (TypeError, ValueError):
                     continue
         bounded = _fit_bounded_records(tuple(selected), self.max_bytes)
-        aggregates_by_metric = {
+        all_aggregates_by_metric = {
             name: {
                 **metric_identity_fields[name],
                 **_metric_summary(metric_values, tuple(timestamps_by_metric.get(name, ()))),
             }
             for name, metric_values in sorted(values_by_metric.items())
+        }
+        ranked_metric_names = sorted(
+            all_aggregates_by_metric,
+            key=lambda name: (
+                -abs(float(all_aggregates_by_metric[name].get("relative_change") or 0.0)),
+                -abs(float(all_aggregates_by_metric[name].get("absolute_delta") or 0.0)),
+                name,
+            ),
+        )
+        bounded_metric_names = ranked_metric_names[:limit]
+        aggregates_by_metric = {
+            name: all_aggregates_by_metric[name] for name in bounded_metric_names
         }
         return {
             "records": list(bounded),
@@ -309,6 +364,9 @@ class ITBenchSnapshotBackend:
                 "delta": values[-1] - values[0] if len(values) > 1 else None,
             },
             "aggregates_by_metric": aggregates_by_metric,
+            "aggregate_group_count": len(all_aggregates_by_metric),
+            "aggregate_groups_returned": len(aggregates_by_metric),
+            "aggregate_groups_truncated": len(aggregates_by_metric) < len(all_aggregates_by_metric),
             "sample_count": len(bounded),
             "sample_truncated": matching_count > len(bounded),
         }
@@ -321,7 +379,7 @@ class ITBenchSnapshotBackend:
         for item in self._iter_records(ITBenchEvidenceCategory.LOGS):
             if not _matches(
                 item,
-                pattern=arguments.get("pattern"),
+                pattern=arguments.get("pattern", arguments.get("contains")),
                 service=arguments.get("service"),
                 namespace=arguments.get("namespace"),
                 trace_id=None,
@@ -370,7 +428,7 @@ class ITBenchSnapshotBackend:
         for item in self._iter_records(ITBenchEvidenceCategory.TRACES):
             if not _matches(
                 item,
-                pattern=arguments.get("pattern"),
+                pattern=arguments.get("pattern", arguments.get("contains")),
                 service=arguments.get("service"),
                 namespace=arguments.get("namespace"),
                 trace_id=arguments.get("trace_id"),
@@ -470,6 +528,12 @@ class ITBenchSnapshotBackend:
         self, category: ITBenchEvidenceCategory
     ) -> Iterator[dict[str, Any]]:
         """Iterate every valid source record for qualification and bounded queries."""
+        if category is ITBenchEvidenceCategory.ALERTS:
+            if self._complete_alert_cache is None:
+                self._complete_alert_cache = tuple(self._iter_records(category))
+            else:
+                self._performance["cache_hits"] += 1
+            return iter(self._complete_alert_cache)
         return self._iter_records(category)
 
     def _iter_metric_records(self, arguments: dict[str, Any]) -> Iterator[dict[str, Any]]:
@@ -523,6 +587,10 @@ class ITBenchSnapshotBackend:
 
     def observable_entities(self) -> tuple[dict[str, str], ...]:
         """Return the complete deduplicated Kubernetes entity catalog."""
+        if self._observable_entities_cache is not None:
+            self._performance["cache_hits"] += 1
+            return self._observable_entities_cache
+        self._performance["cache_misses"] += 1
         entities: dict[str, dict[str, str]] = {}
         for category in (ITBenchEvidenceCategory.K8S_OBJECTS, ITBenchEvidenceCategory.K8S_EVENTS):
             for item in self._iter_records(category):
@@ -552,7 +620,8 @@ class ITBenchSnapshotBackend:
                         "name": name,
                     }
                     entities[f"{entity['namespace']}/{kind}/{name}"] = entity
-        return tuple(entities[key] for key in sorted(entities))
+        self._observable_entities_cache = tuple(entities[key] for key in sorted(entities))
+        return self._observable_entities_cache
 
     def candidate_entities(self, *, limit: int = 10) -> tuple[dict[str, Any], ...]:
         """Rank observable entities using generic evidence-derived signals only.
@@ -829,12 +898,14 @@ class ITBenchSnapshotBackend:
     def _iter_records(self, category: ITBenchEvidenceCategory) -> Iterator[dict[str, Any]]:
         root = Path(self.scenario.snapshot_path)
         for relative_path in self.scenario.evidence_files[category]:
+            self._performance["source_file_scans"] += 1
             path = root / relative_path
             if category is ITBenchEvidenceCategory.ALERTS:
                 source: Iterator[dict[str, Any]] = iter(self._read_alerts(path))
             else:
                 source = iter_tsv(path)
             for index, row in enumerate(source):
+                self._performance["records_scanned"] += 1
                 yield {
                     "evidence_id": str(self.evidence_id(category, relative_path, index)),
                     "category": category.value,
@@ -877,6 +948,20 @@ def _json_object(value: Any) -> dict[str, Any] | None:
     except json.JSONDecodeError:
         return None
     return parsed if isinstance(parsed, dict) else None
+
+
+def _metric_label_identity(record: dict[str, Any]) -> str:
+    """Hash stable metric-label dimensions so heterogeneous series never merge."""
+    tags = record.get("tags", {})
+    # The source stores tags as a deterministic serialized label map. Hashing
+    # that representation avoids reparsing it for every row while preserving
+    # all stable label dimensions in the identity.
+    dimensions: dict[str, Any] = {"tags": str(tags)}
+    for key in ("metric_type", "status_code", "bucket_le"):
+        if record.get(key) is not None:
+            dimensions[key] = record[key]
+    encoded = json.dumps(dimensions, sort_keys=True, separators=(",", ":"), default=str)
+    return sha256(encoded.encode("utf-8")).hexdigest()[:16]
 
 
 def _record_entity(item: dict[str, Any]) -> ITBenchEntity | None:
@@ -1048,7 +1133,7 @@ def _metric_matches(item: dict[str, Any], arguments: dict[str, Any]) -> bool:
         and str(actual_namespace).casefold() != arguments["namespace"].casefold()
     ):
         return False
-    pattern = arguments.get("pattern")
+    pattern = arguments.get("pattern", arguments.get("contains"))
     return (
         not isinstance(pattern, str)
         or pattern.casefold() in json.dumps(record, sort_keys=True, default=str).casefold()

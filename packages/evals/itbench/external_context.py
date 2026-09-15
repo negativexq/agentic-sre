@@ -11,7 +11,9 @@ from packages.evals.itbench.contracts import ITBenchEvidenceCategory
 from packages.evals.itbench.snapshot_backend import ITBenchSnapshotBackend
 
 ITBENCH_EXTERNAL_CONTEXT_VERSION = "itbench_external_context_v2"
+ITBENCH_EXTERNAL_CONTEXT_V3 = "itbench_external_context_v3"
 MAX_EXTERNAL_CONTEXT_CHARS = 70_000
+MAX_EXTERNAL_CONTEXT_V3_CHARS = 35_000
 
 
 def normalize_alerts(backend: ITBenchSnapshotBackend) -> tuple[dict[str, Any], ...]:
@@ -112,6 +114,205 @@ def build_external_context(
     return encoded
 
 
+_V3_SECTION_BUDGETS = {
+    "incident": 1_500,
+    "alert_digest": 4_000,
+    "candidate_shortlist": 4_000,
+    "relevant_topology": 4_000,
+    "case_state": 5_000,
+    "evidence": 10_000,
+    "tool_hints": 2_000,
+    "execution": 1_000,
+}
+
+
+def _fit_section(value: Any, budget: int) -> Any:
+    """Bound one context section without cutting serialized JSON mid-field."""
+    encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
+    if len(encoded) <= budget:
+        return value
+    if isinstance(value, list):
+        selected: list[Any] = []
+        for item in value:
+            candidate = selected + [item]
+            if (
+                len(json.dumps(candidate, ensure_ascii=False, separators=(",", ":"), default=str))
+                > budget
+            ):
+                break
+            selected.append(item)
+        return {
+            "items": selected,
+            "source_count": len(value),
+            "returned_count": len(selected),
+            "truncated": len(selected) < len(value),
+        }
+    if isinstance(value, dict):
+        selected_dict: dict[str, Any] = {}
+        for key, item in value.items():
+            candidate_dict = {**selected_dict, key: item}
+            if (
+                len(
+                    json.dumps(
+                        candidate_dict, ensure_ascii=False, separators=(",", ":"), default=str
+                    )
+                )
+                > budget
+            ):
+                break
+            selected_dict[key] = item
+        selected_dict["truncated"] = True
+        return selected_dict
+    return str(value)[: max(0, budget - 32)]
+
+
+def _alert_digest(backend: ITBenchSnapshotBackend) -> dict[str, Any]:
+    grouped = list(normalize_alerts(backend))
+    alert_counts: dict[str, int] = {}
+    affected_services: set[str] = set()
+    affected_namespaces: set[str] = set()
+    high_signal: list[dict[str, Any]] = []
+    background: dict[str, int] = {}
+    for item in grouped:
+        name = str(item.get("alertname", "unknown"))
+        labels = item.get("labels", {}) if isinstance(item.get("labels"), dict) else {}
+        count = int(item.get("occurrence_count", 0) or 0)
+        alert_counts[name] = alert_counts.get(name, 0) + count
+        for key in ("service", "service_name", "app", "workload"):
+            if isinstance(labels.get(key), str):
+                affected_services.add(labels[key])
+        if isinstance(labels.get("namespace"), str):
+            affected_namespaces.add(labels["namespace"])
+        severity = str(labels.get("severity", ""))
+        if name.casefold() in {"watchdog", "infoinhibitor"} or severity.casefold() == "info":
+            background[name] = background.get(name, 0) + count
+            continue
+        high_signal.append(
+            {
+                "alertname": name,
+                "namespace": labels.get("namespace"),
+                "service_or_entity": labels.get("service")
+                or labels.get("entity")
+                or labels.get("app"),
+                "severity": severity or None,
+                "occurrence_count": count,
+                "first_observed": item.get("first_observed"),
+                "last_observed": item.get("last_observed"),
+            }
+        )
+    return {
+        "high_signal_alerts": high_signal[:20],
+        "affected_services": sorted(affected_services)[:50],
+        "affected_namespaces": sorted(affected_namespaces)[:50],
+        "alert_counts_by_name": dict(sorted(alert_counts.items())),
+        "background": dict(sorted(background.items())),
+    }
+
+
+def _relevant_topology(
+    backend: ITBenchSnapshotBackend,
+    candidate_entities: tuple[dict[str, Any], ...],
+    case_state: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    entities: list[str] = []
+    for item in candidate_entities:
+        canonical = item.get("canonical") or item.get("entity")
+        if isinstance(canonical, str):
+            entities.append(canonical)
+    for key in ("active_candidates", "supported_candidates"):
+        for entity in (case_state or {}).get(key, []):
+            if isinstance(entity, str):
+                entities.append(entity)
+    wanted = set(entities)
+    result: dict[tuple[str, str, str], dict[str, Any]] = {}
+    # The candidate ranker has already built the complete observable edge set for
+    # the first turn. Filter that complete set before applying this response bound;
+    # do not re-derive the entire topology once per candidate.
+    for edge in backend.topology(limit=None):
+        if wanted and not ({edge.get("source"), edge.get("target")} & wanted):
+            continue
+        edge_key = (str(edge.get("source")), str(edge.get("target")), str(edge.get("relationship")))
+        result[edge_key] = edge
+    return [result[edge_key] for edge_key in sorted(result)[:80]]
+
+
+def _compact_case_state(case_state: dict[str, Any] | None) -> dict[str, Any]:
+    state = case_state or {}
+    return {
+        "observed_symptoms": list(state.get("observed_symptoms", []))[:8],
+        "active_candidates": list(state.get("active_candidates", []))[:3],
+        "supported_candidates": list(state.get("supported_candidates", []))[:10],
+        "rejected_candidates": list(state.get("rejected_candidates", []))[:10],
+        "evidence_by_candidate": state.get("evidence_by_candidate", {}),
+        "contradictions_by_candidate": state.get("contradictions_by_candidate", {}),
+        "queries_already_run": list(state.get("queries_already_run", []))[-12:],
+        "budget": state.get("budget", {}),
+    }
+
+
+def build_external_context_v3(
+    backend: ITBenchSnapshotBackend,
+    incident: Incident,
+    alerts: tuple[Alert, ...],
+    descriptors: tuple[dict[str, Any], ...],
+    *,
+    evidence: tuple[dict[str, Any], ...] = (),
+    turn: int = 1,
+    max_turns: int = 5,
+    tool_calls_used: int = 0,
+    tool_calls_limit: int = 12,
+    case_state: dict[str, Any] | None = None,
+    candidate_entities: tuple[dict[str, Any], ...] = (),
+) -> str:
+    """Build compact V3 context from relevant, observable sections only."""
+    hints = [
+        {
+            "name": item.get("name"),
+            "purpose": item.get("purpose"),
+            "arguments": sorted((item.get("arguments") or {}).keys()),
+        }
+        for item in descriptors
+    ]
+    sections: dict[str, Any] = {
+        "incident": {
+            "incident_id": str(incident.incident_id),
+            "title": incident.title,
+            "severity": incident.severity.value,
+            "created_at": incident.created_at.isoformat(),
+            "updated_at": incident.updated_at.isoformat(),
+        },
+        "alert_digest": _alert_digest(backend),
+        "candidate_shortlist": list(candidate_entities)[:10],
+        "relevant_topology": _relevant_topology(backend, candidate_entities, case_state),
+        "case_state": _compact_case_state(case_state),
+        "evidence": list(evidence[-10:]),
+        "tool_hints": hints,
+        "execution": {
+            "turn": turn,
+            "max_turns": max_turns,
+            "semantic_tool_executions_used": tool_calls_used,
+            "semantic_tool_executions_remaining": max(tool_calls_limit - tool_calls_used, 0),
+        },
+    }
+    payload: dict[str, Any] = {
+        "benchmark": "ITBench-Lite",
+        "domain": "SRE",
+        "context_version": ITBENCH_EXTERNAL_CONTEXT_V3,
+    }
+    for name, value in sections.items():
+        payload[name] = _fit_section(value, _V3_SECTION_BUDGETS[name])
+    encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
+    if len(encoded) > MAX_EXTERNAL_CONTEXT_V3_CHARS:
+        # Reduce only low-priority history/evidence sections; never remove identity or digest.
+        payload["evidence"] = _fit_section(list(evidence[-5:]), 5_000)
+        payload["case_state"] = _fit_section(_compact_case_state(case_state), 3_500)
+        payload["relevant_topology"] = _fit_section(payload["relevant_topology"], 2_500)
+        encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
+    if len(encoded) > MAX_EXTERNAL_CONTEXT_V3_CHARS:
+        raise ValueError("external investigator V3 context exceeds configured bound")
+    return encoded
+
+
 def context_hash(context: str) -> str:
     """Hash the exact model-visible external context for dry-run provenance."""
     return sha256(context.encode("utf-8")).hexdigest()
@@ -119,8 +320,11 @@ def context_hash(context: str) -> str:
 
 __all__ = [
     "ITBENCH_EXTERNAL_CONTEXT_VERSION",
+    "ITBENCH_EXTERNAL_CONTEXT_V3",
     "MAX_EXTERNAL_CONTEXT_CHARS",
+    "MAX_EXTERNAL_CONTEXT_V3_CHARS",
     "build_external_context",
+    "build_external_context_v3",
     "context_hash",
     "normalize_alerts",
 ]

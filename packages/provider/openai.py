@@ -8,6 +8,7 @@ from threading import Lock
 from time import monotonic
 from typing import Any, Protocol, cast
 
+from packages.model_policy import ModelPolicyError, validate_agent_config
 from packages.provider.budget import LiveModelBudget
 from packages.provider.contracts import (
     ModelRequest,
@@ -99,10 +100,10 @@ class LiveModelConfig:
 
 
 def live_model_config() -> LiveModelConfig:
-    """Read non-secret model settings from the environment."""
+    """Read explicitly supplied non-secret model settings from the environment."""
     return LiveModelConfig(
-        model=os.getenv("SRE_MODEL", "gpt-5.6-luna"),
-        reasoning_effort=os.getenv("SRE_REASONING_EFFORT", "none"),
+        model=os.getenv("SRE_MODEL", ""),
+        reasoning_effort=os.getenv("SRE_REASONING_EFFORT", ""),
         enabled=os.getenv("SRE_LIVE_MODEL_ENABLED", "false").lower() == "true",
     )
 
@@ -971,6 +972,14 @@ class OpenAIProvider:
             raise ValueError("max_retry must be 0 or 1")
         self._budget = budget
         self._config = config or live_model_config()
+        if self._config.enabled:
+            try:
+                validate_agent_config(self._config.model, self._config.reasoning_effort)
+            except ModelPolicyError as error:
+                raise ProviderError(
+                    ProviderErrorCode.BENCHMARK_MODEL_POLICY_VIOLATION,
+                    str(error),
+                ) from error
         self._transport = transport or self._build_transport()
         self._max_retry = max_retry
         self._accounting_lock = Lock()

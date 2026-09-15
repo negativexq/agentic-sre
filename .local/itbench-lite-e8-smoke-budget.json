@@ -2,9 +2,9 @@
   "execution": "ITB-E8",
   "purpose": "SMOKE",
   "cap": 5,
-  "calls_used": 1,
-  "remaining": 4,
-  "status": "REPAIR_REQUIRED",
+  "calls_used": 5,
+  "remaining": 0,
+  "status": "FAILED_NO_VALID_TERMINAL",
   "historical_failed_attempts": 1,
   "failed_attempts": [
     {
@@ -15,5 +15,7 @@
       "refund": false
     }
   ],
-  "note": "Separate from the official 35-scenario agent ledger; no judge usage. The repaired smoke is ITB-E8-SMOKE-002."
+  "repaired_smoke_id": "ITB-E8-SMOKE-002",
+  "repaired_smoke_outbound_attempts": 4,
+  "note": "The repaired smoke exhausted the remaining four attempts without a valid terminal. No official benchmark was started."
 }

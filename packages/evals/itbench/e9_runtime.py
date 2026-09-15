@@ -417,6 +417,8 @@ class E9InvestigationRuntime:
             )
         return {
             "protocol": ITBENCH_EXTERNAL_PROTOCOL_V5,
+            "execution_id": self.execution_id,
+            "case_id": memory.case_id,
             "scenario_id": scenario_id,
             "incident_id": str(incident.incident_id),
             "terminal": terminal,

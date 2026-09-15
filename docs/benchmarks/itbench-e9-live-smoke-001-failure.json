@@ -1,0 +1,15 @@
+{
+  "execution": "ITB-E9",
+  "smoke_id": "ITB-E9-SMOKE-001",
+  "status": "INVALIDATED_BY_INTEGRATION_FAILURE",
+  "failure": {
+    "type": "artifact_reload",
+    "error": "E9 native result omitted execution_id required by event replay",
+    "provider_response_received": true,
+    "outbound_attempts": 1
+  },
+  "model": "gpt-5.6-luna",
+  "reasoning": "none",
+  "official_scenarios_executed": 0,
+  "note": "The paid attempt and partial native artifacts are preserved. No refund or retry is applied. A new E9 runtime revision and Smoke-002 are required."
+}

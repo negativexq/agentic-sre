@@ -99,6 +99,8 @@ def test_v5_valid_trajectory_owns_identity_and_evidence(tmp_path: Path) -> None:
     assert result["terminal"] == "SUBMIT"
     assert result["submitted_entities"] == ["otel-demo/Service/frontend"]
     assert result["submitted_evidence_refs"] == ["E001"]
+    assert result["execution_id"] == "ITB-E9"
+    assert result["case_id"] == "ITB-E9:Scenario-1"
     assert result["usage"]["model_steps"] == 3
     assert result["safety"]["ground_truth_exposure"] == 0
 

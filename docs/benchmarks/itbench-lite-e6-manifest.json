@@ -23,34 +23,10 @@
   "grader_sha256": "a02a2ab54506a9ebe398fdebd5a7519d76ef6b141f90825ccbab48f4966c6822",
   "model": "gpt-5.6-luna",
   "reasoning": "none",
-  "limits": {
-    "model_calls": 5,
-    "tool_calls": 12,
-    "turns": 5,
-    "wall_seconds": 180,
-    "provider_retries": 0
-  },
-  "official_evaluator": {
-    "source": "itbench-hub/ITBench-Evaluations",
-    "revision": "14f026fc9cc348c4ecec5ab32714de954c95c1b1"
-  },
-  "ledger": {
-    "path": ".local/itbench-lite-e6-budget.json",
-    "cap": 180,
-    "consumed": 0,
-    "remaining": 180,
-    "status": "NOT_STARTED"
-  },
-  "qualification": {
-    "script": "scripts/itbench_e6_check.py",
-    "status": "PASS",
-    "scenarios": "35/35",
-    "openai_calls": 0,
-    "metric_engine": "single_pass_matching_aggregate_and_bounded_samples"
-  },
-  "ground_truth": {
-    "investigator_access": false,
-    "evaluator_access": "post-persistence only"
-  },
+  "limits": {"model_calls": 5, "tool_calls": 12, "turns": 5, "wall_seconds": 180, "provider_retries": 0},
+  "official_evaluator": {"source": "itbench-hub/ITBench-Evaluations", "revision": "14f026fc9cc348c4ecec5ab32714de954c95c1b1"},
+  "ledger": {"path": ".local/itbench-lite-e6-budget.json", "cap": 180, "consumed": 0, "remaining": 180, "status": "NOT_STARTED"},
+  "qualification": {"script": "scripts/itbench_e6_check.py", "status": "PASS", "scenarios": "35/35", "openai_calls": 0, "metric_engine": "single_pass_matching_aggregate_and_bounded_samples"},
+  "ground_truth": {"investigator_access": false, "evaluator_access": "post-persistence only"},
   "notes": "Engineering iteration after E4 baseline and E5 contract/metric defects; same public benchmark, not untouched held-out generalization."
 }

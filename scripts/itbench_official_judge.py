@@ -11,15 +11,19 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
 
 from packages.evals.itbench.judge_policy import (
+    LUNA_JUDGE_COMPAT_PROFILE,
     JudgePlan,
     build_judge_plan,
+    luna_judge_compatibility_hash,
     preflight_judge,
 )
 from packages.model_policy import ModelExecutionIdentity, ModelPolicyError
@@ -71,6 +75,55 @@ def _safe_plan_record(identity: ModelExecutionIdentity, plan: JudgePlan) -> dict
     }
 
 
+def _prepare_luna_compatible_evaluator(source: Path) -> tuple[Path, str]:
+    """Make an ephemeral compatibility copy of the pinned evaluator.
+
+    The pinned evaluator hard-codes ``temperature=0`` and permits retry loops.
+    Luna rejects that temperature, and retries would violate the project judge
+    ceiling. The evaluator semantics and revision remain pinned; this copy
+    changes only provider parameters and retry ceilings, and is not written
+    into the repository.
+    """
+    source_agent = source / "itbench_evaluations" / "agent.py"
+    if not source_agent.is_file():
+        raise ModelPolicyError("JUDGE_EVALUATOR_INVALID", "pinned evaluator agent.py is missing")
+    temporary_root = Path(tempfile.mkdtemp(prefix="itbench-luna-evaluator-"))
+    destination = temporary_root / source.name
+    shutil.copytree(
+        source,
+        destination,
+        ignore=shutil.ignore_patterns(".git", "__pycache__", ".pytest_cache"),
+    )
+    agent_path = destination / "itbench_evaluations" / "agent.py"
+    contents = agent_path.read_text(encoding="utf-8")
+    replacements = {
+        "temperature=0,": "temperature=1,",
+        "max_retries: int = 5": "max_retries: int = 1",
+        "max_calc_retries = 3": "max_calc_retries = 1",
+    }
+    for old, new in replacements.items():
+        if old not in contents:
+            raise ModelPolicyError(
+                "JUDGE_EVALUATOR_UNEXPECTED_SOURCE",
+                f"compatibility anchor not found: {old}",
+            )
+        contents = contents.replace(old, new)
+    agent_path.write_text(contents, encoding="utf-8")
+    client_path = destination / "itbench_evaluations" / "client.py"
+    client_contents = client_path.read_text(encoding="utf-8")
+    client_anchor = "        api_key=api_key,\n"
+    if client_anchor not in client_contents:
+        raise ModelPolicyError(
+            "JUDGE_EVALUATOR_UNEXPECTED_SOURCE",
+            "OpenAI client retry anchor not found",
+        )
+    client_contents = client_contents.replace(
+        client_anchor, "        api_key=api_key,\n        max_retries=0,\n", 1
+    )
+    client_path.write_text(client_contents, encoding="utf-8")
+    return destination, "temperature=1; provider_max_retries=0; evaluation_attempts_per_case=1"
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
@@ -112,8 +165,15 @@ def main(argv: list[str] | None = None) -> int:
             "--max-concurrent",
             "1",
         ]
+        evaluator_cwd, compatibility_patch = _prepare_luna_compatible_evaluator(args.evaluator_cwd)
+        compatibility_hash = luna_judge_compatibility_hash()
         completed = subprocess.run(
-            command, cwd=args.evaluator_cwd, env=env, check=False, capture_output=True, text=True
+            command,
+            cwd=evaluator_cwd,
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
         )
         sys.stdout.write(completed.stdout)
         sys.stderr.write(completed.stderr)
@@ -140,6 +200,7 @@ def main(argv: list[str] | None = None) -> int:
                 score = float(score_value)
         except (OSError, json.JSONDecodeError, AttributeError):
             pass
+        successful = completed.returncode == 0 and score is not None
         if isinstance(result_payload, dict):
             # Keep the upstream evaluator payload intact while attaching the
             # project-owned, non-secret identity needed for auditability.
@@ -153,6 +214,9 @@ def main(argv: list[str] | None = None) -> int:
                 "scenario": args.scenario,
                 "inference_count_reserved": plan.expected_calls,
                 "max_judge_calls": plan.max_calls,
+                "compatibility_patch": compatibility_patch,
+                "compatibility_profile": LUNA_JUDGE_COMPAT_PROFILE,
+                "compatibility_profile_sha256": compatibility_hash,
             }
             result_payload["judge_ledger"] = ledger
             _atomic_json_write(Path(args.result_file), result_payload)
@@ -168,11 +232,15 @@ def main(argv: list[str] | None = None) -> int:
                 "evaluator_revision": args.evaluator_revision,
                 "inference_count_reserved": plan.expected_calls,
                 "max_judge_calls": plan.max_calls,
+                "compatibility_patch": compatibility_patch,
+                "compatibility_profile": LUNA_JUDGE_COMPAT_PROFILE,
+                "compatibility_profile_sha256": compatibility_hash,
                 "actual_model_identity_reported": actual_identity_seen,
                 "root_cause_entity_f1": score,
                 "tokens": "NOT_DURABLY_AVAILABLE",
                 "latency": "NOT_DURABLY_AVAILABLE",
                 "return_code": completed.returncode,
+                "evaluation_success": successful,
                 "ledger": ledger,
             },
         )
@@ -180,6 +248,11 @@ def main(argv: list[str] | None = None) -> int:
             raise ModelPolicyError(
                 "JUDGE_MODEL_IDENTITY_UNCONFIRMED",
                 "evaluator did not report the approved judge model",
+            )
+        if not successful:
+            raise ModelPolicyError(
+                "JUDGE_EVALUATION_FAILED",
+                "pinned evaluator did not produce a valid ROOT_CAUSE_ENTITY result",
             )
         return completed.returncode
     except ModelPolicyError as error:

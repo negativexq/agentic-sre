@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,26 @@ from packages.model_policy import (
     ModelPolicyError,
     validate_judge_environment,
 )
+
+LUNA_JUDGE_COMPAT_PROFILE: dict[str, object] = {
+    "name": "itbench_luna_judge_compat_v1",
+    "version": 1,
+    "provider": "openai",
+    "model": "gpt-5.6-luna",
+    "temperature": 1,
+    "provider_max_retries": 0,
+    "evaluation_attempts_per_case": 1,
+    "fallback_model": "NONE",
+    "fallback_temperature": "NONE",
+}
+
+
+def luna_judge_compatibility_hash() -> str:
+    """Return the stable identity of the Luna-only provider compatibility profile."""
+    encoded = json.dumps(LUNA_JUDGE_COMPAT_PROFILE, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    return hashlib.sha256(encoded).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,4 +87,11 @@ def preflight_judge(
     return identity, ledger
 
 
-__all__ = ["JudgePlan", "build_judge_plan", "preflight_judge", "read_judge_ledger"]
+__all__ = [
+    "LUNA_JUDGE_COMPAT_PROFILE",
+    "JudgePlan",
+    "build_judge_plan",
+    "luna_judge_compatibility_hash",
+    "preflight_judge",
+    "read_judge_ledger",
+]

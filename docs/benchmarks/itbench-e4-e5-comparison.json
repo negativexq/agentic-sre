@@ -1,0 +1,1929 @@
+{
+  "artifact_type": "ITBENCH_E4_E5_COMPARISON",
+  "conditional_metrics": {
+    "e4": {
+      "p_correct_given_diagnosis": 0.25,
+      "p_correct_overall": 0.02857142857142857,
+      "p_diagnosis": 0.11428571428571428
+    },
+    "e5": {
+      "p_correct_given_diagnosis": 0.0,
+      "p_correct_overall": 0.0,
+      "p_diagnosis": 0.17142857142857143
+    }
+  },
+  "e4": {
+    "result_sha256": "04afc0b7dcb0fe7fafd9101820906df7c7d0e8070ed5e0e8151f2b7d9b8e1574",
+    "summary": {
+      "categories": {
+        "itbench_alert_summary": 2,
+        "itbench_entity_context": 202,
+        "itbench_entity_search": 25,
+        "itbench_kubernetes_events": 97,
+        "itbench_kubernetes_objects": 24,
+        "itbench_logs": 87,
+        "itbench_metric_analysis": 56,
+        "itbench_topology": 1,
+        "itbench_trace_search": 30
+      },
+      "per_scenario": [
+        {
+          "f1": 0.0,
+          "model_calls": 3,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-1",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 16,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 3,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-2",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 15,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 4,
+          "precision": 0.0,
+          "predicted_entities": 1,
+          "recall": 0.0,
+          "scenario": "Scenario-4",
+          "terminal": "SUBMIT_DIAGNOSIS",
+          "tool_executions": 12,
+          "tool_requests": 14,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 4,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-5",
+          "terminal": "STOP",
+          "tool_executions": 12,
+          "tool_requests": 12,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 4,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-6",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 12,
+          "tool_requests": 12,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 4,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-7",
+          "terminal": "STOP",
+          "tool_executions": 12,
+          "tool_requests": 12,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 3,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-8",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 16,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 3,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-9",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 13,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 3,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-11",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 15,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 3,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-12",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 15,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 3,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-13",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 15,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 3,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-14",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 18,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 4,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-15",
+          "terminal": "STOP",
+          "tool_executions": 12,
+          "tool_requests": 14,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 4,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-16",
+          "terminal": "STOP",
+          "tool_executions": 12,
+          "tool_requests": 13,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 2,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-17",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 14,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.6666666666666666,
+          "model_calls": 5,
+          "precision": 0.5,
+          "predicted_entities": 2,
+          "recall": 1.0,
+          "scenario": "Scenario-18",
+          "terminal": "SUBMIT_DIAGNOSIS",
+          "tool_executions": 12,
+          "tool_requests": 15,
+          "true_positive": 1
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 3,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-19",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 14,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 5,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-20",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 9,
+          "tool_requests": 18,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 5,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-21",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 11,
+          "tool_requests": 17,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 5,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-22",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 8,
+          "tool_requests": 16,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 4,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-23",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 16,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 5,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-24",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 11,
+          "tool_requests": 18,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 3,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-25",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 13,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 3,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-29",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 13,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 4,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-31",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 18,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 3,
+          "precision": 0.0,
+          "predicted_entities": 2,
+          "recall": 0.0,
+          "scenario": "Scenario-33",
+          "terminal": "SUBMIT_DIAGNOSIS",
+          "tool_executions": 12,
+          "tool_requests": 12,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 3,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-34",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 15,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 4,
+          "precision": 0.0,
+          "predicted_entities": 1,
+          "recall": 0.0,
+          "scenario": "Scenario-35",
+          "terminal": "SUBMIT_DIAGNOSIS",
+          "tool_executions": 12,
+          "tool_requests": 12,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 4,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-38",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 15,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 3,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-80",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 13,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 3,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-81",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 16,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 4,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-83",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 19,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 3,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-91",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 17,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 4,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-102",
+          "terminal": "TOOL_CALL_LIMIT",
+          "tool_executions": 12,
+          "tool_requests": 17,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 5,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-105",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 11,
+          "tool_requests": 16,
+          "true_positive": 0
+        }
+      ],
+      "request_lengths": {
+        "count": 114,
+        "max": 8,
+        "mean": 4.5964912280701755,
+        "median": 4.0
+      },
+      "summary_statuses": {
+        "SKIPPED_DUPLICATE": 64,
+        "SUCCESS": 393,
+        "TOOL_EXECUTION_FAILURE": 17
+      },
+      "terminals": {
+        "MODEL_DECISION_INVALID": 6,
+        "STOP": 4,
+        "SUBMIT_DIAGNOSIS": 4,
+        "TOOL_CALL_LIMIT": 21
+      },
+      "totals": {
+        "diagnoses": 4,
+        "duplicates": 64,
+        "duration_ms": 1317240,
+        "entity_hits": 1,
+        "evidence": 393,
+        "evidence_producing_executions": 393,
+        "input_tokens": 1601206,
+        "outbound_attempts": 128,
+        "output_tokens": 26524,
+        "provider_calls": 128,
+        "provider_latency_ms": 422498,
+        "timeouts": 0,
+        "tool_executions": 410,
+        "tool_requests": 524,
+        "typed_failures": 17,
+        "zero_entity": 31
+      },
+      "validation_stages": {
+        "DECISION_SCHEMA": 5,
+        "EVIDENCE_REFERENCE": 1
+      }
+    }
+  },
+  "e5": {
+    "result_sha256": "6f212542f8e6bd0244a711c7b4b966ce059d2c5db3f35df0fe17cd706fe8b187",
+    "summary": {
+      "categories": {
+        "itbench_alert_summary": 2,
+        "itbench_entity_context": 30,
+        "itbench_entity_search": 13,
+        "itbench_kubernetes_events": 21,
+        "itbench_kubernetes_objects": 2,
+        "itbench_logs": 14,
+        "itbench_metric_analysis": 24,
+        "itbench_topology": 1,
+        "itbench_trace_search": 7
+      },
+      "per_scenario": [
+        {
+          "f1": 0.0,
+          "model_calls": 5,
+          "precision": 0.0,
+          "predicted_entities": 1,
+          "recall": 0.0,
+          "scenario": "Scenario-1",
+          "terminal": "SUBMIT_DIAGNOSIS",
+          "tool_executions": 11,
+          "tool_requests": 12,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 2,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-2",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 3,
+          "tool_requests": 3,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 1,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-4",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 0,
+          "tool_requests": 0,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 1,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-5",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 0,
+          "tool_requests": 0,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 1,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-6",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 0,
+          "tool_requests": 0,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 2,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-7",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 3,
+          "tool_requests": 3,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 1,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-8",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 0,
+          "tool_requests": 0,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 1,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-9",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 0,
+          "tool_requests": 0,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 1,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-11",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 0,
+          "tool_requests": 0,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 5,
+          "precision": 0.0,
+          "predicted_entities": 1,
+          "recall": 0.0,
+          "scenario": "Scenario-12",
+          "terminal": "SUBMIT_DIAGNOSIS",
+          "tool_executions": 12,
+          "tool_requests": 12,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 1,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-13",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 0,
+          "tool_requests": 0,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 2,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-14",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 3,
+          "tool_requests": 3,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 2,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-15",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 3,
+          "tool_requests": 3,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 5,
+          "precision": 0.0,
+          "predicted_entities": 3,
+          "recall": 0.0,
+          "scenario": "Scenario-16",
+          "terminal": "SUBMIT_DIAGNOSIS",
+          "tool_executions": 12,
+          "tool_requests": 12,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 5,
+          "precision": 0.0,
+          "predicted_entities": 1,
+          "recall": 0.0,
+          "scenario": "Scenario-17",
+          "terminal": "SUBMIT_DIAGNOSIS",
+          "tool_executions": 12,
+          "tool_requests": 12,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 2,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-18",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 3,
+          "tool_requests": 3,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 5,
+          "precision": 0.0,
+          "predicted_entities": 1,
+          "recall": 0.0,
+          "scenario": "Scenario-19",
+          "terminal": "SUBMIT_DIAGNOSIS",
+          "tool_executions": 11,
+          "tool_requests": 12,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 1,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-20",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 0,
+          "tool_requests": 0,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 2,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-21",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 3,
+          "tool_requests": 3,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 1,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-22",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 0,
+          "tool_requests": 0,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 3,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-23",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 6,
+          "tool_requests": 6,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 2,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-24",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 3,
+          "tool_requests": 3,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 1,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-25",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 0,
+          "tool_requests": 0,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 1,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-29",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 0,
+          "tool_requests": 0,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 1,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-31",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 0,
+          "tool_requests": 0,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 1,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-33",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 0,
+          "tool_requests": 0,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 1,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-34",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 0,
+          "tool_requests": 0,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 2,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-35",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 3,
+          "tool_requests": 3,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 3,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-38",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 6,
+          "tool_requests": 6,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 1,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-80",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 0,
+          "tool_requests": 0,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 2,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-81",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 3,
+          "tool_requests": 3,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 2,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-83",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 3,
+          "tool_requests": 3,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 5,
+          "precision": 0.0,
+          "predicted_entities": 2,
+          "recall": 0.0,
+          "scenario": "Scenario-91",
+          "terminal": "SUBMIT_DIAGNOSIS",
+          "tool_executions": 12,
+          "tool_requests": 12,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 1,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-102",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 0,
+          "tool_requests": 0,
+          "true_positive": 0
+        },
+        {
+          "f1": 0.0,
+          "model_calls": 1,
+          "precision": 0.0,
+          "predicted_entities": 0,
+          "recall": 0.0,
+          "scenario": "Scenario-105",
+          "terminal": "MODEL_DECISION_INVALID",
+          "tool_executions": 0,
+          "tool_requests": 0,
+          "true_positive": 0
+        }
+      ],
+      "request_lengths": {
+        "count": 38,
+        "max": 3,
+        "mean": 3,
+        "median": 3.0
+      },
+      "summary_statuses": {
+        "SKIPPED_DUPLICATE": 2,
+        "SUCCESS": 85,
+        "TOOL_EXECUTION_FAILURE": 27
+      },
+      "terminals": {
+        "MODEL_DECISION_INVALID": 29,
+        "SUBMIT_DIAGNOSIS": 6
+      },
+      "totals": {
+        "diagnoses": 6,
+        "duplicates": 2,
+        "duration_ms": 930708,
+        "entity_hits": 0,
+        "evidence": 85,
+        "evidence_producing_executions": 85,
+        "input_tokens": 830784,
+        "outbound_attempts": 73,
+        "output_tokens": 12772,
+        "provider_calls": 73,
+        "provider_latency_ms": 240844,
+        "timeouts": 19,
+        "tool_executions": 112,
+        "tool_requests": 114,
+        "typed_failures": 27,
+        "zero_entity": 29
+      },
+      "validation_stages": {
+        "DECISION_SCHEMA": 29
+      }
+    }
+  },
+  "macro": {
+    "e4": {
+      "f1": 0.019047619047619046,
+      "precision": 0.014285714285714285,
+      "recall": 0.02857142857142857,
+      "scenario_count": 35
+    },
+    "e5": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "scenario_count": 35
+    }
+  },
+  "note": "Post-run report derived from durable checkpoints; no investigator or provider calls.",
+  "official_evaluator": "NOT RUN; this report uses the corrected deterministic local scorer",
+  "scenario_comparison": [
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 3,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-1",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 16,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 5,
+        "precision": 0.0,
+        "predicted_entities": 1,
+        "recall": 0.0,
+        "scenario": "Scenario-1",
+        "terminal": "SUBMIT_DIAGNOSIS",
+        "tool_executions": 11,
+        "tool_requests": 12,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-1"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 3,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-2",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 15,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 2,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-2",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 3,
+        "tool_requests": 3,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-2"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 4,
+        "precision": 0.0,
+        "predicted_entities": 1,
+        "recall": 0.0,
+        "scenario": "Scenario-4",
+        "terminal": "SUBMIT_DIAGNOSIS",
+        "tool_executions": 12,
+        "tool_requests": 14,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 1,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-4",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 0,
+        "tool_requests": 0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-4"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 4,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-5",
+        "terminal": "STOP",
+        "tool_executions": 12,
+        "tool_requests": 12,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 1,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-5",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 0,
+        "tool_requests": 0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-5"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 4,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-6",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 12,
+        "tool_requests": 12,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 1,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-6",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 0,
+        "tool_requests": 0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-6"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 4,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-7",
+        "terminal": "STOP",
+        "tool_executions": 12,
+        "tool_requests": 12,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 2,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-7",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 3,
+        "tool_requests": 3,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-7"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 3,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-8",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 16,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 1,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-8",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 0,
+        "tool_requests": 0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-8"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 3,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-9",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 13,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 1,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-9",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 0,
+        "tool_requests": 0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-9"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 3,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-11",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 15,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 1,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-11",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 0,
+        "tool_requests": 0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-11"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 3,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-12",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 15,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 5,
+        "precision": 0.0,
+        "predicted_entities": 1,
+        "recall": 0.0,
+        "scenario": "Scenario-12",
+        "terminal": "SUBMIT_DIAGNOSIS",
+        "tool_executions": 12,
+        "tool_requests": 12,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-12"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 3,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-13",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 15,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 1,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-13",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 0,
+        "tool_requests": 0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-13"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 3,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-14",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 18,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 2,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-14",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 3,
+        "tool_requests": 3,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-14"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 4,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-15",
+        "terminal": "STOP",
+        "tool_executions": 12,
+        "tool_requests": 14,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 2,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-15",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 3,
+        "tool_requests": 3,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-15"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 4,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-16",
+        "terminal": "STOP",
+        "tool_executions": 12,
+        "tool_requests": 13,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 5,
+        "precision": 0.0,
+        "predicted_entities": 3,
+        "recall": 0.0,
+        "scenario": "Scenario-16",
+        "terminal": "SUBMIT_DIAGNOSIS",
+        "tool_executions": 12,
+        "tool_requests": 12,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-16"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 2,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-17",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 14,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 5,
+        "precision": 0.0,
+        "predicted_entities": 1,
+        "recall": 0.0,
+        "scenario": "Scenario-17",
+        "terminal": "SUBMIT_DIAGNOSIS",
+        "tool_executions": 12,
+        "tool_requests": 12,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-17"
+    },
+    {
+      "e4": {
+        "f1": 0.6666666666666666,
+        "model_calls": 5,
+        "precision": 0.5,
+        "predicted_entities": 2,
+        "recall": 1.0,
+        "scenario": "Scenario-18",
+        "terminal": "SUBMIT_DIAGNOSIS",
+        "tool_executions": 12,
+        "tool_requests": 15,
+        "true_positive": 1
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 2,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-18",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 3,
+        "tool_requests": 3,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-18"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 3,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-19",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 14,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 5,
+        "precision": 0.0,
+        "predicted_entities": 1,
+        "recall": 0.0,
+        "scenario": "Scenario-19",
+        "terminal": "SUBMIT_DIAGNOSIS",
+        "tool_executions": 11,
+        "tool_requests": 12,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-19"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 5,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-20",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 9,
+        "tool_requests": 18,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 1,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-20",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 0,
+        "tool_requests": 0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-20"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 5,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-21",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 11,
+        "tool_requests": 17,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 2,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-21",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 3,
+        "tool_requests": 3,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-21"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 5,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-22",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 8,
+        "tool_requests": 16,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 1,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-22",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 0,
+        "tool_requests": 0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-22"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 4,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-23",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 16,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 3,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-23",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 6,
+        "tool_requests": 6,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-23"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 5,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-24",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 11,
+        "tool_requests": 18,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 2,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-24",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 3,
+        "tool_requests": 3,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-24"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 3,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-25",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 13,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 1,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-25",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 0,
+        "tool_requests": 0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-25"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 3,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-29",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 13,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 1,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-29",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 0,
+        "tool_requests": 0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-29"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 4,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-31",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 18,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 1,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-31",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 0,
+        "tool_requests": 0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-31"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 3,
+        "precision": 0.0,
+        "predicted_entities": 2,
+        "recall": 0.0,
+        "scenario": "Scenario-33",
+        "terminal": "SUBMIT_DIAGNOSIS",
+        "tool_executions": 12,
+        "tool_requests": 12,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 1,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-33",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 0,
+        "tool_requests": 0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-33"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 3,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-34",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 15,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 1,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-34",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 0,
+        "tool_requests": 0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-34"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 4,
+        "precision": 0.0,
+        "predicted_entities": 1,
+        "recall": 0.0,
+        "scenario": "Scenario-35",
+        "terminal": "SUBMIT_DIAGNOSIS",
+        "tool_executions": 12,
+        "tool_requests": 12,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 2,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-35",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 3,
+        "tool_requests": 3,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-35"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 4,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-38",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 15,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 3,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-38",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 6,
+        "tool_requests": 6,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-38"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 3,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-80",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 13,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 1,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-80",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 0,
+        "tool_requests": 0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-80"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 3,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-81",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 16,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 2,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-81",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 3,
+        "tool_requests": 3,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-81"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 4,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-83",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 19,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 2,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-83",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 3,
+        "tool_requests": 3,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-83"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 3,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-91",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 17,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 5,
+        "precision": 0.0,
+        "predicted_entities": 2,
+        "recall": 0.0,
+        "scenario": "Scenario-91",
+        "terminal": "SUBMIT_DIAGNOSIS",
+        "tool_executions": 12,
+        "tool_requests": 12,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-91"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 4,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-102",
+        "terminal": "TOOL_CALL_LIMIT",
+        "tool_executions": 12,
+        "tool_requests": 17,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 1,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-102",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 0,
+        "tool_requests": 0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-102"
+    },
+    {
+      "e4": {
+        "f1": 0.0,
+        "model_calls": 5,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-105",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 11,
+        "tool_requests": 16,
+        "true_positive": 0
+      },
+      "e5": {
+        "f1": 0.0,
+        "model_calls": 1,
+        "precision": 0.0,
+        "predicted_entities": 0,
+        "recall": 0.0,
+        "scenario": "Scenario-105",
+        "terminal": "MODEL_DECISION_INVALID",
+        "tool_executions": 0,
+        "tool_requests": 0,
+        "true_positive": 0
+      },
+      "scenario": "Scenario-105"
+    }
+  ]
+}

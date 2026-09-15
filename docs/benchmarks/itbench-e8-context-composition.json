@@ -12,19 +12,19 @@
       "source_file_scans": 214
     },
     "candidate_shortlist": 10,
-    "context_chars": 9005,
+    "context_chars": 10590,
     "context_composition": {
-      "alert_digest": 18,
+      "alert_digest": 1567,
       "candidate_shortlist": 2713,
       "case_state": 195,
       "evidence": 2,
       "execution": 98,
       "incident": 221,
       "relevant_topology": 3962,
-      "tool_hints": 1580,
-      "total": 9005
+      "tool_hints": 1616,
+      "total": 10590
     },
-    "duration_ms": 11375,
+    "duration_ms": 11435,
     "observable_entities": 1013,
     "probe_status": {
       "entity_context": "PASS",
@@ -42,10 +42,10 @@
   "scenario_count": 35,
   "sections": {
     "alert_digest": {
-      "max": 4013,
-      "median": 2660,
-      "min": 18,
-      "p95": 3994
+      "max": 1567,
+      "median": 1313,
+      "min": 863,
+      "p95": 1531
     },
     "candidate_shortlist": {
       "max": 2750,
@@ -84,22 +84,22 @@
       "p95": 4062
     },
     "tool_hints": {
-      "max": 1580,
-      "median": 1580,
-      "min": 1580,
-      "p95": 1580
+      "max": 1616,
+      "median": 1616,
+      "min": 1616,
+      "p95": 1616
     },
     "total": {
-      "max": 13015,
-      "median": 11550,
-      "min": 8610,
-      "p95": 12845
+      "max": 10590,
+      "median": 10247,
+      "min": 9923,
+      "p95": 10504
     }
   },
   "total_chars": {
-    "max": 13015,
-    "median": 11550,
-    "min": 8610,
-    "p95": 12845
+    "max": 10590,
+    "median": 10247,
+    "min": 9923,
+    "p95": 10504
   }
 }

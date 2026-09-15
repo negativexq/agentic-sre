@@ -4,29 +4,29 @@
   "judge_calls": 0,
   "latency_ms": {
     "context": {
-      "max": 16.20204234495759,
-      "median": 8.389667142182589,
-      "p95": 15.898665878921747
+      "max": 16.59233309328556,
+      "median": 8.629666175693274,
+      "p95": 15.971249900758266
     },
     "entity_context": {
-      "max": 1513.7329171411693,
-      "median": 1120.2363329939544,
-      "p95": 1493.838292080909
+      "max": 1480.9966660104692,
+      "median": 1120.052833110094,
+      "p95": 1477.8627082705498
     },
     "logs": {
-      "max": 4922.675792127848,
-      "median": 1948.4875001944602,
-      "p95": 2576.531541068107
+      "max": 5291.910000145435,
+      "median": 2127.0210836082697,
+      "p95": 2811.2108330242336
     },
     "metrics": {
-      "max": 14364.503500051796,
-      "median": 8698.612791020423,
-      "p95": 13538.4958749637
+      "max": 14044.36545772478,
+      "median": 8675.729416776448,
+      "p95": 13403.48399989307
     },
     "traces": {
-      "max": 4955.374124925584,
-      "median": 2392.589333932847,
-      "p95": 4939.158707857132
+      "max": 5004.834208171815,
+      "median": 2402.641291730106,
+      "p95": 4833.533958066255
     }
   },
   "openai_calls": 0,
@@ -42,19 +42,19 @@
         "source_file_scans": 98
       },
       "candidate_shortlist": 10,
-      "context_chars": 11690,
+      "context_chars": 10355,
       "context_composition": {
-        "alert_digest": 2655,
+        "alert_digest": 1284,
         "candidate_shortlist": 2702,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 219,
         "relevant_topology": 4023,
-        "tool_hints": 1580,
-        "total": 11690
+        "tool_hints": 1616,
+        "total": 10355
       },
-      "duration_ms": 22483,
+      "duration_ms": 22625,
       "observable_entities": 1034,
       "probe_status": {
         "entity_context": "PASS",
@@ -78,19 +78,19 @@
         "source_file_scans": 84
       },
       "candidate_shortlist": 10,
-      "context_chars": 12302,
+      "context_chars": 10298,
       "context_composition": {
-        "alert_digest": 3349,
+        "alert_digest": 1309,
         "candidate_shortlist": 2649,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 219,
         "relevant_topology": 3994,
-        "tool_hints": 1580,
-        "total": 12302
+        "tool_hints": 1616,
+        "total": 10298
       },
-      "duration_ms": 14132,
+      "duration_ms": 14149,
       "observable_entities": 1040,
       "probe_status": {
         "entity_context": "PASS",
@@ -114,19 +114,19 @@
         "source_file_scans": 98
       },
       "candidate_shortlist": 10,
-      "context_chars": 11119,
+      "context_chars": 10230,
       "context_composition": {
-        "alert_digest": 2176,
+        "alert_digest": 1251,
         "candidate_shortlist": 2612,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 219,
         "relevant_topology": 4021,
-        "tool_hints": 1580,
-        "total": 11119
+        "tool_hints": 1616,
+        "total": 10230
       },
-      "duration_ms": 18457,
+      "duration_ms": 18417,
       "observable_entities": 1043,
       "probe_status": {
         "entity_context": "PASS",
@@ -150,19 +150,19 @@
         "source_file_scans": 90
       },
       "candidate_shortlist": 10,
-      "context_chars": 12336,
+      "context_chars": 10337,
       "context_composition": {
-        "alert_digest": 3372,
+        "alert_digest": 1337,
         "candidate_shortlist": 2589,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 219,
         "relevant_topology": 4065,
-        "tool_hints": 1580,
-        "total": 12336
+        "tool_hints": 1616,
+        "total": 10337
       },
-      "duration_ms": 17153,
+      "duration_ms": 16997,
       "observable_entities": 1043,
       "probe_status": {
         "entity_context": "PASS",
@@ -186,19 +186,19 @@
         "source_file_scans": 91
       },
       "candidate_shortlist": 10,
-      "context_chars": 11306,
+      "context_chars": 10191,
       "context_composition": {
-        "alert_digest": 2429,
+        "alert_digest": 1278,
         "candidate_shortlist": 2563,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 219,
         "relevant_topology": 4004,
-        "tool_hints": 1580,
-        "total": 11306
+        "tool_hints": 1616,
+        "total": 10191
       },
-      "duration_ms": 17378,
+      "duration_ms": 17788,
       "observable_entities": 1041,
       "probe_status": {
         "entity_context": "PASS",
@@ -222,19 +222,19 @@
         "source_file_scans": 90
       },
       "candidate_shortlist": 10,
-      "context_chars": 12322,
+      "context_chars": 10317,
       "context_composition": {
-        "alert_digest": 3354,
+        "alert_digest": 1313,
         "candidate_shortlist": 2694,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 219,
         "relevant_topology": 3964,
-        "tool_hints": 1580,
-        "total": 12322
+        "tool_hints": 1616,
+        "total": 10317
       },
-      "duration_ms": 13082,
+      "duration_ms": 13398,
       "observable_entities": 1034,
       "probe_status": {
         "entity_context": "PASS",
@@ -258,19 +258,19 @@
         "source_file_scans": 91
       },
       "candidate_shortlist": 10,
-      "context_chars": 11148,
+      "context_chars": 10259,
       "context_composition": {
-        "alert_digest": 2177,
+        "alert_digest": 1252,
         "candidate_shortlist": 2638,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 219,
         "relevant_topology": 4023,
-        "tool_hints": 1580,
-        "total": 11148
+        "tool_hints": 1616,
+        "total": 10259
       },
-      "duration_ms": 17641,
+      "duration_ms": 18155,
       "observable_entities": 1036,
       "probe_status": {
         "entity_context": "PASS",
@@ -294,19 +294,19 @@
         "source_file_scans": 90
       },
       "candidate_shortlist": 10,
-      "context_chars": 10925,
+      "context_chars": 10259,
       "context_composition": {
-        "alert_digest": 1940,
+        "alert_digest": 1238,
         "candidate_shortlist": 2613,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 219,
         "relevant_topology": 4062,
-        "tool_hints": 1580,
-        "total": 10925
+        "tool_hints": 1616,
+        "total": 10259
       },
-      "duration_ms": 14890,
+      "duration_ms": 15367,
       "observable_entities": 1038,
       "probe_status": {
         "entity_context": "PASS",
@@ -330,7 +330,7 @@
         "source_file_scans": 50
       },
       "candidate_shortlist": 10,
-      "context_chars": 9946,
+      "context_chars": 9982,
       "context_composition": {
         "alert_digest": 863,
         "candidate_shortlist": 2750,
@@ -339,10 +339,10 @@
         "execution": 98,
         "incident": 220,
         "relevant_topology": 4022,
-        "tool_hints": 1580,
-        "total": 9946
+        "tool_hints": 1616,
+        "total": 9982
       },
-      "duration_ms": 18291,
+      "duration_ms": 18674,
       "observable_entities": 1010,
       "probe_status": {
         "entity_context": "PASS",
@@ -366,19 +366,19 @@
         "source_file_scans": 97
       },
       "candidate_shortlist": 10,
-      "context_chars": 10898,
+      "context_chars": 10233,
       "context_composition": {
-        "alert_digest": 1894,
+        "alert_digest": 1193,
         "candidate_shortlist": 2720,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 3973,
-        "tool_hints": 1580,
-        "total": 10898
+        "tool_hints": 1616,
+        "total": 10233
       },
-      "duration_ms": 18035,
+      "duration_ms": 18468,
       "observable_entities": 1050,
       "probe_status": {
         "entity_context": "PASS",
@@ -402,19 +402,19 @@
         "source_file_scans": 89
       },
       "candidate_shortlist": 10,
-      "context_chars": 12172,
+      "context_chars": 10171,
       "context_composition": {
-        "alert_digest": 3344,
+        "alert_digest": 1307,
         "candidate_shortlist": 2571,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 3946,
-        "tool_hints": 1580,
-        "total": 12172
+        "tool_hints": 1616,
+        "total": 10171
       },
-      "duration_ms": 15820,
+      "duration_ms": 16078,
       "observable_entities": 1032,
       "probe_status": {
         "entity_context": "PASS",
@@ -438,19 +438,19 @@
         "source_file_scans": 88
       },
       "candidate_shortlist": 10,
-      "context_chars": 11482,
+      "context_chars": 10144,
       "context_composition": {
-        "alert_digest": 2619,
+        "alert_digest": 1245,
         "candidate_shortlist": 2597,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 3955,
-        "tool_hints": 1580,
-        "total": 11482
+        "tool_hints": 1616,
+        "total": 10144
       },
-      "duration_ms": 13865,
+      "duration_ms": 14266,
       "observable_entities": 1048,
       "probe_status": {
         "entity_context": "PASS",
@@ -474,19 +474,19 @@
         "source_file_scans": 88
       },
       "candidate_shortlist": 10,
-      "context_chars": 13015,
+      "context_chars": 10391,
       "context_composition": {
-        "alert_digest": 4013,
+        "alert_digest": 1353,
         "candidate_shortlist": 2639,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 4052,
-        "tool_hints": 1580,
-        "total": 13015
+        "tool_hints": 1616,
+        "total": 10391
       },
-      "duration_ms": 12865,
+      "duration_ms": 13218,
       "observable_entities": 1047,
       "probe_status": {
         "entity_context": "PASS",
@@ -510,19 +510,19 @@
         "source_file_scans": 94
       },
       "candidate_shortlist": 10,
-      "context_chars": 12845,
+      "context_chars": 10266,
       "context_composition": {
-        "alert_digest": 3994,
+        "alert_digest": 1379,
         "candidate_shortlist": 2570,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 3970,
-        "tool_hints": 1580,
-        "total": 12845
+        "tool_hints": 1616,
+        "total": 10266
       },
-      "duration_ms": 20444,
+      "duration_ms": 20821,
       "observable_entities": 1034,
       "probe_status": {
         "entity_context": "PASS",
@@ -546,19 +546,19 @@
         "source_file_scans": 87
       },
       "candidate_shortlist": 10,
-      "context_chars": 12807,
+      "context_chars": 10358,
       "context_composition": {
-        "alert_digest": 3863,
+        "alert_digest": 1378,
         "candidate_shortlist": 2616,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 4017,
-        "tool_hints": 1580,
-        "total": 12807
+        "tool_hints": 1616,
+        "total": 10358
       },
-      "duration_ms": 19988,
+      "duration_ms": 20291,
       "observable_entities": 1517,
       "probe_status": {
         "entity_context": "PASS",
@@ -582,19 +582,19 @@
         "source_file_scans": 85
       },
       "candidate_shortlist": 10,
-      "context_chars": 8610,
+      "context_chars": 10122,
       "context_composition": {
-        "alert_digest": 18,
+        "alert_digest": 1494,
         "candidate_shortlist": 2308,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 3973,
-        "tool_hints": 1580,
-        "total": 8610
+        "tool_hints": 1616,
+        "total": 10122
       },
-      "duration_ms": 15149,
+      "duration_ms": 15221,
       "observable_entities": 1452,
       "probe_status": {
         "entity_context": "PASS",
@@ -618,19 +618,19 @@
         "source_file_scans": 90
       },
       "candidate_shortlist": 10,
-      "context_chars": 12482,
+      "context_chars": 10258,
       "context_composition": {
-        "alert_digest": 3553,
+        "alert_digest": 1293,
         "candidate_shortlist": 2580,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 4038,
-        "tool_hints": 1580,
-        "total": 12482
+        "tool_hints": 1616,
+        "total": 10258
       },
-      "duration_ms": 21207,
+      "duration_ms": 21626,
       "observable_entities": 1701,
       "probe_status": {
         "entity_context": "PASS",
@@ -654,19 +654,19 @@
         "source_file_scans": 222
       },
       "candidate_shortlist": 10,
-      "context_chars": 8685,
+      "context_chars": 10229,
       "context_composition": {
-        "alert_digest": 18,
+        "alert_digest": 1526,
         "candidate_shortlist": 2342,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 4014,
-        "tool_hints": 1580,
-        "total": 8685
+        "tool_hints": 1616,
+        "total": 10229
       },
-      "duration_ms": 17115,
+      "duration_ms": 17426,
       "observable_entities": 1023,
       "probe_status": {
         "entity_context": "PASS",
@@ -690,19 +690,19 @@
         "source_file_scans": 87
       },
       "candidate_shortlist": 10,
-      "context_chars": 12576,
+      "context_chars": 10247,
       "context_composition": {
-        "alert_digest": 3759,
+        "alert_digest": 1394,
         "candidate_shortlist": 2558,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 3948,
-        "tool_hints": 1580,
-        "total": 12576
+        "tool_hints": 1616,
+        "total": 10247
       },
-      "duration_ms": 14228,
+      "duration_ms": 14587,
       "observable_entities": 1604,
       "probe_status": {
         "entity_context": "PASS",
@@ -726,19 +726,19 @@
         "source_file_scans": 87
       },
       "candidate_shortlist": 10,
-      "context_chars": 11821,
+      "context_chars": 10232,
       "context_composition": {
-        "alert_digest": 3014,
+        "alert_digest": 1389,
         "candidate_shortlist": 2554,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 3942,
-        "tool_hints": 1580,
-        "total": 11821
+        "tool_hints": 1616,
+        "total": 10232
       },
-      "duration_ms": 17751,
+      "duration_ms": 18219,
       "observable_entities": 1717,
       "probe_status": {
         "entity_context": "PASS",
@@ -762,19 +762,19 @@
         "source_file_scans": 87
       },
       "candidate_shortlist": 10,
-      "context_chars": 8810,
+      "context_chars": 10322,
       "context_composition": {
-        "alert_digest": 18,
+        "alert_digest": 1494,
         "candidate_shortlist": 2571,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 3910,
-        "tool_hints": 1580,
-        "total": 8810
+        "tool_hints": 1616,
+        "total": 10322
       },
-      "duration_ms": 14496,
+      "duration_ms": 14873,
       "observable_entities": 1051,
       "probe_status": {
         "entity_context": "PASS",
@@ -798,19 +798,19 @@
         "source_file_scans": 214
       },
       "candidate_shortlist": 10,
-      "context_chars": 8955,
+      "context_chars": 10504,
       "context_composition": {
-        "alert_digest": 18,
+        "alert_digest": 1531,
         "candidate_shortlist": 2648,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 3978,
-        "tool_hints": 1580,
-        "total": 8955
+        "tool_hints": 1616,
+        "total": 10504
       },
-      "duration_ms": 13547,
+      "duration_ms": 13801,
       "observable_entities": 1015,
       "probe_status": {
         "entity_context": "PASS",
@@ -834,19 +834,19 @@
         "source_file_scans": 87
       },
       "candidate_shortlist": 10,
-      "context_chars": 11258,
+      "context_chars": 9923,
       "context_composition": {
-        "alert_digest": 2682,
+        "alert_digest": 1311,
         "candidate_shortlist": 2308,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 3957,
-        "tool_hints": 1580,
-        "total": 11258
+        "tool_hints": 1616,
+        "total": 9923
       },
-      "duration_ms": 20838,
+      "duration_ms": 21138,
       "observable_entities": 1409,
       "probe_status": {
         "entity_context": "PASS",
@@ -870,19 +870,19 @@
         "source_file_scans": 85
       },
       "candidate_shortlist": 10,
-      "context_chars": 11600,
+      "context_chars": 10039,
       "context_composition": {
-        "alert_digest": 2889,
+        "alert_digest": 1292,
         "candidate_shortlist": 2376,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 4024,
-        "tool_hints": 1580,
-        "total": 11600
+        "tool_hints": 1616,
+        "total": 10039
       },
-      "duration_ms": 15952,
+      "duration_ms": 16342,
       "observable_entities": 1530,
       "probe_status": {
         "entity_context": "PASS",
@@ -906,19 +906,19 @@
         "source_file_scans": 87
       },
       "candidate_shortlist": 10,
-      "context_chars": 10897,
+      "context_chars": 10233,
       "context_composition": {
-        "alert_digest": 1940,
+        "alert_digest": 1240,
         "candidate_shortlist": 2652,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 3994,
-        "tool_hints": 1580,
-        "total": 10897
+        "tool_hints": 1616,
+        "total": 10233
       },
-      "duration_ms": 15473,
+      "duration_ms": 15781,
       "observable_entities": 1027,
       "probe_status": {
         "entity_context": "PASS",
@@ -942,19 +942,19 @@
         "source_file_scans": 89
       },
       "candidate_shortlist": 10,
-      "context_chars": 11556,
+      "context_chars": 10221,
       "context_composition": {
-        "alert_digest": 2660,
+        "alert_digest": 1289,
         "candidate_shortlist": 2588,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 3997,
-        "tool_hints": 1580,
-        "total": 11556
+        "tool_hints": 1616,
+        "total": 10221
       },
-      "duration_ms": 16366,
+      "duration_ms": 16792,
       "observable_entities": 1026,
       "probe_status": {
         "entity_context": "PASS",
@@ -978,19 +978,19 @@
         "source_file_scans": 84
       },
       "candidate_shortlist": 10,
-      "context_chars": 8915,
+      "context_chars": 10326,
       "context_composition": {
-        "alert_digest": 18,
+        "alert_digest": 1393,
         "candidate_shortlist": 2649,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 3937,
-        "tool_hints": 1580,
-        "total": 8915
+        "tool_hints": 1616,
+        "total": 10326
       },
-      "duration_ms": 15323,
+      "duration_ms": 15577,
       "observable_entities": 1033,
       "probe_status": {
         "entity_context": "PASS",
@@ -1014,19 +1014,19 @@
         "source_file_scans": 83
       },
       "candidate_shortlist": 10,
-      "context_chars": 11171,
+      "context_chars": 10055,
       "context_composition": {
-        "alert_digest": 2418,
+        "alert_digest": 1266,
         "candidate_shortlist": 2457,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 3985,
-        "tool_hints": 1580,
-        "total": 11171
+        "tool_hints": 1616,
+        "total": 10055
       },
-      "duration_ms": 13608,
+      "duration_ms": 14142,
       "observable_entities": 1491,
       "probe_status": {
         "entity_context": "PASS",
@@ -1050,19 +1050,19 @@
         "source_file_scans": 216
       },
       "candidate_shortlist": 10,
-      "context_chars": 8951,
+      "context_chars": 10349,
       "context_composition": {
-        "alert_digest": 18,
+        "alert_digest": 1380,
         "candidate_shortlist": 2606,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 4016,
-        "tool_hints": 1580,
-        "total": 8951
+        "tool_hints": 1616,
+        "total": 10349
       },
-      "duration_ms": 17346,
+      "duration_ms": 17468,
       "observable_entities": 1713,
       "probe_status": {
         "entity_context": "PASS",
@@ -1086,19 +1086,19 @@
         "source_file_scans": 88
       },
       "candidate_shortlist": 10,
-      "context_chars": 12215,
+      "context_chars": 10207,
       "context_composition": {
-        "alert_digest": 3368,
+        "alert_digest": 1324,
         "candidate_shortlist": 2556,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 3980,
-        "tool_hints": 1580,
-        "total": 12215
+        "tool_hints": 1616,
+        "total": 10207
       },
-      "duration_ms": 17331,
+      "duration_ms": 17568,
       "observable_entities": 1654,
       "probe_status": {
         "entity_context": "PASS",
@@ -1122,19 +1122,19 @@
         "source_file_scans": 85
       },
       "candidate_shortlist": 10,
-      "context_chars": 12041,
+      "context_chars": 10054,
       "context_composition": {
-        "alert_digest": 3270,
+        "alert_digest": 1247,
         "candidate_shortlist": 2431,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 4029,
-        "tool_hints": 1580,
-        "total": 12041
+        "tool_hints": 1616,
+        "total": 10054
       },
-      "duration_ms": 13763,
+      "duration_ms": 14185,
       "observable_entities": 1779,
       "probe_status": {
         "entity_context": "PASS",
@@ -1158,19 +1158,19 @@
         "source_file_scans": 85
       },
       "candidate_shortlist": 10,
-      "context_chars": 12080,
+      "context_chars": 10316,
       "context_composition": {
-        "alert_digest": 3131,
+        "alert_digest": 1331,
         "candidate_shortlist": 2628,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 4010,
-        "tool_hints": 1580,
-        "total": 12080
+        "tool_hints": 1616,
+        "total": 10316
       },
-      "duration_ms": 17051,
+      "duration_ms": 17621,
       "observable_entities": 1630,
       "probe_status": {
         "entity_context": "PASS",
@@ -1194,19 +1194,19 @@
         "source_file_scans": 88
       },
       "candidate_shortlist": 10,
-      "context_chars": 11550,
+      "context_chars": 9995,
       "context_composition": {
-        "alert_digest": 2912,
+        "alert_digest": 1321,
         "candidate_shortlist": 2376,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 220,
         "relevant_topology": 3951,
-        "tool_hints": 1580,
-        "total": 11550
+        "tool_hints": 1616,
+        "total": 9995
       },
-      "duration_ms": 23995,
+      "duration_ms": 24063,
       "observable_entities": 1955,
       "probe_status": {
         "entity_context": "PASS",
@@ -1230,19 +1230,19 @@
         "source_file_scans": 211
       },
       "candidate_shortlist": 10,
-      "context_chars": 12776,
+      "context_chars": 10422,
       "context_composition": {
-        "alert_digest": 3821,
+        "alert_digest": 1431,
         "candidate_shortlist": 2649,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 221,
         "relevant_topology": 3994,
-        "tool_hints": 1580,
-        "total": 12776
+        "tool_hints": 1616,
+        "total": 10422
       },
-      "duration_ms": 12407,
+      "duration_ms": 12466,
       "observable_entities": 1003,
       "probe_status": {
         "entity_context": "PASS",
@@ -1266,19 +1266,19 @@
         "source_file_scans": 214
       },
       "candidate_shortlist": 10,
-      "context_chars": 9005,
+      "context_chars": 10590,
       "context_composition": {
-        "alert_digest": 18,
+        "alert_digest": 1567,
         "candidate_shortlist": 2713,
         "case_state": 195,
         "evidence": 2,
         "execution": 98,
         "incident": 221,
         "relevant_topology": 3962,
-        "tool_hints": 1580,
-        "total": 9005
+        "tool_hints": 1616,
+        "total": 10590
       },
-      "duration_ms": 11375,
+      "duration_ms": 11435,
       "observable_entities": 1013,
       "probe_status": {
         "entity_context": "PASS",

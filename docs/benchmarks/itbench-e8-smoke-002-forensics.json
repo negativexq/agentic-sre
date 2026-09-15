@@ -1,0 +1,17 @@
+{
+  "execution": "ITB-E8",
+  "smoke_id": "ITB-E8-SMOKE-002",
+  "status": "POST_HOC_DURABLE_ARTIFACT_AUDIT",
+  "official_scenarios_executed": 0,
+  "durable_smoke_artifact_present": false,
+  "turns": "NOT_DURABLY_RECORDED",
+  "decisions": "NOT_DURABLY_RECORDED",
+  "tool_requests": "NOT_DURABLY_RECORDED",
+  "candidate_updates": "NOT_DURABLY_RECORDED",
+  "evidence_generated": "NOT_DURABLY_RECORDED",
+  "context_metrics": "NOT_DURABLY_RECORDED",
+  "input_tokens": "NOT_DURABLY_RECORDED",
+  "root_cause": "The runner persisted the smoke artifact only after the runtime returned. The fifth call was blocked by the depleted ledger, so no native artifact or turn trace was durably written.",
+  "ground_truth_access": false,
+  "network_calls_during_forensics": 0
+}

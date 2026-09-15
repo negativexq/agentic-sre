@@ -89,6 +89,8 @@ class ITBenchSnapshotBackend:
         entity = arguments.get("entity")
         severity = arguments.get("severity")
         status = arguments.get("status")
+        reason = arguments.get("reason")
+        event_type = arguments.get("type")
         limit = arguments.get("limit", self.max_rows)
         if not isinstance(limit, int) or not 1 <= limit <= self.max_rows:
             raise ValueError("limit must be within the bounded snapshot query limit")
@@ -110,6 +112,8 @@ class ITBenchSnapshotBackend:
                 entity=entity,
                 severity=severity,
                 status=status,
+                reason=reason,
+                event_type=event_type,
             ):
                 matching_count += 1
                 if len(selected) < limit:
@@ -158,11 +162,10 @@ class ITBenchSnapshotBackend:
                 related_alerts.append(alert)
         # Keep the semantic pack bounded; focused telemetry remains available
         # through dedicated tools instead of triggering three full scans here.
-        metric_anomalies: dict[str, Any] = {}
-        if parsed.kind.casefold() in {"service", "pod"}:
-            metric_anomalies = self.metric_analysis(
-                {"namespace": parsed.namespace, "service": parsed.name, "limit": min(limit, 10)}
-            ).get("aggregates_by_metric", {})
+        metric_anomalies: dict[str, Any] = {
+            "data_available": "not_scanned",
+            "query_scope": "dedicated_metric_analysis",
+        }
         log_summary = (
             self._sample_log_summary(parsed, min(limit, 8))
             if include_telemetry
@@ -1055,17 +1058,41 @@ def _matches(
     entity: Any = None,
     severity: Any = None,
     status: Any = None,
+    reason: Any = None,
+    event_type: Any = None,
 ) -> bool:
     record = item.get("record")
     if not any(
         isinstance(value, str)
-        for value in (pattern, service, namespace, trace_id, entity, severity, status)
+        for value in (
+            pattern,
+            service,
+            namespace,
+            trace_id,
+            entity,
+            severity,
+            status,
+            reason,
+            event_type,
+        )
     ):
         return True
     if isinstance(trace_id, str):
         if not isinstance(record, dict) or str(record.get("TraceId", "")) != trace_id:
             return False
     if isinstance(record, dict):
+        body = _json_object(record.get("Body")) or {}
+        semantic_record = {**body, **record} if isinstance(body, dict) else record
+        if (
+            isinstance(reason, str)
+            and reason.casefold() != str(semantic_record.get("reason", "")).casefold()
+        ):
+            return False
+        if (
+            isinstance(event_type, str)
+            and event_type.casefold() != str(semantic_record.get("type", "")).casefold()
+        ):
+            return False
         if isinstance(severity, str):
             actual = str(record.get("SeverityText", record.get("severity", "")))
             if actual and actual.casefold() != severity.casefold():

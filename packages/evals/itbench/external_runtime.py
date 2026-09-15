@@ -221,8 +221,8 @@ class ExternalInvestigationRuntime:
             "budget": {
                 "model_calls_used": 0,
                 "model_calls_remaining": self.limits.max_model_calls,
-                "backend_operations_used": 0,
-                "backend_operations_remaining": self.limits.max_tool_calls,
+                "semantic_tool_executions_used": 0,
+                "semantic_tool_executions_remaining": self.limits.max_tool_calls,
             },
         }
         history: dict[str, ToolObservationHistory] = {}
@@ -241,6 +241,8 @@ class ExternalInvestigationRuntime:
         output_tokens_total = 0
         provider_latency_ms_total = 0
         context_metrics: list[dict[str, Any]] = []
+        submitted_entities: list[str] = []
+        submitted_evidence_refs: list[str] = []
         accounting_reader = getattr(self.provider, "accounting_snapshot", None)
         accounting_before = accounting_reader() if callable(accounting_reader) else None
         validation_stage: str | None = None
@@ -480,11 +482,9 @@ class ExternalInvestigationRuntime:
                         case_state["query_redundancy"]["zero_result_requests"] += 1
                     candidate = canonical.get("entity")
                     if isinstance(candidate, str):
-                        if candidate not in case_state["active_candidates"]:
-                            case_state["active_candidates"].append(candidate)
-                        case_state["evidence_by_candidate"].setdefault(candidate, []).append(handle)
-                    case_state["budget"]["backend_operations_used"] = tool_calls
-                    case_state["budget"]["backend_operations_remaining"] = max(
+                        _associate_candidate_evidence(case_state, candidate, handle)
+                    case_state["budget"]["semantic_tool_executions_used"] = tool_calls
+                    case_state["budget"]["semantic_tool_executions_remaining"] = max(
                         self.limits.max_tool_calls - tool_calls, 0
                     )
                     if registered.name == "itbench_entity_context" and isinstance(
@@ -606,6 +606,8 @@ class ExternalInvestigationRuntime:
                     break
                 else:
                     terminal = "SUBMIT_DIAGNOSIS"
+                    submitted_entities = [item.entity for item in decision.root_causes]
+                    submitted_evidence_refs = list(dict.fromkeys(references))
                 turns.append(
                     {
                         "turn": turn,
@@ -613,6 +615,9 @@ class ExternalInvestigationRuntime:
                         if terminal == "MODEL_DECISION_INVALID"
                         else decision.decision.value,
                         "root_cause_count": len(decision.root_causes),
+                        "submitted_entities": submitted_entities,
+                        "submitted_evidence_refs": submitted_evidence_refs,
+                        "case_state": deepcopy(case_state),
                     }
                 )
                 break
@@ -658,6 +663,8 @@ class ExternalInvestigationRuntime:
                 "subsumed_duplicate_requests"
             ],
             "zero_result_requests": case_state["query_redundancy"]["zero_result_requests"],
+            "submitted_entities": submitted_entities,
+            "submitted_evidence_refs": submitted_evidence_refs,
             "provider": getattr(self.provider, "provider_name", "unknown"),
             "model": self.model,
             "reasoning_effort": self.reasoning_effort,
@@ -698,6 +705,34 @@ def _validation_diagnostic(error: ValidationError) -> tuple[str, str]:
     location = first.get("loc", ())
     path = "$" + "".join(f"[{item}]" if isinstance(item, int) else f".{item}" for item in location)
     return path, str(first.get("type", "validation_error"))
+
+
+def _associate_candidate_evidence(
+    case_state: dict[str, Any], entity: str, evidence_ref: str
+) -> None:
+    """Attach evidence without bypassing candidate-state invariants."""
+    statuses = {
+        key: case_state.setdefault(key, [])
+        for key in ("active_candidates", "supported_candidates", "rejected_candidates")
+    }
+    if (
+        entity not in statuses["rejected_candidates"]
+        and entity not in statuses["supported_candidates"]
+    ):
+        if entity not in statuses["active_candidates"]:
+            if len(statuses["active_candidates"]) >= 3:
+                case_state.setdefault("candidate_association_skips", []).append(
+                    {
+                        "entity": entity,
+                        "reason": "ACTIVE_CANDIDATE_LIMIT",
+                        "evidence_ref": evidence_ref,
+                    }
+                )
+            else:
+                statuses["active_candidates"].append(entity)
+    bucket = case_state.setdefault("evidence_by_candidate", {}).setdefault(entity, [])
+    if evidence_ref not in bucket:
+        bucket.append(evidence_ref)
 
 
 def _apply_candidate_updates(
@@ -881,10 +916,71 @@ def _format_external_observation(
                 items.append(item)
             packed[key] = {"items": items, "source_count": len(value), "truncated": True}
         elif isinstance(value, dict):
-            packed[key] = {"summary": value, "section_truncated": True}
+            packed[key] = _pack_semantic_dict(value, budget)
         else:
             packed[key] = {"value": str(value)[: max(1, budget - 40)], "section_truncated": True}
     return json.dumps(packed, ensure_ascii=False, separators=(",", ":"), default=str)
+
+
+def _pack_semantic_dict(value: dict[str, Any], budget: int) -> dict[str, Any]:
+    """Bound dictionary evidence without re-embedding the oversized source."""
+    selected: dict[str, Any] = {}
+    for key, item in value.items():
+        child_budget = max(48, min(900, budget // max(1, len(value))))
+        encoded = json.dumps(item, ensure_ascii=False, separators=(",", ":"), default=str)
+        if len(encoded) > child_budget:
+            if isinstance(item, dict):
+                item = _pack_semantic_dict(item, child_budget)
+            elif isinstance(item, list):
+                item = _pack_semantic_list(item, child_budget)
+            else:
+                item = str(item)[: max(1, child_budget - 2)]
+        candidate = {
+            "items": {**selected, str(key): item},
+            "source_key_count": len(value),
+            "returned_key_count": len(selected) + 1,
+            "section_truncated": True,
+        }
+        if (
+            len(json.dumps(candidate, ensure_ascii=False, separators=(",", ":"), default=str))
+            <= budget
+        ):
+            selected[str(key)] = item
+    return {
+        "items": selected,
+        "source_key_count": len(value),
+        "returned_key_count": len(selected),
+        "section_truncated": len(selected) < len(value),
+    }
+
+
+def _pack_semantic_list(value: list[Any], budget: int) -> dict[str, Any]:
+    """Bound list evidence while keeping the first semantic items."""
+    selected: list[Any] = []
+    for item in value:
+        child_budget = max(48, budget // max(1, len(value)))
+        if isinstance(item, dict):
+            item = _pack_semantic_dict(item, child_budget)
+        elif isinstance(item, list):
+            item = _pack_semantic_list(item, child_budget)
+        candidate = {
+            "items": [*selected, item],
+            "source_count": len(value),
+            "returned_count": len(selected) + 1,
+            "truncated": True,
+        }
+        if (
+            len(json.dumps(candidate, ensure_ascii=False, separators=(",", ":"), default=str))
+            > budget
+        ):
+            break
+        selected.append(item)
+    return {
+        "items": selected,
+        "source_count": len(value),
+        "returned_count": len(selected),
+        "truncated": len(selected) < len(value),
+    }
 
 
 __all__ = [

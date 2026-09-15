@@ -47,14 +47,14 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA_ROOT = ROOT / ".local/itbench-lite"
 RUN_ROOT = ROOT / ".local/itbench-lite-e8-runs"
 OFFICIAL_ROOT = RUN_ROOT / "official"
-SMOKE_ID = "ITB-E8-SMOKE-002"
+SMOKE_ID = "ITB-E8-SMOKE-003"
 SMOKE_ROOT = RUN_ROOT / SMOKE_ID / "smoke"
-SMOKE_RESULT = ROOT / "docs/benchmarks/itbench-e8-live-smoke-002.json"
+SMOKE_RESULT = ROOT / "docs/benchmarks/itbench-e8-live-smoke-003.json"
 OFFICIAL_PARTIAL = ROOT / "docs/benchmarks/itbench-e8-official-partial.json"
 OFFICIAL_RESULT = ROOT / "docs/benchmarks/itbench-e8-results.json"
 OFFICIAL_RESULT_SHA = ROOT / "docs/benchmarks/itbench-e8-results.sha256"
 MANIFEST = ROOT / "docs/benchmarks/itbench-lite-e8-manifest.json"
-SMOKE_LEDGER = ROOT / ".local/itbench-lite-e8-smoke-budget.json"
+SMOKE_LEDGER = ROOT / ".local/itbench-lite-e8-smoke-003-budget.json"
 OFFICIAL_LEDGER = ROOT / ".local/itbench-lite-e8-official-budget.json"
 EXECUTION = "ITB-E8"
 EXPERIMENT = "itbench-lite-sre-external-eval-v8"
@@ -225,12 +225,7 @@ def _process_metrics(
     result: ITBenchExternalResult, backend: ITBenchSnapshotBackend
 ) -> dict[str, Any]:
     summaries = [summary for turn in result.turns for summary in turn.get("summaries", [])]
-    cited = {
-        ref
-        for turn in result.turns
-        for ref in turn.get("evidence_refs", [])
-        if isinstance(ref, str)
-    }
+    cited = {ref for ref in result.usage.get("submitted_evidence_refs", []) if isinstance(ref, str)}
     return {
         "model_decision_turns": len(result.turns),
         "semantic_tool_requests": result.usage.get("semantic_tool_requests", 0),
@@ -238,6 +233,8 @@ def _process_metrics(
         "backend_source_operations": backend.performance_snapshot(),
         "evidence_producing_executions": len(result.evidence),
         "evidence_cited_refs": sorted(cited),
+        "evidence_citation_rate": len(cited) / len(result.evidence) if result.evidence else 0.0,
+        "unused_evidence_count": max(len(result.evidence) - len(cited), 0),
         "exact_duplicate_requests": result.usage.get("exact_duplicate_requests", 0),
         "subsumed_duplicate_requests": result.usage.get("subsumed_duplicate_requests", 0),
         "zero_result_requests": result.usage.get("zero_result_requests", 0),
@@ -367,10 +364,9 @@ def run_smoke() -> int:
     preflight = _preflight_context(ITBenchLiteDataset.open(DATA_ROOT), manifest)
     budget = LiveModelBudget(5, ledger_path=str(SMOKE_LEDGER))
     current = budget.snapshot()
-    if current.calls_used != 1:
-        raise RuntimeError("E8 smoke ledger must preserve exactly one failed pre-repair attempt")
-    if current.calls_remaining < 1:
-        raise RuntimeError("E8 smoke ledger has no capacity for the repaired smoke")
+    budget.ensure_capacity(LIMITS.max_model_calls)
+    if current.calls_used != 0 or current.calls_remaining < LIMITS.max_model_calls:
+        raise RuntimeError("E8 Smoke-003 requires a fresh full worst-case call budget")
     provider = OpenAIProvider(budget=budget, max_retry=0)
     smoke = _persist_smoke(provider, manifest)
     smoke["preflight"] = preflight
@@ -378,7 +374,7 @@ def run_smoke() -> int:
         "cap": budget.snapshot().limit,
         "consumed": budget.snapshot().calls_used,
         "remaining": budget.snapshot().calls_remaining,
-        "historical_failed_attempts": 1,
+        "historical_smoke_attempts_preserved_elsewhere": 5,
     }
     atomic_json_write(SMOKE_RESULT, smoke)
     print(json.dumps({"status": "ITB_E8_SMOKE_PASS", "attempts": smoke["outbound_attempts"]}))

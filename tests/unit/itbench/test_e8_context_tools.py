@@ -13,8 +13,13 @@ from packages.evals.itbench import (
     build_external_context_v3,
 )
 from packages.evals.itbench.contracts import ITBenchEvidenceCategory
+from packages.evals.itbench.external_context import _fit_alert_digest
 from packages.evals.itbench.external_contracts import ITBENCH_EXTERNAL_PROTOCOL_V4
-from packages.evals.itbench.external_runtime import ExternalInvestigationRuntime
+from packages.evals.itbench.external_runtime import (
+    ExternalInvestigationRuntime,
+    _associate_candidate_evidence,
+    _format_external_observation,
+)
 from packages.evals.itbench.incident import build_observable_incident
 from packages.evals.itbench.snapshot_backend import ITBenchSnapshotBackend
 from packages.investigation.contracts import InvestigationLimits
@@ -140,6 +145,99 @@ def test_v4_public_filters_are_semantic_and_contains_is_literal(tmp_path: Path) 
     assert logs["matching_count"] == 1
     regex_like = registry.invoke("itbench_logs", {"contains": "timeout|error", "limit": 10})
     assert regex_like["matching_count"] == 0
+
+
+def test_v4_typed_filters_reach_backend_semantics(tmp_path: Path) -> None:
+    backend = _backend(tmp_path)
+    registry = ITBenchExternalToolRegistry(backend, contract_version="v4")
+
+    service = registry.invoke("itbench_logs", {"service": "frontend", "limit": 10})
+    assert service["matching_count"] == 1
+    assert (
+        registry.invoke("itbench_logs", {"service": "payments", "limit": 10})["matching_count"] == 0
+    )
+
+    alias = registry.invoke("itbench_alert_summary", {"service": "frontend", "limit": 10})
+    assert alias["returned_count"] == 1
+    assert (
+        registry.invoke("itbench_alert_summary", {"service": "payments", "limit": 10})[
+            "returned_count"
+        ]
+        == 0
+    )
+
+    events = registry.invoke(
+        "itbench_kubernetes_events", {"reason": "ConfigError", "type": "Warning", "limit": 5}
+    )
+    assert events["matching_count"] == 1
+    assert (
+        registry.invoke(
+            "itbench_kubernetes_events", {"reason": "Other", "type": "Warning", "limit": 5}
+        )["matching_count"]
+        == 0
+    )
+
+
+def test_alert_digest_semantic_packing_preserves_each_priority_section() -> None:
+    digest = {
+        "high_signal_alerts": [
+            {"alertname": f"signal-{index}", "message": "x" * 240} for index in range(20)
+        ],
+        "affected_services": [f"service-{index}" for index in range(20)],
+        "affected_namespaces": [f"namespace-{index}" for index in range(20)],
+        "alert_counts_by_name": {f"alert-{index}": index + 1 for index in range(20)},
+        "background": {f"background-{index}": index + 1 for index in range(20)},
+    }
+    packed = _fit_alert_digest(digest, 1_000)
+    encoded = json.dumps(packed, ensure_ascii=False, separators=(",", ":"))
+    assert len(encoded) <= 1_000
+    assert "signal-0" in encoded
+    assert "service-0" in encoded
+    assert "namespace-0" in encoded
+    assert "alert-0" in encoded
+    assert "background-0" in encoded
+    assert packed != {"truncated": True}
+
+
+def test_evidence_dict_packing_is_bounded_without_original_summary() -> None:
+    observation = {
+        "entity": "demo/Pod/app",
+        "metric_anomalies": {
+            f"metric-{index}": {"incident": "x" * 240, "baseline": index} for index in range(20)
+        },
+        "object_state": {"phase": "Running", "ready": True},
+    }
+    formatted = _format_external_observation(
+        "itbench_entity_context", observation, semantic_v4=True
+    )
+    assert len(formatted) <= 120 + 220 + 500 + 700 + 40
+    assert '"summary"' not in formatted
+    assert "metric-0" in formatted
+    assert '"entity":"demo/Pod/app"' in formatted
+
+
+def test_rejected_candidate_is_not_reactivated_by_tool_evidence() -> None:
+    state: dict[str, Any] = {
+        "active_candidates": [],
+        "supported_candidates": [],
+        "rejected_candidates": ["demo/Pod/app"],
+    }
+    _associate_candidate_evidence(state, "demo/Pod/app", "E001")
+    assert state["active_candidates"] == []
+    assert state["rejected_candidates"] == ["demo/Pod/app"]
+    assert state["evidence_by_candidate"]["demo/Pod/app"] == ["E001"]
+
+
+def test_tool_candidate_association_cannot_bypass_three_active_limit() -> None:
+    state: dict[str, Any] = {
+        "active_candidates": ["demo/Pod/a", "demo/Pod/b", "demo/Pod/c"],
+        "supported_candidates": [],
+        "rejected_candidates": [],
+    }
+    _associate_candidate_evidence(state, "demo/Pod/d", "E004")
+    assert len(state["active_candidates"]) == 3
+    assert state["evidence_by_candidate"]["demo/Pod/d"] == ["E004"]
+    assert state["candidate_association_skips"][0]["reason"] == "ACTIVE_CANDIDATE_LIMIT"
 
 
 def test_v4_entity_context_does_not_claim_unindexed_telemetry_absent(tmp_path: Path) -> None:

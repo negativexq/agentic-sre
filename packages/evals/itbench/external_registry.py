@@ -84,6 +84,12 @@ class ExternalV4MetricArguments(ExternalContainsArguments):
 
 class ExternalV4TelemetryArguments(ExternalContainsEntityArguments):
     severity: str | None = Field(default=None, min_length=1, max_length=32)
+    service: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class ExternalV4EventArguments(ExternalV4TelemetryArguments):
+    reason: str | None = Field(default=None, min_length=1, max_length=128)
+    type: str | None = Field(default=None, min_length=1, max_length=32)
 
 
 class ExternalV4TraceArguments(ExternalContainsArguments):
@@ -248,7 +254,7 @@ class ITBenchExternalToolRegistry:
             "itbench_kubernetes_events",
             "Read filtered Kubernetes events.",
             ITBenchEvidenceCategory.K8S_EVENTS,
-            ExternalV4TelemetryArguments,
+            ExternalV4EventArguments,
             10_000,
         ),
         (
@@ -419,7 +425,7 @@ def _entity_matches(item: dict[str, str], args: dict[str, Any]) -> bool:
 
 def _alert_matches(item: dict[str, Any], args: dict[str, Any]) -> bool:
     labels = item.get("labels", {}) if isinstance(item.get("labels"), dict) else {}
-    for key in ("alertname", "severity", "namespace", "service"):
+    for key in ("alertname", "severity", "namespace"):
         expected = args.get(key)
         if (
             isinstance(expected, str)
@@ -427,6 +433,14 @@ def _alert_matches(item: dict[str, Any], args: dict[str, Any]) -> bool:
             not in str(
                 item.get("alertname") if key == "alertname" else labels.get(key, "")
             ).casefold()
+        ):
+            return False
+    expected_service = args.get("service")
+    if isinstance(expected_service, str):
+        service_values = [labels.get(key) for key in ("service", "service_name", "app", "workload")]
+        if not any(
+            isinstance(value, str) and value.casefold() == expected_service.casefold()
+            for value in service_values
         ):
             return False
     contains = args.get("contains")

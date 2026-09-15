@@ -132,38 +132,174 @@ def _fit_section(value: Any, budget: int) -> Any:
     if len(encoded) <= budget:
         return value
     if isinstance(value, list):
-        selected: list[Any] = []
+        selected_items: list[Any] = []
         for item in value:
-            candidate = selected + [item]
+            candidate = selected_items + [item]
             if (
                 len(json.dumps(candidate, ensure_ascii=False, separators=(",", ":"), default=str))
                 > budget
             ):
                 break
-            selected.append(item)
+            selected_items.append(item)
         return {
-            "items": selected,
+            "items": selected_items,
             "source_count": len(value),
-            "returned_count": len(selected),
-            "truncated": len(selected) < len(value),
+            "returned_count": len(selected_items),
+            "truncated": len(selected_items) < len(value),
         }
     if isinstance(value, dict):
-        selected_dict: dict[str, Any] = {}
-        for key, item in value.items():
-            candidate_dict = {**selected_dict, key: item}
+        return _fit_mapping(value, budget)
+    return str(value)[: max(0, budget - 32)]
+
+
+def _fit_mapping(value: dict[str, Any], budget: int) -> dict[str, Any]:
+    """Pack dictionary children independently without re-embedding the source.
+
+    A large first child must not erase all later semantic fields.  The returned
+    wrapper is itself bounded and carries only the children that fit.
+    """
+    metadata = {
+        "source_key_count": len(value),
+        "returned_key_count": 0,
+        "section_truncated": True,
+    }
+    selected: dict[str, Any] = {}
+    for key, item in value.items():
+        remaining = max(64, budget - len(json.dumps({"items": selected, **metadata})))
+        child_budget = max(48, min(1_200, remaining))
+        packed = _fit_value(item, child_budget)
+        candidate = {
+            "items": {**selected, str(key): packed},
+            **metadata,
+            "returned_key_count": len(selected) + 1,
+        }
+        if (
+            len(json.dumps(candidate, ensure_ascii=False, separators=(",", ":"), default=str))
+            > budget
+        ):
+            continue
+        selected[str(key)] = packed
+    result = {
+        "items": selected,
+        "source_key_count": len(value),
+        "returned_key_count": len(selected),
+        "section_truncated": len(selected) < len(value),
+    }
+    return result
+
+
+def _fit_value(value: Any, budget: int) -> Any:
+    """Recursively bound one semantic value to a deterministic character budget."""
+    encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
+    if len(encoded) <= budget:
+        return value
+    if isinstance(value, dict):
+        return _fit_mapping(value, budget)
+    if isinstance(value, list):
+        selected_items: list[Any] = []
+        for item in value:
+            # Reserve enough room for a few representative items.  Dividing by
+            # the complete source length made large alert lists discard every
+            # item because each nested object could not fit its metadata.
+            item_budget = max(48, min(300, budget // max(1, min(len(value), 4))))
+            packed = _fit_value(item, item_budget)
+            candidate = {
+                "items": [*selected_items, packed],
+                "source_count": len(value),
+                "returned_count": len(selected_items) + 1,
+                "truncated": True,
+            }
+            if (
+                len(json.dumps(candidate, ensure_ascii=False, separators=(",", ":"), default=str))
+                > budget
+            ):
+                break
+            selected_items.append(packed)
+        return {
+            "items": selected_items,
+            "source_count": len(value),
+            "returned_count": len(selected_items),
+            "truncated": len(selected_items) < len(value),
+        }
+    return str(value)[: max(1, budget - 2)]
+
+
+def _fit_alert_digest(value: dict[str, Any], budget: int) -> dict[str, Any]:
+    """Pack alert digest fields independently in semantic priority order."""
+    # Keep a bounded slice for every digest dimension.  The proportions are
+    # intentionally independent of source ordering so a large alert list
+    # cannot erase services, namespaces, counts, or background context.
+    proportions = {
+        "high_signal_alerts": 0.42,
+        "affected_services": 0.16,
+        "affected_namespaces": 0.13,
+        "alert_counts_by_name": 0.19,
+        "background": 0.07,
+    }
+    available = max(320, int(budget * 0.45))
+    field_budgets = {
+        key: max(64, int(available * fraction / 0.97)) for key, fraction in proportions.items()
+    }
+    packed: dict[str, Any] = {}
+    for key in (
+        "high_signal_alerts",
+        "affected_services",
+        "affected_namespaces",
+        "alert_counts_by_name",
+        "background",
+    ):
+        if key in value:
+            packed[key] = _fit_alert_value(value[key], field_budgets[key])
+    if len(json.dumps(packed, ensure_ascii=False, separators=(",", ":"), default=str)) <= budget:
+        return packed
+    # The per-field allocations normally make this unnecessary.  Keep a final
+    # deterministic fallback that retains field names and never emits an
+    # unbounded source child.
+    return {
+        key: _fit_alert_value(item, max(32, budget // max(1, len(packed))))
+        for key, item in packed.items()
+    }
+
+
+def _fit_alert_value(value: Any, budget: int) -> Any:
+    """Compact alert values while retaining representative semantic fields."""
+    encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
+    if len(encoded) <= budget:
+        return value
+    if isinstance(value, list):
+        selected_items: list[Any] = []
+        for item in value:
+            item_budget = max(32, min(240, budget // max(1, min(len(value), 4))))
+            compact = _fit_alert_value(item, item_budget)
+            candidate_items = [*selected_items, compact]
             if (
                 len(
                     json.dumps(
-                        candidate_dict, ensure_ascii=False, separators=(",", ":"), default=str
+                        candidate_items, ensure_ascii=False, separators=(",", ":"), default=str
                     )
                 )
                 > budget
             ):
                 break
-            selected_dict[key] = item
-        selected_dict["truncated"] = True
-        return selected_dict
-    return str(value)[: max(0, budget - 32)]
+            selected_items.append(compact)
+        return selected_items
+    if isinstance(value, dict):
+        selected_fields: dict[str, Any] = {}
+        for key, item in value.items():
+            compact = _fit_alert_value(item, max(32, budget // max(1, len(value))))
+            candidate_fields = {**selected_fields, str(key): compact}
+            if (
+                len(
+                    json.dumps(
+                        candidate_fields, ensure_ascii=False, separators=(",", ":"), default=str
+                    )
+                )
+                > budget
+            ):
+                continue
+            selected_fields[str(key)] = compact
+        return selected_fields
+    return str(value)[: max(1, budget - 2)]
 
 
 def _alert_digest(backend: ITBenchSnapshotBackend) -> dict[str, Any]:
@@ -281,7 +417,9 @@ def build_external_context_v3(
             "created_at": incident.created_at.isoformat(),
             "updated_at": incident.updated_at.isoformat(),
         },
-        "alert_digest": _alert_digest(backend),
+        "alert_digest": _fit_alert_digest(
+            _alert_digest(backend), _V3_SECTION_BUDGETS["alert_digest"]
+        ),
         "candidate_shortlist": list(candidate_entities)[:10],
         "relevant_topology": _relevant_topology(backend, candidate_entities, case_state),
         "case_state": _compact_case_state(case_state),

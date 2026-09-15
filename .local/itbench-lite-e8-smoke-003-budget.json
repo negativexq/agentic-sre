@@ -1,0 +1,10 @@
+{
+  "execution": "ITB-E8",
+  "purpose": "SMOKE",
+  "smoke_id": "ITB-E8-SMOKE-003",
+  "cap": 5,
+  "calls_used": 0,
+  "remaining": 5,
+  "status": "NOT_STARTED",
+  "historical_smoke_attempts_preserved_elsewhere": 5
+}

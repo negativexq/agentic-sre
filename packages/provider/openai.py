@@ -1406,6 +1406,7 @@ class OpenAIProvider:
             "itbench_investigation_decision_v2",
             "itbench_investigation_decision_v3",
             "itbench_investigation_decision_v4",
+            ITBENCH_EXTERNAL_PROTOCOL_V5,
         }:
             structured_output, metadata = _extract_decision_function(request, raw)
             schema_error_path = _json_schema_error(structured_output, request.response_schema)

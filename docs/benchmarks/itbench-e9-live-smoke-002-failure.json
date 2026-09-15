@@ -1,0 +1,16 @@
+{
+  "execution": "ITB-E9",
+  "smoke_id": "ITB-E9-SMOKE-002",
+  "status": "INVALIDATED_BY_INTEGRATION_FAILURE",
+  "failure": {
+    "type": "provider_response_extraction",
+    "error_code": "OUTPUT_MESSAGE_MISSING",
+    "error": "E9 Protocol V5 was not included in OpenAIProvider._normalize_response function-call dispatch",
+    "provider_response_received": true,
+    "outbound_attempts": 1
+  },
+  "model": "gpt-5.6-luna",
+  "reasoning": "none",
+  "official_scenarios_executed": 0,
+  "note": "The paid attempt and native artifact are preserved. No refund or retry is applied. A new E9 runtime revision and Smoke-003 are required."
+}

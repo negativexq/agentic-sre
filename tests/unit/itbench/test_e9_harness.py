@@ -222,3 +222,37 @@ def test_v5_provider_schema_is_ref_free_and_has_terminal_split(tmp_path: Path) -
         "submit_itbench_diagnosis",
         "stop_itbench_investigation",
     }
+
+
+def test_v5_function_call_is_dispatched_by_response_normalizer(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path, [])
+    incident, alerts = build_observable_incident(runtime.backend)
+    request, _ = runtime.build_request(
+        incident,
+        alerts,
+        E9CaseMemory(execution_id="ITB-E9", scenario_id="Scenario-1"),
+        E9FSM(),
+        run_id=incident.incident_id,
+        turn=1,
+    )
+    raw = {
+        "status": "completed",
+        "output": [
+            {
+                "type": "function_call",
+                "name": "stop_itbench_investigation",
+                "arguments": json.dumps(
+                    {
+                        "action": "STOP",
+                        "target": None,
+                        "targets": [],
+                        "operation": None,
+                        "rationale": None,
+                        "stop_reason": "insufficient evidence",
+                    }
+                ),
+            }
+        ],
+    }
+    response = OpenAIProvider.__new__(OpenAIProvider)._normalize_response(request, raw, 0.0)
+    assert response.structured_output["action"] == "STOP"

@@ -37,13 +37,13 @@ from packages.provider import LiveModelBudget, OpenAIProvider, live_model_config
 ROOT = Path(__file__).resolve().parents[1]
 DATA_ROOT = ROOT / ".local/itbench-lite"
 RUN_ROOT = ROOT / ".local/itbench-lite-e9-runs"
-SMOKE_ID = "ITB-E9-SMOKE-002"
+SMOKE_ID = "ITB-E9-SMOKE-003"
 SMOKE_ROOT = RUN_ROOT / SMOKE_ID
 OFFICIAL_ROOT = RUN_ROOT / "official"
-SMOKE_RESULT = ROOT / "docs/benchmarks/itbench-e9-live-smoke-002.json"
+SMOKE_RESULT = ROOT / "docs/benchmarks/itbench-e9-live-smoke-003.json"
 OFFICIAL_RESULT = ROOT / "docs/benchmarks/itbench-e9-results.json"
 OFFICIAL_PARTIAL = ROOT / "docs/benchmarks/itbench-e9-official-partial.json"
-SMOKE_LEDGER = ROOT / ".local/itbench-lite-e9-smoke-002-budget.json"
+SMOKE_LEDGER = ROOT / ".local/itbench-lite-e9-smoke-003-budget.json"
 OFFICIAL_LEDGER = ROOT / ".local/itbench-lite-e9-official-budget.json"
 MANIFEST = ROOT / "docs/benchmarks/itbench-lite-e9-manifest.json"
 EXECUTION = "ITB-E9"

@@ -4,29 +4,29 @@
   "judge_calls": 0,
   "latency_ms": {
     "context": {
-      "max": 19.031124655157328,
-      "median": 8.162624668329954,
-      "p95": 16.098250169306993
+      "max": 16.20204234495759,
+      "median": 8.389667142182589,
+      "p95": 15.898665878921747
     },
     "entity_context": {
-      "max": 2022.9974170215428,
-      "median": 1127.5864583440125,
-      "p95": 1480.8516670018435
+      "max": 1513.7329171411693,
+      "median": 1120.2363329939544,
+      "p95": 1493.838292080909
     },
     "logs": {
-      "max": 4810.722333844751,
-      "median": 1940.2432502247393,
-      "p95": 2588.5414578951895
+      "max": 4922.675792127848,
+      "median": 1948.4875001944602,
+      "p95": 2576.531541068107
     },
     "metrics": {
-      "max": 14087.779333814979,
-      "median": 8770.443165674806,
-      "p95": 13438.629125244915
+      "max": 14364.503500051796,
+      "median": 8698.612791020423,
+      "p95": 13538.4958749637
     },
     "traces": {
-      "max": 5088.688415940851,
-      "median": 2405.702000018209,
-      "p95": 4925.863500218838
+      "max": 4955.374124925584,
+      "median": 2392.589333932847,
+      "p95": 4939.158707857132
     }
   },
   "openai_calls": 0,
@@ -54,7 +54,7 @@
         "tool_hints": 1580,
         "total": 11690
       },
-      "duration_ms": 22028,
+      "duration_ms": 22483,
       "observable_entities": 1034,
       "probe_status": {
         "entity_context": "PASS",
@@ -90,7 +90,7 @@
         "tool_hints": 1580,
         "total": 12302
       },
-      "duration_ms": 13736,
+      "duration_ms": 14132,
       "observable_entities": 1040,
       "probe_status": {
         "entity_context": "PASS",
@@ -126,7 +126,7 @@
         "tool_hints": 1580,
         "total": 11119
       },
-      "duration_ms": 18024,
+      "duration_ms": 18457,
       "observable_entities": 1043,
       "probe_status": {
         "entity_context": "PASS",
@@ -162,7 +162,7 @@
         "tool_hints": 1580,
         "total": 12336
       },
-      "duration_ms": 16759,
+      "duration_ms": 17153,
       "observable_entities": 1043,
       "probe_status": {
         "entity_context": "PASS",
@@ -198,7 +198,7 @@
         "tool_hints": 1580,
         "total": 11306
       },
-      "duration_ms": 17611,
+      "duration_ms": 17378,
       "observable_entities": 1041,
       "probe_status": {
         "entity_context": "PASS",
@@ -234,7 +234,7 @@
         "tool_hints": 1580,
         "total": 12322
       },
-      "duration_ms": 13246,
+      "duration_ms": 13082,
       "observable_entities": 1034,
       "probe_status": {
         "entity_context": "PASS",
@@ -270,7 +270,7 @@
         "tool_hints": 1580,
         "total": 11148
       },
-      "duration_ms": 17867,
+      "duration_ms": 17641,
       "observable_entities": 1036,
       "probe_status": {
         "entity_context": "PASS",
@@ -306,7 +306,7 @@
         "tool_hints": 1580,
         "total": 10925
       },
-      "duration_ms": 15054,
+      "duration_ms": 14890,
       "observable_entities": 1038,
       "probe_status": {
         "entity_context": "PASS",
@@ -342,7 +342,7 @@
         "tool_hints": 1580,
         "total": 9946
       },
-      "duration_ms": 18953,
+      "duration_ms": 18291,
       "observable_entities": 1010,
       "probe_status": {
         "entity_context": "PASS",
@@ -378,7 +378,7 @@
         "tool_hints": 1580,
         "total": 10898
       },
-      "duration_ms": 19612,
+      "duration_ms": 18035,
       "observable_entities": 1050,
       "probe_status": {
         "entity_context": "PASS",
@@ -414,7 +414,7 @@
         "tool_hints": 1580,
         "total": 12172
       },
-      "duration_ms": 15934,
+      "duration_ms": 15820,
       "observable_entities": 1032,
       "probe_status": {
         "entity_context": "PASS",
@@ -450,7 +450,7 @@
         "tool_hints": 1580,
         "total": 11482
       },
-      "duration_ms": 13976,
+      "duration_ms": 13865,
       "observable_entities": 1048,
       "probe_status": {
         "entity_context": "PASS",
@@ -486,7 +486,7 @@
         "tool_hints": 1580,
         "total": 13015
       },
-      "duration_ms": 12847,
+      "duration_ms": 12865,
       "observable_entities": 1047,
       "probe_status": {
         "entity_context": "PASS",
@@ -522,7 +522,7 @@
         "tool_hints": 1580,
         "total": 12845
       },
-      "duration_ms": 20451,
+      "duration_ms": 20444,
       "observable_entities": 1034,
       "probe_status": {
         "entity_context": "PASS",
@@ -558,7 +558,7 @@
         "tool_hints": 1580,
         "total": 12807
       },
-      "duration_ms": 19894,
+      "duration_ms": 19988,
       "observable_entities": 1517,
       "probe_status": {
         "entity_context": "PASS",
@@ -594,7 +594,7 @@
         "tool_hints": 1580,
         "total": 8610
       },
-      "duration_ms": 14997,
+      "duration_ms": 15149,
       "observable_entities": 1452,
       "probe_status": {
         "entity_context": "PASS",
@@ -630,7 +630,7 @@
         "tool_hints": 1580,
         "total": 12482
       },
-      "duration_ms": 21155,
+      "duration_ms": 21207,
       "observable_entities": 1701,
       "probe_status": {
         "entity_context": "PASS",
@@ -666,7 +666,7 @@
         "tool_hints": 1580,
         "total": 8685
       },
-      "duration_ms": 17123,
+      "duration_ms": 17115,
       "observable_entities": 1023,
       "probe_status": {
         "entity_context": "PASS",
@@ -702,7 +702,7 @@
         "tool_hints": 1580,
         "total": 12576
       },
-      "duration_ms": 14273,
+      "duration_ms": 14228,
       "observable_entities": 1604,
       "probe_status": {
         "entity_context": "PASS",
@@ -738,7 +738,7 @@
         "tool_hints": 1580,
         "total": 11821
       },
-      "duration_ms": 17813,
+      "duration_ms": 17751,
       "observable_entities": 1717,
       "probe_status": {
         "entity_context": "PASS",
@@ -774,7 +774,7 @@
         "tool_hints": 1580,
         "total": 8810
       },
-      "duration_ms": 14705,
+      "duration_ms": 14496,
       "observable_entities": 1051,
       "probe_status": {
         "entity_context": "PASS",
@@ -810,7 +810,7 @@
         "tool_hints": 1580,
         "total": 8955
       },
-      "duration_ms": 13453,
+      "duration_ms": 13547,
       "observable_entities": 1015,
       "probe_status": {
         "entity_context": "PASS",
@@ -846,7 +846,7 @@
         "tool_hints": 1580,
         "total": 11258
       },
-      "duration_ms": 20862,
+      "duration_ms": 20838,
       "observable_entities": 1409,
       "probe_status": {
         "entity_context": "PASS",
@@ -882,7 +882,7 @@
         "tool_hints": 1580,
         "total": 11600
       },
-      "duration_ms": 15971,
+      "duration_ms": 15952,
       "observable_entities": 1530,
       "probe_status": {
         "entity_context": "PASS",
@@ -918,7 +918,7 @@
         "tool_hints": 1580,
         "total": 10897
       },
-      "duration_ms": 15638,
+      "duration_ms": 15473,
       "observable_entities": 1027,
       "probe_status": {
         "entity_context": "PASS",
@@ -954,7 +954,7 @@
         "tool_hints": 1580,
         "total": 11556
       },
-      "duration_ms": 16418,
+      "duration_ms": 16366,
       "observable_entities": 1026,
       "probe_status": {
         "entity_context": "PASS",
@@ -990,7 +990,7 @@
         "tool_hints": 1580,
         "total": 8915
       },
-      "duration_ms": 15586,
+      "duration_ms": 15323,
       "observable_entities": 1033,
       "probe_status": {
         "entity_context": "PASS",
@@ -1026,7 +1026,7 @@
         "tool_hints": 1580,
         "total": 11171
       },
-      "duration_ms": 13721,
+      "duration_ms": 13608,
       "observable_entities": 1491,
       "probe_status": {
         "entity_context": "PASS",
@@ -1062,7 +1062,7 @@
         "tool_hints": 1580,
         "total": 8951
       },
-      "duration_ms": 17265,
+      "duration_ms": 17346,
       "observable_entities": 1713,
       "probe_status": {
         "entity_context": "PASS",
@@ -1098,7 +1098,7 @@
         "tool_hints": 1580,
         "total": 12215
       },
-      "duration_ms": 17102,
+      "duration_ms": 17331,
       "observable_entities": 1654,
       "probe_status": {
         "entity_context": "PASS",
@@ -1134,7 +1134,7 @@
         "tool_hints": 1580,
         "total": 12041
       },
-      "duration_ms": 13817,
+      "duration_ms": 13763,
       "observable_entities": 1779,
       "probe_status": {
         "entity_context": "PASS",
@@ -1170,7 +1170,7 @@
         "tool_hints": 1580,
         "total": 12080
       },
-      "duration_ms": 17098,
+      "duration_ms": 17051,
       "observable_entities": 1630,
       "probe_status": {
         "entity_context": "PASS",
@@ -1206,7 +1206,7 @@
         "tool_hints": 1580,
         "total": 11550
       },
-      "duration_ms": 23716,
+      "duration_ms": 23995,
       "observable_entities": 1955,
       "probe_status": {
         "entity_context": "PASS",
@@ -1242,7 +1242,7 @@
         "tool_hints": 1580,
         "total": 12776
       },
-      "duration_ms": 12393,
+      "duration_ms": 12407,
       "observable_entities": 1003,
       "probe_status": {
         "entity_context": "PASS",
@@ -1278,7 +1278,7 @@
         "tool_hints": 1580,
         "total": 9005
       },
-      "duration_ms": 11343,
+      "duration_ms": 11375,
       "observable_entities": 1013,
       "probe_status": {
         "entity_context": "PASS",

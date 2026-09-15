@@ -24,7 +24,7 @@
       "tool_hints": 1580,
       "total": 9005
     },
-    "duration_ms": 11343,
+    "duration_ms": 11375,
     "observable_entities": 1013,
     "probe_status": {
       "entity_context": "PASS",

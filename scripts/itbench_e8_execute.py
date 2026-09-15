@@ -58,7 +58,7 @@ SMOKE_LEDGER = ROOT / ".local/itbench-lite-e8-smoke-budget.json"
 OFFICIAL_LEDGER = ROOT / ".local/itbench-lite-e8-official-budget.json"
 EXECUTION = "ITB-E8"
 EXPERIMENT = "itbench-lite-sre-external-eval-v8"
-RUNTIME_SOURCE_SHA = "6c659c4"
+RUNTIME_SOURCE_SHA = "6c3a779c09a5e0978448f71975cc5e523171cdf7"
 ADAPTER = "itbench_lite_snapshot_adapter_v7"
 LIMITS = InvestigationLimits(
     max_model_calls=5, max_tool_calls=12, max_agent_turns=5, max_wall_time_seconds=180

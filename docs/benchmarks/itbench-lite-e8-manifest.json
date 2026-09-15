@@ -1,8 +1,8 @@
 {
   "execution": "ITB-E8",
   "experiment": "itbench-lite-sre-external-eval-v8",
-  "status": "PREREGISTERED",
-  "runtime_source_sha": "6c659c4",
+  "status": "PREREGISTERED_REPAIR_REVISION",
+  "runtime_source_sha": "6c3a779c09a5e0978448f71975cc5e523171cdf7",
   "benchmark": "ITBench-Lite",
   "organization": "IBM Research",
   "dataset_revision": "d0916b08ba421ce5e672e9ad68aa947d938dfef0",
@@ -16,14 +16,14 @@
   "context_source_sha256": "c8bb540ec757f9c5be82ec54072be791e84a5d7379454a9d851b7d090b60788d",
   "tool_registry_sha256": "7bfe13bdb0f6cd218e62c18255ecb9ac85a17facba2fa04ac22986ade3ee71a7",
   "tool_contract_sha256": "7bfe13bdb0f6cd218e62c18255ecb9ac85a17facba2fa04ac22986ade3ee71a7",
-  "provider_schema_sha256": "08c80f89adcc79c5ba7df41bb3ba60b90967ce90f1a282371a4cbf17e50f0ea6",
+  "provider_schema_sha256": "17e615533cb21804dd09c0240ee685dce59d27d8c2cd7aa8ff834e767bc11b72",
   "candidate_retrieval": "observable_candidate_ranker_v2",
   "candidate_retrieval_source_sha256": "aece8d8b30552183b05c9861011a5eab7d92b901c6793d08b1ae5fcc99a95978",
   "evidence_formatter": "semantic_section_packed_external_observation_v2",
   "runtime_source_files": {
     "external_runtime_sha256": "7960e0603da44f6124fb58c2485d774bbe05340d50412e80c8bd5a3fa05446bb",
     "snapshot_backend_sha256": "aece8d8b30552183b05c9861011a5eab7d92b901c6793d08b1ae5fcc99a95978",
-    "provider_openai_sha256": "08c80f89adcc79c5ba7df41bb3ba60b90967ce90f1a282371a4cbf17e50f0ea6"
+    "provider_openai_sha256": "17e615533cb21804dd09c0240ee685dce59d27d8c2cd7aa8ff834e767bc11b72"
   },
   "official_evaluator": {
     "source": "itbench-hub/ITBench-Evaluations",
@@ -77,8 +77,8 @@
   "qualification": {
     "context_report": "docs/benchmarks/itbench-e8-context-composition.json",
     "zero_network_report": "docs/benchmarks/itbench-e8-zero-network-qualification.json",
-    "context_report_sha256": "e516476721a2fc8fc42d47e414b32633a9b42d7b1bbbaa334e0ff73fdf67afb6",
-    "zero_network_report_sha256": "b01a18ec2174ca5076ffb11638e0cd123f967af191e6238dd15ba0b9ea5bdb58",
+    "context_report_sha256": "10318d6fb4afd087295ffbbbf9392a782f3b588a878fea10c02b0d68bbe83ca2",
+    "zero_network_report_sha256": "409a2a2bfe323a38bdad4cd037c452f426e52fe04215bc6cd908be4819b338f0",
     "openai_calls": 0,
     "judge_calls": 0,
     "ground_truth_access": false
@@ -87,5 +87,5 @@
     "investigator_access": false,
     "evaluator_access": "post-persistence only"
   },
-  "notes": "E8 is a new frozen engineering iteration after E7; it is not untouched held-out generalization."
+  "notes": "E8 is a new engineering revision after E7. Smoke-001 exposed a provider schema integration defect and consumed one non-refundable attempt; smoke-002 is the repaired pre-official qualification. E8 is not untouched held-out generalization."
 }

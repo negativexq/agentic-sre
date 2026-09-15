@@ -124,10 +124,14 @@ def main(argv: list[str] | None = None) -> int:
         ledger["status"] = "COMPLETE" if completed.returncode == 0 else "FAILED"
         _atomic_json_write(plan.ledger_path, ledger)
         score: float | None = None
+        result_payload: dict[str, Any] | None = None
         try:
-            result_payload = json.loads(Path(args.result_file).read_text(encoding="utf-8"))
+            loaded_payload = json.loads(Path(args.result_file).read_text(encoding="utf-8"))
+            if isinstance(loaded_payload, dict):
+                result_payload = loaded_payload
             score_value = (
-                result_payload.get("statistics", {})
+                (result_payload or {})
+                .get("statistics", {})
                 .get("overall", {})
                 .get("root_cause_entity_f1", {})
                 .get("mean")
@@ -136,6 +140,22 @@ def main(argv: list[str] | None = None) -> int:
                 score = float(score_value)
         except (OSError, json.JSONDecodeError, AttributeError):
             pass
+        if isinstance(result_payload, dict):
+            # Keep the upstream evaluator payload intact while attaching the
+            # project-owned, non-secret identity needed for auditability.
+            result_payload["project_judge"] = {
+                "provider": identity.provider,
+                "model": identity.model,
+                "purpose": identity.purpose,
+                "judge_base_url_host": identity.base_url_host,
+                "evaluator_revision": args.evaluator_revision,
+                "execution": args.execution,
+                "scenario": args.scenario,
+                "inference_count_reserved": plan.expected_calls,
+                "max_judge_calls": plan.max_calls,
+            }
+            result_payload["judge_ledger"] = ledger
+            _atomic_json_write(Path(args.result_file), result_payload)
         _atomic_json_write(
             args.artifact,
             {

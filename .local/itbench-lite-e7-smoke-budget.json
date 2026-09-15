@@ -1,0 +1,11 @@
+{
+  "execution": "ITB-E7",
+  "purpose": "SMOKE",
+  "historical_failed_attempts": 1,
+  "new_smoke_cap": 5,
+  "calls_used": 0,
+  "new_smoke_consumed": 0,
+  "remaining": 5,
+  "historical_failed_outbound_attempt_remains_charged": true,
+  "status": "NOT_STARTED"
+}

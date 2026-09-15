@@ -152,7 +152,8 @@ class LiveModelBudget:
         with self._ledger_path.open("a+", encoding="utf-8") as ledger:
             fcntl.flock(ledger.fileno(), fcntl.LOCK_EX)
             ledger.seek(0)
-            calls_used = self._parse_ledger(ledger.read())
+            content = ledger.read()
+            calls_used = self._parse_ledger(content)
             if calls_used + count > self._limit:
                 fcntl.flock(ledger.fileno(), fcntl.LOCK_UN)
                 raise ProviderError(
@@ -162,7 +163,23 @@ class LiveModelBudget:
             calls_used += count
             ledger.seek(0)
             ledger.truncate()
-            json.dump({"calls_used": calls_used}, ledger)
+            try:
+                payload = json.loads(content) if content else {}
+            except json.JSONDecodeError as error:
+                raise ValueError("live model budget ledger is invalid") from error
+            if not isinstance(payload, dict):
+                raise ValueError("live model budget ledger is invalid")
+            payload["calls_used"] = calls_used
+            # Preserve richer run-local accounting metadata when a benchmark
+            # ledger carries it, while keeping legacy one-field ledgers byte
+            # compatible with their existing contract.
+            if "consumed" in payload:
+                payload["consumed"] = calls_used
+            if "remaining" in payload:
+                payload["remaining"] = self._limit - calls_used
+            if "new_smoke_consumed" in payload:
+                payload["new_smoke_consumed"] = calls_used
+            json.dump(payload, ledger)
             ledger.flush()
             os.fsync(ledger.fileno())
             fcntl.flock(ledger.fileno(), fcntl.LOCK_UN)

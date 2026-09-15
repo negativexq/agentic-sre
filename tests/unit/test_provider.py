@@ -170,6 +170,33 @@ def test_live_budget_can_share_a_call_ledger_between_process_boundaries(tmp_path
     assert ledger.read_text(encoding="utf-8") == '{"calls_used": 2}'
 
 
+def test_shared_live_budget_preserves_benchmark_metadata(tmp_path: Path) -> None:
+    """Rich benchmark ledgers retain identity and update their run counters."""
+    ledger = tmp_path / "rich-ledger.json"
+    ledger.write_text(
+        json.dumps(
+            {
+                "cap": 5,
+                "calls_used": 0,
+                "consumed": 0,
+                "remaining": 5,
+                "new_smoke_consumed": 0,
+                "purpose": "SMOKE",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    LiveModelBudget(5, ledger_path=str(ledger)).consume()
+
+    payload = json.loads(ledger.read_text(encoding="utf-8"))
+    assert payload["calls_used"] == 1
+    assert payload["consumed"] == 1
+    assert payload["remaining"] == 4
+    assert payload["new_smoke_consumed"] == 1
+    assert payload["purpose"] == "SMOKE"
+
+
 def test_paid_budget_requires_a_shared_ledger(monkeypatch: pytest.MonkeyPatch) -> None:
     """Paid command setup fails before transport when no persistent ledger is configured."""
     monkeypatch.delenv("SRE_LIVE_MODEL_BUDGET_FILE", raising=False)

@@ -87,6 +87,8 @@ def main(argv: list[str] | None = None) -> int:
         # Reserve before starting the upstream process.  There is deliberately
         # no refund path: a transmitted request remains charged on failure.
         ledger["consumed"] += plan.expected_calls
+        ledger["provider_invocations"] += plan.expected_calls
+        ledger["outbound_attempts"] += plan.expected_calls
         ledger["remaining"] = ledger["cap"] - ledger["consumed"]
         ledger["status"] = "RUNNING"
         _atomic_json_write(plan.ledger_path, ledger)
@@ -110,9 +112,30 @@ def main(argv: list[str] | None = None) -> int:
             "--max-concurrent",
             "1",
         ]
-        completed = subprocess.run(command, cwd=args.evaluator_cwd, env=env, check=False)
+        completed = subprocess.run(
+            command, cwd=args.evaluator_cwd, env=env, check=False, capture_output=True, text=True
+        )
+        sys.stdout.write(completed.stdout)
+        sys.stderr.write(completed.stderr)
+        actual_identity_seen = (
+            f"LAAJ Agent initialized with model: {identity.model}" in completed.stdout
+            or f"LAAJ Agent initialized with model: {identity.model}" in completed.stderr
+        )
         ledger["status"] = "COMPLETE" if completed.returncode == 0 else "FAILED"
         _atomic_json_write(plan.ledger_path, ledger)
+        score: float | None = None
+        try:
+            result_payload = json.loads(Path(args.result_file).read_text(encoding="utf-8"))
+            score_value = (
+                result_payload.get("statistics", {})
+                .get("overall", {})
+                .get("root_cause_entity_f1", {})
+                .get("mean")
+            )
+            if isinstance(score_value, (int, float)):
+                score = float(score_value)
+        except (OSError, json.JSONDecodeError, AttributeError):
+            pass
         _atomic_json_write(
             args.artifact,
             {
@@ -125,10 +148,19 @@ def main(argv: list[str] | None = None) -> int:
                 "evaluator_revision": args.evaluator_revision,
                 "inference_count_reserved": plan.expected_calls,
                 "max_judge_calls": plan.max_calls,
+                "actual_model_identity_reported": actual_identity_seen,
+                "root_cause_entity_f1": score,
+                "tokens": "NOT_DURABLY_AVAILABLE",
+                "latency": "NOT_DURABLY_AVAILABLE",
                 "return_code": completed.returncode,
                 "ledger": ledger,
             },
         )
+        if completed.returncode == 0 and not actual_identity_seen:
+            raise ModelPolicyError(
+                "JUDGE_MODEL_IDENTITY_UNCONFIRMED",
+                "evaluator did not report the approved judge model",
+            )
         return completed.returncode
     except ModelPolicyError as error:
         print(

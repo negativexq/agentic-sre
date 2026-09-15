@@ -14,6 +14,7 @@ ITBENCH_EXTERNAL_PROTOCOL_VERSION = "itbench_investigation_decision_v1"
 ITBENCH_EXTERNAL_PROTOCOL_V2 = "itbench_investigation_decision_v2"
 ITBENCH_EXTERNAL_PROTOCOL_V3 = "itbench_investigation_decision_v3"
 ITBENCH_EXTERNAL_PROTOCOL_V4 = "itbench_investigation_decision_v4"
+ITBENCH_EXTERNAL_PROTOCOL_V5 = "itbench_investigation_decision_v5"
 
 
 class ITBenchDecisionType(StrEnum):
@@ -332,6 +333,58 @@ class ITBenchInvestigationDecisionV4(InvestigationModel):
         return self
 
 
+class E9Action(StrEnum):
+    """Small model action vocabulary; workflow state remains runtime-owned."""
+
+    OBSERVE = "OBSERVE"
+    HYPOTHESIZE = "HYPOTHESIZE"
+    INVESTIGATE = "INVESTIGATE"
+    REVISE = "REVISE"
+    SUBMIT = "SUBMIT"
+    STOP = "STOP"
+
+
+class ITBenchInvestigationDecisionV5(InvestigationModel):
+    """Minimal E9 action contract using scenario-local runtime handles."""
+
+    action: E9Action
+    target: str | None = Field(default=None, max_length=16)
+    targets: list[str] = Field(default_factory=list, max_length=3)
+    operation: str | None = Field(default=None, max_length=64)
+    rationale: str | None = Field(default=None, max_length=300)
+    stop_reason: str | None = Field(default=None, max_length=128)
+
+    @field_validator("target")
+    @classmethod
+    def validate_target_handle(cls, value: str | None) -> str | None:
+        if value is not None and (len(value) != 4 or value[0] != "C" or not value[1:].isdigit()):
+            raise ValueError("target must be a runtime candidate handle such as C017")
+        return value
+
+    @field_validator("targets")
+    @classmethod
+    def validate_target_handles(cls, value: list[str]) -> list[str]:
+        if any(len(item) != 4 or item[0] != "C" or not item[1:].isdigit() for item in value):
+            raise ValueError("targets must use runtime candidate handles such as C017")
+        if len(set(value)) != len(value):
+            raise ValueError("targets must not contain duplicates")
+        return value
+
+    @model_validator(mode="after")
+    def validate_action_shape(self) -> ITBenchInvestigationDecisionV5:
+        if self.action is E9Action.SUBMIT and not self.targets:
+            raise ValueError("SUBMIT requires at least one candidate target")
+        if self.action is E9Action.HYPOTHESIZE and self.target is None:
+            raise ValueError("HYPOTHESIZE requires one candidate target")
+        if self.action is E9Action.INVESTIGATE and (self.target is None or self.operation is None):
+            raise ValueError("INVESTIGATE requires target and operation")
+        if self.action is E9Action.STOP and not self.stop_reason:
+            raise ValueError("STOP requires stop_reason")
+        if self.action is not E9Action.STOP and self.stop_reason is not None:
+            raise ValueError("stop_reason is only valid for STOP")
+        return self
+
+
 class ITBenchExternalResult(InvestigationModel):
     """Native external result envelope before evaluator data is loaded."""
 
@@ -361,6 +414,7 @@ __all__ = [
     "ITBENCH_EXTERNAL_PROTOCOL_V2",
     "ITBENCH_EXTERNAL_PROTOCOL_V3",
     "ITBENCH_EXTERNAL_PROTOCOL_V4",
+    "ITBENCH_EXTERNAL_PROTOCOL_V5",
     "ExternalRootCauseV2",
     "ITBenchInvestigationDecisionV2",
     "ExternalRootCauseV3",
@@ -369,4 +423,6 @@ __all__ = [
     "CandidateUpdateV4",
     "ExternalRootCauseV4",
     "ITBenchInvestigationDecisionV4",
+    "E9Action",
+    "ITBenchInvestigationDecisionV5",
 ]

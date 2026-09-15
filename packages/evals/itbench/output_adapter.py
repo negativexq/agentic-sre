@@ -132,6 +132,28 @@ def adapt_external_output(result: ITBenchExternalResult) -> ITBenchAgentOutput:
     )
 
 
+def adapt_e9_output(result: dict[str, Any]) -> ITBenchAgentOutput:
+    """Export E9's runtime-owned canonical submissions without GT access."""
+    predictions = tuple(
+        ITBenchEntityPrediction(
+            entity=parse_canonical_entity(entity),
+            rank=rank,
+            condition="runtime-owned E9 causal submission",
+        )
+        for rank, entity in enumerate(result.get("submitted_entities", ()), start=1)
+        if isinstance(entity, str)
+    )
+    terminal = str(result.get("terminal", "UNKNOWN"))
+    native_terminal = "SUBMIT_DIAGNOSIS" if terminal == "SUBMIT" else terminal
+    return ITBenchAgentOutput(
+        incident_id=str(result.get("incident_id", "unknown")),
+        scenario_id=str(result["scenario_id"]),
+        contributing_factor=predictions,
+        reasoning="E9 harness-owned causal submission",
+        native_terminal=native_terminal,
+    )
+
+
 def write_official_output(path: Path, output: ITBenchAgentOutput) -> None:
     """Write the shape consumed by the official loader, atomically."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -153,6 +175,7 @@ def write_official_output(path: Path, output: ITBenchAgentOutput) -> None:
 __all__ = [
     "adapt_a1_output",
     "adapt_external_output",
+    "adapt_e9_output",
     "entities_from_k8s_records",
     "write_official_output",
 ]

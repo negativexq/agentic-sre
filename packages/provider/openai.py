@@ -36,6 +36,7 @@ ITBENCH_DECISION_FUNCTION_NAMES = (
     "submit_itbench_diagnosis",
     "stop_itbench_investigation",
 )
+ITBENCH_EXTERNAL_PROTOCOL_V5 = "itbench_investigation_decision_v5"
 TERMINAL_DECISION_FUNCTION_NAMES = (
     "submit_root_cause_hypothesis",
     "stop_investigation",
@@ -556,6 +557,33 @@ def _itbench_decision_function_schemas(
     return {name: _compile_strict_schema(value) for name, value in result.items()}
 
 
+def _itbench_v5_decision_function_schemas() -> dict[str, dict[str, Any]]:
+    """Build the small E9 action wire contract without V4 bookkeeping fields."""
+    nullable_string = {"anyOf": [{"type": "string"}, {"type": "null"}]}
+    common = {
+        "target": nullable_string,
+        "targets": {"type": "array", "items": {"type": "string"}},
+        "operation": nullable_string,
+        "rationale": nullable_string,
+        "stop_reason": nullable_string,
+    }
+
+    def envelope(action_values: list[str]) -> dict[str, Any]:
+        properties = {"action": {"type": "string", "enum": action_values}, **common}
+        return {
+            "type": "object",
+            "properties": properties,
+            "required": list(properties),
+            "additionalProperties": False,
+        }
+
+    return {
+        "request_itbench_tools": envelope(["OBSERVE", "HYPOTHESIZE", "INVESTIGATE", "REVISE"]),
+        "submit_itbench_diagnosis": envelope(["SUBMIT"]),
+        "stop_itbench_investigation": envelope(["STOP"]),
+    }
+
+
 def _field(value: Any, name: str, default: Any = None) -> Any:
     """Read a field from either an SDK object or a JSON-like fixture."""
     if isinstance(value, dict):
@@ -754,12 +782,17 @@ def _extract_decision_function(
     items = output if isinstance(output, list) else []
     function_calls = [item for item in items if _field(item, "type") == "function_call"]
     a1_protocol = request.response_schema_name == "a1_investigation_decision"
-    external_protocol = request.response_schema_name in {
-        "itbench_investigation_decision_v1",
-        "itbench_investigation_decision_v2",
-        "itbench_investigation_decision_v3",
-        "itbench_investigation_decision_v4",
-    }
+    external_protocol_v5 = request.response_schema_name == ITBENCH_EXTERNAL_PROTOCOL_V5
+    external_protocol = (
+        request.response_schema_name
+        in {
+            "itbench_investigation_decision_v1",
+            "itbench_investigation_decision_v2",
+            "itbench_investigation_decision_v3",
+            "itbench_investigation_decision_v4",
+        }
+        or external_protocol_v5
+    )
     decision_names = (
         ITBENCH_DECISION_FUNCTION_NAMES
         if external_protocol
@@ -828,7 +861,9 @@ def _extract_decision_function(
             metadata=metadata,
         )
     schemas = (
-        _itbench_decision_function_schemas(
+        _itbench_v5_decision_function_schemas()
+        if external_protocol_v5
+        else _itbench_decision_function_schemas(
             request.response_schema, request.allowed_tool_names, request.tool_schemas
         )
         if external_protocol
@@ -852,6 +887,8 @@ def _extract_decision_function(
             "decision function arguments did not match response schema",
             metadata=metadata.model_copy(update={"schema_error_path": schema_error_path}),
         )
+    if external_protocol_v5:
+        return structured_output, metadata
     if function_name == "request_itbench_tools":
         if "CandidateUpdateV4" in request.response_schema.get("$defs", {}):
             return {
@@ -1159,16 +1196,24 @@ class OpenAIProvider:
             "itbench_investigation_decision_v2",
             "itbench_investigation_decision_v3",
             "itbench_investigation_decision_v4",
+            ITBENCH_EXTERNAL_PROTOCOL_V5,
         }:
             a1_protocol = request.response_schema_name == "a1_investigation_decision"
-            external_protocol = request.response_schema_name in {
-                "itbench_investigation_decision_v1",
-                "itbench_investigation_decision_v2",
-                "itbench_investigation_decision_v3",
-                "itbench_investigation_decision_v4",
-            }
+            external_protocol_v5 = request.response_schema_name == ITBENCH_EXTERNAL_PROTOCOL_V5
+            external_protocol = (
+                request.response_schema_name
+                in {
+                    "itbench_investigation_decision_v1",
+                    "itbench_investigation_decision_v2",
+                    "itbench_investigation_decision_v3",
+                    "itbench_investigation_decision_v4",
+                }
+                or external_protocol_v5
+            )
             schemas = (
-                _itbench_decision_function_schemas(
+                _itbench_v5_decision_function_schemas()
+                if external_protocol_v5
+                else _itbench_decision_function_schemas(
                     request.response_schema,
                     request.allowed_tool_names,
                     request.tool_schemas,
@@ -1209,6 +1254,13 @@ class OpenAIProvider:
                         "Submit only independently causal namespace/Kind/name entities with "
                         "runtime-issued evidence handles."
                     ),
+                    "stop_itbench_investigation": "Stop when observable evidence cannot support a reliable diagnosis.",
+                }
+            if external_protocol_v5:
+                descriptions = {
+                    **descriptions,
+                    "request_itbench_tools": "Choose one bounded OBSERVE, HYPOTHESIZE, INVESTIGATE, or REVISE action.",
+                    "submit_itbench_diagnosis": "Submit runtime candidate handles only when evidence supports a minimal causal set.",
                     "stop_itbench_investigation": "Stop when observable evidence cannot support a reliable diagnosis.",
                 }
             allowed = (

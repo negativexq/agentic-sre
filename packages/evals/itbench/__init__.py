@@ -20,6 +20,16 @@ from packages.evals.itbench.dataset import (
     ITBenchDatasetError,
     ITBenchLiteDataset,
 )
+from packages.evals.itbench.e9_context import E9_CONTEXT_VERSION, E9ContextPlanner
+from packages.evals.itbench.e9_fsm import E9FSM, E9Phase
+from packages.evals.itbench.e9_memory import E9CaseMemory, E9Event
+from packages.evals.itbench.e9_runtime import (
+    ITBENCH_E9_PROMPT_VERSION,
+    E9InvestigationRuntime,
+    E9Limits,
+    e9_prompt_hash,
+)
+from packages.evals.itbench.e9_semantic import E9_SEMANTIC_OPERATIONS, E9SemanticOperations
 from packages.evals.itbench.external_context import (
     ITBENCH_EXTERNAL_CONTEXT_V3,
     ITBENCH_EXTERNAL_CONTEXT_VERSION,
@@ -33,8 +43,10 @@ from packages.evals.itbench.external_contracts import (
     ITBENCH_EXTERNAL_PROTOCOL_V2,
     ITBENCH_EXTERNAL_PROTOCOL_V3,
     ITBENCH_EXTERNAL_PROTOCOL_V4,
+    ITBENCH_EXTERNAL_PROTOCOL_V5,
     CandidateStatus,
     CandidateUpdateV4,
+    E9Action,
     ExternalRootCause,
     ExternalRootCauseV4,
     ExternalStop,
@@ -44,6 +56,7 @@ from packages.evals.itbench.external_contracts import (
     ITBenchInvestigationDecisionV2,
     ITBenchInvestigationDecisionV3,
     ITBenchInvestigationDecisionV4,
+    ITBenchInvestigationDecisionV5,
 )
 from packages.evals.itbench.external_registry import ITBenchExternalToolRegistry
 from packages.evals.itbench.external_runtime import (
@@ -72,6 +85,7 @@ from packages.evals.itbench.official import (
 )
 from packages.evals.itbench.output_adapter import (
     adapt_a1_output,
+    adapt_e9_output,
     adapt_external_output,
     entities_from_k8s_records,
     write_official_output,
@@ -105,13 +119,27 @@ __all__ = [
     "ITBenchInvestigationDecisionV2",
     "ITBenchInvestigationDecisionV3",
     "ITBenchInvestigationDecisionV4",
+    "E9Action",
+    "ITBenchInvestigationDecisionV5",
     "ITBENCH_EXTERNAL_PROTOCOL_V2",
     "ITBENCH_EXTERNAL_PROTOCOL_V3",
     "ITBENCH_EXTERNAL_PROTOCOL_V4",
+    "ITBENCH_EXTERNAL_PROTOCOL_V5",
     "CandidateStatus",
     "CandidateUpdateV4",
     "ExternalRootCauseV4",
     "ITBenchExternalToolRegistry",
+    "E9CaseMemory",
+    "E9ContextPlanner",
+    "E9Event",
+    "E9FSM",
+    "E9InvestigationRuntime",
+    "E9Limits",
+    "E9Phase",
+    "E9_SEMANTIC_OPERATIONS",
+    "E9SemanticOperations",
+    "E9_CONTEXT_VERSION",
+    "ITBENCH_E9_PROMPT_VERSION",
     "ExternalInvestigationRuntime",
     "ITBENCH_EXTERNAL_CONTEXT_VERSION",
     "ITBENCH_EXTERNAL_CONTEXT_V3",
@@ -128,6 +156,7 @@ __all__ = [
     "normalize_alerts",
     "external_prompt_hash",
     "external_prompt_v6_hash",
+    "e9_prompt_hash",
     "ITBenchLiteDataset",
     "ITBenchRunStore",
     "ITBenchScenario",
@@ -139,6 +168,7 @@ __all__ = [
     "OFFICIAL_OUTPUT_RELATIVE_PATH",
     "OfficialITBenchEvaluatorSpec",
     "adapt_a1_output",
+    "adapt_e9_output",
     "adapt_external_output",
     "atomic_json_write",
     "build_observable_incident",

@@ -1,0 +1,32 @@
+{
+  "execution": "ITB-E8",
+  "source": "frozen official native artifacts",
+  "scenario_count": 35,
+  "invalid_count": 21,
+  "fatal_security_or_infrastructure_failures": 0,
+  "histogram": {"DECISION_SCHEMA": 8, "DECISION_SEMANTICS": 11, "TOOL_ARGUMENTS": 2, "EVIDENCE_REFERENCE": 0, "CANONICAL_IDENTITY": 0, "TOO_MANY_ROOT_CAUSES": 0, "OTHER": 0},
+  "recoverability": {"RECOVERABLE_STATE_TRANSITION": 11, "RECOVERABLE_PROTOCOL": 8, "RECOVERABLE_TOOL_ARGUMENT": 2, "FATAL_SECURITY": 0, "FATAL_INFRASTRUCTURE": 0},
+  "scenarios": [
+    {"scenario_id":"Scenario-1","turn":1,"model_calls_before_failure":1,"validation_stage":"DECISION_SEMANTICS","validation_path":"$.candidate_updates","validation_type":"candidate entity is not observable","provider_response_received":true,"classification":"RECOVERABLE_STATE_TRANSITION"},
+    {"scenario_id":"Scenario-5","turn":5,"model_calls_before_failure":5,"validation_stage":"DECISION_SCHEMA","validation_path":"$.stop.stop_reason","validation_type":"string_too_long","provider_response_received":true,"classification":"RECOVERABLE_PROTOCOL"},
+    {"scenario_id":"Scenario-6","turn":1,"model_calls_before_failure":1,"validation_stage":"TOOL_ARGUMENTS","validation_path":"$.limit","validation_type":"INVALID_ARGUMENTS","provider_response_received":true,"classification":"RECOVERABLE_TOOL_ARGUMENT"},
+    {"scenario_id":"Scenario-7","turn":4,"model_calls_before_failure":4,"validation_stage":"DECISION_SEMANTICS","validation_path":"$.candidate_updates","validation_type":"candidate entity is not observable","provider_response_received":true,"classification":"RECOVERABLE_STATE_TRANSITION"},
+    {"scenario_id":"Scenario-8","turn":4,"model_calls_before_failure":4,"validation_stage":"DECISION_SEMANTICS","validation_path":"$.candidate_updates","validation_type":"candidate entity is not observable","provider_response_received":true,"classification":"RECOVERABLE_STATE_TRANSITION"},
+    {"scenario_id":"Scenario-11","turn":5,"model_calls_before_failure":5,"validation_stage":"DECISION_SCHEMA","validation_path":"$.stop.stop_reason","validation_type":"string_too_long","provider_response_received":true,"classification":"RECOVERABLE_PROTOCOL"},
+    {"scenario_id":"Scenario-12","turn":5,"model_calls_before_failure":5,"validation_stage":"DECISION_SCHEMA","validation_path":"$.candidate_update_2.entity","validation_type":"value_error","provider_response_received":true,"classification":"RECOVERABLE_PROTOCOL"},
+    {"scenario_id":"Scenario-13","turn":2,"model_calls_before_failure":2,"validation_stage":"DECISION_SEMANTICS","validation_path":"$.candidate_updates","validation_type":"candidate entity is not observable","provider_response_received":true,"classification":"RECOVERABLE_STATE_TRANSITION"},
+    {"scenario_id":"Scenario-14","turn":5,"model_calls_before_failure":5,"validation_stage":"DECISION_SCHEMA","validation_path":"$.candidate_update_2.entity","validation_type":"value_error","provider_response_received":true,"classification":"RECOVERABLE_PROTOCOL"},
+    {"scenario_id":"Scenario-15","turn":2,"model_calls_before_failure":2,"validation_stage":"TOOL_ARGUMENTS","validation_path":"$.limit","validation_type":"INVALID_ARGUMENTS","provider_response_received":true,"classification":"RECOVERABLE_TOOL_ARGUMENT"},
+    {"scenario_id":"Scenario-16","turn":1,"model_calls_before_failure":1,"validation_stage":"DECISION_SEMANTICS","validation_path":"$.candidate_updates","validation_type":"candidate entity is not observable","provider_response_received":true,"classification":"RECOVERABLE_STATE_TRANSITION"},
+    {"scenario_id":"Scenario-17","turn":4,"model_calls_before_failure":4,"validation_stage":"DECISION_SEMANTICS","validation_path":"$.candidate_updates","validation_type":"candidate entity is not observable","provider_response_received":true,"classification":"RECOVERABLE_STATE_TRANSITION"},
+    {"scenario_id":"Scenario-21","turn":4,"model_calls_before_failure":4,"validation_stage":"DECISION_SEMANTICS","validation_path":"$.candidate_updates","validation_type":"maximum active candidates exceeded","provider_response_received":true,"classification":"RECOVERABLE_STATE_TRANSITION"},
+    {"scenario_id":"Scenario-29","turn":4,"model_calls_before_failure":4,"validation_stage":"DECISION_SEMANTICS","validation_path":"$.candidate_updates","validation_type":"candidate entity is not observable","provider_response_received":true,"classification":"RECOVERABLE_STATE_TRANSITION"},
+    {"scenario_id":"Scenario-31","turn":5,"model_calls_before_failure":5,"validation_stage":"DECISION_SCHEMA","validation_path":"$.stop.stop_reason","validation_type":"string_too_long","provider_response_received":true,"classification":"RECOVERABLE_PROTOCOL"},
+    {"scenario_id":"Scenario-33","turn":3,"model_calls_before_failure":3,"validation_stage":"DECISION_SCHEMA","validation_path":"$.candidate_update_2.entity","validation_type":"value_error","provider_response_received":true,"classification":"RECOVERABLE_PROTOCOL"},
+    {"scenario_id":"Scenario-35","turn":5,"model_calls_before_failure":5,"validation_stage":"DECISION_SEMANTICS","validation_path":"$.candidate_updates","validation_type":"candidate entity is not observable","provider_response_received":true,"classification":"RECOVERABLE_STATE_TRANSITION"},
+    {"scenario_id":"Scenario-38","turn":3,"model_calls_before_failure":3,"validation_stage":"DECISION_SEMANTICS","validation_path":"$.candidate_updates","validation_type":"candidate entity is not observable","provider_response_received":true,"classification":"RECOVERABLE_STATE_TRANSITION"},
+    {"scenario_id":"Scenario-83","turn":5,"model_calls_before_failure":5,"validation_stage":"DECISION_SCHEMA","validation_path":"$.stop.stop_reason","validation_type":"string_too_long","provider_response_received":true,"classification":"RECOVERABLE_PROTOCOL"},
+    {"scenario_id":"Scenario-91","turn":5,"model_calls_before_failure":5,"validation_stage":"DECISION_SCHEMA","validation_path":"$.stop.stop_reason","validation_type":"string_too_long","provider_response_received":true,"classification":"RECOVERABLE_PROTOCOL"},
+    {"scenario_id":"Scenario-102","turn":2,"model_calls_before_failure":2,"validation_stage":"DECISION_SEMANTICS","validation_path":"$.candidate_updates","validation_type":"candidate entity is not observable","provider_response_received":true,"classification":"RECOVERABLE_STATE_TRANSITION"}
+  ]
+}

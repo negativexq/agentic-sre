@@ -1,8 +1,8 @@
 {
   "execution": "ITB-E8",
   "experiment": "itbench-lite-sre-external-eval-v8",
-  "status": "PREREGISTERED_REPAIR_REVISION",
-  "runtime_source_sha": "6c3a779c09a5e0978448f71975cc5e523171cdf7",
+  "status": "PREREGISTERED_FINAL_REPAIR_REVISION",
+  "runtime_source_sha": "e474db9432b17fc854873fa8458a3b9b0de8d49a",
   "benchmark": "ITBench-Lite",
   "organization": "IBM Research",
   "dataset_revision": "d0916b08ba421ce5e672e9ad68aa947d938dfef0",
@@ -21,9 +21,13 @@
   "candidate_retrieval_source_sha256": "aece8d8b30552183b05c9861011a5eab7d92b901c6793d08b1ae5fcc99a95978",
   "evidence_formatter": "semantic_section_packed_external_observation_v2",
   "runtime_source_files": {
-    "external_runtime_sha256": "7960e0603da44f6124fb58c2485d774bbe05340d50412e80c8bd5a3fa05446bb",
-    "snapshot_backend_sha256": "aece8d8b30552183b05c9861011a5eab7d92b901c6793d08b1ae5fcc99a95978",
-    "provider_openai_sha256": "17e615533cb21804dd09c0240ee685dce59d27d8c2cd7aa8ff834e767bc11b72"
+    "external_context_sha256": "a18a70b3d7625d460fe3194a1895171219ffac8defe1d8442347b7abab779a36",
+    "external_registry_sha256": "6d5e326b4b0db9ae43942d429d76ec22f23430ddb08236594605b04d00bc051c",
+    "external_runtime_sha256": "48b5829c5d28154a4e6053da2f1de4c786d45a47e6c828bdcf7655b5dd06aea7",
+    "snapshot_backend_sha256": "bca27256be048388d6cd3d1ab5768e184cfa8a150788ea040c5fbcb751f8b32c",
+    "provider_openai_sha256": "17e615533cb21804dd09c0240ee685dce59d27d8c2cd7aa8ff834e767bc11b72",
+    "external_contracts_sha256": "8b5fd5e6ea7259c9c7a2976e4d189c5c6e70a833360f7f4c979ffbc09eb28ed1",
+    "runner_sha256": "b10e182adaf48b7596883777e953f64ad905c6a25b388ceafeeb66763d50aa26"
   },
   "official_evaluator": {
     "source": "itbench-hub/ITBench-Evaluations",
@@ -47,10 +51,12 @@
   ],
   "ledgers": {
     "smoke": {
-      "path": ".local/itbench-lite-e8-smoke-budget.json",
+      "path": ".local/itbench-lite-e8-smoke-003-budget.json",
       "cap": 5,
       "consumed": 0,
-      "status": "NOT_STARTED"
+      "status": "NOT_STARTED",
+      "smoke_id": "ITB-E8-SMOKE-003",
+      "historical_attempts_preserved": 5
     },
     "official_agent": {
       "path": ".local/itbench-lite-e8-official-budget.json",
@@ -77,8 +83,8 @@
   "qualification": {
     "context_report": "docs/benchmarks/itbench-e8-context-composition.json",
     "zero_network_report": "docs/benchmarks/itbench-e8-zero-network-qualification.json",
-    "context_report_sha256": "10318d6fb4afd087295ffbbbf9392a782f3b588a878fea10c02b0d68bbe83ca2",
-    "zero_network_report_sha256": "409a2a2bfe323a38bdad4cd037c452f426e52fe04215bc6cd908be4819b338f0",
+    "context_report_sha256": "4fadf168cfe7c18747a211a69349f438036bb7ec5142db1c59862d5eabd8b410",
+    "zero_network_report_sha256": "5306cc35e31f2f1d16bea4c56dcf0586bf9542959defe0067d40b9e58db5506d",
     "openai_calls": 0,
     "judge_calls": 0,
     "ground_truth_access": false
@@ -87,5 +93,5 @@
     "investigator_access": false,
     "evaluator_access": "post-persistence only"
   },
-  "notes": "E8 is a new engineering revision after E7. Smoke-001 exposed a provider schema integration defect and consumed one non-refundable attempt; smoke-002 is the repaired pre-official qualification. E8 is not untouched held-out generalization."
+  "notes": "E8 official execution had not begun. Smoke-001 and Smoke-002 exposed objective pre-official integration/harness defects and remain immutable. This manifest preregisters the final repair revision before any official E8 prediction; E8 is not untouched held-out generalization."
 }

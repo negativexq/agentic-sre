@@ -298,7 +298,7 @@ def run_official() -> int:
         if ledger.get("calls_used", 0) != 0 or ledger.get("cap") != 420:
             raise RuntimeError("E9 official ledger must start fresh at cap 420")
         budget.ensure_capacity(len(ITBENCH_SCENARIO_IDS) * LIMITS.max_model_calls)
-    else:
+    elif pending:
         budget.ensure_capacity(len(pending) * LIMITS.max_model_calls)
     provider = OpenAIProvider(budget=budget, max_retry=0)
     store = ITBenchRunStore(OFFICIAL_ROOT, execution_id=EXECUTION)
@@ -378,15 +378,14 @@ def run_official() -> int:
         print(f"completed {scenario.scenario_id}", flush=True)
     if [item["scenario_id"] for item in checkpoints] != list(ITBENCH_SCENARIO_IDS):
         raise RuntimeError("E9 official scenario order/completeness mismatch")
-    grades = [
-        json.loads(
-            (OFFICIAL_ROOT / item["scenario_id"] / "1" / "grade.json").read_text(encoding="utf-8")
+    from packages.evals.itbench.grader import ITBenchEntityGrade
+
+    grade_models = [
+        ITBenchEntityGrade.model_validate_json(
+            (OFFICIAL_ROOT / item["scenario_id"] / "1" / "grade.json").read_bytes()
         )
         for item in checkpoints
     ]
-    from packages.evals.itbench.grader import ITBenchEntityGrade
-
-    grade_models = [ITBenchEntityGrade.model_validate(item) for item in grades]
     final = budget.snapshot()
     summary = {
         "execution": EXECUTION,

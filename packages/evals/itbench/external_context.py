@@ -10,7 +10,7 @@ from packages.contracts import Alert, Incident
 from packages.evals.itbench.contracts import ITBenchEvidenceCategory
 from packages.evals.itbench.snapshot_backend import ITBenchSnapshotBackend
 
-ITBENCH_EXTERNAL_CONTEXT_VERSION = "itbench_external_context_v1"
+ITBENCH_EXTERNAL_CONTEXT_VERSION = "itbench_external_context_v2"
 MAX_EXTERNAL_CONTEXT_CHARS = 70_000
 
 
@@ -67,6 +67,8 @@ def build_external_context(
     max_turns: int = 5,
     tool_calls_used: int = 0,
     tool_calls_limit: int = 12,
+    case_state: dict[str, Any] | None = None,
+    candidate_entities: tuple[dict[str, Any], ...] = (),
 ) -> str:
     """Build a complete-object JSON context with an explicit size guard."""
     payload = {
@@ -83,8 +85,15 @@ def build_external_context(
         "alerts": list(normalize_alerts(backend)),
         "available_evidence": [category.value for category in ITBenchEvidenceCategory],
         "observable_entity_count": len(backend.observable_entities()),
+        "candidate_shortlist": list(candidate_entities),
         "observable_topology": list(backend.topology(limit=100)),
         "evidence": list(evidence[-12:]),
+        "case_state": case_state
+        or {
+            "queries_already_run": [],
+            "entities_contextualized": [],
+            "active_candidates": [],
+        },
         "tool_catalog": list(descriptors),
         "execution": {
             "turn": turn,

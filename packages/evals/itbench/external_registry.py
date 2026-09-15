@@ -30,8 +30,19 @@ class ExternalEntityArguments(ExternalQueryArguments):
     entity: str | None = Field(default=None, min_length=3, max_length=512)
 
 
+class ExternalEntityContextArguments(ToolArguments):
+    """Arguments whose complete public surface is consumed by entity context."""
+
+    entity: str = Field(min_length=3, max_length=512)
+    limit: int = Field(default=20, ge=1, le=50)
+
+
 class ExternalTraceArguments(ExternalQueryArguments):
     trace_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class ExternalTelemetryArguments(ExternalEntityArguments):
+    severity: str | None = Field(default=None, min_length=1, max_length=32)
 
 
 class ExternalMetricArguments(ExternalQueryArguments):
@@ -39,6 +50,13 @@ class ExternalMetricArguments(ExternalQueryArguments):
 
     service: str | None = Field(default=None, min_length=1, max_length=255)
     namespace: str | None = Field(default=None, min_length=1, max_length=255)
+    metric_name: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class ExternalTopologyArguments(ExternalEntityArguments):
+    """Structured topology filters; every field is consumed by the backend."""
+
+    relationship: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class ITBenchExternalToolRegistry:
@@ -63,14 +81,14 @@ class ITBenchExternalToolRegistry:
             "itbench_entity_context",
             "Read bounded context for one observable entity.",
             ITBenchEvidenceCategory.K8S_OBJECTS,
-            ExternalEntityArguments,
+            ExternalEntityContextArguments,
             10_000,
         ),
         (
             "itbench_topology",
             "Read bounded observable Kubernetes relationships.",
             ITBenchEvidenceCategory.K8S_OBJECTS,
-            ExternalQueryArguments,
+            ExternalTopologyArguments,
             5_000,
         ),
         (
@@ -160,12 +178,25 @@ class ITBenchExternalToolRegistry:
         if name == "itbench_topology":
             return _bounded_records(
                 name,
-                list(self.backend.topology(limit=args.get("limit", 20))),
+                list(
+                    self.backend.topology(
+                        entity=args.get("entity"),
+                        namespace=args.get("namespace"),
+                        kind=args.get("kind"),
+                        pattern=args.get("pattern"),
+                        relationship=args.get("relationship"),
+                        limit=args.get("limit", 20),
+                    )
+                ),
                 args.get("limit", 20),
                 self.backend.max_bytes,
             )
         if name == "itbench_metric_analysis":
             return self.backend.metric_analysis(args)
+        if name == "itbench_logs":
+            return {"tool": name, **self.backend.log_analysis(args)}
+        if name == "itbench_trace_search":
+            return {"tool": name, **self.backend.trace_analysis(args)}
         if name == "itbench_trace_detail" and isinstance(args.get("trace_id"), str):
             return self.backend.query(
                 ITBenchEvidenceCategory.TRACES,

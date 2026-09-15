@@ -170,3 +170,65 @@ def test_metric_analysis_is_one_backend_scan(
     assert result["aggregate"]["count"] == 2
     assert result["sample_count"] == 1
     assert scans == 1
+
+
+def test_topology_public_filters_are_consumed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backend = _backend(tmp_path)
+    registry = ITBenchExternalToolRegistry(backend)
+    seen: dict[str, object] = {}
+
+    def topology(**kwargs: object) -> tuple[dict[str, object], ...]:
+        seen.update(kwargs)
+        return (
+            {
+                "source": "demo/Service/frontend",
+                "target": "demo/Pod/frontend-1",
+                "relationship": "selector",
+            },
+        )
+
+    monkeypatch.setattr(backend, "topology", topology)
+    result = registry.invoke(
+        "itbench_topology",
+        {
+            "entity": "demo/Service/frontend",
+            "namespace": "demo",
+            "kind": "Service",
+            "pattern": "frontend",
+            "relationship": "selector",
+            "limit": 1,
+        },
+    )
+    assert result["returned_count"] == 1
+    assert seen == {
+        "entity": "demo/Service/frontend",
+        "namespace": "demo",
+        "kind": "Service",
+        "pattern": "frontend",
+        "relationship": "selector",
+        "limit": 1,
+    }
+
+
+def test_entity_context_filters_topology_before_bounding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backend = _backend(tmp_path)
+    calls: list[dict[str, object]] = []
+
+    def topology(**kwargs: object) -> tuple[dict[str, object], ...]:
+        calls.append(kwargs)
+        return (
+            {
+                "source": "demo/ConfigMap/checkout-config",
+                "target": "demo/Pod/late",
+                "relationship": "configuration_reference",
+            },
+        )
+
+    monkeypatch.setattr(backend, "topology", topology)
+    result = backend.query_entity_context("demo/ConfigMap/checkout-config", 1)
+    assert result["topology"]
+    assert calls == [{"entity": "demo/ConfigMap/checkout-config", "limit": 1}]

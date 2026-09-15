@@ -1,0 +1,9 @@
+{
+  "execution": "ITB-E6",
+  "evaluator_revision": "14f026fc9cc348c4ecec5ab32714de954c95c1b1",
+  "metric": "ROOT_CAUSE_ENTITY",
+  "status": "NOT_RUN",
+  "reason": "The pinned evaluator implementation is not present in this checkout and the recorded repository metadata points to an unavailable external revision. Frozen agent predictions were not changed or re-executed.",
+  "provider_calls": 0,
+  "agent_predictions_reused": true
+}

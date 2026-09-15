@@ -1,0 +1,13 @@
+{
+  "execution": "ITB-E7-pre",
+  "ground_truth_used_for_behavior": false,
+  "changes": [
+    {"change": "structured topology filtering", "mechanism": "query filters complete observable edges before bounding", "expected_effect": "restore entity-specific causal relationships"},
+    {"change": "semantic entity context", "mechanism": "one bounded context response groups object, event, topology and telemetry summaries", "expected_effect": "reduce structural fishing and expose causal evidence"},
+    {"change": "metric identity grouping", "mechanism": "aggregate per metric/service/namespace identity", "expected_effect": "avoid heterogeneous metric statistics"},
+    {"change": "semantic evidence formatter", "mechanism": "prioritize stable sections instead of raw JSON prefix truncation", "expected_effect": "retain high-signal fields under context bounds"},
+    {"change": "observable candidate shortlist", "mechanism": "transparent scores from alerts, topology, events and control-resource signals", "expected_effect": "raise candidate recall without GT-derived rules"},
+    {"change": "runtime case state", "mechanism": "persist auditable candidates, evidence refs, query ledger and budgets", "expected_effect": "reduce duplicate actions and preserve causal state across turns"},
+    {"change": "prompt v5", "mechanism": "generic symptom/cause, temporal and irreducibility procedure", "expected_effect": "improve causal selection while preserving model and budgets"}
+  ]
+}

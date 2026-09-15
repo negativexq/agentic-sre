@@ -1,0 +1,1704 @@
+{
+  "execution": "ITB-E6",
+  "primary_failure_counts": {
+    "DIAGNOSIS_PARTIAL_OR_CORRECT": 1,
+    "DIAGNOSIS_WRONG_CAUSE": 29,
+    "MODEL_DECISION_INVALID": 2,
+    "VOLUNTARY_STOP": 3
+  },
+  "scenario_count": 35,
+  "scenarios": [
+    {
+      "duplicate_or_reused": 3,
+      "evidence_count": 5,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "load-generator-.*"
+          ],
+          "id": "load-generator-pod-1",
+          "kind": "Pod",
+          "name": null,
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 53888,
+      "model_calls": 5,
+      "output_tokens": 640,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Deployment/frontend-proxy"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-1",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 5,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_topology",
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_topology",
+        "itbench_entity_context",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 8,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 5,
+      "evidence_count": 4,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "otel-demo"
+          ],
+          "id": "otel-demo-namespace-1",
+          "kind": "Namespace",
+          "name": null,
+          "namespace": null
+        }
+      ],
+      "input_tokens": 82954,
+      "model_calls": 5,
+      "output_tokens": 764,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/ResourceQuota/otel-demo-memory",
+        "otel-demo/Deployment/ad"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-102",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 4,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_kubernetes_events"
+      ],
+      "tool_requests": 9,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 6,
+      "evidence_count": 4,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "product-catalog-.*"
+          ],
+          "id": "product-catalog-deployment",
+          "kind": "Deployment",
+          "name": null,
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 92342,
+      "model_calls": 5,
+      "output_tokens": 813,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Deployment/product-catalog"
+      ],
+      "prediction_categories": [
+        "WRONG_ENTITY_NORMALIZATION"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-105",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 4,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 10,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 1,
+      "evidence_count": 8,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [],
+          "id": "flagd-config",
+          "kind": "ConfigMap",
+          "name": "flagd-config",
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 40186,
+      "model_calls": 5,
+      "output_tokens": 703,
+      "precision": 0.0,
+      "predicted_entities": [],
+      "prediction_categories": [],
+      "primary_failure_class": "VOLUNTARY_STOP",
+      "recall": 0.0,
+      "scenario": "Scenario-11",
+      "terminal": "STOP",
+      "tool_executions": 8,
+      "tool_names": [
+        "itbench_metric_analysis",
+        "itbench_metric_analysis",
+        "itbench_metric_analysis",
+        "itbench_entity_search",
+        "itbench_entity_search",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_kubernetes_events"
+      ],
+      "tool_requests": 9,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 2,
+      "evidence_count": 6,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [],
+          "id": "flagd-config-1",
+          "kind": "ConfigMap",
+          "name": "flagd-config",
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 53414,
+      "model_calls": 5,
+      "output_tokens": 744,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Service/frontend-proxy",
+        "otel-demo/Deployment/frontend-proxy"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-12",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 6,
+      "tool_names": [
+        "itbench_alert_summary",
+        "itbench_metric_analysis",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_alert_summary",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 8,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 1,
+      "evidence_count": 9,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [],
+          "id": "flagd-config",
+          "kind": "ConfigMap",
+          "name": "flagd-config",
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 60216,
+      "model_calls": 5,
+      "output_tokens": 760,
+      "precision": 0.0,
+      "predicted_entities": [
+        "_cluster/Pod/kube-controller-manager-i-036656695f1bb1e7f",
+        "_cluster/Pod/kube-scheduler-i-036656695f1bb1e7f"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-13",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 9,
+      "tool_names": [
+        "itbench_metric_analysis",
+        "itbench_metric_analysis",
+        "itbench_metric_analysis",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_trace_search",
+        "itbench_logs",
+        "itbench_entity_context",
+        "itbench_kubernetes_events"
+      ],
+      "tool_requests": 10,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 4,
+      "evidence_count": 6,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [],
+          "id": "flagd-config-1",
+          "kind": "ConfigMap",
+          "name": "flagd-config",
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 56264,
+      "model_calls": 5,
+      "output_tokens": 1009,
+      "precision": 0.0,
+      "predicted_entities": [],
+      "prediction_categories": [],
+      "primary_failure_class": "MODEL_DECISION_INVALID",
+      "recall": 0.0,
+      "scenario": "Scenario-14",
+      "terminal": "MODEL_DECISION_INVALID",
+      "tool_executions": 6,
+      "tool_names": [
+        "itbench_metric_analysis",
+        "itbench_metric_analysis",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 10,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": "$.root_causes[0].evidence_refs",
+      "validation_stage": "DECISION_SCHEMA",
+      "validation_type": "too_short"
+    },
+    {
+      "duplicate_or_reused": 1,
+      "evidence_count": 10,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [],
+          "id": "flagd-config-1",
+          "kind": "ConfigMap",
+          "name": "flagd-config",
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 60051,
+      "model_calls": 5,
+      "output_tokens": 761,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Service/checkout"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-15",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 10,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_metric_analysis",
+        "itbench_metric_analysis",
+        "itbench_metric_analysis",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_trace_search"
+      ],
+      "tool_requests": 11,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 0,
+      "evidence_count": 7,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "shipping\\b"
+          ],
+          "id": "shipping-deployment-1",
+          "kind": "Deployment",
+          "name": null,
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 57801,
+      "model_calls": 5,
+      "output_tokens": 652,
+      "precision": 0.0,
+      "predicted_entities": [
+        "_cluster/ControlPlane/kube-scheduler",
+        "_cluster/ControlPlane/kube-controller-manager"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-16",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 7,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_kubernetes_objects",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 7,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 2,
+      "evidence_count": 7,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            ".*product-catalog"
+          ],
+          "id": "delay-otel-demo-product-catalog-1",
+          "kind": "NetworkChaos",
+          "name": null,
+          "namespace": "chaos-mesh"
+        }
+      ],
+      "input_tokens": 59978,
+      "model_calls": 5,
+      "output_tokens": 803,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Deployment/frontend",
+        "otel-demo/Service/frontend",
+        "otel-demo/Service/checkout"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-17",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 7,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_trace_search",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 9,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 2,
+      "evidence_count": 3,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            ".*product-catalog-network-delay"
+          ],
+          "id": "otel-demo-product-catalog-network-delay-1",
+          "kind": "PodChaos",
+          "name": null,
+          "namespace": "chaos-mesh"
+        }
+      ],
+      "input_tokens": 62954,
+      "model_calls": 5,
+      "output_tokens": 622,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Pod/checkout-5dccddf8bb-9dn2q"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-18",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 3,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 5,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 4,
+      "evidence_count": 4,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            ".*email-checkout-network-partition"
+          ],
+          "id": "otel-demo-email-checkout-network-partition-1",
+          "kind": "NetworkChaos",
+          "name": null,
+          "namespace": "chaos-mesh"
+        }
+      ],
+      "input_tokens": 58494,
+      "model_calls": 5,
+      "output_tokens": 712,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Service/checkout",
+        "otel-demo/Service/frontend"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-19",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 4,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_topology",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_kubernetes_events"
+      ],
+      "tool_requests": 8,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 1,
+      "evidence_count": 8,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [],
+          "id": "flagd-config",
+          "kind": "ConfigMap",
+          "name": "flagd-config",
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 59582,
+      "model_calls": 5,
+      "output_tokens": 865,
+      "precision": 0.0,
+      "predicted_entities": [
+        "_cluster/Pod/kube-scheduler-i-0532e33054d94ef32",
+        "_cluster/Pod/kube-controller-manager-i-0532e33054d94ef32",
+        "otel-demo/Deployment/frontend"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-2",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 8,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_topology",
+        "itbench_entity_context",
+        "itbench_topology",
+        "itbench_entity_search",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 9,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 5,
+      "evidence_count": 4,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "product-catalog-.*"
+          ],
+          "id": "productcatalog-deployment-1",
+          "kind": "Deployment",
+          "name": null,
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 87627,
+      "model_calls": 5,
+      "output_tokens": 904,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Deployment/product-catalog"
+      ],
+      "prediction_categories": [
+        "WRONG_ENTITY_NORMALIZATION"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-20",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 7,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 12,
+      "true_positive": 0,
+      "typed_failures": 3,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 2,
+      "evidence_count": 4,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "otel-demo-valkey-memory-stress"
+          ],
+          "id": "otel-demo-valkey-memory-stress",
+          "kind": "StressChaos",
+          "name": null,
+          "namespace": "chaos-mesh"
+        }
+      ],
+      "input_tokens": 58884,
+      "model_calls": 5,
+      "output_tokens": 659,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Pod/valkey-cart-58df56c79c-4cvft"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-21",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 4,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_logs",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 6,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 3,
+      "evidence_count": 4,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "otel-demo-ad-memory-stress"
+          ],
+          "id": "otel-demo-ad-memory-stress",
+          "kind": "StressChaos",
+          "name": null,
+          "namespace": "chaos-mesh"
+        }
+      ],
+      "input_tokens": 58503,
+      "model_calls": 5,
+      "output_tokens": 637,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Pod/ad-554b849958-l9ft5"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-22",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 4,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_logs",
+        "itbench_entity_context",
+        "itbench_kubernetes_events"
+      ],
+      "tool_requests": 7,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 3,
+      "evidence_count": 6,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "checkout-.*"
+          ],
+          "id": "checkout-deployment-1",
+          "kind": "Deployment",
+          "name": null,
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 65001,
+      "model_calls": 5,
+      "output_tokens": 794,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Deployment/checkout",
+        "otel-demo/Pod/checkout-d75b77f99-hgc68"
+      ],
+      "prediction_categories": [
+        "WRONG_ENTITY_NORMALIZATION",
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-23",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 6,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 9,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 2,
+      "evidence_count": 5,
+      "f1": 1.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "checkout\\b"
+          ],
+          "id": "checkout-deployment",
+          "kind": "Deployment",
+          "name": null,
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 87508,
+      "model_calls": 5,
+      "output_tokens": 654,
+      "precision": 1.0,
+      "predicted_entities": [
+        "otel-demo/Deployment/checkout"
+      ],
+      "prediction_categories": [
+        "EXACT_OR_ROOT_FILTER_MATCH"
+      ],
+      "primary_failure_class": "DIAGNOSIS_PARTIAL_OR_CORRECT",
+      "recall": 1.0,
+      "scenario": "Scenario-24",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 5,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_logs",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 7,
+      "true_positive": 1,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 2,
+      "evidence_count": 7,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            ".*recommendation"
+          ],
+          "id": "otel-demo-recommendation-cpu-stress",
+          "kind": "Schedule",
+          "name": null,
+          "namespace": "chaos-mesh"
+        }
+      ],
+      "input_tokens": 56379,
+      "model_calls": 5,
+      "output_tokens": 743,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Deployment/recommendation"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-25",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 9,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_topology",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_metric_analysis",
+        "itbench_trace_search",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_search"
+      ],
+      "tool_requests": 11,
+      "true_positive": 0,
+      "typed_failures": 2,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 3,
+      "evidence_count": 8,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            ".*adservice"
+          ],
+          "id": "jvm-return-otel-demo-ad-1",
+          "kind": "JVMChaos",
+          "name": null,
+          "namespace": "chaos-mesh"
+        }
+      ],
+      "input_tokens": 62674,
+      "model_calls": 5,
+      "output_tokens": 837,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Deployment/frontend",
+        "otel-demo/Deployment/ad",
+        "otel-demo/Deployment/product-catalog"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-29",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 8,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_topology",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_topology",
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_metric_analysis"
+      ],
+      "tool_requests": 11,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 4,
+      "evidence_count": 6,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "frontend-block-all-ports"
+          ],
+          "id": "frontend-block-all-ports",
+          "kind": "NetworkPolicy",
+          "name": null,
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 55672,
+      "model_calls": 5,
+      "output_tokens": 913,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Pod/frontend-675fd7b5c5-8qrfh",
+        "otel-demo/Service/frontend-proxy",
+        "otel-demo/Deployment/frontend-proxy"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-31",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 6,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_metric_analysis",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_logs"
+      ],
+      "tool_requests": 10,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 1,
+      "evidence_count": 6,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "ad-.*"
+          ],
+          "id": "ad-pod-1",
+          "kind": "Pod",
+          "name": null,
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 54870,
+      "model_calls": 5,
+      "output_tokens": 876,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Deployment/frontend-proxy",
+        "otel-demo/Pod/frontend-675fd7b5c5-ljs28"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY",
+        "WRONG_ENTITY_NORMALIZATION"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-33",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 10,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_metric_analysis",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_kubernetes_events"
+      ],
+      "tool_requests": 11,
+      "true_positive": 0,
+      "typed_failures": 4,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 2,
+      "evidence_count": 8,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "valkey-cart-.*"
+          ],
+          "id": "valkey-pod-1",
+          "kind": "Pod",
+          "name": null,
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 66152,
+      "model_calls": 5,
+      "output_tokens": 832,
+      "precision": 0.0,
+      "predicted_entities": [
+        "_cluster/Component/kube-scheduler",
+        "_cluster/Component/kube-controller-manager"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-34",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 9,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_topology",
+        "itbench_metric_analysis",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_kubernetes_events"
+      ],
+      "tool_requests": 11,
+      "true_positive": 0,
+      "typed_failures": 1,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 6,
+      "evidence_count": 4,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "otel-demo-ad-jvm-chaos"
+          ],
+          "id": "otel-demo-ad-jvm-chaos",
+          "kind": "JVMChaos",
+          "name": null,
+          "namespace": "chaos-mesh"
+        }
+      ],
+      "input_tokens": 56715,
+      "model_calls": 5,
+      "output_tokens": 747,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Deployment/ad",
+        "otel-demo/Deployment/frontend"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-35",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 4,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_topology",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_kubernetes_events"
+      ],
+      "tool_requests": 10,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 0,
+      "evidence_count": 7,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "*.*"
+          ],
+          "id": "otel-demo-horizontal-pod-autoscalers",
+          "kind": "HorizontalPodAutoscaler",
+          "name": null,
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 73059,
+      "model_calls": 5,
+      "output_tokens": 782,
+      "precision": 0.0,
+      "predicted_entities": [
+        "kube-system/Pod/kube-controller-manager-i-08942eb4ee52d7d33",
+        "kube-system/Pod/kube-scheduler-i-08942eb4ee52d7d33"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-38",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 7,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_topology",
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 7,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 1,
+      "evidence_count": 5,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "flagd-config\\b"
+          ],
+          "id": "flagd-config-1",
+          "kind": "ConfigMap",
+          "name": null,
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 56973,
+      "model_calls": 5,
+      "output_tokens": 594,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Deployment/frontend"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-4",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 5,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_metric_analysis",
+        "itbench_entity_context",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 6,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 2,
+      "evidence_count": 7,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "flagd-config"
+          ],
+          "id": "flagd-config-1",
+          "kind": "ConfigMap",
+          "name": null,
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 59368,
+      "model_calls": 5,
+      "output_tokens": 876,
+      "precision": 0.0,
+      "predicted_entities": [],
+      "prediction_categories": [],
+      "primary_failure_class": "VOLUNTARY_STOP",
+      "recall": 0.0,
+      "scenario": "Scenario-5",
+      "terminal": "STOP",
+      "tool_executions": 7,
+      "tool_names": [
+        "itbench_kubernetes_events",
+        "itbench_entity_search",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_entity_context",
+        "itbench_kubernetes_objects"
+      ],
+      "tool_requests": 9,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 0,
+      "evidence_count": 7,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [],
+          "id": "flagd-config",
+          "kind": "ConfigMap",
+          "name": "flagd-config",
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 57559,
+      "model_calls": 5,
+      "output_tokens": 770,
+      "precision": 0.0,
+      "predicted_entities": [
+        "_cluster/Node/i-01101b2dc9fb0033f",
+        "otel-demo/Deployment/frontend"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-6",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 9,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_trace_search",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 9,
+      "true_positive": 0,
+      "typed_failures": 2,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 1,
+      "evidence_count": 6,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [],
+          "id": "flagd-config",
+          "kind": "ConfigMap",
+          "name": "flagd-config",
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 58683,
+      "model_calls": 5,
+      "output_tokens": 597,
+      "precision": 0.0,
+      "predicted_entities": [],
+      "prediction_categories": [],
+      "primary_failure_class": "MODEL_DECISION_INVALID",
+      "recall": 0.0,
+      "scenario": "Scenario-7",
+      "terminal": "MODEL_DECISION_INVALID",
+      "tool_executions": 6,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_topology",
+        "itbench_entity_context",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 7,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": "$",
+      "validation_stage": "DECISION_SCHEMA",
+      "validation_type": "value_error"
+    },
+    {
+      "duplicate_or_reused": 1,
+      "evidence_count": 8,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [],
+          "id": "flagd-config",
+          "kind": "ConfigMap",
+          "name": "flagd-config",
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 60967,
+      "model_calls": 5,
+      "output_tokens": 818,
+      "precision": 0.0,
+      "predicted_entities": [
+        "_cluster/Secret/unknown",
+        "otel-demo/Deployment/frontend"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-8",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 10,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_topology",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_kubernetes_events"
+      ],
+      "tool_requests": 11,
+      "true_positive": 0,
+      "typed_failures": 2,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 3,
+      "evidence_count": 5,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "otel-demo-checkout-kafka-network-partition"
+          ],
+          "id": "otel-demo-checkout-kafka-network-partition",
+          "kind": "NetworkChaos",
+          "name": null,
+          "namespace": "chaos-mesh"
+        }
+      ],
+      "input_tokens": 54108,
+      "model_calls": 5,
+      "output_tokens": 786,
+      "precision": 0.0,
+      "predicted_entities": [
+        "_cluster/Deployment/kube-scheduler",
+        "_cluster/Deployment/kube-controller-manager"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-80",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 5,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 8,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 2,
+      "evidence_count": 9,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "otel-demo-shipping-quote-network-partition"
+          ],
+          "id": "otel-demo-shipping-quote-network-partition",
+          "kind": "NetworkChaos",
+          "name": null,
+          "namespace": "chaos-mesh"
+        }
+      ],
+      "input_tokens": 58690,
+      "model_calls": 5,
+      "output_tokens": 872,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Service/checkout",
+        "otel-demo/Service/frontend-proxy",
+        "otel-demo/Service/shipping",
+        "otel-demo/Service/frontend"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-81",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 9,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 11,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 2,
+      "evidence_count": 9,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "otel-demo-email-checkout-network-partition"
+          ],
+          "id": "otel-demo-email-checkout-network-partition",
+          "kind": "NetworkChaos",
+          "name": null,
+          "namespace": "chaos-mesh"
+        }
+      ],
+      "input_tokens": 58885,
+      "model_calls": 5,
+      "output_tokens": 817,
+      "precision": 0.0,
+      "predicted_entities": [
+        "otel-demo/Pod/frontend-675fd7b5c5-kzdpp"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-83",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 9,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_kubernetes_events",
+        "itbench_metric_analysis",
+        "itbench_metric_analysis",
+        "itbench_metric_analysis",
+        "itbench_entity_context",
+        "itbench_logs",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 11,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 0,
+      "evidence_count": 2,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [],
+          "id": "flagd-config",
+          "kind": "ConfigMap",
+          "name": "flagd-config",
+          "namespace": "otel-demo"
+        }
+      ],
+      "input_tokens": 49906,
+      "model_calls": 5,
+      "output_tokens": 795,
+      "precision": 0.0,
+      "predicted_entities": [],
+      "prediction_categories": [],
+      "primary_failure_class": "VOLUNTARY_STOP",
+      "recall": 0.0,
+      "scenario": "Scenario-9",
+      "terminal": "STOP",
+      "tool_executions": 9,
+      "tool_names": [
+        "itbench_metric_analysis",
+        "itbench_trace_search",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 9,
+      "true_positive": 0,
+      "typed_failures": 7,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    },
+    {
+      "duplicate_or_reused": 1,
+      "evidence_count": 9,
+      "f1": 0.0,
+      "ground_truth_root_groups": [
+        {
+          "filters": [
+            "otel-demo-fraud-detection-kafka-network-partition"
+          ],
+          "id": "otel-demo-fraud-detection-kafka-network-partition",
+          "kind": "NetworkChaos",
+          "name": null,
+          "namespace": "chaos-mesh"
+        }
+      ],
+      "input_tokens": 58556,
+      "model_calls": 5,
+      "output_tokens": 867,
+      "precision": 0.0,
+      "predicted_entities": [
+        "_cluster/Pod/kube-controller-manager-i-08602542d82e8f6e6",
+        "_cluster/Pod/kube-scheduler-i-08602542d82e8f6e6"
+      ],
+      "prediction_categories": [
+        "UNRELATED_ENTITY",
+        "UNRELATED_ENTITY"
+      ],
+      "primary_failure_class": "DIAGNOSIS_WRONG_CAUSE",
+      "recall": 0.0,
+      "scenario": "Scenario-91",
+      "terminal": "SUBMIT_DIAGNOSIS",
+      "tool_executions": 9,
+      "tool_names": [
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_entity_search",
+        "itbench_entity_search",
+        "itbench_kubernetes_events",
+        "itbench_entity_context",
+        "itbench_entity_context",
+        "itbench_entity_context"
+      ],
+      "tool_requests": 10,
+      "true_positive": 0,
+      "typed_failures": 0,
+      "validation_path": null,
+      "validation_stage": null,
+      "validation_type": null
+    }
+  ],
+  "source": "persisted E6 predictions and traces; GT used post-hoc only"
+}

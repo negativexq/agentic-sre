@@ -1,7 +1,7 @@
 {
   "execution": "ITB-E8",
   "experiment": "itbench-lite-sre-external-eval-v8",
-  "status": "PREREGISTERED_FINAL_REPAIR_REVISION",
+  "status": "OFFICIAL_COMPLETE_FROZEN_RESULT",
   "runtime_source_sha": "e474db9432b17fc854873fa8458a3b9b0de8d49a",
   "benchmark": "ITBench-Lite",
   "organization": "IBM Research",
@@ -33,8 +33,12 @@
     "source": "itbench-hub/ITBench-Evaluations",
     "revision": "14f026fc9cc348c4ecec5ab32714de954c95c1b1",
     "metric": "ROOT_CAUSE_ENTITY",
-    "judge": "deferred_until_predictions_are_frozen",
-    "compatibility_profile": "itbench_luna_judge_compat_v1"
+    "judge": "gpt-5.6-luna",
+    "temperature": 1,
+    "provider_retries": 0,
+    "evaluation_attempts_per_case": 1,
+    "compatibility_profile": "itbench_luna_judge_compat_v1",
+    "compatibility_profile_sha256": "104483524ebcd4faa824aed4a2982d9c7b01a9791b90d3e5acd464d06b08307f"
   },
   "model": "gpt-5.6-luna",
   "reasoning": "none",
@@ -53,20 +57,25 @@
     "smoke": {
       "path": ".local/itbench-lite-e8-smoke-003-budget.json",
       "cap": 5,
-      "consumed": 0,
-      "status": "NOT_STARTED",
+      "consumed": 5,
+      "status": "PASS",
       "smoke_id": "ITB-E8-SMOKE-003",
       "historical_attempts_preserved": 5
     },
     "official_agent": {
       "path": ".local/itbench-lite-e8-official-budget.json",
       "cap": 175,
-      "consumed": 0,
-      "status": "NOT_STARTED"
+      "consumed": 145,
+      "status": "COMPLETE"
     },
     "judge": {
       "path": ".local/itbench-judge-luna-budget.json",
-      "usage": "separate; deferred until E8 predictions are frozen"
+      "usage": "separate; E8 result in .local/itbench-e8-judge-budget.json",
+      "path": ".local/itbench-e8-judge-budget.json",
+      "cap": 35,
+      "consumed": 35,
+      "remaining": 0,
+      "status": "COMPLETE"
     }
   },
   "engineering_evaluation_goals": {
@@ -93,5 +102,5 @@
     "investigator_access": false,
     "evaluator_access": "post-persistence only"
   },
-  "notes": "E8 official execution had not begun. Smoke-001 and Smoke-002 exposed objective pre-official integration/harness defects and remain immutable. This manifest preregisters the final repair revision before any official E8 prediction; E8 is not untouched held-out generalization."
+  "notes": "E8 official execution began only after Smoke-003 passed with full five-call capacity. Smoke-001 and Smoke-002 remain immutable pre-official failures. The official E8 result is the first and only frozen 35x1 execution of the repaired runtime; E8 is not untouched held-out generalization."
 }

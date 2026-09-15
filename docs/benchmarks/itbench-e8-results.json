@@ -23,8 +23,22 @@
     "scenario_count": 35,
     "true_positive": 0
   },
-  "manifest_sha256": "64c3201b0ebc1064d50f5e2f4f8b10a5a87b6b849463df59900991f9c228b63b",
-  "official_judge": "DEFERRED_UNTIL_PREDICTIONS_FROZEN",
+  "manifest_sha256": "2736d205bf7cfa0be04f52ae16e9b1359efad372c2823906401071f4e9d75e42",
+  "official_judge": {
+    "metric": "ROOT_CAUSE_ENTITY",
+    "mean_f1": 0.02857142857142857,
+    "official_denominator": 35,
+    "judge_provider": "openai",
+    "judge_model": "gpt-5.6-luna",
+    "temperature": 1,
+    "provider_retries": 0,
+    "evaluation_attempts_per_case": 1,
+    "compatibility_profile": "itbench_luna_judge_compat_v1",
+    "compatibility_profile_sha256": "104483524ebcd4faa824aed4a2982d9c7b01a9791b90d3e5acd464d06b08307f",
+    "evaluator_revision": "14f026fc9cc348c4ecec5ab32714de954c95c1b1",
+    "judge_calls": 35,
+    "checkpointed": true
+  },
   "preflight": {
     "context_chars": 3046,
     "ground_truth_access": false,

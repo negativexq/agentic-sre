@@ -1,13 +1,15 @@
 {
-  "execution": "ITB-E8",
-  "purpose": "JUDGE",
   "cap": 35,
-  "consumed": 0,
-  "remaining": 35,
-  "status": "NOT_STARTED",
-  "provider": "openai",
-  "model": "gpt-5.6-luna",
-  "evaluator_revision": "14f026fc9cc348c4ecec5ab32714de954c95c1b1",
   "compatibility_profile": "itbench_luna_judge_compat_v1",
-  "scenario_checkpoints": []
+  "consumed": 35,
+  "evaluator_revision": "14f026fc9cc348c4ecec5ab32714de954c95c1b1",
+  "execution": "ITB-E8",
+  "model": "gpt-5.6-luna",
+  "outbound_attempts": 35,
+  "provider": "openai",
+  "provider_invocations": 35,
+  "purpose": "JUDGE",
+  "remaining": 0,
+  "scenario_checkpoints": [],
+  "status": "COMPLETE"
 }

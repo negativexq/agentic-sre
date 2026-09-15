@@ -12,6 +12,7 @@ from packages.investigation.contracts import InvestigationModel, ToolRequestSpec
 
 ITBENCH_EXTERNAL_PROTOCOL_VERSION = "itbench_investigation_decision_v1"
 ITBENCH_EXTERNAL_PROTOCOL_V2 = "itbench_investigation_decision_v2"
+ITBENCH_EXTERNAL_PROTOCOL_V3 = "itbench_investigation_decision_v3"
 
 
 class ITBenchDecisionType(StrEnum):
@@ -133,13 +134,74 @@ class ITBenchInvestigationDecisionV2(InvestigationModel):
         return self
 
 
+class ExternalRootCauseV3(InvestigationModel):
+    """External root cause with runtime-enforced, not hidden, bounds."""
+
+    entity: str = Field(
+        min_length=3,
+        max_length=512,
+        description=(
+            "Canonical ITBench Kubernetes identity in namespace/Kind/name format. "
+            "Use _cluster/Kind/name for cluster-scoped resources."
+        ),
+    )
+    causal_summary: str = Field(min_length=1, max_length=1_000)
+    evidence_refs: list[str] = Field(
+        min_length=1,
+        description="Runtime-issued evidence handles such as E001; never invent handles.",
+    )
+
+    @field_validator("entity")
+    @classmethod
+    def validate_entity_syntax(cls, value: str) -> str:
+        parts = value.split("/")
+        if len(parts) != 3 or not all(parts) or any(len(part) > 255 for part in parts):
+            raise ValueError("entity must use namespace/Kind/name syntax")
+        return value
+
+    @field_validator("evidence_refs")
+    @classmethod
+    def validate_evidence_refs(cls, value: list[str]) -> list[str]:
+        if any(len(ref) != 4 or ref[0] != "E" or not ref[1:].isdigit() for ref in value):
+            raise ValueError("evidence_refs must use runtime handles such as E001")
+        if len(set(value)) != len(value):
+            raise ValueError("evidence_refs must not contain duplicates")
+        return value
+
+
+class ITBenchInvestigationDecisionV3(InvestigationModel):
+    """External envelope without a hidden provider/local cardinality mismatch."""
+
+    decision: ITBenchDecisionType
+    requests: list[ToolRequestSpec] = Field(default_factory=list)
+    root_causes: list[ExternalRootCauseV3] = Field(default_factory=list)
+    stop: ExternalStop | None = None
+
+    @model_validator(mode="after")
+    def validate_payload(self) -> ITBenchInvestigationDecisionV3:
+        if self.decision is ITBenchDecisionType.CALL_TOOLS:
+            if not self.requests or self.root_causes or self.stop is not None:
+                raise ValueError("CALL_TOOLS requires requests only")
+        elif self.decision is ITBenchDecisionType.SUBMIT_DIAGNOSIS:
+            if not self.root_causes or self.requests or self.stop is not None:
+                raise ValueError("SUBMIT_DIAGNOSIS requires root causes only")
+        elif not self.stop or self.requests or self.root_causes:
+            raise ValueError("STOP requires stop metadata only")
+        return self
+
+
 class ITBenchExternalResult(InvestigationModel):
     """Native external result envelope before evaluator data is loaded."""
 
     protocol: str = ITBENCH_EXTERNAL_PROTOCOL_VERSION
     scenario_id: str = Field(pattern=r"^Scenario-[0-9]+$", max_length=32)
     incident_id: UUID
-    decision: ITBenchInvestigationDecisionV1 | ITBenchInvestigationDecisionV2 | None = None
+    decision: (
+        ITBenchInvestigationDecisionV1
+        | ITBenchInvestigationDecisionV2
+        | ITBenchInvestigationDecisionV3
+        | None
+    ) = None
     evidence: list[dict[str, Any]] = Field(default_factory=list, max_length=12)
     turns: list[dict[str, Any]] = Field(default_factory=list, max_length=8)
     usage: dict[str, Any] = Field(default_factory=dict)
@@ -154,6 +216,9 @@ __all__ = [
     "ITBenchInvestigationDecisionV1",
     "ITBENCH_EXTERNAL_PROTOCOL_VERSION",
     "ITBENCH_EXTERNAL_PROTOCOL_V2",
+    "ITBENCH_EXTERNAL_PROTOCOL_V3",
     "ExternalRootCauseV2",
     "ITBenchInvestigationDecisionV2",
+    "ExternalRootCauseV3",
+    "ITBenchInvestigationDecisionV3",
 ]

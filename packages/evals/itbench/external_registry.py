@@ -165,7 +165,7 @@ class ITBenchExternalToolRegistry:
                 self.backend.max_bytes,
             )
         if name == "itbench_metric_analysis":
-            return _metric_analysis(self.backend, args)
+            return self.backend.metric_analysis(args)
         if name == "itbench_trace_detail" and isinstance(args.get("trace_id"), str):
             return self.backend.query(
                 ITBenchEvidenceCategory.TRACES,
@@ -253,26 +253,6 @@ def _bounded_records(
         "matching_count_lower_bound": len(selected),
         "truncated": len(records) > len(selected),
     }
-
-
-def _metric_analysis(backend: ITBenchSnapshotBackend, args: dict[str, Any]) -> dict[str, Any]:
-    response = backend.query(ITBenchEvidenceCategory.METRICS, args)
-    records = response.get("records", [])
-    aggregate = backend.metric_aggregate(args)
-    values: list[float] = []
-    for item in records:
-        record = item.get("record", {}) if isinstance(item, dict) else {}
-        for key in ("Value", "value", "metric_value"):
-            try:
-                if isinstance(record, dict) and key in record:
-                    values.append(float(record[key]))
-                    break
-            except (TypeError, ValueError):
-                pass
-    response["aggregate"] = aggregate
-    response["sample_count"] = len(values)
-    response["sample_truncated"] = response.get("matching_count", 0) > len(values)
-    return response
 
 
 _SOURCE_TYPES = {

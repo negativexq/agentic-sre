@@ -387,7 +387,11 @@ def _itbench_decision_function_schemas(
     if not isinstance(definitions, dict):
         raise ValueError("ITBench decision schema definitions are invalid")
     request = definitions.get("ToolRequestSpec")
-    root_cause = definitions.get("ExternalRootCauseV2") or definitions.get("ExternalRootCause")
+    root_cause = (
+        definitions.get("ExternalRootCauseV3")
+        or definitions.get("ExternalRootCauseV2")
+        or definitions.get("ExternalRootCause")
+    )
     stop = definitions.get("ExternalStop")
     if not all(isinstance(item, dict) for item in (request, root_cause, stop)):
         raise ValueError("ITBench decision schema definitions are incomplete")
@@ -440,7 +444,7 @@ def _itbench_decision_function_schemas(
             "tool_requests": {
                 "type": "array",
                 "items": request_item,
-                "maxItems": 3 if "ExternalRootCauseV2" in definitions else 12,
+                "maxItems": 12,
             },
         },
         ["reason", "tool_requests"],
@@ -665,6 +669,7 @@ def _extract_decision_function(
     external_protocol = request.response_schema_name in {
         "itbench_investigation_decision_v1",
         "itbench_investigation_decision_v2",
+        "itbench_investigation_decision_v3",
     }
     decision_names = (
         ITBENCH_DECISION_FUNCTION_NAMES
@@ -998,11 +1003,13 @@ class OpenAIProvider:
             "a1_investigation_decision",
             "itbench_investigation_decision_v1",
             "itbench_investigation_decision_v2",
+            "itbench_investigation_decision_v3",
         }:
             a1_protocol = request.response_schema_name == "a1_investigation_decision"
             external_protocol = request.response_schema_name in {
                 "itbench_investigation_decision_v1",
                 "itbench_investigation_decision_v2",
+                "itbench_investigation_decision_v3",
             }
             schemas = (
                 _itbench_decision_function_schemas(
@@ -1183,6 +1190,7 @@ class OpenAIProvider:
             "a1_investigation_decision",
             "itbench_investigation_decision_v1",
             "itbench_investigation_decision_v2",
+            "itbench_investigation_decision_v3",
         }:
             structured_output, metadata = _extract_decision_function(request, raw)
             schema_error_path = _json_schema_error(structured_output, request.response_schema)

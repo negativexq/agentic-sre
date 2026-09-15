@@ -28,17 +28,20 @@ from packages.evals.itbench.external_context import (
 )
 from packages.evals.itbench.external_contracts import (
     ITBENCH_EXTERNAL_PROTOCOL_V2,
+    ITBENCH_EXTERNAL_PROTOCOL_V3,
     ExternalRootCause,
     ExternalStop,
     ITBenchDecisionType,
     ITBenchExternalResult,
     ITBenchInvestigationDecisionV1,
     ITBenchInvestigationDecisionV2,
+    ITBenchInvestigationDecisionV3,
 )
 from packages.evals.itbench.external_registry import ITBenchExternalToolRegistry
 from packages.evals.itbench.external_runtime import (
     ITBENCH_EXTERNAL_PROMPT,
     ITBENCH_EXTERNAL_PROMPT_ACTIVE_VERSION,
+    ITBENCH_EXTERNAL_PROMPT_E6_VERSION,
     ITBENCH_EXTERNAL_PROMPT_VERSION,
     ExternalInvestigationRuntime,
     external_prompt_hash,
@@ -89,7 +92,9 @@ __all__ = [
     "ITBenchExternalResult",
     "ITBenchInvestigationDecisionV1",
     "ITBenchInvestigationDecisionV2",
+    "ITBenchInvestigationDecisionV3",
     "ITBENCH_EXTERNAL_PROTOCOL_V2",
+    "ITBENCH_EXTERNAL_PROTOCOL_V3",
     "ITBenchExternalToolRegistry",
     "ExternalInvestigationRuntime",
     "ITBENCH_EXTERNAL_CONTEXT_VERSION",
@@ -97,6 +102,7 @@ __all__ = [
     "ITBENCH_EXTERNAL_PROMPT",
     "ITBENCH_EXTERNAL_PROMPT_VERSION",
     "ITBENCH_EXTERNAL_PROMPT_ACTIVE_VERSION",
+    "ITBENCH_EXTERNAL_PROMPT_E6_VERSION",
     "build_external_context",
     "normalize_alerts",
     "external_prompt_hash",

@@ -166,6 +166,57 @@ class ITBenchSnapshotBackend:
             "delta": values[-1] - values[0] if len(values) > 1 else None,
         }
 
+    def metric_analysis(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Scan matching metrics once for both aggregates and bounded samples."""
+        limit = arguments.get("limit", self.max_rows)
+        if not isinstance(limit, int) or not 1 <= limit <= self.max_rows:
+            raise ValueError("limit must be within the bounded snapshot query limit")
+        selected: list[dict[str, Any]] = []
+        values: list[float] = []
+        matching_count = 0
+        for item in self._iter_records(ITBenchEvidenceCategory.METRICS):
+            if not _matches(
+                item,
+                pattern=arguments.get("pattern"),
+                service=arguments.get("service"),
+                namespace=arguments.get("namespace"),
+                trace_id=None,
+            ):
+                continue
+            matching_count += 1
+            if len(selected) < limit:
+                selected.append(item)
+            record = item.get("record", {})
+            if not isinstance(record, dict):
+                continue
+            for key in ("Value", "value", "metric_value"):
+                try:
+                    if key in record:
+                        values.append(float(record[key]))
+                        break
+                except (TypeError, ValueError):
+                    continue
+        bounded = _fit_bounded_records(tuple(selected), self.max_bytes)
+        return {
+            "records": list(bounded),
+            "category": ITBenchEvidenceCategory.METRICS.value,
+            "scenario_id": self.scenario.scenario_id,
+            "matching_count": matching_count,
+            "returned_count": len(bounded),
+            "truncated": matching_count > len(bounded),
+            "aggregate": {
+                "count": len(values),
+                "min": min(values) if values else None,
+                "max": max(values) if values else None,
+                "mean": sum(values) / len(values) if values else None,
+                "first": values[0] if values else None,
+                "last": values[-1] if values else None,
+                "delta": values[-1] - values[0] if len(values) > 1 else None,
+            },
+            "sample_count": len(bounded),
+            "sample_truncated": matching_count > len(bounded),
+        }
+
     def _query_trace_index(self, trace_id: str, limit: int) -> dict[str, Any] | None:
         index_path = trace_index_path(self.scenario.snapshot_path)
         if not index_path.exists():

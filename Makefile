@@ -86,6 +86,9 @@ itbench-e2-request-build-check:
 itbench-e5-check:
 	.venv/bin/python scripts/itbench_e5_check.py
 
+itbench-e6-check:
+	.venv/bin/python scripts/itbench_e6_check.py
+
 model-smoke-live:
 	test -n "$$OPENAI_API_KEY"
 	SRE_LIVE_MODEL_ENABLED=true SRE_LIVE_MODEL_BUDGET_FILE="$(LIVE_BUDGET_FILE)" .venv/bin/python scripts/model_smoke_live.py

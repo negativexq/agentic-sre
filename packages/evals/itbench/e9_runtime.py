@@ -422,7 +422,6 @@ class E9InvestigationRuntime:
                     item.get("decision") in {"OBSERVE", "INVESTIGATE"} for item in turns
                 ),
                 "semantic_actions_executed": memory.state["semantic_actions_used"],
-                "backend_reads": memory.state["semantic_actions_used"],
                 "input_tokens": input_tokens,
                 "output_tokens": output_tokens,
                 "provider_latency_ms": provider_latency,

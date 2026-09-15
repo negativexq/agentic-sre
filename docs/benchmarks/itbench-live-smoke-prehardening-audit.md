@@ -18,6 +18,21 @@ This is an offline source audit at reviewed HEAD `e4cdaa354a24b7efa24900c83dee20
 
 The complete machine-readable record is in [`itbench-live-smoke-prehardening-audit.json`](itbench-live-smoke-prehardening-audit.json).
 
+## Required finding matrix
+
+| Area | Status |
+|---|---|
+| Distinct ablations | CONFIRMED_PRIOR_REPAIR_EXECUTABLE |
+| Canary metrics | CONFIRMED_REPAIRED_IN_V3 |
+| Candidate state | NOT_CONFIRMED_AS_OPEN_DEFECT; reversible history retained |
+| Dynamic candidate visibility | CONFIRMED_REPAIRED_IN_V3 |
+| Temporal semantics | CONFIRMED_REPAIRED_AND_GATED |
+| Semantic operation honesty | CONFIRMED_REPAIRED_AND_MEASURED |
+| Structured memory packing | CONFIRMED_PRIOR_REPAIR_PRESENT |
+| ContextPlanner selectivity | PARTIALLY_CONFIRMED; bounded planner retained |
+| Provider schema complexity | CONFIRMED_TARGET_ENUM_ADDED |
+| Identity preflight | CONFIRMED_REPAIRED_AND_SYNTHETICALLY_VALIDATED |
+
 ## Decision
 
 The operation and target surfaces are now derived from the same observable capability/control path. A future live smoke remains prohibited in this task; the final classification is produced only after all offline checks and CI.

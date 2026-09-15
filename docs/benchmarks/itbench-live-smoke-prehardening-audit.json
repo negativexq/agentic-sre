@@ -16,5 +16,17 @@
     {"id": "submission_association", "status": "PARTIALLY_CONFIRMED", "file": "packages/evals/itbench/e9_runtime.py", "symbol": "_submit_ready", "repair": "existing candidate-associated evidence gate retained; additional regression remains", "test": "existing harness tests plus future targeted test"},
     {"id": "identity_hashes", "status": "PARTIALLY_CONFIRMED", "file": "scripts/itbench_control_plane_live_smoke.py", "symbol": "validate_future_live_preflight", "repair": "requires capability/schema identity fields before provider construction", "test": "future preflight unit path"}
   ],
+  "finding_matrix": {
+    "A_distinct_ablation_validity": "CONFIRMED_PRIOR_REPAIR_EXECUTABLE",
+    "B_canary_metric_validity": "CONFIRMED_REPAIRED_IN_V3",
+    "C_candidate_state_simplification": "NOT_CONFIRMED_AS_OPEN_DEFECT; existing reversible history retained",
+    "D_dynamic_candidate_visibility": "CONFIRMED_REPAIRED_IN_V3",
+    "E_temporal_semantics": "CONFIRMED_REPAIRED_AND_GATED",
+    "F_semantic_operation_honesty": "CONFIRMED_REPAIRED_AND_MEASURED",
+    "G_memory_structured_packing": "CONFIRMED_PRIOR_REPAIR_PRESENT",
+    "H_contextplanner_selectivity": "PARTIALLY_CONFIRMED; existing bounded planner retained",
+    "I_provider_schema_complexity": "CONFIRMED_TARGET_ENUM_ADDED_WITHOUT_FUNCTION_CHURN",
+    "J_identity_preflight_integration": "CONFIRMED_REPAIRED_AND_SYNTHETICALLY_VALIDATED"
+  },
   "network_accounting": {"live_agent_calls": 0, "openai_outbound_attempts": 0, "luna_calls": 0, "judge_calls": 0, "official_benchmark_scenarios": 0, "live_smoke_scenarios": 0}
 }

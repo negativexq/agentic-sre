@@ -1,13 +1,13 @@
 {
-  "cap": 142,
-  "consumed": 1,
+  "cap": 177,
+  "consumed": 37,
   "input_tokens": 0,
   "model": "gpt-5.6-luna",
-  "outbound_attempts": 1,
+  "outbound_attempts": 37,
   "output_tokens": 0,
   "provider": "openai",
-  "provider_invocations": 1,
+  "provider_invocations": 37,
   "purpose": "JUDGE",
-  "remaining": 141,
+  "remaining": 140,
   "status": "FAILED"
 }

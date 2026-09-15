@@ -127,6 +127,9 @@ def _prepare_luna_compatible_evaluator(source: Path) -> tuple[Path, str]:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
+        result_file = Path(args.result_file).resolve()
+        ground_truth = Path(args.ground_truth).resolve()
+        outputs = Path(args.outputs).resolve()
         plan = build_judge_plan(
             expected_calls=args.expected_calls,
             max_calls=args.max_judge_calls,
@@ -155,11 +158,11 @@ def main(argv: list[str] | None = None) -> int:
             "-m",
             "itbench_evaluations",
             "--ground-truth",
-            args.ground_truth,
+            str(ground_truth),
             "--outputs",
-            args.outputs,
+            str(outputs),
             "--result-file",
-            args.result_file,
+            str(result_file),
             "--eval-criteria",
             "ROOT_CAUSE_ENTITY",
             "--max-concurrent",
@@ -186,7 +189,7 @@ def main(argv: list[str] | None = None) -> int:
         score: float | None = None
         result_payload: dict[str, Any] | None = None
         try:
-            loaded_payload = json.loads(Path(args.result_file).read_text(encoding="utf-8"))
+            loaded_payload = json.loads(result_file.read_text(encoding="utf-8"))
             if isinstance(loaded_payload, dict):
                 result_payload = loaded_payload
             score_value = (
@@ -219,7 +222,7 @@ def main(argv: list[str] | None = None) -> int:
                 "compatibility_profile_sha256": compatibility_hash,
             }
             result_payload["judge_ledger"] = ledger
-            _atomic_json_write(Path(args.result_file), result_payload)
+            _atomic_json_write(result_file, result_payload)
         _atomic_json_write(
             args.artifact,
             {

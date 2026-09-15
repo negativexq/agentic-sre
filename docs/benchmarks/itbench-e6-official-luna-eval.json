@@ -1,0 +1,3111 @@
+{
+  "config": {
+    "domain": "sre",
+    "eval_criteria": [
+      "ROOT_CAUSE_ENTITY"
+    ],
+    "ground_truth_path": "/private/tmp/e6-luna-judge-all.qJfQQL/gt",
+    "k": 3,
+    "outputs_path": "/private/tmp/e6-luna-judge-all.qJfQQL/outputs"
+  },
+  "judge_ledger": {
+    "cap": 177,
+    "consumed": 142,
+    "input_tokens": 0,
+    "model": "gpt-5.6-luna",
+    "outbound_attempts": 142,
+    "output_tokens": 0,
+    "provider": "openai",
+    "provider_invocations": 142,
+    "purpose": "JUDGE",
+    "remaining": 35,
+    "status": "COMPLETE"
+  },
+  "project_judge": {
+    "compatibility_patch": "temperature=1; provider_max_retries=0; evaluation_attempts_per_case=1",
+    "compatibility_profile": {
+      "evaluation_attempts_per_case": 1,
+      "fallback_model": "NONE",
+      "fallback_temperature": "NONE",
+      "model": "gpt-5.6-luna",
+      "name": "itbench_luna_judge_compat_v1",
+      "provider": "openai",
+      "provider_max_retries": 0,
+      "temperature": 1,
+      "version": 1
+    },
+    "compatibility_profile_sha256": "104483524ebcd4faa824aed4a2982d9c7b01a9791b90d3e5acd464d06b08307f",
+    "evaluator_revision": "14f026fc9cc348c4ecec5ab32714de954c95c1b1",
+    "execution": "E6",
+    "inference_count_reserved": 35,
+    "judge_base_url_host": "api.openai.com",
+    "max_judge_calls": 35,
+    "model": "gpt-5.6-luna",
+    "provider": "openai",
+    "purpose": "JUDGE",
+    "scenario": "ALL_35"
+  },
+  "raw_results": [
+    {
+      "incident_id": "1",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "load-generator-pod-1"
+          ],
+          "justification": "The Ground Truth root cause is load-generator-pod-1. The predicted entity is a frontend-proxy Deployment, which does not confidently match any Ground Truth entity because the Ground Truth frontend-proxy entities are a Service and a Pod. Although frontend-proxy Service and Pod entities are aliases in the Ground Truth, the predicted Deployment is not a confident match to either alias. Therefore, no predicted contributing factor matches the root cause alias group.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Deployment/frontend-proxy",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "102",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": null,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-namespace-1"
+          ],
+          "justification": "The GT root cause is the otel-demo Namespace. The predicted ResourceQuota is not a confident match because its kind differs from Namespace. The predicted ad Deployment confidently maps to ad-deployment-1, but that entity is not a root cause and is not an alias of the root-cause Namespace. Therefore, neither predicted contributing factor matches the GT root cause.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/ResourceQuota/otel-demo-memory",
+              "matches_gt": false
+            },
+            {
+              "entity": "otel-demo/Deployment/ad",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "105",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0,
+          "gt_entities": [
+            "product-catalog-deployment"
+          ],
+          "justification": "The predicted Deployment named product-catalog in namespace otel-demo confidently matches the Ground Truth Deployment entity product-catalog-deployment through its kind, namespace, and product-catalog-.* filter. It is the sole Ground Truth root-cause entity and the sole predicted contributing factor. No alias match is required.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Deployment/product-catalog",
+              "matched_to": "product-catalog-deployment",
+              "matches_gt": true
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "11",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0,
+          "gt_entities": [
+            "flagd-config"
+          ],
+          "justification": "The Ground Truth identifies flagd-config as the sole root cause entity. The Generated Response contains no contributing_factor entities, so there are no correct predictions. Precision, recall, and F1 are therefore 0; no alias matching applies.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "12",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config-1"
+          ],
+          "justification": "The only GT root cause entity is flagd-config-1, a ConfigMap named flagd-config. Neither predicted entity confidently matches this entity or any alias of it. frontend-proxy is not the GT frontend Service entity because the names do not clearly correspond, and the predicted Deployment kind has no corresponding GT root cause. Therefore, 0 of 2 predicted entities are correct and 0 of 1 GT root cause entities are identified.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Service/frontend-proxy",
+              "matches_gt": false
+            },
+            {
+              "entity": "otel-demo/Deployment/frontend-proxy",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "13",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config"
+          ],
+          "justification": "The sole GT root cause is the otel-demo ConfigMap flagd-config. Neither predicted entity is a confident match: both are Pod entities with kube-control-plane names and do not correspond to flagd-config or any alias. Therefore, no predicted contributing factor matches the GT root cause.",
+          "predicted_entities": [
+            {
+              "entity": "kube-controller-manager-i-036656695f1bb1e7f",
+              "matches_gt": false
+            },
+            {
+              "entity": "kube-scheduler-i-036656695f1bb1e7f",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "14",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config-1"
+          ],
+          "justification": "The Ground Truth identifies flagd-config-1 as the sole root-cause entity. The Generated Response contains no contributing_factor entities, so there are no predicted entities to match. Therefore, no root cause was correctly identified; precision, recall, and F1 are all 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "15",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config-1"
+          ],
+          "justification": "The predicted entity otel-demo/Service/checkout confidently maps to the Ground Truth entity checkout-service-2, but checkout-service-2 is not a root cause. Its alias checkout-pod-2 is also not a root cause alias. The sole Ground Truth root cause is flagd-config-1, with no predicted match.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Service/checkout",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "16",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "shipping-deployment-1"
+          ],
+          "justification": "Neither predicted ControlPlane entity confidently matches the Ground Truth root cause shipping-deployment-1, its Deployment kind, or any entity in its shipping Service/Pod/Deployment alias group. Therefore, zero of two predicted entities are correct and zero of one Ground Truth root cause entity is identified.",
+          "predicted_entities": [
+            {
+              "entity": "ControlPlane/kube-scheduler",
+              "matches_gt": false
+            },
+            {
+              "entity": "ControlPlane/kube-controller-manager",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "17",
+      "propagation_chain": {
+        "details": {
+          "normalization_map": {
+            "otel-demo/Deployment/frontend": null,
+            "otel-demo/Service/checkout": "checkout-service-1",
+            "otel-demo/Service/frontend": "frontend-service-1"
+          }
+        }
+      },
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "delay-otel-demo-product-catalog-1"
+          ],
+          "justification": "The Ground Truth has one root-cause entity: delay-otel-demo-product-catalog-1, a chaos-mesh NetworkChaos resource. The predicted frontend Deployment cannot be confidently mapped to any Ground Truth entity because no corresponding Deployment group exists. The predicted frontend and checkout Services map confidently to frontend-service-1 and checkout-service-1, respectively, but neither is the root cause nor an alias of the root cause. Therefore, no predicted contributing factor matches the Ground Truth root cause.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Deployment/frontend",
+              "matches_gt": false
+            },
+            {
+              "entity": "otel-demo/Service/frontend",
+              "matches_gt": false
+            },
+            {
+              "entity": "otel-demo/Service/checkout",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "18",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-product-catalog-network-delay-1"
+          ],
+          "justification": "The predicted checkout Pod confidently maps to the Ground Truth entity checkout-pod-1 because its namespace, kind, and name match the checkout-.* Pod filter. However, checkout-pod-1 is not the root cause and is not an alias of the root-cause entity otel-demo-product-catalog-network-delay-1. Therefore, no predicted contributing factor matches the Ground Truth root cause.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Pod/checkout-5dccddf8bb-9dn2q",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "19",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-email-checkout-network-partition-1"
+          ],
+          "justification": "Both predicted entities confidently map to checkout-service-1 and frontend-service-1 based on their namespace, kind, and names. Neither is the GT root cause entity otel-demo-email-checkout-network-partition-1, nor is either an alias of it. The root-cause alias group contains only otel-demo-email-checkout-network-partition-1 and otel-demo-email-checkout-network-partition. Therefore, no predicted contributing factor matches the root cause.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Service/checkout",
+              "matches_gt": false
+            },
+            {
+              "entity": "otel-demo/Service/frontend",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "2",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config"
+          ],
+          "justification": "The sole GT root cause is the otel-demo ConfigMap flagd-config. None of the predicted entities confidently matches it. The predicted frontend Deployment does not match the GT frontend Service and is not an alias of flagd-config; the two control-plane Pods also have no corresponding GT entity or alias. Therefore, 0 of 3 predicted entities are correct and 0 of 1 GT root-cause entities are identified.",
+          "predicted_entities": [
+            {
+              "entity": "Pod/kube-scheduler-i-0532e33054d94ef32",
+              "matches_gt": false
+            },
+            {
+              "entity": "Pod/kube-controller-manager-i-0532e33054d94ef32",
+              "matches_gt": false
+            },
+            {
+              "entity": "otel-demo/Deployment/frontend",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "20",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0,
+          "gt_entities": [
+            "productcatalog-deployment-1"
+          ],
+          "justification": "The predicted otel-demo Deployment named product-catalog confidently corresponds to the Ground Truth productcatalog-deployment-1 entity through the matching product-catalog naming, namespace, and Deployment kind. It correctly identifies the sole root cause entity, so precision, recall, and F1 are all 1.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Deployment/product-catalog",
+              "matched_to": "productcatalog-deployment-1",
+              "matches_gt": true
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "21",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-valkey-memory-stress"
+          ],
+          "justification": "The predicted entity confidently matches the Ground Truth valkey-cart Pod group via kind Pod and filter valkey-cart-.*, but that group is not a root cause. The only Ground Truth root cause is the StressChaos entity otel-demo-valkey-memory-stress. The predicted Pod is an alias of valkey-cart-service-1, and neither member of that alias group is a root cause, so the prediction does not receive root-cause credit.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Pod/valkey-cart-58df56c79c-4cvft",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "22",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-ad-memory-stress"
+          ],
+          "justification": "The predicted entity confidently maps to the Ground Truth ad-pod-1 entity because it is a Pod named ad-554b849958-l9ft5 in the otel-demo namespace matching the ad-.* filter. However, ad-pod-1 is not the root cause; the sole Ground Truth root cause is the StressChaos entity otel-demo-ad-memory-stress. The ad-pod-1/ad-service-1 alias group does not include the root cause entity, so no alias match applies.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Pod/ad-554b849958-l9ft5",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "23",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0,
+          "gt_entities": [
+            "checkout-deployment-1"
+          ],
+          "justification": "The predicted Deployment named checkout confidently matches the Ground Truth checkout deployment, which is the root cause. The predicted checkout Pod confidently matches the checkout pod entity and is an alias of the root-cause deployment through the alias group [checkout-service-1, checkout-pod-1]; therefore it also counts as a correct root-cause match. There is one Ground Truth root-cause alias group and two predicted contributing-factor entities, both correctly identified.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Deployment/checkout",
+              "matched_to": "checkout-deployment-1",
+              "matches_gt": true
+            },
+            {
+              "entity": "otel-demo/Pod/checkout-d75b77f99-hgc68",
+              "matched_to": "checkout-deployment-1",
+              "matches_gt": true
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 1.3333333333333333,
+          "calculation_precision": 1.0,
+          "calculation_recall": 2.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 1.3333333333333333,
+          "calculation_precision": 1.0,
+          "calculation_recall": 2.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 1.3333333333333333,
+          "calculation_precision": 1.0,
+          "calculation_recall": 2.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 1.3333333333333333,
+          "calculation_precision": 1.0,
+          "calculation_recall": 2.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 1.3333333333333333,
+          "calculation_precision": 1.0,
+          "calculation_recall": 2.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "24",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0,
+          "gt_entities": [
+            "checkout-deployment"
+          ],
+          "justification": "The predicted otel-demo Deployment named checkout confidently matches the Ground Truth checkout-deployment entity by namespace, kind, and name/filter correspondence. It is the sole Ground Truth root-cause entity and the sole predicted contributing factor. No alias matching is required.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Deployment/checkout",
+              "matched_to": "checkout-deployment",
+              "matches_gt": true
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "25",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-recommendation-cpu-stress"
+          ],
+          "justification": "The predicted entity is a Deployment named recommendation in the otel-demo namespace. The GT root cause is the Schedule otel-demo-recommendation-cpu-stress in the chaos-mesh namespace, and no alias links the predicted Deployment to that root cause. Therefore, the prediction is not a confident match; precision, recall, and F1 are all 0.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Deployment/recommendation",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "29",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "jvm-return-otel-demo-ad-1"
+          ],
+          "justification": "None of the predicted Deployment entities confidently matches the Ground Truth JVMChaos root-cause entity or any alias of it. The predicted frontend and ad Deployments also do not match the aliased frontend Service/Pod or ad Service/Pod entities because their kinds differ, and product-catalog has no corresponding Ground Truth entity. Therefore, 0 of 3 predicted entities are correct and 0 of 1 Ground Truth root-cause entities is identified.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Deployment/frontend",
+              "matches_gt": false
+            },
+            {
+              "entity": "otel-demo/Deployment/ad",
+              "matches_gt": false
+            },
+            {
+              "entity": "otel-demo/Deployment/product-catalog",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "31",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "frontend-block-all-ports"
+          ],
+          "justification": "The predicted frontend Pod confidently maps to the GT frontend-pod-1 entity, and the predicted frontend-proxy Service confidently maps to frontend-proxy-service-1; neither is the root-cause NetworkPolicy. The frontend-proxy Deployment has no corresponding GT entity and is not a confident match. No predicted contributing factor matches the root-cause entity frontend-block-all-ports or any alias of it. Therefore, precision, recall, and F1 are all zero.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Pod/frontend-675fd7b5c5-8qrfh",
+              "matches_gt": false
+            },
+            {
+              "entity": "otel-demo/Service/frontend-proxy",
+              "matches_gt": false
+            },
+            {
+              "entity": "otel-demo/Deployment/frontend-proxy",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "33",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "ad-pod-1"
+          ],
+          "justification": "The GT root cause is ad-pod-1. The predicted frontend-proxy Deployment has no confident match to a GT entity because no corresponding Deployment group exists. The predicted frontend Pod confidently maps to the frontend-pod-1 group, but that entity is not the root cause and is not an alias of ad-pod-1. Therefore, zero of two predicted contributing factors are correct, and zero of one GT root cause entity is identified.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Deployment/frontend-proxy",
+              "matches_gt": false
+            },
+            {
+              "entity": "otel-demo/Pod/frontend-675fd7b5c5-ljs28",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "34",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "valkey-pod-1"
+          ],
+          "justification": "Neither predicted Component entity has a name or metadata that confidently matches the Ground Truth root cause valkey-pod-1 (Pod matching valkey-cart-.* in namespace otel-demo). No predicted entity matches the valkey service/pod alias group, so there are zero correct root-cause identifications. Precision is 0/2, recall is 0/1, and F1 is 0.",
+          "predicted_entities": [
+            {
+              "entity": "kube-scheduler",
+              "matches_gt": false
+            },
+            {
+              "entity": "kube-controller-manager",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "35",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-ad-jvm-chaos"
+          ],
+          "justification": "Neither predicted Deployment is a confident match for the GT root-cause JVMChaos entity otel-demo-ad-jvm-chaos. The predicted ad Deployment does not match the JVMChaos kind or name, and the predicted frontend Deployment is not a root cause and does not match any root-cause alias. The only GT alias group contains ad-service-1 and ad-pod-1, neither of which is a root cause entity; therefore, no alias match applies.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Deployment/ad",
+              "matches_gt": false
+            },
+            {
+              "entity": "otel-demo/Deployment/frontend",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "38",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-horizontal-pod-autoscalers"
+          ],
+          "justification": "The Ground Truth root cause is the otel-demo HorizontalPodAutoscaler group. Neither predicted entity is a confident match: both are kube-system Pods, not the otel-demo HorizontalPodAutoscaler identified by the Ground Truth. There are no applicable aliases.",
+          "predicted_entities": [
+            {
+              "entity": "kube-system/Pod/kube-controller-manager-i-08942eb4ee52d7d33",
+              "matches_gt": false
+            },
+            {
+              "entity": "kube-system/Pod/kube-scheduler-i-08942eb4ee52d7d33",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "4",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config-1"
+          ],
+          "justification": "The Ground Truth root cause is the otel-demo ConfigMap flagd-config-1. The predicted otel-demo Deployment/frontend has no confident match to any Ground Truth entity: the Ground Truth contains frontend Service and Pod entities, but no frontend Deployment, and frontend is not an alias of the root cause. Therefore, there are zero correct root-cause identifications out of one predicted entity and one Ground Truth root-cause entity.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Deployment/frontend",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "5",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config-1"
+          ],
+          "justification": "The Ground Truth identifies flagd-config-1 as the sole root-cause entity. The generated response contains no contributing-factor entities, so there are no correct predictions. Precision, recall, and F1 are therefore all 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "6",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config"
+          ],
+          "justification": "The sole GT root-cause entity is the ConfigMap flagd-config. Neither the predicted Node nor the otel-demo Deployment/frontend confidently matches that ConfigMap by name or kind. The frontend Deployment also cannot be mapped to the GT frontend Service because the kinds differ, and no root-cause alias group includes either prediction. Therefore, zero of two predicted entities are correct and zero of one GT root-cause entity is identified.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Node/i-01101b2dc9fb0033f",
+              "matches_gt": false
+            },
+            {
+              "entity": "otel-demo/Deployment/frontend",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "7",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config"
+          ],
+          "justification": "The Ground Truth contains one root cause entity, flagd-config. The generated response contains no contributing_factor entities, so there are no confident matches and no alias matches. Precision, recall, and F1 are all 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "8",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config"
+          ],
+          "justification": "The sole Ground Truth root cause is the otel-demo ConfigMap flagd-config. Neither the predicted Secret/unknown nor otel-demo/Deployment/frontend confidently matches that entity or any alias. Therefore, zero of two predicted contributing factors are correct, and zero of one Ground Truth root cause is identified.",
+          "predicted_entities": [
+            {
+              "entity": "Secret/unknown",
+              "matches_gt": false
+            },
+            {
+              "entity": "otel-demo/Deployment/frontend",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "80",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-checkout-kafka-network-partition"
+          ],
+          "justification": "Neither predicted Deployment has metadata that confidently matches the Ground Truth NetworkChaos entity otel-demo-checkout-kafka-network-partition. No predicted entity matches the root cause or any root-cause alias. The checkout pod and checkout service alias group is not a root-cause alias group, so it does not affect matching. Therefore, precision, recall, and F1 are all 0.",
+          "predicted_entities": [
+            {
+              "entity": "Deployment/kube-scheduler",
+              "matches_gt": false
+            },
+            {
+              "entity": "Deployment/kube-controller-manager",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "81",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-shipping-quote-network-partition"
+          ],
+          "justification": "All four predicted entities confidently map to non-root-cause GT service entities: checkout-service-1, frontend-proxy-service-1, shipping-service-1, and frontend-service-1. The sole GT root cause is the NetworkChaos entity otel-demo-shipping-quote-network-partition. Although shipping-service-1 is aliased with shipping-pod-1, neither alias is the GT root cause, so this alias does not produce a root-cause match. Therefore, 0 of 4 predictions are correct and 0 of 1 GT root-cause entities is identified.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Service/checkout",
+              "matches_gt": false
+            },
+            {
+              "entity": "otel-demo/Service/frontend-proxy",
+              "matches_gt": false
+            },
+            {
+              "entity": "otel-demo/Service/shipping",
+              "matches_gt": false
+            },
+            {
+              "entity": "otel-demo/Service/frontend",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "83",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-email-checkout-network-partition"
+          ],
+          "justification": "The generated contributing-factor entity is the frontend Pod, which does not confidently match the Ground Truth NetworkChaos entity or any alias of it. The only Ground Truth root cause is otel-demo-email-checkout-network-partition. Therefore, no root cause entities were correctly identified: precision, recall, and F1 are all 0.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Pod/frontend-675fd7b5c5-kzdpp",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "9",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config"
+          ],
+          "justification": "The Ground Truth root cause is flagd-config. The Generated Response contains no contributing_factor entities, so it identifies no root cause. No alias matching is applicable. Precision, recall, and F1 are therefore all 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "91",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-fraud-detection-kafka-network-partition"
+          ],
+          "justification": "Neither predicted Pod corresponds by name or metadata to the Ground Truth root-cause NetworkChaos entity. No alias group applies to either prediction. Therefore, 0 of 2 predicted contributing factors are correct and 0 of 1 Ground Truth root-cause entities is identified; with no matching entities, F1 is 0.",
+          "predicted_entities": [
+            {
+              "entity": "kube-controller-manager-i-08602542d82e8f6e6",
+              "matches_gt": false
+            },
+            {
+              "entity": "kube-scheduler-i-08602542d82e8f6e6",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    }
+  ],
+  "statistics": {
+    "overall": {
+      "root_cause_entity_f1": {
+        "mean": 0.11764705882352941,
+        "n_incidents": 34,
+        "stderr": 0.05608603466150543
+      },
+      "root_cause_entity_k_f1": {
+        "mean": 0.1238095238095238,
+        "n_incidents": 35,
+        "stderr": 0.05970001929302955
+      },
+      "root_cause_entity_k_precision": {
+        "mean": 0.11428571428571428,
+        "n_incidents": 35,
+        "stderr": 0.05456364060755606
+      },
+      "root_cause_entity_k_recall": {
+        "mean": 0.14285714285714285,
+        "n_incidents": 35,
+        "stderr": 0.07267814558130976
+      },
+      "root_cause_entity_precision": {
+        "mean": 0.11428571428571428,
+        "n_incidents": 35,
+        "stderr": 0.05456364060755606
+      },
+      "root_cause_entity_recall": {
+        "mean": 0.11428571428571428,
+        "n_incidents": 35,
+        "stderr": 0.05456364060755606
+      },
+      "total_bad_runs": 0
+    },
+    "per_incident": {
+      "1": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "102": {
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "105": {
+        "root_cause_entity_f1": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "11": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "12": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "13": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "14": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "15": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "16": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "17": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "18": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "19": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "2": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "20": {
+        "root_cause_entity_f1": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "21": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "22": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "23": {
+        "root_cause_entity_f1": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 1.3333333333333333,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 2.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "24": {
+        "root_cause_entity_f1": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "25": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "29": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "31": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "33": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "34": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "35": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "38": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "4": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "5": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "6": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "7": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "8": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "80": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "81": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "83": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "9": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "91": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      }
+    }
+  }
+}

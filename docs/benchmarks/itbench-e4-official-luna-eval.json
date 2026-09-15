@@ -1,0 +1,2876 @@
+{
+  "config": {
+    "domain": "sre",
+    "eval_criteria": [
+      "ROOT_CAUSE_ENTITY"
+    ],
+    "ground_truth_path": "/private/tmp/e4-luna-judge-recovery.plO1ye/gt",
+    "k": 3,
+    "outputs_path": "/private/tmp/e4-luna-judge-recovery.plO1ye/outputs"
+  },
+  "judge_ledger": {
+    "cap": 177,
+    "consumed": 72,
+    "input_tokens": 0,
+    "model": "gpt-5.6-luna",
+    "outbound_attempts": 72,
+    "output_tokens": 0,
+    "provider": "openai",
+    "provider_invocations": 72,
+    "purpose": "JUDGE",
+    "remaining": 105,
+    "status": "COMPLETE"
+  },
+  "project_judge": {
+    "compatibility_patch": "temperature=1; provider_max_retries=0; evaluation_attempts_per_case=1",
+    "compatibility_profile": {
+      "evaluation_attempts_per_case": 1,
+      "fallback_model": "NONE",
+      "fallback_temperature": "NONE",
+      "model": "gpt-5.6-luna",
+      "name": "itbench_luna_judge_compat_v1",
+      "provider": "openai",
+      "provider_max_retries": 0,
+      "temperature": 1,
+      "version": 1
+    },
+    "compatibility_profile_sha256": "104483524ebcd4faa824aed4a2982d9c7b01a9791b90d3e5acd464d06b08307f",
+    "evaluator_revision": "14f026fc9cc348c4ecec5ab32714de954c95c1b1",
+    "execution": "E4",
+    "inference_count_reserved": 35,
+    "judge_base_url_host": "api.openai.com",
+    "max_judge_calls": 35,
+    "model": "gpt-5.6-luna",
+    "provider": "openai",
+    "purpose": "JUDGE",
+    "scenario": "ALL_35_RECOVERY"
+  },
+  "raw_results": [
+    {
+      "incident_id": "1",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "load-generator-pod-1"
+          ],
+          "justification": "The Ground Truth has one root-cause entity, load-generator-pod-1. The Generated Response contains no contributing_factor entities, so there are no predicted root-cause matches. The alias group does not affect the result because no entity was predicted. Precision, recall, and F1 are therefore 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "102",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-namespace-1"
+          ],
+          "justification": "The Ground Truth root cause is otel-demo-namespace-1. The Generated Response contains no contributing_factor entities, so there are no predicted matches. Precision, recall, and F1 are therefore 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "105",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "product-catalog-deployment"
+          ],
+          "justification": "The generated response contains no contributing_factor entities. Therefore, it does not identify the Ground Truth root cause product-catalog-deployment, and no alias match applies. Precision, recall, and F1 are all 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "11",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config"
+          ],
+          "justification": "The Ground Truth contains one root-cause entity, flagd-config. The Generated Response contains no contributing factors, so there are no predicted entities to match. Precision, recall, and F1 are therefore all 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "12",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0,
+          "gt_entities": [
+            "flagd-config-1"
+          ],
+          "justification": "The Ground Truth has one root cause entity, flagd-config-1. The Generated Response contains no contributing_factor entities, so there are no correct matches. Precision, recall, and F1 are therefore all 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "13",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0,
+          "gt_entities": [
+            "flagd-config"
+          ],
+          "justification": "The Ground Truth identifies flagd-config as the sole root-cause entity. The Generated Response contains no contributing-factor entities, so there are no correct matches. Precision, recall, and F1 are therefore 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "14",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config-1"
+          ],
+          "justification": "The Ground Truth has one root cause entity, flagd-config-1. The generated response contains no contributing_factor entities, so there are no correct matches. No alias matching applies. Precision, recall, and F1 are all 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "15",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config-1"
+          ],
+          "justification": "The Ground Truth identifies flagd-config-1 as the sole root cause entity. The Generated Response contains no contributing_factor entities, so there are no predicted matches, no alias matches, and all root-cause identification scores are 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "16",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0,
+          "gt_entities": [
+            "shipping-deployment-1"
+          ],
+          "justification": "The Ground Truth contains one root cause entity, shipping-deployment-1. The Generated Response contains no contributing-factor entities, so no root cause or alias match is identified. Precision, recall, and F1 are therefore 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "17",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "delay-otel-demo-product-catalog-1"
+          ],
+          "justification": "The Ground Truth contains one root-cause entity, delay-otel-demo-product-catalog-1. The Generated Response contains no contributing-factor entities, so there are no matches. Precision is scored as 0 because no predicted root-cause entities were provided, recall is 0 / 1, and F1 is 0. No alias matching applies.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "18",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0.6666666666666666,
+          "calculation_precision": 0.5,
+          "calculation_recall": 1.0,
+          "gt_entities": [
+            "otel-demo-product-catalog-network-delay-1"
+          ],
+          "justification": "The predicted PodChaos entity confidently matches the Ground Truth root-cause PodChaos through its namespace, kind, and name correspondence to the product-catalog-network-delay filter. The predicted checkout Pod confidently maps to checkout-pod-1, but that entity is not a root cause. No alias match is needed for the root-cause match.",
+          "predicted_entities": [
+            {
+              "entity": "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-q5s8b",
+              "matched_to": "otel-demo-product-catalog-network-delay-1",
+              "matches_gt": true
+            },
+            {
+              "entity": "otel-demo/Pod/checkout-5dccddf8bb-9dn2q",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.6666666666666666,
+          "calculation_precision": 0.5,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 1.0,
+          "calculation_precision": 1.0,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.6666666666666666,
+          "calculation_precision": 0.5,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.6666666666666666,
+          "calculation_precision": 0.5,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.6666666666666666,
+          "calculation_precision": 0.5,
+          "calculation_recall": 1.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.6666666666666666,
+          "calculation_precision": 0.5,
+          "calculation_recall": 1.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "19",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-email-checkout-network-partition-1"
+          ],
+          "justification": "The Ground Truth contains one root cause entity, otel-demo-email-checkout-network-partition-1. The Generated Response contains no contributing_factor entities, so there are no predicted entities to match and no alias match can be made. Precision, recall, and F1 are all 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "2",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config"
+          ],
+          "justification": "The Ground Truth identifies flagd-config as the sole root cause entity. The Generated Response contains no contributing_factor entities, so there are no correct predictions. Precision is 0 because no root cause entity was predicted, recall is 0/1, and F1 is 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "20",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "productcatalog-deployment-1"
+          ],
+          "justification": "The Ground Truth has one root cause entity, productcatalog-deployment-1. Its alias group includes productcatalog-pod-1 and productcatalog-service-1, but the Generated Response contains no contributing_factor entities, so no root cause or alias match is identified. Precision, recall, and F1 are therefore 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "21",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-valkey-memory-stress"
+          ],
+          "justification": "The Ground Truth contains one root cause entity, otel-demo-valkey-memory-stress. The Generated Response contains no contributing_factor entities, so no root cause entity was identified. There are no alias matches applicable to the root cause. Precision, recall, and F1 are therefore 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "22",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-ad-memory-stress"
+          ],
+          "justification": "The Ground Truth has one root-cause entity, otel-demo-ad-memory-stress (StressChaos). The generated response contains no contributing_factor entities, so there are no confident matches. Precision, recall, and F1 are all 0; precision is defined as 0 when no entities are predicted.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "23",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "checkout-deployment-1"
+          ],
+          "justification": "The Ground Truth identifies checkout-deployment-1 as the sole root cause entity. The Generated Response contains no contributing_factor entities, so there are no correct predictions. The checkout-service-1 and checkout-pod-1 alias group does not include the root cause deployment, and therefore cannot provide an alias match.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "24",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "checkout-deployment"
+          ],
+          "justification": "The Ground Truth identifies checkout-deployment as the sole root-cause entity. The Generated Response contains no contributing-factor entities, so there are no predicted entities to normalize or match. Therefore, no root cause was identified: precision, recall, and F1 are all 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "25",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-recommendation-cpu-stress"
+          ],
+          "justification": "The Ground Truth contains one root cause entity, otel-demo-recommendation-cpu-stress. The Generated Response identifies no contributing-factor entities, so there are no correct matches. No alias applies because the root cause entity is not included in either alias group.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "29",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "jvm-return-otel-demo-ad-1"
+          ],
+          "justification": "The Ground Truth contains one root cause entity, jvm-return-otel-demo-ad-1. The Generated Response contains no contributing_factor entities, so there are no predicted entities to match, no alias matches, and zero correct identifications. Precision, recall, and F1 are therefore 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "31",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0,
+          "gt_entities": [
+            "frontend-block-all-ports"
+          ],
+          "justification": "The Ground Truth identifies frontend-block-all-ports as the sole root-cause entity. The Generated Response contains no contributing_factor entities, so no root cause was identified and there are no alias matches.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "33",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "ad-pod-1"
+          ],
+          "justification": "The Ground Truth root cause is ad-pod-1. The predicted Node does not confidently match any Ground Truth entity, and the predicted frontend Pod confidently maps to frontend-pod-1, which is not a root cause. The ad-pod-1 alias group includes ad-service-1, but neither predicted entity matches that alias group. Therefore, no root cause entities are correctly identified.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Node/i-01a47734339426210",
+              "matches_gt": false
+            },
+            {
+              "entity": "otel-demo/Pod/frontend-675fd7b5c5-ljs28",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "34",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0,
+          "gt_entities": [
+            "valkey-pod-1"
+          ],
+          "justification": "The Ground Truth has one root cause entity, valkey-pod-1. The generated response contains no contributing_factor entities, so there are no correct matches. Precision, recall, and F1 are all 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "35",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-ad-jvm-chaos"
+          ],
+          "justification": "The predicted Pod confidently matches the Ground Truth ad-pod-1 entity via its namespace, kind, and ad-.* name filter. However, ad-pod-1 is only an alias of ad-service-1 and neither is an alias of the root-cause JVMChaos entity otel-demo-ad-jvm-chaos. Therefore, the predicted contributing factor does not match the Ground Truth root cause. Precision, recall, and F1 are all zero.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Pod/ad-554b849958-fcl25",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "38",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-horizontal-pod-autoscalers"
+          ],
+          "justification": "The Ground Truth contains one root-cause entity: the HorizontalPodAutoscaler group otel-demo-horizontal-pod-autoscalers. The Generated Response contains no contributing_factor entities, so there are no predicted entities to match. Therefore, zero root causes are correctly identified; precision, recall, and F1 are all 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "4",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config-1"
+          ],
+          "justification": "The predicted entity is a frontend Pod and confidently normalizes to the Ground Truth entity frontend-pod-1 based on its namespace, kind, and frontend-.* filter. However, the only Ground Truth root cause is flagd-config-1, and the predicted frontend Pod is not an alias of that root cause. Therefore, no root cause entity was correctly identified: precision = 0, recall = 0, and F1 = 0.",
+          "predicted_entities": [
+            {
+              "entity": "otel-demo/Pod/frontend-675fd7b5c5-chsmw",
+              "matches_gt": false
+            }
+          ]
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "5",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config-1"
+          ],
+          "justification": "The Ground Truth has one root cause entity, flagd-config-1. The Generated Response contains no contributing factors, so there are no predicted entities to match. Therefore, precision, recall, and F1 are all 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "6",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0,
+          "gt_entities": [
+            "flagd-config"
+          ],
+          "justification": "The Ground Truth contains one root cause entity, flagd-config. The Generated Response contains no contributing_factor entities, so there are no correct matches. Precision, recall, and F1 are all 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "7",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config"
+          ],
+          "justification": "The Ground Truth identifies flagd-config as the sole root-cause entity. The Generated Response contains no contributing-factor entities, so no root cause was correctly identified. Precision, recall, and F1 are therefore 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "8",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0,
+          "gt_entities": [
+            "flagd-config"
+          ],
+          "justification": "The Ground Truth contains one root cause entity, flagd-config. The Generated Response contains no contributing_factor entities, so no root cause entity was identified. Precision, recall, and F1 are therefore all 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "80",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-checkout-kafka-network-partition"
+          ],
+          "justification": "The Ground Truth contains one root cause entity, otel-demo-checkout-kafka-network-partition. The Generated Response contains no contributing_factor entities, so there are no predicted matches. Precision, recall, and F1 are therefore all 0. No alias match applies.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "81",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-shipping-quote-network-partition"
+          ],
+          "justification": "The Ground Truth has one root cause entity, otel-demo-shipping-quote-network-partition. The Generated Response contains no contributing_factor entities, so no root cause entity is identified. No alias matching applies. Precision, recall, and F1 are therefore 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "83",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "otel-demo-email-checkout-network-partition"
+          ],
+          "justification": "The Ground Truth contains one root cause entity, the NetworkChaos resource otel-demo-email-checkout-network-partition. The Generated Response contains no contributing-factor entities, so there are no confident matches. Precision, recall, and F1 are therefore 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "9",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": null,
+          "calculation_recall": 0.0,
+          "gt_entities": [
+            "flagd-config"
+          ],
+          "justification": "The Ground Truth identifies flagd-config as the sole root cause entity. The Generated Response contains no contributing_factor entities, so no root cause entity was identified. There are no predicted entities requiring normalization or alias matching. Precision is defined as 0 when no entities are predicted.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    },
+    {
+      "incident_id": "91",
+      "scenario_index": 0,
+      "scores": {
+        "root_cause_entity": {
+          "calculation_f1": 0,
+          "calculation_precision": 0,
+          "calculation_recall": 0,
+          "gt_entities": [
+            "otel-demo-fraud-detection-kafka-network-partition"
+          ],
+          "justification": "The Ground Truth identifies the NetworkChaos entity otel-demo-fraud-detection-kafka-network-partition as the sole root cause. The Generated Response contains no contributing_factor entities, so there are no predicted entities to match and no alias matches apply. Precision, recall, and F1 are therefore all 0.",
+          "predicted_entities": []
+        },
+        "root_cause_entity_k": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@1": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@2": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@3": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@4": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        },
+        "root_cause_entity_k@5": {
+          "calculation_f1": 0.0,
+          "calculation_precision": 0.0,
+          "calculation_recall": 0.0
+        }
+      },
+      "trial_id": "1"
+    }
+  ],
+  "statistics": {
+    "overall": {
+      "root_cause_entity_f1": {
+        "mean": 0.019047619047619046,
+        "n_incidents": 35,
+        "stderr": 0.019047619047619042
+      },
+      "root_cause_entity_k_f1": {
+        "mean": 0.019047619047619046,
+        "n_incidents": 35,
+        "stderr": 0.019047619047619042
+      },
+      "root_cause_entity_k_precision": {
+        "mean": 0.014285714285714285,
+        "n_incidents": 35,
+        "stderr": 0.014285714285714287
+      },
+      "root_cause_entity_k_recall": {
+        "mean": 0.02857142857142857,
+        "n_incidents": 35,
+        "stderr": 0.028571428571428574
+      },
+      "root_cause_entity_precision": {
+        "mean": 0.014705882352941176,
+        "n_incidents": 34,
+        "stderr": 0.014705882352941175
+      },
+      "root_cause_entity_recall": {
+        "mean": 0.02857142857142857,
+        "n_incidents": 35,
+        "stderr": 0.028571428571428574
+      },
+      "total_bad_runs": 0
+    },
+    "per_incident": {
+      "1": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "102": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "105": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "11": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "12": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "13": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "14": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "15": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "16": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "17": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "18": {
+        "root_cause_entity_f1": {
+          "mean": 0.6666666666666666,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.6666666666666666,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.5,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.5,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 1.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "19": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "2": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "20": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "21": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "22": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "23": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "24": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "25": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "29": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "31": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "33": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "34": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "35": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "38": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "4": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "5": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "6": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "7": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "8": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "80": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "81": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "83": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "9": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      },
+      "91": {
+        "root_cause_entity_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_f1": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_k_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_precision": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        },
+        "root_cause_entity_recall": {
+          "mean": 0.0,
+          "n": 1,
+          "stderr": 0.0
+        }
+      }
+    }
+  }
+}

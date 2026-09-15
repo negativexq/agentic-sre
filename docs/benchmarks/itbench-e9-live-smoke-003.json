@@ -1,0 +1,113 @@
+{
+  "artifact_reload": true,
+  "duration_ms": 30632,
+  "execution": "ITB-E9",
+  "experiment": "itbench-lite-sre-external-eval-v9",
+  "ledger": {
+    "calls_used": 12,
+    "cap": 12,
+    "remaining": 0
+  },
+  "manifest_sha256": "4f4491ab9564dc7483eb49d9d7d0c7c1725d5fcf9c57e908ca83d53bad9270a4",
+  "metrics": {
+    "action_rejections": 3,
+    "input_tokens": 22584,
+    "model_steps": 12,
+    "output_tokens": 961,
+    "provider_latency_ms": 30565,
+    "recovered_action_rejections": 3,
+    "semantic_actions_executed": 7,
+    "semantic_actions_requested": 7,
+    "terminal": "SUBMIT"
+  },
+  "model": "gpt-5.6-luna",
+  "outbound_attempts": 12,
+  "provider": "openai",
+  "reasoning": "none",
+  "runtime_source_sha": "96c3168e1f4990794032abf38a0de5c139f2b5fc",
+  "safety": {
+    "arbitrary_execution": 0,
+    "cross_scenario_evidence": 0,
+    "ground_truth_exposure": 0,
+    "writes": 0
+  },
+  "scenario_id": "Scenario-999",
+  "smoke_id": "ITB-E9-SMOKE-003",
+  "terminal": "SUBMIT",
+  "turns": [
+    {
+      "decision": "OBSERVE",
+      "evidence_ref": "E001",
+      "operation": "INCIDENT_OVERVIEW",
+      "phase": "OBSERVE",
+      "target": null,
+      "turn": 1
+    },
+    {
+      "decision": "OBSERVE",
+      "evidence_ref": "E002",
+      "operation": "ALERT_ANALYSIS",
+      "phase": "OBSERVE",
+      "target": null,
+      "turn": 2
+    },
+    {
+      "decision": "OBSERVE",
+      "evidence_ref": "E003",
+      "operation": "TOPOLOGY_ANALYSIS",
+      "phase": "OBSERVE",
+      "target": null,
+      "turn": 3
+    },
+    {
+      "decision": "ACTION_REJECTED",
+      "reason": "DUPLICATE_OPERATION",
+      "turn": 5
+    },
+    {
+      "decision": "OBSERVE",
+      "evidence_ref": "E004",
+      "operation": "EVENT_ANALYSIS",
+      "phase": "OBSERVE",
+      "target": null,
+      "turn": 6
+    },
+    {
+      "decision": "ACTION_REJECTED",
+      "reason": "invalid_action_shape",
+      "turn": 7
+    },
+    {
+      "decision": "INVESTIGATE",
+      "evidence_ref": "E005",
+      "operation": "VERIFY_TEMPORAL_ALIGNMENT",
+      "phase": "VERIFY",
+      "target": "C001",
+      "turn": 9
+    },
+    {
+      "decision": "INVESTIGATE",
+      "evidence_ref": "E006",
+      "operation": "METRIC_ANOMALIES",
+      "phase": "VERIFY",
+      "target": "C001",
+      "turn": 10
+    },
+    {
+      "decision": "INVESTIGATE",
+      "evidence_ref": "E007",
+      "operation": "SPEC_ANALYSIS",
+      "phase": "VERIFY",
+      "target": "C001",
+      "turn": 11
+    },
+    {
+      "decision": "SUBMIT",
+      "phase": "CONCLUDE",
+      "targets": [
+        "C001"
+      ],
+      "turn": 12
+    }
+  ]
+}

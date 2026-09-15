@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from typing import Any
 
-from packages.evals.itbench.e9_semantic import E9_SEMANTIC_OPERATIONS
+from packages.evals.itbench.e9_semantic import E9_SEMANTIC_OPERATION_SPECS, E9_SEMANTIC_OPERATIONS
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +61,8 @@ def control_surface(
     max_steps: int,
     max_rejections: int,
     semantic_limit: int,
+    available_operations: tuple[str, ...] | None = None,
+    target_handles: tuple[str, ...] | None = None,
     **_: Any,
 ) -> E9ControlSurface:
     """Derive all capabilities from the materialized CaseState only."""
@@ -102,7 +104,6 @@ def control_surface(
     }
     target = state.get("current_hypothesis")
     current_target = target.get("entity_handle") if isinstance(target, dict) else None
-    target_handles: tuple[str, ...]
     discovered = [
         item
         for item in state.get("discovered_entities", {}).values()
@@ -115,18 +116,28 @@ def control_surface(
             str(item.get("handle")),
         )
     )
-    target_handles = tuple(str(item["handle"]) for item in discovered[:12])
-    available_operations: tuple[str, ...] = tuple(
+    resolved_target_handles = target_handles or tuple(
+        str(item["handle"]) for item in discovered[:12]
+    )
+    resolved_operations: tuple[str, ...] = tuple(
         operation
         for operation in operations
-        if (current_target, operation) not in completed
+        if (
+            (None, operation)
+            if next(spec for spec in E9_SEMANTIC_OPERATION_SPECS if spec.name == operation).scope
+            == "GLOBAL"
+            else (current_target, operation)
+        )
+        not in completed
         and int(state.get("semantic_actions_used", 0)) < semantic_limit
     )
     return E9ControlSurface(
         phase=phase,
         actions=actions,
-        operations=available_operations,
-        target_handles=target_handles,
+        operations=available_operations
+        if available_operations is not None
+        else resolved_operations,
+        target_handles=resolved_target_handles,
         final_turn=final_turn,
         rejection_budget_remaining=max(
             max_rejections - int(state.get("consecutive_rejections", 0)), 0

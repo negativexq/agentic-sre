@@ -1,0 +1,147 @@
+{
+  "dataset_revision": "d0916b08ba421ce5e672e9ad68aa947d938dfef0",
+  "disabled_by_default": [
+    "RECENT_CHANGE_ANALYSIS",
+    "COMPARE_REPLICAS",
+    "VERIFY_TEMPORAL_ALIGNMENT"
+  ],
+  "execution": "E9_OFFLINE_PREFLIGHT",
+  "ground_truth_used": false,
+  "judge_calls": 0,
+  "openai_calls": 0,
+  "operations": [
+    {
+      "context_constrained": true,
+      "observe_available_scenarios": 35,
+      "operation": "INCIDENT_OVERVIEW",
+      "provider_constrained": true,
+      "reason": "observable typed backend capability",
+      "requires_target": false,
+      "runtime_constrained": true,
+      "scope": "GLOBAL",
+      "tested": true,
+      "verify_available_scenarios": 35
+    },
+    {
+      "context_constrained": true,
+      "observe_available_scenarios": 35,
+      "operation": "ALERT_ANALYSIS",
+      "provider_constrained": true,
+      "reason": "observable typed backend capability",
+      "requires_target": false,
+      "runtime_constrained": true,
+      "scope": "GLOBAL",
+      "tested": true,
+      "verify_available_scenarios": 35
+    },
+    {
+      "context_constrained": true,
+      "observe_available_scenarios": 35,
+      "operation": "TOPOLOGY_ANALYSIS",
+      "provider_constrained": true,
+      "reason": "observable typed backend capability",
+      "requires_target": false,
+      "runtime_constrained": true,
+      "scope": "GLOBAL",
+      "tested": true,
+      "verify_available_scenarios": 35
+    },
+    {
+      "context_constrained": true,
+      "observe_available_scenarios": 0,
+      "operation": "RECENT_CHANGE_ANALYSIS",
+      "provider_constrained": true,
+      "reason": "change history unavailable in immutable snapshots",
+      "requires_target": false,
+      "runtime_constrained": true,
+      "scope": "GLOBAL",
+      "tested": true,
+      "verify_available_scenarios": 0
+    },
+    {
+      "context_constrained": true,
+      "observe_available_scenarios": 0,
+      "operation": "ENTITY_CONTEXT",
+      "provider_constrained": true,
+      "reason": "observable typed backend capability",
+      "requires_target": true,
+      "runtime_constrained": true,
+      "scope": "TARGET",
+      "tested": true,
+      "verify_available_scenarios": 35
+    },
+    {
+      "context_constrained": true,
+      "observe_available_scenarios": 35,
+      "operation": "EVENT_ANALYSIS",
+      "provider_constrained": true,
+      "reason": "observable typed backend capability",
+      "requires_target": false,
+      "runtime_constrained": true,
+      "scope": "GLOBAL",
+      "tested": true,
+      "verify_available_scenarios": 35
+    },
+    {
+      "context_constrained": true,
+      "observe_available_scenarios": 0,
+      "operation": "METRIC_ANOMALIES",
+      "provider_constrained": true,
+      "reason": "observable typed backend capability",
+      "requires_target": true,
+      "runtime_constrained": true,
+      "scope": "TARGET",
+      "tested": true,
+      "verify_available_scenarios": 35
+    },
+    {
+      "context_constrained": true,
+      "observe_available_scenarios": 0,
+      "operation": "TRACE_ERROR_TREE",
+      "provider_constrained": true,
+      "reason": "only exposed when a meaningful trace edge exists",
+      "requires_target": true,
+      "runtime_constrained": true,
+      "scope": "TARGET",
+      "tested": true,
+      "verify_available_scenarios": 1
+    },
+    {
+      "context_constrained": true,
+      "observe_available_scenarios": 0,
+      "operation": "SPEC_ANALYSIS",
+      "provider_constrained": true,
+      "reason": "observable typed backend capability",
+      "requires_target": true,
+      "runtime_constrained": true,
+      "scope": "TARGET",
+      "tested": true,
+      "verify_available_scenarios": 35
+    },
+    {
+      "context_constrained": true,
+      "observe_available_scenarios": 0,
+      "operation": "COMPARE_REPLICAS",
+      "provider_constrained": true,
+      "reason": "only exposed when peer state and a comparison dimension exist",
+      "requires_target": true,
+      "runtime_constrained": true,
+      "scope": "TARGET",
+      "tested": true,
+      "verify_available_scenarios": 0
+    },
+    {
+      "context_constrained": true,
+      "observe_available_scenarios": 0,
+      "operation": "VERIFY_TEMPORAL_ALIGNMENT",
+      "provider_constrained": true,
+      "reason": "only exposed when incident and candidate timestamps are usable",
+      "requires_target": true,
+      "runtime_constrained": true,
+      "scope": "TARGET",
+      "tested": true,
+      "verify_available_scenarios": 0
+    }
+  ],
+  "purpose": "LIVE_SMOKE_CAPABILITY_SURFACE"
+}

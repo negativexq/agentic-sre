@@ -34,7 +34,12 @@ from packages.evals.itbench.e9_runtime import (
     E9Limits,
     e9_prompt_hash,
 )
-from packages.evals.itbench.e9_semantic import E9_SEMANTIC_OPERATIONS, E9SemanticOperations
+from packages.evals.itbench.e9_semantic import (
+    E9_SEMANTIC_OPERATION_SPECS,
+    E9_SEMANTIC_OPERATIONS,
+    E9SemanticOperations,
+    SemanticCapabilityResolver,
+)
 from packages.evals.itbench.external_context import (
     ITBENCH_EXTERNAL_CONTEXT_V3,
     ITBENCH_EXTERNAL_CONTEXT_VERSION,
@@ -143,6 +148,8 @@ __all__ = [
     "E9Limits",
     "E9Phase",
     "E9_SEMANTIC_OPERATIONS",
+    "E9_SEMANTIC_OPERATION_SPECS",
+    "SemanticCapabilityResolver",
     "E9SemanticOperations",
     "E9_CONTEXT_VERSION",
     "ITBENCH_E9_PROMPT_VERSION",

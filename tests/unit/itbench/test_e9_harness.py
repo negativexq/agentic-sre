@@ -25,6 +25,7 @@ from packages.evals.itbench.e9_runtime import E9InvestigationRuntime
 from packages.evals.itbench.e9_semantic import (
     E9_SEMANTIC_OPERATIONS,
     E9SemanticOperations,
+    SemanticCapabilityResolver,
     _temporal_assessment,
 )
 from packages.evals.itbench.external_contracts import (
@@ -32,7 +33,7 @@ from packages.evals.itbench.external_contracts import (
     ITBenchInvestigationDecisionV5,
 )
 from packages.provider import FakeModelProvider
-from packages.provider.openai import OpenAIProvider
+from packages.provider.openai import OpenAIProvider, _json_schema_error
 
 
 def _scenario(tmp_path: Path) -> ITBenchScenario:
@@ -319,7 +320,8 @@ def test_v5_provider_surface_matches_control_policy(tmp_path: Path) -> None:
         "HYPOTHESIZE",
     ]
     operation_schema = request_schema["properties"]["operation"]["anyOf"][0]
-    assert "RECENT_CHANGE_ANALYSIS" in operation_schema["enum"]
+    assert "RECENT_CHANGE_ANALYSIS" not in operation_schema["enum"]
+    assert "TRACE_ERROR_TREE" not in operation_schema["enum"]
     memory.append(
         "HYPOTHESIS_PROPOSED",
         1,
@@ -496,3 +498,66 @@ def test_every_registered_semantic_operation_has_a_real_bounded_executor(tmp_pat
         assert result["operation"] == operation
         assert result["evidence_ref"].startswith("E")
         assert len(json.dumps(result["summary"], default=str)) <= 5_500
+
+
+def test_provider_target_enum_rejects_unknown_handle_offline(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path, [])
+    incident, alerts = build_observable_incident(runtime.backend)
+    memory = E9CaseMemory(execution_id="ITB-E9", scenario_id="Scenario-1")
+    memory.discover_entities(({"canonical": "otel-demo/Service/frontend"},))
+    request, _ = runtime.build_request(
+        incident, alerts, memory, run_id=incident.incident_id, turn=1
+    )
+    parameters = OpenAIProvider.__new__(OpenAIProvider)._request_parameters(request)
+    schema = next(
+        item["parameters"]
+        for item in parameters["tools"]
+        if item["name"] == "request_itbench_tools"
+    )
+    target_schema = schema["properties"]["target"]["anyOf"][0]
+    assert target_schema["enum"] == ["C001"]
+    invalid: dict[str, object] = {
+        "action": "HYPOTHESIZE",
+        "target": "C999",
+        "targets": [],
+        "operation": None,
+        "rationale": None,
+    }
+    assert _json_schema_error(invalid, schema) == "$.target"
+
+
+def test_capability_resolver_removes_known_dead_operations(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path, [])
+    incident, _ = build_observable_incident(runtime.backend)
+    memory = E9CaseMemory(execution_id="ITB-E9", scenario_id="Scenario-1")
+    memory.discover_entities(({"canonical": "otel-demo/Service/frontend"},))
+    resolver = SemanticCapabilityResolver(runtime.backend, memory, incident)
+    available = resolver.available_operations(phase="OBSERVE")
+    assert "RECENT_CHANGE_ANALYSIS" not in available
+
+
+def test_submit_requires_candidate_associated_evidence() -> None:
+    memory = E9CaseMemory(execution_id="ITB-E9", scenario_id="Scenario-1")
+    memory.discover_entities(
+        (
+            {"canonical": "otel-demo/Service/one"},
+            {"canonical": "otel-demo/Service/two"},
+        )
+    )
+    memory.append("HYPOTHESIS_PROPOSED", 1, {"entity_handle": "C002", "rationale": "test"})
+    memory.add_evidence(
+        turn=2,
+        handle=None,
+        operation="ALERT_ANALYSIS",
+        category="alerts",
+        summary={"alert": "global"},
+    )
+    assert not E9InvestigationRuntime._submit_ready(memory, ["C002"])
+    memory.add_evidence(
+        turn=3,
+        handle="C002",
+        operation="ENTITY_CONTEXT",
+        category="entity",
+        summary={"identity": "C002"},
+    )
+    assert E9InvestigationRuntime._submit_ready(memory, ["C002"])

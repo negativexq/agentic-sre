@@ -10,6 +10,7 @@ from packages.evals.itbench.e9_control import control_surface
 from packages.evals.itbench.e9_fsm import E9FSM
 from packages.evals.itbench.e9_memory import E9CaseMemory
 from packages.evals.itbench.e9_packing import bounded_pack
+from packages.evals.itbench.e9_semantic import SemanticCapabilityResolver
 from packages.evals.itbench.external_context import normalize_alerts
 from packages.evals.itbench.snapshot_backend import ITBenchSnapshotBackend
 
@@ -51,12 +52,18 @@ class E9ContextPlanner:
         handles = handles[:10]
         alert_items = normalize_alerts(backend)
         digest = _alert_digest(alert_items)
+        available_operations = SemanticCapabilityResolver(
+            backend, memory, incident
+        ).available_operations(
+            phase=str(memory.state.get("current_phase", "OBSERVE")), target_handle=target_handle
+        )
         surface = control_surface(
             memory.state,
             turn=turn,
             max_steps=max_steps,
             max_rejections=(fsm.max_consecutive_rejections if fsm else 2),
             semantic_limit=semantic_limit,
+            available_operations=available_operations,
         )
         topology: list[dict[str, Any]] = []
         if isinstance(target_handle, str):
@@ -211,29 +218,6 @@ def _fit_alert_digest(value: dict[str, Any], limit: int = 4_000) -> dict[str, An
         child_packed = bounded_pack(child, child_limit)
         packed[key] = child_packed
     return packed
-
-
-def _operations_for_phase(phase: str, final_turn: bool) -> tuple[str, ...]:
-    if final_turn:
-        return ("SUBMIT", "REVISE", "STOP")
-    if phase == "OBSERVE":
-        return (
-            "INCIDENT_OVERVIEW",
-            "ALERT_ANALYSIS",
-            "TOPOLOGY_ANALYSIS",
-            "RECENT_CHANGE_ANALYSIS",
-            "EVENT_ANALYSIS",
-        )
-    if phase == "VERIFY":
-        return (
-            "ENTITY_CONTEXT",
-            "METRIC_ANOMALIES",
-            "TRACE_ERROR_TREE",
-            "SPEC_ANALYSIS",
-            "COMPARE_REPLICAS",
-            "VERIFY_TEMPORAL_ALIGNMENT",
-        )
-    return ("INCIDENT_OVERVIEW", "ENTITY_CONTEXT", "EVENT_ANALYSIS", "VERIFY_TEMPORAL_ALIGNMENT")
 
 
 __all__ = ["E9_CONTEXT_MAX_CHARS", "E9_CONTEXT_VERSION", "E9ContextPlanner"]

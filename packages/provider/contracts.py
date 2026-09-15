@@ -77,6 +77,7 @@ class ModelRequest(BaseModel):
     ) = None
     allowed_v5_actions: tuple[str, ...] | None = None
     allowed_v5_operations: tuple[str, ...] | None = None
+    allowed_v5_targets: tuple[str, ...] | None = None
     allowed_tool_names: tuple[str, ...] | None = None
     tool_schemas: tuple[ToolSchemaDescriptor, ...] | None = None
 

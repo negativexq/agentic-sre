@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from packages.contracts import Incident
 from packages.evals.itbench.contracts import ITBenchEvidenceCategory
@@ -27,6 +28,162 @@ E9_SEMANTIC_OPERATIONS = (
     "COMPARE_REPLICAS",
     "VERIFY_TEMPORAL_ALIGNMENT",
 )
+
+
+@dataclass(frozen=True, slots=True)
+class SemanticOperationSpec:
+    """Declarative scope metadata for the model-visible operation registry."""
+
+    name: str
+    scope: Literal["GLOBAL", "TARGET"]
+    requires_target: bool
+
+
+_TARGET_OPERATIONS = frozenset(
+    {
+        "ENTITY_CONTEXT",
+        "METRIC_ANOMALIES",
+        "TRACE_ERROR_TREE",
+        "SPEC_ANALYSIS",
+        "COMPARE_REPLICAS",
+        "VERIFY_TEMPORAL_ALIGNMENT",
+    }
+)
+E9_SEMANTIC_OPERATION_SPECS = tuple(
+    SemanticOperationSpec(
+        name, "TARGET" if name in _TARGET_OPERATIONS else "GLOBAL", name in _TARGET_OPERATIONS
+    )
+    for name in E9_SEMANTIC_OPERATIONS
+)
+
+
+class SemanticCapabilityResolver:
+    """Resolve useful observable operations without model or ground truth access."""
+
+    def __init__(
+        self,
+        backend: ITBenchSnapshotBackend,
+        memory: E9CaseMemory,
+        incident: Incident | None = None,
+    ) -> None:
+        self.backend, self.memory, self.incident = backend, memory, incident
+
+    def resolve(self, target_handle: str | None = None) -> dict[str, dict[str, Any]]:
+        cache: dict[tuple[Any, ...], dict[str, dict[str, Any]]] = (
+            self.backend._semantic_capability_cache
+        )
+        cache_key = (target_handle, self.incident.created_at.isoformat() if self.incident else None)
+        if cache_key in cache:
+            return cache[cache_key]
+        canonical = self.memory.resolve(target_handle) if target_handle else None
+        operations = E9SemanticOperations(
+            self.backend, self.memory, self.incident, enable_discovery=False
+        )
+        result: dict[str, dict[str, Any]] = {}
+        for spec in E9_SEMANTIC_OPERATION_SPECS:
+            if spec.requires_target and canonical is None:
+                result[spec.name] = {"available": False, "reason": "observable target required"}
+                continue
+            try:
+                result[spec.name] = self._check(operations, spec.name, canonical)
+            except (KeyError, TypeError, ValueError) as error:
+                result[spec.name] = {
+                    "available": False,
+                    "reason": f"capability check failed: {error}"[:200],
+                }
+        cache[cache_key] = result
+        return result
+
+    def available_operations(
+        self, *, phase: str, target_handle: str | None = None
+    ) -> tuple[str, ...]:
+        phase_operations = {
+            "OBSERVE": (
+                "INCIDENT_OVERVIEW",
+                "ALERT_ANALYSIS",
+                "TOPOLOGY_ANALYSIS",
+                "RECENT_CHANGE_ANALYSIS",
+                "EVENT_ANALYSIS",
+            ),
+            "VERIFY": (
+                "ENTITY_CONTEXT",
+                "METRIC_ANOMALIES",
+                "TRACE_ERROR_TREE",
+                "SPEC_ANALYSIS",
+                "COMPARE_REPLICAS",
+                "VERIFY_TEMPORAL_ALIGNMENT",
+            ),
+        }.get(phase, E9_SEMANTIC_OPERATIONS)
+        availability = self.resolve(target_handle)
+        completed = {
+            (item.get("entity_handle"), item.get("operation"))
+            for item in self.memory.state.get("operations_already_run", [])
+        }
+        scope_by_name = {spec.name: spec.scope for spec in E9_SEMANTIC_OPERATION_SPECS}
+        return tuple(
+            operation
+            for operation in phase_operations
+            if availability.get(operation, {}).get("available")
+            and (
+                (target_handle, operation)
+                if scope_by_name[operation] == "TARGET"
+                else (None, operation)
+            )
+            not in completed
+        )
+
+    @staticmethod
+    def _check(
+        operations: E9SemanticOperations, operation: str, canonical: str | None
+    ) -> dict[str, Any]:
+        if operation in {
+            "INCIDENT_OVERVIEW",
+            "ALERT_ANALYSIS",
+            "TOPOLOGY_ANALYSIS",
+            "EVENT_ANALYSIS",
+        }:
+            return {"available": True, "reason": None}
+        if operation == "RECENT_CHANGE_ANALYSIS":
+            value = operations._recent_changes(canonical)
+            available = bool(value.get("change_history_available") and value.get("changes"))
+            return {
+                "available": available,
+                "reason": None if available else "change history unavailable in immutable snapshot",
+            }
+        if canonical is None:
+            return {"available": False, "reason": "observable target required"}
+        if operation == "TRACE_ERROR_TREE":
+            value = operations._trace_error_tree(canonical)
+            available = bool(value.get("error_tree_available") and value.get("edges"))
+            return {
+                "available": available,
+                "reason": None if available else "no usable trace service-edge/status fields",
+            }
+        if operation == "COMPARE_REPLICAS":
+            value = operations._compare_replicas(canonical)
+            available = bool(value.get("comparison_available")) and bool(
+                value.get("spec_differences") or value.get("event_differences")
+            )
+            return {
+                "available": available,
+                "reason": None
+                if available
+                else "no comparable peer state/difference is observable",
+            }
+        if operation == "VERIFY_TEMPORAL_ALIGNMENT":
+            value = operations._temporal_alignment(canonical)
+            available = (
+                bool(value.get("incident_start"))
+                and bool(value.get("candidate_event_times"))
+                and value.get("temporal_relation") not in {None, "UNKNOWN"}
+            )
+            return {
+                "available": available,
+                "reason": None
+                if available
+                else "incident/candidate timestamps or event semantics unavailable",
+            }
+        return {"available": True, "reason": None}
 
 
 class E9SemanticOperations:
@@ -449,4 +606,10 @@ def _alert_digest(alerts: tuple[dict[str, Any], ...]) -> dict[str, Any]:
     }
 
 
-__all__ = ["E9_SEMANTIC_OPERATIONS", "E9SemanticOperations"]
+__all__ = [
+    "E9_SEMANTIC_OPERATIONS",
+    "E9_SEMANTIC_OPERATION_SPECS",
+    "E9SemanticOperations",
+    "SemanticCapabilityResolver",
+    "SemanticOperationSpec",
+]

@@ -14,7 +14,7 @@ from packages.contracts import Alert, Incident
 from packages.evals.itbench.e9_context import E9ContextPlanner
 from packages.evals.itbench.e9_control import E9ControlPlaneVariant, control_surface
 from packages.evals.itbench.e9_memory import E9CaseMemory
-from packages.evals.itbench.e9_semantic import E9SemanticOperations
+from packages.evals.itbench.e9_semantic import E9SemanticOperations, SemanticCapabilityResolver
 from packages.evals.itbench.external_contracts import (
     ITBENCH_EXTERNAL_PROTOCOL_V5,
     E9Action,
@@ -111,6 +111,16 @@ class E9InvestigationRuntime:
             max_steps=self.limits.max_model_calls,
             max_rejections=self.max_consecutive_rejected_actions,
             semantic_limit=self.limits.max_tool_calls,
+            available_operations=SemanticCapabilityResolver(
+                self.backend, memory, incident
+            ).available_operations(
+                phase=str(memory.state.get("current_phase", "OBSERVE")),
+                target_handle=(
+                    memory.state.get("current_hypothesis", {}).get("entity_handle")
+                    if isinstance(memory.state.get("current_hypothesis"), dict)
+                    else None
+                ),
+            ),
             visible_rejection_feedback=self.variant.visible_rejection_feedback,
             dynamic_action_gating=self.variant.dynamic_action_gating,
             dynamic_operation_gating=self.variant.dynamic_operation_gating,
@@ -161,6 +171,7 @@ class E9InvestigationRuntime:
                 action for action in provider_actions if action not in {"SUBMIT", "STOP"}
             ),
             allowed_v5_operations=provider_operations,
+            allowed_v5_targets=surface.target_handles,
             allowed_tool_names=(),
             tool_schemas=(),
         )
@@ -210,8 +221,14 @@ class E9InvestigationRuntime:
                 + (["SUBMIT"] if "SUBMIT_DIAGNOSIS" in (request.allowed_decisions or ()) else [])
                 + (["STOP"] if "STOP" in (request.allowed_decisions or ()) else []),
                 "provider_exposed_operations": list(request.allowed_v5_operations or ()),
-                "runtime_accepted_actions": list(self._surface(memory, turn).actions),
-                "runtime_accepted_operations": list(self._surface(memory, turn).operations),
+                "provider_exposed_targets": list(request.allowed_v5_targets or ()),
+                "runtime_accepted_actions": list(self._surface(memory, turn, incident).actions),
+                "runtime_accepted_operations": list(
+                    self._surface(memory, turn, incident).operations
+                ),
+                "runtime_accepted_targets": list(
+                    self._surface(memory, turn, incident).target_handles
+                ),
             }
             try:
                 response = self.provider.complete(request)
@@ -221,7 +238,7 @@ class E9InvestigationRuntime:
                     ProviderErrorCode.JSON_DECODE_FAILED,
                     ProviderErrorCode.SCHEMA_VALIDATION_FAILED,
                 }:
-                    surface = self._surface(memory, turn)
+                    surface = self._surface(memory, turn, incident)
                     self._reject(
                         memory,
                         turn,
@@ -255,7 +272,7 @@ class E9InvestigationRuntime:
                     payload["action"] = E9Action(payload["action"])
                 decision = ITBenchInvestigationDecisionV5.model_validate(payload)
             except (ValidationError, ValueError) as error:
-                surface = self._surface(memory, turn)
+                surface = self._surface(memory, turn, incident)
                 validation_reason = "safe action shape was invalid"
                 code = (
                     error.errors()[0].get("type", "validation_error")
@@ -284,7 +301,7 @@ class E9InvestigationRuntime:
                 continue
 
             action = decision.action.value
-            surface = self._surface(memory, turn)
+            surface = self._surface(memory, turn, incident)
             target_handles = [item for item in (decision.target, *decision.targets) if item]
             operation = decision.operation or ("INCIDENT_OVERVIEW" if action == "OBSERVE" else "")
             reason: str | None = None
@@ -510,13 +527,24 @@ class E9InvestigationRuntime:
             "duration_ms": int((monotonic() - started) * 1000),
         }
 
-    def _surface(self, memory: E9CaseMemory, turn: int) -> Any:
+    def _surface(self, memory: E9CaseMemory, turn: int, incident: Incident | None = None) -> Any:
+        hypothesis = memory.state.get("current_hypothesis")
+        target_handle = hypothesis.get("entity_handle") if isinstance(hypothesis, dict) else None
+        available = (
+            SemanticCapabilityResolver(self.backend, memory, incident).available_operations(
+                phase=str(memory.state.get("current_phase", "OBSERVE")),
+                target_handle=target_handle,
+            )
+            if incident is not None
+            else None
+        )
         return control_surface(
             memory.state,
             turn=turn,
             max_steps=self.limits.max_model_calls,
             max_rejections=self.max_consecutive_rejected_actions,
             semantic_limit=self.limits.max_tool_calls,
+            available_operations=available,
         )
 
     @staticmethod

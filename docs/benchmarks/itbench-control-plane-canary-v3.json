@@ -1,0 +1,752 @@
+{
+  "basic_35_snapshot": [
+    {
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [
+        {
+          "chars": 3181,
+          "dispatch": "PASS",
+          "operation": "INCIDENT_OVERVIEW",
+          "structured": true
+        },
+        {
+          "chars": 1103,
+          "dispatch": "PASS",
+          "operation": "ALERT_ANALYSIS",
+          "structured": true
+        },
+        {
+          "chars": 4936,
+          "dispatch": "PASS",
+          "operation": "TOPOLOGY_ANALYSIS",
+          "structured": true
+        },
+        {
+          "chars": 5089,
+          "dispatch": "PASS",
+          "operation": "RECENT_CHANGE_ANALYSIS",
+          "structured": true
+        },
+        {
+          "chars": 1984,
+          "dispatch": "PASS",
+          "operation": "ENTITY_CONTEXT",
+          "structured": true
+        },
+        {
+          "chars": 1107,
+          "dispatch": "PASS",
+          "operation": "EVENT_ANALYSIS",
+          "structured": true
+        },
+        {
+          "chars": 411,
+          "dispatch": "PASS",
+          "operation": "METRIC_ANOMALIES",
+          "structured": true
+        },
+        {
+          "chars": 63,
+          "dispatch": "PASS",
+          "operation": "TRACE_ERROR_TREE",
+          "structured": true
+        },
+        {
+          "chars": 2311,
+          "dispatch": "PASS",
+          "operation": "SPEC_ANALYSIS",
+          "structured": true
+        },
+        {
+          "chars": 176,
+          "dispatch": "PASS",
+          "operation": "COMPARE_REPLICAS",
+          "structured": true
+        },
+        {
+          "chars": 326,
+          "dispatch": "PASS",
+          "operation": "VERIFY_TEMPORAL_ALIGNMENT",
+          "structured": true
+        }
+      ],
+      "scenario_id": "Scenario-1",
+      "semantic_dispatch_errors": 0,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-2",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-4",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-5",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-6",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-7",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-8",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-9",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-11",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-12",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-13",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-14",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-15",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-16",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-17",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-18",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-19",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-20",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-21",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-22",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-23",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-24",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-25",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-29",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-31",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-33",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-34",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-35",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-38",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-80",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-81",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-83",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-91",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-102",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    },
+    {
+      "dispatch_scope": "representative scenario only",
+      "model_steps": 3,
+      "replay_equal": true,
+      "rows": [],
+      "scenario_id": "Scenario-105",
+      "semantic_dispatch_errors": null,
+      "stale_action_count": 0,
+      "stale_operation_count": 0,
+      "stale_target_count": 0,
+      "terminal": "SUBMIT",
+      "trace_complete": true
+    }
+  ],
+  "basic_terminal_counts": {
+    "SUBMIT": 35
+  },
+  "dataset_revision": "d0916b08ba421ce5e672e9ad68aa947d938dfef0",
+  "execution": "E9_OFFLINE_PREFLIGHT",
+  "ground_truth_used": false,
+  "judge_calls": 0,
+  "missing_executor_count": 0,
+  "modes": {
+    "CANARY_CAPABILITY_GATING": {
+      "context_exposed": false,
+      "operation": "TRACE_ERROR_TREE",
+      "provider_exposed": false,
+      "runtime_exposed": false
+    },
+    "CANARY_DYNAMIC_DISCOVERY": {
+      "c002_evidence": true,
+      "c002_revisable": true,
+      "c002_visible": true,
+      "direct_discovery_injected": false,
+      "events": [
+        {
+          "case_id": "CANARY-V3-DISCOVERY:Scenario-1",
+          "event_id": "17921f94-1768-4395-a07c-07fc9255b0da",
+          "event_type": "ENTITY_DISCOVERED",
+          "payload": {
+            "canonical": "otel-demo/Service/seed",
+            "discovered_turn": 0,
+            "entity_handle": "C001",
+            "metadata": {
+              "canonical": "otel-demo/Service/seed"
+            }
+          },
+          "sequence_number": 2,
+          "timestamp": "2026-09-15T23:16:28.393618+00:00",
+          "turn": 0
+        },
+        {
+          "case_id": "CANARY-V3-DISCOVERY:Scenario-1",
+          "event_id": "16e54f8d-3503-4cc2-81a4-700b46a2ed97",
+          "event_type": "ENTITY_DISCOVERED",
+          "payload": {
+            "canonical": "otel-demo/ConfigMap/related",
+            "discovered_turn": 2,
+            "entity_handle": "C002",
+            "metadata": {
+              "canonical": "otel-demo/ConfigMap/related"
+            }
+          },
+          "sequence_number": 10,
+          "timestamp": "2026-09-15T23:16:34.237465+00:00",
+          "turn": 2
+        },
+        {
+          "case_id": "CANARY-V3-DISCOVERY:Scenario-1",
+          "event_id": "e6705e3c-7586-4b5b-90de-1608657e6de4",
+          "event_type": "HYPOTHESIS_REVISED",
+          "payload": {
+            "hypothesis": {
+              "entity_handle": "C002",
+              "rationale": "follow dependency"
+            }
+          },
+          "sequence_number": 16,
+          "timestamp": "2026-09-15T23:16:34.941749+00:00",
+          "turn": 3
+        },
+        {
+          "case_id": "CANARY-V3-DISCOVERY:Scenario-1",
+          "event_id": "b8e72c0b-dd5a-4400-b203-31dec9f094bf",
+          "event_type": "DIAGNOSIS_SUBMITTED",
+          "payload": {
+            "submitted_entities": [
+              "otel-demo/ConfigMap/related"
+            ],
+            "targets": [
+              "C002"
+            ]
+          },
+          "sequence_number": 24,
+          "timestamp": "2026-09-15T23:16:39.370430+00:00",
+          "turn": 5
+        }
+      ],
+      "replay_equal": true,
+      "requests": [
+        {
+          "actions": [
+            "OBSERVE",
+            "HYPOTHESIZE"
+          ],
+          "operations": [
+            "INCIDENT_OVERVIEW",
+            "ALERT_ANALYSIS",
+            "TOPOLOGY_ANALYSIS",
+            "EVENT_ANALYSIS"
+          ],
+          "targets": [
+            "C001"
+          ]
+        },
+        {
+          "actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE"
+          ],
+          "operations": [
+            "ENTITY_CONTEXT",
+            "METRIC_ANOMALIES",
+            "SPEC_ANALYSIS"
+          ],
+          "targets": [
+            "C001"
+          ]
+        },
+        {
+          "actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE"
+          ],
+          "operations": [
+            "METRIC_ANOMALIES",
+            "SPEC_ANALYSIS"
+          ],
+          "targets": [
+            "C001",
+            "C002"
+          ]
+        },
+        {
+          "actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE"
+          ],
+          "operations": [
+            "ENTITY_CONTEXT",
+            "METRIC_ANOMALIES",
+            "SPEC_ANALYSIS"
+          ],
+          "targets": [
+            "C002",
+            "C001"
+          ]
+        },
+        {
+          "actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE"
+          ],
+          "operations": [
+            "METRIC_ANOMALIES",
+            "SPEC_ANALYSIS"
+          ],
+          "targets": [
+            "C002",
+            "C001"
+          ]
+        }
+      ],
+      "target_schema": {
+        "invalid_c999_error": "$.target",
+        "valid_c002_error": null,
+        "valid_targets": [
+          "C001",
+          "C002"
+        ]
+      },
+      "terminal": "SUBMIT",
+      "turns": 5
+    },
+    "CANARY_TARGET_SCHEMA": {
+      "invalid_c999_error": "$.target",
+      "valid_c002_error": null,
+      "valid_targets": [
+        "C001",
+        "C002"
+      ]
+    }
+  },
+  "openai_calls": 0,
+  "purpose": "CONTROL_PLANE_CANARY_V3",
+  "replay_mismatch_count": 0,
+  "scenario_order": [
+    "Scenario-1",
+    "Scenario-2",
+    "Scenario-4",
+    "Scenario-5",
+    "Scenario-6",
+    "Scenario-7",
+    "Scenario-8",
+    "Scenario-9",
+    "Scenario-11",
+    "Scenario-12",
+    "Scenario-13",
+    "Scenario-14",
+    "Scenario-15",
+    "Scenario-16",
+    "Scenario-17",
+    "Scenario-18",
+    "Scenario-19",
+    "Scenario-20",
+    "Scenario-21",
+    "Scenario-22",
+    "Scenario-23",
+    "Scenario-24",
+    "Scenario-25",
+    "Scenario-29",
+    "Scenario-31",
+    "Scenario-33",
+    "Scenario-34",
+    "Scenario-35",
+    "Scenario-38",
+    "Scenario-80",
+    "Scenario-81",
+    "Scenario-83",
+    "Scenario-91",
+    "Scenario-102",
+    "Scenario-105"
+  ],
+  "semantic_dispatch_scope": "all operations on one representative snapshot; basic structural path on all 35",
+  "stale_capability_count": 0,
+  "status": "PASS",
+  "trace_completeness": 1.0
+}

@@ -1,0 +1,808 @@
+{
+  "cases": [
+    {
+      "action_rejections": 0,
+      "evidence": [
+        {
+          "category": "entity_context",
+          "compact_summary": {
+            "items": {
+              "items": {
+                "items": {
+                  "identity": {
+                    "items": {},
+                    "returned_key_count": 0,
+                    "section_truncated": true,
+                    "source_key_count": 3
+                  },
+                  "ownership": []
+                },
+                "returned_key_count": 2,
+                "section_truncated": true,
+                "source_key_count": 19
+              },
+              "returned_key_count": 19,
+              "section_truncated": true,
+              "source_key_count": 19
+            },
+            "returned_key_count": 4,
+            "section_truncated": true,
+            "source_key_count": 4
+          },
+          "entity_handle": "C001",
+          "evidence_handle": "E001",
+          "operation": "ENTITY_CONTEXT"
+        },
+        {
+          "category": "spec",
+          "compact_summary": {
+            "items": {
+              "configuration_dependencies": {
+                "items": [
+                  {
+                    "items": {},
+                    "returned_key_count": 0,
+                    "section_truncated": true,
+                    "source_key_count": 3
+                  }
+                ],
+                "returned_count": 1,
+                "section_truncated": true,
+                "source_count": 2
+              },
+              "entity": "clickhouse-operator/ConfigMap/clickhouse-operator-altinity-clickhouse-operator-configd-files",
+              "owner": [],
+              "specs": {
+                "items": [
+                  {
+                    "items": {},
+                    "returned_key_count": 0,
+                    "section_truncated": true,
+                    "source_key_count": 10
+                  }
+                ],
+                "returned_count": 1,
+                "section_truncated": true,
+                "source_count": 7
+              }
+            },
+            "returned_key_count": 4,
+            "section_truncated": true,
+            "source_key_count": 4
+          },
+          "entity_handle": "C001",
+          "evidence_handle": "E002",
+          "operation": "SPEC_ANALYSIS"
+        }
+      ],
+      "judge_calls": 0,
+      "model_steps": 4,
+      "name": "SIMULATED_SMOKE",
+      "openai_calls": 0,
+      "recovered_rejections": 0,
+      "semantic_actions": 2,
+      "terminal": "SUBMIT",
+      "turns": [
+        {
+          "accepted": true,
+          "context_chars": 7111,
+          "decision": "HYPOTHESIZE",
+          "evidence_created": [],
+          "operation": "",
+          "parsed_action": "HYPOTHESIZE",
+          "phase_after": "VERIFY",
+          "phase_before": "OBSERVE",
+          "provider_exposed_actions": [
+            "OBSERVE",
+            "HYPOTHESIZE",
+            "STOP"
+          ],
+          "provider_exposed_operations": [
+            "INCIDENT_OVERVIEW",
+            "ALERT_ANALYSIS",
+            "TOPOLOGY_ANALYSIS",
+            "EVENT_ANALYSIS"
+          ],
+          "provider_exposed_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "runtime_accepted_actions": [
+            "OBSERVE",
+            "HYPOTHESIZE",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [
+            "INCIDENT_OVERVIEW",
+            "ALERT_ANALYSIS",
+            "TOPOLOGY_ANALYSIS",
+            "EVENT_ANALYSIS"
+          ],
+          "runtime_accepted_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": "C001",
+          "turn": 1
+        },
+        {
+          "accepted": true,
+          "context_chars": 6578,
+          "decision": "INVESTIGATE",
+          "evidence_created": [
+            "E001"
+          ],
+          "operation": "ENTITY_CONTEXT",
+          "parsed_action": "INVESTIGATE",
+          "phase_after": "VERIFY",
+          "phase_before": "VERIFY",
+          "provider_exposed_actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "provider_exposed_operations": [
+            "ENTITY_CONTEXT",
+            "METRIC_ANOMALIES",
+            "SPEC_ANALYSIS"
+          ],
+          "provider_exposed_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "runtime_accepted_actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [
+            "ENTITY_CONTEXT",
+            "METRIC_ANOMALIES",
+            "SPEC_ANALYSIS"
+          ],
+          "runtime_accepted_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": "C001",
+          "turn": 2
+        },
+        {
+          "accepted": true,
+          "context_chars": 7110,
+          "decision": "INVESTIGATE",
+          "evidence_created": [
+            "E002"
+          ],
+          "operation": "SPEC_ANALYSIS",
+          "parsed_action": "INVESTIGATE",
+          "phase_after": "VERIFY",
+          "phase_before": "VERIFY",
+          "provider_exposed_actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "provider_exposed_operations": [
+            "METRIC_ANOMALIES",
+            "SPEC_ANALYSIS"
+          ],
+          "provider_exposed_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "runtime_accepted_actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [
+            "METRIC_ANOMALIES",
+            "SPEC_ANALYSIS"
+          ],
+          "runtime_accepted_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": "C001",
+          "turn": 3
+        },
+        {
+          "accepted": true,
+          "context_chars": 7502,
+          "decision": "SUBMIT",
+          "evidence_created": [],
+          "operation": "",
+          "parsed_action": "SUBMIT",
+          "phase_after": "CONCLUDE",
+          "phase_before": "VERIFY",
+          "provider_exposed_actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "provider_exposed_operations": [
+            "METRIC_ANOMALIES"
+          ],
+          "provider_exposed_targets": [
+            "C001",
+            "C011",
+            "C012",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "runtime_accepted_actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [
+            "METRIC_ANOMALIES"
+          ],
+          "runtime_accepted_targets": [
+            "C001",
+            "C011",
+            "C012",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": null,
+          "targets": [
+            "C001"
+          ],
+          "turn": 4
+        }
+      ]
+    },
+    {
+      "action_rejections": 2,
+      "evidence": [
+        {
+          "category": "entity_context",
+          "compact_summary": {
+            "items": {
+              "items": {
+                "items": {
+                  "identity": {
+                    "items": {},
+                    "returned_key_count": 0,
+                    "section_truncated": true,
+                    "source_key_count": 3
+                  },
+                  "ownership": []
+                },
+                "returned_key_count": 2,
+                "section_truncated": true,
+                "source_key_count": 19
+              },
+              "returned_key_count": 19,
+              "section_truncated": true,
+              "source_key_count": 19
+            },
+            "returned_key_count": 4,
+            "section_truncated": true,
+            "source_key_count": 4
+          },
+          "entity_handle": "C001",
+          "evidence_handle": "E001",
+          "operation": "ENTITY_CONTEXT"
+        },
+        {
+          "category": "spec",
+          "compact_summary": {
+            "items": {
+              "configuration_dependencies": {
+                "items": [
+                  {
+                    "items": {},
+                    "returned_key_count": 0,
+                    "section_truncated": true,
+                    "source_key_count": 3
+                  }
+                ],
+                "returned_count": 1,
+                "section_truncated": true,
+                "source_count": 2
+              },
+              "entity": "clickhouse-operator/ConfigMap/clickhouse-operator-altinity-clickhouse-operator-configd-files",
+              "owner": [],
+              "specs": {
+                "items": [
+                  {
+                    "items": {},
+                    "returned_key_count": 0,
+                    "section_truncated": true,
+                    "source_key_count": 10
+                  }
+                ],
+                "returned_count": 1,
+                "section_truncated": true,
+                "source_count": 7
+              }
+            },
+            "returned_key_count": 4,
+            "section_truncated": true,
+            "source_key_count": 4
+          },
+          "entity_handle": "C001",
+          "evidence_handle": "E002",
+          "operation": "SPEC_ANALYSIS"
+        }
+      ],
+      "judge_calls": 0,
+      "model_steps": 6,
+      "name": "ADVERSARIAL_SIMULATED_SMOKE",
+      "openai_calls": 0,
+      "recovered_rejections": 2,
+      "semantic_actions": 2,
+      "terminal": "SUBMIT",
+      "turns": [
+        {
+          "accepted": false,
+          "context_chars": 7111,
+          "decision": "ACTION_REJECTED",
+          "evidence_created": [],
+          "operation": "",
+          "parsed_action": "HYPOTHESIZE",
+          "phase_before": "OBSERVE",
+          "provider_exposed_actions": [
+            "OBSERVE",
+            "HYPOTHESIZE",
+            "STOP"
+          ],
+          "provider_exposed_operations": [
+            "INCIDENT_OVERVIEW",
+            "ALERT_ANALYSIS",
+            "TOPOLOGY_ANALYSIS",
+            "EVENT_ANALYSIS"
+          ],
+          "provider_exposed_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "rejection_code": "UNKNOWN_CANDIDATE",
+          "rejection_reason": "target is not an observable candidate handle",
+          "runtime_accepted_actions": [
+            "OBSERVE",
+            "HYPOTHESIZE",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [
+            "INCIDENT_OVERVIEW",
+            "ALERT_ANALYSIS",
+            "TOPOLOGY_ANALYSIS",
+            "EVENT_ANALYSIS"
+          ],
+          "runtime_accepted_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": "C999",
+          "turn": 1,
+          "valid_next_actions": [
+            "OBSERVE",
+            "HYPOTHESIZE",
+            "STOP"
+          ],
+          "valid_operations": [
+            "INCIDENT_OVERVIEW",
+            "ALERT_ANALYSIS",
+            "TOPOLOGY_ANALYSIS",
+            "EVENT_ANALYSIS"
+          ]
+        },
+        {
+          "accepted": true,
+          "context_chars": 7428,
+          "decision": "HYPOTHESIZE",
+          "evidence_created": [],
+          "operation": "",
+          "parsed_action": "HYPOTHESIZE",
+          "phase_after": "VERIFY",
+          "phase_before": "OBSERVE",
+          "provider_exposed_actions": [
+            "OBSERVE",
+            "HYPOTHESIZE",
+            "STOP"
+          ],
+          "provider_exposed_operations": [
+            "INCIDENT_OVERVIEW",
+            "ALERT_ANALYSIS",
+            "TOPOLOGY_ANALYSIS",
+            "EVENT_ANALYSIS"
+          ],
+          "provider_exposed_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "runtime_accepted_actions": [
+            "OBSERVE",
+            "HYPOTHESIZE",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [
+            "INCIDENT_OVERVIEW",
+            "ALERT_ANALYSIS",
+            "TOPOLOGY_ANALYSIS",
+            "EVENT_ANALYSIS"
+          ],
+          "runtime_accepted_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": "C001",
+          "turn": 2
+        },
+        {
+          "accepted": true,
+          "context_chars": 6502,
+          "decision": "INVESTIGATE",
+          "evidence_created": [
+            "E001"
+          ],
+          "operation": "ENTITY_CONTEXT",
+          "parsed_action": "INVESTIGATE",
+          "phase_after": "VERIFY",
+          "phase_before": "VERIFY",
+          "provider_exposed_actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "provider_exposed_operations": [
+            "ENTITY_CONTEXT",
+            "METRIC_ANOMALIES",
+            "SPEC_ANALYSIS"
+          ],
+          "provider_exposed_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "runtime_accepted_actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [
+            "ENTITY_CONTEXT",
+            "METRIC_ANOMALIES",
+            "SPEC_ANALYSIS"
+          ],
+          "runtime_accepted_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": "C001",
+          "turn": 3
+        },
+        {
+          "accepted": false,
+          "context_chars": 7035,
+          "decision": "ACTION_REJECTED",
+          "evidence_created": [],
+          "operation": "ENTITY_CONTEXT",
+          "parsed_action": "INVESTIGATE",
+          "phase_before": "VERIFY",
+          "provider_exposed_actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "provider_exposed_operations": [
+            "METRIC_ANOMALIES",
+            "SPEC_ANALYSIS"
+          ],
+          "provider_exposed_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "rejection_code": "UNSUPPORTED_OPERATION",
+          "rejection_reason": "operation is not currently exposed for this phase/target",
+          "runtime_accepted_actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [
+            "METRIC_ANOMALIES",
+            "SPEC_ANALYSIS"
+          ],
+          "runtime_accepted_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": "C001",
+          "turn": 4,
+          "valid_next_actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "valid_operations": [
+            "METRIC_ANOMALIES",
+            "SPEC_ANALYSIS"
+          ]
+        },
+        {
+          "accepted": true,
+          "context_chars": 7361,
+          "decision": "INVESTIGATE",
+          "evidence_created": [
+            "E002"
+          ],
+          "operation": "SPEC_ANALYSIS",
+          "parsed_action": "INVESTIGATE",
+          "phase_after": "VERIFY",
+          "phase_before": "VERIFY",
+          "provider_exposed_actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "provider_exposed_operations": [
+            "METRIC_ANOMALIES",
+            "SPEC_ANALYSIS"
+          ],
+          "provider_exposed_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "runtime_accepted_actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [
+            "METRIC_ANOMALIES",
+            "SPEC_ANALYSIS"
+          ],
+          "runtime_accepted_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": "C001",
+          "turn": 5
+        },
+        {
+          "accepted": true,
+          "context_chars": 7427,
+          "decision": "SUBMIT",
+          "evidence_created": [],
+          "operation": "",
+          "parsed_action": "SUBMIT",
+          "phase_after": "CONCLUDE",
+          "phase_before": "VERIFY",
+          "provider_exposed_actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "provider_exposed_operations": [
+            "METRIC_ANOMALIES"
+          ],
+          "provider_exposed_targets": [
+            "C001",
+            "C011",
+            "C012",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "runtime_accepted_actions": [
+            "OBSERVE",
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [
+            "METRIC_ANOMALIES"
+          ],
+          "runtime_accepted_targets": [
+            "C001",
+            "C011",
+            "C012",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": null,
+          "targets": [
+            "C001"
+          ],
+          "turn": 6
+        }
+      ]
+    }
+  ],
+  "execution": "E9_OFFLINE_PREFLIGHT",
+  "ground_truth_used": false,
+  "judge_calls": 0,
+  "luna_calls": 0,
+  "openai_calls": 0,
+  "provider": "fake",
+  "purpose": "OFFLINE_SIMULATED_SMOKE",
+  "status": "PASS"
+}

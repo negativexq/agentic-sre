@@ -560,12 +560,18 @@ def _itbench_decision_function_schemas(
 def _itbench_v5_decision_function_schemas(
     allowed_actions: tuple[str, ...] | None = None,
     allowed_operations: tuple[str, ...] | None = None,
+    allowed_targets: tuple[str, ...] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Build V5 functions from the same dynamic surface used by the runtime."""
     nullable_string = {"anyOf": [{"type": "string"}, {"type": "null"}]}
     action_values = list(allowed_actions or ("OBSERVE", "HYPOTHESIZE", "INVESTIGATE", "REVISE"))
     operation_values = list(allowed_operations or [])
     operation = {"type": "string", "enum": operation_values}
+    target_string: dict[str, Any] = {"type": "string"}
+    if allowed_targets is not None:
+        target_string["enum"] = list(allowed_targets)
+    target_or_null: dict[str, Any] = {"anyOf": [target_string, {"type": "null"}]}
+    target_array: dict[str, Any] = {"type": "array", "items": target_string}
 
     def obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
         return {
@@ -579,16 +585,14 @@ def _itbench_v5_decision_function_schemas(
         "request_itbench_tools": obj(
             {
                 "action": {"type": "string", "enum": action_values},
-                "target": nullable_string,
-                "targets": {"type": "array", "items": {"type": "string"}},
+                "target": target_or_null if allowed_targets is not None else nullable_string,
+                "targets": target_array,
                 "operation": {"anyOf": [operation, {"type": "null"}]},
                 "rationale": nullable_string,
             },
             ["action", "target", "targets", "operation", "rationale"],
         ),
-        "submit_itbench_diagnosis": obj(
-            {"targets": {"type": "array", "items": {"type": "string"}}}, ["targets"]
-        ),
+        "submit_itbench_diagnosis": obj({"targets": target_array}, ["targets"]),
         "stop_itbench_investigation": obj({"stop_reason": {"type": "string"}}, ["stop_reason"]),
     }
 
@@ -871,7 +875,7 @@ def _extract_decision_function(
         )
     schemas = (
         _itbench_v5_decision_function_schemas(
-            request.allowed_v5_actions, request.allowed_v5_operations
+            request.allowed_v5_actions, request.allowed_v5_operations, request.allowed_v5_targets
         )
         if external_protocol_v5
         else _itbench_decision_function_schemas(
@@ -1241,7 +1245,9 @@ class OpenAIProvider:
             )
             schemas = (
                 _itbench_v5_decision_function_schemas(
-                    request.allowed_v5_actions, request.allowed_v5_operations
+                    request.allowed_v5_actions,
+                    request.allowed_v5_operations,
+                    request.allowed_v5_targets,
                 )
                 if external_protocol_v5
                 else _itbench_decision_function_schemas(

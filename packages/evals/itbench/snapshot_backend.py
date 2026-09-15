@@ -46,6 +46,7 @@ class ITBenchSnapshotBackend:
         self._entity_record_index: dict[str, tuple[dict[str, Any], ...]] | None = None
         self._observable_entities_cache: tuple[dict[str, str], ...] | None = None
         self._complete_alert_cache: tuple[dict[str, Any], ...] | None = None
+        self._semantic_capability_cache: dict[tuple[Any, ...], dict[str, dict[str, Any]]] = {}
         self._performance = {
             "source_file_scans": 0,
             "records_scanned": 0,

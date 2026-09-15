@@ -25,6 +25,18 @@ def validate_future_live_preflight(
     """Validate all identity/readiness gates without importing a live provider."""
     actual = collect_e9_identity(root, relevant_paths)
     validate_e9_identity(actual, manifest)
+    required_identity_fields = (
+        "control_policy_hash",
+        "semantic_registry_hash",
+        "semantic_availability_policy_hash",
+        "provider_schema_hash",
+        "context_planner_hash",
+    )
+    missing_identity = [field for field in required_identity_fields if not manifest.get(field)]
+    if missing_identity:
+        raise LivePreflightError(
+            "future manifest missing capability identity: " + ",".join(missing_identity)
+        )
     if manifest.get("dataset_revision") != ITBENCH_DATASET_REVISION:
         raise LivePreflightError("dataset revision mismatch")
     if manifest.get("offline_readiness_status") != "READY_FOR_LIVE_SMOKE_REVIEW":

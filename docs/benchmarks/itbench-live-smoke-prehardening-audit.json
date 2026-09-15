@@ -1,0 +1,20 @@
+{
+  "execution": "E9_OFFLINE_PREFLIGHT",
+  "purpose": "FINAL_OFFLINE_CAPABILITY_HARDENING_AUDIT",
+  "reviewed_head": "e4cdaa354a24b7efa24900c83dee20a38b09e41b",
+  "historical_artifacts_immutable": true,
+  "findings": [
+    {"id": "semantic_dead_capabilities", "status": "CONFIRMED", "file": "packages/evals/itbench/e9_semantic.py", "symbol": "E9SemanticOperations", "repair": "SemanticCapabilityResolver gates unavailable operations before all three surfaces", "test": "coverage-v2 and capability-surface reports"},
+    {"id": "recent_change_honesty", "status": "CONFIRMED", "file": "packages/evals/itbench/e9_semantic.py", "symbol": "_recent_changes", "repair": "unavailable when immutable snapshots do not contain change history", "test": "coverage-v2"},
+    {"id": "trace_utility", "status": "CONFIRMED", "file": "packages/evals/itbench/e9_semantic.py", "symbol": "_trace_error_tree", "repair": "meaningful-edge availability rule", "test": "coverage-v2"},
+    {"id": "replica_utility", "status": "CONFIRMED", "file": "packages/evals/itbench/e9_semantic.py", "symbol": "_compare_replicas", "repair": "requires peer plus observable comparison dimension", "test": "coverage-v2"},
+    {"id": "temporal_utility", "status": "CONFIRMED", "file": "packages/evals/itbench/e9_semantic.py", "symbol": "_temporal_alignment", "repair": "unavailable without usable timestamp relation", "test": "coverage-v2"},
+    {"id": "dynamic_discovery_canary", "status": "CONFIRMED", "file": "scripts/itbench_e9_control_plane_canary.py", "symbol": "CANARY_DYNAMIC_DISCOVERY", "repair": "v3 uses semantic result discovery end-to-end", "test": "canary-v3"},
+    {"id": "unconstrained_targets", "status": "CONFIRMED", "file": "packages/provider/openai.py", "symbol": "_itbench_v5_decision_function_schemas", "repair": "allowed_v5_targets enum in strict provider schema", "test": "offline schema compilation"},
+    {"id": "weak_executor_metric", "status": "CONFIRMED", "file": "scripts/itbench_e9_control_plane_canary.py", "symbol": "_executor_audit", "repair": "v3 executes every operation on a representative snapshot", "test": "canary-v3 dispatch matrix"},
+    {"id": "dead_policy_helper", "status": "CONFIRMED", "file": "packages/evals/itbench/e9_context.py", "symbol": "_operations_for_phase", "repair": "removed; resolver is authoritative", "test": "ruff/full pytest"},
+    {"id": "submission_association", "status": "PARTIALLY_CONFIRMED", "file": "packages/evals/itbench/e9_runtime.py", "symbol": "_submit_ready", "repair": "existing candidate-associated evidence gate retained; additional regression remains", "test": "existing harness tests plus future targeted test"},
+    {"id": "identity_hashes", "status": "PARTIALLY_CONFIRMED", "file": "scripts/itbench_control_plane_live_smoke.py", "symbol": "validate_future_live_preflight", "repair": "requires capability/schema identity fields before provider construction", "test": "future preflight unit path"}
+  ],
+  "network_accounting": {"live_agent_calls": 0, "openai_outbound_attempts": 0, "luna_calls": 0, "judge_calls": 0, "official_benchmark_scenarios": 0, "live_smoke_scenarios": 0}
+}

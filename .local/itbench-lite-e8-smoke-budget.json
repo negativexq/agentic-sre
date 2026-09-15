@@ -1,0 +1,10 @@
+{
+  "execution": "ITB-E8",
+  "purpose": "SMOKE",
+  "cap": 5,
+  "calls_used": 0,
+  "remaining": 5,
+  "status": "NOT_STARTED",
+  "historical_failed_attempts": 0,
+  "note": "Separate from the official 35-scenario agent ledger; no judge usage."
+}

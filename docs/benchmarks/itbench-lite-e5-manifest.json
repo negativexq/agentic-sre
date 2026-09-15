@@ -42,7 +42,7 @@
         "Scenario-83",
         "Scenario-91",
         "Scenario-102",
-        "Scenario-105",
+    "Scenario-105"
     ],
     "adapter": "itbench_lite_snapshot_adapter_v4",
     "prompt": "itbench_sre_investigator_v3",
@@ -59,25 +59,25 @@
         "tool_calls": 12,
         "turns": 5,
         "wall_seconds": 180,
-        "provider_retries": 0,
+        "provider_retries": 0
     },
     "official_evaluator": {
         "source": "itbench-hub/ITBench-Evaluations",
-        "revision": "14f026fc9cc348c4ecec5ab32714de954c95c1b1",
+        "revision": "14f026fc9cc348c4ecec5ab32714de954c95c1b1"
     },
     "ledger": {
         "path": ".local/itbench-lite-e5-budget.json",
         "cap": 180,
         "consumed": 0,
         "remaining": 180,
-        "status": "NOT_STARTED",
+        "status": "NOT_STARTED"
     },
     "qualification": {
         "script": "scripts/itbench_e5_check.py",
         "status": "PASS",
         "scenarios": "35/35",
-        "openai_calls": 0,
+        "openai_calls": 0
     },
     "ground_truth": {"investigator_access": false, "evaluator_access": "post-persistence only"},
-    "notes": "Engineering iteration after frozen E4 baseline; same public scenarios, not untouched held-out generalization.",
+    "notes": "Engineering iteration after frozen E4 baseline; same public scenarios, not untouched held-out generalization."
 }

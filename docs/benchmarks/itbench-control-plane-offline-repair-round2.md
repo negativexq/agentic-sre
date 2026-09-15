@@ -21,7 +21,7 @@ OpenAI request, Luna request, or judge request occurred.
 
 ## Offline evidence
 
-The executable ablation harness ran eight configurations over twelve scripted
+The executable ablation harness ran eight configurations over thirteen scripted
 trajectories. R0 disables recovery and produced 7 stalls out of 12. R1–R7
 enable recovery and completed all 12. The v3 artifact includes feature flags,
 configuration hashes, surface sizes, rejection/recovery counts, replay and

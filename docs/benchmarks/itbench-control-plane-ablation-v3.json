@@ -4,10 +4,10 @@
   "judge_calls": 0,
   "method": "real FakeModelProvider trajectories over the E9 runtime; no network, no judge, no official GT",
   "openai_calls": 0,
-  "trajectory_count_per_variant": 12,
+  "trajectory_count_per_variant": 13,
   "variants": [
     {
-      "completion_rate": 0.4166666666666667,
+      "completion_rate": 0.38461538461538464,
       "configuration": {
         "max_consecutive_rejected_actions": 0
       },
@@ -21,13 +21,14 @@
         "semantic_facade": false,
         "visible_rejection_feedback": false
       },
-      "mean_context_chars": 6799.75,
-      "mean_exposed_actions": 6.566666666666666,
+      "mean_context_chars": 6663.846153846154,
+      "mean_discovered_candidates": 2.0,
+      "mean_exposed_actions": 6.5625,
       "mean_exposed_operations": 11.0,
-      "mean_model_steps": 2.5,
-      "protocol_stall_count": 7,
+      "mean_model_steps": 2.4615384615384617,
+      "protocol_stall_count": 8,
       "recovered_rejection_count": 0,
-      "rejection_count": 7,
+      "rejection_count": 8,
       "rejection_feedback_visible_runs": 0,
       "replay_mismatches": 0,
       "runs": [
@@ -37,6 +38,7 @@
             2662,
             3371
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -63,6 +65,7 @@
           "context_chars": [
             2371
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6
           ],
@@ -87,6 +90,7 @@
             2662,
             3371
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -113,6 +117,7 @@
           "context_chars": [
             2371
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6
           ],
@@ -138,6 +143,7 @@
             2889,
             3382
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -166,6 +172,7 @@
           "context_chars": [
             2371
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6
           ],
@@ -190,6 +197,7 @@
             2971,
             3261
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             6,
@@ -219,6 +227,7 @@
             3027,
             3164
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -249,6 +258,7 @@
             2662,
             3047
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -277,6 +287,7 @@
             2662,
             3366
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -304,6 +315,7 @@
             2371,
             2662
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7
@@ -329,6 +341,7 @@
             2371,
             2662
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7
@@ -348,16 +361,42 @@
           "terminal": "PROTOCOL_STALLED",
           "trace_complete": true,
           "trajectory": 12
+        },
+        {
+          "context_chars": [
+            2371,
+            2662
+          ],
+          "discovered_candidate_count": 2,
+          "exposed_action_counts": [
+            6,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11
+          ],
+          "model_steps": 2,
+          "provider_schema_chars": 2118,
+          "recovered_rejections": 0,
+          "rejection_feedback_visible": false,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "PROTOCOL_STALLED",
+          "trace_complete": true,
+          "trajectory": 13
         }
       ],
       "synthetic_correct_count": 0,
       "terminal_counts": {
-        "PROTOCOL_STALLED": 7,
+        "PROTOCOL_STALLED": 8,
         "STOP": 1,
         "SUBMIT": 4
       },
       "trace_incomplete": 0,
-      "trajectory_count": 12,
+      "trajectory_count": 13,
       "variant": "R0"
     },
     {
@@ -375,13 +414,14 @@
         "semantic_facade": false,
         "visible_rejection_feedback": false
       },
-      "mean_context_chars": 10738.416666666666,
-      "mean_exposed_actions": 6.673913043478261,
+      "mean_context_chars": 10504.23076923077,
+      "mean_discovered_candidates": 2.0,
+      "mean_exposed_actions": 6.673469387755102,
       "mean_exposed_operations": 11.0,
-      "mean_model_steps": 3.8333333333333335,
+      "mean_model_steps": 3.769230769230769,
       "protocol_stall_count": 0,
-      "recovered_rejection_count": 8,
-      "rejection_count": 10,
+      "recovered_rejection_count": 9,
+      "rejection_count": 11,
       "rejection_feedback_visible_runs": 0,
       "replay_mismatches": 0,
       "runs": [
@@ -391,6 +431,7 @@
             2662,
             3371
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -420,6 +461,7 @@
             2661,
             3183
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             6,
@@ -452,6 +494,7 @@
             3371,
             3879
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -486,6 +529,7 @@
             2661,
             2661
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             6,
@@ -519,6 +563,7 @@
             2889,
             3382
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -547,6 +592,7 @@
           "context_chars": [
             2371
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6
           ],
@@ -573,6 +619,7 @@
             3261,
             3261
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             6,
@@ -606,6 +653,7 @@
             3027,
             3164
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -637,6 +685,7 @@
             3047,
             3047
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -667,6 +716,7 @@
             2662,
             3366
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -696,6 +746,7 @@
             2661,
             3183
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -727,6 +778,7 @@
             2661,
             3371
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -750,15 +802,44 @@
           "terminal": "SUBMIT",
           "trace_complete": true,
           "trajectory": 12
+        },
+        {
+          "context_chars": [
+            2371,
+            2662,
+            2661
+          ],
+          "discovered_candidate_count": 2,
+          "exposed_action_counts": [
+            6,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": false,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 13
         }
       ],
       "synthetic_correct_count": 0,
       "terminal_counts": {
-        "STOP": 4,
+        "STOP": 5,
         "SUBMIT": 8
       },
       "trace_incomplete": 0,
-      "trajectory_count": 12,
+      "trajectory_count": 13,
       "variant": "R1"
     },
     {
@@ -776,14 +857,15 @@
         "semantic_facade": false,
         "visible_rejection_feedback": true
       },
-      "mean_context_chars": 11148.916666666666,
-      "mean_exposed_actions": 6.673913043478261,
+      "mean_context_chars": 10919.923076923076,
+      "mean_discovered_candidates": 2.0,
+      "mean_exposed_actions": 6.673469387755102,
       "mean_exposed_operations": 11.0,
-      "mean_model_steps": 3.8333333333333335,
+      "mean_model_steps": 3.769230769230769,
       "protocol_stall_count": 0,
-      "recovered_rejection_count": 8,
-      "rejection_count": 10,
-      "rejection_feedback_visible_runs": 12,
+      "recovered_rejection_count": 9,
+      "rejection_count": 11,
+      "rejection_feedback_visible_runs": 13,
       "replay_mismatches": 0,
       "runs": [
         {
@@ -792,6 +874,7 @@
             2684,
             3393
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -821,6 +904,7 @@
             2683,
             3205
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             6,
@@ -853,6 +937,7 @@
             3785,
             3901
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -887,6 +972,7 @@
             3092,
             3076
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             6,
@@ -920,6 +1006,7 @@
             2911,
             3404
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -948,6 +1035,7 @@
           "context_chars": [
             2393
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6
           ],
@@ -974,6 +1062,7 @@
             3700,
             3676
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             6,
@@ -1007,6 +1096,7 @@
             3049,
             3186
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -1038,6 +1128,7 @@
             3069,
             3459
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -1068,6 +1159,7 @@
             2684,
             3388
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -1097,6 +1189,7 @@
             3092,
             3205
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -1128,6 +1221,7 @@
             3089,
             3393
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             6,
             7,
@@ -1151,15 +1245,44 @@
           "terminal": "SUBMIT",
           "trace_complete": true,
           "trajectory": 12
+        },
+        {
+          "context_chars": [
+            2393,
+            2684,
+            3095
+          ],
+          "discovered_candidate_count": 2,
+          "exposed_action_counts": [
+            6,
+            7,
+            7
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 13
         }
       ],
       "synthetic_correct_count": 0,
       "terminal_counts": {
-        "STOP": 4,
+        "STOP": 5,
         "SUBMIT": 8
       },
       "trace_incomplete": 0,
-      "trajectory_count": 12,
+      "trajectory_count": 13,
       "variant": "R2"
     },
     {
@@ -1177,14 +1300,15 @@
         "semantic_facade": false,
         "visible_rejection_feedback": true
       },
-      "mean_context_chars": 11072.75,
-      "mean_exposed_actions": 5.3478260869565215,
+      "mean_context_chars": 10845.0,
+      "mean_discovered_candidates": 2.0,
+      "mean_exposed_actions": 5.346938775510204,
       "mean_exposed_operations": 11.0,
-      "mean_model_steps": 3.8333333333333335,
+      "mean_model_steps": 3.769230769230769,
       "protocol_stall_count": 0,
-      "recovered_rejection_count": 8,
-      "rejection_count": 10,
-      "rejection_feedback_visible_runs": 12,
+      "recovered_rejection_count": 9,
+      "rejection_count": 11,
+      "rejection_feedback_visible_runs": 13,
       "replay_mismatches": 0,
       "runs": [
         {
@@ -1193,6 +1317,7 @@
             2670,
             3379
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -1222,6 +1347,7 @@
             2669,
             3191
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             4,
@@ -1254,6 +1380,7 @@
             3771,
             3887
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -1288,6 +1415,7 @@
             3078,
             3062
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             4,
@@ -1321,6 +1449,7 @@
             2897,
             3390
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -1349,6 +1478,7 @@
           "context_chars": [
             2361
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4
           ],
@@ -1375,6 +1505,7 @@
             3686,
             3662
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             4,
@@ -1408,6 +1539,7 @@
             3035,
             3172
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -1439,6 +1571,7 @@
             3055,
             3445
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -1469,6 +1602,7 @@
             2670,
             3374
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -1498,6 +1632,7 @@
             3078,
             3191
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -1529,6 +1664,7 @@
             3075,
             3379
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -1552,15 +1688,44 @@
           "terminal": "SUBMIT",
           "trace_complete": true,
           "trajectory": 12
+        },
+        {
+          "context_chars": [
+            2361,
+            2670,
+            3081
+          ],
+          "discovered_candidate_count": 2,
+          "exposed_action_counts": [
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            11,
+            11,
+            11
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 13
         }
       ],
       "synthetic_correct_count": 0,
       "terminal_counts": {
-        "STOP": 4,
+        "STOP": 5,
         "SUBMIT": 8
       },
       "trace_incomplete": 0,
-      "trajectory_count": 12,
+      "trajectory_count": 13,
       "variant": "R3"
     },
     {
@@ -1578,14 +1743,15 @@
         "semantic_facade": false,
         "visible_rejection_feedback": true
       },
-      "mean_context_chars": 10646.5,
-      "mean_exposed_actions": 5.3478260869565215,
-      "mean_exposed_operations": 5.3478260869565215,
-      "mean_model_steps": 3.8333333333333335,
+      "mean_context_chars": 10427.23076923077,
+      "mean_discovered_candidates": 2.0,
+      "mean_exposed_actions": 5.346938775510204,
+      "mean_exposed_operations": 5.36734693877551,
+      "mean_model_steps": 3.769230769230769,
       "protocol_stall_count": 0,
-      "recovered_rejection_count": 8,
-      "rejection_count": 10,
-      "rejection_feedback_visible_runs": 12,
+      "recovered_rejection_count": 9,
+      "rejection_count": 11,
+      "rejection_feedback_visible_runs": 13,
       "replay_mismatches": 0,
       "runs": [
         {
@@ -1594,6 +1760,7 @@
             2571,
             3263
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -1623,6 +1790,7 @@
             2570,
             3076
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             4,
@@ -1655,6 +1823,7 @@
             3655,
             3755
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -1689,6 +1858,7 @@
             2979,
             2963
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             4,
@@ -1722,6 +1892,7 @@
             2798,
             3263
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -1750,6 +1921,7 @@
           "context_chars": [
             2243
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4
           ],
@@ -1776,6 +1948,7 @@
             3587,
             3563
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             4,
@@ -1809,6 +1982,7 @@
             2917,
             3054
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -1840,6 +2014,7 @@
             2937,
             3327
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -1870,6 +2045,7 @@
             2571,
             3256
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -1899,6 +2075,7 @@
             2979,
             3076
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -1930,6 +2107,7 @@
             2976,
             3263
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -1953,15 +2131,44 @@
           "terminal": "SUBMIT",
           "trace_complete": true,
           "trajectory": 12
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2982
+          ],
+          "discovered_candidate_count": 2,
+          "exposed_action_counts": [
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            6
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 13
         }
       ],
       "synthetic_correct_count": 0,
       "terminal_counts": {
-        "STOP": 4,
+        "STOP": 5,
         "SUBMIT": 8
       },
       "trace_incomplete": 0,
-      "trajectory_count": 12,
+      "trajectory_count": 13,
       "variant": "R4"
     },
     {
@@ -1979,14 +2186,15 @@
         "semantic_facade": true,
         "visible_rejection_feedback": true
       },
-      "mean_context_chars": 10471.583333333334,
-      "mean_exposed_actions": 5.3478260869565215,
-      "mean_exposed_operations": 5.3478260869565215,
-      "mean_model_steps": 3.8333333333333335,
+      "mean_context_chars": 10265.76923076923,
+      "mean_discovered_candidates": 2.0,
+      "mean_exposed_actions": 5.346938775510204,
+      "mean_exposed_operations": 5.36734693877551,
+      "mean_model_steps": 3.769230769230769,
       "protocol_stall_count": 0,
-      "recovered_rejection_count": 8,
-      "rejection_count": 10,
-      "rejection_feedback_visible_runs": 12,
+      "recovered_rejection_count": 9,
+      "rejection_count": 11,
+      "rejection_feedback_visible_runs": 13,
       "replay_mismatches": 0,
       "runs": [
         {
@@ -1995,6 +2203,7 @@
             2571,
             3054
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2024,6 +2233,7 @@
             2570,
             3058
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             4,
@@ -2056,6 +2266,7 @@
             3446,
             3528
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2090,6 +2301,7 @@
             2979,
             2963
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             4,
@@ -2123,6 +2335,7 @@
             2798,
             3245
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2151,6 +2364,7 @@
           "context_chars": [
             2243
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4
           ],
@@ -2177,6 +2391,7 @@
             3413,
             3389
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             4,
@@ -2210,6 +2425,7 @@
             2899,
             3036
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2241,6 +2457,7 @@
             2919,
             3309
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2271,6 +2488,7 @@
             2571,
             3042
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2300,6 +2518,7 @@
             2979,
             3058
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2331,6 +2550,7 @@
             2976,
             3054
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2354,15 +2574,44 @@
           "terminal": "SUBMIT",
           "trace_complete": true,
           "trajectory": 12
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2982
+          ],
+          "discovered_candidate_count": 2,
+          "exposed_action_counts": [
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            6
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 13
         }
       ],
       "synthetic_correct_count": 0,
       "terminal_counts": {
-        "STOP": 4,
+        "STOP": 5,
         "SUBMIT": 8
       },
       "trace_incomplete": 0,
-      "trajectory_count": 12,
+      "trajectory_count": 13,
       "variant": "R5"
     },
     {
@@ -2380,14 +2629,15 @@
         "semantic_facade": true,
         "visible_rejection_feedback": true
       },
-      "mean_context_chars": 10471.583333333334,
-      "mean_exposed_actions": 5.3478260869565215,
-      "mean_exposed_operations": 5.3478260869565215,
-      "mean_model_steps": 3.8333333333333335,
+      "mean_context_chars": 10265.76923076923,
+      "mean_discovered_candidates": 2.0,
+      "mean_exposed_actions": 5.346938775510204,
+      "mean_exposed_operations": 5.36734693877551,
+      "mean_model_steps": 3.769230769230769,
       "protocol_stall_count": 0,
-      "recovered_rejection_count": 8,
-      "rejection_count": 10,
-      "rejection_feedback_visible_runs": 12,
+      "recovered_rejection_count": 9,
+      "rejection_count": 11,
+      "rejection_feedback_visible_runs": 13,
       "replay_mismatches": 0,
       "runs": [
         {
@@ -2396,6 +2646,7 @@
             2571,
             3054
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2425,6 +2676,7 @@
             2570,
             3058
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             4,
@@ -2457,6 +2709,7 @@
             3446,
             3528
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2491,6 +2744,7 @@
             2979,
             2963
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             4,
@@ -2524,6 +2778,7 @@
             2798,
             3245
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2552,6 +2807,7 @@
           "context_chars": [
             2243
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4
           ],
@@ -2578,6 +2834,7 @@
             3413,
             3389
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             4,
@@ -2611,6 +2868,7 @@
             2899,
             3036
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2642,6 +2900,7 @@
             2919,
             3309
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2672,6 +2931,7 @@
             2571,
             3042
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2701,6 +2961,7 @@
             2979,
             3058
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2732,6 +2993,7 @@
             2976,
             3054
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2755,15 +3017,44 @@
           "terminal": "SUBMIT",
           "trace_complete": true,
           "trajectory": 12
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2982
+          ],
+          "discovered_candidate_count": 2,
+          "exposed_action_counts": [
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            6
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 13
         }
       ],
       "synthetic_correct_count": 0,
       "terminal_counts": {
-        "STOP": 4,
+        "STOP": 5,
         "SUBMIT": 8
       },
       "trace_incomplete": 0,
-      "trajectory_count": 12,
+      "trajectory_count": 13,
       "variant": "R6"
     },
     {
@@ -2781,14 +3072,15 @@
         "semantic_facade": true,
         "visible_rejection_feedback": true
       },
-      "mean_context_chars": 10471.583333333334,
-      "mean_exposed_actions": 5.3478260869565215,
-      "mean_exposed_operations": 5.3478260869565215,
-      "mean_model_steps": 3.8333333333333335,
+      "mean_context_chars": 10265.76923076923,
+      "mean_discovered_candidates": 2.0,
+      "mean_exposed_actions": 5.346938775510204,
+      "mean_exposed_operations": 5.36734693877551,
+      "mean_model_steps": 3.769230769230769,
       "protocol_stall_count": 0,
-      "recovered_rejection_count": 8,
-      "rejection_count": 10,
-      "rejection_feedback_visible_runs": 12,
+      "recovered_rejection_count": 9,
+      "rejection_count": 11,
+      "rejection_feedback_visible_runs": 13,
       "replay_mismatches": 0,
       "runs": [
         {
@@ -2797,6 +3089,7 @@
             2571,
             3054
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2826,6 +3119,7 @@
             2570,
             3058
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             4,
@@ -2858,6 +3152,7 @@
             3446,
             3528
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2892,6 +3187,7 @@
             2979,
             2963
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             4,
@@ -2925,6 +3221,7 @@
             2798,
             3245
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -2953,6 +3250,7 @@
           "context_chars": [
             2243
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4
           ],
@@ -2979,6 +3277,7 @@
             3413,
             3389
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             4,
@@ -3012,6 +3311,7 @@
             2899,
             3036
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -3043,6 +3343,7 @@
             2919,
             3309
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -3073,6 +3374,7 @@
             2571,
             3042
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -3102,6 +3404,7 @@
             2979,
             3058
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -3133,6 +3436,7 @@
             2976,
             3054
           ],
+          "discovered_candidate_count": 2,
           "exposed_action_counts": [
             4,
             6,
@@ -3156,15 +3460,44 @@
           "terminal": "SUBMIT",
           "trace_complete": true,
           "trajectory": 12
+        },
+        {
+          "context_chars": [
+            2243,
+            2571,
+            2982
+          ],
+          "discovered_candidate_count": 2,
+          "exposed_action_counts": [
+            4,
+            6,
+            6
+          ],
+          "exposed_operation_counts": [
+            5,
+            6,
+            6
+          ],
+          "model_steps": 3,
+          "provider_schema_chars": 3177,
+          "recovered_rejections": 1,
+          "rejection_feedback_visible": true,
+          "rejections": 1,
+          "replay_equal": true,
+          "semantic_actions": 0,
+          "synthetic_correct": false,
+          "terminal": "STOP",
+          "trace_complete": true,
+          "trajectory": 13
         }
       ],
       "synthetic_correct_count": 0,
       "terminal_counts": {
-        "STOP": 4,
+        "STOP": 5,
         "SUBMIT": 8
       },
       "trace_incomplete": 0,
-      "trajectory_count": 12,
+      "trajectory_count": 13,
       "variant": "R7"
     }
   ]

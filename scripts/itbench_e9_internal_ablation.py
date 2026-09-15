@@ -108,6 +108,11 @@ TRAJECTORIES: tuple[tuple[dict[str, Any], ...], ...] = (
         {"action": "INVESTIGATE", "target": "C001", "operation": "ENTITY_CONTEXT"},
         {"action": "SUBMIT", "targets": ["C001"]},
     ),
+    (
+        {"action": "HYPOTHESIZE", "target": "C001"},
+        {"action": "INVESTIGATE", "target": "C001", "operation": "TOPOLOGY_ANALYSIS"},
+        {"action": "STOP", "stop_reason": "discovery trajectory complete"},
+    ),
 )
 
 
@@ -171,6 +176,9 @@ def run_variant(name: str, variant: E9ControlPlaneVariant) -> dict[str, Any]:
                     for request in provider.requests
                 ),
                 "synthetic_correct": result["submitted_entities"] == ["otel-demo/Service/checkout"],
+                "discovered_candidate_count": len(
+                    result["case_state"].get("discovered_entities", {})
+                ),
             }
         )
     terminals: dict[str, int] = {}
@@ -187,6 +195,8 @@ def run_variant(name: str, variant: E9ControlPlaneVariant) -> dict[str, Any]:
         "protocol_stall_count": terminals.get("PROTOCOL_STALLED", 0),
         "rejection_count": sum(run["rejections"] for run in runs),
         "recovered_rejection_count": sum(run["recovered_rejections"] for run in runs),
+        "mean_discovered_candidates": sum(run["discovered_candidate_count"] for run in runs)
+        / len(runs),
         "synthetic_correct_count": sum(run["synthetic_correct"] for run in runs),
         "mean_model_steps": sum(run["model_steps"] for run in runs) / len(runs),
         "mean_context_chars": sum(sum(run["context_chars"]) for run in runs) / len(runs),

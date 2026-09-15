@@ -22,6 +22,7 @@
   },
   "canary": {"scenarios": 35, "terminal_counts": {"SUBMIT": 35}, "stale_capability_count": 0, "missing_executor_count": 0, "replay_mismatch_count": 0, "trace_completeness": 1.0, "semantic_matrix_errors": 0},
   "semantic_coverage": {"operations": 11, "scenarios_per_operation": 35, "structured_errors": 0, "ground_truth_used": false},
+  "ablation": {"variants": 8, "trajectories_per_variant": 13, "hard_coded_metrics": false},
   "historical_e9_classification": "ITB_E9_COMPLETE_REGRESSED",
   "live_readiness": "READY_FOR_LIVE_SMOKE_REVIEW"
 }

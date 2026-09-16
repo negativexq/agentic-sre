@@ -1,0 +1,275 @@
+{
+  "cases": [
+    {
+      "case": "BELOW_LIMIT",
+      "completed_operations": [],
+      "final_effective_operations": [
+        "ENTITY_CONTEXT"
+      ],
+      "pass": true,
+      "provider_branches": [
+        {
+          "action": [
+            "INVESTIGATE"
+          ],
+          "operations": [
+            "ENTITY_CONTEXT"
+          ],
+          "targets": [
+            "C001"
+          ]
+        },
+        {
+          "action": [
+            "REVISE"
+          ],
+          "operations": [],
+          "targets": [
+            "C002"
+          ]
+        }
+      ],
+      "provider_operations": [
+        "ENTITY_CONTEXT"
+      ],
+      "resolver_available_operations": [
+        "ENTITY_CONTEXT"
+      ],
+      "runtime_operations": [
+        "ENTITY_CONTEXT"
+      ],
+      "semantic_actions_used": 2,
+      "semantic_limit": 3,
+      "valid_actions": [
+        "INVESTIGATE",
+        "REVISE",
+        "STOP"
+      ]
+    },
+    {
+      "case": "AT_LIMIT",
+      "completed_operations": [],
+      "final_effective_operations": [],
+      "pass": true,
+      "provider_branches": [
+        {
+          "action": [
+            "REVISE"
+          ],
+          "operations": [],
+          "targets": [
+            "C002"
+          ]
+        }
+      ],
+      "provider_operations": [],
+      "resolver_available_operations": [
+        "ENTITY_CONTEXT",
+        "EVENT_ANALYSIS",
+        "SPEC_ANALYSIS"
+      ],
+      "runtime_operations": [],
+      "semantic_actions_used": 3,
+      "semantic_limit": 3,
+      "valid_actions": [
+        "REVISE",
+        "STOP"
+      ]
+    },
+    {
+      "case": "OVER_LIMIT",
+      "completed_operations": [],
+      "final_effective_operations": [],
+      "pass": true,
+      "provider_branches": [
+        {
+          "action": [
+            "REVISE"
+          ],
+          "operations": [],
+          "targets": [
+            "C002"
+          ]
+        }
+      ],
+      "provider_operations": [],
+      "resolver_available_operations": [
+        "ENTITY_CONTEXT",
+        "EVENT_ANALYSIS",
+        "SPEC_ANALYSIS"
+      ],
+      "runtime_operations": [],
+      "semantic_actions_used": 4,
+      "semantic_limit": 3,
+      "valid_actions": [
+        "REVISE",
+        "STOP"
+      ]
+    },
+    {
+      "case": "CAPABILITY_INTERSECTION",
+      "completed_operations": [
+        {
+          "entity_handle": "C001",
+          "operation": "ENTITY_CONTEXT"
+        }
+      ],
+      "final_effective_operations": [
+        "SPEC_ANALYSIS"
+      ],
+      "pass": true,
+      "provider_branches": [
+        {
+          "action": [
+            "INVESTIGATE"
+          ],
+          "operations": [
+            "SPEC_ANALYSIS"
+          ],
+          "targets": [
+            "C001"
+          ]
+        },
+        {
+          "action": [
+            "REVISE"
+          ],
+          "operations": [],
+          "targets": [
+            "C002"
+          ]
+        }
+      ],
+      "provider_operations": [
+        "SPEC_ANALYSIS"
+      ],
+      "resolver_available_operations": [
+        "ENTITY_CONTEXT",
+        "SPEC_ANALYSIS"
+      ],
+      "runtime_operations": [
+        "SPEC_ANALYSIS"
+      ],
+      "semantic_actions_used": 0,
+      "semantic_limit": 3,
+      "valid_actions": [
+        "INVESTIGATE",
+        "REVISE",
+        "STOP"
+      ]
+    },
+    {
+      "case": "TARGET_SCOPED_DUPLICATE",
+      "completed_operations": [
+        {
+          "entity_handle": "C001",
+          "operation": "ENTITY_CONTEXT"
+        }
+      ],
+      "final_effective_operations": [
+        "ENTITY_CONTEXT"
+      ],
+      "pass": true,
+      "provider_branches": [
+        {
+          "action": [
+            "INVESTIGATE"
+          ],
+          "operations": [
+            "ENTITY_CONTEXT"
+          ],
+          "targets": [
+            "C002"
+          ]
+        },
+        {
+          "action": [
+            "REVISE"
+          ],
+          "operations": [],
+          "targets": [
+            "C001"
+          ]
+        }
+      ],
+      "provider_operations": [
+        "ENTITY_CONTEXT"
+      ],
+      "resolver_available_operations": [
+        "ENTITY_CONTEXT"
+      ],
+      "runtime_operations": [
+        "ENTITY_CONTEXT"
+      ],
+      "semantic_actions_used": 1,
+      "semantic_limit": 3,
+      "valid_actions": [
+        "INVESTIGATE",
+        "REVISE",
+        "STOP"
+      ]
+    },
+    {
+      "case": "SUBMIT_AT_LIMIT",
+      "completed_operations": [],
+      "final_effective_operations": [],
+      "pass": true,
+      "provider_branches": [
+        {
+          "action": [
+            "REVISE"
+          ],
+          "operations": [],
+          "targets": [
+            "C002"
+          ]
+        }
+      ],
+      "provider_operations": [],
+      "resolver_available_operations": [
+        "ENTITY_CONTEXT"
+      ],
+      "runtime_operations": [],
+      "semantic_actions_used": 3,
+      "semantic_limit": 3,
+      "valid_actions": [
+        "REVISE",
+        "SUBMIT",
+        "STOP"
+      ]
+    },
+    {
+      "case": "NO_EVIDENCE_AT_LIMIT",
+      "completed_operations": [],
+      "final_effective_operations": [],
+      "pass": true,
+      "provider_branches": [
+        {
+          "action": [
+            "REVISE"
+          ],
+          "operations": [],
+          "targets": [
+            "C002"
+          ]
+        }
+      ],
+      "provider_operations": [],
+      "resolver_available_operations": [
+        "ENTITY_CONTEXT"
+      ],
+      "runtime_operations": [],
+      "semantic_actions_used": 3,
+      "semantic_limit": 3,
+      "valid_actions": [
+        "REVISE",
+        "STOP"
+      ]
+    }
+  ],
+  "execution": "ITB-E9-OFFLINE",
+  "judge_calls": 0,
+  "provider_calls": 0,
+  "purpose": "SEMANTIC_BUDGET_INVARIANT",
+  "status": "PASS"
+}

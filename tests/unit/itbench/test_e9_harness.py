@@ -33,7 +33,43 @@ from packages.evals.itbench.external_contracts import (
     ITBenchInvestigationDecisionV5,
 )
 from packages.provider import FakeModelProvider
-from packages.provider.openai import OpenAIProvider, _json_schema_error
+from packages.provider.openai import (
+    OpenAIProvider,
+    _itbench_v5_decision_function_schemas,
+    _json_schema_error,
+)
+
+
+def _semantic_budget_state(
+    *,
+    used: int,
+    current: str = "C001",
+    completed: tuple[tuple[str, str], ...] = (),
+    evidence: bool = False,
+) -> dict[str, Any]:
+    discovered = {
+        f"otel-demo/Service/{handle.lower()}": {
+            "handle": handle,
+            "canonical": f"otel-demo/Service/{handle.lower()}",
+            "metadata": {},
+            "discovered_turn": 0,
+        }
+        for handle in ("C001", "C002")
+    }
+    return {
+        "current_phase": "VERIFY",
+        "current_hypothesis": {"entity_handle": current, "rationale": "test"},
+        "alternative_candidates": [],
+        "discovered_entities": discovered,
+        "operations_already_run": [
+            {"entity_handle": handle, "operation": operation} for handle, operation in completed
+        ],
+        "semantic_actions_used": used,
+        "consecutive_rejections": 0,
+        "evidence": (
+            {"E001": {"entity_handle": current, "operation": "ENTITY_CONTEXT"}} if evidence else {}
+        ),
+    }
 
 
 def _scenario(tmp_path: Path) -> ITBenchScenario:
@@ -472,6 +508,143 @@ def test_control_surface_is_dynamic_and_removes_completed_operation() -> None:
         memory.state, turn=2, max_steps=12, max_rejections=2, semantic_limit=24
     )
     assert second.operations == ()
+
+
+def _budget_surface(
+    state: dict[str, Any], *, limit: int = 3, available: tuple[str, ...] | None = None
+) -> Any:
+    return control_surface(
+        state,
+        turn=2,
+        max_steps=12,
+        max_rejections=2,
+        semantic_limit=limit,
+        available_operations=available,
+    )
+
+
+def test_semantic_budget_below_limit_keeps_investigation_visible() -> None:
+    surface = _budget_surface(_semantic_budget_state(used=2), available=("ENTITY_CONTEXT",))
+    assert surface.operations == ("ENTITY_CONTEXT",)
+    assert "INVESTIGATE" in surface.actions
+    assert surface.capabilities()["INVESTIGATE"] == {
+        "targets": ("C001",),
+        "operations": ("ENTITY_CONTEXT",),
+    }
+
+
+def test_semantic_budget_at_limit_removes_investigation() -> None:
+    surface = _budget_surface(
+        _semantic_budget_state(used=3), available=("ENTITY_CONTEXT", "EVENT_ANALYSIS")
+    )
+    assert surface.operations == ()
+    assert "INVESTIGATE" not in surface.actions
+    assert "INVESTIGATE" not in surface.capabilities()
+
+
+def test_semantic_budget_over_limit_removes_investigation() -> None:
+    surface = _budget_surface(
+        _semantic_budget_state(used=4), available=("ENTITY_CONTEXT", "SPEC_ANALYSIS")
+    )
+    assert surface.operations == ()
+    assert "INVESTIGATE" not in surface.actions
+
+
+def test_capability_availability_intersects_policy_and_duplicate_filters() -> None:
+    surface = _budget_surface(
+        _semantic_budget_state(used=0, completed=(("C001", "ENTITY_CONTEXT"),)),
+        available=("ENTITY_CONTEXT", "SPEC_ANALYSIS"),
+    )
+    assert surface.operations == ("SPEC_ANALYSIS",)
+
+
+def test_duplicate_suppression_remains_target_scoped_after_revision() -> None:
+    surface = _budget_surface(
+        _semantic_budget_state(used=1, current="C002", completed=(("C001", "ENTITY_CONTEXT"),)),
+        available=("ENTITY_CONTEXT",),
+    )
+    assert surface.operations == ("ENTITY_CONTEXT",)
+    assert surface.capabilities()["INVESTIGATE"]["targets"] == ("C002",)
+
+
+def test_submit_remains_available_at_semantic_budget_limit_with_evidence() -> None:
+    surface = _budget_surface(
+        _semantic_budget_state(used=3, evidence=True),
+        available=("ENTITY_CONTEXT", "EVENT_ANALYSIS"),
+    )
+    assert surface.operations == ()
+    assert surface.actions == ("REVISE", "SUBMIT", "STOP")
+    assert surface.capabilities()["SUBMIT"]["targets"] == ("C001",)
+
+
+def test_no_evidence_at_semantic_budget_limit_allows_only_revision_or_stop() -> None:
+    surface = _budget_surface(
+        _semantic_budget_state(used=3),
+        available=("ENTITY_CONTEXT", "EVENT_ANALYSIS"),
+    )
+    assert surface.actions == ("REVISE", "STOP")
+    assert "SUBMIT" not in surface.actions
+    assert "INVESTIGATE" not in surface.actions
+
+
+def test_exhausted_budget_provider_schema_has_no_investigate_branch() -> None:
+    surface = _budget_surface(_semantic_budget_state(used=3), available=("ENTITY_CONTEXT",))
+    schemas = _itbench_v5_decision_function_schemas(
+        allowed_actions=tuple(
+            action for action in surface.actions if action not in {"SUBMIT", "STOP"}
+        ),
+        allowed_operations=surface.operations,
+        allowed_targets=surface.target_handles,
+        allowed_action_capabilities=surface.capabilities(),
+    )
+    request_schema = schemas["request_itbench_tools"]
+    assert all(
+        "INVESTIGATE" not in branch["properties"]["action"].get("enum", [])
+        for branch in request_schema["anyOf"]
+    )
+
+
+def test_exhausted_budget_context_has_no_investigation_surface(tmp_path: Path) -> None:
+    scenario = _scenario(tmp_path)
+    backend = ITBenchSnapshotBackend(
+        cast(ITBenchLiteDataset, object()), scenario, max_rows=5, max_bytes=10_000
+    )
+    incident, alerts = build_observable_incident(backend)
+    memory = E9CaseMemory(execution_id="ITB-E9", scenario_id="Scenario-1")
+    memory.discover_entities(({"canonical": "otel-demo/Service/frontend"},))
+    memory.append("HYPOTHESIS_PROPOSED", 1, {"entity_handle": "C001", "rationale": "test"})
+    memory.state["semantic_actions_used"] = 3
+    context, _ = E9ContextPlanner().plan(
+        backend, incident, alerts, memory, None, turn=2, max_steps=12, semantic_limit=3
+    )
+    payload = json.loads(context)
+    assert payload["workflow"]["semantic_actions_remaining"] == 0
+    assert "INVESTIGATE" not in payload["workflow"]["actions"]
+
+
+def test_runtime_rejects_injected_investigation_after_budget_exhaustion(tmp_path: Path) -> None:
+    runtime = _runtime(
+        tmp_path,
+        [
+            {"action": "HYPOTHESIZE", "target": "C001", "rationale": "test"},
+            {
+                "action": "INVESTIGATE",
+                "target": "C001",
+                "operation": "ENTITY_CONTEXT",
+            },
+            {
+                "action": "INVESTIGATE",
+                "target": "C001",
+                "operation": "ENTITY_CONTEXT",
+            },
+            {"action": "STOP", "stop_reason": "budget regression test"},
+        ],
+    )
+    runtime.limits = type(runtime.limits)(max_tool_calls=1)
+    result = runtime.run(*build_observable_incident(runtime.backend))
+    assert result["terminal"] == "STOP"
+    assert result["usage"]["semantic_actions_executed"] == 1
+    assert result["usage"]["action_rejections"] == 1
 
 
 def test_every_registered_semantic_operation_has_a_real_bounded_executor(tmp_path: Path) -> None:

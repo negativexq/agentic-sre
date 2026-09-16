@@ -141,9 +141,20 @@ def control_surface(
         not in completed
         and int(state.get("semantic_actions_used", 0)) < semantic_limit
     )
-    effective_operations = (
-        tuple(available_operations) if available_operations is not None else resolved_operations
+    # Capability availability is an additional constraint, not a replacement
+    # for policy constraints such as scope, duplicate suppression, and budget.
+    # Keeping this as an intersection is important because the resolver is
+    # deliberately advisory: it cannot own CaseState's semantic budget.
+    effective_operations = tuple(
+        operation
+        for operation in resolved_operations
+        if available_operations is None or operation in available_operations
     )
+    if not effective_operations:
+        # Do not expose an INVESTIGATE branch that has no legal operation.  A
+        # model may still revise, submit, or stop when the semantic budget is
+        # exhausted.
+        actions = tuple(action for action in actions if action != "INVESTIGATE")
     current_targets = (current_target,) if current_target else ()
     alternatives = tuple(handle for handle in resolved_target_handles if handle != current_target)
     submit_targets = tuple(

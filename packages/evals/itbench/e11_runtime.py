@@ -851,6 +851,10 @@ class E11InvestigationRuntime:
             item for item in projection["evidence"] if item.get("assessment") == "CONTRADICTS"
         ]
         projection["recent_operations"] = projection.get("operations_already_run", [])[-6:]
+        # The context contract calls these revisions; E9 memory retains the
+        # historical ``ranking_history`` name for compatibility with its
+        # persisted projection.
+        projection["ranking_revisions"] = projection.get("ranking_history", [])[-8:]
         return projection
 
 

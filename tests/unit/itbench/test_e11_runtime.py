@@ -149,6 +149,76 @@ def test_no_data_evidence_cannot_support_candidate() -> None:
         raise AssertionError("NO_DATA evidence was accepted as causal support")
 
 
+def test_two_semantically_illegal_actions_reach_protocol_stalled(tmp_path: Path) -> None:
+    """Parse success must not clear the rejection window before _apply()."""
+    backend = _backend(
+        tmp_path,
+        object_bodies=[
+            {"kind": "Deployment", "metadata": {"name": "checkout", "namespace": "prod"}}
+        ],
+        event_bodies=[],
+    )
+    provider = FakeModelProvider(
+        [
+            {"action": "OBSERVE", "operation": "INCIDENT_OVERVIEW", "rationale": None},
+            {"action": "HYPOTHESIZE", "target": "C001", "rationale": None},
+            {
+                "action": "INVESTIGATE",
+                "target": "C001",
+                "operation": "COMPARE_REPLICAS",
+                "rationale": None,
+            },
+            {
+                "action": "INVESTIGATE",
+                "target": "C001",
+                "operation": "COMPARE_REPLICAS",
+                "rationale": None,
+            },
+        ]
+    )
+    result = E11InvestigationRuntime(provider, backend, execution_id="reject-window").run()
+    assert result["terminal"] == "PROTOCOL_STALLED"
+    assert result["case_state"]["action_rejections"] == 2
+    assert result["case_state"]["consecutive_rejections"] == 2
+    assert len(provider.requests) >= 3
+
+
+def test_submit_is_hidden_until_runtime_support_exists(tmp_path: Path) -> None:
+    backend = _backend(
+        tmp_path,
+        object_bodies=[
+            {"kind": "Deployment", "metadata": {"name": "checkout", "namespace": "prod"}}
+        ],
+        event_bodies=[
+            {
+                "involvedObject": {
+                    "kind": "Deployment",
+                    "name": "checkout",
+                    "namespace": "prod",
+                },
+                "reason": "BackOff",
+                "type": "Warning",
+            }
+        ],
+    )
+    seen: list[tuple[str, ...]] = []
+
+    def response(request: Any) -> dict[str, Any]:
+        seen.append(tuple(request.allowed_decisions or ()))
+        if len(seen) == 1:
+            return {"action": "OBSERVE", "operation": "INCIDENT_OVERVIEW", "rationale": None}
+        if len(seen) == 2:
+            return {"action": "HYPOTHESIZE", "target": "C001", "rationale": None}
+        return {"action": "STOP", "stop_reason": "no additional evidence"}
+
+    provider = FakeModelProvider([response] * 3)
+    result = E11InvestigationRuntime(provider, backend, execution_id="submit-surface").run()
+    assert result["terminal"] == "STOP"
+    assert "SUBMIT_DIAGNOSIS" not in seen[1]
+    assert "SUBMIT_DIAGNOSIS" not in seen[2]
+    assert result["agent_output"]["contributing_factor"] == []
+
+
 def test_contradiction_can_be_explicitly_superseded() -> None:
     from packages.evals.itbench.e11_observability import (
         ObservedEntityCatalog,

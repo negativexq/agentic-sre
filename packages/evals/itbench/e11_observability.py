@@ -59,6 +59,32 @@ _TRACE_PROVENANCE = "TRACE_RESOURCE"
 _TOPOLOGY_PROVENANCE = "TOPOLOGY_DERIVED"
 
 
+@dataclass(frozen=True, slots=True)
+class E11RetrievalConfig:
+    """One immutable retrieval policy shared by runtime and qualification."""
+
+    # B1 keeps telemetry out of the ranked catalog, but semantic operations
+    # resolve telemetry independently from the backend when evidence exists.
+    include_telemetry_in_catalog: bool = False
+    include_telemetry_in_ranking: bool = False
+    use_direct_topology: bool = False
+    use_causal_propagation: bool = True
+    use_namespace_context: bool = True
+    use_temporal: bool = False
+    diversity: bool = False
+    shortlist_size: int = E11_DEFAULT_SHORTLIST_SIZE
+
+    def __post_init__(self) -> None:
+        if self.shortlist_size < 1:
+            raise ValueError("E11 shortlist size must be positive")
+
+
+# This is the measured B1 configuration.  Telemetry ranking is disabled to
+# preserve the measured B1 shortlist; semantic tools resolve their source
+# availability independently from the backend.
+E11_B1_CONFIG = E11RetrievalConfig()
+
+
 @dataclass(slots=True)
 class ObservedEntity:
     """One identity defensibly established by observable structured data."""
@@ -169,20 +195,27 @@ class ObservedEntityCatalog:
         timestamp: str | None = None,
         aliases: Iterable[str] = (),
         identity_quality: str = "DIRECT",
+        handle: str | None = None,
     ) -> ObservedEntity:
         """Add/merge an observed identity without inventing mappings."""
         entity = self._entities.get(canonical)
         if entity is None:
+            assigned_handle = handle or f"C{self._next_handle:03d}"
+            if self.by_handle(assigned_handle) is not None:
+                raise ValueError(
+                    f"catalog handle already belongs to another entity: {assigned_handle}"
+                )
             entity = ObservedEntity(
                 canonical=canonical,
-                handle=f"C{self._next_handle:03d}",
+                handle=assigned_handle,
                 identity_type=identity_type,
                 namespace=namespace,
                 kind=kind,
                 name=name,
                 identity_quality=identity_quality,
             )
-            self._next_handle += 1
+            numeric = int(assigned_handle[1:]) if assigned_handle.startswith("C") else 0
+            self._next_handle = max(self._next_handle + 1, numeric + 1)
             self._entities[canonical] = entity
         elif entity.identity_type != identity_type:
             entity.identity_type = "|".join(
@@ -337,6 +370,7 @@ def rank_observed_candidates(
     use_namespace_context: bool = True,
     use_temporal: bool = True,
     telemetry_records: dict[ITBenchEvidenceCategory, tuple[dict[str, Any], ...]] | None = None,
+    runtime_signals: dict[str, tuple[RetrievalEvidence, ...]] | None = None,
 ) -> tuple[RankedCandidate, ...]:
     """Rank candidates using evidence channels, never static object priors."""
     if limit < 1:
@@ -541,6 +575,8 @@ def rank_observed_candidates(
 
     scored: list[tuple[float, ObservedEntity, tuple[RetrievalEvidence, ...]]] = []
     for entity in catalog.entities():
+        if runtime_signals and entity.canonical in runtime_signals:
+            evidence[entity.canonical].extend(runtime_signals[entity.canonical])
         items = tuple(
             sorted(
                 evidence.get(entity.canonical, ()),
@@ -1310,7 +1346,9 @@ def _candidate_family(entity: ObservedEntity) -> str:
 
 
 __all__ = [
+    "E11_B1_CONFIG",
     "E11_CATALOG_VERSION",
+    "E11RetrievalConfig",
     "E11_RETRIEVAL_VERSION",
     "E11_DEFAULT_SHORTLIST_SIZE",
     "ObservedEntity",

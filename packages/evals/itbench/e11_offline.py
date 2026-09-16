@@ -13,12 +13,14 @@ from collections import Counter
 from hashlib import sha256
 from pathlib import Path
 from time import monotonic
-from typing import Any
+from typing import Any, cast
 
 from packages.evals.itbench.contracts import ITBenchEntity, ITBenchEvidenceCategory
 from packages.evals.itbench.dataset import ITBENCH_SCENARIO_IDS, ITBenchLiteDataset
 from packages.evals.itbench.e11_observability import (
+    E11_B1_CONFIG,
     E11_RETRIEVAL_VERSION,
+    E11RetrievalConfig,
     _fast_source_records,
     build_observed_entity_catalog,
     rank_observed_candidates,
@@ -213,6 +215,19 @@ def _dataset_revision(dataset: ITBenchLiteDataset) -> str:
     return str(manifest["revision"])
 
 
+def _retrieval_config_dict(config: E11RetrievalConfig) -> dict[str, Any]:
+    return {
+        "include_telemetry_in_catalog": config.include_telemetry_in_catalog,
+        "include_telemetry_in_ranking": config.include_telemetry_in_ranking,
+        "use_direct_topology": config.use_direct_topology,
+        "use_causal_propagation": config.use_causal_propagation,
+        "use_namespace_context": config.use_namespace_context,
+        "use_temporal": config.use_temporal,
+        "diversity": config.diversity,
+        "shortlist_size": config.shortlist_size,
+    }
+
+
 def build_retrieval_ablations(
     dataset: ITBenchLiteDataset,
     *,
@@ -332,53 +347,42 @@ def build_clean_retrieval_ablations(
     These labels intentionally supersede the historical R-series, whose
     topology flag did not disable causal propagation.
     """
+    configuration_objects: dict[str, E11RetrievalConfig | None] = {
+        "B0": None,
+        "B1": E11_B1_CONFIG,
+        "B2": E11RetrievalConfig(
+            include_telemetry_in_catalog=True, include_telemetry_in_ranking=True
+        ),
+        "B3": E11RetrievalConfig(
+            include_telemetry_in_catalog=True,
+            include_telemetry_in_ranking=True,
+            use_direct_topology=True,
+        ),
+        "B4": E11RetrievalConfig(
+            include_telemetry_in_catalog=True,
+            include_telemetry_in_ranking=True,
+            use_direct_topology=True,
+            use_causal_propagation=True,
+        ),
+        "B5": E11RetrievalConfig(
+            include_telemetry_in_catalog=True,
+            include_telemetry_in_ranking=True,
+            use_direct_topology=True,
+            use_causal_propagation=True,
+            use_temporal=True,
+        ),
+        "B6": E11RetrievalConfig(
+            include_telemetry_in_catalog=True,
+            include_telemetry_in_ranking=True,
+            use_direct_topology=True,
+            use_causal_propagation=True,
+            use_temporal=True,
+            diversity=True,
+        ),
+    }
     configurations: dict[str, dict[str, Any]] = {
-        "B0": {"legacy": True},
-        "B1": {
-            "telemetry": False,
-            "direct_topology": False,
-            # This is the strongest current non-telemetry comparator used by
-            # the previous qualification.  Direct topology scoring remains
-            # disabled; causal propagation is independently visible here.
-            "causal_propagation": True,
-            "temporal": False,
-            "diversity": False,
-        },
-        "B2": {
-            "telemetry": True,
-            "direct_topology": False,
-            "causal_propagation": False,
-            "temporal": False,
-            "diversity": False,
-        },
-        "B3": {
-            "telemetry": True,
-            "direct_topology": True,
-            "causal_propagation": False,
-            "temporal": False,
-            "diversity": False,
-        },
-        "B4": {
-            "telemetry": True,
-            "direct_topology": True,
-            "causal_propagation": True,
-            "temporal": False,
-            "diversity": False,
-        },
-        "B5": {
-            "telemetry": True,
-            "direct_topology": True,
-            "causal_propagation": True,
-            "temporal": True,
-            "diversity": False,
-        },
-        "B6": {
-            "telemetry": True,
-            "direct_topology": True,
-            "causal_propagation": True,
-            "temporal": True,
-            "diversity": True,
-        },
+        label: ({"legacy": True} if config is None else {"retrieval_config": config})
+        for label, config in configuration_objects.items()
     }
     outputs: dict[str, dict[str, Any]] = {}
     scenario_cache: dict[str, dict[str, Any]] = {}
@@ -394,8 +398,13 @@ def build_clean_retrieval_ablations(
                 },
             )
             backend = cached["backend"]
+            retrieval_config = config.get("retrieval_config")
             telemetry = cached.get("telemetry")
-            if config.get("telemetry") and telemetry is None:
+            if (
+                retrieval_config is not None
+                and retrieval_config.include_telemetry_in_catalog
+                and telemetry is None
+            ):
                 telemetry = {
                     category: tuple(
                         _fast_source_records(backend, category, limit=max_telemetry_records)
@@ -420,12 +429,17 @@ def build_clean_retrieval_ablations(
                 ]
                 catalog = {"entities": list(backend.observable_entities())}
             else:
-                catalog_key = "full_catalog" if config["telemetry"] else "k8s_catalog"
+                assert isinstance(retrieval_config, E11RetrievalConfig)
+                catalog_key = (
+                    "full_catalog"
+                    if retrieval_config.include_telemetry_in_catalog
+                    else "k8s_catalog"
+                )
                 built = cached.get(catalog_key)
                 if built is None:
                     built = build_observed_entity_catalog(
                         backend,
-                        include_telemetry=bool(config["telemetry"]),
+                        include_telemetry=retrieval_config.include_telemetry_in_catalog,
                         max_telemetry_records=max_telemetry_records,
                         telemetry_records=telemetry,
                     )
@@ -433,13 +447,13 @@ def build_clean_retrieval_ablations(
                 ranked = rank_observed_candidates(
                     backend,
                     built,
-                    limit=shortlist_size,
-                    diversity=bool(config["diversity"]),
-                    include_telemetry=bool(config["telemetry"]),
-                    use_direct_topology=bool(config["direct_topology"]),
-                    use_causal_propagation=bool(config["causal_propagation"]),
-                    use_temporal=bool(config["temporal"]),
-                    use_namespace_context=bool(config["causal_propagation"]),
+                    limit=retrieval_config.shortlist_size,
+                    diversity=retrieval_config.diversity,
+                    include_telemetry=retrieval_config.include_telemetry_in_ranking,
+                    use_direct_topology=retrieval_config.use_direct_topology,
+                    use_causal_propagation=retrieval_config.use_causal_propagation,
+                    use_temporal=retrieval_config.use_temporal,
+                    use_namespace_context=retrieval_config.use_namespace_context,
                     telemetry_records=telemetry,
                 )
                 shortlist = [item.as_dict() for item in ranked]
@@ -452,7 +466,11 @@ def build_clean_retrieval_ablations(
                 }
             )
         outputs[label] = {
-            "configuration": config,
+            "configuration": (
+                {"legacy": True}
+                if config.get("legacy")
+                else _retrieval_config_dict(cast(E11RetrievalConfig, config["retrieval_config"]))
+            ),
             "dataset_revision": _dataset_revision(dataset),
             "scenario_order": list(ITBENCH_SCENARIO_IDS),
             "ground_truth_access": 0,

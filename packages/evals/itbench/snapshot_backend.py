@@ -120,6 +120,7 @@ class ITBenchSnapshotBackend:
         self._entity_record_index: dict[str, tuple[dict[str, Any], ...]] | None = None
         self._observable_entities_cache: tuple[dict[str, str], ...] | None = None
         self._complete_alert_cache: tuple[dict[str, Any], ...] | None = None
+        self._complete_source_cache: dict[ITBenchEvidenceCategory, tuple[dict[str, Any], ...]] = {}
         self._semantic_capability_cache: dict[tuple[Any, ...], dict[str, dict[str, Any]]] = {}
         self._query_cache: dict[tuple[str, str], dict[str, Any]] = {}
         self._performance = {
@@ -685,13 +686,15 @@ class ITBenchSnapshotBackend:
         self, category: ITBenchEvidenceCategory
     ) -> Iterator[dict[str, Any]]:
         """Iterate every valid source record for qualification and bounded queries."""
-        if category is ITBenchEvidenceCategory.ALERTS:
-            if self._complete_alert_cache is None:
-                self._complete_alert_cache = tuple(self._iter_records(category))
-            else:
-                self._performance["cache_hits"] += 1
-            return iter(self._complete_alert_cache)
-        return self._iter_records(category)
+        cached = self._complete_source_cache.get(category)
+        if cached is None:
+            cached = tuple(self._iter_records(category))
+            self._complete_source_cache[category] = cached
+            if category is ITBenchEvidenceCategory.ALERTS:
+                self._complete_alert_cache = cached
+        else:
+            self._performance["cache_hits"] += 1
+        return iter(cached)
 
     def _iter_metric_records(self, arguments: dict[str, Any]) -> Iterator[dict[str, Any]]:
         """Read only metric files that can satisfy a typed filter.

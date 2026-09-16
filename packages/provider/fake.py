@@ -4,6 +4,7 @@ from collections.abc import Callable, Iterable
 from time import monotonic
 from typing import Any
 
+from packages.provider.budget import LiveModelBudget
 from packages.provider.contracts import (
     ModelProvider,
     ModelRequest,
@@ -26,16 +27,20 @@ class FakeModelProvider:
         model: str = "fake-model",
         input_tokens: int = 0,
         output_tokens: int = 0,
+        budget: LiveModelBudget | None = None,
     ) -> None:
         self._responses = list(responses)
         self._model = model
         self._input_tokens = input_tokens
         self._output_tokens = output_tokens
+        self._budget = budget
         self.requests: list[ModelRequest] = []
 
     def complete(self, request: ModelRequest) -> ModelResponse:
         """Return the next scripted output and record the validated request."""
         self.requests.append(request)
+        if self._budget is not None:
+            self._budget.consume()
         if not self._responses:
             raise RuntimeError("fake model response script exhausted")
         started = monotonic()

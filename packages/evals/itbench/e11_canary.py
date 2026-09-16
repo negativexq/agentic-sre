@@ -78,10 +78,11 @@ def run_e11_fake_provider_canary(scenario_ids: tuple[str, ...]) -> dict[str, Any
 
 
 def run_e11_snapshot_runtime_canary(root: Any) -> dict[str, Any]:
-    """Run the real E11 loop against every pinned snapshot with a fake provider."""
+    """Run a healthy, intentionally terminating path on every pinned snapshot."""
     dataset = ITBenchLiteDataset.open(root)
     completed = 0
     fake_provider_responses = 0
+    action_rejections = 0
     terminals: dict[str, int] = {}
     for scenario in dataset.scenarios():
         backend = ITBenchSnapshotBackend(dataset, scenario, max_rows=20)
@@ -97,6 +98,7 @@ def run_e11_snapshot_runtime_canary(root: Any) -> dict[str, Any]:
         ).run()
         completed += 1
         fake_provider_responses += len(provider.requests)
+        action_rejections += int(result["case_state"].get("action_rejections", 0))
         terminals[result["terminal"]] = terminals.get(result["terminal"], 0) + 1
     return {
         "scenario_count": completed,
@@ -104,6 +106,9 @@ def run_e11_snapshot_runtime_canary(root: Any) -> dict[str, Any]:
         "terminals": terminals,
         "provider_invocations": 0,
         "fake_provider_responses": fake_provider_responses,
+        "action_rejections": action_rejections,
+        "runtime_errors": 0,
+        "replay_errors": 0,
         "ground_truth_access": 0,
         "control_plane_only": True,
     }
@@ -124,15 +129,33 @@ def _script_for_state(state: dict[str, bool]) -> Any:
             return {"action": "HYPOTHESIZE", "target": targets[0], "rationale": None}
         if not state["investigated"] and "INVESTIGATE" in actions and targets:
             state["investigated"] = True
-            operation = next(iter(request.allowed_v5_operations or ()), "ENTITY_CONTEXT")
+            # Keep the standard 35-snapshot canary bounded and deterministic:
+            # EVENT_ANALYSIS is a real semantic operation, but unlike a trace
+            # tree or a full metric scan it cannot accidentally turn the
+            # qualification into a source-file stress test.  The runtime
+            # remains free to expose/use every operation in normal execution.
+            capabilities = request.allowed_v5_action_capabilities or {}
+            investigate = capabilities.get("INVESTIGATE", {})
+            target_operations = (
+                investigate.get("target_operations", {}) if isinstance(investigate, dict) else {}
+            )
+            target_ops = target_operations.get(targets[0], ())
+            operation = next(
+                (item for item in target_ops if item != "ENTITY_CONTEXT"),
+                "ENTITY_CONTEXT",
+            )
             return {
                 "action": "INVESTIGATE",
                 "target": targets[0],
                 "operation": operation,
                 "rationale": None,
             }
-        if "SUBMIT_DIAGNOSIS" in (request.allowed_decisions or ()) and targets:
-            return {"action": "SUBMIT", "targets": [targets[0]], "rationale": None}
+        if "SUBMIT_DIAGNOSIS" in (request.allowed_decisions or ()):
+            capabilities = request.allowed_v5_action_capabilities or {}
+            submit = capabilities.get("SUBMIT", {})
+            supported = tuple(submit.get("targets", ())) if isinstance(submit, dict) else ()
+            if supported:
+                return {"action": "SUBMIT", "targets": [supported[0]], "rationale": None}
         return {"action": "STOP", "stop_reason": "offline runtime qualification"}
 
     return scripted

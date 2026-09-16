@@ -224,6 +224,13 @@ class E11CaseMemory:
             self.candidate_status.get(handle) == CandidateStatus.SUPPORTED for handle in handles
         )
 
+    def _supported_handles_for_submission(self) -> tuple[str, ...]:
+        return tuple(
+            handle
+            for handle, status in self.candidate_status.items()
+            if status == CandidateStatus.SUPPORTED
+        )
+
     def _refresh_status(self, handle: str) -> None:
         candidate = [item for item in self.assessments if item.handle == handle]
         active_contradictions = {
@@ -291,11 +298,10 @@ def e11_control_surface(memory: E11CaseMemory, *, final_turn: bool = False) -> E
             for handle in targets
             if _operations_for_handle(memory, handle)
         )
-        actions = (
-            ("INVESTIGATE", "REVISE", "SUBMIT", "STOP")
-            if operations
-            else ("REVISE", "SUBMIT", "STOP")
-        )
+        actions_list = ("INVESTIGATE", "REVISE", "STOP") if operations else ("REVISE", "STOP")
+        if memory.submit_ready(memory._supported_handles_for_submission()):
+            actions_list = (*actions_list[:-1], "SUBMIT", "STOP")
+        actions = actions_list
         return E11ControlSurface(
             memory.phase,
             actions,

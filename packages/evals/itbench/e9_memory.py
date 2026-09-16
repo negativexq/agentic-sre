@@ -64,6 +64,8 @@ class E9CaseMemory:
             "last_rejection": None,
             "evidence": {},
             "ranking_history": [],
+            "submitted_targets": [],
+            "active_shortlist": [],
         }
         self.append("CASE_STARTED", 0, {"execution_id": execution_id, "scenario_id": scenario_id})
 
@@ -123,7 +125,7 @@ class E9CaseMemory:
         """Apply one bounded, auditable candidate transition."""
         if self.resolve(handle) is None:
             raise ValueError(f"unknown candidate handle: {handle}")
-        if status not in {"ACTIVE", "SUPPORTED", "REJECTED"}:
+        if status not in {"ACTIVE", "SUPPORTED", "CONTRADICTED", "REJECTED"}:
             raise ValueError(f"unsupported candidate status: {status}")
         if any(
             ref not in self.state["evidence"] for ref in (*supporting_refs, *contradicting_refs)
@@ -131,6 +133,8 @@ class E9CaseMemory:
             raise ValueError("candidate status references unknown evidence")
         if status == "SUPPORTED" and not supporting_refs:
             raise ValueError("SUPPORTED requires supporting evidence")
+        if status == "CONTRADICTED" and not contradicting_refs:
+            raise ValueError("CONTRADICTED requires contradicting evidence")
         self.append(
             "CANDIDATE_STATUS_CHANGED",
             turn,
@@ -183,6 +187,12 @@ class E9CaseMemory:
             for item in self.state["operations_already_run"]
         )
 
+    def set_active_shortlist(self, handles: tuple[str, ...], *, turn: int) -> None:
+        """Persist the runtime-visible shortlist shared with E11 memory."""
+        if any(self.resolve(handle) is None for handle in handles):
+            raise ValueError("shortlist contains an unknown candidate handle")
+        self.append("SHORTLIST_UPDATED", turn, {"handles": list(handles)[:20]})
+
     def projection(self) -> dict[str, Any]:
         """Return only bounded operational state suitable for a model context."""
         return {
@@ -207,6 +217,8 @@ class E9CaseMemory:
             "last_rejection": self.state["last_rejection"],
             "evidence": list(self.state["evidence"].values())[-12:],
             "ranking_history": self.state["ranking_history"][-8:],
+            "submitted_targets": self.state["submitted_targets"],
+            "active_shortlist": self.state["active_shortlist"],
         }
 
     def persist(self, path: Path) -> None:
@@ -250,6 +262,8 @@ class E9CaseMemory:
             "last_rejection": None,
             "evidence": {},
             "ranking_history": [],
+            "submitted_targets": [],
+            "active_shortlist": [],
         }
         for raw in payload.get("events", []):
             event = E9Event(
@@ -344,6 +358,8 @@ class E9CaseMemory:
                     "handles": list(payload.get("handles", []))[:20],
                 }
             )
+        elif event.event_type == "SHORTLIST_UPDATED":
+            self.state["active_shortlist"] = list(payload.get("handles", []))[:20]
         elif event.event_type == "ACTION_REJECTED":
             self.state["action_rejections"] += 1
             self.state["rejection_count"] += 1
@@ -362,6 +378,8 @@ class E9CaseMemory:
             self.state["model_steps_used"] += 1
         elif event.event_type in {"DIAGNOSIS_SUBMITTED", "CASE_STOPPED"}:
             self.state["current_phase"] = "CONCLUDE"
+            if event.event_type == "DIAGNOSIS_SUBMITTED":
+                self.state["submitted_targets"] = list(payload.get("targets", []))
         elif event.event_type == "OPERATION_REQUESTED":
             item = {
                 "entity_handle": payload.get("entity_handle"),

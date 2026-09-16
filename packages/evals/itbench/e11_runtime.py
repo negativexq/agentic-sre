@@ -7,6 +7,7 @@ ground-truth or evaluator imports.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from time import monotonic
 from typing import Any, cast
@@ -14,22 +15,31 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
-from packages.evals.itbench.contracts import ITBenchEvidenceCategory
+from packages.evals.itbench.contracts import (
+    ITBenchAgentOutput,
+    ITBenchEntityPrediction,
+    ITBenchEvidenceCategory,
+    parse_canonical_entity,
+)
 from packages.evals.itbench.e9_memory import E9CaseMemory
 from packages.evals.itbench.e9_semantic import E9SemanticOperations
 from packages.evals.itbench.e11_context import build_e11_context
 from packages.evals.itbench.e11_control import E11_PROMPT, E11CaseMemory, EvidenceAssessment
 from packages.evals.itbench.e11_observability import (
+    E11_B1_CONFIG,
+    E11RetrievalConfig,
     RankedCandidate,
+    RetrievalEvidence,
     build_observed_entity_catalog,
     rank_observed_candidates,
 )
-from packages.evals.itbench.e11_operations import available_e11_operations
+from packages.evals.itbench.e11_operations import available_e11_operations, comparable_peer_count
 from packages.evals.itbench.external_contracts import (
     ITBENCH_EXTERNAL_PROTOCOL_V5,
     E9Action,
     ITBenchInvestigationDecisionV5,
 )
+from packages.evals.itbench.incident import build_observable_incident
 from packages.provider import ModelMessage, ModelProvider, ModelRequest
 
 
@@ -52,8 +62,9 @@ class E11InvestigationRuntime:
         *,
         limits: E11RuntimeLimits | None = None,
         execution_id: str = "ITB-E11",
-        shortlist_size: int = 10,
-        telemetry_ranking: bool = False,
+        shortlist_size: int | None = None,
+        telemetry_ranking: bool | None = None,
+        retrieval_config: E11RetrievalConfig | None = None,
     ) -> None:
         self.provider = provider
         self.backend = backend
@@ -61,14 +72,31 @@ class E11InvestigationRuntime:
             backend._semantic_capability_cache = {}
         self.limits = limits or E11RuntimeLimits()
         self.execution_id = execution_id
-        self.shortlist_size = shortlist_size
-        # The known qualification set currently has a stronger, honest
-        # non-telemetry ranking baseline.  Telemetry remains available to
-        # semantic operations and catalog discovery, but is opt-in for the
-        # initial rank until an offline qualification proves parity.
-        self.telemetry_ranking = telemetry_ranking
+        config = retrieval_config or E11_B1_CONFIG
+        if shortlist_size is not None or telemetry_ranking is not None:
+            config = E11RetrievalConfig(
+                include_telemetry_in_catalog=config.include_telemetry_in_catalog,
+                include_telemetry_in_ranking=(
+                    config.include_telemetry_in_ranking
+                    if telemetry_ranking is None
+                    else telemetry_ranking
+                ),
+                use_direct_topology=config.use_direct_topology,
+                use_causal_propagation=config.use_causal_propagation,
+                use_namespace_context=config.use_namespace_context,
+                use_temporal=config.use_temporal,
+                diversity=config.diversity,
+                shortlist_size=(
+                    config.shortlist_size if shortlist_size is None else shortlist_size
+                ),
+            )
+        self.retrieval_config = config
+        self.shortlist_size = config.shortlist_size
+        self._runtime_signals: dict[str, list[RetrievalEvidence]] = {}
+        self._incident_available = False
 
     def run(self) -> dict[str, Any]:
+        self._runtime_signals = {}
         started = monotonic()
         scenario_id = str(self.backend.scenario.scenario_id)
         run_id = uuid4()
@@ -86,22 +114,33 @@ class E11InvestigationRuntime:
         }
         catalog = build_observed_entity_catalog(
             self.backend,
-            include_telemetry=self.telemetry_ranking,
+            include_telemetry=self.retrieval_config.include_telemetry_in_catalog,
             telemetry_records=telemetry_records,
         )
-        ranking = rank_observed_candidates(
-            self.backend,
-            catalog,
-            limit=self.shortlist_size,
-            include_telemetry=self.telemetry_ranking,
-            telemetry_records=telemetry_records,
-            use_causal_propagation=True,
-        )
+        ranking = self._rank(catalog, telemetry_records)
+        initial_ranking = ranking
         memory = E9CaseMemory(execution_id=self.execution_id, scenario_id=scenario_id)
         memory.discover_entities(tuple(entity.as_dict() for entity in catalog.entities()), turn=0)
+        memory.set_active_shortlist(tuple(item.handle for item in ranking), turn=0)
         evidence_memory = E11CaseMemory(scenario_id=scenario_id, catalog=catalog)
         evidence_memory.initialize(ranking)
-        operations = E9SemanticOperations(self.backend, memory, enable_discovery=True)
+        memory.append(
+            "RANKING_REVISION",
+            0,
+            {
+                "revision": 0,
+                "triggering_evidence_ref": None,
+                "handles": [candidate.handle for candidate in ranking],
+            },
+        )
+        try:
+            incident, _alerts = build_observable_incident(self.backend)
+        except ValueError:
+            # Small unit fixtures may intentionally omit alerts; temporal
+            # capability is then unavailable rather than fabricated.
+            incident = None
+        self._incident_available = incident is not None
+        operations = E9SemanticOperations(self.backend, memory, incident, enable_discovery=True)
         turns: list[dict[str, Any]] = []
         usage = {"model_calls": 0, "input_tokens": 0, "output_tokens": 0, "latency_ms": 0}
         terminal = "MODEL_STEP_LIMIT"
@@ -158,9 +197,10 @@ class E11InvestigationRuntime:
                     terminal = "PROTOCOL_STALLED"
                     break
                 continue
-            consecutive_rejections = 0
             try:
-                result = self._apply(decision, memory, evidence_memory, operations, surface, turn)
+                result = self._apply(
+                    decision, memory, evidence_memory, operations, surface, catalog, turn
+                )
             except ValueError as error:
                 consecutive_rejections += 1
                 memory.append(
@@ -176,6 +216,9 @@ class E11InvestigationRuntime:
                     terminal = "PROTOCOL_STALLED"
                     break
                 continue
+            # Parsing alone is not an accepted action.  Only a fully applied
+            # action clears the consecutive rejection window.
+            consecutive_rejections = 0
             trace.update(result)
             trace["accepted"] = True
             memory.append("ACTION_ACCEPTED", turn, {"action": decision.action.value})
@@ -183,16 +226,13 @@ class E11InvestigationRuntime:
             if result.get("terminal"):
                 terminal = str(result["terminal"])
                 break
-            ranking = rank_observed_candidates(
-                self.backend,
-                catalog,
-                limit=self.shortlist_size,
-                include_telemetry=self.telemetry_ranking,
-                telemetry_records=telemetry_records,
-                use_causal_propagation=True,
-            )
-            if memory.state.get("evidence"):
-                trigger = next(reversed(memory.state["evidence"]))
+            ranking = self._rank(catalog, telemetry_records)
+            if evidence_memory.evidence:
+                trigger = next(reversed(evidence_memory.evidence))
+                previous_ranks = {candidate.handle: candidate.rank for candidate in candidates}
+                new_ranks = {candidate.handle: candidate.rank for candidate in ranking}
+                evidence_memory.rerank(ranking, trigger)
+                memory.set_active_shortlist(tuple(item.handle for item in ranking), turn=turn)
                 memory.append(
                     "RANKING_REVISION",
                     turn,
@@ -200,6 +240,8 @@ class E11InvestigationRuntime:
                         "revision": len(memory.state.get("ranking_history", [])) + 1,
                         "triggering_evidence_ref": trigger,
                         "handles": [candidate.handle for candidate in ranking],
+                        "previous_ranks": previous_ranks,
+                        "new_ranks": new_ranks,
                     },
                 )
         safety = {
@@ -216,13 +258,25 @@ class E11InvestigationRuntime:
             "assessment_history": [item.as_dict() for item in evidence_memory.assessments],
             "event_log": [event.as_dict() for event in memory.events],
             "native_artifact": {"scenario_id": scenario_id, "terminal": terminal},
-            "agent_output": {
-                "terminal": terminal,
-                "submitted": memory.state.get("current_hypothesis"),
-            },
+            "agent_output": self._export_agent_output(
+                scenario_id, terminal, memory, evidence_memory, catalog
+            ).model_dump(mode="json"),
             "usage": {**usage, "safety": safety},
             "safety": safety,
             "catalog": [entity.as_dict() for entity in catalog.entities()],
+            "initial_ranking": [candidate.as_dict() for candidate in initial_ranking],
+            "retrieval_config": self.retrieval_config.__dict__
+            if hasattr(self.retrieval_config, "__dict__")
+            else {
+                "include_telemetry_in_catalog": self.retrieval_config.include_telemetry_in_catalog,
+                "include_telemetry_in_ranking": self.retrieval_config.include_telemetry_in_ranking,
+                "use_direct_topology": self.retrieval_config.use_direct_topology,
+                "use_causal_propagation": self.retrieval_config.use_causal_propagation,
+                "use_namespace_context": self.retrieval_config.use_namespace_context,
+                "use_temporal": self.retrieval_config.use_temporal,
+                "diversity": self.retrieval_config.diversity,
+                "shortlist_size": self.retrieval_config.shortlist_size,
+            },
         }
 
     def _request(self, run_id: Any, context: str, surface: dict[str, Any]) -> ModelRequest:
@@ -257,6 +311,26 @@ class E11InvestigationRuntime:
             tool_schemas=(),
         )
 
+    def _rank(
+        self,
+        catalog: Any,
+        telemetry_records: dict[ITBenchEvidenceCategory, tuple[dict[str, Any], ...]],
+    ) -> tuple[RankedCandidate, ...]:
+        """Apply the exact configured retrieval policy used by qualification."""
+        return rank_observed_candidates(
+            self.backend,
+            catalog,
+            limit=self.retrieval_config.shortlist_size,
+            diversity=self.retrieval_config.diversity,
+            include_telemetry=self.retrieval_config.include_telemetry_in_ranking,
+            telemetry_records=telemetry_records,
+            use_direct_topology=self.retrieval_config.use_direct_topology,
+            use_causal_propagation=self.retrieval_config.use_causal_propagation,
+            use_namespace_context=self.retrieval_config.use_namespace_context,
+            use_temporal=self.retrieval_config.use_temporal,
+            runtime_signals={key: tuple(value) for key, value in self._runtime_signals.items()},
+        )
+
     def _surface(
         self,
         memory: E9CaseMemory,
@@ -289,7 +363,14 @@ class E11InvestigationRuntime:
                 if handle == current_handle:
                     entity = catalog.by_handle(handle)
                     available[handle] = (
-                        available_e11_operations(entity) if entity is not None else ()
+                        available_e11_operations(
+                            entity,
+                            comparable_peers=comparable_peer_count(catalog, entity),
+                            backend=self.backend,
+                            incident_available=self._incident_available,
+                        )
+                        if entity is not None
+                        else ()
                     )
                 else:
                     # Alternative handles receive a bounded source-derived
@@ -298,19 +379,33 @@ class E11InvestigationRuntime:
                     # full telemetry scan for every visible candidate.
                     entity = catalog.by_handle(handle)
                     available[handle] = (
-                        available_e11_operations(entity) if entity is not None else ()
+                        available_e11_operations(
+                            entity,
+                            comparable_peers=comparable_peer_count(catalog, entity),
+                            backend=self.backend,
+                            incident_available=self._incident_available,
+                        )
+                        if entity is not None
+                        else ()
                     )
             operations = tuple(
                 dict.fromkeys(operation for values in available.values() for operation in values)
             )
-            actions = ("INVESTIGATE", "REVISE", "SUBMIT", "STOP")
+            supported = self._supported_handles(memory)
+            actions = ("INVESTIGATE", "REVISE", "STOP")
+            if supported:
+                actions = ("INVESTIGATE", "REVISE", "SUBMIT", "STOP")
             capabilities = {
-                "INVESTIGATE": {"targets": handles, "operations": operations},
+                "INVESTIGATE": {
+                    "targets": handles,
+                    "operations": operations,
+                    "target_operations": available,
+                },
                 "REVISE": {
                     "targets": tuple(handle for handle in handles if handle != current_handle),
                     "operations": (),
                 },
-                "SUBMIT": {"targets": self._supported_handles(memory), "operations": ()},
+                "SUBMIT": {"targets": supported, "operations": ()},
                 "STOP": {"targets": (), "operations": ()},
             }
         return {
@@ -332,6 +427,7 @@ class E11InvestigationRuntime:
         evidence_memory: E11CaseMemory,
         operations: E9SemanticOperations,
         surface: dict[str, Any],
+        catalog: Any,
         turn: int,
     ) -> dict[str, Any]:
         action = decision.action.value
@@ -345,6 +441,7 @@ class E11InvestigationRuntime:
             if decision.operation not in capability["operations"]:
                 raise ValueError("observation operation is not available")
             evidence = operations.execute(decision.operation or "", None, turn)
+            self._sync_discovered_entities(memory, catalog, evidence.get("evidence_ref"), turn)
             return {
                 "model_action": action,
                 "operation": decision.operation,
@@ -380,7 +477,10 @@ class E11InvestigationRuntime:
             if decision.operation not in legal_operations:
                 raise ValueError("investigation operation is not available")
             evidence = operations.execute(decision.operation or "", decision.target, turn)
-            self._record_assessment(memory, evidence_memory, turn, decision.target, evidence)
+            self._sync_discovered_entities(memory, catalog, evidence.get("evidence_ref"), turn)
+            self._record_assessment(
+                memory, evidence_memory, turn, decision.target, evidence, catalog
+            )
             return {
                 "model_action": action,
                 "target": decision.target,
@@ -403,12 +503,38 @@ class E11InvestigationRuntime:
         return {"model_action": action, "terminal": "STOP", "stop_reason": decision.stop_reason}
 
     @staticmethod
+    def _sync_discovered_entities(
+        memory: E9CaseMemory, catalog: Any, evidence_ref: Any, turn: int
+    ) -> None:
+        """Bridge structured semantic discoveries into the E11 catalog."""
+        for canonical, item in memory.state.get("discovered_entities", {}).items():
+            if catalog.get(canonical) is not None:
+                continue
+            parts = canonical.split("/", 2)
+            if len(parts) != 3 or not all(parts):
+                continue
+            namespace, kind, name = parts
+            catalog.add(
+                canonical=canonical,
+                identity_type="UnresolvedObservedIdentity",
+                namespace=namespace,
+                kind=kind,
+                name=name,
+                source_category="semantic_discovery",
+                provenance="TOPOLOGY_DERIVED",
+                evidence_ref=str(evidence_ref or ""),
+                identity_quality="MAPPED",
+                handle=str(item.get("handle")) if isinstance(item, dict) else None,
+            )
+
     def _record_assessment(
+        self,
         memory: E9CaseMemory,
         evidence_memory: E11CaseMemory,
         turn: int,
         handle: str | None,
         result: dict[str, Any],
+        catalog: Any,
     ) -> None:
         evidence_ref = result.get("evidence_ref")
         if not isinstance(evidence_ref, str) or not isinstance(handle, str):
@@ -419,27 +545,22 @@ class E11InvestigationRuntime:
             str(result.get("operation", "")),
             summary if isinstance(summary, dict) else {},
         )
-        assessment = "INCONCLUSIVE"
-        if isinstance(summary, dict):
-            operation = result.get("operation")
-            positive = {
-                "EVENT_ANALYSIS": bool(summary.get("matching_count")),
-                "LOG_ANALYSIS": bool(summary.get("data_available") and summary.get("patterns")),
-                "METRIC_ANOMALIES": any(
-                    isinstance(item, dict) and item.get("anomaly")
-                    for item in summary.get("aggregates_by_metric", {}).values()
-                )
-                if isinstance(summary.get("aggregates_by_metric"), dict)
-                else False,
-                "TRACE_ERROR_TREE": bool(
-                    summary.get("error_tree_available") and summary.get("edges")
+        assessment, dimension, reason, channel, weight = self._assess_semantic_result(
+            str(result.get("operation", "")), summary
+        )
+        supersedes = None
+        if assessment == EvidenceAssessment.SUPPORTS:
+            prior = next(
+                (
+                    item
+                    for item in reversed(evidence_memory.assessments)
+                    if item.handle == handle
+                    and item.assessment == EvidenceAssessment.CONTRADICTS
+                    and item.dimension == dimension
                 ),
-                "COMPARE_REPLICAS": bool(
-                    summary.get("comparison_available") and summary.get("peer_count", 0) > 0
-                ),
-            }.get(str(operation), False)
-            if positive:
-                assessment = "SUPPORTS"
+                None,
+            )
+            supersedes = prior.evidence_ref if prior is not None else None
         memory.append(
             "EVIDENCE_ASSESSMENT",
             turn,
@@ -447,26 +568,206 @@ class E11InvestigationRuntime:
                 "entity_handle": handle,
                 "evidence_handle": evidence_ref,
                 "assessment": assessment,
-                "dimension": "causal",
+                "dimension": dimension,
+                "rationale": reason,
+                "supersedes_evidence_ref": supersedes,
             },
         )
         if assessment == "SUPPORTS":
             memory.set_candidate_status(
                 turn=turn, handle=handle, status="SUPPORTED", supporting_refs=(evidence_ref,)
             )
-            evidence_memory.assess(
-                handle,
-                local_ref,
-                EvidenceAssessment.SUPPORTS,
-                dimension="causal",
-            )
         else:
-            evidence_memory.assess(
-                handle,
-                local_ref,
-                EvidenceAssessment.INCONCLUSIVE,
-                dimension="causal",
+            if assessment == EvidenceAssessment.CONTRADICTS:
+                memory.set_candidate_status(
+                    turn=turn,
+                    handle=handle,
+                    status="CONTRADICTED",
+                    contradicting_refs=(evidence_ref,),
+                    rationale=reason,
+                )
+        evidence_memory.assess(
+            handle,
+            local_ref,
+            cast(Any, assessment),
+            dimension=dimension,
+            rationale=reason,
+            supersedes_evidence_ref=supersedes,
+        )
+        canonical = memory.resolve(handle)
+        if canonical is not None and channel is not None:
+            self._runtime_signals.setdefault(canonical, []).append(
+                RetrievalEvidence(
+                    channel,
+                    evidence_ref,
+                    reason,
+                    weight if assessment == EvidenceAssessment.SUPPORTS else -weight,
+                )
             )
+
+    @staticmethod
+    def _assess_semantic_result(
+        operation: str, summary: Any
+    ) -> tuple[str, str, str, str | None, float]:
+        """Derive conservative polarity from structured operation output."""
+        if not isinstance(summary, dict):
+            return (
+                EvidenceAssessment.INCONCLUSIVE,
+                "causal_mechanism",
+                "non-structured result",
+                None,
+                0.0,
+            )
+        if operation == "EVENT_ANALYSIS":
+            records = summary.get("records", [])
+            diagnostic = any(
+                any(
+                    token in _event_text(item).casefold()
+                    for token in (
+                        "fail",
+                        "error",
+                        "backoff",
+                        "crash",
+                        "oom",
+                        "evict",
+                        "mount",
+                        "image",
+                    )
+                )
+                for item in records
+            )
+            if diagnostic:
+                return (
+                    EvidenceAssessment.SUPPORTS,
+                    "failure_signature",
+                    "diagnostic incident event observed",
+                    "FAILURE_EVENT",
+                    7.0,
+                )
+            return (
+                EvidenceAssessment.INCONCLUSIVE,
+                "failure_signature",
+                "no diagnostic event support",
+                None,
+                0.0,
+            )
+        if operation == "LOG_ANALYSIS":
+            patterns = summary.get("patterns")
+            if summary.get("data_available") and isinstance(patterns, list) and patterns:
+                return (
+                    EvidenceAssessment.SUPPORTS,
+                    "failure_signature",
+                    "target-specific structured error pattern observed",
+                    "LOG_FAILURE",
+                    7.0,
+                )
+            return (
+                EvidenceAssessment.INCONCLUSIVE,
+                "failure_signature",
+                "no usable target-specific log error",
+                None,
+                0.0,
+            )
+        if operation == "METRIC_ANOMALIES":
+            groups = summary.get("aggregates_by_metric")
+            if isinstance(groups, dict):
+                anomalies = [
+                    item
+                    for item in groups.values()
+                    if isinstance(item, dict) and item.get("anomaly")
+                ]
+                if anomalies:
+                    return (
+                        EvidenceAssessment.SUPPORTS,
+                        "resource_pressure",
+                        "candidate-relevant metric anomaly observed",
+                        "METRIC_ANOMALY",
+                        7.0,
+                    )
+                if groups and summary.get("matching_count", 0):
+                    return (
+                        EvidenceAssessment.CONTRADICTS,
+                        "resource_pressure",
+                        "complete candidate metric coverage has no anomaly",
+                        "METRIC_ANOMALY",
+                        4.0,
+                    )
+            return (
+                EvidenceAssessment.INCONCLUSIVE,
+                "resource_pressure",
+                "metric evidence is unavailable or inconclusive",
+                None,
+                0.0,
+            )
+        if operation == "TRACE_ERROR_TREE":
+            edges = summary.get("edges")
+            if isinstance(edges, list) and any(
+                item.get("status") == "ERROR" for item in edges if isinstance(item, dict)
+            ):
+                return (
+                    EvidenceAssessment.SUPPORTS,
+                    "dependency",
+                    "error-bearing trace edge observed",
+                    "TRACE_ERROR_PROPAGATION",
+                    7.0,
+                )
+            return (
+                EvidenceAssessment.INCONCLUSIVE,
+                "dependency",
+                "no usable error-origin trace edge",
+                None,
+                0.0,
+            )
+        if operation == "COMPARE_REPLICAS":
+            if summary.get("comparison_available") and (
+                summary.get("spec_differences") or summary.get("event_differences")
+            ):
+                return (
+                    EvidenceAssessment.SUPPORTS,
+                    "comparative",
+                    "target differs from comparable peers",
+                    "COMPARATIVE_EVIDENCE",
+                    8.0,
+                )
+            return (
+                EvidenceAssessment.INCONCLUSIVE,
+                "comparative",
+                "peers are equivalent or comparison unavailable",
+                None,
+                0.0,
+            )
+        if operation == "VERIFY_TEMPORAL_ALIGNMENT":
+            relation = summary.get("causal_temporal_assessment")
+            if relation == EvidenceAssessment.SUPPORTS:
+                return (
+                    EvidenceAssessment.SUPPORTS,
+                    "temporal",
+                    "diagnostic signal is bounded and near incident onset",
+                    "TEMPORAL_ALIGNMENT",
+                    5.0,
+                )
+            if relation == EvidenceAssessment.CONTRADICTS:
+                return (
+                    EvidenceAssessment.CONTRADICTS,
+                    "temporal",
+                    "signal timing contradicts the causal hypothesis",
+                    "TEMPORAL_ALIGNMENT",
+                    4.0,
+                )
+            return (
+                EvidenceAssessment.INCONCLUSIVE,
+                "temporal",
+                "timing is not sufficiently discriminating",
+                None,
+                0.0,
+            )
+        return (
+            EvidenceAssessment.INCONCLUSIVE,
+            "causal_mechanism",
+            "context alone does not establish causality",
+            None,
+            0.0,
+        )
 
     @staticmethod
     def _ranked_for_memory(
@@ -497,6 +798,49 @@ class E11InvestigationRuntime:
             if item.get("status") == "SUPPORTED"
         )
 
+    def _export_agent_output(
+        self,
+        scenario_id: str,
+        terminal: str,
+        memory: E9CaseMemory,
+        evidence_memory: E11CaseMemory,
+        catalog: Any,
+    ) -> ITBenchAgentOutput:
+        """Export the native conclusion in the official ITBench shape."""
+        predictions: list[ITBenchEntityPrediction] = []
+        if terminal == "SUBMIT":
+            submitted = memory.state.get("submitted_targets", ())
+            if not isinstance(submitted, (list, tuple)):
+                submitted = ()
+            for rank, handle in enumerate(submitted, start=1):
+                entity = catalog.by_handle(str(handle))
+                if entity is None:
+                    raise ValueError("submitted handle is absent from runtime catalog")
+                predictions.append(
+                    ITBenchEntityPrediction(
+                        entity=parse_canonical_entity(entity.canonical),
+                        rank=rank,
+                        condition="runtime-validated causal support",
+                    )
+                )
+        reasoning = ""
+        if terminal == "STOP":
+            last = memory.state.get("last_rejection")
+            reasoning = (
+                str(last.get("reason", "insufficient causal evidence"))
+                if isinstance(last, dict)
+                else "insufficient causal evidence"
+            )
+        else:
+            reasoning = "submitted runtime-validated causal candidates"
+        return ITBenchAgentOutput(
+            incident_id=f"{self.execution_id}:{scenario_id}",
+            scenario_id=scenario_id,
+            contributing_factor=tuple(predictions),
+            reasoning=reasoning[:1000],
+            native_terminal=terminal,
+        )
+
     @staticmethod
     def _investigation_state(memory: E9CaseMemory) -> dict[str, Any]:
         projection = memory.projection()
@@ -508,6 +852,23 @@ class E11InvestigationRuntime:
         ]
         projection["recent_operations"] = projection.get("operations_already_run", [])[-6:]
         return projection
+
+
+def _event_text(item: Any) -> str:
+    if not isinstance(item, dict):
+        return ""
+    record = item.get("record", item)
+    if isinstance(record, dict):
+        body = record.get("Body")
+        if isinstance(body, str):
+            try:
+                parsed = json.loads(body)
+            except json.JSONDecodeError:
+                parsed = {}
+            if isinstance(parsed, dict):
+                return " ".join(str(parsed.get(key, "")) for key in ("reason", "message", "type"))
+        return " ".join(str(record.get(key, "")) for key in ("reason", "message", "type"))
+    return ""
 
 
 __all__ = ["E11InvestigationRuntime", "E11RuntimeLimits"]

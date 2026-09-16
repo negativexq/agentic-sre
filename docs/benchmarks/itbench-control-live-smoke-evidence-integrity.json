@@ -97,7 +97,7 @@
     "official_benchmark_scenarios": 0,
     "live_smoke_scenarios": 0
   },
-  "current_source_head": "a4199ac57f5b93b350858dc445713d5b0bc7e5e4",
+  "current_source_head": "a3476432c8a12376d6eadc5537fffbe9edd59efa",
   "actual_smoke_002_prereg_created": false,
   "actual_smoke_002_ledger_created": false
 }

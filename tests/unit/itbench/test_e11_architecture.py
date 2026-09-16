@@ -523,6 +523,12 @@ def test_e11_ledger_cap_is_derived_from_frozen_counts() -> None:
     assert build_e11_ledger(manifest)["cap"] == 420
 
 
+def test_e11_identity_covers_snapshot_evidence_backend() -> None:
+    from packages.evals.itbench.e11_official import E11_OFFICIAL_RELEVANT_PATHS
+
+    assert "packages/evals/itbench/snapshot_backend.py" in E11_OFFICIAL_RELEVANT_PATHS
+
+
 def test_e11_seal_requires_and_verifies_all_35_checkpoint_hashes(tmp_path: Path) -> None:
     from packages.evals.itbench.e11_official import (
         E11OfficialManifestV1,

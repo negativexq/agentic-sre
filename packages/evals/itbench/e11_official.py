@@ -38,6 +38,7 @@ E11_TRIAL_COUNT: Final[int] = 1
 E11_OFFICIAL_RELEVANT_PATHS: Final[tuple[str, ...]] = (
     *LIVE_SMOKE_RELEVANT_PATHS,
     "packages/provider/budget.py",
+    "packages/evals/itbench/snapshot_backend.py",
     "packages/evals/itbench/e11_context.py",
     "packages/evals/itbench/e11_control.py",
     "packages/evals/itbench/e11_observability.py",

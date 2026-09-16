@@ -71,6 +71,34 @@ live smoke scenarios: 0
 ground-truth accesses during prediction qualification: 0
 ```
 
-The artifact records the qualifying source commit as
-`1a7134df495d064e36580795414474639c475083`; no E10
-prediction manifest, ledger, seal, or official result was created.
+## Final integrity guards
+
+Resume accounting is delta-based. A continuation captures the ledger and
+provider snapshots before pending scenarios, then requires:
+
+```text
+(budget_after.calls_used - budget_before.calls_used)
+==
+(provider_after.outbound_api_attempts - provider_before.outbound_api_attempts)
+```
+
+Capacity is checked only for pending scenarios, while prior ledger consumption
+remains monotonic. The offline regression covered five sealed scenarios with
+five prior calls and thirty pending scenarios, producing thirty resumed
+provider attempts and a final ledger of 35 calls.
+
+`packages/provider/budget.py` is part of `E10_OFFICIAL_RELEVANT_PATHS`, so a
+change to the shared paid-call accounting implementation invalidates E10
+identity. Before a checkpoint is accepted, the measured runtime safety fields
+`ground_truth_exposure`, `cross_scenario_evidence`, `writes`, and
+`arbitrary_execution` must all be zero. The only continuable terminals are:
+
+```text
+SUBMIT, STOP, MODEL_STEP_LIMIT, PROTOCOL_STALLED, WALL_TIME_LIMIT
+```
+
+`PROVIDER_ERROR` and unknown terminals persist failure evidence, mark the
+ledger failed, and abort prediction generation.
+
+The qualifying source patch is `0d5c5ec`; no E10 prediction manifest, ledger,
+seal, official result, or live provider execution was created.

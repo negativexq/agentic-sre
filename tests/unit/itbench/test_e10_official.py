@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -15,9 +16,12 @@ from packages.evals.itbench.dataset import (
     ITBENCH_SRE_VERSION,
     ITBenchLiteDataset,
 )
+from packages.evals.itbench.e9_identity import E9IdentityMismatch
+from packages.evals.itbench.e9_runtime import E9InvestigationRuntime
 from packages.evals.itbench.e10_local_grading import grade_local_e10
 from packages.evals.itbench.e10_official import (
     E10_OFFICIAL_RELEVANT_PATHS,
+    E10OfficialManifestV1,
     E10PredictionError,
     E10PreflightError,
     build_e10_ledger,
@@ -27,7 +31,11 @@ from packages.evals.itbench.e10_official import (
     validate_e10_preflight,
     verify_e10_seal,
 )
+from packages.evals.itbench.incident import build_observable_incident
+from packages.evals.itbench.output_adapter import adapt_e9_output
 from packages.evals.itbench.persistence import atomic_json_write
+from packages.evals.itbench.snapshot_backend import ITBenchSnapshotBackend
+from packages.provider import LiveModelBudget
 from packages.provider.contracts import (
     ModelRequest,
     ModelResponse,
@@ -107,6 +115,68 @@ def _stop_response(_request: object) -> dict[str, object]:
         "rationale": None,
         "stop_reason": "offline qualification",
     }
+
+
+class _BudgetedFakeProvider:
+    """Offline provider with the same shared-ledger accounting as OpenAIProvider."""
+
+    provider_name = "fake"
+
+    def __init__(self, budget: LiveModelBudget) -> None:
+        self.budget = budget
+        self.requests: list[ModelRequest] = []
+
+    def complete(self, request: ModelRequest) -> ModelResponse:
+        self.budget.consume()
+        self.requests.append(request)
+        return ModelResponse(
+            request_id=request.request_id,
+            structured_output=_stop_response(request),
+            provider=self.provider_name,
+            model="fake-model",
+            input_tokens=0,
+            output_tokens=0,
+            latency_ms=0,
+            finish_reason="scripted",
+        )
+
+    def accounting_snapshot(self) -> ProviderAccountingSnapshot:
+        return ProviderAccountingSnapshot(
+            provider_invocations=len(self.requests),
+            outbound_api_attempts=len(self.requests),
+            shared_ledger_consumed=self.budget.snapshot().calls_used,
+        )
+
+
+def _seed_checkpoint(
+    manifest_path: Path,
+    predictions_root: Path,
+    dataset: ITBenchLiteDataset,
+    scenario_id: str,
+    manifest: E10OfficialManifestV1,
+) -> None:
+    """Create one real, replay-checked completed checkpoint for resume tests."""
+    scenario = next(item for item in dataset.scenarios() if item.scenario_id == scenario_id)
+    backend = ITBenchSnapshotBackend(dataset, scenario)
+    incident, alerts = build_observable_incident(backend)
+    result = E9InvestigationRuntime(
+        FakeModelProvider([_stop_response]),
+        backend,
+        limits=manifest.runtime_limits.to_e9_limits(),
+        execution_id=manifest.execution,
+        max_consecutive_rejected_actions=manifest.runtime_limits.max_consecutive_rejected_actions,
+    ).run(incident, alerts)
+    output = adapt_e9_output(result)
+    checkpoint = {
+        "scenario_id": scenario_id,
+        "trial": 1,
+        "manifest_sha256": e10_official._sha256(manifest_path),
+        "terminal": result["terminal"],
+        "safety": result["safety"],
+    }
+    e10_official._persist_prediction(
+        predictions_root / scenario_id / "1", result, output, checkpoint
+    )
 
 
 def test_e10_manifest_uses_explicit_official_envelope() -> None:
@@ -330,3 +400,197 @@ def test_prediction_module_has_no_gt_or_judge_imports() -> None:
     source = (ROOT / "packages/evals/itbench/e10_official.py").read_text(encoding="utf-8")
     assert "load_ground_truth" not in source
     assert "packages.evals.itbench.grader" not in source
+
+
+def test_e10_identity_includes_budget_accounting_module(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert "packages/provider/budget.py" in E10_OFFICIAL_RELEVANT_PATHS
+    manifest = build_e10_manifest(ROOT)
+    assert "packages/provider/budget.py" in manifest.runtime_identity.relevant_paths
+    assert "packages/provider/budget.py" in manifest.runtime_identity.relevant_content_sha256
+
+    actual_identity = manifest.runtime_identity.model_dump(mode="json")
+    actual_identity["relevant_worktree_dirty"] = True
+    monkeypatch.setattr(
+        e10_official,
+        "collect_e9_identity",
+        lambda _root, paths: (
+            actual_identity
+            if "packages/provider/budget.py" in paths
+            else manifest.runtime_identity.model_dump(mode="json")
+        ),
+    )
+    with pytest.raises(E9IdentityMismatch, match="dirty"):
+        validate_e10_preflight(
+            ROOT,
+            manifest,
+            relevant_paths=E10_OFFICIAL_RELEVANT_PATHS,
+            ledger=build_e10_ledger(manifest),
+        )
+
+
+def test_partial_resume_uses_ledger_and_provider_deltas(
+    tmp_path: Path,
+) -> None:
+    manifest_path, ledger_path, predictions, seal, _result = _manifest_and_paths(tmp_path)
+    manifest = build_e10_manifest(ROOT)
+    dataset = ITBenchLiteDataset.open(ROOT / e10_official.E10_DATA_ROOT)
+
+    # Seed five real checkpoints and five prior calls through the shared budget.
+    seed_budget = LiveModelBudget(manifest.ledger_cap, ledger_path=str(ledger_path))
+    for _ in range(5):
+        seed_budget.consume()
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    ledger["status"] = "RUNNING"
+    atomic_json_write(ledger_path, ledger)
+    seeded_hashes: dict[str, str] = {}
+    for scenario_id in ITBENCH_SCENARIO_IDS[:5]:
+        _seed_checkpoint(manifest_path, predictions, dataset, scenario_id, manifest)
+        seeded_hashes[scenario_id] = e10_official._sha256(
+            predictions / scenario_id / "1" / "trial_manifest.json"
+        )
+
+    provider: _BudgetedFakeProvider | None = None
+
+    def factory(_manifest: E10OfficialManifestV1, budget: LiveModelBudget) -> _BudgetedFakeProvider:
+        nonlocal provider
+        provider = _BudgetedFakeProvider(budget)
+        return provider
+
+    checkpoints = predict_e10(
+        ROOT,
+        manifest_path=manifest_path,
+        ledger_path=ledger_path,
+        predictions_root=predictions,
+        seal_path=seal,
+        provider_factory=factory,
+    )
+    assert len(checkpoints) == 35
+    assert provider is not None
+    assert len(provider.requests) == 30
+    assert all(
+        e10_official._sha256(predictions / scenario_id / "1" / "trial_manifest.json")
+        == seeded_hashes[scenario_id]
+        for scenario_id in ITBENCH_SCENARIO_IDS[:5]
+    )
+    final_ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    assert final_ledger["status"] == "COMPLETE"
+    assert final_ledger["calls_used"] == 35
+    assert final_ledger["remaining"] == 385
+
+
+def test_resume_manifest_mismatch_fails_before_provider(
+    tmp_path: Path,
+) -> None:
+    manifest_path, ledger_path, predictions, seal, _result = _manifest_and_paths(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["scenario_order_hash"] = "mismatch"
+    atomic_json_write(manifest_path, manifest)
+    predictions.mkdir()
+    called = False
+
+    def factory(_manifest: object, _budget: object) -> FakeModelProvider:
+        nonlocal called
+        called = True
+        return FakeModelProvider([])
+
+    with pytest.raises(E10PreflightError):
+        predict_e10(
+            ROOT,
+            manifest_path=manifest_path,
+            ledger_path=ledger_path,
+            predictions_root=predictions,
+            seal_path=seal,
+            provider_factory=factory,
+        )
+    assert called is False
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("writes", 1),
+        ("cross_scenario_evidence", 1),
+        ("ground_truth_exposure", 1),
+        ("arbitrary_execution", 1),
+    ],
+)
+def test_nonzero_runtime_safety_aborts_prediction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    value: int,
+) -> None:
+    manifest_path, ledger_path, predictions, seal, _result = _manifest_and_paths(tmp_path)
+    original_run = E9InvestigationRuntime.run
+
+    def unsafe_run(self: E9InvestigationRuntime, incident: Any, alerts: Any) -> dict[str, Any]:
+        result = original_run(self, incident, alerts)
+        result["safety"][field] = value
+        return result
+
+    monkeypatch.setattr(E9InvestigationRuntime, "run", unsafe_run)
+    with pytest.raises(E10PredictionError, match="aborted"):
+        predict_e10(
+            ROOT,
+            manifest_path=manifest_path,
+            ledger_path=ledger_path,
+            predictions_root=predictions,
+            seal_path=seal,
+            provider_factory=lambda _manifest, _budget: FakeModelProvider([_stop_response]),
+        )
+    assert json.loads((ledger_path).read_text(encoding="utf-8"))["status"] == "FAILED"
+    failure = json.loads((predictions / "prediction_failure.json").read_text(encoding="utf-8"))
+    assert "RUNTIME_SAFETY_VIOLATION" in failure["error_message_bounded"]
+    assert (predictions / "Scenario-1" / "1" / "trial_manifest.json").is_file()
+
+
+def test_model_step_limit_is_a_persisted_benchmark_terminal_and_continues(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest_path, ledger_path, predictions, seal, _result = _manifest_and_paths(tmp_path)
+    original_run = E9InvestigationRuntime.run
+
+    def limited_run(self: E9InvestigationRuntime, incident: Any, alerts: Any) -> dict[str, Any]:
+        result = original_run(self, incident, alerts)
+        result["terminal"] = "MODEL_STEP_LIMIT"
+        return result
+
+    monkeypatch.setattr(E9InvestigationRuntime, "run", limited_run)
+    checkpoints = predict_e10(
+        ROOT,
+        manifest_path=manifest_path,
+        ledger_path=ledger_path,
+        predictions_root=predictions,
+        seal_path=seal,
+        provider_factory=lambda _manifest, _budget: FakeModelProvider([_stop_response] * 35),
+    )
+    assert len(checkpoints) == 35
+    assert checkpoints[0].terminal == "MODEL_STEP_LIMIT"
+    assert json.loads(ledger_path.read_text(encoding="utf-8"))["status"] == "COMPLETE"
+
+
+def test_unknown_terminal_fails_closed_after_persisting_checkpoint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest_path, ledger_path, predictions, seal, _result = _manifest_and_paths(tmp_path)
+    original_run = E9InvestigationRuntime.run
+
+    def unknown_run(self: E9InvestigationRuntime, incident: Any, alerts: Any) -> dict[str, Any]:
+        result = original_run(self, incident, alerts)
+        result["terminal"] = "TOTALLY_UNKNOWN"
+        return result
+
+    monkeypatch.setattr(E9InvestigationRuntime, "run", unknown_run)
+    with pytest.raises(E10PredictionError, match="aborted"):
+        predict_e10(
+            ROOT,
+            manifest_path=manifest_path,
+            ledger_path=ledger_path,
+            predictions_root=predictions,
+            seal_path=seal,
+            provider_factory=lambda _manifest, _budget: FakeModelProvider([_stop_response]),
+        )
+    assert json.loads(ledger_path.read_text(encoding="utf-8"))["status"] == "FAILED"
+    assert (predictions / "Scenario-1" / "1" / "trial_manifest.json").is_file()

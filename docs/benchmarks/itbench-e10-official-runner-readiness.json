@@ -1,7 +1,7 @@
 {
   "status": "E10_OFFICIAL_RUNNER_READY_FOR_REVIEW",
   "qualification": "offline_only",
-  "source_commit_qualified": "1a7134df495d064e36580795414474639c475083",
+  "source_commit_qualified": "0d5c5ec79142210d99f94952b598f0e678331584",
   "execution": "ITB-E10",
   "experiment": "itbench-lite-sre-external-eval-v10",
   "trial_count": 1,
@@ -68,7 +68,33 @@
     "completed_checkpoint": "validate hashes and skip",
     "pending_checkpoint": "continue in canonical order",
     "partial_checkpoint": "fail closed with human review required",
-    "different_manifest_or_identity": "fail closed"
+    "different_manifest_or_identity": "fail closed",
+    "ledger_accounting": "delta-safe: budget_after - budget_before equals provider outbound delta",
+    "capacity": "pending scenario count multiplied by max_model_calls",
+    "previous_consumption_preserved": true,
+    "partial_resume_regression": "PASS (5 completed, 30 pending, 5 prior calls + 30 resumed calls = 35)"
+  },
+  "integrity_guards": {
+    "budget_identity_path": "packages/provider/budget.py",
+    "budget_identity_frozen": true,
+    "runtime_safety_fields": [
+      "ground_truth_exposure",
+      "cross_scenario_evidence",
+      "writes",
+      "arbitrary_execution"
+    ],
+    "runtime_safety_requires_zero_before_checkpoint_acceptance": true,
+    "runtime_safety_fail_closed_regression": "PASS",
+    "continuable_terminals": [
+      "SUBMIT",
+      "STOP",
+      "MODEL_STEP_LIMIT",
+      "PROTOCOL_STALLED",
+      "WALL_TIME_LIMIT"
+    ],
+    "provider_error_aborts": true,
+    "unknown_terminal_aborts": true,
+    "terminal_allowlist_regression": "PASS"
   },
   "failure_policy": {
     "model_control_terminal": "persist and continue",
@@ -94,13 +120,13 @@
     "hard-codes the historical 420-call cap"
   ],
   "validation": {
-    "targeted_e10_tests": "PASS",
+    "targeted_e10_tests": "PASS (17 tests)",
     "semantic_budget_invariant": "PASS",
     "simulated_smoke_v2": "PASS",
-    "full_make_check": "PASS (521 tests)",
-    "a1_eval_check": "PASS",
-    "pre_commit_all_files": "PASS",
-    "ci": "PASS (GitHub checks 35106398779)"
+    "full_make_check": "PENDING",
+    "a1_eval_check": "PENDING",
+    "pre_commit_all_files": "PENDING",
+    "ci": "PENDING"
   },
   "network_accounting": {
     "live_agent_calls": 0,
@@ -110,5 +136,6 @@
     "official_benchmark_scenarios": 0,
     "live_smoke_scenarios": 0,
     "ground_truth_accesses_during_prediction_qualification": 0
-  }
+  },
+  "qualification_scope": "offline_only; no E10 predictions, seal, ledger, official scenario, judge, or live provider was run"
 }

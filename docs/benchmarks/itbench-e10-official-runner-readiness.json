@@ -100,7 +100,7 @@
     "full_make_check": "PASS (521 tests)",
     "a1_eval_check": "PASS",
     "pre_commit_all_files": "PASS",
-    "ci": "PENDING_PUSH"
+    "ci": "PASS (GitHub checks 35106398779)"
   },
   "network_accounting": {
     "live_agent_calls": 0,

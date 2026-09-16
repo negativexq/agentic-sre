@@ -1,0 +1,509 @@
+{
+  "diagnosis_coverage": 0.45714285714285713,
+  "execution": "ITB-E10",
+  "experiment": "itbench-lite-sre-external-eval-v10",
+  "local_fixed_35_macro": {
+    "f1": 0.0,
+    "precision": 0.0,
+    "recall": 0.0,
+    "scenario_count": 35
+  },
+  "local_fixed_35_micro": {
+    "f1": 0.0,
+    "ground_truth": 35,
+    "precision": 0.0,
+    "predicted": 16,
+    "recall": 0.0,
+    "true_positive": 0
+  },
+  "manifest_sha256": "4c1f21636b6d9fa7016065429049ec5a92fb90823e7a7a9a7542a39d58e94b93",
+  "official_judge": "DEFERRED_UNTIL_PREDICTIONS_FROZEN_AND_HUMAN_AUTHORIZED",
+  "prediction_seal_sha256": "c212764cc5ac8b22d5a6a93c3ff79eb28c074c4610864ef1a9c06c1a11bbfda4",
+  "provider_calls": 0,
+  "scenario_count": 35,
+  "scenario_order": [
+    "Scenario-1",
+    "Scenario-2",
+    "Scenario-4",
+    "Scenario-5",
+    "Scenario-6",
+    "Scenario-7",
+    "Scenario-8",
+    "Scenario-9",
+    "Scenario-11",
+    "Scenario-12",
+    "Scenario-13",
+    "Scenario-14",
+    "Scenario-15",
+    "Scenario-16",
+    "Scenario-17",
+    "Scenario-18",
+    "Scenario-19",
+    "Scenario-20",
+    "Scenario-21",
+    "Scenario-22",
+    "Scenario-23",
+    "Scenario-24",
+    "Scenario-25",
+    "Scenario-29",
+    "Scenario-31",
+    "Scenario-33",
+    "Scenario-34",
+    "Scenario-35",
+    "Scenario-38",
+    "Scenario-80",
+    "Scenario-81",
+    "Scenario-83",
+    "Scenario-91",
+    "Scenario-102",
+    "Scenario-105"
+  ],
+  "scenarios": [
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 1,
+      "predictions": [
+        {
+          "entity": "prometheus/StatefulSet/prometheus-prometheus-kube-prometheus-prometheus",
+          "matched_to": null,
+          "matches_gt": false
+        }
+      ],
+      "recall": 0.0,
+      "scenario_id": "Scenario-1",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-2",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-4",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-5",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-6",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 1,
+      "predictions": [
+        {
+          "entity": "prometheus/StatefulSet/prometheus-prometheus-kube-prometheus-prometheus",
+          "matched_to": null,
+          "matches_gt": false
+        }
+      ],
+      "recall": 0.0,
+      "scenario_id": "Scenario-7",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-8",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-9",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-11",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-12",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 1,
+      "predictions": [
+        {
+          "entity": "otel-demo/Deployment/flagd",
+          "matched_to": null,
+          "matches_gt": false
+        }
+      ],
+      "recall": 0.0,
+      "scenario_id": "Scenario-13",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-14",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-15",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 1,
+      "predictions": [
+        {
+          "entity": "otel-demo/Deployment/flagd",
+          "matched_to": null,
+          "matches_gt": false
+        }
+      ],
+      "recall": 0.0,
+      "scenario_id": "Scenario-16",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-17",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-18",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 1,
+      "predictions": [
+        {
+          "entity": "prometheus/Pod/prometheus-prometheus-kube-prometheus-prometheus-0",
+          "matched_to": null,
+          "matches_gt": false
+        }
+      ],
+      "recall": 0.0,
+      "scenario_id": "Scenario-19",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 1,
+      "predictions": [
+        {
+          "entity": "otel-demo/Deployment/product-catalog",
+          "matched_to": null,
+          "matches_gt": false
+        }
+      ],
+      "recall": 0.0,
+      "scenario_id": "Scenario-20",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 1,
+      "predictions": [
+        {
+          "entity": "otel-demo/Deployment/flagd",
+          "matched_to": null,
+          "matches_gt": false
+        }
+      ],
+      "recall": 0.0,
+      "scenario_id": "Scenario-21",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-22",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-23",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-24",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 1,
+      "predictions": [
+        {
+          "entity": "prometheus/Prometheus/prometheus-kube-prometheus-prometheus",
+          "matched_to": null,
+          "matches_gt": false
+        }
+      ],
+      "recall": 0.0,
+      "scenario_id": "Scenario-25",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-29",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 1,
+      "predictions": [
+        {
+          "entity": "prometheus/StatefulSet/prometheus-prometheus-kube-prometheus-prometheus",
+          "matched_to": null,
+          "matches_gt": false
+        }
+      ],
+      "recall": 0.0,
+      "scenario_id": "Scenario-31",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 1,
+      "predictions": [
+        {
+          "entity": "prometheus/StatefulSet/prometheus-prometheus-kube-prometheus-prometheus",
+          "matched_to": null,
+          "matches_gt": false
+        }
+      ],
+      "recall": 0.0,
+      "scenario_id": "Scenario-33",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-34",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-35",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 1,
+      "predictions": [
+        {
+          "entity": "otel-demo/Deployment/ad",
+          "matched_to": null,
+          "matches_gt": false
+        }
+      ],
+      "recall": 0.0,
+      "scenario_id": "Scenario-38",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 1,
+      "predictions": [
+        {
+          "entity": "prometheus/StatefulSet/prometheus-prometheus-kube-prometheus-prometheus",
+          "matched_to": null,
+          "matches_gt": false
+        }
+      ],
+      "recall": 0.0,
+      "scenario_id": "Scenario-80",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 1,
+      "predictions": [
+        {
+          "entity": "otel-demo/Deployment/flagd",
+          "matched_to": null,
+          "matches_gt": false
+        }
+      ],
+      "recall": 0.0,
+      "scenario_id": "Scenario-81",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 1,
+      "predictions": [
+        {
+          "entity": "prometheus/StatefulSet/prometheus-prometheus-kube-prometheus-prometheus",
+          "matched_to": null,
+          "matches_gt": false
+        }
+      ],
+      "recall": 0.0,
+      "scenario_id": "Scenario-83",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 1,
+      "predictions": [
+        {
+          "entity": "otel-demo/Deployment/flagd",
+          "matched_to": null,
+          "matches_gt": false
+        }
+      ],
+      "recall": 0.0,
+      "scenario_id": "Scenario-91",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 1,
+      "predictions": [
+        {
+          "entity": "prometheus/Prometheus/prometheus-kube-prometheus-prometheus",
+          "matched_to": null,
+          "matches_gt": false
+        }
+      ],
+      "recall": 0.0,
+      "scenario_id": "Scenario-102",
+      "true_positive": 0
+    },
+    {
+      "f1": 0.0,
+      "ground_truth_count": 1,
+      "precision": 0.0,
+      "predicted_count": 0,
+      "predictions": [],
+      "recall": 0.0,
+      "scenario_id": "Scenario-105",
+      "true_positive": 0
+    }
+  ]
+}

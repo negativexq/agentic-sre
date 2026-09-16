@@ -1,0 +1,337 @@
+{
+  "completion_count": 35,
+  "dataset_revision": "d0916b08ba421ce5e672e9ad68aa947d938dfef0",
+  "execution": "ITB-E10",
+  "experiment": "itbench-lite-sre-external-eval-v10",
+  "ledger": {
+    "calls_used": 405,
+    "cap": 420,
+    "execution": "ITB-E10",
+    "purpose": "AGENT",
+    "remaining": 15,
+    "status": "COMPLETE"
+  },
+  "manifest_sha256": "4c1f21636b6d9fa7016065429049ec5a92fb90823e7a7a9a7542a39d58e94b93",
+  "runtime_bundle_sha": "fcce066898d49ad64633dee7b90a90af539dd967e35f2496780dcca1e59505f8",
+  "runtime_source_sha": "82cb3ce13d2e6995008bee981b99b27f7d7ac2f9",
+  "scenario_order": [
+    "Scenario-1",
+    "Scenario-2",
+    "Scenario-4",
+    "Scenario-5",
+    "Scenario-6",
+    "Scenario-7",
+    "Scenario-8",
+    "Scenario-9",
+    "Scenario-11",
+    "Scenario-12",
+    "Scenario-13",
+    "Scenario-14",
+    "Scenario-15",
+    "Scenario-16",
+    "Scenario-17",
+    "Scenario-18",
+    "Scenario-19",
+    "Scenario-20",
+    "Scenario-21",
+    "Scenario-22",
+    "Scenario-23",
+    "Scenario-24",
+    "Scenario-25",
+    "Scenario-29",
+    "Scenario-31",
+    "Scenario-33",
+    "Scenario-34",
+    "Scenario-35",
+    "Scenario-38",
+    "Scenario-80",
+    "Scenario-81",
+    "Scenario-83",
+    "Scenario-91",
+    "Scenario-102",
+    "Scenario-105"
+  ],
+  "scenario_order_hash": "73e7320916c433bcf73082e07a9da2e657f8f74f21587757b3d19fa6a3235b9b",
+  "scenarios": [
+    {
+      "agent_output_sha256": "921cfe79f127f2c6366e86ed1d1d8f1d367a29e3456602b06806ddc2dabe4598",
+      "native_artifact_sha256": "0a84840ff3b911e168ad7807b918ebf14f598ecff996f25f01695e2e51a4a66f",
+      "scenario_id": "Scenario-1",
+      "terminal": "SUBMIT",
+      "trial": 1,
+      "trial_manifest_sha256": "1e87f33d511ec1c8f55b29b4a5a823235546358269cf13f4ea3bcf3c81623825"
+    },
+    {
+      "agent_output_sha256": "942d6480186cbe954d8fbd444b5629578af6a55e05776ee84993fe5d8a061a6d",
+      "native_artifact_sha256": "45a02debe7de1406fed230feeec156836290a9f10023a9a1656365b55a08eb24",
+      "scenario_id": "Scenario-2",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "09883b16401130866e963110f07c3c037a95222c9c5ea27b1aaa9de46f132d4d"
+    },
+    {
+      "agent_output_sha256": "324422467c91dea04bf1e2f3b8393cf6cce29bed699d0191c5e01964429217f1",
+      "native_artifact_sha256": "c443be721797470938e6597d77c5e1f7103f09b900fa62d492898ec46844e6c0",
+      "scenario_id": "Scenario-4",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "8b7a161f9a23ba9d0f07466cf994849364682b9332f977f23305cca08b2c9187"
+    },
+    {
+      "agent_output_sha256": "de4b32f106be56e954ddfcf22a90a23d4d316072b9506ce0aa24435930387c28",
+      "native_artifact_sha256": "512a0cd3c1efacd79927169e9c6b0b628aa77b48db50bae5c4c070efb88e31e7",
+      "scenario_id": "Scenario-5",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "53790be782dcb941b86a12ed0eb0bd8a236d71b950438fec9b43587f78ced72c"
+    },
+    {
+      "agent_output_sha256": "b583fe0864cb6027a048dc5e5bb6754c34fdf1dc0ecb378884c5b7e58f0373c0",
+      "native_artifact_sha256": "7e9aa9a65309c5a67d862854e8c09230be7942d5b3bca2b6ba21383480c1c339",
+      "scenario_id": "Scenario-6",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "c51d29273e996c71040d1ded2a947deccb0c979780fb4e1f22ef72903eeb8283"
+    },
+    {
+      "agent_output_sha256": "a49d7ccc1ac0ecfe5905519693e4a23d5af5669cad4c13ddaaeead93ce9b0218",
+      "native_artifact_sha256": "8cdcb92fd76e1f3dcdf0e708e42d7380c0e6c0f75949f642e034b944f479c23c",
+      "scenario_id": "Scenario-7",
+      "terminal": "SUBMIT",
+      "trial": 1,
+      "trial_manifest_sha256": "ce9f7a9347771ec6390436187677c83b826bb609d3d0644aaf839d1282a069b8"
+    },
+    {
+      "agent_output_sha256": "b1246e392865000566891a9b0efc24a1e4babec7636957dd3de8ac2b7dcc8e96",
+      "native_artifact_sha256": "fd188aa5e4df7ae6be8b9d861b73a16079ccecd1121a7e16db3819f46412abfd",
+      "scenario_id": "Scenario-8",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "f5fe5cdb3b5838d7e712bda12bc8cc1d67de8863a30cc5a08e20e827aafbacbd"
+    },
+    {
+      "agent_output_sha256": "94ce53fc2ddac28ca31fa0ec6042297949f19929148734496ea9b9fa95746065",
+      "native_artifact_sha256": "aa56ba42ddb3b7d0cb3cd36615602e681bc6da1f562a38def71434e6e1fea29e",
+      "scenario_id": "Scenario-9",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "00f22323ffe6890bb0a97d18fdbc4126f2fe68857ba1437124ffbdc393cbdd92"
+    },
+    {
+      "agent_output_sha256": "0f8f6d338efc513d0c1cbcc8585ecc5a0b9989de6290c3ca1ba2a6f76f7fade7",
+      "native_artifact_sha256": "ff6c7b1be9562c57096c4957a084fe76131f7fee0c0249d3d87e0752895984cf",
+      "scenario_id": "Scenario-11",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "8efcca959a5df345622866a91c5678456d6ef55eca5dce6337ceefab3a751cc3"
+    },
+    {
+      "agent_output_sha256": "8c8206400adc2107c2a2e98eeb962d8145988f66fbbb8fa93185ae33b291cd6a",
+      "native_artifact_sha256": "e5039206b7b86aa974188e68f558b798e30f81d175dc7e733b2d4c0307ad314d",
+      "scenario_id": "Scenario-12",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "cc2d7ee5d27484a542278c2f1f37815d60dbddcd48cdba834d4fda07fc20da8b"
+    },
+    {
+      "agent_output_sha256": "40cf25cbe67de810cfae631b782dfecb2bb6403d5ce12673d106530384291bee",
+      "native_artifact_sha256": "1c88eb63cfaaccc79622eacdb44650a8977b1828a9c58650d0021633cd9b9e11",
+      "scenario_id": "Scenario-13",
+      "terminal": "SUBMIT",
+      "trial": 1,
+      "trial_manifest_sha256": "bf7edb0df75e334efee2ba95fcf56858da6a87c6be83f22b1edee06064a4a992"
+    },
+    {
+      "agent_output_sha256": "01bab88bd9974c330c874cc842967b24d14479112e9fd4d26d80f8b74a294906",
+      "native_artifact_sha256": "87bcee6fbad310181f755628a7c97ecaa3b6309ee856af9569d373c312a64b0b",
+      "scenario_id": "Scenario-14",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "482f5e2da6212bab3e33c3fc5bc6b36e39039f5905c583950a69e61f6f4dbd60"
+    },
+    {
+      "agent_output_sha256": "0b30e935d882095d1e0b31b2aa0e14ebdb4ae4627ee726f4e023753a27d674f7",
+      "native_artifact_sha256": "4ba6033893655230064992e8cfdfee669bbd44055f3e85307309e7bd7c563f13",
+      "scenario_id": "Scenario-15",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "d07165f4b2a6a56a14915d5311de9f9b37c97d7ec9344e37599b93cf8b360209"
+    },
+    {
+      "agent_output_sha256": "57217e061b0ac283aa49006273892a106234727f67759d48e46e56d7398f0575",
+      "native_artifact_sha256": "00d5ae4dfdf29b940e4b8aa9d9627c0ad79aff0edd09646ea6f9e83a56355831",
+      "scenario_id": "Scenario-16",
+      "terminal": "SUBMIT",
+      "trial": 1,
+      "trial_manifest_sha256": "d893995176545478d0b69c2bdbdea395ddc76a9c9bba2cf46308767c2c7ea555"
+    },
+    {
+      "agent_output_sha256": "bdaad9fc6cd97e8a43de99cf73a170eb0085eff6fe1cf7f4611e3371dda9cfab",
+      "native_artifact_sha256": "f1629a63bba20d86f4214a2e75cc6882b627efa294338747d36860d62adbcab5",
+      "scenario_id": "Scenario-17",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "7485994a349a89bf382c1760eb3208adc33c98a1fd26f95078ea764c4aa58904"
+    },
+    {
+      "agent_output_sha256": "6051281c8302477825328f94c594a5afdc1c3f4b52d6e1fc1616599ad867cb49",
+      "native_artifact_sha256": "896e3387ad450bf57ca4520477770a6ee14165b78cca521a3f5d8591df0afc3e",
+      "scenario_id": "Scenario-18",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "14684c303e15239f909afb12dbe46d8607a4e8a8f4effbe58be0bf03a587d500"
+    },
+    {
+      "agent_output_sha256": "477beb6011f62dbff33c9bb651f10e4f53421a427560d2fa49496dcedfcaca57",
+      "native_artifact_sha256": "10926a8021addda2ddb0d21b1b4a76b6eeae66dc3df7ba464a70b21656405bc0",
+      "scenario_id": "Scenario-19",
+      "terminal": "SUBMIT",
+      "trial": 1,
+      "trial_manifest_sha256": "3a99ca9dae71dd8ca33b482a0f8f1d75a7d67951c3786e458e5225c2a12d111d"
+    },
+    {
+      "agent_output_sha256": "c4968f4a62d21f4fa2855a51ec67351c641bdd4b5ff542c6e3e2e8ccad1a6d96",
+      "native_artifact_sha256": "3f4e694520fe49ae408f0d76c324e419eac62ee79faf80549424b98e5e4e2016",
+      "scenario_id": "Scenario-20",
+      "terminal": "SUBMIT",
+      "trial": 1,
+      "trial_manifest_sha256": "dc0feb16775fb7606c8a9358d824658ccbaa8863998162cb96ae8c6cc93f71af"
+    },
+    {
+      "agent_output_sha256": "ef6d935069f74f89d8f5b90477e1195a0690fa1f3f34cec1c77d610a8b3c8de8",
+      "native_artifact_sha256": "cbd2e22eafe79d3e4c9d0e4c0712571fc524a5b92b28479b73ce4846f4424a2d",
+      "scenario_id": "Scenario-21",
+      "terminal": "SUBMIT",
+      "trial": 1,
+      "trial_manifest_sha256": "5749cf35b5a584d90c27396f0dbdb1c923213686c2fa28a601c7a5a3eb075832"
+    },
+    {
+      "agent_output_sha256": "85a6531ea9fc575e77c01aa95cb775d2478c73de090e548499e05b2960db7ed8",
+      "native_artifact_sha256": "86b7dfe0584f36878159c8e3823077695ab36084d2d58417a581a26dbf51a772",
+      "scenario_id": "Scenario-22",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "c6181aa4b03ebaaedc68f73a7ce6579c2c4efa7fcc700ed3026c367573f6fafe"
+    },
+    {
+      "agent_output_sha256": "ff173384134e961a673fe562b3b497e8d2ad71cb2e18e92caa95b04ee71f71cd",
+      "native_artifact_sha256": "94eb26e37bbeaeb0a91927f563cb0f2f32a5736f2380cea32d91d51808e4b306",
+      "scenario_id": "Scenario-23",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "4e5f95dc044609ee30c3a22d187966a03de25ed8bea4d38007b2b6684e804f3c"
+    },
+    {
+      "agent_output_sha256": "fc00f12ed3a37c05cbce860f7b8a846c509c5fed14f4cf6fdbca16bde3197461",
+      "native_artifact_sha256": "c33236cd0e7a61c2e8f7aa9e9f8ac701a94cdd14bfab2a0baadecac9f839a395",
+      "scenario_id": "Scenario-24",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "3457d02198237410cfc2d8374d23e85e404ac5097615d0c2681d6fb22d7204a1"
+    },
+    {
+      "agent_output_sha256": "26eb43ace7deae0657ca126401a87dee1f943497e228dd3b17b1b67c746eb387",
+      "native_artifact_sha256": "897cf9f856aafc410ddaf2b3e7e0d76a6a464fa0b347e32cd01e64fc8f77447e",
+      "scenario_id": "Scenario-25",
+      "terminal": "SUBMIT",
+      "trial": 1,
+      "trial_manifest_sha256": "17fef8827b1d6f4878a30590c618bf2acd4c4a0e1a0ed0820e1aa5497caa9b45"
+    },
+    {
+      "agent_output_sha256": "623daa6c7d2cc15fe803002ddb66fb7fdf75d8010bf4ea4acc1e0418c9c37ac4",
+      "native_artifact_sha256": "ae04d709b2651e8a22e0476ccf1fecdbfb36e15111573f4f2396796b6bf3ed65",
+      "scenario_id": "Scenario-29",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "28f9faf2b262097632c371a54d3f1f5282814bcb529f9e432cc8e6971f351c96"
+    },
+    {
+      "agent_output_sha256": "c5b67074d3a77fa94b94838a58b671f6a6533beca03f398fad39e1f6033dbf22",
+      "native_artifact_sha256": "24432078dadf6f90eea225f63188a53fa135fa36187613d1536ae15b766d193f",
+      "scenario_id": "Scenario-31",
+      "terminal": "SUBMIT",
+      "trial": 1,
+      "trial_manifest_sha256": "43829ef6ee7aa07f770d067dfa57c18c03743e462b8a8043bcd3b0fcd4524dad"
+    },
+    {
+      "agent_output_sha256": "7925c07b99273b224d8262dd1dfc1b89986e81f8cb7de9fe3c67503037cd1f35",
+      "native_artifact_sha256": "4e1580a584ef66c54faf9a6e01bd2d21ac4a5858ef587c322c23b9fdebfd1cd0",
+      "scenario_id": "Scenario-33",
+      "terminal": "SUBMIT",
+      "trial": 1,
+      "trial_manifest_sha256": "48bee1e725a47deb5dafe1eb785a7848ce6ce30a917921a68378341b37f0ee00"
+    },
+    {
+      "agent_output_sha256": "c58d4ecf038ff84af57dea33ab5749631f1791350eafc52822a2a7199a5e17d9",
+      "native_artifact_sha256": "b8c854413b15a1d55853b77bcbf7cd7cb049f1d83a1a749a04949c225d8af740",
+      "scenario_id": "Scenario-34",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "f2ecfdb5e67820f66253d710d031755289e7419bc037764c614c448e327b330a"
+    },
+    {
+      "agent_output_sha256": "e1ef84970d507fb6f261e9b915fc0cba0edb2cc5ef57ed88e53e9d487a8d4c66",
+      "native_artifact_sha256": "ec20c8a42781ec08738367429809b7128b63c65c6a59f67bac0ad117de68ec29",
+      "scenario_id": "Scenario-35",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "6941c64c013f812679ce8b37b62d4f682a77dfcde429d7c3bc3233b826017175"
+    },
+    {
+      "agent_output_sha256": "bfc1590adc29ff4791f55f2cb8a3fe78a840c63880da29bc8e52ce61a9468f41",
+      "native_artifact_sha256": "15c9dda9f594491176215410a2187ad143bff77a78cbdd184a472805f60fe427",
+      "scenario_id": "Scenario-38",
+      "terminal": "SUBMIT",
+      "trial": 1,
+      "trial_manifest_sha256": "b366b92d720a14e6d5742a6059ac877e29f9a456a76d1ef6ee9d367987efc317"
+    },
+    {
+      "agent_output_sha256": "c9afd6eb63d6006b92b0ca95824fd8a15bbd65977c3abb4bf8bc725fd551f8f0",
+      "native_artifact_sha256": "81d3b75d2c6fc6b8737e7e3a30adb3e01d2944f1bb03f468829c4fd478727aaa",
+      "scenario_id": "Scenario-80",
+      "terminal": "SUBMIT",
+      "trial": 1,
+      "trial_manifest_sha256": "ee686e8e08c263acd8b8f0fe4bb81ebe184ace1ddddf6acb736bd2398e597a4a"
+    },
+    {
+      "agent_output_sha256": "7bbe5e0df923b4393375dddc8131d44d84a25e22718ce2d93ff1b753740af522",
+      "native_artifact_sha256": "4a9b2a87b680e21e578311baec16c779b16608c5015053ce5c0a2f3ff4c1b6b6",
+      "scenario_id": "Scenario-81",
+      "terminal": "SUBMIT",
+      "trial": 1,
+      "trial_manifest_sha256": "f5d5d1a0b5df66feed8ec09d2899b147fc52b3760621d92bf134f229573ce509"
+    },
+    {
+      "agent_output_sha256": "9d0857c6acff3c9ae780821328dbf24afe9d7b14df8f36b32c89d2a10a646921",
+      "native_artifact_sha256": "c9bcaef7bd9d425ee2c0734e6972a652654f646bfc73646b0f3530ff5e66a9a3",
+      "scenario_id": "Scenario-83",
+      "terminal": "SUBMIT",
+      "trial": 1,
+      "trial_manifest_sha256": "8595fdf060816daa3f4d3303d38715ee5ed98a8e2c7ac737f1f4dc8ba2af2987"
+    },
+    {
+      "agent_output_sha256": "e266bcb32d41d584f780d69dbb5c64b8cf236ffa76beffe599ba8676fb2ca31a",
+      "native_artifact_sha256": "a5aaa6d824895447b3dcf176d510d5267fb7a46de2ba716a70a4342e5ac76358",
+      "scenario_id": "Scenario-91",
+      "terminal": "SUBMIT",
+      "trial": 1,
+      "trial_manifest_sha256": "f8e25fe10bc5652923836c8813d1abb0a367838c038b94c303289096aeaa0261"
+    },
+    {
+      "agent_output_sha256": "20688492bc08228a358a8c7ac25a1d4e1da6f53f0b5ce484aa014a2260071c8d",
+      "native_artifact_sha256": "6a962e43f44a940d4c26f6cbf2a5511560f151372305595d72f31345d90c4108",
+      "scenario_id": "Scenario-102",
+      "terminal": "SUBMIT",
+      "trial": 1,
+      "trial_manifest_sha256": "a531b07b91b7ae3ac42c2c990217bb1bbaf175ee630228758139532864884d50"
+    },
+    {
+      "agent_output_sha256": "c5d2b1f5a2d00800f899fddfcf711171abfdc4c71d3a0e620baf7704f1e0a5af",
+      "native_artifact_sha256": "59b7d0507a316f2303b50e224fb8ea972759d9dae7c1b88f6cd80418f9dff1ed",
+      "scenario_id": "Scenario-105",
+      "terminal": "STOP",
+      "trial": 1,
+      "trial_manifest_sha256": "9bcdf4ed5b51be24abc5834f626aa005541620c2b322e5f88b7f4d4898001196"
+    }
+  ]
+}

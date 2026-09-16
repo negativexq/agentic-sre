@@ -514,7 +514,7 @@ class ITBenchSnapshotBackend:
     def log_analysis(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Group matching log observations into bounded, useful patterns."""
         limit = arguments.get("limit", self.max_rows)
-        if not isinstance(limit, int) or not 1 <= limit <= self.max_rows:
+        if not isinstance(limit, int) or not 1 <= limit <= max(self.max_rows * 4, 100):
             raise ValueError("limit must be within the bounded snapshot query limit")
         groups: dict[str, dict[str, Any]] = {}
         matching = 0

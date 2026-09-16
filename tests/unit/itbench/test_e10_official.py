@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 import packages.evals.itbench.e10_official as e10_official
+from packages.evals.itbench.contracts import ITBenchGroundTruth, ITBenchGroundTruthGroup
 from packages.evals.itbench.dataset import (
     ITBENCH_DATASET_REVISION,
     ITBENCH_SCENARIO_IDS,
@@ -231,7 +232,22 @@ def test_fake_prediction_35x1_has_no_ground_truth_and_seals(
         )["completion_count"]
         == 35
     )
-    monkeypatch.undo()
+
+    def post_seal_gt(_self: ITBenchLiteDataset, scenario_id: str) -> ITBenchGroundTruth:
+        return ITBenchGroundTruth(
+            scenario_id=scenario_id,
+            root_cause_groups=(
+                ITBenchGroundTruthGroup(
+                    group_id="offline-qualification",
+                    kind="Service",
+                    namespace="demo",
+                    name="not-observed",
+                    root_cause=True,
+                ),
+            ),
+        )
+
+    monkeypatch.setattr(ITBenchLiteDataset, "load_ground_truth", post_seal_gt)
     graded = grade_local_e10(
         ROOT,
         manifest=build_e10_manifest(ROOT),

@@ -139,13 +139,36 @@ def _bounded_incident(value: dict[str, Any]) -> dict[str, Any]:
         "description",
         "incident_start",
         "observation_window",
-        "diagnostic_alerts",
         "affected_identities",
         "symptoms",
+        "diagnostic_alert_group_count",
+        "background_alert_counts",
     )
     selected = {key: value[key] for key in keys if key in value}
-    bounded = _bounded_item(selected or value, 3_000)
-    return bounded if isinstance(bounded, dict) else {"summary": str(bounded)}
+    bounded = _bounded_item(selected or value, 2_400)
+    result = bounded if isinstance(bounded, dict) else {"summary": str(bounded)}
+    alerts = value.get("diagnostic_alerts")
+    if isinstance(alerts, list):
+        # Alerts are the primary symptom signal; bound them by count, not by a
+        # share of the incident budget.
+        result["diagnostic_alerts"] = [
+            {
+                key: item[key]
+                for key in (
+                    "alert_name",
+                    "service",
+                    "namespace",
+                    "first_starts_at",
+                    "last_starts_at",
+                    "starts_at",
+                    "occurrence_count",
+                )
+                if key in item
+            }
+            for item in alerts[:12]
+            if isinstance(item, dict)
+        ]
+    return result
 
 
 def _bounded_evidence(value: Any) -> list[Any]:
@@ -177,16 +200,25 @@ def _bounded_item(value: Any, limit: int) -> Any:
             str(key): _bounded_item(item, max(80, limit // max(2, len(value))))
             for key, item in value.items()
         }
-        return (
+        # Drop whole trailing keys instead of cutting serialized JSON mid-value.
+        dropped = 0
+        while (
             result
-            if len(_encode(result)) <= limit
-            else {"summary": _encode(result)[: max(1, limit - 20)]}
-        )
+            and len(_encode({**result, "truncated_keys": dropped} if dropped else result)) > limit
+        ):
+            result.pop(next(reversed(result)))
+            dropped += 1
+        if dropped:
+            result["truncated_keys"] = dropped
+        return result
     if isinstance(value, (list, tuple)):
         list_result = [
             _bounded_item(item, max(80, limit // max(2, len(value)))) for item in value[-12:]
         ]
-        return list_result if len(_encode(list_result)) <= limit else list_result[:3]
+        # Keep the most recent entries that fit.
+        while list_result and len(_encode(list_result)) > limit:
+            list_result.pop(0)
+        return list_result
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value if len(str(value)) <= limit else str(value)[:limit]
     return str(value)[:limit]
@@ -211,6 +243,18 @@ def _bounded_record(value: Any) -> Any:
         "pattern",
         "count",
         "classification_reason",
+        "source_service",
+        "destination_service",
+        "status",
+        "finding",
+        "rule_status",
+        "relation",
+        "candidate",
+        "affected_entity",
+        "configuration_dependency_match",
+        "selector_target_match",
+        "chaos_target_match",
+        "timing_compatible",
     )
     return {key: value[key] for key in keys if key in value}
 
@@ -218,10 +262,16 @@ def _bounded_record(value: Any) -> Any:
 def _bounded_finding(value: dict[str, Any], limit: int) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, item in value.items():
-        if key in {"records", "patterns", "edges"} and isinstance(item, list):
+        if key in {"records", "patterns", "edges", "causal_findings"} and isinstance(item, list):
             result[key] = [_bounded_record(entry) for entry in item[:6]]
         elif isinstance(item, (str, int, float, bool)) or item is None:
             result[key] = item
+        elif (
+            isinstance(item, list)
+            and item
+            and all(isinstance(entry, (str, int, float, bool)) for entry in item)
+        ):
+            result[key] = item[:12]
         elif key in {"alerts", "high_signal_alerts"} and isinstance(item, list):
             result[key] = [_bounded_record(entry) for entry in item[:6]]
         elif key == "alerts" and isinstance(item, dict):

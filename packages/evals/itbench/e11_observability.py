@@ -924,12 +924,9 @@ def _alert_identities(item: dict[str, Any]) -> tuple[dict[str, Any], ...]:
     return tuple(result)
 
 
-def _is_diagnostic_alert(item: dict[str, Any]) -> bool:
-    """Exclude recurring control-plane/telemetry health noise from linkage."""
-    record = item.get("record", {})
-    labels = record.get("labels", {}) if isinstance(record, dict) else {}
-    name = str(labels.get("alertname", "")).casefold() if isinstance(labels, dict) else ""
-    return name not in {
+# Recurring control-plane/telemetry health alerts, compared case-insensitively.
+E11_BACKGROUND_ALERT_NAMES = frozenset(
+    {
         "watchdog",
         "infoinhibitor",
         "prometheusnotconnectedtoalertmanagers",
@@ -937,6 +934,15 @@ def _is_diagnostic_alert(item: dict[str, Any]) -> bool:
         "kubeschedulerdown",
         "kubecontrollermanagerdown",
     }
+)
+
+
+def _is_diagnostic_alert(item: dict[str, Any]) -> bool:
+    """Exclude recurring control-plane/telemetry health noise from linkage."""
+    record = item.get("record", {})
+    labels = record.get("labels", {}) if isinstance(record, dict) else {}
+    name = str(labels.get("alertname", "")).casefold() if isinstance(labels, dict) else ""
+    return name not in E11_BACKGROUND_ALERT_NAMES
 
 
 def _telemetry_identities(
@@ -1347,6 +1353,7 @@ def _candidate_family(entity: ObservedEntity) -> str:
 
 __all__ = [
     "E11_B1_CONFIG",
+    "E11_BACKGROUND_ALERT_NAMES",
     "E11_CATALOG_VERSION",
     "E11RetrievalConfig",
     "E11_RETRIEVAL_VERSION",

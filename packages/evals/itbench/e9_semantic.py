@@ -244,7 +244,7 @@ class E9SemanticOperations:
         canonical = self.memory.resolve(target_handle) if target_handle else None
         if target_handle and canonical is None:
             raise ValueError(f"unknown candidate handle: {target_handle}")
-        if self.memory.has_operation(target_handle, operation) and not self._recheck_allowed(
+        if self.memory.has_operation(target_handle, operation) and not self.memory.recheck_allowed(
             target_handle, operation
         ):
             raise ValueError("identical operation has already been completed")
@@ -344,21 +344,6 @@ class E9SemanticOperations:
             "summary": summary,
         }
 
-    def _recheck_allowed(self, target_handle: str | None, operation: str) -> bool:
-        """Permit a bounded recheck only after an inconclusive/negative finding."""
-        if target_handle is None:
-            return False
-        prior = [
-            item
-            for item in self.memory.state.get("evidence", {}).values()
-            if item.get("entity_handle") == target_handle and item.get("operation") == operation
-        ]
-        return len(prior) == 1 and str(prior[-1].get("result_status")) in {
-            "NO_DATA",
-            "NEGATIVE_FINDING",
-            "INCONCLUSIVE",
-        }
-
     @staticmethod
     def _result_status(operation: str, summary: dict[str, Any]) -> str:
         """Classify findings without treating an empty result as causal support."""
@@ -456,18 +441,17 @@ class E9SemanticOperations:
                     }
                 )
         causal_findings: list[dict[str, Any]] = []
+        # Without an observable onset, timing cannot be checked, so no finding.
+        incident_time = self.incident.created_at if self.incident else None
         for edge in context.get("topology", []):
-            if not isinstance(edge, dict) or edge.get("target") == canonical:
-                relation = edge.get("relationship") if isinstance(edge, dict) else None
-            else:
-                relation = edge.get("relationship")
-            if relation not in {
-                "configuration_reference",
-                "selects",
-                "policy_selects",
-                "disrupts",
-                "scales",
-            }:
+            if incident_time is None:
+                break
+            if not isinstance(edge, dict):
+                continue
+            relation = edge.get("relationship")
+            if relation not in SPEC_CAUSAL_RELATIONS:
+                continue
+            if canonical not in {edge.get("source"), edge.get("target")}:
                 continue
             affected = edge.get("target") if edge.get("source") == canonical else edge.get("source")
             if not isinstance(affected, str) or affected == canonical:
@@ -476,24 +460,39 @@ class E9SemanticOperations:
                 ITBenchEvidenceCategory.K8S_EVENTS,
                 {"entity": affected, "limit": self._limit(8)},
             )
-            failure_events = [
-                item
-                for item in events.get("records", [])
-                if _event_kind(_json_body(item.get("record", {}).get("Body")) or {}) == "failure"
-            ]
-            if failure_events:
+            aligned: list[dict[str, Any]] = []
+            for item in events.get("records", []):
+                record = item.get("record", {})
+                body = _json_body(record.get("Body")) if isinstance(record, dict) else None
+                if not body or _event_kind(body) != "failure":
+                    continue
+                when = _parse_time(body.get("lastTimestamp", body.get("eventTime")))
+                if when is None:
+                    continue
+                delta = (when - incident_time).total_seconds()
+                temporal_relation, support = _temporal_assessment(delta, "failure")
+                if support == "SUPPORTS":
+                    aligned.append(
+                        {
+                            "evidence_id": item.get("evidence_id"),
+                            "delta_seconds": delta,
+                            "temporal_relation": temporal_relation,
+                        }
+                    )
+            if aligned:
                 causal_findings.append(
                     {
                         "finding": "structured_targeting_relation",
+                        # Unqualified rule: evaluate separately before relying on it.
+                        "rule_status": "EXPERIMENTAL",
                         "relation": relation,
                         "candidate": canonical,
                         "affected_entity": affected,
                         "configuration_dependency_match": relation == "configuration_reference",
                         "selector_target_match": relation in {"selects", "policy_selects"},
                         "chaos_target_match": relation == "disrupts",
-                        "mechanism_compatible": True,
                         "timing_compatible": True,
-                        "evidence_refs": [item.get("evidence_id") for item in failure_events[:4]],
+                        "aligned_failure_events": aligned[:4],
                     }
                 )
         return {
@@ -639,12 +638,17 @@ class E9SemanticOperations:
 
     def _trace_error_tree(self, canonical: str | None) -> dict[str, Any]:
         args: dict[str, Any] = {"limit": self._limit(40)}
+        candidate_service: str | None = None
         if canonical:
             parsed = parse_canonical_entity(canonical)
             if parsed.kind.casefold() == "service":
                 args["service"] = parsed.name
             else:
                 args["entity"] = canonical
+            # Only workload-level identities share a name with the trace
+            # service; Pods and other kinds cannot be matched without guessing.
+            if parsed.kind.casefold() in {"service", "deployment", "statefulset", "daemonset"}:
+                candidate_service = parsed.name
         result = self.backend.query(ITBenchEvidenceCategory.TRACES, args)
         edges: dict[tuple[str, str, str], int] = {}
         for item in result.get("records", []):
@@ -658,12 +662,17 @@ class E9SemanticOperations:
                 if key[0] == "unknown" and key[1] == "unknown":
                     continue
                 edges[key] = edges.get(key, 0) + 1
+        origins = _error_origins(edges)
         return {
             "error_tree_available": bool(edges),
             "edges": [
                 {"source_service": a, "destination_service": b, "status": c, "count": n}
                 for (a, b, c), n in sorted(edges.items(), key=lambda pair: (-pair[1], pair[0]))[:12]
             ],
+            "error_origins": origins[:12],
+            "candidate_service": candidate_service,
+            "candidate_is_error_origin": candidate_service is not None
+            and candidate_service in origins,
             "source_count": result.get("matching_count", 0),
         }
 
@@ -806,6 +815,25 @@ def _semantic_summary(operation: str, data: Any) -> Any:
             "alerts": data.get("alerts", []),
         }
     return _bounded(data)
+
+
+SPEC_CAUSAL_RELATIONS = frozenset(
+    {"configuration_reference", "selects", "policy_selects", "disrupts", "scales"}
+)
+
+
+def _error_origins(edges: dict[tuple[str, str, str], int]) -> list[str]:
+    """Return services where observed ERROR propagation terminates.
+
+    A caller whose span failed because its callee failed is a downstream
+    symptom.  The origin is the deepest ERROR callee with no ERROR call of its
+    own, or a service whose ERROR span has no remote destination.
+    """
+    error_edges = {(a, b) for (a, b, status) in edges if status == "ERROR" and a != "unknown"}
+    propagating = {a for a, b in error_edges if b != "unknown"}
+    origins = {b for a, b in error_edges if b != "unknown" and b not in propagating}
+    origins |= {a for a, b in error_edges if b == "unknown" and a not in propagating}
+    return sorted(origins)
 
 
 def _temporal_assessment(delta: float, event_kind: str) -> tuple[str, str]:

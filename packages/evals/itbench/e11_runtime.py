@@ -27,6 +27,7 @@ from packages.evals.itbench.e11_context import build_e11_context
 from packages.evals.itbench.e11_control import E11_PROMPT, E11CaseMemory, EvidenceAssessment
 from packages.evals.itbench.e11_observability import (
     E11_B1_CONFIG,
+    E11_BACKGROUND_ALERT_NAMES,
     E11RetrievalConfig,
     RankedCandidate,
     RetrievalEvidence,
@@ -140,6 +141,11 @@ class E11InvestigationRuntime:
         try:
             incident, alerts = build_observable_incident(self.backend)
             self._incident_context = _incident_context(scenario_id, incident, alerts)
+            # Temporal checks are anchored to the first diagnostic alert, not to
+            # recurring platform-health alerts that precede the fault.
+            onset = _diagnostic_onset(alerts)
+            if onset is not None:
+                incident = incident.model_copy(update={"created_at": onset, "updated_at": onset})
         except ValueError:
             # Small unit fixtures may intentionally omit alerts; temporal
             # capability is then unavailable rather than fabricated.
@@ -784,16 +790,24 @@ class E11InvestigationRuntime:
                 0.0,
             )
         if operation == "TRACE_ERROR_TREE":
+            if summary.get("candidate_is_error_origin") is True:
+                return (
+                    EvidenceAssessment.SUPPORTS,
+                    "dependency",
+                    "candidate is the origin of observed trace error propagation",
+                    "TRACE_ERROR_PROPAGATION",
+                    7.0,
+                )
             edges = summary.get("edges")
             if isinstance(edges, list) and any(
                 item.get("status") == "ERROR" for item in edges if isinstance(item, dict)
             ):
                 return (
-                    EvidenceAssessment.SUPPORTS,
+                    EvidenceAssessment.INCONCLUSIVE,
                     "dependency",
-                    "error-bearing trace edge observed",
-                    "TRACE_ERROR_PROPAGATION",
-                    7.0,
+                    "trace errors observed but candidate is not their origin",
+                    None,
+                    0.0,
                 )
             return (
                 EvidenceAssessment.INCONCLUSIVE,
@@ -960,34 +974,101 @@ def _event_text(item: Any) -> str:
 
 
 def _incident_context(scenario_id: str, incident: Any, alerts: tuple[Any, ...]) -> dict[str, Any]:
-    """Serialize only observable incident metadata for the model context."""
+    """Serialize only observable incident metadata for the model context.
+
+    Snapshot alerts repeat once per capture, so they are grouped by identity
+    and ordered by onset.  Recurring platform-health alerts are reported as
+    counts rather than occupying the bounded diagnostic list.
+    """
     raw = incident.model_dump(mode="json") if hasattr(incident, "model_dump") else {}
-    diagnostic = []
-    affected: set[str] = set()
-    for alert in alerts[:12]:
-        item = alert.model_dump(mode="json") if hasattr(alert, "model_dump") else {}
-        diagnostic.append(
+    groups: dict[tuple[str, str, str], dict[str, Any]] = {}
+    background: dict[str, int] = {}
+    for alert in alerts:
+        name = str(getattr(alert, "alert_name", ""))
+        if name.casefold() in E11_BACKGROUND_ALERT_NAMES:
+            background[name] = background.get(name, 0) + 1
+            continue
+        service = str(getattr(alert, "service", "unknown"))
+        namespace = str(getattr(alert, "namespace", "unknown"))
+        starts_at = getattr(alert, "starts_at", None)
+        group = groups.setdefault(
+            (name, service, namespace),
             {
-                "alert_name": item.get("alert_name"),
-                "service": item.get("service"),
-                "namespace": item.get("namespace"),
-                "starts_at": item.get("starts_at"),
-                "labels": item.get("labels", {}),
-            }
+                "alert_name": name,
+                "service": service,
+                "namespace": namespace,
+                "first_starts_at": starts_at,
+                "last_starts_at": starts_at,
+                "occurrence_count": 0,
+            },
         )
-        for key in ("service", "namespace"):
-            if item.get(key):
-                affected.add(f"{key}:{item[key]}")
+        group["occurrence_count"] += 1
+        if starts_at is not None:
+            if group["first_starts_at"] is None or starts_at < group["first_starts_at"]:
+                group["first_starts_at"] = starts_at
+            if group["last_starts_at"] is None or starts_at > group["last_starts_at"]:
+                group["last_starts_at"] = starts_at
+    ordered = sorted(
+        groups.values(),
+        key=lambda item: (
+            item["first_starts_at"] is None,
+            item["first_starts_at"].isoformat() if item["first_starts_at"] else "",
+            item["alert_name"],
+            item["service"],
+        ),
+    )
+    starts = [item["first_starts_at"] for item in ordered if item["first_starts_at"]]
+    ends = [item["last_starts_at"] for item in ordered if item["last_starts_at"]]
+    diagnostic = [
+        {
+            **item,
+            "first_starts_at": _iso(item["first_starts_at"]),
+            "last_starts_at": _iso(item["last_starts_at"]),
+        }
+        for item in ordered[:12]
+    ]
+    affected = sorted(
+        {f"service:{item['service']}" for item in ordered if item["service"] != "unknown"}
+        | {f"namespace:{item['namespace']}" for item in ordered if item["namespace"] != "unknown"}
+    )
+    symptoms: dict[str, list[str]] = {}
+    for item in ordered:
+        symptoms.setdefault(item["alert_name"], [])
+        if item["service"] not in symptoms[item["alert_name"]]:
+            symptoms[item["alert_name"]].append(item["service"])
     return {
         "scenario_id": scenario_id,
         "incident_id": str(raw.get("incident_id", "")),
         "title": raw.get("title"),
         "description": raw.get("description"),
-        "incident_start": raw.get("created_at"),
+        "incident_start": _iso(min(starts)) if starts else raw.get("created_at"),
+        "observation_window": {
+            "first_diagnostic_alert_at": _iso(min(starts)) if starts else None,
+            "last_diagnostic_alert_at": _iso(max(ends)) if ends else None,
+        },
         "diagnostic_alerts": diagnostic,
-        "affected_identities": sorted(affected),
-        "observation_window": "snapshot-bounded",
+        "diagnostic_alert_group_count": len(ordered),
+        "background_alert_counts": dict(sorted(background.items())),
+        "affected_identities": affected[:24],
+        "symptoms": [
+            {"alert_name": name, "services": sorted(services)[:8]}
+            for name, services in list(symptoms.items())[:12]
+        ],
     }
+
+
+def _diagnostic_onset(alerts: tuple[Any, ...]) -> Any:
+    starts = [
+        alert.starts_at
+        for alert in alerts
+        if str(getattr(alert, "alert_name", "")).casefold() not in E11_BACKGROUND_ALERT_NAMES
+        and getattr(alert, "starts_at", None) is not None
+    ]
+    return min(starts) if starts else None
+
+
+def _iso(value: Any) -> str | None:
+    return value.isoformat() if hasattr(value, "isoformat") else None
 
 
 __all__ = ["E11InvestigationRuntime", "E11RuntimeLimits"]

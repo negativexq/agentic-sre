@@ -67,7 +67,9 @@ def test_e11_context_contract_preserves_semantic_content() -> None:
 def _backend(tmp_path: Path, **kwargs: Any) -> Any:
     root = tmp_path / "Scenario-runtime"
     root.mkdir(parents=True)
-    (root / "alerts.json").write_text(json.dumps({"data": {"alerts": []}}), encoding="utf-8")
+    (root / "alerts.json").write_text(
+        json.dumps({"data": {"alerts": kwargs.get("alerts", [])}}), encoding="utf-8"
+    )
 
     def write_tsv(name: str, rows: list[dict[str, str]], fields: tuple[str, ...]) -> str:
         content = ["\t".join(fields)]
@@ -418,7 +420,16 @@ def test_runtime_contradiction_then_explicit_supersession(tmp_path: Path) -> Non
     assert result["case_state"]["candidate_state"]["C001"]["status"] == "SUPPORTED"
 
 
-def test_spec_analysis_has_causal_config_path_but_not_existence_only(tmp_path: Path) -> None:
+def _checkout_alert(active_at: str) -> dict[str, Any]:
+    return {
+        "state": "firing",
+        "activeAt": active_at,
+        "labels": {"alertname": "RequestErrorRate", "service_name": "checkout"},
+        "annotations": {},
+    }
+
+
+def _config_fixture(event_time: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     deployment = {
         "kind": "Deployment",
         "metadata": {"name": "checkout", "namespace": "prod", "labels": {"app": "checkout"}},
@@ -442,8 +453,12 @@ def test_spec_analysis_has_causal_config_path_but_not_existence_only(tmp_path: P
         "involvedObject": {"kind": "Deployment", "name": "checkout", "namespace": "prod"},
         "reason": "BackOff",
         "type": "Warning",
+        "lastTimestamp": event_time,
     }
-    backend = _backend(tmp_path, object_bodies=[deployment, config], event_bodies=[event])
+    return [deployment, config], [event]
+
+
+def _spec_run(backend: Any, execution_id: str) -> tuple[dict[str, Any], FakeModelProvider]:
     provider = FakeModelProvider(
         [
             {"action": "HYPOTHESIZE", "target": "C002", "rationale": None},
@@ -454,9 +469,21 @@ def test_spec_analysis_has_causal_config_path_but_not_existence_only(tmp_path: P
                 "rationale": None,
             },
             {"action": "SUBMIT", "targets": ["C002"], "rationale": None},
+            {"action": "STOP", "stop_reason": "unsupported"},
         ]
     )
-    result = E11InvestigationRuntime(provider, backend, execution_id="config").run()
+    return E11InvestigationRuntime(provider, backend, execution_id=execution_id).run(), provider
+
+
+def test_spec_analysis_has_causal_config_path_but_not_existence_only(tmp_path: Path) -> None:
+    objects, events = _config_fixture("2025-01-01T00:01:00Z")
+    backend = _backend(
+        tmp_path,
+        object_bodies=objects,
+        event_bodies=events,
+        alerts=[_checkout_alert("2025-01-01T00:00:30Z")],
+    )
+    result, _provider = _spec_run(backend, "config")
     assert result["terminal"] == "SUBMIT"
     assert result["assessment_history"][0]["dimension"] == "configuration"
 
@@ -486,6 +513,28 @@ def test_spec_analysis_has_causal_config_path_but_not_existence_only(tmp_path: P
     plain = E11InvestigationRuntime(plain_provider, plain_backend, execution_id="plain").run()
     assert plain["terminal"] == "STOP"
     assert "SUBMIT_DIAGNOSIS" not in tuple(plain_provider.requests[2].allowed_decisions or ())
+
+
+def test_spec_analysis_requires_failure_near_incident_onset(tmp_path: Path) -> None:
+    objects, events = _config_fixture("2025-01-01T02:00:00Z")
+    backend = _backend(
+        tmp_path,
+        object_bodies=objects,
+        event_bodies=events,
+        alerts=[_checkout_alert("2025-01-01T00:00:30Z")],
+    )
+    result, provider = _spec_run(backend, "config-late")
+    assert result["terminal"] != "SUBMIT"
+    assert result["assessment_history"][0]["assessment"] == "INCONCLUSIVE"
+    assert "SUBMIT_DIAGNOSIS" not in tuple(provider.requests[2].allowed_decisions or ())
+
+
+def test_spec_analysis_without_observable_onset_is_inconclusive(tmp_path: Path) -> None:
+    objects, events = _config_fixture("2025-01-01T00:01:00Z")
+    backend = _backend(tmp_path, object_bodies=objects, event_bodies=events)
+    result, _provider = _spec_run(backend, "config-no-alert")
+    assert result["terminal"] != "SUBMIT"
+    assert result["assessment_history"][0]["assessment"] == "INCONCLUSIVE"
 
 
 def test_contradiction_can_be_explicitly_superseded() -> None:
@@ -528,3 +577,108 @@ def test_contradiction_can_be_explicitly_superseded() -> None:
         supersedes_evidence_ref=contradiction,
     )
     assert memory.submit_ready((entity.handle,))
+
+
+def test_trace_support_requires_candidate_to_be_error_origin() -> None:
+    from packages.evals.itbench.e9_semantic import _error_origins
+
+    edges = {
+        ("frontend", "checkout", "ERROR"): 5,
+        ("checkout", "payment", "ERROR"): 3,
+        ("payment", "unknown", "OK"): 9,
+    }
+    assert _error_origins(edges) == ["payment"]
+    assess = E11InvestigationRuntime._assess_semantic_result
+    downstream = {
+        "edges": [
+            {"source_service": "frontend", "destination_service": "checkout", "status": "ERROR"}
+        ],
+        "candidate_service": "frontend",
+        "candidate_is_error_origin": False,
+    }
+    assert assess("TRACE_ERROR_TREE", downstream)[0] == EvidenceAssessment.INCONCLUSIVE
+    origin = {**downstream, "candidate_service": "payment", "candidate_is_error_origin": True}
+    assert assess("TRACE_ERROR_TREE", origin)[0] == EvidenceAssessment.SUPPORTS
+
+
+def test_incident_context_groups_alerts_and_separates_background() -> None:
+    from datetime import UTC, datetime, timedelta
+    from types import SimpleNamespace
+
+    from packages.evals.itbench.e11_runtime import _diagnostic_onset, _incident_context
+
+    base = datetime(2025, 1, 1, tzinfo=UTC)
+
+    def alert(name: str, service: str, minutes: int) -> Any:
+        return SimpleNamespace(
+            alert_name=name,
+            service=service,
+            namespace="prod",
+            starts_at=base + timedelta(minutes=minutes),
+            labels={},
+        )
+
+    alerts = (
+        *(alert("KubeSchedulerDown", "unknown", 0) for _ in range(20)),
+        alert("RequestErrorRate", "checkout", 12),
+        alert("RequestErrorRate", "checkout", 14),
+        alert("RequestLatency", "frontend", 10),
+    )
+    context = _incident_context("S", SimpleNamespace(), alerts)
+    assert [item["alert_name"] for item in context["diagnostic_alerts"]] == [
+        "RequestLatency",
+        "RequestErrorRate",
+    ]
+    assert context["diagnostic_alerts"][1]["occurrence_count"] == 2
+    assert context["background_alert_counts"] == {"KubeSchedulerDown": 20}
+    assert context["incident_start"] == (base + timedelta(minutes=10)).isoformat()
+    assert _diagnostic_onset(alerts) == base + timedelta(minutes=10)
+
+
+def test_context_bounding_never_emits_partial_json_strings() -> None:
+    from packages.evals.itbench.e11_context import _bounded_item
+
+    value = {f"key{index}": "x" * 60 for index in range(20)}
+    bounded = _bounded_item(value, 400)
+    assert "summary" not in bounded
+    assert bounded["truncated_keys"] > 0
+    assert all(item == "x" * 60 for key, item in bounded.items() if key != "truncated_keys")
+    items = _bounded_item([{"n": index, "pad": "y" * 50} for index in range(12)], 300)
+    assert items and items[-1]["n"] == 11
+    assert len(json.dumps(items)) <= 300
+
+
+def test_real_runtime_empty_output_passes_official_checkpoint(tmp_path: Path) -> None:
+    from packages.evals.itbench.e11_official import E11OfficialManifestV1, predict_e11
+    from packages.evals.itbench.live_smoke_contract import ITBenchLiveSmokeRuntimeIdentity
+
+    backend = _backend(
+        tmp_path / "snapshot", object_bodies=_config_fixture("2025-01-01T00:01:00Z")[0]
+    )
+    provider = FakeModelProvider([{"action": "STOP", "stop_reason": "insufficient evidence"}])
+    manifest = E11OfficialManifestV1.model_construct(
+        execution="ITB-E11",
+        scenario_order=["Scenario-997"],
+        dataset_revision="offline",
+        runtime_identity=ITBenchLiveSmokeRuntimeIdentity.model_construct(
+            git_head="offline",
+            relevant_paths=["offline"],
+            relevant_content_sha256={"offline": "hash"},
+            bundle_sha256="bundle",
+            relevant_worktree_dirty=False,
+        ),
+    )
+    checkpoints = predict_e11(
+        manifest,
+        tmp_path / "predictions",
+        lambda _scenario_id: E11InvestigationRuntime(
+            provider, backend, execution_id="ITB-E11"
+        ).run(),
+    )
+    assert checkpoints[0]["terminal"] == "STOP"
+    output = json.loads(
+        (tmp_path / "predictions" / "Scenario-997" / "1" / "agent_output.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert output["contributing_factor"] == []

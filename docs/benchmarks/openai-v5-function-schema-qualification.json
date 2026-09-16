@@ -1,0 +1,524 @@
+{
+  "source_sha": "1378e2e6bef8626f983ab4d10bdc94fe723bf943",
+  "states": {
+    "FINAL": {
+      "request_tools": {
+        "stop_itbench_investigation": {
+          "action_enums": [],
+          "additionalProperties": false,
+          "branch_count": 0,
+          "function_name": "stop_itbench_investigation",
+          "nested_union_location": null,
+          "operation_enum_counts": [],
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "stop_reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "stop_reason"
+            ],
+            "type": "object"
+          },
+          "qualification": "PASS",
+          "root_anyOf_present": false,
+          "root_properties": [
+            "stop_reason"
+          ],
+          "root_required": [
+            "stop_reason"
+          ],
+          "root_type": "object",
+          "target_enum_counts": []
+        },
+        "submit_itbench_diagnosis": {
+          "action_enums": [],
+          "additionalProperties": false,
+          "branch_count": 0,
+          "function_name": "submit_itbench_diagnosis",
+          "nested_union_location": null,
+          "operation_enum_counts": [],
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "targets": {
+                "items": {
+                  "enum": [
+                    "C001"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "targets"
+            ],
+            "type": "object"
+          },
+          "qualification": "PASS",
+          "root_anyOf_present": false,
+          "root_properties": [
+            "targets"
+          ],
+          "root_required": [
+            "targets"
+          ],
+          "root_type": "object",
+          "target_enum_counts": []
+        }
+      },
+      "schema_qualification": "PASS",
+      "tool_count": 2
+    },
+    "INITIAL": {
+      "request_tools": {
+        "request_itbench_tools": {
+          "action_enums": [
+            "HYPOTHESIZE"
+          ],
+          "additionalProperties": false,
+          "branch_count": 1,
+          "function_name": "request_itbench_tools",
+          "nested_union_location": "properties.decision.anyOf",
+          "operation_enum_counts": [
+            0
+          ],
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "decision": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "enum": [
+                          "HYPOTHESIZE"
+                        ],
+                        "type": "string"
+                      },
+                      "rationale": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "target": {
+                        "enum": [
+                          "C001",
+                          "C002"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "rationale",
+                      "target"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "decision"
+            ],
+            "type": "object"
+          },
+          "qualification": "PASS",
+          "root_anyOf_present": false,
+          "root_properties": [
+            "decision"
+          ],
+          "root_required": [
+            "decision"
+          ],
+          "root_type": "object",
+          "target_enum_counts": [
+            2
+          ]
+        },
+        "stop_itbench_investigation": {
+          "action_enums": [],
+          "additionalProperties": false,
+          "branch_count": 0,
+          "function_name": "stop_itbench_investigation",
+          "nested_union_location": null,
+          "operation_enum_counts": [],
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "stop_reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "stop_reason"
+            ],
+            "type": "object"
+          },
+          "qualification": "PASS",
+          "root_anyOf_present": false,
+          "root_properties": [
+            "stop_reason"
+          ],
+          "root_required": [
+            "stop_reason"
+          ],
+          "root_type": "object",
+          "target_enum_counts": []
+        }
+      },
+      "schema_qualification": "PASS",
+      "tool_count": 2
+    },
+    "VERIFY": {
+      "request_tools": {
+        "request_itbench_tools": {
+          "action_enums": [
+            "INVESTIGATE",
+            "REVISE"
+          ],
+          "additionalProperties": false,
+          "branch_count": 2,
+          "function_name": "request_itbench_tools",
+          "nested_union_location": "properties.decision.anyOf",
+          "operation_enum_counts": [
+            3,
+            0
+          ],
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "decision": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "enum": [
+                          "INVESTIGATE"
+                        ],
+                        "type": "string"
+                      },
+                      "operation": {
+                        "enum": [
+                          "ENTITY_CONTEXT",
+                          "EVENT_ANALYSIS",
+                          "SPEC_ANALYSIS"
+                        ],
+                        "type": "string"
+                      },
+                      "rationale": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "target": {
+                        "enum": [
+                          "C001"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "rationale",
+                      "target",
+                      "operation"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "enum": [
+                          "REVISE"
+                        ],
+                        "type": "string"
+                      },
+                      "rationale": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "target": {
+                        "enum": [
+                          "C002",
+                          "C003"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "rationale",
+                      "target"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "decision"
+            ],
+            "type": "object"
+          },
+          "qualification": "PASS",
+          "root_anyOf_present": false,
+          "root_properties": [
+            "decision"
+          ],
+          "root_required": [
+            "decision"
+          ],
+          "root_type": "object",
+          "target_enum_counts": [
+            1,
+            2
+          ]
+        },
+        "stop_itbench_investigation": {
+          "action_enums": [],
+          "additionalProperties": false,
+          "branch_count": 0,
+          "function_name": "stop_itbench_investigation",
+          "nested_union_location": null,
+          "operation_enum_counts": [],
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "stop_reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "stop_reason"
+            ],
+            "type": "object"
+          },
+          "qualification": "PASS",
+          "root_anyOf_present": false,
+          "root_properties": [
+            "stop_reason"
+          ],
+          "root_required": [
+            "stop_reason"
+          ],
+          "root_type": "object",
+          "target_enum_counts": []
+        }
+      },
+      "schema_qualification": "PASS",
+      "tool_count": 2
+    },
+    "VERIFY_WITH_SUBMIT": {
+      "request_tools": {
+        "request_itbench_tools": {
+          "action_enums": [
+            "INVESTIGATE",
+            "REVISE"
+          ],
+          "additionalProperties": false,
+          "branch_count": 2,
+          "function_name": "request_itbench_tools",
+          "nested_union_location": "properties.decision.anyOf",
+          "operation_enum_counts": [
+            3,
+            0
+          ],
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "decision": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "enum": [
+                          "INVESTIGATE"
+                        ],
+                        "type": "string"
+                      },
+                      "operation": {
+                        "enum": [
+                          "ENTITY_CONTEXT",
+                          "EVENT_ANALYSIS",
+                          "SPEC_ANALYSIS"
+                        ],
+                        "type": "string"
+                      },
+                      "rationale": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "target": {
+                        "enum": [
+                          "C001"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "rationale",
+                      "target",
+                      "operation"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "enum": [
+                          "REVISE"
+                        ],
+                        "type": "string"
+                      },
+                      "rationale": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "target": {
+                        "enum": [
+                          "C002",
+                          "C003"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "rationale",
+                      "target"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "decision"
+            ],
+            "type": "object"
+          },
+          "qualification": "PASS",
+          "root_anyOf_present": false,
+          "root_properties": [
+            "decision"
+          ],
+          "root_required": [
+            "decision"
+          ],
+          "root_type": "object",
+          "target_enum_counts": [
+            1,
+            2
+          ]
+        },
+        "stop_itbench_investigation": {
+          "action_enums": [],
+          "additionalProperties": false,
+          "branch_count": 0,
+          "function_name": "stop_itbench_investigation",
+          "nested_union_location": null,
+          "operation_enum_counts": [],
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "stop_reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "stop_reason"
+            ],
+            "type": "object"
+          },
+          "qualification": "PASS",
+          "root_anyOf_present": false,
+          "root_properties": [
+            "stop_reason"
+          ],
+          "root_required": [
+            "stop_reason"
+          ],
+          "root_type": "object",
+          "target_enum_counts": []
+        },
+        "submit_itbench_diagnosis": {
+          "action_enums": [],
+          "additionalProperties": false,
+          "branch_count": 0,
+          "function_name": "submit_itbench_diagnosis",
+          "nested_union_location": null,
+          "operation_enum_counts": [],
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "targets": {
+                "items": {
+                  "enum": [
+                    "C001"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "targets"
+            ],
+            "type": "object"
+          },
+          "qualification": "PASS",
+          "root_anyOf_present": false,
+          "root_properties": [
+            "targets"
+          ],
+          "root_required": [
+            "targets"
+          ],
+          "root_type": "object",
+          "target_enum_counts": []
+        }
+      },
+      "schema_qualification": "PASS",
+      "tool_count": 3
+    }
+  }
+}

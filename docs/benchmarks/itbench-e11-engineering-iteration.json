@@ -58,6 +58,8 @@
     "recovered_action_rejections": 0,
     "repeated_operations": 0,
     "first_hypothesis_turn": {"min": 2, "median": 2, "p95": 2, "max": 2},
+    "context_chars": {"min": 6317, "median": 9899, "p95": 18394, "max": 19887},
+    "context_evidence_visible_requests": 183,
     "runtime_errors": 0,
     "replay_errors": 0,
     "ground_truth_access": 0,

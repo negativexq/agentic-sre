@@ -42,7 +42,13 @@ from packages.evals.itbench.output_adapter import adapt_e9_output
 from packages.evals.itbench.persistence import atomic_json_write
 from packages.evals.itbench.snapshot_backend import ITBenchSnapshotBackend
 from packages.model_policy import validate_agent_config, validate_agent_environment
-from packages.provider import LiveModelBudget, ModelProvider, OpenAIProvider, live_model_config
+from packages.provider import (
+    LiveModelBudget,
+    ModelProvider,
+    OpenAIProvider,
+    ProviderError,
+    live_model_config,
+)
 
 E10_EXECUTION: Final[str] = "ITB-E10"
 E10_EXPERIMENT: Final[str] = "itbench-lite-sre-external-eval-v10"
@@ -55,11 +61,28 @@ E10_SMOKE005_RESULT: Final[str] = "docs/benchmarks/itbench-control-live-smoke-00
 E10_SMOKE005_REVIEW: Final[str] = "docs/benchmarks/itbench-control-live-smoke-005.md"
 E10_OFFICIAL_RELEVANT_PATHS: Final[tuple[str, ...]] = (
     *LIVE_SMOKE_RELEVANT_PATHS,
+    "packages/provider/budget.py",
     "packages/evals/itbench/e10_official.py",
     "packages/evals/itbench/e10_local_grading.py",
     "scripts/itbench_e10_execute.py",
     E10_SMOKE005_RESULT,
     E10_SMOKE005_REVIEW,
+)
+
+E10_CONTINUABLE_TERMINALS: Final[frozenset[str]] = frozenset(
+    {
+        "SUBMIT",
+        "STOP",
+        "MODEL_STEP_LIMIT",
+        "PROTOCOL_STALLED",
+        "WALL_TIME_LIMIT",
+    }
+)
+E10_RUNTIME_SAFETY_FIELDS: Final[tuple[str, ...]] = (
+    "ground_truth_exposure",
+    "cross_scenario_evidence",
+    "writes",
+    "arbitrary_execution",
 )
 
 
@@ -387,6 +410,25 @@ def _checkpoint_paths(trial_dir: Path) -> tuple[Path, ...]:
     )
 
 
+def _validate_checkpoint_policy(checkpoint: dict[str, Any], scenario_id: str) -> None:
+    """Apply the benchmark terminal and measured-safety allowlists."""
+    terminal = checkpoint.get("terminal")
+    if terminal == "PROVIDER_ERROR":
+        raise E10PredictionError(
+            f"provider failure checkpoint requires human review: {scenario_id}"
+        )
+    if terminal not in E10_CONTINUABLE_TERMINALS:
+        raise E10PredictionError(f"UNEXPECTED_RUNTIME_TERMINAL: {scenario_id}: {terminal!r}")
+    safety = checkpoint.get("safety")
+    if not isinstance(safety, dict):
+        raise E10PredictionError(f"runtime safety is missing: {scenario_id}")
+    violations = {
+        field: safety.get(field) for field in E10_RUNTIME_SAFETY_FIELDS if safety.get(field) != 0
+    }
+    if violations:
+        raise E10PredictionError(f"RUNTIME_SAFETY_VIOLATION: {scenario_id}: {violations}")
+
+
 def _validate_checkpoint(
     trial_dir: Path, scenario_id: str, *, expected_manifest_sha256: str | None = None
 ) -> E10Checkpoint:
@@ -395,10 +437,7 @@ def _validate_checkpoint(
     checkpoint = _read_json(trial_dir / "trial_manifest.json")
     if checkpoint.get("scenario_id") != scenario_id or checkpoint.get("trial") != 1:
         raise E10PredictionError(f"checkpoint identity mismatch: {scenario_id}")
-    if checkpoint.get("terminal") == "PROVIDER_ERROR":
-        raise E10PredictionError(
-            f"provider failure checkpoint requires human review: {scenario_id}"
-        )
+    _validate_checkpoint_policy(checkpoint, scenario_id)
     if (
         expected_manifest_sha256 is not None
         and checkpoint.get("manifest_sha256") != expected_manifest_sha256
@@ -523,6 +562,7 @@ def predict_e10(
             next(item for item in completed if item.scenario_id == scenario_id)
             for scenario_id in ITBENCH_SCENARIO_IDS
         ]
+    budget_before = budget.snapshot()
     _mark_ledger(ledger_path, ledger, status="RUNNING", budget=budget)
     try:
         provider = (provider_factory or _default_provider_factory)(manifest, budget)
@@ -615,10 +655,6 @@ def predict_e10(
                     predictions_root / scenario.scenario_id / "1", result, output, checkpoint
                 )
             )
-            if result["terminal"] == "PROVIDER_ERROR":
-                raise E10PredictionError(
-                    f"provider failure aborted E10 prediction phase: {scenario.scenario_id}"
-                )
     except BaseException as error:
         atomic_json_write(
             predictions_root / "prediction_failure.json",
@@ -633,10 +669,13 @@ def predict_e10(
         raise E10PredictionError("E10 prediction phase aborted") from error
     global_after = _provider_snapshot(provider)
     if global_after is not None and provider_before is not None:
-        expected_calls = global_after.outbound_api_attempts - provider_before.outbound_api_attempts
-        if budget.snapshot().calls_used != expected_calls:
+        outbound_delta = global_after.outbound_api_attempts - provider_before.outbound_api_attempts
+        budget_after = budget.snapshot()
+        try:
+            LiveModelBudget.verify_ledger_delta(budget_before, budget_after, outbound_delta)
+        except ProviderError as error:
             _mark_ledger(ledger_path, ledger, status="FAILED", budget=budget)
-            raise E10PredictionError("E10 provider/ledger accounting mismatch")
+            raise E10PredictionError("E10 provider/ledger accounting mismatch") from error
     _mark_ledger(ledger_path, ledger, status="COMPLETE", budget=budget)
     return [
         next(item for item in completed if item.scenario_id == scenario_id)

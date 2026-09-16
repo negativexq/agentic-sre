@@ -1,0 +1,102 @@
+{
+  "document": "openai-provider-failure-attribution-audit",
+  "scope": "offline provider-failure attribution repair",
+  "historical_smoke_002": {
+    "execution": "ITB-CONTROL-LIVE-SMOKE-002",
+    "classification": "LIVE_SMOKE_PROVIDER_FAILURE",
+    "historical_error_code": "PROVIDER_UNAVAILABLE",
+    "provider_invocations": 1,
+    "outbound_api_attempts": 1,
+    "successful_model_responses": 0,
+    "immutable": true,
+    "diagnostic_limitation": "The old transport boundary discarded the SDK exception metadata before the smoke summary was built. The exact status and API error body therefore cannot be reconstructed from SMOKE-002."
+  },
+  "findings": [
+    {
+      "id": "SDK_EXCEPTION_TO_PROVIDER_ERROR",
+      "status": "CONFIRMED",
+      "repair_status": "FIXED",
+      "file": "packages/provider/openai.py",
+      "symbol": "OpenAIProvider.complete",
+      "old_behavior": "After retries, generic SDK/transport exceptions were mapped to PROVIDER_UNAVAILABLE with a generic message; only timeout, connection, rate-limit, and context-limit behavior had limited distinction.",
+      "consequence": "HTTP status, API error fields, request ID, and transport category were unavailable to callers.",
+      "repair": "Defensive status/class mapping now creates ProviderFailureMetadata and uses precise stable ProviderErrorCode values.",
+      "test": "tests/unit/test_provider.py::test_openai_status_failures_preserve_typed_attribution and connection/timeout/redaction tests"
+    },
+    {
+      "id": "PROVIDER_ERROR_CONTRACT",
+      "status": "CONFIRMED",
+      "repair_status": "FIXED",
+      "file": "packages/provider/contracts.py",
+      "symbol": "ProviderError / ProviderFailureMetadata",
+      "old_behavior": "ProviderError carried only its stable code and successful-response metadata; there was no bounded transport/API failure contract.",
+      "consequence": "Failure consumers could not preserve safe provider diagnostics without retaining the raw SDK exception.",
+      "repair": "Added strict ProviderFailureMetadata, kept separate from ResponseEnvelopeMetadata, and attached it to ProviderError.",
+      "test": "tests/unit/test_provider.py::test_provider_failure_metadata_contract_is_strict_and_bounded"
+    },
+    {
+      "id": "RUNTIME_PROVIDER_ERROR_TRACE",
+      "status": "CONFIRMED",
+      "repair_status": "FIXED",
+      "file": "packages/evals/itbench/e9_runtime.py",
+      "symbol": "E9InvestigationRuntime.run",
+      "old_behavior": "A provider failure turn stored only error.code.value in trace.provider_error.",
+      "consequence": "The runtime terminal retained PROVIDER_ERROR but lost typed attribution before persistence.",
+      "repair": "The trace now stores the stable code plus the sanitized ProviderFailureMetadata fields.",
+      "test": "tests/unit/itbench/test_live_smoke_execution.py::test_provider_failure_persists_summary_and_fails_ledger"
+    },
+    {
+      "id": "SMOKE_SUMMARY_PROPAGATION",
+      "status": "CONFIRMED",
+      "repair_status": "FIXED",
+      "file": "packages/evals/itbench/live_smoke_execution.py",
+      "symbol": "_terminal_failure / _summary / _persist_failure_artifact",
+      "old_behavior": "The smoke summary and failure artifact could report only PROVIDER_UNAVAILABLE and a generic runtime terminal message.",
+      "consequence": "A future provider failure could not be diagnosed from the immutable smoke evidence.",
+      "repair": "Whitelisted typed provider diagnostics are copied into the turn trace, failure artifact, and final summary without rewriting historical SMOKE-002.",
+      "test": "tests/unit/itbench/test_live_smoke_execution.py::test_provider_failure_persists_summary_and_fails_ledger"
+    },
+    {
+      "id": "UNSAFE_MESSAGE_FALLBACK",
+      "status": "PARTIALLY_CONFIRMED",
+      "repair_status": "FIXED",
+      "file": "packages/provider/openai.py",
+      "symbol": "_safe_error_message",
+      "old_behavior": "The diagnostic message helper fell back to str(error), which could include SDK-rendered response/request details.",
+      "consequence": "An exception string could cross the persistence boundary without being an explicit safe field.",
+      "repair": "Only an explicit SDK message attribute is accepted; common bearer and sk-* patterns are redacted and bounded to 500 characters.",
+      "test": "tests/unit/test_provider.py::test_openai_failure_metadata_redacts_common_credentials",
+      "remaining_risk": "SDK-specific message attributes vary; when no explicit safe message exists, message_summary is null rather than reconstructed from exception repr."
+    }
+  ],
+  "safe_metadata_whitelist": [
+    "provider",
+    "exception_class",
+    "category",
+    "http_status_code",
+    "api_error_type",
+    "api_error_code",
+    "api_error_param",
+    "request_id",
+    "message_summary"
+  ],
+  "explicitly_excluded": [
+    "API key",
+    "Authorization header",
+    "full HTTP headers",
+    "request body",
+    "system prompt",
+    "user prompt",
+    "raw tool payloads",
+    "raw response body",
+    "exception repr"
+  ],
+  "network_accounting": {
+    "live_agent_calls": 0,
+    "openai_outbound_attempts": 0,
+    "luna_calls": 0,
+    "judge_calls": 0,
+    "live_smoke_scenarios": 0,
+    "official_benchmark_scenarios": 0
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "document": "openai-provider-diagnostics-readiness",
+  "status": "PROVIDER_DIAGNOSTICS_READY_FOR_REVIEW",
+  "historical_smoke_002": {
+    "classification": "LIVE_SMOKE_PROVIDER_FAILURE",
+    "error_code": "PROVIDER_UNAVAILABLE",
+    "outbound_api_attempts": 1,
+    "successful_model_responses": 0,
+    "diagnostic_limit": "The historical provider boundary discarded the underlying SDK exception metadata. No exact status/category can be recovered without rewriting history."
+  },
+  "typed_mapping": {
+    "400": {"code": "BAD_REQUEST", "category": "BAD_REQUEST"},
+    "401": {"code": "AUTHENTICATION_FAILED", "category": "AUTHENTICATION"},
+    "403": {"code": "PERMISSION_DENIED", "category": "PERMISSION_DENIED"},
+    "404": {"code": "RESOURCE_NOT_FOUND", "category": "NOT_FOUND"},
+    "422": {"code": "UNPROCESSABLE_REQUEST", "category": "BAD_REQUEST"},
+    "429": {"code": "RATE_LIMITED", "category": "RATE_LIMIT"},
+    "500_plus": {"code": "PROVIDER_UNAVAILABLE", "category": "SERVER_ERROR"},
+    "timeout": {"code": "PROVIDER_TIMEOUT", "category": "TIMEOUT"},
+    "connection": {"code": "PROVIDER_UNAVAILABLE", "category": "CONNECTION"},
+    "unknown": {"code": "PROVIDER_UNAVAILABLE", "category": "UNKNOWN"}
+  },
+  "safe_metadata_whitelist": [
+    "provider",
+    "exception_class",
+    "category",
+    "http_status_code",
+    "api_error_type",
+    "api_error_code",
+    "api_error_param",
+    "request_id",
+    "message_summary"
+  ],
+  "redaction": {
+    "message_summary_max_chars": 500,
+    "accepted_message_source": "explicit SDK message attribute only",
+    "redacted_patterns": ["Authorization: Bearer ...", "Bearer ...", "sk-..."]
+  },
+  "propagation": [
+    "ProviderError.failure_metadata",
+    "E9 turn trace provider_error",
+    "live smoke failure_artifact.json provider_failure",
+    "live smoke result provider_failure"
+  ],
+  "offline_tests": {
+    "provider_mapping": "PASS",
+    "runtime_and_smoke_propagation": "PASS",
+    "redaction_and_strict_contract": "PASS",
+    "full_pytest": "PASS (500 passed)",
+    "ruff_check": "PASS",
+    "ruff_format_check": "PASS",
+    "mypy": "PASS",
+    "make_check": "PASS",
+    "make_a1_eval_check": "PASS",
+    "pre_commit_all_files": "PASS",
+    "network": "NOT USED"
+  },
+  "network_accounting": {
+    "live_agent_calls": 0,
+    "openai_outbound_attempts": 0,
+    "luna_calls": 0,
+    "judge_calls": 0,
+    "live_smoke_scenarios": 0,
+    "official_benchmark_scenarios": 0
+  },
+  "historical_integrity": {
+    "smoke_002_modified": false,
+    "e9_results_modified": false
+  }
+}

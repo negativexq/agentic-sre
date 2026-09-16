@@ -486,6 +486,17 @@ def test_provider_failure_metadata_contract_is_strict_and_bounded() -> None:
         )
 
 
+def test_offline_development_guard_blocks_transport_construction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Offline qualification cannot accidentally open a real provider transport."""
+    monkeypatch.setenv("AGENTIC_SRE_OFFLINE", "1")
+    with pytest.raises(ProviderError) as error:
+        OpenAIProvider(budget=LiveModelBudget(1), config=LiveModelConfig(enabled=True))
+    assert error.value.code is ProviderErrorCode.LIVE_MODEL_DISABLED
+    assert "offline development guard" in str(error.value)
+
+
 def test_local_request_schema_failure_consumes_no_budget_or_transport_call() -> None:
     """Invalid local function schema is rejected before an outbound attempt."""
     calls = 0

@@ -1645,6 +1645,11 @@ class OpenAIProvider:
 
     def _build_transport(self) -> ResponsesTransport:
         """Construct the SDK client lazily, keeping imports out of offline paths."""
+        if os.getenv("AGENTIC_SRE_OFFLINE") == "1":
+            raise ProviderError(
+                ProviderErrorCode.LIVE_MODEL_DISABLED,
+                "offline development guard forbids live provider transport",
+            )
         if not self._config.enabled:
             raise ProviderError(
                 ProviderErrorCode.LIVE_MODEL_DISABLED,

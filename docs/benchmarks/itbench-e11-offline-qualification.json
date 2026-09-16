@@ -1,0 +1,379 @@
+{
+  "ablations": {
+    "R0": {
+      "candidate_concentration": {
+        "top10_family_counts": {
+          "_cluster/Node": 71,
+          "chaos-mesh/DaemonSet": 12,
+          "chaos-mesh/Pod": 23,
+          "chaos-mesh/ReplicaSet": 5,
+          "chaos-mesh/Service": 2,
+          "clickhouse-operator/ConfigMap": 58,
+          "clickhouse/ConfigMap": 25,
+          "kube-system/ConfigMap": 36,
+          "opentelemetry-collectors/ConfigMap": 7,
+          "otel-demo/ConfigMap": 38,
+          "otel-demo/Deployment": 2,
+          "otel-demo/HorizontalPodAutoscaler": 3,
+          "otel-demo/Service": 2,
+          "prometheus/ConfigMap": 33,
+          "prometheus/Pod": 33
+        },
+        "top1_family_counts": {
+          "clickhouse-operator/ConfigMap": 8,
+          "otel-demo/ConfigMap": 26,
+          "otel-demo/HorizontalPodAutoscaler": 1
+        }
+      },
+      "catalog_root_coverage": 0.5428571428571428,
+      "catalog_size": {
+        "max": 1955,
+        "mean": 1253.5142857142857,
+        "median": 1043,
+        "min": 1003
+      },
+      "conditional_recall_at_k": {
+        "1": 0.42105263157894735,
+        "10": 0.631578947368421,
+        "20": 0.631578947368421,
+        "3": 0.5789473684210527,
+        "5": 0.631578947368421
+      },
+      "configuration": {
+        "legacy": true
+      },
+      "ground_truth_access_post_freeze": 35,
+      "recall_at_k": {
+        "1": 0.22857142857142856,
+        "10": 0.34285714285714286,
+        "20": 0.34285714285714286,
+        "3": 0.3142857142857143,
+        "5": 0.34285714285714286
+      },
+      "shortlist_size": {
+        "max": 10,
+        "mean": 10.0,
+        "median": 10,
+        "min": 10
+      }
+    },
+    "R1": {
+      "candidate_concentration": {
+        "top10_family_counts": {
+          "_cluster/Job": 1,
+          "_cluster/Namespace": 35,
+          "_cluster/PersistentVolume": 15,
+          "chaos-mesh/JVMChaos": 8,
+          "chaos-mesh/NetworkChaos": 37,
+          "chaos-mesh/PodChaos": 4,
+          "chaos-mesh/Schedule": 1,
+          "chaos-mesh/StressChaos": 15,
+          "data-recorders/Job": 1,
+          "data-recorders/PersistentVolumeClaim": 1,
+          "data-recorders/Pod": 5,
+          "data-recorders/StatefulSet": 34,
+          "kube-system/ConfigMap": 1,
+          "otel-demo/ConfigMap": 76,
+          "otel-demo/Deployment": 4,
+          "otel-demo/Job": 5,
+          "otel-demo/Pod": 32,
+          "otel-demo/ReplicaSet": 1,
+          "otel-demo/Service": 74
+        },
+        "top1_family_counts": {
+          "chaos-mesh/JVMChaos": 1,
+          "chaos-mesh/NetworkChaos": 1,
+          "chaos-mesh/Schedule": 1,
+          "kube-system/ConfigMap": 1,
+          "otel-demo/ConfigMap": 10,
+          "otel-demo/Deployment": 1,
+          "otel-demo/Pod": 3,
+          "otel-demo/Service": 17
+        }
+      },
+      "catalog_root_coverage": 0.8571428571428571,
+      "catalog_size": {
+        "max": 829,
+        "mean": 731.9714285714285,
+        "median": 703,
+        "min": 694
+      },
+      "conditional_recall_at_k": {
+        "1": 0.3,
+        "10": 0.8,
+        "20": 0.8,
+        "3": 0.4666666666666667,
+        "5": 0.7
+      },
+      "configuration": {
+        "diversity": false,
+        "telemetry": false,
+        "temporal": false,
+        "topology": false
+      },
+      "ground_truth_access_post_freeze": 35,
+      "recall_at_k": {
+        "1": 0.2571428571428571,
+        "10": 0.6857142857142857,
+        "20": 0.6857142857142857,
+        "3": 0.4,
+        "5": 0.6
+      },
+      "shortlist_size": {
+        "max": 10,
+        "mean": 10.0,
+        "median": 10,
+        "min": 10
+      }
+    },
+    "R2": {
+      "candidate_concentration": {
+        "top10_family_counts": {
+          "_cluster/Namespace": 12,
+          "chaos-mesh/JVMChaos": 2,
+          "chaos-mesh/NetworkChaos": 6,
+          "chaos-mesh/Schedule": 1,
+          "chaos-mesh/StressChaos": 1,
+          "kube-system/ConfigMap": 1,
+          "otel-demo/ConfigMap": 55,
+          "otel-demo/Deployment": 3,
+          "otel-demo/HorizontalPodAutoscaler": 5,
+          "otel-demo/Pod": 115,
+          "otel-demo/ReplicaSet": 1,
+          "otel-demo/Service": 148
+        },
+        "top1_family_counts": {
+          "otel-demo/Pod": 12,
+          "otel-demo/Service": 23
+        }
+      },
+      "catalog_root_coverage": 0.8571428571428571,
+      "catalog_size": {
+        "max": 831,
+        "mean": 734.0,
+        "median": 705,
+        "min": 698
+      },
+      "conditional_recall_at_k": {
+        "1": 0.0,
+        "10": 0.5,
+        "20": 0.5,
+        "3": 0.03333333333333333,
+        "5": 0.1
+      },
+      "configuration": {
+        "diversity": false,
+        "telemetry": true,
+        "temporal": false,
+        "topology": false
+      },
+      "ground_truth_access_post_freeze": 35,
+      "recall_at_k": {
+        "1": 0.0,
+        "10": 0.42857142857142855,
+        "20": 0.42857142857142855,
+        "3": 0.02857142857142857,
+        "5": 0.08571428571428572
+      },
+      "shortlist_size": {
+        "max": 10,
+        "mean": 10.0,
+        "median": 10,
+        "min": 10
+      }
+    },
+    "R3": {
+      "candidate_concentration": {
+        "top10_family_counts": {
+          "_cluster/Namespace": 11,
+          "chaos-mesh/JVMChaos": 2,
+          "chaos-mesh/NetworkChaos": 6,
+          "chaos-mesh/Schedule": 1,
+          "chaos-mesh/StressChaos": 1,
+          "kube-system/ConfigMap": 1,
+          "otel-demo/ConfigMap": 53,
+          "otel-demo/Deployment": 4,
+          "otel-demo/HorizontalPodAutoscaler": 5,
+          "otel-demo/Pod": 118,
+          "otel-demo/ReplicaSet": 1,
+          "otel-demo/Service": 147
+        },
+        "top1_family_counts": {
+          "otel-demo/Pod": 13,
+          "otel-demo/Service": 22
+        }
+      },
+      "catalog_root_coverage": 0.8571428571428571,
+      "catalog_size": {
+        "max": 831,
+        "mean": 734.0,
+        "median": 705,
+        "min": 698
+      },
+      "conditional_recall_at_k": {
+        "1": 0.0,
+        "10": 0.5,
+        "20": 0.5,
+        "3": 0.03333333333333333,
+        "5": 0.1
+      },
+      "configuration": {
+        "diversity": false,
+        "telemetry": true,
+        "temporal": false,
+        "topology": true
+      },
+      "ground_truth_access_post_freeze": 35,
+      "recall_at_k": {
+        "1": 0.0,
+        "10": 0.42857142857142855,
+        "20": 0.42857142857142855,
+        "3": 0.02857142857142857,
+        "5": 0.08571428571428572
+      },
+      "shortlist_size": {
+        "max": 10,
+        "mean": 10.0,
+        "median": 10,
+        "min": 10
+      }
+    },
+    "R4": {
+      "candidate_concentration": {
+        "top10_family_counts": {
+          "_cluster/Namespace": 2,
+          "chaos-mesh/JVMChaos": 5,
+          "chaos-mesh/NetworkChaos": 19,
+          "chaos-mesh/Schedule": 1,
+          "chaos-mesh/StressChaos": 3,
+          "ingress-nginx/Pod": 1,
+          "kube-system/ConfigMap": 1,
+          "otel-demo/ConfigMap": 33,
+          "otel-demo/Deployment": 4,
+          "otel-demo/HorizontalPodAutoscaler": 5,
+          "otel-demo/Pod": 129,
+          "otel-demo/ReplicaSet": 1,
+          "otel-demo/Service": 146
+        },
+        "top1_family_counts": {
+          "otel-demo/Pod": 14,
+          "otel-demo/Service": 21
+        }
+      },
+      "catalog_root_coverage": 0.8571428571428571,
+      "catalog_size": {
+        "max": 831,
+        "mean": 734.0,
+        "median": 705,
+        "min": 698
+      },
+      "conditional_recall_at_k": {
+        "1": 0.0,
+        "10": 0.5666666666666667,
+        "20": 0.5666666666666667,
+        "3": 0.03333333333333333,
+        "5": 0.13333333333333333
+      },
+      "configuration": {
+        "diversity": false,
+        "telemetry": true,
+        "temporal": true,
+        "topology": true
+      },
+      "ground_truth_access_post_freeze": 35,
+      "recall_at_k": {
+        "1": 0.0,
+        "10": 0.4857142857142857,
+        "20": 0.4857142857142857,
+        "3": 0.02857142857142857,
+        "5": 0.11428571428571428
+      },
+      "shortlist_size": {
+        "max": 10,
+        "mean": 10.0,
+        "median": 10,
+        "min": 10
+      }
+    },
+    "R5": {
+      "candidate_concentration": {
+        "top10_family_counts": {
+          "_cluster/Namespace": 17,
+          "chaos-mesh/JVMChaos": 6,
+          "chaos-mesh/NetworkChaos": 18,
+          "chaos-mesh/PodChaos": 3,
+          "chaos-mesh/Schedule": 1,
+          "chaos-mesh/StressChaos": 8,
+          "ingress-nginx/Pod": 4,
+          "kube-system/ConfigMap": 1,
+          "kube-system/Pod": 1,
+          "otel-demo/ConfigMap": 79,
+          "otel-demo/Deployment": 4,
+          "otel-demo/HorizontalPodAutoscaler": 3,
+          "otel-demo/Pod": 99,
+          "otel-demo/ReplicaSet": 2,
+          "otel-demo/Service": 104
+        },
+        "top1_family_counts": {
+          "otel-demo/Pod": 14,
+          "otel-demo/Service": 21
+        }
+      },
+      "catalog_root_coverage": 0.8571428571428571,
+      "catalog_size": {
+        "max": 831,
+        "mean": 734.0,
+        "median": 705,
+        "min": 698
+      },
+      "conditional_recall_at_k": {
+        "1": 0.0,
+        "10": 0.7666666666666667,
+        "20": 0.7666666666666667,
+        "3": 0.03333333333333333,
+        "5": 0.16666666666666666
+      },
+      "configuration": {
+        "diversity": true,
+        "telemetry": true,
+        "temporal": true,
+        "topology": true
+      },
+      "ground_truth_access_post_freeze": 35,
+      "recall_at_k": {
+        "1": 0.0,
+        "10": 0.6571428571428571,
+        "20": 0.6571428571428571,
+        "3": 0.02857142857142857,
+        "5": 0.14285714285714285
+      },
+      "shortlist_size": {
+        "max": 10,
+        "mean": 10.0,
+        "median": 10,
+        "min": 10
+      }
+    }
+  },
+  "dataset_revision": "d0916b08ba421ce5e672e9ad68aa947d938dfef0",
+  "execution": "ITB-E10.1-E11-OFFLINE",
+  "frozen_e7_baseline": {
+    "catalog_root_coverage": 0.34285714285714286,
+    "recall_at_k": {
+      "1": 0.22857142857142856,
+      "10": 0.34285714285714286,
+      "3": 0.3142857142857143,
+      "5": 0.34285714285714286
+    }
+  },
+  "frozen_outputs_sha256": "2ad7f66b8cc97ff3b0f43432946a96d0c033670095d85dd608033acdaa91c215",
+  "ground_truth_access_during_build": 0,
+  "provider_invocations": 0,
+  "r5_delta_vs_e7": {
+    "catalog_root_coverage": 0.5142857142857142,
+    "recall_at_10": 0.3142857142857143
+  },
+  "scenario_count": 35,
+  "telemetry_record_bound_per_file": 100,
+  "wall_time_ms": 149858
+}

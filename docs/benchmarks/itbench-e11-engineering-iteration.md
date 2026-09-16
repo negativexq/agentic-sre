@@ -55,6 +55,46 @@ context-key mismatches, missing rejection feedback, target-operation ambiguity,
 and unbounded generic observation. It is not evidence that Luna cannot perform
 RCA. No second smoke was run after these offline repairs.
 
+## Post-smoke-2 repairs
+
+The second three-scenario smoke (`ITB-E11-SMOKE-2`) stopped after Scenario-1:
+the out-of-tree live adapter validated the runtime's JSON-shaped
+`agent_output` (`contributing_factor=[]`) with strict Python-mode validation,
+which rejects arrays for tuple fields. `ITBenchAgentOutput.from_json_value`
+now validates at the JSON boundary, and `predict_e11` validates every
+`agent_output` before checkpointing and fails closed with
+`AGENT_OUTPUT_INVALID`. Live adapters must use the same helper. The smoke-2
+artifacts are immutable and were not rerun.
+
+An offline review of the v3 context found further defects, all repaired
+without ground truth:
+
+- Incident alerts were the first twelve raw snapshot rows, so repeated
+  platform-health alerts could fill the list. Alerts are now grouped by
+  name/service/namespace, ordered by onset, and recurring platform-health
+  alerts are reported only as counts. The incident window is derived from
+  diagnostic alerts.
+- Temporal checks were anchored to the earliest alert including
+  platform-health alerts (up to ~15 minutes early). Semantic operations now
+  use the first diagnostic alert as onset; B1 retrieval is unchanged.
+- `TRACE_ERROR_TREE` supported a candidate on any ERROR edge. Support now
+  requires the candidate to be the origin of observed error propagation; a
+  caller that only propagates a callee's error is inconclusive.
+- `SPEC_ANALYSIS` causal findings asserted timing and mechanism compatibility
+  without checking them. A finding now requires a related-entity failure event
+  within the existing ±300 s onset window and is marked
+  `rule_status=EXPERIMENTAL`; without an observable onset there is no finding.
+- Trace edge fields and SPEC findings were dropped from the model context, and
+  over-limit values were cut into partial JSON strings. Context bounding now
+  drops whole keys or oldest list entries.
+
+After these repairs the context-aware 35-snapshot canary was rerun: 35/35
+completed, 218 fake responses, `STOP=31`, `SUBMIT=4`, action rejections `0`,
+repeated operations `0`, runtime and replay errors `0`, zero provider calls and
+zero GT access. Context size was min 7,609, median 11,650, p95 17,713, max
+19,717 characters. The first-hypothesis turn (always 2) reflects the fake
+provider's fixed policy, not the runtime observe bound.
+
 The canary is also available as:
 
 ```text

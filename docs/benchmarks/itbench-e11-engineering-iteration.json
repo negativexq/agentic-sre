@@ -43,7 +43,13 @@
     "evidence_polarity_validation": "PASS",
     "gt_isolation": "PASS",
     "real_provider_calls": 0,
-    "second_smoke": "NOT_RUN"
+    "second_smoke": "BLOCKED_AGENT_OUTPUT_VALIDATION",
+    "agent_output_json_boundary_validation": "PASS",
+    "incident_alert_grouping": "PASS",
+    "diagnostic_onset_anchoring": "PASS",
+    "trace_support_requires_error_origin": "PASS",
+    "spec_support_requires_onset_alignment": "EXPERIMENTAL",
+    "structured_context_bounding": "PASS"
   },
   "runtime_canary": {
     "scenario_count": 35,
@@ -57,13 +63,24 @@
     "action_rejections": 0,
     "recovered_action_rejections": 0,
     "repeated_operations": 0,
-    "first_hypothesis_turn": {"min": 2, "median": 2, "p95": 2, "max": 2},
-    "context_chars": {"min": 6317, "median": 9899, "p95": 18394, "max": 19887},
+    "first_hypothesis_turn": {
+      "min": 2,
+      "median": 2,
+      "p95": 2,
+      "max": 2
+    },
+    "context_chars": {
+      "min": 7609,
+      "median": 11650,
+      "p95": 17713,
+      "max": 19717
+    },
     "context_evidence_visible_requests": 183,
     "runtime_errors": 0,
     "replay_errors": 0,
     "ground_truth_access": 0,
-    "provider_invocations": 0
+    "provider_invocations": 0,
+    "first_hypothesis_turn_source": "fake provider policy"
   },
   "retrieval_qualification": {
     "artifact": "itbench-e11-retrieval-qualification-v2.json",

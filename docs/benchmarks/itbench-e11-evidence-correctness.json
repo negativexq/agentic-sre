@@ -25,7 +25,8 @@
       "namespace",
       "instance"
     ],
-    "matching": "case-insensitive exact structured identity; no substring identity matching"
+    "matching": "case-insensitive exact structured identity; no substring identity matching",
+    "semantic_scan_limit": 5000
   },
   "resource_contract": {
     "sources": ["spec.containers[].resources", "spec.initContainers[].resources"],

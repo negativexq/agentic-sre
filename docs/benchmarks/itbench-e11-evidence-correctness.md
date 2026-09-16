@@ -9,6 +9,7 @@ This is an offline prerequisite for the future E11 run. It repairs and tests the
 - Workload specification summaries include `containers[].resources` and `initContainers[].resources`. Multiple container values remain attributed to their container rather than being collapsed into a misleading scalar.
 - `LOG_ANALYSIS` is a bounded target-scoped semantic operation backed by structured log identities and normalized error-pattern summaries. Arbitrary log queries are not exposed.
 - `COMPARE_REPLICAS` resolves sibling pods through owner references or explicit shared labels and reports unavailable when no peer exists.
+- Metric semantic scans are capped at 5,000 source rows per operation; exhaustive post-hoc catalog/qualification scans use the explicit complete-source path.
 - `RECENT_CHANGE_ANALYSIS` remains unavailable when the snapshot contains no trusted change history; current state is not represented as a recent change.
 
 ## Qualification

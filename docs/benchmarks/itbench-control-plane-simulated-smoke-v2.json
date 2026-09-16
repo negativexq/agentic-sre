@@ -58,7 +58,7 @@
         },
         {
           "accepted": true,
-          "context_chars": 6559,
+          "context_chars": 6542,
           "decision": "INVESTIGATE",
           "evidence_created": [
             "E001"
@@ -74,7 +74,6 @@
           ],
           "provider_exposed_operations": [
             "ENTITY_CONTEXT",
-            "EVENT_ANALYSIS",
             "SPEC_ANALYSIS"
           ],
           "provider_exposed_targets": [
@@ -96,7 +95,6 @@
           ],
           "runtime_accepted_operations": [
             "ENTITY_CONTEXT",
-            "EVENT_ANALYSIS",
             "SPEC_ANALYSIS"
           ],
           "runtime_accepted_targets": [
@@ -116,7 +114,7 @@
         },
         {
           "accepted": true,
-          "context_chars": 7137,
+          "context_chars": 7120,
           "decision": "SUBMIT",
           "evidence_created": [],
           "operation": "",
@@ -130,7 +128,6 @@
             "STOP"
           ],
           "provider_exposed_operations": [
-            "EVENT_ANALYSIS",
             "SPEC_ANALYSIS"
           ],
           "provider_exposed_targets": [
@@ -152,7 +149,6 @@
             "STOP"
           ],
           "runtime_accepted_operations": [
-            "EVENT_ANALYSIS",
             "SPEC_ANALYSIS"
           ],
           "runtime_accepted_targets": [
@@ -285,7 +281,7 @@
         },
         {
           "accepted": true,
-          "context_chars": 6525,
+          "context_chars": 6508,
           "decision": "INVESTIGATE",
           "evidence_created": [
             "E001"
@@ -301,7 +297,6 @@
           ],
           "provider_exposed_operations": [
             "ENTITY_CONTEXT",
-            "EVENT_ANALYSIS",
             "SPEC_ANALYSIS"
           ],
           "provider_exposed_targets": [
@@ -323,7 +318,6 @@
           ],
           "runtime_accepted_operations": [
             "ENTITY_CONTEXT",
-            "EVENT_ANALYSIS",
             "SPEC_ANALYSIS"
           ],
           "runtime_accepted_targets": [
@@ -343,7 +337,7 @@
         },
         {
           "accepted": false,
-          "context_chars": 7104,
+          "context_chars": 7087,
           "decision": "ACTION_REJECTED",
           "evidence_created": [],
           "operation": "ENTITY_CONTEXT",
@@ -356,7 +350,6 @@
             "STOP"
           ],
           "provider_exposed_operations": [
-            "EVENT_ANALYSIS",
             "SPEC_ANALYSIS"
           ],
           "provider_exposed_targets": [
@@ -380,7 +373,6 @@
             "STOP"
           ],
           "runtime_accepted_operations": [
-            "EVENT_ANALYSIS",
             "SPEC_ANALYSIS"
           ],
           "runtime_accepted_targets": [
@@ -404,13 +396,12 @@
             "STOP"
           ],
           "valid_operations": [
-            "EVENT_ANALYSIS",
             "SPEC_ANALYSIS"
           ]
         },
         {
           "accepted": true,
-          "context_chars": 7418,
+          "context_chars": 7384,
           "decision": "INVESTIGATE",
           "evidence_created": [
             "E002"
@@ -426,7 +417,6 @@
             "STOP"
           ],
           "provider_exposed_operations": [
-            "EVENT_ANALYSIS",
             "SPEC_ANALYSIS"
           ],
           "provider_exposed_targets": [
@@ -448,7 +438,6 @@
             "STOP"
           ],
           "runtime_accepted_operations": [
-            "EVENT_ANALYSIS",
             "SPEC_ANALYSIS"
           ],
           "runtime_accepted_targets": [
@@ -468,7 +457,7 @@
         },
         {
           "accepted": true,
-          "context_chars": 7496,
+          "context_chars": 7429,
           "decision": "SUBMIT",
           "evidence_created": [],
           "operation": "",
@@ -476,14 +465,11 @@
           "phase_after": "CONCLUDE",
           "phase_before": "VERIFY",
           "provider_exposed_actions": [
-            "INVESTIGATE",
             "REVISE",
             "SUBMIT",
             "STOP"
           ],
-          "provider_exposed_operations": [
-            "EVENT_ANALYSIS"
-          ],
+          "provider_exposed_operations": [],
           "provider_exposed_targets": [
             "C011",
             "C012",
@@ -499,14 +485,11 @@
             "C010"
           ],
           "runtime_accepted_actions": [
-            "INVESTIGATE",
             "REVISE",
             "SUBMIT",
             "STOP"
           ],
-          "runtime_accepted_operations": [
-            "EVENT_ANALYSIS"
-          ],
+          "runtime_accepted_operations": [],
           "runtime_accepted_targets": [
             "C011",
             "C012",

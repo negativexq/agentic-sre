@@ -1,0 +1,33 @@
+{
+  "execution": "ITB-CONTROL-LIVE-SMOKE-001",
+  "purpose": "SINGLE_LIVE_LUNA_INTERACTION",
+  "classification": "LIVE_SMOKE_PREFLIGHT_FAILED",
+  "preflight": {
+    "passed": false,
+    "failure": "future manifest missing capability identity: semantic_availability_policy_hash",
+    "provider_constructed": false,
+    "network_started": false
+  },
+  "runtime_source_sha": "505019000f54ad396bfcce5ec6129f6aced7ab88",
+  "preregistration_sha256": "322034fd8782e1940b2b5922cfc68bcfaa7bac233446a17f04bec3a02f51550d",
+  "provider": "openai",
+  "model": "gpt-5.6-luna",
+  "reasoning_effort": "none",
+  "provider_retries": 0,
+  "agent_calls": 0,
+  "input_tokens": 0,
+  "output_tokens": 0,
+  "provider_latency_ms": 0,
+  "outbound_attempts": 0,
+  "judge_calls": 0,
+  "official_benchmark_scenarios": 0,
+  "live_smoke_scenarios": 0,
+  "ledger": {
+    "cap": 8,
+    "calls_used": 0,
+    "remaining": 8,
+    "status": "NOT_STARTED"
+  },
+  "rerun": "FORBIDDEN",
+  "historical_artifacts_modified": false
+}

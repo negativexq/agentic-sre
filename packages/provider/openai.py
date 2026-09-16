@@ -615,7 +615,7 @@ def _itbench_v5_decision_function_schemas(
             elif action == "OBSERVE":
                 branch_properties["operation"] = operation_branch
             branches.append(obj(branch_properties, list(branch_properties)))
-        request_schema = {"anyOf": branches}
+        request_schema = obj({"decision": {"anyOf": branches}}, ["decision"])
     submit_targets = list(allowed_targets or ())
     if allowed_action_capabilities is not None:
         submit_capability = allowed_action_capabilities.get("SUBMIT", {})
@@ -1050,12 +1050,19 @@ def _extract_decision_function(
         )
     if external_protocol_v5:
         if function_name == "request_itbench_tools":
+            decision = structured_output.get("decision")
+            if not isinstance(decision, dict):
+                raise ProviderError(
+                    ProviderErrorCode.FUNCTION_ARGUMENTS_SCHEMA_INVALID,
+                    "V5 decision function did not contain a decision object",
+                    metadata=metadata,
+                )
             return {
-                "action": structured_output.get("action"),
-                "target": structured_output.get("target"),
-                "targets": structured_output.get("targets", []),
-                "operation": structured_output.get("operation"),
-                "rationale": structured_output.get("rationale"),
+                "action": decision.get("action"),
+                "target": decision.get("target"),
+                "targets": decision.get("targets", []),
+                "operation": decision.get("operation"),
+                "rationale": decision.get("rationale"),
                 "stop_reason": None,
             }, metadata
         if function_name == "submit_itbench_diagnosis":
@@ -1326,6 +1333,57 @@ def _json_schema_error(
     return None
 
 
+def _validate_strict_function_parameters(schema: dict[str, Any]) -> None:
+    """Fail fast on the strict function-root invariants required by Responses."""
+    if schema.get("type") != "object":
+        raise ProviderError(
+            ProviderErrorCode.FUNCTION_ARGUMENTS_SCHEMA_INVALID,
+            "strict function parameters must have an object root",
+        )
+    if "anyOf" in schema:
+        raise ProviderError(
+            ProviderErrorCode.FUNCTION_ARGUMENTS_SCHEMA_INVALID,
+            "strict function parameters cannot use anyOf at the root",
+        )
+
+    def validate_object(value: dict[str, Any], path: str) -> None:
+        if value.get("type") == "object":
+            properties = value.get("properties")
+            required = value.get("required")
+            if not isinstance(properties, dict) or not isinstance(required, list):
+                raise ProviderError(
+                    ProviderErrorCode.FUNCTION_ARGUMENTS_SCHEMA_INVALID,
+                    f"strict function object is incomplete at {path}",
+                )
+            if value.get("additionalProperties") is not False:
+                raise ProviderError(
+                    ProviderErrorCode.FUNCTION_ARGUMENTS_SCHEMA_INVALID,
+                    f"strict function object allows additional properties at {path}",
+                )
+            if not set(properties).issubset(set(required)):
+                raise ProviderError(
+                    ProviderErrorCode.FUNCTION_ARGUMENTS_SCHEMA_INVALID,
+                    f"strict function object has non-required properties at {path}",
+                )
+            for name, child in properties.items():
+                if isinstance(child, dict):
+                    validate_object(child, f"{path}.properties.{name}")
+        elif "anyOf" in value:
+            branches = value["anyOf"]
+            if not isinstance(branches, list):
+                raise ProviderError(
+                    ProviderErrorCode.FUNCTION_ARGUMENTS_SCHEMA_INVALID,
+                    f"strict function union is invalid at {path}",
+                )
+            for index, branch in enumerate(branches):
+                if isinstance(branch, dict):
+                    validate_object(branch, f"{path}.anyOf[{index}]")
+        elif value.get("type") == "array" and isinstance(value.get("items"), dict):
+            validate_object(value["items"], f"{path}.items")
+
+    validate_object(schema, "$")
+
+
 class OpenAIProvider:
     """Call OpenAI only when explicitly enabled and budget-authorized."""
 
@@ -1468,6 +1526,8 @@ class OpenAIProvider:
                     ProviderErrorCode.INVALID_RESPONSE,
                     "request contained an unknown decision function",
                 )
+            for name in allowed:
+                _validate_strict_function_parameters(schemas[name])
             parameters.update(
                 {
                     "tools": [

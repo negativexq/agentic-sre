@@ -351,8 +351,9 @@ def test_v5_provider_surface_matches_control_policy(tmp_path: Path) -> None:
         for item in parameters["tools"]
         if item["name"] == "request_itbench_tools"
     )
-    assert len(request_schema["anyOf"]) == 1
-    assert request_schema["anyOf"][0]["properties"]["action"]["enum"] == ["HYPOTHESIZE"]
+    decision_schema = request_schema["properties"]["decision"]
+    assert len(decision_schema["anyOf"]) == 1
+    assert decision_schema["anyOf"][0]["properties"]["action"]["enum"] == ["HYPOTHESIZE"]
     memory.append(
         "HYPOTHESIS_PROPOSED",
         1,
@@ -598,9 +599,10 @@ def test_exhausted_budget_provider_schema_has_no_investigate_branch() -> None:
         allowed_action_capabilities=surface.capabilities(),
     )
     request_schema = schemas["request_itbench_tools"]
+    decision_schema = request_schema["properties"]["decision"]
     assert all(
         "INVESTIGATE" not in branch["properties"]["action"].get("enum", [])
-        for branch in request_schema["anyOf"]
+        for branch in decision_schema["anyOf"]
     )
 
 
@@ -692,7 +694,7 @@ def test_provider_target_enum_rejects_unknown_handle_offline(tmp_path: Path) -> 
         for item in parameters["tools"]
         if item["name"] == "request_itbench_tools"
     )
-    target_schema = schema["anyOf"][0]["properties"]["target"]
+    target_schema = schema["properties"]["decision"]["anyOf"][0]["properties"]["target"]
     assert target_schema["enum"] == ["C001"]
     invalid: dict[str, object] = {
         "action": "HYPOTHESIZE",
@@ -701,7 +703,7 @@ def test_provider_target_enum_rejects_unknown_handle_offline(tmp_path: Path) -> 
         "operation": None,
         "rationale": None,
     }
-    assert _json_schema_error(invalid, schema) is not None
+    assert _json_schema_error({"decision": invalid}, schema) is not None
 
 
 def test_capability_resolver_removes_known_dead_operations(tmp_path: Path) -> None:
@@ -797,10 +799,12 @@ def test_action_specific_schema_rejects_cross_product_combinations(tmp_path: Pat
     assert (
         _json_schema_error(
             {
-                "action": "HYPOTHESIZE",
-                "target": "C001",
-                "operation": "ENTITY_CONTEXT",
-                "rationale": None,
+                "decision": {
+                    "action": "HYPOTHESIZE",
+                    "target": "C001",
+                    "operation": "ENTITY_CONTEXT",
+                    "rationale": None,
+                },
             },
             schema,
         )
@@ -809,26 +813,32 @@ def test_action_specific_schema_rejects_cross_product_combinations(tmp_path: Pat
     assert (
         _json_schema_error(
             {
-                "action": "INVESTIGATE",
-                "target": "C002",
-                "operation": "ENTITY_CONTEXT",
-                "rationale": None,
+                "decision": {
+                    "action": "INVESTIGATE",
+                    "target": "C002",
+                    "operation": "ENTITY_CONTEXT",
+                    "rationale": None,
+                },
             },
             schema,
         )
         is not None
     )
     assert (
-        _json_schema_error({"action": "REVISE", "target": "C001", "rationale": None}, schema)
+        _json_schema_error(
+            {"decision": {"action": "REVISE", "target": "C001", "rationale": None}}, schema
+        )
         is not None
     )
     assert (
         _json_schema_error(
             {
-                "action": "INVESTIGATE",
-                "target": "C001",
-                "operation": "ENTITY_CONTEXT",
-                "rationale": None,
+                "decision": {
+                    "action": "INVESTIGATE",
+                    "target": "C001",
+                    "operation": "ENTITY_CONTEXT",
+                    "rationale": None,
+                },
             },
             schema,
         )

@@ -4,6 +4,7 @@ import json
 import multiprocessing
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -25,9 +26,13 @@ from packages.provider.openai import (
     A1_DECISION_FUNCTION_NAMES,
     DECISION_FUNCTION_DESCRIPTIONS,
     DECISION_FUNCTION_NAMES,
+    ITBENCH_EXTERNAL_PROTOCOL_V5,
     LiveModelConfig,
     _compile_strict_schema,
     _decision_function_schemas,
+    _itbench_v5_decision_function_schemas,
+    _json_schema_error,
+    _validate_strict_function_parameters,
 )
 
 
@@ -51,6 +56,27 @@ def function_request() -> ModelRequest:
         update={
             "response_schema_name": "investigation_decision",
             "response_schema": InvestigationDecision.model_json_schema(),
+        }
+    )
+
+
+def v5_function_request(
+    *,
+    actions: tuple[str, ...],
+    operations: tuple[str, ...],
+    targets: tuple[str, ...],
+    capabilities: dict[str, Any],
+    decisions: tuple[str, ...] = ("CALL_TOOLS",),
+) -> ModelRequest:
+    """Build a provider request for one action-specific V5 surface."""
+    return request().model_copy(
+        update={
+            "response_schema_name": ITBENCH_EXTERNAL_PROTOCOL_V5,
+            "allowed_decisions": decisions,
+            "allowed_v5_actions": actions,
+            "allowed_v5_operations": operations,
+            "allowed_v5_targets": targets,
+            "allowed_v5_action_capabilities": capabilities,
         }
     )
 
@@ -913,6 +939,254 @@ def test_provider_accepts_fields_for_their_canonical_tool_only() -> None:
         "service": "order-worker",
         "pattern": "ERROR",
     }
+
+
+def test_v5_function_root_contains_nested_decision_union() -> None:
+    """The V5 function root is an object; action union is nested under decision."""
+    schemas = _itbench_v5_decision_function_schemas(
+        allowed_actions=("HYPOTHESIZE",),
+        allowed_operations=(),
+        allowed_targets=("C001", "C002"),
+        allowed_action_capabilities={
+            "HYPOTHESIZE": {"targets": ("C001", "C002"), "operations": ()}
+        },
+    )
+    parameters = schemas["request_itbench_tools"]
+    assert parameters["type"] == "object"
+    assert "anyOf" not in parameters
+    assert list(parameters["properties"]) == ["decision"]
+    assert parameters["required"] == ["decision"]
+    assert parameters["additionalProperties"] is False
+    decision = parameters["properties"]["decision"]
+    assert isinstance(decision["anyOf"], list)
+    branch = decision["anyOf"][0]
+    assert branch["properties"]["action"]["enum"] == ["HYPOTHESIZE"]
+    assert branch["properties"]["target"]["enum"] == ["C001", "C002"]
+    assert branch["required"] == ["action", "rationale", "target"]
+    assert branch["additionalProperties"] is False
+
+
+def test_v5_verify_schema_preserves_action_specific_branches() -> None:
+    """VERIFY keeps investigation on the current target and revision on alternatives."""
+    schemas = _itbench_v5_decision_function_schemas(
+        allowed_actions=("INVESTIGATE", "REVISE"),
+        allowed_operations=("ENTITY_CONTEXT", "EVENT_ANALYSIS", "SPEC_ANALYSIS"),
+        allowed_targets=("C001", "C002", "C003"),
+        allowed_action_capabilities={
+            "INVESTIGATE": {
+                "targets": ("C001",),
+                "operations": ("ENTITY_CONTEXT", "EVENT_ANALYSIS", "SPEC_ANALYSIS"),
+            },
+            "REVISE": {"targets": ("C002", "C003"), "operations": ()},
+        },
+    )
+    branches = schemas["request_itbench_tools"]["properties"]["decision"]["anyOf"]
+    by_action = {branch["properties"]["action"]["enum"][0]: branch for branch in branches}
+    assert by_action["INVESTIGATE"]["properties"]["target"]["enum"] == ["C001"]
+    assert by_action["INVESTIGATE"]["properties"]["operation"]["enum"] == [
+        "ENTITY_CONTEXT",
+        "EVENT_ANALYSIS",
+        "SPEC_ANALYSIS",
+    ]
+    assert by_action["REVISE"]["properties"]["target"]["enum"] == ["C002", "C003"]
+    assert "operation" not in by_action["REVISE"]["properties"]
+    assert set(by_action["INVESTIGATE"]["properties"]) == {
+        "action",
+        "rationale",
+        "target",
+        "operation",
+    }
+
+
+def test_v5_schema_rejects_invalid_action_combinations() -> None:
+    """Branch-specific fields and enums reject the old cartesian combinations."""
+    schema = _itbench_v5_decision_function_schemas(
+        allowed_actions=("HYPOTHESIZE", "INVESTIGATE", "REVISE"),
+        allowed_operations=("ENTITY_CONTEXT",),
+        allowed_targets=("C001", "C002", "C003"),
+        allowed_action_capabilities={
+            "HYPOTHESIZE": {"targets": ("C001", "C002", "C003"), "operations": ()},
+            "INVESTIGATE": {"targets": ("C001",), "operations": ("ENTITY_CONTEXT",)},
+            "REVISE": {"targets": ("C002", "C003"), "operations": ()},
+        },
+    )["request_itbench_tools"]["properties"]["decision"]
+    assert (
+        _json_schema_error(
+            {
+                "action": "HYPOTHESIZE",
+                "target": "C001",
+                "operation": "ENTITY_CONTEXT",
+                "rationale": None,
+            },
+            schema,
+        )
+        is not None
+    )
+    assert (
+        _json_schema_error(
+            {
+                "action": "INVESTIGATE",
+                "target": "C002",
+                "operation": "ENTITY_CONTEXT",
+                "rationale": None,
+            },
+            schema,
+        )
+        is not None
+    )
+    assert (
+        _json_schema_error(
+            {
+                "action": "INVESTIGATE",
+                "target": "C001",
+                "operation": "TRACE_ERROR_TREE",
+                "rationale": None,
+            },
+            schema,
+        )
+        is not None
+    )
+    assert (
+        _json_schema_error(
+            {"action": "REVISE", "target": "C001", "rationale": None},
+            schema,
+        )
+        is not None
+    )
+
+
+def test_root_anyof_is_rejected_but_nested_decision_union_is_allowed() -> None:
+    """Encode the exact SMOKE-003 root-schema regression locally."""
+    with pytest.raises(ProviderError, match="object root"):
+        _validate_strict_function_parameters({"anyOf": [{"type": "object"}]})
+
+    schema = _itbench_v5_decision_function_schemas(
+        allowed_actions=("HYPOTHESIZE",),
+        allowed_operations=(),
+        allowed_targets=("C001",),
+        allowed_action_capabilities={"HYPOTHESIZE": {"targets": ("C001",), "operations": ()}},
+    )["request_itbench_tools"]
+    _validate_strict_function_parameters(schema)
+
+
+def test_v5_provider_payload_has_object_root_at_failed_path() -> None:
+    """The exact tools[0].parameters path is locally strict-root compatible."""
+    provider = OpenAIProvider(
+        budget=LiveModelBudget(1),
+        config=LiveModelConfig(enabled=True),
+        transport=object(),  # type: ignore[arg-type]
+        max_retry=0,
+    )
+    model_request = v5_function_request(
+        actions=("HYPOTHESIZE",),
+        operations=(),
+        targets=("C001", "C002"),
+        capabilities={"HYPOTHESIZE": {"targets": ("C001", "C002"), "operations": ()}},
+        decisions=("CALL_TOOLS", "STOP"),
+    )
+    parameters = provider._request_parameters(model_request)
+    tools = parameters["tools"]
+    assert isinstance(tools, list)
+    request_tool = next(tool for tool in tools if tool["name"] == "request_itbench_tools")
+    schema = request_tool["parameters"]
+    assert schema["type"] == "object"
+    assert "anyOf" not in schema
+    assert schema["properties"]["decision"]["anyOf"]
+
+
+def test_v5_request_tools_unwraps_decision_for_internal_protocol() -> None:
+    """Nested provider wire arguments remain flat for the existing V5 runtime."""
+    model_request = v5_function_request(
+        actions=("HYPOTHESIZE",),
+        operations=(),
+        targets=("C001",),
+        capabilities={"HYPOTHESIZE": {"targets": ("C001",), "operations": ()}},
+    )
+    normalized = _normalize_fixture(
+        _envelope(
+            [
+                _function_call(
+                    json.dumps(
+                        {
+                            "decision": {
+                                "action": "HYPOTHESIZE",
+                                "target": "C001",
+                                "rationale": None,
+                            }
+                        }
+                    ),
+                    name="request_itbench_tools",
+                )
+            ]
+        ),
+        model_request,
+    )
+    assert normalized.structured_output == {  # type: ignore[attr-defined]
+        "action": "HYPOTHESIZE",
+        "target": "C001",
+        "targets": [],
+        "operation": None,
+        "rationale": None,
+        "stop_reason": None,
+    }
+
+
+def test_v5_investigate_wire_arguments_unwrap_to_flat_internal_decision() -> None:
+    """INVESTIGATE normalization keeps its target and operation unchanged."""
+    model_request = v5_function_request(
+        actions=("INVESTIGATE",),
+        operations=("ENTITY_CONTEXT",),
+        targets=("C001",),
+        capabilities={"INVESTIGATE": {"targets": ("C001",), "operations": ("ENTITY_CONTEXT",)}},
+    )
+    normalized = _normalize_fixture(
+        _envelope(
+            [
+                _function_call(
+                    json.dumps(
+                        {
+                            "decision": {
+                                "action": "INVESTIGATE",
+                                "target": "C001",
+                                "operation": "ENTITY_CONTEXT",
+                                "rationale": None,
+                            }
+                        }
+                    ),
+                    name="request_itbench_tools",
+                )
+            ]
+        ),
+        model_request,
+    )
+    assert normalized.structured_output["action"] == "INVESTIGATE"  # type: ignore[attr-defined]
+    assert normalized.structured_output["target"] == "C001"  # type: ignore[attr-defined]
+    assert normalized.structured_output["operation"] == "ENTITY_CONTEXT"  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize(
+    ("function_name", "arguments", "expected"),
+    [
+        ("submit_itbench_diagnosis", {"targets": ["C001"]}, "SUBMIT"),
+        ("stop_itbench_investigation", {"stop_reason": "insufficient_evidence"}, "STOP"),
+    ],
+)
+def test_v5_terminal_function_normalization_remains_unchanged(
+    function_name: str, arguments: dict[str, object], expected: str
+) -> None:
+    """Terminal V5 functions retain their existing provider-independent form."""
+    model_request = v5_function_request(
+        actions=(),
+        operations=(),
+        targets=("C001",),
+        capabilities={"SUBMIT": {"targets": ("C001",), "operations": ()}},
+        decisions=("SUBMIT_DIAGNOSIS", "STOP"),
+    )
+    normalized = _normalize_fixture(
+        _envelope([_function_call(json.dumps(arguments), name=function_name)]),
+        model_request,
+    )
+    assert normalized.structured_output["action"] == expected  # type: ignore[attr-defined]
 
 
 def test_final_turn_exposes_only_terminal_decision_functions() -> None:

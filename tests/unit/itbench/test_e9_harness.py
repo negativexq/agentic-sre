@@ -645,6 +645,16 @@ def test_runtime_rejects_injected_investigation_after_budget_exhaustion(tmp_path
     assert result["terminal"] == "STOP"
     assert result["usage"]["semantic_actions_executed"] == 1
     assert result["usage"]["action_rejections"] == 1
+    replayed = E9CaseMemory.replay(
+        {
+            "execution_id": result["execution_id"],
+            "scenario_id": result["scenario_id"],
+            "case_id": result["case_id"],
+            "events": result["events"],
+        }
+    )
+    assert replayed.projection() == result["case_state"]
+    assert len(result["turns"]) == result["usage"]["model_steps"]
 
 
 def test_every_registered_semantic_operation_has_a_real_bounded_executor(tmp_path: Path) -> None:

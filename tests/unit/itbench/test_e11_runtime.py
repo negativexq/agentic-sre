@@ -28,6 +28,8 @@ def _backend(tmp_path: Path, **kwargs: Any) -> Any:
 
     objects = kwargs.get("object_bodies", [])
     events = kwargs.get("event_bodies", [])
+    metric_rows = kwargs.get("metric_rows", [])
+    log_rows = kwargs.get("log_rows", [])
     object_rows = [
         {"Timestamp": "2025-01-01T00:00:00Z", "Body": json.dumps(body)} for body in objects
     ]
@@ -43,9 +45,17 @@ def _backend(tmp_path: Path, **kwargs: Any) -> Any:
             write_tsv("events.tsv", event_rows, ("Timestamp", "Body")),
         ),
         ITBenchEvidenceCategory.METRICS: (
-            write_tsv("metrics.tsv", [], ("Timestamp", "metric_name", "value")),
+            write_tsv(
+                "metrics.tsv",
+                metric_rows,
+                ("Timestamp", "metric_name", "value", "workload", "namespace", "metric_type"),
+            ),
         ),
-        ITBenchEvidenceCategory.LOGS: (write_tsv("logs.tsv", [], ("Timestamp", "Body")),),
+        ITBenchEvidenceCategory.LOGS: (
+            write_tsv(
+                "logs.tsv", log_rows, ("Timestamp", "Body", "severity", "workload", "namespace")
+            ),
+        ),
         ITBenchEvidenceCategory.TRACES: (
             write_tsv("traces.tsv", [], ("Timestamp", "ServiceName", "Body")),
         ),
@@ -217,6 +227,98 @@ def test_submit_is_hidden_until_runtime_support_exists(tmp_path: Path) -> None:
     assert "SUBMIT_DIAGNOSIS" not in seen[1]
     assert "SUBMIT_DIAGNOSIS" not in seen[2]
     assert result["agent_output"]["contributing_factor"] == []
+
+
+def test_runtime_contradiction_then_explicit_supersession(tmp_path: Path) -> None:
+    backend = _backend(
+        tmp_path,
+        object_bodies=[
+            {"kind": "Deployment", "metadata": {"name": "checkout", "namespace": "prod"}}
+        ],
+        event_bodies=[
+            {
+                "involvedObject": {
+                    "kind": "Deployment",
+                    "name": "checkout",
+                    "namespace": "prod",
+                },
+                "reason": "BackOff",
+                "type": "Warning",
+            }
+        ],
+        metric_rows=[
+            {
+                "Timestamp": "2025-01-01T00:00:01Z",
+                "metric_name": "request_latency_seconds",
+                "value": "5",
+                "workload": "checkout",
+                "namespace": "prod",
+                "metric_type": "gauge",
+            },
+            {
+                "Timestamp": "2025-01-01T00:00:02Z",
+                "metric_name": "request_latency_seconds",
+                "value": "5",
+                "workload": "checkout",
+                "namespace": "prod",
+                "metric_type": "gauge",
+            },
+        ],
+    )
+    metric_calls = 0
+
+    def metric_analysis(_arguments: dict[str, Any]) -> dict[str, Any]:
+        nonlocal metric_calls
+        metric_calls += 1
+        if metric_calls == 1:
+            return {
+                "matching_count": 2,
+                "aggregates_by_metric": {
+                    "request_latency_seconds": {
+                        "delta": 0.0,
+                        "relative_change": 0.0,
+                        "anomaly": False,
+                    }
+                },
+            }
+        return {
+            "matching_count": 2,
+            "aggregates_by_metric": {
+                "request_latency_seconds": {
+                    "delta": 5.0,
+                    "relative_change": 1.0,
+                    "anomaly": True,
+                }
+            },
+        }
+
+    backend.metric_analysis = metric_analysis
+    provider = FakeModelProvider(
+        [
+            {"action": "OBSERVE", "operation": "INCIDENT_OVERVIEW", "rationale": None},
+            {"action": "HYPOTHESIZE", "target": "C001", "rationale": None},
+            {
+                "action": "INVESTIGATE",
+                "target": "C001",
+                "operation": "METRIC_ANOMALIES",
+                "rationale": None,
+            },
+            {
+                "action": "INVESTIGATE",
+                "target": "C001",
+                "operation": "METRIC_ANOMALIES",
+                "rationale": None,
+            },
+            {"action": "SUBMIT", "targets": ["C001"], "rationale": None},
+        ]
+    )
+    result = E11InvestigationRuntime(provider, backend, execution_id="polarity").run()
+    assert result["terminal"] == "SUBMIT"
+    assessments = result["assessment_history"]
+    assert assessments[0]["assessment"] == "CONTRADICTS"
+    assert assessments[1]["assessment"] == "SUPPORTS"
+    assert assessments[1]["supersedes_evidence_ref"] == assessments[0]["evidence_ref"]
+    assert result["case_state"]["candidate_state"]["C001"]["status"] == "SUPPORTED"
 
 
 def test_contradiction_can_be_explicitly_superseded() -> None:

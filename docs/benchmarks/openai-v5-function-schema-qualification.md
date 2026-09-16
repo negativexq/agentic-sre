@@ -5,7 +5,7 @@ Offline-only qualification for the provider wire-schema repair motivated by SMOK
 Source used for generation:
 
 ```text
-1378e2e6bef8626f983ab4d10bdc94fe723bf943
+1614172a4f39f791a143ecfc97db67ad712635d5
 ```
 
 ## Root contract
@@ -27,6 +27,15 @@ properties.decision.anyOf
 ```
 
 This directly fixes the SMOKE-003 failure path: `tools[0].parameters.type` is `object`, and `tools[0].parameters` has no root-level `anyOf`.
+
+V5 runtime/provider bounds are also present in the generated schemas:
+
+```text
+rationale.maxLength = 300
+submit.targets.minItems = 1
+submit.targets.maxItems = 3
+stop_reason.maxLength = 128
+```
 
 ## Representative surfaces
 

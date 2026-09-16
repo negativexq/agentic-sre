@@ -1,5 +1,6 @@
 {
-  "source_sha": "1378e2e6bef8626f983ab4d10bdc94fe723bf943",
+  "protocol": "itbench_investigation_decision_v5",
+  "source_sha": "1614172a4f39f791a143ecfc97db67ad712635d5",
   "states": {
     "FINAL": {
       "request_tools": {
@@ -14,6 +15,7 @@
             "additionalProperties": false,
             "properties": {
               "stop_reason": {
+                "maxLength": 128,
                 "type": "string"
               }
             },
@@ -23,6 +25,7 @@
             "type": "object"
           },
           "qualification": "PASS",
+          "rationale_maxLength": null,
           "root_anyOf_present": false,
           "root_properties": [
             "stop_reason"
@@ -31,6 +34,9 @@
             "stop_reason"
           ],
           "root_type": "object",
+          "stop_reason_maxLength": 128,
+          "submit_targets_maxItems": null,
+          "submit_targets_minItems": null,
           "target_enum_counts": []
         },
         "submit_itbench_diagnosis": {
@@ -48,8 +54,11 @@
                   "enum": [
                     "C001"
                   ],
+                  "maxLength": 16,
                   "type": "string"
                 },
+                "maxItems": 3,
+                "minItems": 1,
                 "type": "array"
               }
             },
@@ -59,6 +68,7 @@
             "type": "object"
           },
           "qualification": "PASS",
+          "rationale_maxLength": null,
           "root_anyOf_present": false,
           "root_properties": [
             "targets"
@@ -67,6 +77,9 @@
             "targets"
           ],
           "root_type": "object",
+          "stop_reason_maxLength": null,
+          "submit_targets_maxItems": 3,
+          "submit_targets_minItems": 1,
           "target_enum_counts": []
         }
       },
@@ -103,6 +116,7 @@
                       "rationale": {
                         "anyOf": [
                           {
+                            "maxLength": 300,
                             "type": "string"
                           },
                           {
@@ -115,6 +129,7 @@
                           "C001",
                           "C002"
                         ],
+                        "maxLength": 16,
                         "type": "string"
                       }
                     },
@@ -134,6 +149,7 @@
             "type": "object"
           },
           "qualification": "PASS",
+          "rationale_maxLength": 300,
           "root_anyOf_present": false,
           "root_properties": [
             "decision"
@@ -142,6 +158,9 @@
             "decision"
           ],
           "root_type": "object",
+          "stop_reason_maxLength": null,
+          "submit_targets_maxItems": null,
+          "submit_targets_minItems": null,
           "target_enum_counts": [
             2
           ]
@@ -157,6 +176,7 @@
             "additionalProperties": false,
             "properties": {
               "stop_reason": {
+                "maxLength": 128,
                 "type": "string"
               }
             },
@@ -166,6 +186,7 @@
             "type": "object"
           },
           "qualification": "PASS",
+          "rationale_maxLength": null,
           "root_anyOf_present": false,
           "root_properties": [
             "stop_reason"
@@ -174,6 +195,9 @@
             "stop_reason"
           ],
           "root_type": "object",
+          "stop_reason_maxLength": 128,
+          "submit_targets_maxItems": null,
+          "submit_targets_minItems": null,
           "target_enum_counts": []
         }
       },
@@ -215,11 +239,13 @@
                           "EVENT_ANALYSIS",
                           "SPEC_ANALYSIS"
                         ],
+                        "maxLength": 64,
                         "type": "string"
                       },
                       "rationale": {
                         "anyOf": [
                           {
+                            "maxLength": 300,
                             "type": "string"
                           },
                           {
@@ -231,6 +257,7 @@
                         "enum": [
                           "C001"
                         ],
+                        "maxLength": 16,
                         "type": "string"
                       }
                     },
@@ -254,6 +281,7 @@
                       "rationale": {
                         "anyOf": [
                           {
+                            "maxLength": 300,
                             "type": "string"
                           },
                           {
@@ -266,6 +294,7 @@
                           "C002",
                           "C003"
                         ],
+                        "maxLength": 16,
                         "type": "string"
                       }
                     },
@@ -285,6 +314,7 @@
             "type": "object"
           },
           "qualification": "PASS",
+          "rationale_maxLength": 300,
           "root_anyOf_present": false,
           "root_properties": [
             "decision"
@@ -293,6 +323,9 @@
             "decision"
           ],
           "root_type": "object",
+          "stop_reason_maxLength": null,
+          "submit_targets_maxItems": null,
+          "submit_targets_minItems": null,
           "target_enum_counts": [
             1,
             2
@@ -309,6 +342,7 @@
             "additionalProperties": false,
             "properties": {
               "stop_reason": {
+                "maxLength": 128,
                 "type": "string"
               }
             },
@@ -318,6 +352,7 @@
             "type": "object"
           },
           "qualification": "PASS",
+          "rationale_maxLength": null,
           "root_anyOf_present": false,
           "root_properties": [
             "stop_reason"
@@ -326,6 +361,9 @@
             "stop_reason"
           ],
           "root_type": "object",
+          "stop_reason_maxLength": 128,
+          "submit_targets_maxItems": null,
+          "submit_targets_minItems": null,
           "target_enum_counts": []
         }
       },
@@ -367,11 +405,13 @@
                           "EVENT_ANALYSIS",
                           "SPEC_ANALYSIS"
                         ],
+                        "maxLength": 64,
                         "type": "string"
                       },
                       "rationale": {
                         "anyOf": [
                           {
+                            "maxLength": 300,
                             "type": "string"
                           },
                           {
@@ -383,6 +423,7 @@
                         "enum": [
                           "C001"
                         ],
+                        "maxLength": 16,
                         "type": "string"
                       }
                     },
@@ -406,6 +447,7 @@
                       "rationale": {
                         "anyOf": [
                           {
+                            "maxLength": 300,
                             "type": "string"
                           },
                           {
@@ -418,6 +460,7 @@
                           "C002",
                           "C003"
                         ],
+                        "maxLength": 16,
                         "type": "string"
                       }
                     },
@@ -437,6 +480,7 @@
             "type": "object"
           },
           "qualification": "PASS",
+          "rationale_maxLength": 300,
           "root_anyOf_present": false,
           "root_properties": [
             "decision"
@@ -445,6 +489,9 @@
             "decision"
           ],
           "root_type": "object",
+          "stop_reason_maxLength": null,
+          "submit_targets_maxItems": null,
+          "submit_targets_minItems": null,
           "target_enum_counts": [
             1,
             2
@@ -461,6 +508,7 @@
             "additionalProperties": false,
             "properties": {
               "stop_reason": {
+                "maxLength": 128,
                 "type": "string"
               }
             },
@@ -470,6 +518,7 @@
             "type": "object"
           },
           "qualification": "PASS",
+          "rationale_maxLength": null,
           "root_anyOf_present": false,
           "root_properties": [
             "stop_reason"
@@ -478,6 +527,9 @@
             "stop_reason"
           ],
           "root_type": "object",
+          "stop_reason_maxLength": 128,
+          "submit_targets_maxItems": null,
+          "submit_targets_minItems": null,
           "target_enum_counts": []
         },
         "submit_itbench_diagnosis": {
@@ -495,8 +547,11 @@
                   "enum": [
                     "C001"
                   ],
+                  "maxLength": 16,
                   "type": "string"
                 },
+                "maxItems": 3,
+                "minItems": 1,
                 "type": "array"
               }
             },
@@ -506,6 +561,7 @@
             "type": "object"
           },
           "qualification": "PASS",
+          "rationale_maxLength": null,
           "root_anyOf_present": false,
           "root_properties": [
             "targets"
@@ -514,6 +570,9 @@
             "targets"
           ],
           "root_type": "object",
+          "stop_reason_maxLength": null,
+          "submit_targets_maxItems": 3,
+          "submit_targets_minItems": 1,
           "target_enum_counts": []
         }
       },

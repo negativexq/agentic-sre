@@ -1,0 +1,187 @@
+{
+  "basic_35": {
+    "initial_surface_failures": 0,
+    "replay_failures": 0,
+    "scenarios": 35,
+    "stale_capability_count": 0,
+    "terminal_failures": 0,
+    "trace_failures": 0
+  },
+  "dynamic_discovery": {
+    "c002_discovered": true,
+    "c002_investigated": true,
+    "c002_revisable": true,
+    "replay_equal": true,
+    "requests": [
+      {
+        "capabilities": {
+          "HYPOTHESIZE": {
+            "operations": [],
+            "targets": [
+              "C001"
+            ]
+          },
+          "STOP": {
+            "operations": [],
+            "targets": []
+          }
+        },
+        "targets": [
+          "C001"
+        ]
+      },
+      {
+        "capabilities": {
+          "INVESTIGATE": {
+            "operations": [
+              "ENTITY_CONTEXT",
+              "EVENT_ANALYSIS",
+              "SPEC_ANALYSIS"
+            ],
+            "targets": [
+              "C001"
+            ]
+          },
+          "REVISE": {
+            "operations": [],
+            "targets": []
+          },
+          "STOP": {
+            "operations": [],
+            "targets": []
+          }
+        },
+        "targets": [
+          "C001"
+        ]
+      },
+      {
+        "capabilities": {
+          "INVESTIGATE": {
+            "operations": [
+              "EVENT_ANALYSIS",
+              "SPEC_ANALYSIS"
+            ],
+            "targets": [
+              "C001"
+            ]
+          },
+          "REVISE": {
+            "operations": [],
+            "targets": [
+              "C002"
+            ]
+          },
+          "STOP": {
+            "operations": [],
+            "targets": []
+          },
+          "SUBMIT": {
+            "operations": [],
+            "targets": [
+              "C001"
+            ]
+          }
+        },
+        "targets": [
+          "C002",
+          "C001"
+        ]
+      },
+      {
+        "capabilities": {
+          "INVESTIGATE": {
+            "operations": [
+              "ENTITY_CONTEXT",
+              "EVENT_ANALYSIS",
+              "SPEC_ANALYSIS"
+            ],
+            "targets": [
+              "C002"
+            ]
+          },
+          "REVISE": {
+            "operations": [],
+            "targets": [
+              "C001"
+            ]
+          },
+          "STOP": {
+            "operations": [],
+            "targets": []
+          },
+          "SUBMIT": {
+            "operations": [],
+            "targets": [
+              "C001"
+            ]
+          }
+        },
+        "targets": [
+          "C002",
+          "C001"
+        ]
+      },
+      {
+        "capabilities": {
+          "INVESTIGATE": {
+            "operations": [
+              "EVENT_ANALYSIS",
+              "SPEC_ANALYSIS"
+            ],
+            "targets": [
+              "C002"
+            ]
+          },
+          "REVISE": {
+            "operations": [],
+            "targets": [
+              "C001"
+            ]
+          },
+          "STOP": {
+            "operations": [],
+            "targets": []
+          },
+          "SUBMIT": {
+            "operations": [],
+            "targets": [
+              "C002",
+              "C001"
+            ]
+          }
+        },
+        "targets": [
+          "C002",
+          "C001"
+        ]
+      }
+    ],
+    "terminal": "SUBMIT",
+    "trace_complete": true
+  },
+  "event_target_scoped": true,
+  "execution": "E9_OFFLINE_INTERFACE_HARDENING",
+  "ground_truth_used": false,
+  "initial_observation_operations_absent": true,
+  "metrics_capability_is_resolver_gated": true,
+  "model_calls": 0,
+  "no_evidence_submit_is_unavailable": true,
+  "openai_outbound_attempts": 0,
+  "purpose": "FINAL_INTERFACE_CANARY",
+  "status": "PASS",
+  "target_schema": {
+    "branch_count": 2,
+    "event_target_scoped": true,
+    "initial_observation_operations_absent": true,
+    "invalid_errors": {
+      "C999": "$.target",
+      "wrong_action_pair": "$.action",
+      "wrong_target": "$.target"
+    },
+    "metric_gated": true,
+    "no_evidence_submit_is_unavailable": true,
+    "schema_chars": 675,
+    "valid_error": null
+  }
+}

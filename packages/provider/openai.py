@@ -561,6 +561,7 @@ def _itbench_v5_decision_function_schemas(
     allowed_actions: tuple[str, ...] | None = None,
     allowed_operations: tuple[str, ...] | None = None,
     allowed_targets: tuple[str, ...] | None = None,
+    allowed_action_capabilities: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Build V5 functions from the same dynamic surface used by the runtime."""
     nullable_string = {"anyOf": [{"type": "string"}, {"type": "null"}]}
@@ -581,18 +582,48 @@ def _itbench_v5_decision_function_schemas(
             "additionalProperties": False,
         }
 
-    return {
-        "request_itbench_tools": obj(
-            {
-                "action": {"type": "string", "enum": action_values},
-                "target": target_or_null if allowed_targets is not None else nullable_string,
-                "targets": target_array,
-                "operation": {"anyOf": [operation, {"type": "null"}]},
+    request_properties = {
+        "action": {"type": "string", "enum": action_values},
+        "target": target_or_null if allowed_targets is not None else nullable_string,
+        "targets": target_array,
+        "operation": {"anyOf": [operation, {"type": "null"}]},
+        "rationale": nullable_string,
+    }
+    request_schema: dict[str, Any] = obj(request_properties, list(request_properties))
+    if allowed_action_capabilities is not None:
+        branches: list[dict[str, Any]] = []
+        for action in action_values:
+            capability = allowed_action_capabilities.get(action, {})
+            if not isinstance(capability, dict):
+                continue
+            targets = [str(item) for item in capability.get("targets", ())]
+            operations = [str(item) for item in capability.get("operations", ())]
+            target_branch: dict[str, Any] = {"type": "string", "enum": targets}
+            operation_branch: dict[str, Any] = {"type": "string", "enum": operations}
+            branch_properties = {
+                "action": {"type": "string", "enum": [action]},
                 "rationale": nullable_string,
-            },
-            ["action", "target", "targets", "operation", "rationale"],
+            }
+            if action in {"HYPOTHESIZE", "REVISE"}:
+                branch_properties["target"] = target_branch
+            elif action == "INVESTIGATE":
+                branch_properties["target"] = target_branch
+                branch_properties["operation"] = operation_branch
+            elif action == "OBSERVE":
+                branch_properties["operation"] = operation_branch
+            branches.append(obj(branch_properties, list(branch_properties)))
+        request_schema = {"anyOf": branches}
+    submit_targets = list(allowed_targets or ())
+    if allowed_action_capabilities is not None:
+        submit_capability = allowed_action_capabilities.get("SUBMIT", {})
+        if isinstance(submit_capability, dict):
+            submit_targets = [str(item) for item in submit_capability.get("targets", ())]
+    submit_target_schema: dict[str, Any] = {"type": "string", "enum": submit_targets}
+    return {
+        "request_itbench_tools": request_schema,
+        "submit_itbench_diagnosis": obj(
+            {"targets": {"type": "array", "items": submit_target_schema}}, ["targets"]
         ),
-        "submit_itbench_diagnosis": obj({"targets": target_array}, ["targets"]),
         "stop_itbench_investigation": obj({"stop_reason": {"type": "string"}}, ["stop_reason"]),
     }
 
@@ -875,7 +906,10 @@ def _extract_decision_function(
         )
     schemas = (
         _itbench_v5_decision_function_schemas(
-            request.allowed_v5_actions, request.allowed_v5_operations, request.allowed_v5_targets
+            request.allowed_v5_actions,
+            request.allowed_v5_operations,
+            request.allowed_v5_targets,
+            request.allowed_v5_action_capabilities,
         )
         if external_protocol_v5
         else _itbench_decision_function_schemas(
@@ -903,6 +937,15 @@ def _extract_decision_function(
             metadata=metadata.model_copy(update={"schema_error_path": schema_error_path}),
         )
     if external_protocol_v5:
+        if function_name == "request_itbench_tools":
+            return {
+                "action": structured_output.get("action"),
+                "target": structured_output.get("target"),
+                "targets": structured_output.get("targets", []),
+                "operation": structured_output.get("operation"),
+                "rationale": structured_output.get("rationale"),
+                "stop_reason": None,
+            }, metadata
         if function_name == "submit_itbench_diagnosis":
             structured_output = {
                 "action": "SUBMIT",
@@ -1105,12 +1148,13 @@ def _json_schema_error(
         branches = schema["anyOf"]
         if not isinstance(branches, list):
             return path
-        if any(
-            _json_schema_error(value, branch, path=path, root_schema=root_schema) is None
+        errors = [
+            _json_schema_error(value, branch, path=path, root_schema=root_schema)
             for branch in branches
-        ):
+        ]
+        if any(error is None for error in errors):
             return None
-        return path
+        return next((error for error in errors if error is not None), path)
     if "enum" in schema and value not in schema["enum"]:
         return path
 
@@ -1248,6 +1292,7 @@ class OpenAIProvider:
                     request.allowed_v5_actions,
                     request.allowed_v5_operations,
                     request.allowed_v5_targets,
+                    request.allowed_v5_action_capabilities,
                 )
                 if external_protocol_v5
                 else _itbench_decision_function_schemas(

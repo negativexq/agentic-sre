@@ -39,7 +39,7 @@ def validate_future_live_preflight(
         )
     if manifest.get("dataset_revision") != ITBENCH_DATASET_REVISION:
         raise LivePreflightError("dataset revision mismatch")
-    if manifest.get("offline_readiness_status") != "READY_FOR_LIVE_SMOKE_REVIEW":
+    if manifest.get("offline_readiness_status") != "READY_FOR_SINGLE_LIVE_SMOKE_REVIEW":
         raise LivePreflightError("offline readiness review artifact is not approved")
     try:
         identity = validate_agent_config(str(manifest.get("model")), str(manifest.get("reasoning")))

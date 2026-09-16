@@ -20,10 +20,20 @@ class E9ControlSurface:
     target_handles: tuple[str, ...]
     final_turn: bool
     rejection_budget_remaining: int
+    # Each branch is (action, targets, operations).  A singleton target is
+    # represented in the same tuple as other target choices; this keeps the
+    # provider, context and runtime on one action-specific policy.
+    action_capabilities: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = ()
 
     @property
     def all_actions(self) -> tuple[str, ...]:
         return self.actions
+
+    def capabilities(self) -> dict[str, dict[str, tuple[str, ...]]]:
+        return {
+            action: {"targets": targets, "operations": operations}
+            for action, targets, operations in self.action_capabilities
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,25 +79,37 @@ def control_surface(
     phase = str(state.get("current_phase", "OBSERVE"))
     final_turn = turn >= max_steps
     has_hypothesis = state.get("current_hypothesis") is not None
-    has_evidence = bool(state.get("evidence"))
+    has_evidence = any(
+        isinstance(item, dict) and isinstance(item.get("entity_handle"), str)
+        for item in state.get("evidence", {}).values()
+    )
+    discovered_handles = tuple(
+        str(item["handle"])
+        for item in sorted(
+            [
+                item
+                for item in state.get("discovered_entities", {}).values()
+                if isinstance(item, dict) and isinstance(item.get("handle"), str)
+            ],
+            key=lambda item: (
+                -int(item.get("discovered_turn", 0)),
+                str(item.get("handle")),
+            ),
+        )
+    )
+    actions: tuple[str, ...]
+    operations: tuple[str, ...]
     if final_turn:
-        actions: tuple[str, ...] = (
-            ("SUBMIT", "STOP") if has_hypothesis and has_evidence else ("STOP",)
-        )
-        operations: tuple[str, ...] = ()
+        actions = ("SUBMIT", "STOP") if has_hypothesis and has_evidence else ("STOP",)
+        operations = ()
     elif phase == "OBSERVE":
-        actions = ("OBSERVE", "HYPOTHESIZE", "STOP")
-        operations = (
-            "INCIDENT_OVERVIEW",
-            "ALERT_ANALYSIS",
-            "TOPOLOGY_ANALYSIS",
-            "RECENT_CHANGE_ANALYSIS",
-            "EVENT_ANALYSIS",
-        )
+        actions = ("HYPOTHESIZE", "STOP")
+        operations = ()
     elif phase == "VERIFY":
-        actions = ("OBSERVE", "INVESTIGATE", "REVISE", "SUBMIT", "STOP")
+        actions = ("INVESTIGATE", "REVISE", "SUBMIT", "STOP")
         operations = (
             "ENTITY_CONTEXT",
+            "EVENT_ANALYSIS",
             "METRIC_ANOMALIES",
             "TRACE_ERROR_TREE",
             "SPEC_ANALYSIS",
@@ -95,7 +117,7 @@ def control_surface(
             "VERIFY_TEMPORAL_ALIGNMENT",
         )
     else:
-        actions = ("OBSERVE", "HYPOTHESIZE", "INVESTIGATE", "REVISE", "STOP")
+        actions = ("HYPOTHESIZE", "INVESTIGATE", "REVISE", "STOP")
         operations = E9_SEMANTIC_OPERATIONS
 
     completed = {
@@ -104,20 +126,8 @@ def control_surface(
     }
     target = state.get("current_hypothesis")
     current_target = target.get("entity_handle") if isinstance(target, dict) else None
-    discovered = [
-        item
-        for item in state.get("discovered_entities", {}).values()
-        if isinstance(item, dict) and isinstance(item.get("handle"), str)
-    ]
-    discovered.sort(
-        key=lambda item: (
-            item.get("handle") != current_target,
-            -int(item.get("discovered_turn", 0)),
-            str(item.get("handle")),
-        )
-    )
-    resolved_target_handles = target_handles or tuple(
-        str(item["handle"]) for item in discovered[:12]
+    resolved_target_handles: tuple[str, ...] = (
+        tuple(target_handles) if target_handles is not None else discovered_handles[:12]
     )
     resolved_operations: tuple[str, ...] = tuple(
         operation
@@ -131,17 +141,40 @@ def control_surface(
         not in completed
         and int(state.get("semantic_actions_used", 0)) < semantic_limit
     )
+    effective_operations = (
+        tuple(available_operations) if available_operations is not None else resolved_operations
+    )
+    current_targets = (current_target,) if current_target else ()
+    alternatives = tuple(handle for handle in resolved_target_handles if handle != current_target)
+    submit_targets = tuple(
+        handle
+        for handle in resolved_target_handles
+        if any(item.get("entity_handle") == handle for item in state.get("evidence", {}).values())
+    )
+    if "SUBMIT" in actions and not submit_targets:
+        actions = tuple(action for action in actions if action != "SUBMIT")
+    branches: list[tuple[str, tuple[str, ...], tuple[str, ...]]] = []
+    for action in actions:
+        if action == "HYPOTHESIZE":
+            branches.append((action, resolved_target_handles, ()))
+        elif action == "INVESTIGATE":
+            branches.append((action, current_targets, effective_operations))
+        elif action == "REVISE":
+            branches.append((action, alternatives, ()))
+        elif action == "SUBMIT":
+            branches.append((action, submit_targets, ()))
+        else:
+            branches.append((action, (), ()))
     return E9ControlSurface(
         phase=phase,
         actions=actions,
-        operations=available_operations
-        if available_operations is not None
-        else resolved_operations,
+        operations=effective_operations,
         target_handles=resolved_target_handles,
         final_turn=final_turn,
         rejection_budget_remaining=max(
             max_rejections - int(state.get("consecutive_rejections", 0)), 0
         ),
+        action_capabilities=tuple(branches),
     )
 
 

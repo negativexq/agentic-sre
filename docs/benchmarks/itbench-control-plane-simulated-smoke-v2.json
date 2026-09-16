@@ -1,0 +1,540 @@
+{
+  "cases": [
+    {
+      "action_rejections": 0,
+      "model_steps": 3,
+      "name": "NORMAL",
+      "recovered_rejections": 0,
+      "replay_events": 23,
+      "semantic_actions": 1,
+      "terminal": "SUBMIT",
+      "trace_complete": true,
+      "turns": [
+        {
+          "accepted": true,
+          "context_chars": 7042,
+          "decision": "HYPOTHESIZE",
+          "evidence_created": [],
+          "operation": "",
+          "parsed_action": "HYPOTHESIZE",
+          "phase_after": "VERIFY",
+          "phase_before": "OBSERVE",
+          "provider_exposed_actions": [
+            "HYPOTHESIZE",
+            "STOP"
+          ],
+          "provider_exposed_operations": [],
+          "provider_exposed_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "runtime_accepted_actions": [
+            "HYPOTHESIZE",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [],
+          "runtime_accepted_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": "C001",
+          "turn": 1
+        },
+        {
+          "accepted": true,
+          "context_chars": 6559,
+          "decision": "INVESTIGATE",
+          "evidence_created": [
+            "E001"
+          ],
+          "operation": "ENTITY_CONTEXT",
+          "parsed_action": "INVESTIGATE",
+          "phase_after": "VERIFY",
+          "phase_before": "VERIFY",
+          "provider_exposed_actions": [
+            "INVESTIGATE",
+            "REVISE",
+            "STOP"
+          ],
+          "provider_exposed_operations": [
+            "ENTITY_CONTEXT",
+            "EVENT_ANALYSIS",
+            "SPEC_ANALYSIS"
+          ],
+          "provider_exposed_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "runtime_accepted_actions": [
+            "INVESTIGATE",
+            "REVISE",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [
+            "ENTITY_CONTEXT",
+            "EVENT_ANALYSIS",
+            "SPEC_ANALYSIS"
+          ],
+          "runtime_accepted_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": "C001",
+          "turn": 2
+        },
+        {
+          "accepted": true,
+          "context_chars": 7137,
+          "decision": "SUBMIT",
+          "evidence_created": [],
+          "operation": "",
+          "parsed_action": "SUBMIT",
+          "phase_after": "CONCLUDE",
+          "phase_before": "VERIFY",
+          "provider_exposed_actions": [
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "provider_exposed_operations": [
+            "EVENT_ANALYSIS",
+            "SPEC_ANALYSIS"
+          ],
+          "provider_exposed_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "runtime_accepted_actions": [
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [
+            "EVENT_ANALYSIS",
+            "SPEC_ANALYSIS"
+          ],
+          "runtime_accepted_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": null,
+          "targets": [
+            "C001"
+          ],
+          "turn": 3
+        }
+      ]
+    },
+    {
+      "action_rejections": 2,
+      "model_steps": 6,
+      "name": "ADVERSARIAL",
+      "recovered_rejections": 2,
+      "replay_events": 34,
+      "semantic_actions": 2,
+      "terminal": "SUBMIT",
+      "trace_complete": true,
+      "turns": [
+        {
+          "accepted": false,
+          "context_chars": 7042,
+          "decision": "ACTION_REJECTED",
+          "evidence_created": [],
+          "operation": "",
+          "parsed_action": "HYPOTHESIZE",
+          "phase_before": "OBSERVE",
+          "provider_exposed_actions": [
+            "HYPOTHESIZE",
+            "STOP"
+          ],
+          "provider_exposed_operations": [],
+          "provider_exposed_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "rejection_code": "UNKNOWN_CANDIDATE",
+          "rejection_reason": "target is not an observable candidate handle",
+          "runtime_accepted_actions": [
+            "HYPOTHESIZE",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [],
+          "runtime_accepted_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": "C999",
+          "turn": 1,
+          "valid_next_actions": [
+            "HYPOTHESIZE",
+            "STOP"
+          ],
+          "valid_operations": []
+        },
+        {
+          "accepted": true,
+          "context_chars": 7276,
+          "decision": "HYPOTHESIZE",
+          "evidence_created": [],
+          "operation": "",
+          "parsed_action": "HYPOTHESIZE",
+          "phase_after": "VERIFY",
+          "phase_before": "OBSERVE",
+          "provider_exposed_actions": [
+            "HYPOTHESIZE",
+            "STOP"
+          ],
+          "provider_exposed_operations": [],
+          "provider_exposed_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "runtime_accepted_actions": [
+            "HYPOTHESIZE",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [],
+          "runtime_accepted_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": "C001",
+          "turn": 2
+        },
+        {
+          "accepted": true,
+          "context_chars": 6525,
+          "decision": "INVESTIGATE",
+          "evidence_created": [
+            "E001"
+          ],
+          "operation": "ENTITY_CONTEXT",
+          "parsed_action": "INVESTIGATE",
+          "phase_after": "VERIFY",
+          "phase_before": "VERIFY",
+          "provider_exposed_actions": [
+            "INVESTIGATE",
+            "REVISE",
+            "STOP"
+          ],
+          "provider_exposed_operations": [
+            "ENTITY_CONTEXT",
+            "EVENT_ANALYSIS",
+            "SPEC_ANALYSIS"
+          ],
+          "provider_exposed_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "runtime_accepted_actions": [
+            "INVESTIGATE",
+            "REVISE",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [
+            "ENTITY_CONTEXT",
+            "EVENT_ANALYSIS",
+            "SPEC_ANALYSIS"
+          ],
+          "runtime_accepted_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": "C001",
+          "turn": 3
+        },
+        {
+          "accepted": false,
+          "context_chars": 7104,
+          "decision": "ACTION_REJECTED",
+          "evidence_created": [],
+          "operation": "ENTITY_CONTEXT",
+          "parsed_action": "INVESTIGATE",
+          "phase_before": "VERIFY",
+          "provider_exposed_actions": [
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "provider_exposed_operations": [
+            "EVENT_ANALYSIS",
+            "SPEC_ANALYSIS"
+          ],
+          "provider_exposed_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "rejection_code": "UNSUPPORTED_OPERATION",
+          "rejection_reason": "operation is not currently exposed for this phase/target",
+          "runtime_accepted_actions": [
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [
+            "EVENT_ANALYSIS",
+            "SPEC_ANALYSIS"
+          ],
+          "runtime_accepted_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": "C001",
+          "turn": 4,
+          "valid_next_actions": [
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "valid_operations": [
+            "EVENT_ANALYSIS",
+            "SPEC_ANALYSIS"
+          ]
+        },
+        {
+          "accepted": true,
+          "context_chars": 7418,
+          "decision": "INVESTIGATE",
+          "evidence_created": [
+            "E002"
+          ],
+          "operation": "SPEC_ANALYSIS",
+          "parsed_action": "INVESTIGATE",
+          "phase_after": "VERIFY",
+          "phase_before": "VERIFY",
+          "provider_exposed_actions": [
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "provider_exposed_operations": [
+            "EVENT_ANALYSIS",
+            "SPEC_ANALYSIS"
+          ],
+          "provider_exposed_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "runtime_accepted_actions": [
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [
+            "EVENT_ANALYSIS",
+            "SPEC_ANALYSIS"
+          ],
+          "runtime_accepted_targets": [
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": "C001",
+          "turn": 5
+        },
+        {
+          "accepted": true,
+          "context_chars": 7496,
+          "decision": "SUBMIT",
+          "evidence_created": [],
+          "operation": "",
+          "parsed_action": "SUBMIT",
+          "phase_after": "CONCLUDE",
+          "phase_before": "VERIFY",
+          "provider_exposed_actions": [
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "provider_exposed_operations": [
+            "EVENT_ANALYSIS"
+          ],
+          "provider_exposed_targets": [
+            "C011",
+            "C012",
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "runtime_accepted_actions": [
+            "INVESTIGATE",
+            "REVISE",
+            "SUBMIT",
+            "STOP"
+          ],
+          "runtime_accepted_operations": [
+            "EVENT_ANALYSIS"
+          ],
+          "runtime_accepted_targets": [
+            "C011",
+            "C012",
+            "C001",
+            "C002",
+            "C003",
+            "C004",
+            "C005",
+            "C006",
+            "C007",
+            "C008",
+            "C009",
+            "C010"
+          ],
+          "target": null,
+          "targets": [
+            "C001"
+          ],
+          "turn": 6
+        }
+      ]
+    }
+  ],
+  "execution": "E9_OFFLINE_INTERFACE_HARDENING",
+  "ground_truth_used": false,
+  "model_calls": 0,
+  "openai_outbound_attempts": 0,
+  "provider": "fake",
+  "purpose": "SIMULATED_SMOKE_V2",
+  "status": "PASS"
+}

@@ -1,0 +1,13 @@
+{
+  "execution": "E9_OFFLINE_INTERFACE_HARDENING",
+  "reviewed_head": "15d837d9d1673cdb1085c4c63bfe6624ccbbb211",
+  "ground_truth_used": false,
+  "live_agent_calls": 0,
+  "openai_outbound_attempts": 0,
+  "findings": [
+    {"id":"A","status":"CONFIRMED","file":"packages/evals/itbench/e9_context.py; packages/evals/itbench/e9_control.py","symbol":"E9ContextPlanner.plan; control_surface","defect":"Initial context already contains alert digest, relevant topology and candidate/incident metadata while OBSERVE exposed overview, alert and topology operations.","repair":"Initial model-visible surface is HYPOTHESIZE or STOP; cheap observation packet remains harness-owned.","test":"initial surface regression and overlap report"},
+    {"id":"B","status":"CONFIRMED","file":"packages/evals/itbench/e9_semantic.py","symbol":"_TARGET_OPERATIONS; SemanticCapabilityResolver.available_operations","defect":"EVENT_ANALYSIS was registered as GLOBAL although its executor accepts and uses a canonical entity filter.","repair":"EVENT_ANALYSIS is TARGET-scoped and available only in VERIFY for the current candidate.","test":"targeted event scope and per-candidate duplicate tests"},
+    {"id":"C","status":"CONFIRMED","file":"packages/evals/itbench/e9_semantic.py","symbol":"SemanticCapabilityResolver._check","defect":"Unrecognized operations fell through to available=true, so METRIC_ANOMALIES was exposed even when its bounded result had no useful candidate signal.","repair":"Metric availability is derived from candidate-filtered aggregate groups with an actual delta/relative-change signal.","test":"metric capability and v3 coverage"},
+    {"id":"D","status":"CONFIRMED","file":"packages/provider/openai.py; packages/evals/itbench/e9_runtime.py","symbol":"_itbench_v5_decision_function_schemas; E9InvestigationRuntime.run","defect":"Individual action, operation and target enums did not prevent cross-field combinations such as HYPOTHESIZE with an operation or INVESTIGATE on a non-current target.","repair":"Provider request schema uses action-specific anyOf branches and runtime validates the same branches.","test":"valid/invalid combination schema tests"}
+  ]
+}

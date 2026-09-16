@@ -42,6 +42,7 @@ class SemanticOperationSpec:
 _TARGET_OPERATIONS = frozenset(
     {
         "ENTITY_CONTEXT",
+        "EVENT_ANALYSIS",
         "METRIC_ANOMALIES",
         "TRACE_ERROR_TREE",
         "SPEC_ANALYSIS",
@@ -98,15 +99,10 @@ class SemanticCapabilityResolver:
         self, *, phase: str, target_handle: str | None = None
     ) -> tuple[str, ...]:
         phase_operations = {
-            "OBSERVE": (
-                "INCIDENT_OVERVIEW",
-                "ALERT_ANALYSIS",
-                "TOPOLOGY_ANALYSIS",
-                "RECENT_CHANGE_ANALYSIS",
-                "EVENT_ANALYSIS",
-            ),
+            "OBSERVE": (),
             "VERIFY": (
                 "ENTITY_CONTEXT",
+                "EVENT_ANALYSIS",
                 "METRIC_ANOMALIES",
                 "TRACE_ERROR_TREE",
                 "SPEC_ANALYSIS",
@@ -140,9 +136,12 @@ class SemanticCapabilityResolver:
             "INCIDENT_OVERVIEW",
             "ALERT_ANALYSIS",
             "TOPOLOGY_ANALYSIS",
-            "EVENT_ANALYSIS",
         }:
             return {"available": True, "reason": None}
+        if operation == "EVENT_ANALYSIS":
+            return {"available": canonical is not None, "reason": None}
+        if operation in {"ENTITY_CONTEXT", "SPEC_ANALYSIS"}:
+            return {"available": canonical is not None, "reason": None}
         if operation == "RECENT_CHANGE_ANALYSIS":
             value = operations._recent_changes(canonical)
             available = bool(value.get("change_history_available") and value.get("changes"))
@@ -158,6 +157,21 @@ class SemanticCapabilityResolver:
             return {
                 "available": available,
                 "reason": None if available else "no usable trace service-edge/status fields",
+            }
+        if operation == "METRIC_ANOMALIES":
+            value = operations._metric_anomalies(canonical)
+            groups = value.get("aggregates_by_metric", {})
+            useful = bool(
+                isinstance(groups, dict)
+                and any(
+                    isinstance(item, dict)
+                    and (item.get("delta") is not None or item.get("relative_change") is not None)
+                    for item in groups.values()
+                )
+            )
+            return {
+                "available": useful,
+                "reason": None if useful else "no candidate-relevant metric signal",
             }
         if operation == "COMPARE_REPLICAS":
             value = operations._compare_replicas(canonical)
@@ -183,7 +197,7 @@ class SemanticCapabilityResolver:
                 if available
                 else "incident/candidate timestamps or event semantics unavailable",
             }
-        return {"available": True, "reason": None}
+        return {"available": False, "reason": "operation has no availability rule"}
 
 
 class E9SemanticOperations:
@@ -260,15 +274,7 @@ class E9SemanticOperations:
                 "events",
             )
         elif operation == "METRIC_ANOMALIES":
-            service = canonical.rsplit("/", 1)[-1] if canonical else None
-            data, category = (
-                self.backend.metric_analysis(
-                    {"service": service, "limit": self._limit(12)}
-                    if service
-                    else {"limit": self._limit(12)}
-                ),
-                "metrics",
-            )
+            data, category = self._metric_anomalies(canonical), "metrics"
         elif operation == "TRACE_ERROR_TREE":
             data, category = self._trace_error_tree(canonical), "traces"
         else:
@@ -371,6 +377,15 @@ class E9SemanticOperations:
             "configuration_dependencies": context.get("configuration_dependencies", []),
             "owner": context.get("ownership", []),
         }
+
+    def _metric_anomalies(self, canonical: str | None) -> dict[str, Any]:
+        service = canonical.rsplit("/", 1)[-1] if canonical else None
+        arguments = (
+            {"service": service, "limit": self._limit(12)}
+            if service
+            else {"limit": self._limit(12)}
+        )
+        return self.backend.metric_analysis(arguments)
 
     def _compare_replicas(self, canonical: str) -> dict[str, Any]:
         context = self.backend.query_entity_context(canonical, 20, include_telemetry=False)

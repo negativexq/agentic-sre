@@ -98,15 +98,19 @@ class E9ContextPlanner:
             "case_state": case_state,
             "workflow": {
                 "phase": surface.phase,
-                "valid_actions": surface.actions,
                 "turn": turn,
                 "model_steps_remaining": max(max_steps - turn, 0),
                 "semantic_actions_remaining": max(
                     semantic_limit - int(memory.state["semantic_actions_used"]), 0
                 ),
                 "rejection_budget_remaining": surface.rejection_budget_remaining,
-                "valid_operations": surface.operations,
-                "target_handles": surface.target_handles,
+                "actions": {
+                    action: {
+                        "targets": list(targets),
+                        "operations": list(operations),
+                    }
+                    for action, targets, operations in surface.action_capabilities
+                },
             },
             "rules": [
                 "Candidate handles are runtime-owned; do not invent C### handles.",
@@ -119,30 +123,37 @@ class E9ContextPlanner:
             ],
         }
         if not dynamic_action_gating:
-            payload["workflow"]["valid_actions"] = (
-                "OBSERVE",
-                "HYPOTHESIZE",
-                "INVESTIGATE",
-                "REVISE",
-                "SUBMIT",
-                "STOP",
-            )
-        if not dynamic_operation_gating:
-            payload["workflow"]["valid_operations"] = tuple(
-                (
-                    "INCIDENT_OVERVIEW",
-                    "ALERT_ANALYSIS",
-                    "TOPOLOGY_ANALYSIS",
-                    "RECENT_CHANGE_ANALYSIS",
-                    "ENTITY_CONTEXT",
-                    "EVENT_ANALYSIS",
-                    "METRIC_ANOMALIES",
-                    "TRACE_ERROR_TREE",
-                    "SPEC_ANALYSIS",
-                    "COMPARE_REPLICAS",
-                    "VERIFY_TEMPORAL_ALIGNMENT",
+            payload["workflow"]["actions"] = {
+                action: {
+                    "targets": list(surface.target_handles),
+                    "operations": list(surface.operations),
+                }
+                for action in (
+                    "OBSERVE",
+                    "HYPOTHESIZE",
+                    "INVESTIGATE",
+                    "REVISE",
+                    "SUBMIT",
+                    "STOP",
                 )
-            )
+            }
+        if not dynamic_operation_gating:
+            for action in payload["workflow"]["actions"].values():
+                action["operations"] = list(
+                    (
+                        "INCIDENT_OVERVIEW",
+                        "ALERT_ANALYSIS",
+                        "TOPOLOGY_ANALYSIS",
+                        "RECENT_CHANGE_ANALYSIS",
+                        "ENTITY_CONTEXT",
+                        "EVENT_ANALYSIS",
+                        "METRIC_ANOMALIES",
+                        "TRACE_ERROR_TREE",
+                        "SPEC_ANALYSIS",
+                        "COMPARE_REPLICAS",
+                        "VERIFY_TEMPORAL_ALIGNMENT",
+                    )
+                )
         if not selective_context:
             payload["case_state"]["evidence"] = list(memory.state["evidence"].values())
         encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)

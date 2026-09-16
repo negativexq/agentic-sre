@@ -31,10 +31,10 @@ class E9FSM:
         if final_turn:
             return ("SUBMIT", "STOP") if has_hypothesis and evidence_count else ("STOP",)
         if current == E9Phase.OBSERVE:
-            return ("OBSERVE", "HYPOTHESIZE", "STOP")
+            return ("HYPOTHESIZE", "STOP")
         if current == E9Phase.VERIFY:
-            return ("OBSERVE", "INVESTIGATE", "REVISE", "SUBMIT", "STOP")
-        return ("OBSERVE", "HYPOTHESIZE", "INVESTIGATE", "REVISE", "STOP")
+            return ("INVESTIGATE", "REVISE", "SUBMIT", "STOP")
+        return ("HYPOTHESIZE", "INVESTIGATE", "REVISE", "STOP")
 
     @staticmethod
     def transition(phase: str, action: str) -> str:

@@ -315,13 +315,8 @@ def test_v5_provider_surface_matches_control_policy(tmp_path: Path) -> None:
         for item in parameters["tools"]
         if item["name"] == "request_itbench_tools"
     )
-    assert request_schema["properties"]["action"]["enum"] == [
-        "OBSERVE",
-        "HYPOTHESIZE",
-    ]
-    operation_schema = request_schema["properties"]["operation"]["anyOf"][0]
-    assert "RECENT_CHANGE_ANALYSIS" not in operation_schema["enum"]
-    assert "TRACE_ERROR_TREE" not in operation_schema["enum"]
+    assert len(request_schema["anyOf"]) == 1
+    assert request_schema["anyOf"][0]["properties"]["action"]["enum"] == ["HYPOTHESIZE"]
     memory.append(
         "HYPOTHESIS_PROPOSED",
         1,
@@ -469,14 +464,14 @@ def test_control_surface_is_dynamic_and_removes_completed_operation() -> None:
     memory.discover_entities(({"canonical": "otel-demo/Service/frontend"},))
     first = control_surface(memory.state, turn=1, max_steps=12, max_rejections=2, semantic_limit=24)
     assert "HYPOTHESIZE" in first.actions
-    assert "RECENT_CHANGE_ANALYSIS" in first.operations
+    assert first.operations == ()
     memory.append(
         "OPERATION_REQUESTED", 1, {"entity_handle": None, "operation": "RECENT_CHANGE_ANALYSIS"}
     )
     second = control_surface(
         memory.state, turn=2, max_steps=12, max_rejections=2, semantic_limit=24
     )
-    assert "RECENT_CHANGE_ANALYSIS" not in second.operations
+    assert second.operations == ()
 
 
 def test_every_registered_semantic_operation_has_a_real_bounded_executor(tmp_path: Path) -> None:
@@ -514,7 +509,7 @@ def test_provider_target_enum_rejects_unknown_handle_offline(tmp_path: Path) -> 
         for item in parameters["tools"]
         if item["name"] == "request_itbench_tools"
     )
-    target_schema = schema["properties"]["target"]["anyOf"][0]
+    target_schema = schema["anyOf"][0]["properties"]["target"]
     assert target_schema["enum"] == ["C001"]
     invalid: dict[str, object] = {
         "action": "HYPOTHESIZE",
@@ -523,7 +518,7 @@ def test_provider_target_enum_rejects_unknown_handle_offline(tmp_path: Path) -> 
         "operation": None,
         "rationale": None,
     }
-    assert _json_schema_error(invalid, schema) == "$.target"
+    assert _json_schema_error(invalid, schema) is not None
 
 
 def test_capability_resolver_removes_known_dead_operations(tmp_path: Path) -> None:
@@ -561,3 +556,98 @@ def test_submit_requires_candidate_associated_evidence() -> None:
         summary={"identity": "C002"},
     )
     assert E9InvestigationRuntime._submit_ready(memory, ["C002"])
+
+
+def test_final_interface_initial_surface_has_no_redundant_observation_calls() -> None:
+    memory = E9CaseMemory(execution_id="ITB-E9", scenario_id="Scenario-1")
+    memory.discover_entities(({"canonical": "otel-demo/Service/frontend"},))
+    surface = control_surface(
+        memory.state, turn=1, max_steps=12, max_rejections=2, semantic_limit=24
+    )
+    assert surface.actions == ("HYPOTHESIZE", "STOP")
+    assert surface.operations == ()
+    assert surface.capabilities() == {
+        "HYPOTHESIZE": {"targets": ("C001",), "operations": ()},
+        "STOP": {"targets": (), "operations": ()},
+    }
+
+
+def test_event_analysis_is_candidate_scoped_and_metric_capability_is_observable(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path, [])
+    incident, _ = build_observable_incident(runtime.backend)
+    memory = E9CaseMemory(execution_id="ITB-E9", scenario_id="Scenario-1")
+    memory.discover_entities(({"canonical": "otel-demo/Service/frontend"},))
+    memory.append("HYPOTHESIS_PROPOSED", 1, {"entity_handle": "C001", "rationale": "test"})
+    resolver = SemanticCapabilityResolver(runtime.backend, memory, incident)
+    available = resolver.available_operations(phase="VERIFY", target_handle="C001")
+    assert "EVENT_ANALYSIS" in available
+    assert "METRIC_ANOMALIES" not in available
+    assert (
+        next(spec for spec in resolver_specs() if spec.name == "EVENT_ANALYSIS").scope == "TARGET"
+    )
+
+
+def resolver_specs() -> tuple[Any, ...]:
+    from packages.evals.itbench.e9_semantic import E9_SEMANTIC_OPERATION_SPECS
+
+    return E9_SEMANTIC_OPERATION_SPECS
+
+
+def test_action_specific_schema_rejects_cross_product_combinations(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path, [])
+    incident, alerts = build_observable_incident(runtime.backend)
+    memory = E9CaseMemory(execution_id="ITB-E9", scenario_id="Scenario-1")
+    memory.discover_entities(
+        ({"canonical": "otel-demo/Service/frontend"}, {"canonical": "otel-demo/Service/other"})
+    )
+    memory.append("HYPOTHESIS_PROPOSED", 1, {"entity_handle": "C001", "rationale": "test"})
+    request, _ = runtime.build_request(
+        incident, alerts, memory, run_id=incident.incident_id, turn=2
+    )
+    schema = next(
+        item["parameters"]
+        for item in OpenAIProvider.__new__(OpenAIProvider)._request_parameters(request)["tools"]
+        if item["name"] == "request_itbench_tools"
+    )
+    assert (
+        _json_schema_error(
+            {
+                "action": "HYPOTHESIZE",
+                "target": "C001",
+                "operation": "ENTITY_CONTEXT",
+                "rationale": None,
+            },
+            schema,
+        )
+        is not None
+    )
+    assert (
+        _json_schema_error(
+            {
+                "action": "INVESTIGATE",
+                "target": "C002",
+                "operation": "ENTITY_CONTEXT",
+                "rationale": None,
+            },
+            schema,
+        )
+        is not None
+    )
+    assert (
+        _json_schema_error({"action": "REVISE", "target": "C001", "rationale": None}, schema)
+        is not None
+    )
+    assert (
+        _json_schema_error(
+            {
+                "action": "INVESTIGATE",
+                "target": "C001",
+                "operation": "ENTITY_CONTEXT",
+                "rationale": None,
+            },
+            schema,
+        )
+        is None
+    )

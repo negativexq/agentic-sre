@@ -172,6 +172,7 @@ class E9InvestigationRuntime:
             ),
             allowed_v5_operations=provider_operations,
             allowed_v5_targets=surface.target_handles,
+            allowed_v5_action_capabilities=surface.capabilities(),
             allowed_tool_names=(),
             tool_schemas=(),
         )
@@ -302,29 +303,47 @@ class E9InvestigationRuntime:
 
             action = decision.action.value
             surface = self._surface(memory, turn, incident)
+            capabilities = surface.capabilities()
+            capability = capabilities.get(action)
             target_handles = [item for item in (decision.target, *decision.targets) if item]
-            operation = decision.operation or ("INCIDENT_OVERVIEW" if action == "OBSERVE" else "")
+            operation = decision.operation or ""
             reason: str | None = None
             code = "INVALID_ACTION"
-            if action not in surface.actions:
+            if capability is None:
                 reason, code = (
                     f"action {action} is not valid in phase {surface.phase}",
                     "INVALID_TRANSITION",
                 )
-            elif any(memory.resolve(handle) is None for handle in target_handles):
+            elif any(handle not in capability["targets"] for handle in target_handles):
                 reason, code = "target is not an observable candidate handle", "UNKNOWN_CANDIDATE"
-            elif action in {"OBSERVE", "INVESTIGATE"} and operation not in surface.operations:
+            elif action in {"OBSERVE", "INVESTIGATE"} and operation not in capability["operations"]:
                 reason, code = (
                     "operation is not currently exposed for this phase/target",
                     "UNSUPPORTED_OPERATION",
                 )
-            elif action in {"HYPOTHESIZE", "REVISE"} and decision.target is None:
+            elif action in {"HYPOTHESIZE", "REVISE"} and (
+                decision.target is None or decision.targets or decision.operation is not None
+            ):
                 reason, code = f"{action} requires one target handle", "TARGET_REQUIRED"
-            elif action == "SUBMIT" and not self._submit_ready(memory, decision.targets):
+            elif action == "INVESTIGATE" and (
+                decision.target != (capability["targets"][0] if capability["targets"] else None)
+                or decision.targets
+            ):
+                reason, code = "INVESTIGATE must target the current hypothesis", "INVALID_TARGET"
+            elif action == "SUBMIT" and (
+                not self._submit_ready(memory, decision.targets)
+                or any(handle not in capability["targets"] for handle in decision.targets)
+                or decision.target is not None
+                or decision.operation is not None
+            ):
                 reason, code = (
                     "SUBMIT requires hypothesis-associated evidence for every target",
                     "SUBMIT_PRECONDITION",
                 )
+            elif action == "STOP" and (
+                decision.target is not None or decision.targets or decision.operation is not None
+            ):
+                reason, code = "STOP does not accept target or operation", "INVALID_ACTION_SHAPE"
             elif action == "INVESTIGATE" and memory.has_operation(decision.target, operation):
                 reason, code = "operation already completed for this target", "DUPLICATE_OPERATION"
             if reason is not None:

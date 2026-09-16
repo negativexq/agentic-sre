@@ -539,7 +539,9 @@ def execute_live_smoke(
         )
         stage = "ACCOUNTING_RECONCILIATION"
         LiveModelBudget.verify_ledger_delta(before_budget, after_budget, outbound_attempts)
-        if provider_invocations != result["usage"].get("model_calls", 0):
+        if result.get("terminal") != "PROVIDER_ERROR" and provider_invocations != result[
+            "usage"
+        ].get("model_calls", 0):
             raise LiveSmokeExecutionError("provider invocation accounting mismatch")
         stage = "TERMINAL_POLICY"
         failure = _terminal_failure(result)

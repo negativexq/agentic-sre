@@ -403,7 +403,11 @@ class ITBenchSnapshotBackend:
         limit = arguments.get("limit", self.max_rows)
         groups: dict[str, dict[str, Any]] = {}
         matching = 0
-        for item in self._iter_records(ITBenchEvidenceCategory.LOGS):
+        # Capability checks and model-facing evidence must remain bounded. A
+        # full source scan is unnecessary here because ``records`` provides a
+        # deterministic sample; qualification can use complete_source_records
+        # separately when it needs exhaustive post-hoc analysis.
+        for item in self.records(ITBenchEvidenceCategory.LOGS):
             if not _matches(
                 item,
                 pattern=arguments.get("pattern", arguments.get("contains")),

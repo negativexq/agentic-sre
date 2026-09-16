@@ -7,6 +7,7 @@ loader only constructs :class:`ITBenchScenario` and :class:`InvestigatorData`.
 
 from __future__ import annotations
 
+import json
 from enum import StrEnum
 from typing import Any
 
@@ -172,3 +173,12 @@ class ITBenchAgentOutput(BaseModel):
     contributing_factor: tuple[ITBenchEntityPrediction, ...] = Field(max_length=5)
     reasoning: str = Field(default="", max_length=1_000)
     native_terminal: str = Field(min_length=1, max_length=64)
+
+    @classmethod
+    def from_json_value(cls, value: Any) -> ITBenchAgentOutput:
+        """Validate a JSON-shaped export (arrays for tuples) at the JSON boundary.
+
+        Strict Python-mode validation rejects JSON arrays for tuple fields, so
+        persisted or ``model_dump(mode="json")`` values must use this path.
+        """
+        return cls.model_validate_json(json.dumps(value))

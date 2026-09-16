@@ -16,6 +16,7 @@ from typing import Any, Final, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from packages.evals.itbench.contracts import ITBenchAgentOutput
 from packages.evals.itbench.dataset import (
     ITBENCH_DATASET_REVISION,
     ITBENCH_SCENARIO_IDS,
@@ -320,6 +321,16 @@ def predict_e11(
                 error_message="measured runtime safety counter was nonzero",
             )
             raise E11PredictionError(f"E11 runtime safety violation: {scenario_id}")
+        try:
+            ITBenchAgentOutput.from_json_value(result.get("agent_output"))
+        except (TypeError, ValueError) as error:
+            _persist_prediction_failure(
+                failure_path,
+                scenario_id=scenario_id,
+                error_code="AGENT_OUTPUT_INVALID",
+                error_message=str(error),
+            )
+            raise E11PredictionError(f"E11 agent output invalid: {scenario_id}") from error
         trial_dir.mkdir(parents=True, exist_ok=True)
         for name in E11_CHECKPOINT_FILES[:-1]:
             value = result.get(name.removesuffix(".json"), {})

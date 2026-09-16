@@ -676,14 +676,15 @@ def test_e11_checkpoint_runner_resumes_without_rerunning_completed_trials(tmp_pa
 
     def executor(scenario_id: str) -> dict[str, object]:
         calls.append(scenario_id)
+        terminal = "STOP"
         return {
             "native_artifact": {"scenario_id": scenario_id},
-            "agent_output": {"scenario_id": scenario_id},
+            "agent_output": _json_agent_output(scenario_id, terminal),
             "turn_trace": [],
             "case_state": {},
             "event_log": [],
             "usage": {"provider_invocations": 0},
-            "terminal": "STOP",
+            "terminal": terminal,
             "safety": {
                 "ground_truth_exposure": 0,
                 "cross_scenario_evidence": 0,
@@ -701,6 +702,52 @@ def test_e11_checkpoint_runner_resumes_without_rerunning_completed_trials(tmp_pa
     seal = tmp_path / "seal.json"
     seal_e11_predictions(manifest, predictions, seal)
     assert verify_e11_seal(manifest, predictions, seal)["completion_count"] == 35
+
+
+def _json_agent_output(scenario_id: str, terminal: str) -> dict[str, Any]:
+    """Runtime-shaped export: ``model_dump(mode="json")`` turns tuples into lists."""
+    return {
+        "incident_id": f"ITB-E11:{scenario_id}",
+        "scenario_id": scenario_id,
+        "contributing_factor": [],
+        "reasoning": "insufficient causal evidence",
+        "native_terminal": terminal,
+    }
+
+
+def test_e11_json_shaped_empty_output_is_checkpointed(tmp_path: Path) -> None:
+    from pydantic import ValidationError
+
+    from packages.evals.itbench.contracts import ITBenchAgentOutput
+    from packages.evals.itbench.e11_official import predict_e11
+
+    value = _json_agent_output("Scenario-1", "MODEL_STEP_LIMIT")
+    with pytest.raises(ValidationError):
+        ITBenchAgentOutput.model_validate(value)
+    assert ITBenchAgentOutput.from_json_value(value).contributing_factor == ()
+    checkpoints = predict_e11(
+        _minimal_e11_manifest(["Scenario-1"]),
+        tmp_path / "predictions",
+        lambda scenario_id: _e11_executor_result(scenario_id, terminal="MODEL_STEP_LIMIT"),
+    )
+    assert checkpoints[0]["terminal"] == "MODEL_STEP_LIMIT"
+
+
+def test_e11_invalid_agent_output_fails_closed_before_checkpoint(tmp_path: Path) -> None:
+    from packages.evals.itbench.e11_official import E11PredictionError, predict_e11
+
+    predictions = tmp_path / "predictions"
+
+    def executor(scenario_id: str) -> dict[str, Any]:
+        result = _e11_executor_result(scenario_id)
+        result["agent_output"] = {"scenario_id": scenario_id}
+        return result
+
+    with pytest.raises(E11PredictionError, match="agent output invalid"):
+        predict_e11(_minimal_e11_manifest(["Scenario-1"]), predictions, executor)
+    failure = json.loads((predictions / "prediction_failure.json").read_text(encoding="utf-8"))
+    assert failure["error_code"] == "AGENT_OUTPUT_INVALID"
+    assert not (predictions / "Scenario-1" / "1" / "trial_manifest.json").exists()
 
 
 def _minimal_e11_manifest(order: list[str]) -> Any:
@@ -729,7 +776,7 @@ def _e11_executor_result(
 ) -> dict[str, Any]:
     return {
         "native_artifact": {"scenario_id": scenario_id},
-        "agent_output": {"scenario_id": scenario_id},
+        "agent_output": _json_agent_output(scenario_id, terminal),
         "turn_trace": [],
         "case_state": {},
         "event_log": [],

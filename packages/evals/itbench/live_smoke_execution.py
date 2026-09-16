@@ -306,8 +306,8 @@ def execute_live_smoke(
                 "judge_evaluator_access": 0,
             },
         }
-        _mark_ledger(ledger_path, ledger, status="COMPLETE", budget=budget)
         atomic_json_write(result_path, smoke_result)
+        _mark_ledger(ledger_path, ledger, status="COMPLETE", budget=budget)
         return smoke_result
     except BaseException:
         if ledger_path.exists():

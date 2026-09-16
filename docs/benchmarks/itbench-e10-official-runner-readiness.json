@@ -123,10 +123,10 @@
     "targeted_e10_tests": "PASS (17 tests)",
     "semantic_budget_invariant": "PASS",
     "simulated_smoke_v2": "PASS",
-    "full_make_check": "PENDING",
-    "a1_eval_check": "PENDING",
-    "pre_commit_all_files": "PENDING",
-    "ci": "PENDING"
+    "full_make_check": "PASS (530 tests)",
+    "a1_eval_check": "PASS",
+    "pre_commit_all_files": "PASS",
+    "ci": "PASS (GitHub checks 35108980010)"
   },
   "network_accounting": {
     "live_agent_calls": 0,

@@ -58,6 +58,14 @@ class _FailureInfo:
     error: BaseException
 
 
+class _TerminalError(RuntimeError):
+    """A bounded runtime terminal carrying an optional provider error code."""
+
+    def __init__(self, message: str, *, code: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 def _read_object(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -413,7 +421,10 @@ def _terminal_failure(result: dict[str, Any]) -> _FailureInfo | None:
         return _FailureInfo(
             "LIVE_SMOKE_PROVIDER_FAILURE",
             "PROVIDER_TRANSPORT",
-            RuntimeError("runtime returned PROVIDER_ERROR"),
+            _TerminalError(
+                "runtime returned PROVIDER_ERROR",
+                code=(str(result.get("provider_error")) if result.get("provider_error") else None),
+            ),
         )
     if terminal not in {"SUBMIT", "STOP"}:
         return _FailureInfo(

@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 from packages.evals.itbench.e9_identity import E9IdentityMismatch, collect_e9_identity
-from packages.evals.itbench.e9_runtime import E9Limits
+from packages.evals.itbench.e9_runtime import E9InvestigationRuntime, E9Limits
 from packages.evals.itbench.live_smoke_contract import (
     LIVE_SMOKE_RELEVANT_PATHS,
     ITBenchLiveSmokeManifestV1,
@@ -23,7 +23,14 @@ from packages.evals.itbench.live_smoke_execution import (
     execute_live_smoke,
 )
 from packages.evals.itbench.live_smoke_preflight import LivePreflightError
-from packages.provider import FakeModelProvider, LiveModelBudget
+from packages.provider import (
+    FakeModelProvider,
+    LiveModelBudget,
+    ModelResponse,
+    ProviderAccountingSnapshot,
+    ProviderError,
+    ProviderErrorCode,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 RELEVANT_PATHS = LIVE_SMOKE_RELEVANT_PATHS
@@ -116,15 +123,22 @@ def test_fake_end_to_end_persists_and_reloads_without_gt_or_judge(tmp_path: Path
         "budget_limit": 8,
         "provider_retries": 0,
     }
-    assert result["safety"] == {
-        "provider_fallback": 0,
-        "ground_truth_access": 0,
-        "cross_scenario_access": 0,
-        "writes_remediation": 0,
-        "shell": 0,
-        "sql": 0,
-        "arbitrary_promql": 0,
-        "judge_evaluator_access": 0,
+    assert result["classification"] == "LIVE_SMOKE_PASS"
+    assert result["runtime_measured_safety"] == {
+        "ground_truth_exposure": 0,
+        "cross_scenario_evidence": 0,
+        "writes": 0,
+        "arbitrary_execution": 0,
+    }
+    assert result["structural_safety_invariants"] == {
+        "judge_path_present": False,
+        "ground_truth_loader_present": False,
+        "provider_fallback_available": False,
+        "shell_execution_path_present": False,
+        "sql_execution_path_present": False,
+        "arbitrary_promql_path_present": False,
+        "remediation_path_present": False,
+        "cross_scenario_loader_present": False,
     }
     assert result_path.is_file()
     assert (run_dir / "native_artifact.json").is_file()
@@ -133,6 +147,154 @@ def test_fake_end_to_end_persists_and_reloads_without_gt_or_judge(tmp_path: Path
     assert ledger["status"] == "COMPLETE"
     assert ledger["calls_used"] == 0
     assert ledger["remaining"] == 8
+
+
+def _run_and_read_failure(
+    tmp_path: Path,
+    provider_factory: Callable[[ITBenchLiveSmokeManifestV1, LiveModelBudget], Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    manifest_path, ledger_path = _write_inputs(tmp_path, _manifest_payload())
+    result_path = tmp_path / "result.json"
+    run_dir = tmp_path / "run" / "Scenario-999"
+    with pytest.raises(LiveSmokeExecutionError):
+        execute_live_smoke(
+            ROOT,
+            manifest_path,
+            ledger_path,
+            result_path,
+            run_dir,
+            relevant_paths=RELEVANT_PATHS,
+            provider_factory=provider_factory,
+        )
+    assert result_path.is_file()
+    return (
+        json.loads(result_path.read_text(encoding="utf-8")),
+        json.loads(ledger_path.read_text(encoding="utf-8")),
+    )
+
+
+def test_model_step_limit_persists_interaction_failure_and_refuses_rerun(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_run = E9InvestigationRuntime.run
+
+    def step_limit_run(self: Any, incident: Any, alerts: Any = ()) -> dict[str, Any]:
+        result = original_run(
+            self,
+            incident,
+            alerts,
+        )
+        result["terminal"] = "MODEL_STEP_LIMIT"
+        return result
+
+    monkeypatch.setattr(E9InvestigationRuntime, "run", step_limit_run)
+
+    result, ledger = _run_and_read_failure(tmp_path, _fake_factory({}))
+
+    assert result["classification"] == "LIVE_SMOKE_INTERACTION_NOT_READY"
+    assert result["failure_stage"] == "TERMINAL_POLICY"
+    assert result["terminal"] == "MODEL_STEP_LIMIT"
+    assert ledger["status"] == "FAILED"
+    assert ledger["calls_used"] == 0
+    with pytest.raises(LiveSmokeExecutionError, match="rerun refused"):
+        execute_live_smoke(
+            ROOT,
+            tmp_path / "manifest.json",
+            tmp_path / "budget.json",
+            tmp_path / "result.json",
+            tmp_path / "run" / "Scenario-999",
+            relevant_paths=RELEVANT_PATHS,
+            provider_factory=_fake_factory({}),
+        )
+
+
+def test_protocol_stalled_persists_interaction_failure(tmp_path: Path) -> None:
+    responses = [{"action": "HYPOTHESIZE", "target": "C999"}] * 3
+
+    result, ledger = _run_and_read_failure(
+        tmp_path, lambda _manifest, _budget: FakeModelProvider(responses)
+    )
+
+    assert result["classification"] == "LIVE_SMOKE_INTERACTION_NOT_READY"
+    assert result["terminal"] == "PROTOCOL_STALLED"
+    assert ledger["status"] == "FAILED"
+
+
+class _FailingProvider:
+    provider_name = "fake"
+
+    def complete(self, _request: Any) -> ModelResponse:
+        raise ProviderError(ProviderErrorCode.PROVIDER_UNAVAILABLE, "offline provider failure")
+
+    def accounting_snapshot(self) -> ProviderAccountingSnapshot:
+        return ProviderAccountingSnapshot()
+
+
+def test_provider_failure_persists_summary_and_fails_ledger(tmp_path: Path) -> None:
+    result, ledger = _run_and_read_failure(tmp_path, lambda _manifest, _budget: _FailingProvider())
+
+    assert result["classification"] == "LIVE_SMOKE_PROVIDER_FAILURE"
+    assert result["failure_stage"] == "PROVIDER_TRANSPORT"
+    assert result["error_code"] == "PROVIDER_UNAVAILABLE"
+    assert result["terminal"] == "PROVIDER_ERROR"
+    assert ledger["status"] == "FAILED"
+
+
+def test_replay_mismatch_persists_harness_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import packages.evals.itbench.live_smoke_execution as execution
+
+    monkeypatch.setattr(
+        execution,
+        "_strict_reload",
+        lambda _run_dir, _result, _output: (_ for _ in ()).throw(
+            LiveSmokeExecutionError("replay mismatch")
+        ),
+    )
+    result, ledger = _run_and_read_failure(tmp_path, _fake_factory({}))
+
+    assert result["classification"] == "LIVE_SMOKE_HARNESS_FAILURE"
+    assert result["failure_stage"] == "REPLAY"
+    assert "replay mismatch" in result["error_message_bounded"]
+    assert ledger["status"] == "FAILED"
+
+
+def test_accounting_mismatch_persists_failure_before_raise(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def mismatch(_before: Any, _after: Any, _attempts: int) -> None:
+        raise ProviderError(
+            ProviderErrorCode.LIVE_MODEL_BUDGET_LEDGER_MISMATCH,
+            "synthetic accounting mismatch",
+        )
+
+    monkeypatch.setattr(LiveModelBudget, "verify_ledger_delta", staticmethod(mismatch))
+    result, ledger = _run_and_read_failure(tmp_path, _fake_factory({}))
+
+    assert result["classification"] == "LIVE_SMOKE_HARNESS_FAILURE"
+    assert result["failure_stage"] == "ACCOUNTING_RECONCILIATION"
+    assert result["error_code"] == "LIVE_MODEL_BUDGET_LEDGER_MISMATCH"
+    assert ledger["status"] == "FAILED"
+
+
+def test_nonzero_runtime_safety_persists_harness_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_run = E9InvestigationRuntime.run
+
+    def unsafe_run(self: Any, incident: Any, alerts: Any = ()) -> dict[str, Any]:
+        result = original_run(self, incident, alerts)
+        result["safety"]["writes"] = 1
+        return result
+
+    monkeypatch.setattr(E9InvestigationRuntime, "run", unsafe_run)
+    result, ledger = _run_and_read_failure(tmp_path, _fake_factory({}))
+
+    assert result["classification"] == "LIVE_SMOKE_HARNESS_FAILURE"
+    assert result["failure_stage"] == "RUNTIME"
+    assert result["runtime_measured_safety"]["writes"] == 1
+    assert ledger["status"] == "FAILED"
 
 
 def test_preflight_failure_does_not_invoke_provider_factory(tmp_path: Path) -> None:

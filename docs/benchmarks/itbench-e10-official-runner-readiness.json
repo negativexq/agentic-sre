@@ -1,7 +1,7 @@
 {
   "status": "E10_OFFICIAL_RUNNER_READY_FOR_REVIEW",
   "qualification": "offline_only",
-  "source_commit_qualified": "b3e942ed97d41d0488dc72469aff64167c4607c3",
+  "source_commit_qualified": "1a7134df495d064e36580795414474639c475083",
   "execution": "ITB-E10",
   "experiment": "itbench-lite-sre-external-eval-v10",
   "trial_count": 1,

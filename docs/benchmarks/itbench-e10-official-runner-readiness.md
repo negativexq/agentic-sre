@@ -72,5 +72,5 @@ ground-truth accesses during prediction qualification: 0
 ```
 
 The artifact records the qualifying source commit as
-`b3e942ed97d41d0488dc72469aff64167c4607c3`; no E10
+`1a7134df495d064e36580795414474639c475083`; no E10
 prediction manifest, ledger, seal, or official result was created.

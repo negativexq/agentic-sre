@@ -7,12 +7,30 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
+ProviderFailureCategory = Literal[
+    "BAD_REQUEST",
+    "AUTHENTICATION",
+    "PERMISSION_DENIED",
+    "NOT_FOUND",
+    "RATE_LIMIT",
+    "TIMEOUT",
+    "CONNECTION",
+    "SERVER_ERROR",
+    "API_STATUS_ERROR",
+    "UNKNOWN",
+]
+
 
 class ProviderErrorCode(StrEnum):
     """Stable provider failure categories exposed to the runtime."""
 
     PROVIDER_TIMEOUT = "PROVIDER_TIMEOUT"
     PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
+    BAD_REQUEST = "BAD_REQUEST"
+    AUTHENTICATION_FAILED = "AUTHENTICATION_FAILED"
+    PERMISSION_DENIED = "PERMISSION_DENIED"
+    RESOURCE_NOT_FOUND = "RESOURCE_NOT_FOUND"
+    UNPROCESSABLE_REQUEST = "UNPROCESSABLE_REQUEST"
     RATE_LIMITED = "RATE_LIMITED"
     INVALID_RESPONSE = "INVALID_RESPONSE"
     RESPONSE_FAILED = "RESPONSE_FAILED"
@@ -113,6 +131,22 @@ class ResponseEnvelopeMetadata(BaseModel):
     schema_error_path: str | None = None
 
 
+class ProviderFailureMetadata(BaseModel):
+    """Safe, bounded metadata for an SDK/API failure before a usable response."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    provider: Literal["openai"] = "openai"
+    exception_class: str | None = Field(default=None, max_length=128)
+    category: ProviderFailureCategory
+    http_status_code: int | None = Field(default=None, ge=100, le=599)
+    api_error_type: str | None = Field(default=None, max_length=128)
+    api_error_code: str | None = Field(default=None, max_length=128)
+    api_error_param: str | None = Field(default=None, max_length=256)
+    request_id: str | None = Field(default=None, max_length=256)
+    message_summary: str | None = Field(default=None, max_length=500)
+
+
 class ProviderAccountingSnapshot(BaseModel):
     """Non-secret provider and outbound-attempt counters for one process."""
 
@@ -156,10 +190,12 @@ class ProviderError(RuntimeError):
         message: str,
         *,
         metadata: ResponseEnvelopeMetadata | None = None,
+        failure_metadata: ProviderFailureMetadata | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.metadata = metadata
+        self.failure_metadata = failure_metadata
 
 
 def messages_to_dicts(messages: Sequence[ModelMessage]) -> list[dict[str, str]]:

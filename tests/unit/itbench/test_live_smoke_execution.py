@@ -30,6 +30,7 @@ from packages.provider import (
     ProviderAccountingSnapshot,
     ProviderError,
     ProviderErrorCode,
+    ProviderFailureMetadata,
 )
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -227,7 +228,20 @@ class _FailingProvider:
     provider_name = "fake"
 
     def complete(self, _request: Any) -> ModelResponse:
-        raise ProviderError(ProviderErrorCode.PROVIDER_UNAVAILABLE, "offline provider failure")
+        raise ProviderError(
+            ProviderErrorCode.BAD_REQUEST,
+            "offline provider failure",
+            failure_metadata=ProviderFailureMetadata(
+                exception_class="BadRequestError",
+                category="BAD_REQUEST",
+                http_status_code=400,
+                api_error_type="invalid_request_error",
+                api_error_code="invalid_function_parameters",
+                api_error_param="tools[0].parameters",
+                request_id="req_test_123",
+                message_summary="offline provider failure",
+            ),
+        )
 
     def accounting_snapshot(self) -> ProviderAccountingSnapshot:
         return ProviderAccountingSnapshot()
@@ -238,8 +252,28 @@ def test_provider_failure_persists_summary_and_fails_ledger(tmp_path: Path) -> N
 
     assert result["classification"] == "LIVE_SMOKE_PROVIDER_FAILURE"
     assert result["failure_stage"] == "PROVIDER_TRANSPORT"
-    assert result["error_code"] == "PROVIDER_UNAVAILABLE"
+    assert result["error_code"] == "BAD_REQUEST"
     assert result["terminal"] == "PROVIDER_ERROR"
+    assert result["provider_failure"] == {
+        "provider": "openai",
+        "exception_class": "BadRequestError",
+        "category": "BAD_REQUEST",
+        "http_status_code": 400,
+        "api_error_type": "invalid_request_error",
+        "api_error_code": "invalid_function_parameters",
+        "api_error_param": "tools[0].parameters",
+        "request_id": "req_test_123",
+        "message_summary": "offline provider failure",
+    }
+    trace = json.loads(
+        (tmp_path / "run" / "Scenario-999" / "turn_trace.json").read_text(encoding="utf-8")
+    )
+    assert trace[0]["provider_error"]["code"] == "BAD_REQUEST"
+    assert trace[0]["provider_error"]["request_id"] == "req_test_123"
+    failure_artifact = json.loads(
+        (tmp_path / "run" / "Scenario-999" / "failure_artifact.json").read_text(encoding="utf-8")
+    )
+    assert failure_artifact["provider_failure"] == result["provider_failure"]
     assert ledger["status"] == "FAILED"
 
 

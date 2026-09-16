@@ -9,6 +9,8 @@ from packages.provider.contracts import (
     ProviderAccountingSnapshot,
     ProviderError,
     ProviderErrorCode,
+    ProviderFailureCategory,
+    ProviderFailureMetadata,
     ResponseEnvelopeMetadata,
     ToolSchemaDescriptor,
 )
@@ -26,6 +28,8 @@ __all__ = [
     "OpenAIProvider",
     "ProviderError",
     "ProviderErrorCode",
+    "ProviderFailureCategory",
+    "ProviderFailureMetadata",
     "ProviderAccountingSnapshot",
     "ResponseEnvelopeMetadata",
     "ToolSchemaDescriptor",

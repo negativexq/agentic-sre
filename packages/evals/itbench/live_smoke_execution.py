@@ -56,6 +56,7 @@ class _FailureInfo:
     classification: str
     stage: str
     error: BaseException
+    provider_failure: dict[str, Any] | None = None
 
 
 class _TerminalError(RuntimeError):
@@ -186,6 +187,7 @@ def _persist_failure_artifact(
             "error_type": type(failure.error).__name__,
             "error_code": _error_code(failure.error),
             "error_message_bounded": str(failure.error)[:1_000],
+            "provider_failure": failure.provider_failure,
         },
     )
     persisted.append(name)
@@ -351,6 +353,11 @@ def _summary(
             "remaining": None,
         }
     )
+    provider_failure = (
+        failure.provider_failure
+        if failure is not None and failure.provider_failure is not None
+        else _provider_failure_from_result(result)
+    )
     summary = {
         "execution": manifest.execution,
         **_identity_payload(manifest, preflight, manifest_path),
@@ -375,6 +382,7 @@ def _summary(
         "error_type": type(failure.error).__name__ if failure else None,
         "error_code": _error_code(failure.error) if failure else None,
         "error_message_bounded": str(failure.error)[:1_000] if failure else None,
+        "provider_failure": provider_failure,
         "terminal": result.get("terminal") if isinstance(result, dict) else None,
         "metrics": {
             "model_calls": usage.get("model_calls"),
@@ -401,12 +409,46 @@ def _summary(
     return summary
 
 
+def _provider_failure_from_result(result: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Extract only the runtime's already-sanitized provider diagnostics."""
+    if not isinstance(result, dict):
+        return None
+    for turn in reversed(result.get("turns", ())):
+        if not isinstance(turn, dict):
+            continue
+        value = turn.get("provider_error")
+        if not isinstance(value, dict):
+            continue
+        metadata = {
+            key: value[key]
+            for key in (
+                "provider",
+                "exception_class",
+                "category",
+                "http_status_code",
+                "api_error_type",
+                "api_error_code",
+                "api_error_param",
+                "request_id",
+                "message_summary",
+            )
+            if key in value
+        }
+        return metadata or None
+    return None
+
+
 def _classify_exception(error: BaseException, stage: str) -> _FailureInfo:
+    provider_failure = (
+        error.failure_metadata.model_dump(mode="json")
+        if isinstance(error, ProviderError) and error.failure_metadata is not None
+        else None
+    )
     if stage in {"PROVIDER_CONSTRUCTION", "PROVIDER_TRANSPORT"} or (
         isinstance(error, ProviderError) and stage == "RUNTIME"
     ):
-        return _FailureInfo("LIVE_SMOKE_PROVIDER_FAILURE", stage, error)
-    return _FailureInfo("LIVE_SMOKE_HARNESS_FAILURE", stage, error)
+        return _FailureInfo("LIVE_SMOKE_PROVIDER_FAILURE", stage, error, provider_failure)
+    return _FailureInfo("LIVE_SMOKE_HARNESS_FAILURE", stage, error, provider_failure)
 
 
 def _terminal_failure(result: dict[str, Any]) -> _FailureInfo | None:
@@ -426,13 +468,36 @@ def _terminal_failure(result: dict[str, Any]) -> _FailureInfo | None:
             ),
             None,
         )
+        provider_failure = (
+            {
+                key: provider_error[key]
+                for key in (
+                    "provider",
+                    "exception_class",
+                    "category",
+                    "http_status_code",
+                    "api_error_type",
+                    "api_error_code",
+                    "api_error_param",
+                    "request_id",
+                    "message_summary",
+                )
+                if key in provider_error
+            }
+            if isinstance(provider_error, dict)
+            else None
+        )
+        provider_code = (
+            provider_error.get("code") if isinstance(provider_error, dict) else provider_error
+        )
         return _FailureInfo(
             "LIVE_SMOKE_PROVIDER_FAILURE",
             "PROVIDER_TRANSPORT",
             _TerminalError(
                 "runtime returned PROVIDER_ERROR",
-                code=str(provider_error) if provider_error else None,
+                code=str(provider_code) if provider_code else None,
             ),
+            provider_failure,
         )
     if terminal not in {"SUBMIT", "STOP"}:
         return _FailureInfo(

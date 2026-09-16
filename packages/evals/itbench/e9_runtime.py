@@ -40,6 +40,14 @@ def e9_prompt_hash() -> str:
     return sha256(ITBENCH_E9_PROMPT.encode("utf-8")).hexdigest()
 
 
+def _provider_error_payload(error: ProviderError) -> dict[str, Any]:
+    """Expose stable provider diagnostics without retaining raw SDK errors."""
+    payload: dict[str, Any] = {"code": error.code.value}
+    if error.failure_metadata is not None:
+        payload.update(error.failure_metadata.model_dump(mode="json"))
+    return payload
+
+
 @dataclass(frozen=True, slots=True)
 class E9Limits:
     max_model_calls: int = 12
@@ -261,7 +269,9 @@ class E9InvestigationRuntime:
                         break
                     continue
                 terminal = "PROVIDER_ERROR"
-                trace.update({"decision": terminal, "provider_error": error.code.value})
+                trace.update(
+                    {"decision": terminal, "provider_error": _provider_error_payload(error)}
+                )
                 turns.append(trace)
                 break
             provider_latency += response.latency_ms

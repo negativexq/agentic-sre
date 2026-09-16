@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from hashlib import sha256
 from threading import Lock
@@ -16,6 +17,8 @@ from packages.provider.contracts import (
     ProviderAccountingSnapshot,
     ProviderError,
     ProviderErrorCode,
+    ProviderFailureCategory,
+    ProviderFailureMetadata,
     ResponseEnvelopeMetadata,
     ToolSchemaDescriptor,
     messages_to_dicts,
@@ -638,6 +641,110 @@ def _field(value: Any, name: str, default: Any = None) -> Any:
 def _safe_string(value: Any, *, limit: int = 128) -> str | None:
     """Return a bounded diagnostic scalar without retaining arbitrary payloads."""
     return value[:limit] if isinstance(value, str) else None
+
+
+def _safe_error_message(error: Any) -> str | None:
+    """Keep a short diagnostic message while removing common credentials."""
+    value = getattr(error, "message", None)
+    raw = value if isinstance(value, str) else str(error)
+    redacted = re.sub(r"(?i)(authorization\s*:\s*bearer\s+)[^\s,;]+", r"\1[REDACTED]", raw)
+    redacted = re.sub(r"(?i)\bbearer\s+[^\s,;]+", "Bearer [REDACTED]", redacted)
+    redacted = re.sub(r"\bsk-[A-Za-z0-9_-]+\b", "[REDACTED]", redacted)
+    return redacted[:500] or None
+
+
+def _provider_status_code(error: Any) -> int | None:
+    """Read an HTTP status without invoking SDK response methods."""
+    for value in (
+        getattr(error, "status_code", None),
+        getattr(getattr(error, "response", None), "status_code", None),
+    ):
+        if isinstance(value, int) and 100 <= value <= 599:
+            return value
+    return None
+
+
+def _provider_error_body(error: Any) -> Any:
+    """Return only the SDK's structured error object, never the raw body."""
+    body = getattr(error, "body", None)
+    if isinstance(body, dict):
+        return body.get("error", body)
+    return None
+
+
+def _provider_failure_metadata(
+    error: Any,
+    *,
+    category: ProviderFailureCategory,
+    status_code: int | None,
+) -> ProviderFailureMetadata:
+    """Build a strict whitelist of safe provider failure attributes."""
+    body = _provider_error_body(error)
+    request_id = getattr(error, "request_id", None) or getattr(error, "_request_id", None)
+    return ProviderFailureMetadata(
+        exception_class=error.__class__.__name__[:128],
+        category=category,
+        http_status_code=status_code,
+        api_error_type=_safe_string(_field(body, "type")),
+        api_error_code=_safe_string(_field(body, "code")),
+        api_error_param=_safe_string(_field(body, "param"), limit=256),
+        request_id=_safe_string(request_id, limit=256),
+        message_summary=_safe_error_message(error),
+    )
+
+
+def _provider_error_from_exception(error: BaseException) -> ProviderError:
+    """Map SDK status/transport failures without depending on SDK classes."""
+    status_code = _provider_status_code(error)
+    error_name = error.__class__.__name__.lower()
+    message = _safe_error_message(error)
+    category: ProviderFailureCategory
+    if isinstance(error, TimeoutError) or "timeout" in error_name:
+        code = ProviderErrorCode.PROVIDER_TIMEOUT
+        category = "TIMEOUT"
+    elif isinstance(error, ConnectionError) or "connection" in error_name:
+        code = ProviderErrorCode.PROVIDER_UNAVAILABLE
+        category = "CONNECTION"
+    elif status_code == 400:
+        code = ProviderErrorCode.BAD_REQUEST
+        category = "BAD_REQUEST"
+    elif status_code == 401:
+        code = ProviderErrorCode.AUTHENTICATION_FAILED
+        category = "AUTHENTICATION"
+    elif status_code == 403:
+        code = ProviderErrorCode.PERMISSION_DENIED
+        category = "PERMISSION_DENIED"
+    elif status_code == 404:
+        code = ProviderErrorCode.RESOURCE_NOT_FOUND
+        category = "NOT_FOUND"
+    elif status_code == 422:
+        code = ProviderErrorCode.UNPROCESSABLE_REQUEST
+        category = "BAD_REQUEST"
+    elif status_code == 429:
+        code = ProviderErrorCode.RATE_LIMITED
+        category = "RATE_LIMIT"
+    elif status_code is not None and status_code >= 500:
+        code = ProviderErrorCode.PROVIDER_UNAVAILABLE
+        category = "SERVER_ERROR"
+    elif status_code is not None:
+        code = ProviderErrorCode.PROVIDER_UNAVAILABLE
+        category = "API_STATUS_ERROR"
+    elif message and "context" in message.lower() and "limit" in message.lower():
+        code = ProviderErrorCode.CONTEXT_LIMIT_EXCEEDED
+        category = "API_STATUS_ERROR"
+    else:
+        code = ProviderErrorCode.PROVIDER_UNAVAILABLE
+        category = "UNKNOWN"
+    failure_metadata = _provider_failure_metadata(
+        error,
+        category=category,
+        status_code=status_code,
+    )
+    return ProviderError(
+        code,
+        message or "live provider request failed",
+        failure_metadata=failure_metadata,
+    )
 
 
 def _safe_strings(values: list[Any]) -> list[str]:
@@ -1442,36 +1549,15 @@ class OpenAIProvider:
             except (TimeoutError, ConnectionError) as error:
                 if attempt + 1 < attempts:
                     continue
-                if attempt + 1 == attempts:
-                    raise ProviderError(
-                        ProviderErrorCode.PROVIDER_TIMEOUT
-                        if isinstance(error, TimeoutError)
-                        else ProviderErrorCode.PROVIDER_UNAVAILABLE,
-                        "live provider request failed",
-                    ) from error
+                raise _provider_error_from_exception(error) from error
             except Exception as error:
-                status_code = getattr(error, "status_code", None)
-                error_name = error.__class__.__name__.lower()
-                if "timeout" in error_name:
-                    if attempt + 1 < attempts:
-                        continue
-                    raise ProviderError(
-                        ProviderErrorCode.PROVIDER_TIMEOUT,
-                        "live provider request timed out",
-                    ) from error
+                status_code = _provider_status_code(error)
                 retryable = status_code == 429 or (
                     isinstance(status_code, int) and status_code >= 500
                 )
                 if retryable and attempt + 1 < attempts:
                     continue
-                message = str(error).lower()
-                if "context" in message and "limit" in message:
-                    code = ProviderErrorCode.CONTEXT_LIMIT_EXCEEDED
-                elif status_code == 429:
-                    code = ProviderErrorCode.RATE_LIMITED
-                else:
-                    code = ProviderErrorCode.PROVIDER_UNAVAILABLE
-                raise ProviderError(code, "live provider request failed") from error
+                raise _provider_error_from_exception(error) from error
         raise AssertionError("provider retry loop must return or raise")
 
     def _normalize_response(

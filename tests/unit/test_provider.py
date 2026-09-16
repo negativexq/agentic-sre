@@ -18,6 +18,7 @@ from packages.provider import (
     OpenAIProvider,
     ProviderError,
     ProviderErrorCode,
+    ProviderFailureMetadata,
     ToolSchemaDescriptor,
 )
 from packages.provider.openai import (
@@ -314,6 +315,142 @@ def test_live_provider_accounting_counts_retry_and_ledger_units() -> None:
     assert accounting.outbound_api_attempts == 2
     assert accounting.provider_retries == 1
     assert accounting.shared_ledger_consumed == 2
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected_code", "expected_category"),
+    [
+        (400, ProviderErrorCode.BAD_REQUEST, "BAD_REQUEST"),
+        (401, ProviderErrorCode.AUTHENTICATION_FAILED, "AUTHENTICATION"),
+        (403, ProviderErrorCode.PERMISSION_DENIED, "PERMISSION_DENIED"),
+        (404, ProviderErrorCode.RESOURCE_NOT_FOUND, "NOT_FOUND"),
+        (422, ProviderErrorCode.UNPROCESSABLE_REQUEST, "BAD_REQUEST"),
+        (429, ProviderErrorCode.RATE_LIMITED, "RATE_LIMIT"),
+        (500, ProviderErrorCode.PROVIDER_UNAVAILABLE, "SERVER_ERROR"),
+        (503, ProviderErrorCode.PROVIDER_UNAVAILABLE, "SERVER_ERROR"),
+    ],
+)
+def test_openai_status_failures_preserve_typed_attribution(
+    status_code: int,
+    expected_code: ProviderErrorCode,
+    expected_category: str,
+) -> None:
+    """Map representative OpenAI API statuses without making a network call."""
+
+    class SDKError(RuntimeError):
+        def __init__(self) -> None:
+            super().__init__("request rejected")
+            self.status_code = status_code
+            self.body = {
+                "error": {
+                    "type": "invalid_request_error",
+                    "code": "invalid_function_parameters",
+                    "param": "tools[0].parameters",
+                }
+            }
+            self.request_id = "req_test_123"
+
+    class Transport:
+        def create(self, **_kwargs: object) -> object:
+            raise SDKError()
+
+    provider = OpenAIProvider(
+        budget=LiveModelBudget(1),
+        config=LiveModelConfig(enabled=True),
+        transport=Transport(),
+        max_retry=0,
+    )
+
+    with pytest.raises(ProviderError) as error:
+        provider.complete(request())
+
+    assert error.value.code is expected_code
+    failure = error.value.failure_metadata
+    assert failure is not None
+    assert failure.category == expected_category
+    assert failure.http_status_code == status_code
+    assert failure.api_error_type == "invalid_request_error"
+    assert failure.api_error_code == "invalid_function_parameters"
+    assert failure.api_error_param == "tools[0].parameters"
+    assert failure.request_id == "req_test_123"
+
+
+@pytest.mark.parametrize(
+    ("exception_name", "expected_code", "expected_category"),
+    [
+        ("APIConnectionError", ProviderErrorCode.PROVIDER_UNAVAILABLE, "CONNECTION"),
+        ("APITimeoutError", ProviderErrorCode.PROVIDER_TIMEOUT, "TIMEOUT"),
+    ],
+)
+def test_openai_connection_and_timeout_failures_are_distinct(
+    exception_name: str,
+    expected_code: ProviderErrorCode,
+    expected_category: str,
+) -> None:
+    """Classify SDK-like transport exceptions by failure mode."""
+    error_type = type(exception_name, (RuntimeError,), {})
+
+    class Transport:
+        def create(self, **_kwargs: object) -> object:
+            raise error_type("transport failed")
+
+    provider = OpenAIProvider(
+        budget=LiveModelBudget(1),
+        config=LiveModelConfig(enabled=True),
+        transport=Transport(),
+        max_retry=0,
+    )
+
+    with pytest.raises(ProviderError) as error:
+        provider.complete(request())
+
+    assert error.value.code is expected_code
+    assert error.value.failure_metadata is not None
+    assert error.value.failure_metadata.category == expected_category
+
+
+def test_openai_failure_metadata_redacts_common_credentials() -> None:
+    """Persisted diagnostics do not retain bearer tokens or OpenAI keys."""
+
+    class SDKError(RuntimeError):
+        def __init__(self) -> None:
+            super().__init__("Authorization: Bearer abc sk-testsecret")
+            self.status_code = 400
+
+    class Transport:
+        def create(self, **_kwargs: object) -> object:
+            raise SDKError()
+
+    provider = OpenAIProvider(
+        budget=LiveModelBudget(1),
+        config=LiveModelConfig(enabled=True),
+        transport=Transport(),
+        max_retry=0,
+    )
+
+    with pytest.raises(ProviderError) as error:
+        provider.complete(request())
+
+    failure = error.value.failure_metadata
+    assert failure is not None
+    assert "abc" not in (failure.message_summary or "")
+    assert "sk-testsecret" not in (failure.message_summary or "")
+    assert "REDACTED" in (failure.message_summary or "")
+    assert len(failure.message_summary or "") <= 500
+
+
+def test_provider_failure_metadata_contract_is_strict_and_bounded() -> None:
+    """The failure payload has no unbounded or undeclared fields."""
+    metadata = ProviderFailureMetadata(
+        category="BAD_REQUEST",
+        http_status_code=400,
+        message_summary="safe",
+    )
+    assert metadata.provider == "openai"
+    with pytest.raises(ValueError):
+        ProviderFailureMetadata.model_validate(
+            {**metadata.model_dump(), "raw_response_body": "secret"}
+        )
 
 
 def test_local_request_schema_failure_consumes_no_budget_or_transport_call() -> None:

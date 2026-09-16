@@ -21,6 +21,23 @@ LIVE_SMOKE_MAX_AGENT_TURNS = 8
 LIVE_SMOKE_MAX_SEMANTIC_ACTIONS = 8
 LIVE_SMOKE_MAX_WALL_TIME_SECONDS = 180
 LIVE_SMOKE_MAX_CONSECUTIVE_REJECTIONS = 2
+LIVE_SMOKE_RELEVANT_PATHS: Final[tuple[str, ...]] = (
+    "packages/evals/itbench/e9_control.py",
+    "packages/evals/itbench/e9_runtime.py",
+    "packages/evals/itbench/e9_context.py",
+    "packages/evals/itbench/e9_semantic.py",
+    "packages/evals/itbench/e9_memory.py",
+    "packages/evals/itbench/e9_packing.py",
+    "packages/evals/itbench/external_contracts.py",
+    "packages/provider/openai.py",
+    "packages/provider/contracts.py",
+    "packages/model_policy.py",
+    "packages/evals/itbench/live_smoke_contract.py",
+    "packages/evals/itbench/live_smoke_preflight.py",
+    "packages/evals/itbench/live_smoke_execution.py",
+    "scripts/itbench_control_plane_live_smoke.py",
+    "scripts/itbench_control_plane_live_smoke_execute.py",
+)
 
 
 class ITBenchLiveSmokeRuntimeIdentity(BaseModel):
@@ -83,7 +100,7 @@ class ITBenchLiveSmokeManifestV1(BaseModel):
 
 def build_live_smoke_manifest(
     root: Path,
-    relevant_paths: tuple[str, ...],
+    relevant_paths: tuple[str, ...] = LIVE_SMOKE_RELEVANT_PATHS,
     *,
     execution: str = "ITB-CONTROL-LIVE-SMOKE-002",
 ) -> ITBenchLiveSmokeManifestV1:
@@ -144,6 +161,7 @@ __all__ = [
     "LIVE_SMOKE_MAX_SEMANTIC_ACTIONS",
     "LIVE_SMOKE_MAX_WALL_TIME_SECONDS",
     "LIVE_SMOKE_OFFLINE_READINESS",
+    "LIVE_SMOKE_RELEVANT_PATHS",
     "LIVE_SMOKE_REQUIRED_BUDGET",
     "build_live_smoke_manifest",
 ]

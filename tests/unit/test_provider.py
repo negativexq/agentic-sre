@@ -415,6 +415,7 @@ def test_openai_failure_metadata_redacts_common_credentials() -> None:
     class SDKError(RuntimeError):
         def __init__(self) -> None:
             super().__init__("Authorization: Bearer abc sk-testsecret")
+            self.message = "Authorization: Bearer abc sk-testsecret"
             self.status_code = 400
 
     class Transport:

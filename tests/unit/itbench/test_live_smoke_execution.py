@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -35,6 +35,24 @@ from packages.provider import (
 
 ROOT = Path(__file__).resolve().parents[3]
 RELEVANT_PATHS = LIVE_SMOKE_RELEVANT_PATHS
+
+
+@pytest.fixture(autouse=True)
+def _permit_uncommitted_subject_changes_for_tests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep identity-focused tests independent of this task's dirty worktree."""
+    import packages.evals.itbench.live_smoke_preflight as preflight
+
+    preflight_module: Any = preflight
+    collect_identity = preflight_module.collect_e9_identity
+
+    def clean_identity(root: Path, paths: tuple[str, ...]) -> dict[str, Any]:
+        actual = cast(dict[str, Any], collect_identity(root, paths))
+        actual["relevant_worktree_dirty"] = False
+        return actual
+
+    monkeypatch.setattr(preflight_module, "collect_e9_identity", clean_identity)
 
 
 def _manifest_payload() -> dict[str, Any]:

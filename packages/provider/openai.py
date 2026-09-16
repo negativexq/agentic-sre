@@ -646,7 +646,12 @@ def _safe_string(value: Any, *, limit: int = 128) -> str | None:
 def _safe_error_message(error: Any) -> str | None:
     """Keep a short diagnostic message while removing common credentials."""
     value = getattr(error, "message", None)
-    raw = value if isinstance(value, str) else str(error)
+    # Do not fall back to repr/str(error): SDK exception strings can embed a
+    # complete response or request payload.  The explicit message attribute is
+    # the only message source permitted at this persistence boundary.
+    if not isinstance(value, str):
+        return None
+    raw = value
     redacted = re.sub(r"(?i)(authorization\s*:\s*bearer\s+)[^\s,;]+", r"\1[REDACTED]", raw)
     redacted = re.sub(r"(?i)\bbearer\s+[^\s,;]+", "Bearer [REDACTED]", redacted)
     redacted = re.sub(r"\bsk-[A-Za-z0-9_-]+\b", "[REDACTED]", redacted)

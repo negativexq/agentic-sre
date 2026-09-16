@@ -11,6 +11,7 @@ import hashlib
 import json
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -34,7 +35,13 @@ from packages.evals.itbench.output_adapter import adapt_e9_output
 from packages.evals.itbench.persistence import atomic_json_write
 from packages.evals.itbench.snapshot_backend import ITBenchSnapshotBackend
 from packages.model_policy import ModelPolicyError, validate_agent_environment
-from packages.provider import LiveModelBudget, ModelProvider, OpenAIProvider, live_model_config
+from packages.provider import (
+    LiveModelBudget,
+    ModelProvider,
+    OpenAIProvider,
+    ProviderError,
+    live_model_config,
+)
 
 
 class LiveSmokeExecutionError(RuntimeError):
@@ -42,6 +49,13 @@ class LiveSmokeExecutionError(RuntimeError):
 
 
 ProviderFactory = Callable[[ITBenchLiveSmokeManifestV1, LiveModelBudget], ModelProvider]
+
+
+@dataclass(frozen=True, slots=True)
+class _FailureInfo:
+    classification: str
+    stage: str
+    error: BaseException
 
 
 def _read_object(path: Path) -> dict[str, Any]:
@@ -130,13 +144,43 @@ def _persist_run_artifacts(
     run_dir: Path,
     result: dict[str, Any],
     output: ITBenchAgentOutput,
+    persisted: list[str],
 ) -> None:
-    atomic_json_write(run_dir / "native_artifact.json", result)
-    atomic_json_write(run_dir / "turn_trace.json", result["turns"])
-    atomic_json_write(run_dir / "case_state.json", result["case_state"])
-    atomic_json_write(run_dir / "event_log.json", result["events"])
-    atomic_json_write(run_dir / "usage.json", result["usage"])
-    atomic_json_write(run_dir / "agent_output.json", output.model_dump(mode="json"))
+    values = (
+        ("native_artifact.json", result),
+        ("turn_trace.json", result["turns"]),
+        ("case_state.json", result["case_state"]),
+        ("event_log.json", result["events"]),
+        ("usage.json", result["usage"]),
+        ("agent_output.json", output.model_dump(mode="json")),
+    )
+    for name, value in values:
+        atomic_json_write(run_dir / name, value)
+        persisted.append(name)
+
+
+def _persist_failure_artifact(
+    run_dir: Path,
+    manifest: ITBenchLiveSmokeManifestV1,
+    failure: _FailureInfo,
+    persisted: list[str],
+) -> None:
+    name = "failure_artifact.json"
+    if name in persisted or (run_dir / name).exists():
+        return
+    atomic_json_write(
+        run_dir / name,
+        {
+            "execution": manifest.execution,
+            "status": "FAILED",
+            "failure_stage": failure.stage,
+            "classification": failure.classification,
+            "error_type": type(failure.error).__name__,
+            "error_code": _error_code(failure.error),
+            "error_message_bounded": str(failure.error)[:1_000],
+        },
+    )
+    persisted.append(name)
 
 
 def _strict_reload(run_dir: Path, result: dict[str, Any], output: ITBenchAgentOutput) -> None:
@@ -175,6 +219,223 @@ def _mark_ledger(
     )
 
 
+def _accounting_snapshot(provider: ModelProvider | None) -> Any:
+    if provider is None:
+        return None
+    reader = getattr(provider, "accounting_snapshot", None)
+    if not callable(reader):
+        return None
+    try:
+        return reader()
+    except BaseException:
+        return None
+
+
+def _error_code(error: BaseException) -> str | None:
+    code = getattr(error, "code", None)
+    if code is None:
+        return None
+    value = getattr(code, "value", code)
+    return str(value)
+
+
+def _runtime_measured_safety(result: dict[str, Any] | None) -> dict[str, Any]:
+    raw = result.get("safety") if isinstance(result, dict) else None
+    raw = raw if isinstance(raw, dict) else {}
+    return {
+        "ground_truth_exposure": raw.get("ground_truth_exposure", "not_available"),
+        "cross_scenario_evidence": raw.get("cross_scenario_evidence", "not_available"),
+        "writes": raw.get("writes", "not_available"),
+        "arbitrary_execution": raw.get("arbitrary_execution", "not_available"),
+    }
+
+
+def _structural_safety_invariants() -> dict[str, bool]:
+    """Return architectural facts, distinct from runtime-measured counters."""
+    return {
+        "judge_path_present": False,
+        "ground_truth_loader_present": False,
+        "provider_fallback_available": False,
+        "shell_execution_path_present": False,
+        "sql_execution_path_present": False,
+        "arbitrary_promql_path_present": False,
+        "remediation_path_present": False,
+        "cross_scenario_loader_present": False,
+    }
+
+
+def _safety_is_zero(result: dict[str, Any]) -> bool:
+    measured = _runtime_measured_safety(result)
+    return all(measured.get(name) == 0 for name in measured)
+
+
+def _identity_payload(
+    manifest: ITBenchLiveSmokeManifestV1, preflight: dict[str, Any], manifest_path: Path
+) -> dict[str, Any]:
+    return {
+        "manifest_sha256": _sha256(manifest_path),
+        "runtime_identity": preflight["runtime_identity"],
+        "identity": {
+            "runtime_source_sha": preflight["runtime_identity"]["git_head"],
+            "runtime_bundle_sha": preflight["runtime_identity"]["bundle_sha256"],
+            "dataset_revision": manifest.dataset_revision,
+            "control_policy_hash": manifest.control_policy_hash,
+            "semantic_registry_hash": manifest.semantic_registry_hash,
+            "semantic_capability_policy_hash": manifest.semantic_capability_policy_hash,
+            "provider_schema_hash": manifest.provider_schema_hash,
+            "context_planner_hash": manifest.context_planner_hash,
+            "candidate_discovery_hash": manifest.candidate_discovery_hash,
+            "prompt_version": manifest.prompt_version,
+            "prompt_hash": manifest.prompt_hash,
+            "protocol_version": manifest.protocol_version,
+            "protocol_hash": manifest.protocol_hash,
+        },
+    }
+
+
+def _summary(
+    *,
+    root: Path,
+    manifest: ITBenchLiveSmokeManifestV1,
+    manifest_path: Path,
+    preflight: dict[str, Any],
+    result: dict[str, Any] | None,
+    failure: _FailureInfo | None,
+    provider_before: Any,
+    provider_after: Any,
+    budget_snapshot: Any,
+    persisted: list[str],
+    run_dir: Path,
+    started: float,
+) -> dict[str, Any]:
+    usage = result.get("usage", {}) if isinstance(result, dict) else {}
+    if not isinstance(usage, dict):
+        usage = {}
+    if provider_before is not None and provider_after is not None:
+        provider_invocations = (
+            provider_after.provider_invocations - provider_before.provider_invocations
+        )
+        outbound_attempts = (
+            provider_after.outbound_api_attempts - provider_before.outbound_api_attempts
+        )
+    else:
+        provider_invocations = usage.get("provider_invocations")
+        outbound_attempts = usage.get("outbound_api_attempts")
+    if provider_before is not None and provider_after is not None:
+        provider_accounting: Any = {
+            "before": provider_before.model_dump(mode="json"),
+            "after": provider_after.model_dump(mode="json"),
+        }
+    elif provider_after is not None:
+        provider_accounting = provider_after.model_dump(mode="json")
+    else:
+        provider_accounting = "not_available"
+    budget = (
+        {
+            "cap": budget_snapshot.limit,
+            "calls_used": budget_snapshot.calls_used,
+            "remaining": budget_snapshot.calls_remaining,
+        }
+        if budget_snapshot is not None
+        else {
+            "cap": manifest.required_budget,
+            "calls_used": None,
+            "remaining": None,
+        }
+    )
+    summary = {
+        "execution": manifest.execution,
+        **_identity_payload(manifest, preflight, manifest_path),
+        "fixture": manifest.fixture.model_dump(mode="json"),
+        "model_policy": {
+            "provider": manifest.provider,
+            "model": manifest.model,
+            "reasoning_effort": manifest.reasoning_effort,
+            "provider_retries": manifest.provider_retries,
+            "judge_disabled": manifest.judge_disabled,
+            "rerun_policy": manifest.rerun_policy,
+        },
+        "runtime_limits": {
+            "max_model_calls": manifest.max_model_calls,
+            "max_agent_turns": manifest.max_agent_turns,
+            "max_semantic_actions": manifest.max_semantic_actions,
+            "max_wall_time_seconds": manifest.max_wall_time_seconds,
+            "max_consecutive_rejected_actions": manifest.max_consecutive_rejected_actions,
+        },
+        "classification": failure.classification if failure else "LIVE_SMOKE_PASS",
+        "failure_stage": failure.stage if failure else None,
+        "error_type": type(failure.error).__name__ if failure else None,
+        "error_code": _error_code(failure.error) if failure else None,
+        "error_message_bounded": str(failure.error)[:1_000] if failure else None,
+        "terminal": result.get("terminal") if isinstance(result, dict) else None,
+        "metrics": {
+            "model_calls": usage.get("model_calls"),
+            "provider_invocations": provider_invocations,
+            "provider_outbound_attempts": outbound_attempts,
+            "input_tokens": usage.get("input_tokens"),
+            "output_tokens": usage.get("output_tokens"),
+            "semantic_actions_requested": usage.get("semantic_actions_requested"),
+            "semantic_actions_executed": usage.get("semantic_actions_executed"),
+            "action_rejections": usage.get("action_rejections"),
+            "recovered_action_rejections": usage.get("recovered_action_rejections"),
+            "evidence_count": len(result.get("evidence", ())) if isinstance(result, dict) else None,
+            "wall_time_ms": int((time.monotonic() - started) * 1000),
+        },
+        "provider_accounting": provider_accounting,
+        "budget": budget,
+        "artifacts": {
+            "run_dir": str(run_dir),
+            "persisted": list(persisted),
+        },
+        "runtime_measured_safety": _runtime_measured_safety(result),
+        "structural_safety_invariants": _structural_safety_invariants(),
+    }
+    return summary
+
+
+def _classify_exception(error: BaseException, stage: str) -> _FailureInfo:
+    if stage in {"PROVIDER_CONSTRUCTION", "PROVIDER_TRANSPORT"} or (
+        isinstance(error, ProviderError) and stage == "RUNTIME"
+    ):
+        return _FailureInfo("LIVE_SMOKE_PROVIDER_FAILURE", stage, error)
+    return _FailureInfo("LIVE_SMOKE_HARNESS_FAILURE", stage, error)
+
+
+def _terminal_failure(result: dict[str, Any]) -> _FailureInfo | None:
+    terminal = result.get("terminal")
+    if terminal in {"MODEL_STEP_LIMIT", "PROTOCOL_STALLED", "WALL_TIME_LIMIT"}:
+        return _FailureInfo(
+            "LIVE_SMOKE_INTERACTION_NOT_READY",
+            "TERMINAL_POLICY",
+            RuntimeError(f"runtime terminal: {terminal}"),
+        )
+    if terminal == "PROVIDER_ERROR":
+        return _FailureInfo(
+            "LIVE_SMOKE_PROVIDER_FAILURE",
+            "PROVIDER_TRANSPORT",
+            RuntimeError("runtime returned PROVIDER_ERROR"),
+        )
+    if terminal not in {"SUBMIT", "STOP"}:
+        return _FailureInfo(
+            "LIVE_SMOKE_HARNESS_FAILURE",
+            "TERMINAL_POLICY",
+            RuntimeError(f"invalid smoke terminal: {terminal}"),
+        )
+    if not result.get("evidence"):
+        return _FailureInfo(
+            "LIVE_SMOKE_HARNESS_FAILURE",
+            "TERMINAL_POLICY",
+            RuntimeError("smoke did not exercise a semantic evidence path"),
+        )
+    if not _safety_is_zero(result):
+        return _FailureInfo(
+            "LIVE_SMOKE_HARNESS_FAILURE",
+            "RUNTIME",
+            RuntimeError("runtime measured safety counter is nonzero"),
+        )
+    return None
+
+
 def execute_live_smoke(
     root: Path,
     manifest_path: Path,
@@ -209,11 +470,48 @@ def execute_live_smoke(
 
     _mark_ledger(ledger_path, ledger, status="RUNNING", budget=budget)
     started = time.monotonic()
+    stage = "PROVIDER_CONSTRUCTION"
+    provider: ModelProvider | None = None
+    provider_before: Any = None
+    provider_after: Any = None
+    result: dict[str, Any] | None = None
+    persisted: list[str] = []
+
+    def write_failure(failure: _FailureInfo) -> None:
+        """Publish one bounded failure summary before propagating the failure."""
+        nonlocal provider_after
+        if provider_after is None:
+            provider_after = _accounting_snapshot(provider)
+        try:
+            budget_snapshot = budget.snapshot()
+        except BaseException:
+            budget_snapshot = None
+        _persist_failure_artifact(run_dir, manifest, failure, persisted)
+        summary = _summary(
+            root=root,
+            manifest=manifest,
+            manifest_path=manifest_path,
+            preflight=preflight,
+            result=result,
+            failure=failure,
+            provider_before=provider_before,
+            provider_after=provider_after,
+            budget_snapshot=budget_snapshot,
+            persisted=persisted,
+            run_dir=run_dir,
+            started=started,
+        )
+        if result_path.exists():
+            raise LiveSmokeExecutionError("live smoke result already exists; result is immutable")
+        atomic_json_write(result_path, summary)
+        _mark_ledger(ledger_path, ledger, status="FAILED", budget=budget)
+
     try:
         provider = provider_factory(manifest, budget)
+        provider_before = _accounting_snapshot(provider)
+        stage = "RUNTIME"
         backend = ITBenchSnapshotBackend(cast(Any, None), _smoke_scenario(root))
         incident, alerts = build_observable_incident(backend)
-        provider_before = getattr(provider, "accounting_snapshot", lambda: None)()
         result = E9InvestigationRuntime(
             provider,
             backend,
@@ -221,10 +519,12 @@ def execute_live_smoke(
             execution_id=manifest.execution,
             max_consecutive_rejected_actions=manifest.max_consecutive_rejected_actions,
         ).run(incident, alerts)
-        provider_after = getattr(provider, "accounting_snapshot", lambda: None)()
+        provider_after = _accounting_snapshot(provider)
         after_budget = budget.snapshot()
         output = adapt_e9_output(result)
-        _persist_run_artifacts(run_dir, result, output)
+        stage = "PERSISTENCE"
+        _persist_run_artifacts(run_dir, result, output, persisted)
+        stage = "REPLAY"
         _strict_reload(run_dir, result, output)
 
         provider_invocations = (
@@ -237,106 +537,50 @@ def execute_live_smoke(
             if provider_before is not None and provider_after is not None
             else 0
         )
+        stage = "ACCOUNTING_RECONCILIATION"
         LiveModelBudget.verify_ledger_delta(before_budget, after_budget, outbound_attempts)
         if provider_invocations != result["usage"].get("model_calls", 0):
             raise LiveSmokeExecutionError("provider invocation accounting mismatch")
-        if result["terminal"] not in {"SUBMIT", "STOP"}:
-            raise LiveSmokeExecutionError(f"invalid smoke terminal: {result['terminal']}")
-        if not result.get("evidence"):
-            raise LiveSmokeExecutionError("smoke did not exercise a semantic evidence path")
+        stage = "TERMINAL_POLICY"
+        failure = _terminal_failure(result)
+        if failure is not None:
+            write_failure(failure)
+            raise LiveSmokeExecutionError(f"{failure.classification}: {failure.error}")
 
-        smoke_result = {
-            "execution": manifest.execution,
-            "manifest_sha256": _sha256(manifest_path),
-            "runtime_identity": preflight["runtime_identity"],
-            "identity": {
-                "runtime_source_sha": preflight["runtime_identity"]["git_head"],
-                "runtime_bundle_sha": preflight["runtime_identity"]["bundle_sha256"],
-                "dataset_revision": manifest.dataset_revision,
-                "control_policy_hash": manifest.control_policy_hash,
-                "semantic_registry_hash": manifest.semantic_registry_hash,
-                "semantic_capability_policy_hash": manifest.semantic_capability_policy_hash,
-                "provider_schema_hash": manifest.provider_schema_hash,
-                "context_planner_hash": manifest.context_planner_hash,
-                "candidate_discovery_hash": manifest.candidate_discovery_hash,
-                "prompt_version": manifest.prompt_version,
-                "prompt_hash": manifest.prompt_hash,
-                "protocol_version": manifest.protocol_version,
-                "protocol_hash": manifest.protocol_hash,
-            },
-            "fixture": manifest.fixture.model_dump(mode="json"),
-            "model_policy": {
-                "provider": manifest.provider,
-                "model": manifest.model,
-                "reasoning_effort": manifest.reasoning_effort,
-                "provider_retries": manifest.provider_retries,
-                "judge_disabled": manifest.judge_disabled,
-                "rerun_policy": manifest.rerun_policy,
-            },
-            "runtime_limits": {
-                "max_model_calls": limits.max_model_calls,
-                "max_agent_turns": limits.max_agent_turns,
-                "max_semantic_actions": limits.max_tool_calls,
-                "max_wall_time_seconds": limits.max_wall_time_seconds,
-                "max_consecutive_rejected_actions": manifest.max_consecutive_rejected_actions,
-            },
-            "terminal": result["terminal"],
-            "metrics": {
-                "model_calls": result["usage"].get("model_calls", 0),
-                "input_tokens": result["usage"].get("input_tokens", 0),
-                "output_tokens": result["usage"].get("output_tokens", 0),
-                "provider_invocations": provider_invocations,
-                "provider_outbound_attempts": outbound_attempts,
-                "provider_latency_ms": result["usage"].get("provider_latency_ms", 0),
-                "semantic_actions_requested": result["usage"].get("semantic_actions_requested", 0),
-                "semantic_actions_executed": result["usage"].get("semantic_actions_executed", 0),
-                "action_rejections": result["usage"].get("action_rejections", 0),
-                "recovered_action_rejections": result["usage"].get(
-                    "recovered_action_rejections", 0
-                ),
-                "evidence_count": len(result.get("evidence", ())),
-                "wall_time_ms": int((time.monotonic() - started) * 1000),
-            },
-            "provider_accounting": (
-                provider_after.model_dump(mode="json")
-                if provider_after is not None
-                else {
-                    "provider_invocations": provider_invocations,
-                    "outbound_api_attempts": outbound_attempts,
-                }
-            ),
-            "budget": {
-                "cap": after_budget.limit,
-                "calls_used": after_budget.calls_used,
-                "remaining": after_budget.calls_remaining,
-            },
-            "artifacts": {
-                "run_dir": str(run_dir),
-                "native_artifact": str(run_dir / "native_artifact.json"),
-                "turn_trace": str(run_dir / "turn_trace.json"),
-                "case_state": str(run_dir / "case_state.json"),
-                "event_log": str(run_dir / "event_log.json"),
-                "usage": str(run_dir / "usage.json"),
-                "agent_output": str(run_dir / "agent_output.json"),
-            },
-            "safety": {
-                "provider_fallback": 0,
-                "ground_truth_access": 0,
-                "cross_scenario_access": 0,
-                "writes_remediation": 0,
-                "shell": 0,
-                "sql": 0,
-                "arbitrary_promql": 0,
-                "judge_evaluator_access": 0,
-            },
-        }
-        atomic_json_write(result_path, smoke_result)
+        summary = _summary(
+            root=root,
+            manifest=manifest,
+            manifest_path=manifest_path,
+            preflight=preflight,
+            result=result,
+            failure=None,
+            provider_before=provider_before,
+            provider_after=provider_after,
+            budget_snapshot=after_budget,
+            persisted=persisted,
+            run_dir=run_dir,
+            started=started,
+        )
+        if result_path.exists():
+            raise LiveSmokeExecutionError("live smoke result already exists; result is immutable")
+        atomic_json_write(result_path, summary)
         _mark_ledger(ledger_path, ledger, status="COMPLETE", budget=budget)
-        return smoke_result
-    except BaseException:
-        if ledger_path.exists():
-            _mark_ledger(ledger_path, ledger, status="FAILED", budget=budget)
+        return summary
+    except LiveSmokeExecutionError as error:
+        # Terminal-policy failures are deliberately raised only after their
+        # summary is published.  Do not attempt to overwrite that evidence.
+        if result_path.exists():
+            raise
+        failure = _classify_exception(error, stage)
+        write_failure(failure)
         raise
+    except BaseException as error:
+        failure = _classify_exception(error, stage)
+        try:
+            write_failure(failure)
+        except BaseException as persist_error:
+            raise persist_error from error
+        raise LiveSmokeExecutionError(f"{failure.classification}: {failure.error}") from error
 
 
 __all__ = ["LiveSmokeExecutionError", "ProviderFactory", "execute_live_smoke"]

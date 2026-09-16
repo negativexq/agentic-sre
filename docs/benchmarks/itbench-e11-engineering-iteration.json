@@ -1,0 +1,54 @@
+{
+  "execution": "ITB-E10.1-E11-OFFLINE-ENGINEERING",
+  "provider_invocations_during_development": 0,
+  "e11_live_run": "NOT_RUN",
+  "future_model": {
+    "provider": "openai",
+    "model": "gpt-5.6-luna",
+    "reasoning_effort": "none",
+    "provider_retries": 0,
+    "router": "none",
+    "fallback": "none",
+    "secondary_model": "none"
+  },
+  "historical_baseline": {
+    "e10_scenarios": 35,
+    "e10_submit": 16,
+    "e10_stop": 19,
+    "e10_local_macro_f1": 0.0,
+    "e10_local_micro_f1": 0.0,
+    "e7_recall_at_10": 0.34285714285714286,
+    "e7_catalog_root_coverage": 0.34285714285714286
+  },
+  "implemented_offline_gates": {
+    "structured_log_classification": "PASS",
+    "trace_status_normalization": "PASS",
+    "metric_series_identity": "PASS",
+    "metric_counter_semantics": "PASS",
+    "metric_timestamp_order_invariance": "PASS",
+    "container_resource_extraction": "PASS",
+    "log_analysis_wiring": "PASS",
+    "replica_peer_resolution": "PASS",
+    "observe_first_runtime": "PASS",
+    "fake_provider_same_runtime_path": "PASS",
+    "evidence_polarity_validation": "PASS",
+    "gt_isolation": "PASS",
+    "real_provider_calls": 0
+  },
+  "retrieval_qualification": {
+    "artifact": "itbench-e11-retrieval-qualification-v2.json",
+    "selected_default": "B1",
+    "r_at_1": 0.2571428571428571,
+    "r_at_3": 0.4,
+    "r_at_5": 0.6,
+    "r_at_10": 0.6857142857142857,
+    "regression_gate": "PASS",
+    "telemetry_initial_ranking": "DISABLED_PENDING_REGRESSION_REPAIR"
+  },
+  "readiness": "READY_FOR_HUMAN_AUTHORIZED_SMOKE",
+  "notes": [
+    "The historical E10 artifacts are immutable.",
+    "The fake-provider canary proves control-plane execution, not RCA quality.",
+    "Telemetry ranking is not selected as the default because corrected B2 remains below the R1 top-K regression gates."
+  ]
+}

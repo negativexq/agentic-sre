@@ -27,6 +27,31 @@ from packages.evals.itbench.grader import _entity_matches_group
 from packages.evals.itbench.snapshot_backend import ITBenchSnapshotBackend
 
 
+class _CachedBackend:
+    """Memoize immutable snapshot reads while comparing several ablations."""
+
+    def __init__(self, backend: ITBenchSnapshotBackend) -> None:
+        self._backend = backend
+        self.scenario = backend.scenario
+        self._records: dict[ITBenchEvidenceCategory, tuple[dict[str, Any], ...]] = {}
+
+    def complete_source_records(
+        self, category: ITBenchEvidenceCategory
+    ) -> tuple[dict[str, Any], ...]:
+        if category not in self._records:
+            self._records[category] = tuple(self._backend.complete_source_records(category))
+        return self._records[category]
+
+    def records(self, category: ITBenchEvidenceCategory) -> tuple[dict[str, Any], ...]:
+        return self.complete_source_records(category)
+
+    def topology(self, **kwargs: Any) -> tuple[dict[str, Any], ...]:
+        return self._backend.topology(**kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._backend, name)
+
+
 def build_frozen_outputs(
     dataset: ITBenchLiteDataset,
     *,
@@ -221,8 +246,8 @@ def build_retrieval_ablations(
             cached = scenario_cache.setdefault(
                 scenario.scenario_id,
                 {
-                    "backend": ITBenchSnapshotBackend(
-                        dataset, scenario, max_rows=50, max_bytes=100_000
+                    "backend": _CachedBackend(
+                        ITBenchSnapshotBackend(dataset, scenario, max_rows=50, max_bytes=100_000)
                     )
                 },
             )
@@ -296,6 +321,148 @@ def build_retrieval_ablations(
     return result
 
 
+def build_clean_retrieval_ablations(
+    dataset: ITBenchLiteDataset,
+    *,
+    shortlist_size: int = 10,
+    max_telemetry_records: int = 100,
+) -> dict[str, dict[str, Any]]:
+    """Build independently-controlled B0-B6 outputs without GT access.
+
+    These labels intentionally supersede the historical R-series, whose
+    topology flag did not disable causal propagation.
+    """
+    configurations: dict[str, dict[str, Any]] = {
+        "B0": {"legacy": True},
+        "B1": {
+            "telemetry": False,
+            "direct_topology": False,
+            # This is the strongest current non-telemetry comparator used by
+            # the previous qualification.  Direct topology scoring remains
+            # disabled; causal propagation is independently visible here.
+            "causal_propagation": True,
+            "temporal": False,
+            "diversity": False,
+        },
+        "B2": {
+            "telemetry": True,
+            "direct_topology": False,
+            "causal_propagation": False,
+            "temporal": False,
+            "diversity": False,
+        },
+        "B3": {
+            "telemetry": True,
+            "direct_topology": True,
+            "causal_propagation": False,
+            "temporal": False,
+            "diversity": False,
+        },
+        "B4": {
+            "telemetry": True,
+            "direct_topology": True,
+            "causal_propagation": True,
+            "temporal": False,
+            "diversity": False,
+        },
+        "B5": {
+            "telemetry": True,
+            "direct_topology": True,
+            "causal_propagation": True,
+            "temporal": True,
+            "diversity": False,
+        },
+        "B6": {
+            "telemetry": True,
+            "direct_topology": True,
+            "causal_propagation": True,
+            "temporal": True,
+            "diversity": True,
+        },
+    }
+    outputs: dict[str, dict[str, Any]] = {}
+    scenario_cache: dict[str, dict[str, Any]] = {}
+    for label, config in configurations.items():
+        scenarios: list[dict[str, Any]] = []
+        for scenario in dataset.scenarios():
+            cached = scenario_cache.setdefault(
+                scenario.scenario_id,
+                {
+                    "backend": _CachedBackend(
+                        ITBenchSnapshotBackend(dataset, scenario, max_rows=50, max_bytes=100_000)
+                    )
+                },
+            )
+            backend = cached["backend"]
+            telemetry = cached.get("telemetry")
+            if config.get("telemetry") and telemetry is None:
+                telemetry = {
+                    category: tuple(
+                        _fast_source_records(backend, category, limit=max_telemetry_records)
+                    )
+                    for category in (
+                        ITBenchEvidenceCategory.METRICS,
+                        ITBenchEvidenceCategory.LOGS,
+                        ITBenchEvidenceCategory.TRACES,
+                    )
+                }
+                cached["telemetry"] = telemetry
+            if config.get("legacy"):
+                shortlist = [
+                    {
+                        "canonical": item["canonical"],
+                        "kind": item["kind"],
+                        "name": item["name"],
+                        "namespace": item["namespace"],
+                        "family": f"{item['namespace']}/{item['kind']}",
+                    }
+                    for item in backend.candidate_entities(limit=shortlist_size)
+                ]
+                catalog = {"entities": list(backend.observable_entities())}
+            else:
+                catalog_key = "full_catalog" if config["telemetry"] else "k8s_catalog"
+                built = cached.get(catalog_key)
+                if built is None:
+                    built = build_observed_entity_catalog(
+                        backend,
+                        include_telemetry=bool(config["telemetry"]),
+                        max_telemetry_records=max_telemetry_records,
+                        telemetry_records=telemetry,
+                    )
+                    cached[catalog_key] = built
+                ranked = rank_observed_candidates(
+                    backend,
+                    built,
+                    limit=shortlist_size,
+                    diversity=bool(config["diversity"]),
+                    include_telemetry=bool(config["telemetry"]),
+                    use_direct_topology=bool(config["direct_topology"]),
+                    use_causal_propagation=bool(config["causal_propagation"]),
+                    use_temporal=bool(config["temporal"]),
+                    use_namespace_context=bool(config["causal_propagation"]),
+                    telemetry_records=telemetry,
+                )
+                shortlist = [item.as_dict() for item in ranked]
+                catalog = {"entities": built.as_dict()["entities"]}
+            scenarios.append(
+                {
+                    "scenario_id": scenario.scenario_id,
+                    "catalog": catalog,
+                    "active_shortlist": shortlist,
+                }
+            )
+        outputs[label] = {
+            "configuration": config,
+            "dataset_revision": _dataset_revision(dataset),
+            "scenario_order": list(ITBENCH_SCENARIO_IDS),
+            "ground_truth_access": 0,
+            "provider_invocations": 0,
+            "scenario_count": len(scenarios),
+            "scenarios": scenarios,
+        }
+    return outputs
+
+
 def evaluate_retrieval_ablations(
     dataset: ITBenchLiteDataset, ablations: dict[str, dict[str, Any]]
 ) -> dict[str, dict[str, Any]]:
@@ -306,6 +473,7 @@ def evaluate_retrieval_ablations(
 __all__ = [
     "build_frozen_outputs",
     "build_retrieval_ablations",
+    "build_clean_retrieval_ablations",
     "evaluate_retrieval_ablations",
     "evaluate_frozen_outputs",
     "write_frozen_outputs",

@@ -1,0 +1,39 @@
+{
+  "execution": "ITB-E11-OFFLINE-RETRIEVAL-V2",
+  "dataset_revision": "d0916b08ba421ce5e672e9ad68aa947d938dfef0",
+  "scenario_count": 35,
+  "provider_invocations": 0,
+  "ground_truth_access_during_build": 0,
+  "default_configuration": "B1",
+  "regression_gate": {
+    "r_at_1": 0.2571428571428571,
+    "r_at_3": 0.4,
+    "r_at_5": 0.6,
+    "r_at_10": 0.6857142857142857
+  },
+  "ablations": {
+    "B0": {"catalog_coverage": 0.5428571428571428, "r_at_1": 0.22857142857142856, "r_at_3": 0.3142857142857143, "r_at_5": 0.34285714285714286, "r_at_10": 0.34285714285714286, "r_at_20": 0.34285714285714286},
+    "B1": {"catalog_coverage": 0.8571428571428571, "r_at_1": 0.2571428571428571, "r_at_3": 0.4, "r_at_5": 0.6, "r_at_10": 0.6857142857142857, "r_at_20": 0.6857142857142857},
+    "B2": {"catalog_coverage": 0.8571428571428571, "r_at_1": 0.05714285714285714, "r_at_3": 0.2, "r_at_5": 0.2571428571428571, "r_at_10": 0.3142857142857143, "r_at_20": 0.3142857142857143},
+    "B3": {"catalog_coverage": 0.8571428571428571, "r_at_1": 0.05714285714285714, "r_at_3": 0.14285714285714285, "r_at_5": 0.22857142857142856, "r_at_10": 0.3142857142857143, "r_at_20": 0.3142857142857143},
+    "B4": {"catalog_coverage": 0.8571428571428571, "r_at_1": 0.02857142857142857, "r_at_3": 0.05714285714285714, "r_at_5": 0.2571428571428571, "r_at_10": 0.45714285714285713, "r_at_20": 0.45714285714285713},
+    "B5": {"catalog_coverage": 0.8571428571428571, "r_at_1": 0.02857142857142857, "r_at_3": 0.11428571428571428, "r_at_5": 0.2571428571428571, "r_at_10": 0.5714285714285714, "r_at_20": 0.5714285714285714},
+    "B6": {"catalog_coverage": 0.8571428571428571, "r_at_1": 0.02857142857142857, "r_at_3": 0.11428571428571428, "r_at_5": 0.2857142857142857, "r_at_10": 0.6857142857142857, "r_at_20": 0.6857142857142857}
+  },
+  "telemetry_forensics": {
+    "improved": 5,
+    "unchanged": 16,
+    "regressed": 14,
+    "dominant_top1_added_channels": {
+      "METRIC_ANOMALY": 10,
+      "FAILURE_EVENT": 9,
+      "TRACE_ERROR_PROPAGATION": 9,
+      "ALERT_LINK": 4
+    }
+  },
+  "notes": [
+    "B1 is the selected default because it preserves the strongest current non-telemetry ranking gate.",
+    "Telemetry evidence remains available to semantic operations and can be requalified independently.",
+    "No entity-name, subsystem, Service, Pod, Prometheus, or flagd blacklist is used."
+  ]
+}

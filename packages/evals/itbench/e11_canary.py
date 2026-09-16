@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from packages.evals.itbench.dataset import ITBenchLiteDataset
 from packages.evals.itbench.e11_control import (
     CandidateStatus,
     E11CaseMemory,
@@ -19,6 +20,9 @@ from packages.evals.itbench.e11_observability import (
     RankedCandidate,
     RetrievalEvidence,
 )
+from packages.evals.itbench.e11_runtime import E11InvestigationRuntime
+from packages.evals.itbench.snapshot_backend import ITBenchSnapshotBackend
+from packages.provider.fake import FakeModelProvider
 
 
 def run_e11_fake_provider_canary(scenario_ids: tuple[str, ...]) -> dict[str, Any]:
@@ -73,4 +77,62 @@ def run_e11_fake_provider_canary(scenario_ids: tuple[str, ...]) -> dict[str, Any
     }
 
 
-__all__ = ["run_e11_fake_provider_canary"]
+def run_e11_snapshot_runtime_canary(root: Any) -> dict[str, Any]:
+    """Run the real E11 loop against every pinned snapshot with a fake provider."""
+    dataset = ITBenchLiteDataset.open(root)
+    completed = 0
+    fake_provider_responses = 0
+    terminals: dict[str, int] = {}
+    for scenario in dataset.scenarios():
+        backend = ITBenchSnapshotBackend(dataset, scenario, max_rows=20)
+        state = {"observed": False, "hypothesized": False, "investigated": False}
+
+        scripted = _script_for_state(state)
+
+        provider = FakeModelProvider([scripted] * 12, model="fake-luna")
+        result = E11InvestigationRuntime(
+            provider,
+            backend,
+            execution_id="ITB-E11-OFFLINE-CANARY",
+        ).run()
+        completed += 1
+        fake_provider_responses += len(provider.requests)
+        terminals[result["terminal"]] = terminals.get(result["terminal"], 0) + 1
+    return {
+        "scenario_count": completed,
+        "completed": completed,
+        "terminals": terminals,
+        "provider_invocations": 0,
+        "fake_provider_responses": fake_provider_responses,
+        "ground_truth_access": 0,
+        "control_plane_only": True,
+    }
+
+
+__all__ = ["run_e11_fake_provider_canary", "run_e11_snapshot_runtime_canary"]
+
+
+def _script_for_state(state: dict[str, bool]) -> Any:
+    def scripted(request: Any) -> dict[str, Any]:
+        actions = set(request.allowed_v5_actions or ())
+        targets = tuple(request.allowed_v5_targets or ())
+        if not state["observed"] and "OBSERVE" in actions:
+            state["observed"] = True
+            return {"action": "OBSERVE", "operation": "INCIDENT_OVERVIEW", "rationale": None}
+        if not state["hypothesized"] and "HYPOTHESIZE" in actions and targets:
+            state["hypothesized"] = True
+            return {"action": "HYPOTHESIZE", "target": targets[0], "rationale": None}
+        if not state["investigated"] and "INVESTIGATE" in actions and targets:
+            state["investigated"] = True
+            operation = next(iter(request.allowed_v5_operations or ()), "ENTITY_CONTEXT")
+            return {
+                "action": "INVESTIGATE",
+                "target": targets[0],
+                "operation": operation,
+                "rationale": None,
+            }
+        if "SUBMIT_DIAGNOSIS" in (request.allowed_decisions or ()) and targets:
+            return {"action": "SUBMIT", "targets": [targets[0]], "rationale": None}
+        return {"action": "STOP", "stop_reason": "offline runtime qualification"}
+
+    return scripted

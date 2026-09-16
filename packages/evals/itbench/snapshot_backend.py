@@ -27,6 +27,78 @@ _EVIDENCE_NAMESPACE = UUID("2e6bbd95-4c2a-47d5-8b7c-cf19ccf9a3c4")
 _SEMANTIC_METRIC_SCAN_LIMIT = 5_000
 
 
+def normalize_trace_status(record: dict[str, Any]) -> tuple[str, str]:
+    """Normalize observed trace status without treating unknown values as errors."""
+    raw: Any = None
+    for key in ("status.code", "StatusCode", "status_code", "Status", "status"):
+        if key in record:
+            raw = record[key]
+            break
+    if isinstance(raw, dict):
+        raw = raw.get("code", raw.get("value"))
+    if raw is None:
+        raw = _mapping_value(record.get("ResourceAttributes")).get("status.code")
+    value = str(raw).strip().casefold()
+    if value in {"", "unset", "unknown", "none"}:
+        return "UNSET", "trace status is unset"
+    if value in {"ok", "success", "successful", "1"}:
+        return "OK", "trace status explicitly indicates success"
+    if value in {"error", "failed", "failure", "2"}:
+        return "ERROR", "trace status explicitly indicates an error"
+    if value == "0":
+        return "UNSET", "OTel status code 0 is unset"
+    # Explicit exception/error attributes are stronger than an unknown status.
+    for key in ("error.type", "exception.type", "exception.message"):
+        if record.get(key):
+            return "ERROR", f"explicit {key} attribute"
+    attrs = _mapping_value(record.get("SpanAttributes"))
+    if attrs.get("error.type") or attrs.get("exception.type"):
+        return "ERROR", "explicit span error attribute"
+    return "UNKNOWN", "unrecognized trace status representation"
+
+
+def classify_structured_log(record: dict[str, Any]) -> tuple[str, str]:
+    """Classify a log from structured severity/error fields, not whole-record text."""
+    fields: dict[str, Any] = dict(record)
+    for key in ("attributes", "resource", "ResourceAttributes", "resource_attributes"):
+        nested = _mapping_value(record.get(key))
+        fields.update(nested)
+    explicit = next(
+        (
+            fields[key]
+            for key in ("severity_text", "SeverityText", "severity", "level", "log.level")
+            if key in fields
+        ),
+        None,
+    )
+    normalized = str(explicit).strip().casefold() if explicit is not None else ""
+    if normalized in {"error", "fatal", "critical", "err", "emergency", "alert"}:
+        return "ERROR", "structured severity"
+    if normalized in {"warning", "warn"}:
+        return "WARNING", "structured severity"
+    if normalized in {"info", "information", "debug", "trace", "notice"}:
+        return "INFO", "structured severity"
+    for key in ("error", "is_error", "error.flag"):
+        value = fields.get(key)
+        if value is True or (isinstance(value, str) and value.strip().casefold() == "true"):
+            return "ERROR", f"structured {key} flag"
+        if value is False or (isinstance(value, str) and value.strip().casefold() == "false"):
+            return "INFO", f"structured {key}=false"
+    for key in ("exception.type", "exception.message", "error.type", "error.message"):
+        if fields.get(key):
+            return "ERROR", f"structured {key}"
+    body = fields.get("body", fields.get("Body", fields.get("message", "")))
+    if isinstance(body, dict):
+        return classify_structured_log(body)
+    if isinstance(body, str) and re.search(
+        r"\b(?:error|exception|timeout|timed\s+out|failed|failure|panic)\b",
+        body,
+        flags=re.IGNORECASE,
+    ):
+        return "ERROR", "bounded message error pattern"
+    return "UNKNOWN", "no structured diagnostic log signal"
+
+
 class ITBenchSnapshotBackend:
     """Read bounded records and issue runtime-owned deterministic evidence IDs."""
 
@@ -49,6 +121,7 @@ class ITBenchSnapshotBackend:
         self._observable_entities_cache: tuple[dict[str, str], ...] | None = None
         self._complete_alert_cache: tuple[dict[str, Any], ...] | None = None
         self._semantic_capability_cache: dict[tuple[Any, ...], dict[str, dict[str, Any]]] = {}
+        self._query_cache: dict[tuple[str, str], dict[str, Any]] = {}
         self._performance = {
             "source_file_scans": 0,
             "records_scanned": 0,
@@ -82,6 +155,22 @@ class ITBenchSnapshotBackend:
         return result
 
     def query(self, category: ITBenchEvidenceCategory, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Execute one bounded query and memoize immutable snapshot results."""
+        cache_key = (
+            category.value,
+            json.dumps(arguments, ensure_ascii=False, sort_keys=True, default=str),
+        )
+        cached = self._query_cache.get(cache_key)
+        if cached is not None:
+            self._performance["cache_hits"] += 1
+            return cached
+        result = self._query_uncached(category, arguments)
+        self._query_cache[cache_key] = result
+        return result
+
+    def _query_uncached(
+        self, category: ITBenchEvidenceCategory, arguments: dict[str, Any]
+    ) -> dict[str, Any]:
         """Execute a named, bounded query; arbitrary filesystem access is impossible."""
         selected: list[dict[str, Any]] = []
         matching_count = 0
@@ -319,6 +408,8 @@ class ITBenchSnapshotBackend:
         values_by_metric: dict[str, list[float]] = {}
         timestamps_by_metric: dict[str, list[str]] = {}
         metric_identity_fields: dict[str, dict[str, Any]] = {}
+        metric_types: dict[str, str] = {}
+        seen_samples: set[tuple[str, str, str, str]] = set()
         matching_count = 0
         scanned = 0
         for item in self._iter_metric_records(arguments):
@@ -337,10 +428,7 @@ class ITBenchSnapshotBackend:
                 try:
                     if key in record:
                         value = float(record[key])
-                        values.append(value)
                         timestamp = record.get("timestamp", record.get("Timestamp"))
-                        if isinstance(timestamp, str):
-                            timestamps.append(timestamp)
                         metric_name = str(
                             record.get("metric_name", record.get("MetricName", "unknown"))
                         )
@@ -350,9 +438,20 @@ class ITBenchSnapshotBackend:
                         metric_key = "|".join(
                             (metric_name, metric_service, metric_namespace, label_identity)
                         )
+                        metric_type = _metric_type(record, metric_name)
+                        timestamp_value = timestamp if isinstance(timestamp, str) else ""
+                        sample_key = (metric_key, timestamp_value, str(value), metric_type)
+                        if sample_key in seen_samples:
+                            break
+                        seen_samples.add(sample_key)
+                        values.append(value)
+                        if isinstance(timestamp, str):
+                            timestamps.append(timestamp)
                         values_by_metric.setdefault(metric_key, []).append(value)
+                        metric_types[metric_key] = metric_type
                         metric_identity_fields[metric_key] = {
                             "metric_name": metric_name,
+                            "metric_type": metric_type,
                             "service": metric_service or None,
                             "namespace": metric_namespace or None,
                             "label_identity": label_identity,
@@ -367,7 +466,11 @@ class ITBenchSnapshotBackend:
         all_aggregates_by_metric = {
             name: {
                 **metric_identity_fields[name],
-                **_metric_summary(metric_values, tuple(timestamps_by_metric.get(name, ()))),
+                **_metric_summary_for_type(
+                    metric_values,
+                    tuple(timestamps_by_metric.get(name, ())),
+                    metric_types.get(name, "unknown"),
+                ),
             }
             for name, metric_values in sorted(values_by_metric.items())
         }
@@ -411,6 +514,8 @@ class ITBenchSnapshotBackend:
     def log_analysis(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Group matching log observations into bounded, useful patterns."""
         limit = arguments.get("limit", self.max_rows)
+        if not isinstance(limit, int) or not 1 <= limit <= self.max_rows:
+            raise ValueError("limit must be within the bounded snapshot query limit")
         groups: dict[str, dict[str, Any]] = {}
         matching = 0
         # Capability checks and model-facing evidence must remain bounded. A
@@ -430,6 +535,11 @@ class ITBenchSnapshotBackend:
                 continue
             matching += 1
             record = item.get("record", {})
+            if not isinstance(record, dict):
+                continue
+            log_status, classification_reason = classify_structured_log(record)
+            if log_status != "ERROR":
+                continue
             body = record.get("Body", "") if isinstance(record, dict) else ""
             normalized = re.sub(r"[0-9a-f]{8}-[0-9a-f-]{27,}", "<id>", str(body), flags=re.I)
             normalized = re.sub(r"\b\d{3,}\b", "<n>", normalized)
@@ -441,6 +551,8 @@ class ITBenchSnapshotBackend:
                     "first_observed": record.get("Timestamp") if isinstance(record, dict) else None,
                     "last_observed": record.get("Timestamp") if isinstance(record, dict) else None,
                     "evidence_id": item.get("evidence_id"),
+                    "classification": log_status,
+                    "classification_reason": classification_reason,
                 },
             )
             group["count"] += 1
@@ -455,10 +567,10 @@ class ITBenchSnapshotBackend:
             "category": ITBenchEvidenceCategory.LOGS.value,
             "patterns": patterns,
             "records": patterns,
-            "matching_count": matching,
+            "matching_count": sum(int(value["count"]) for value in groups.values()),
             "returned_count": len(patterns),
             "truncated": len(groups) > len(patterns),
-            "data_available": matching > 0,
+            "data_available": bool(groups),
         }
 
     def trace_analysis(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -496,8 +608,12 @@ class ITBenchSnapshotBackend:
             group["span_count"] += 1
             if isinstance(record.get("ServiceName"), str):
                 group["services"].add(record["ServiceName"])
-            if str(record.get("StatusCode", "")).casefold() not in {"", "ok", "unset", "0"}:
+            trace_status, trace_reason = normalize_trace_status(record)
+            if trace_status == "ERROR":
                 group["error_spans"].append(str(record.get("SpanName", ""))[:200])
+            group.setdefault("status_observations", []).append(
+                {"status": trace_status, "reason": trace_reason}
+            )
             try:
                 group["duration"].append(float(record.get("Duration", 0)))
             except (TypeError, ValueError):
@@ -992,17 +1108,54 @@ def _json_object(value: Any) -> dict[str, Any] | None:
 
 
 def _metric_label_identity(record: dict[str, Any]) -> str:
-    """Hash stable metric-label dimensions so heterogeneous series never merge."""
-    tags = record.get("tags", {})
-    # The source stores tags as a deterministic serialized label map. Hashing
-    # that representation avoids reparsing it for every row while preserving
-    # all stable label dimensions in the identity.
-    dimensions: dict[str, Any] = {"tags": str(tags)}
-    for key in ("metric_type", "status_code", "bucket_le"):
+    """Return a stable full label identity for one metric time series."""
+    dimensions: dict[str, Any] = {}
+    for key in ("tags", "labels", "resource", "ResourceAttributes", "resource_attributes"):
+        parsed = _mapping_value(record.get(key))
+        if parsed:
+            dimensions.update({str(label): str(value) for label, value in parsed.items()})
+    # Some snapshot writers store resource labels as columns rather than a map.
+    for key in (
+        "service",
+        "service_name",
+        "service.name",
+        "pod",
+        "pod_name",
+        "workload",
+        "deployment",
+        "statefulset",
+        "daemonset",
+        "namespace",
+        "instance",
+        "node",
+        "node_name",
+        "status_code",
+        "bucket_le",
+    ):
         if record.get(key) is not None:
-            dimensions[key] = record[key]
+            dimensions[key] = str(record[key])
     encoded = json.dumps(dimensions, sort_keys=True, separators=(",", ":"), default=str)
     return sha256(encoded.encode("utf-8")).hexdigest()[:16]
+
+
+def _metric_type(record: dict[str, Any], metric_name: str) -> str:
+    """Resolve metric semantics conservatively from explicit type/name suffix."""
+    raw = record.get("metric_type", record.get("MetricType", record.get("type")))
+    value = str(raw).casefold() if raw is not None else ""
+    if value in {"counter", "cumulative", "monotonic"}:
+        return "counter"
+    if value in {"gauge", "value", "instant"}:
+        return "gauge"
+    if value in {"histogram", "histogram_bucket", "bucket"}:
+        return "histogram"
+    if value in {"summary"}:
+        return "summary"
+    name = metric_name.casefold()
+    if name.endswith("_bucket"):
+        return "histogram"
+    if name.endswith("_total") or name.endswith("_count"):
+        return "counter"
+    return "unknown"
 
 
 def _record_entity(item: dict[str, Any]) -> ITBenchEntity | None:
@@ -1213,8 +1366,8 @@ def _matches(
             if actual and actual.casefold() != severity.casefold():
                 return False
         if isinstance(status, str):
-            actual = str(record.get("StatusCode", record.get("status", "")))
-            if actual and status.casefold() not in actual.casefold():
+            actual_status, _reason = normalize_trace_status(record)
+            if actual_status and status.casefold() not in actual_status.casefold():
                 return False
         if isinstance(service, str):
             service_values = _identity_values(record, "service")
@@ -1328,6 +1481,64 @@ def _metric_summary(values: list[float], timestamps: tuple[str, ...]) -> dict[st
         "time_start": time_start,
         "time_end": time_end,
     }
+
+
+def _metric_summary_for_type(
+    values: list[float], timestamps: tuple[str, ...], metric_type: str
+) -> dict[str, Any]:
+    """Add conservative anomaly semantics to the generic metric summary."""
+    summary = _metric_summary(values, timestamps)
+    summary["metric_type"] = metric_type
+    if metric_type in {"histogram", "summary"}:
+        summary["anomaly"] = False
+        return summary
+    if metric_type != "counter":
+        summary["anomaly"] = abs(float(summary.get("relative_change") or 0.0)) >= 0.20
+        return summary
+    ordered = (
+        sorted(zip(timestamps, values, strict=True), key=lambda pair: pair[0])
+        if len(timestamps) == len(values)
+        else []
+    )
+    rates: list[float] = []
+    for (before_time, before), (after_time, after) in zip(ordered, ordered[1:], strict=False):
+        seconds = _timestamp_delta_seconds(after_time, before_time)
+        if seconds is not None and seconds > 0:
+            rates.append((after - before) / seconds)
+    if len(rates) < 2:
+        summary["anomaly"] = False
+        summary["rate_change"] = None
+        return summary
+    split = max(1, len(rates) // 2)
+    baseline = sum(rates[:split]) / split
+    incident = sum(rates[-split:]) / split
+    rate_change = incident - baseline
+    summary.update(
+        {
+            "baseline_rate": baseline,
+            "incident_rate": incident,
+            "rate_change": rate_change,
+            "relative_rate_change": rate_change / abs(baseline) if baseline else None,
+            "anomaly": abs(rate_change) >= max(0.001, abs(baseline) * 0.20),
+        }
+    )
+    return summary
+
+
+def _timestamp_delta_seconds(left: str, right: str) -> float | None:
+    """Parse the ISO timestamps used by metric snapshots without exceptions leaking."""
+    from datetime import UTC, datetime
+
+    try:
+        left_value = datetime.fromisoformat(left.replace("Z", "+00:00"))
+        right_value = datetime.fromisoformat(right.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if left_value.tzinfo is None:
+        left_value = left_value.replace(tzinfo=UTC)
+    if right_value.tzinfo is None:
+        right_value = right_value.replace(tzinfo=UTC)
+    return (left_value - right_value).total_seconds()
 
 
 def _fit_bounded_records(

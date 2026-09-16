@@ -354,6 +354,46 @@ def test_contradictory_evidence_blocks_submission() -> None:
     assert not memory.submit_ready((entity.handle,))
 
 
+def test_causal_propagation_and_direct_topology_are_independent() -> None:
+    backend = _FakeBackend(
+        [_object("Deployment", "checkout"), _object("ConfigMap", "checkout-config")],
+        [_event("Deployment", "checkout", "BackOff")],
+        [],
+        topology=(
+            {
+                "source": "default/Deployment/checkout",
+                "target": "default/ConfigMap/checkout-config",
+                "relationship": "configuration_reference",
+            },
+        ),
+    )
+    catalog = build_observed_entity_catalog(backend, include_telemetry=False)
+    direct_only = rank_observed_candidates(
+        backend,
+        catalog,
+        include_telemetry=False,
+        use_direct_topology=True,
+        use_causal_propagation=False,
+    )
+    config = next(
+        (item for item in direct_only if item.canonical.endswith("ConfigMap/checkout-config")), None
+    )
+    assert config is None or not any(
+        item.channel == "CAUSAL_RELATION" for item in config.retrieval_evidence
+    )
+    propagated = rank_observed_candidates(
+        backend,
+        catalog,
+        include_telemetry=False,
+        use_direct_topology=False,
+        use_causal_propagation=True,
+    )
+    config = next(
+        item for item in propagated if item.canonical.endswith("ConfigMap/checkout-config")
+    )
+    assert any(item.channel == "CAUSAL_RELATION" for item in config.retrieval_evidence)
+
+
 def test_compare_replicas_requires_explicit_shared_owner() -> None:
     from packages.evals.itbench.e11_operations import (
         available_e11_operations,

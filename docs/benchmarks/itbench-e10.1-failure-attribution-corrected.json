@@ -1,0 +1,723 @@
+{
+  "categories": {
+    "MODEL_SELECTION_MISS": {
+      "count": 7,
+      "fraction": 0.2
+    },
+    "NOT_IN_RECORDED_DISCOVERED_ENTITIES": {
+      "count": 23,
+      "fraction": 0.6571428571428571
+    },
+    "VERIFICATION_MISS": {
+      "count": 5,
+      "fraction": 0.14285714285714285
+    }
+  },
+  "execution": "ITB-E10.1",
+  "predictions_root": "/Users/ofk/agentic-sre/.local/itbench-e10-predictions",
+  "provider_calls": 0,
+  "scenario_count": 35,
+  "scenarios": [
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-1",
+      "terminal": "SUBMIT"
+    },
+    {
+      "first_turn": {
+        "discovered": 0,
+        "hypothesized": null,
+        "investigated": null,
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": 1
+      },
+      "primary_bottleneck": "MODEL_SELECTION_MISS",
+      "root_ever_discovered": true,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": true,
+      "root_in_initial_recorded_candidates": true,
+      "root_in_recorded_discovered_entities": true,
+      "root_submitted": false,
+      "scenario_id": "Scenario-2",
+      "terminal": "STOP"
+    },
+    {
+      "first_turn": {
+        "discovered": 0,
+        "hypothesized": null,
+        "investigated": null,
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": 1
+      },
+      "primary_bottleneck": "MODEL_SELECTION_MISS",
+      "root_ever_discovered": true,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": true,
+      "root_in_initial_recorded_candidates": true,
+      "root_in_recorded_discovered_entities": true,
+      "root_submitted": false,
+      "scenario_id": "Scenario-4",
+      "terminal": "STOP"
+    },
+    {
+      "first_turn": {
+        "discovered": 0,
+        "hypothesized": null,
+        "investigated": null,
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": 1
+      },
+      "primary_bottleneck": "MODEL_SELECTION_MISS",
+      "root_ever_discovered": true,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": true,
+      "root_in_initial_recorded_candidates": true,
+      "root_in_recorded_discovered_entities": true,
+      "root_submitted": false,
+      "scenario_id": "Scenario-5",
+      "terminal": "STOP"
+    },
+    {
+      "first_turn": {
+        "discovered": 0,
+        "hypothesized": 1,
+        "investigated": 2,
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": 1
+      },
+      "primary_bottleneck": "VERIFICATION_MISS",
+      "root_ever_discovered": true,
+      "root_ever_hypothesized": true,
+      "root_ever_investigated": true,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": true,
+      "root_in_initial_recorded_candidates": true,
+      "root_in_recorded_discovered_entities": true,
+      "root_submitted": false,
+      "scenario_id": "Scenario-6",
+      "terminal": "STOP"
+    },
+    {
+      "first_turn": {
+        "discovered": 0,
+        "hypothesized": null,
+        "investigated": null,
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": 1
+      },
+      "primary_bottleneck": "MODEL_SELECTION_MISS",
+      "root_ever_discovered": true,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": true,
+      "root_in_initial_recorded_candidates": true,
+      "root_in_recorded_discovered_entities": true,
+      "root_submitted": false,
+      "scenario_id": "Scenario-7",
+      "terminal": "SUBMIT"
+    },
+    {
+      "first_turn": {
+        "discovered": 0,
+        "hypothesized": null,
+        "investigated": null,
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": 1
+      },
+      "primary_bottleneck": "MODEL_SELECTION_MISS",
+      "root_ever_discovered": true,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": true,
+      "root_in_initial_recorded_candidates": true,
+      "root_in_recorded_discovered_entities": true,
+      "root_submitted": false,
+      "scenario_id": "Scenario-8",
+      "terminal": "STOP"
+    },
+    {
+      "first_turn": {
+        "discovered": 0,
+        "hypothesized": null,
+        "investigated": null,
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": 1
+      },
+      "primary_bottleneck": "MODEL_SELECTION_MISS",
+      "root_ever_discovered": true,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": true,
+      "root_in_initial_recorded_candidates": true,
+      "root_in_recorded_discovered_entities": true,
+      "root_submitted": false,
+      "scenario_id": "Scenario-9",
+      "terminal": "STOP"
+    },
+    {
+      "first_turn": {
+        "discovered": 0,
+        "hypothesized": 1,
+        "investigated": 2,
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": 1
+      },
+      "primary_bottleneck": "VERIFICATION_MISS",
+      "root_ever_discovered": true,
+      "root_ever_hypothesized": true,
+      "root_ever_investigated": true,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": true,
+      "root_in_initial_recorded_candidates": true,
+      "root_in_recorded_discovered_entities": true,
+      "root_submitted": false,
+      "scenario_id": "Scenario-11",
+      "terminal": "STOP"
+    },
+    {
+      "first_turn": {
+        "discovered": 0,
+        "hypothesized": null,
+        "investigated": null,
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": 1
+      },
+      "primary_bottleneck": "MODEL_SELECTION_MISS",
+      "root_ever_discovered": true,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": true,
+      "root_in_initial_recorded_candidates": true,
+      "root_in_recorded_discovered_entities": true,
+      "root_submitted": false,
+      "scenario_id": "Scenario-12",
+      "terminal": "STOP"
+    },
+    {
+      "first_turn": {
+        "discovered": 0,
+        "hypothesized": 6,
+        "investigated": 7,
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": 1
+      },
+      "primary_bottleneck": "VERIFICATION_MISS",
+      "root_ever_discovered": true,
+      "root_ever_hypothesized": true,
+      "root_ever_investigated": true,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": true,
+      "root_in_initial_recorded_candidates": true,
+      "root_in_recorded_discovered_entities": true,
+      "root_submitted": false,
+      "scenario_id": "Scenario-13",
+      "terminal": "SUBMIT"
+    },
+    {
+      "first_turn": {
+        "discovered": 0,
+        "hypothesized": 1,
+        "investigated": 2,
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": 1
+      },
+      "primary_bottleneck": "VERIFICATION_MISS",
+      "root_ever_discovered": true,
+      "root_ever_hypothesized": true,
+      "root_ever_investigated": true,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": true,
+      "root_in_initial_recorded_candidates": true,
+      "root_in_recorded_discovered_entities": true,
+      "root_submitted": false,
+      "scenario_id": "Scenario-14",
+      "terminal": "STOP"
+    },
+    {
+      "first_turn": {
+        "discovered": 0,
+        "hypothesized": 11,
+        "investigated": null,
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": 1
+      },
+      "primary_bottleneck": "VERIFICATION_MISS",
+      "root_ever_discovered": true,
+      "root_ever_hypothesized": true,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": true,
+      "root_in_initial_recorded_candidates": true,
+      "root_in_recorded_discovered_entities": true,
+      "root_submitted": false,
+      "scenario_id": "Scenario-15",
+      "terminal": "STOP"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-16",
+      "terminal": "SUBMIT"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-17",
+      "terminal": "STOP"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-18",
+      "terminal": "STOP"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-19",
+      "terminal": "SUBMIT"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-20",
+      "terminal": "SUBMIT"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-21",
+      "terminal": "SUBMIT"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-22",
+      "terminal": "STOP"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-23",
+      "terminal": "STOP"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-24",
+      "terminal": "STOP"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-25",
+      "terminal": "SUBMIT"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-29",
+      "terminal": "STOP"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-31",
+      "terminal": "SUBMIT"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-33",
+      "terminal": "SUBMIT"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-34",
+      "terminal": "STOP"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-35",
+      "terminal": "STOP"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-38",
+      "terminal": "SUBMIT"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-80",
+      "terminal": "SUBMIT"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-81",
+      "terminal": "SUBMIT"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-83",
+      "terminal": "SUBMIT"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-91",
+      "terminal": "SUBMIT"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-102",
+      "terminal": "SUBMIT"
+    },
+    {
+      "first_turn": {
+        "discovered": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "hypothesized": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "investigated": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "supported": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT",
+        "visible": "NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT"
+      },
+      "primary_bottleneck": "NOT_IN_RECORDED_DISCOVERED_ENTITIES",
+      "root_ever_discovered": false,
+      "root_ever_hypothesized": false,
+      "root_ever_investigated": false,
+      "root_ever_supported": false,
+      "root_ever_visible_to_model": false,
+      "root_in_initial_recorded_candidates": false,
+      "root_in_recorded_discovered_entities": false,
+      "root_submitted": false,
+      "scenario_id": "Scenario-105",
+      "terminal": "STOP"
+    }
+  ],
+  "source_execution": "ITB-E10"
+}

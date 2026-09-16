@@ -74,8 +74,8 @@ def build_e10_1_attribution(
         }
         root_submitted = any(_matches_root(entity, root_groups) for entity in submitted)
         flags = {
-            "root_in_observable_catalog": bool(root_handles),
-            "root_in_initial_top_k": bool(root_handles & initial_handles),
+            "root_in_recorded_discovered_entities": bool(root_handles),
+            "root_in_initial_recorded_candidates": bool(root_handles & initial_handles),
             "root_ever_discovered": bool(root_handles),
             "root_ever_visible_to_model": bool(root_handles & visible_handles),
             "root_ever_hypothesized": bool(root_handles & hypothesized),
@@ -169,9 +169,9 @@ def _turn_number(item: dict[str, Any]) -> int:
 
 
 def _primary_category(flags: dict[str, bool], *, terminal: str) -> str:
-    if not flags["root_in_observable_catalog"]:
-        return "CATALOG_MISS"
-    if not flags["root_in_initial_top_k"]:
+    if not flags["root_in_recorded_discovered_entities"]:
+        return "NOT_IN_RECORDED_DISCOVERED_ENTITIES"
+    if not flags["root_in_initial_recorded_candidates"]:
         return "INITIAL_RETRIEVAL_MISS"
     if not flags["root_ever_visible_to_model"]:
         return "DYNAMIC_DISCOVERY_MISS"

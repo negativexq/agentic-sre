@@ -19,7 +19,7 @@ def main() -> int:
         ROOT / ".local/itbench-e10-predictions",
         ROOT / "docs/benchmarks/itbench-e10-local-results.json",
     )
-    output = ROOT / "docs/benchmarks/itbench-e10-failure-attribution.json"
+    output = ROOT / "docs/benchmarks/itbench-e10.1-failure-attribution-corrected.json"
     output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     lines = [
         "# E10.1 frozen failure attribution",
@@ -42,7 +42,7 @@ def main() -> int:
             "Fields not present in the frozen E10 trace are recorded as `NOT_OBSERVABLE_FROM_FROZEN_ARTIFACT`; no historical state is fabricated.",
         ]
     )
-    (ROOT / "docs/benchmarks/itbench-e10-failure-attribution.md").write_text(
+    (ROOT / "docs/benchmarks/itbench-e10.1-failure-attribution-corrected.md").write_text(
         "\n".join(lines) + "\n", encoding="utf-8"
     )
     print(json.dumps({"status": "E10_1_ATTRIBUTION_WRITTEN", "provider_calls": 0}))

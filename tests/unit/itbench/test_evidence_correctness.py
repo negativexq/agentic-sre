@@ -13,7 +13,11 @@ from packages.evals.itbench.e9_semantic import (
     SemanticCapabilityResolver,
     _resources,
 )
-from packages.evals.itbench.snapshot_backend import ITBenchSnapshotBackend
+from packages.evals.itbench.snapshot_backend import (
+    ITBenchSnapshotBackend,
+    classify_structured_log,
+    normalize_trace_status,
+)
 
 
 def _scenario(
@@ -231,3 +235,19 @@ def test_compare_replicas_resolves_owner_siblings_and_singletons_are_unavailable
     singleton_memory.discover_entities(({"canonical": "prod/Pod/checkout-a"},))
     singleton_ops = E9SemanticOperations(singleton_backend, singleton_memory)
     assert singleton_ops._compare_replicas("prod/Pod/checkout-a")["comparison_available"] is False
+
+
+def test_structured_log_false_error_and_field_name_are_not_failures() -> None:
+    assert classify_structured_log({"error": False, "message": "request completed"})[0] == "INFO"
+    assert (
+        classify_structured_log({"error_count": 0, "message": "request completed"})[0] == "UNKNOWN"
+    )
+    assert classify_structured_log({"severity_text": "ERROR", "message": "failed"})[0] == "ERROR"
+
+
+def test_trace_status_normalization_is_explicit() -> None:
+    assert normalize_trace_status({"status.code": "OK"})[0] == "OK"
+    assert normalize_trace_status({"StatusCode": "0"})[0] == "UNSET"
+    assert normalize_trace_status({"status": "success"})[0] == "OK"
+    assert normalize_trace_status({"status": "future-code"})[0] == "UNKNOWN"
+    assert normalize_trace_status({"StatusCode": "ERROR"})[0] == "ERROR"

@@ -13,11 +13,12 @@ from packages.evals.itbench.contracts import ITBenchEvidenceCategory, parse_cano
 from packages.evals.itbench.e9_memory import E9CaseMemory
 from packages.evals.itbench.e9_packing import bounded_pack
 from packages.evals.itbench.external_context import normalize_alerts
-from packages.evals.itbench.snapshot_backend import ITBenchSnapshotBackend
+from packages.evals.itbench.snapshot_backend import ITBenchSnapshotBackend, normalize_trace_status
 
 E9_SEMANTIC_OPERATIONS = (
     "INCIDENT_OVERVIEW",
     "ALERT_ANALYSIS",
+    "ANOMALY_DISCOVERY",
     "TOPOLOGY_ANALYSIS",
     "RECENT_CHANGE_ANALYSIS",
     "ENTITY_CONTEXT",
@@ -138,6 +139,7 @@ class SemanticCapabilityResolver:
         if operation in {
             "INCIDENT_OVERVIEW",
             "ALERT_ANALYSIS",
+            "ANOMALY_DISCOVERY",
             "TOPOLOGY_ANALYSIS",
         }:
             return {"available": True, "reason": None}
@@ -253,6 +255,11 @@ class E9SemanticOperations:
                     "topology": list(self.backend.topology(limit=16)),
                 },
                 "incident",
+            )
+        elif operation == "ANOMALY_DISCOVERY":
+            data, category = (
+                self.backend.metric_analysis({"limit": self._limit(12)}),
+                "anomalies",
             )
         elif operation == "ALERT_ANALYSIS":
             data, category = (
@@ -536,11 +543,13 @@ class E9SemanticOperations:
         }
 
     def _trace_error_tree(self, canonical: str | None) -> dict[str, Any]:
-        args = (
-            {"service": canonical.rsplit("/", 1)[-1], "limit": self._limit(40)}
-            if canonical
-            else {"limit": self._limit(40)}
-        )
+        args: dict[str, Any] = {"limit": self._limit(40)}
+        if canonical:
+            parsed = parse_canonical_entity(canonical)
+            if parsed.kind.casefold() == "service":
+                args["service"] = parsed.name
+            else:
+                args["entity"] = canonical
         result = self.backend.query(ITBenchEvidenceCategory.TRACES, args)
         edges: dict[tuple[str, str, str], int] = {}
         for item in result.get("records", []):
@@ -549,11 +558,7 @@ class E9SemanticOperations:
                 key = (
                     str(record.get("ServiceName", record.get("service", "unknown"))),
                     str(record.get("RemoteService", record.get("destination_service", "unknown"))),
-                    str(
-                        record.get(
-                            "Status", record.get("status", record.get("StatusCode", "unknown"))
-                        )
-                    ),
+                    normalize_trace_status(record)[0],
                 )
                 if key[0] == "unknown" and key[1] == "unknown":
                     continue
@@ -648,7 +653,7 @@ def _temporal_assessment(delta: float, event_kind: str) -> tuple[str, str]:
     if 0 <= delta <= 300:
         return ("NEAR_ONSET" if delta <= 120 else "DURING"), "SUPPORTS"
     if delta < -300:
-        return "BEFORE", "SUPPORTS" if event_kind == "change" else "INCONCLUSIVE"
+        return "BEFORE", "INCONCLUSIVE"
     return "AFTER", "INCONCLUSIVE"
 
 

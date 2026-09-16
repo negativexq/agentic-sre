@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from packages.evals.itbench.dataset import (
     ITBENCH_DATASET_REVISION,
     ITBENCH_SCENARIO_IDS,
+    ITBenchLiteDataset,
 )
 from packages.evals.itbench.e9_identity import collect_e9_identity, validate_e9_identity
 from packages.evals.itbench.e11_context import E11_CONTEXT_VERSION
@@ -45,6 +46,7 @@ E11_OFFICIAL_RELEVANT_PATHS: Final[tuple[str, ...]] = (
     "packages/evals/itbench/e11_operations.py",
     "packages/evals/itbench/e11_official.py",
     "packages/evals/itbench/e11_canary.py",
+    "packages/evals/itbench/e11_runtime.py",
     "packages/evals/itbench/e11_local_grading.py",
     "scripts/itbench_e11_execute.py",
 )
@@ -342,6 +344,50 @@ def predict_e11(
     return checkpoints
 
 
+def predict_e11_runtime(
+    manifest: E11OfficialManifestV1,
+    dataset: ITBenchLiteDataset,
+    predictions_root: Path,
+    provider: Any,
+    *,
+    manifest_sha256: str = "",
+) -> list[dict[str, Any]]:
+    """Run the repository-owned E11 loop for each scenario.
+
+    The provider is dependency-injected so offline tests use ``FakeModelProvider``;
+    this function itself never constructs OpenAI or reads ground truth.
+    """
+    from packages.evals.itbench.e11_runtime import E11InvestigationRuntime, E11RuntimeLimits
+    from packages.evals.itbench.snapshot_backend import ITBenchSnapshotBackend
+
+    if manifest.scenario_count != len(manifest.scenario_order):
+        raise E11ManifestError("manifest scenario count/order mismatch")
+
+    def execute(scenario_id: str) -> dict[str, Any]:
+        scenario = dataset._load_scenario(scenario_id)
+        backend = ITBenchSnapshotBackend(dataset, scenario, max_rows=50, max_bytes=100_000)
+        runtime = E11InvestigationRuntime(
+            provider,
+            backend,
+            limits=E11RuntimeLimits(
+                max_model_calls=manifest.runtime_limits.max_model_calls,
+                max_tool_calls=manifest.runtime_limits.max_tool_calls,
+                max_agent_turns=manifest.runtime_limits.max_agent_turns,
+                max_wall_time_seconds=manifest.runtime_limits.max_wall_time_seconds,
+                max_consecutive_rejected_actions=manifest.runtime_limits.max_consecutive_rejected_actions,
+            ),
+            execution_id=manifest.execution,
+        )
+        return runtime.run()
+
+    return predict_e11(
+        manifest,
+        predictions_root,
+        execute,
+        manifest_sha256=manifest_sha256,
+    )
+
+
 def _persist_available_artifacts(trial_dir: Path, result: dict[str, Any]) -> None:
     """Keep trustworthy executor output before classifying a failure."""
     artifact_names = {name.removesuffix(".json") for name in E11_CHECKPOINT_FILES[:-1]}
@@ -516,6 +562,7 @@ __all__ = [
     "build_e11_manifest",
     "load_e11_manifest",
     "predict_e11",
+    "predict_e11_runtime",
     "seal_e11_predictions",
     "validate_e11_preflight",
     "verify_e11_seal",

@@ -20,6 +20,7 @@ from typing import Any, Protocol, cast
 
 from packages.evals.itbench.contracts import ITBenchEvidenceCategory
 from packages.evals.itbench.dataset import iter_tsv
+from packages.evals.itbench.snapshot_backend import classify_structured_log, normalize_trace_status
 
 
 class SnapshotEvidenceSource(Protocol):
@@ -43,9 +44,11 @@ class SnapshotEvidenceSource(Protocol):
     ) -> tuple[dict[str, Any], ...]: ...
 
 
-E11_CATALOG_VERSION = "itbench_e11_observed_catalog_v1"
-E11_RETRIEVAL_VERSION = "itbench_e11_evidence_retrieval_v1"
+E11_CATALOG_VERSION = "itbench_e11_observed_catalog_v2"
+E11_RETRIEVAL_VERSION = "itbench_e11_evidence_retrieval_v2"
 E11_DEFAULT_SHORTLIST_SIZE = 10
+MAX_PRE_ONSET_SECONDS = 300
+MAX_POST_ONSET_SECONDS = 300
 
 _DIRECT_PROVENANCE = "DIRECT_K8S_OBJECT"
 _EVENT_PROVENANCE = "DIRECT_K8S_EVENT"
@@ -72,6 +75,9 @@ class ObservedEntity:
     evidence_refs: set[str] = field(default_factory=set)
     first_observed: str | None = None
     last_observed: str | None = None
+    first_diagnostic_signal: str | None = None
+    first_failure_signal: str | None = None
+    first_anomaly_signal: str | None = None
     relationships: set[tuple[str, str, str]] = field(default_factory=set)
     identity_quality: str = "DIRECT"
 
@@ -89,6 +95,9 @@ class ObservedEntity:
             "evidence_refs": sorted(self.evidence_refs),
             "first_observed": self.first_observed,
             "last_observed": self.last_observed,
+            "first_diagnostic_signal": self.first_diagnostic_signal,
+            "first_failure_signal": self.first_failure_signal,
+            "first_anomaly_signal": self.first_anomaly_signal,
             "relationships": [
                 {"source": source, "target": target, "relationship": relation}
                 for source, target, relation in sorted(self.relationships)
@@ -323,12 +332,17 @@ def rank_observed_candidates(
     include_telemetry: bool = True,
     max_telemetry_records: int = 5_000,
     use_topology: bool = True,
+    use_direct_topology: bool | None = None,
+    use_causal_propagation: bool = True,
+    use_namespace_context: bool = True,
     use_temporal: bool = True,
     telemetry_records: dict[ITBenchEvidenceCategory, tuple[dict[str, Any], ...]] | None = None,
 ) -> tuple[RankedCandidate, ...]:
     """Rank candidates using evidence channels, never static object priors."""
     if limit < 1:
         raise ValueError("candidate limit must be positive")
+    if use_direct_topology is not None:
+        use_topology = use_direct_topology
     evidence: dict[str, list[RetrievalEvidence]] = defaultdict(list)
     onset = _incident_onset(backend)
     aliases: dict[str, set[str]] = defaultdict(set)
@@ -351,6 +365,7 @@ def rank_observed_candidates(
                 item["evidence_id"],
                 "explicit alert resource label",
                 6.0,
+                timestamp=_item_timestamp(item),
             )
         namespace = alert_labels.get("namespace") if isinstance(alert_labels, dict) else None
         namespace_entity = (
@@ -411,8 +426,17 @@ def rank_observed_candidates(
             if telemetry_records is None
             else telemetry_records.get(ITBenchEvidenceCategory.METRICS, ()),
         )
-        for canonical, (ref, detail, weight) in metric_anomalies.items():
-            _add_signal(catalog, evidence, canonical, "METRIC_ANOMALY", ref, detail, weight)
+        for canonical, (ref, detail, weight, timestamp) in metric_anomalies.items():
+            _add_signal(
+                catalog,
+                evidence,
+                canonical,
+                "METRIC_ANOMALY",
+                ref,
+                detail,
+                weight,
+                timestamp=timestamp,
+            )
 
         for category, channel in (
             (ITBenchEvidenceCategory.LOGS, "LOG_FAILURE"),
@@ -428,21 +452,14 @@ def rank_observed_candidates(
                 if not telemetry_identity:
                     continue
                 record = item.get("record", {})
-                text = json.dumps(record, default=str).casefold()
-                error = category is ITBenchEvidenceCategory.TRACES and str(
-                    record.get("StatusCode", "")
-                ).casefold() not in {"", "ok", "0"}
-                error = error or any(
-                    token in text
-                    for token in (
-                        "error",
-                        "exception",
-                        "timeout",
-                        "5xx",
-                        "503",
-                        "504",
-                        "deadline_exceeded",
-                    )
+                if not isinstance(record, dict):
+                    continue
+                log_status, log_reason = classify_structured_log(record)
+                trace_status, trace_reason = normalize_trace_status(record)
+                error = (
+                    log_status == "ERROR"
+                    if category is ITBenchEvidenceCategory.LOGS
+                    else trace_status == "ERROR"
                 )
                 if error:
                     _add_signal(
@@ -451,7 +468,7 @@ def rank_observed_candidates(
                         telemetry_identity[0]["canonical"],
                         channel,
                         item["evidence_id"],
-                        "structured telemetry contains an error signal",
+                        f"structured telemetry: {log_reason if category is ITBenchEvidenceCategory.LOGS else trace_reason}",
                         5.0,
                         timestamp=_item_timestamp(item),
                     )
@@ -460,14 +477,14 @@ def rank_observed_candidates(
         first_signal = _first_evidence_time(entity, evidence)
         if use_temporal and evidence.get(entity.canonical) and onset and first_signal:
             delta = _time_delta_seconds(first_signal, onset)
-            if delta is not None and delta <= 300:
+            if delta is not None and -MAX_PRE_ONSET_SECONDS <= delta <= MAX_POST_ONSET_SECONDS:
                 _add_signal(
                     catalog,
                     evidence,
                     entity.canonical,
                     "TEMPORAL_ALIGNMENT",
                     f"time:{entity.handle}",
-                    f"first signal is {max(0, int(delta))}s before/near incident onset",
+                    _temporal_detail(delta),
                     3.0,
                 )
         if evidence.get(entity.canonical):
@@ -494,14 +511,16 @@ def rank_observed_candidates(
     # Propagate only along explicit causal/dependency edges.  This makes a
     # chaos, policy, HPA, owner, or configuration candidate reachable from an
     # affected workload without rewarding generic graph centrality.
-    edges = _catalog_edges(catalog)
+    edges = _catalog_edges(catalog) if use_causal_propagation else ()
     # Causal paths can span Pod → ReplicaSet → Deployment → ConfigMap.  Reach
     # a fixed point while deduplicating derived evidence so edge order cannot
     # hide a valid multi-hop path.
     for _ in range(len(edges) + 1):
         changed = False
         for source, target, relationship in edges:
-            if relationship in {"configuration_reference", "owner", "namespace_contains"}:
+            if relationship in {"configuration_reference", "owner"} or (
+                relationship == "namespace_contains" and use_namespace_context
+            ):
                 changed |= _propagate_signals(
                     evidence, source=source, target=target, relationship=relationship
                 )
@@ -769,13 +788,31 @@ def _add_signal(
     timestamp: str | None = None,
 ) -> None:
     if catalog.get(canonical) is not None:
-        evidence[canonical].append(RetrievalEvidence(channel, evidence_ref, detail[:240], weight))
+        if not any(
+            item.channel == channel and item.evidence_ref == evidence_ref
+            for item in evidence[canonical]
+        ):
+            evidence[canonical].append(
+                RetrievalEvidence(channel, evidence_ref, detail[:240], weight)
+            )
         entity = catalog.get(canonical)
         if entity and timestamp:
             if entity.first_observed is None or timestamp < entity.first_observed:
                 entity.first_observed = timestamp
             if entity.last_observed is None or timestamp > entity.last_observed:
                 entity.last_observed = timestamp
+            if channel not in {"DIRECTED_TOPOLOGY", "NAMESPACE_CONTEXT"}:
+                if (
+                    entity.first_diagnostic_signal is None
+                    or timestamp < entity.first_diagnostic_signal
+                ):
+                    entity.first_diagnostic_signal = timestamp
+            if channel in {"FAILURE_EVENT", "DISRUPTION", "LOG_FAILURE", "TRACE_ERROR_PROPAGATION"}:
+                if entity.first_failure_signal is None or timestamp < entity.first_failure_signal:
+                    entity.first_failure_signal = timestamp
+            if channel == "METRIC_ANOMALY":
+                if entity.first_anomaly_signal is None or timestamp < entity.first_anomaly_signal:
+                    entity.first_anomaly_signal = timestamp
 
 
 def _k8s_identity(item: dict[str, Any], *, event: bool = False) -> dict[str, Any] | None:
@@ -1016,6 +1053,7 @@ def _incident_onset(backend: SnapshotEvidenceSource) -> str | None:
     timestamps = [
         _item_timestamp(item)
         for item in backend.complete_source_records(ITBenchEvidenceCategory.ALERTS)
+        if _is_diagnostic_alert(item)
     ]
     return min((item for item in timestamps if item), default=None)
 
@@ -1056,8 +1094,8 @@ def _metric_anomaly_signals(
     *,
     limit: int,
     records: Iterable[dict[str, Any]] | None = None,
-) -> dict[str, tuple[str, str, float]]:
-    series: dict[str, list[tuple[str | None, float, str]]] = defaultdict(list)
+) -> dict[str, tuple[str, str, float, str | None]]:
+    series: dict[str, list[tuple[str | None, float, str, str]]] = defaultdict(list)
     source = (
         records
         if records is not None
@@ -1085,54 +1123,138 @@ def _metric_anomaly_signals(
         except (TypeError, ValueError):
             continue
         metric_name = str(record.get("metric_name", record.get("MetricName", "unknown")))
-        if not _metric_is_anomaly_candidate(metric_name):
+        metric_type = _metric_semantics(record, metric_name)
+        if not _metric_is_anomaly_candidate(metric_name, metric_type):
             continue
-        for candidate in identity:
-            if catalog.get(candidate["canonical"]):
-                series[f"{candidate['canonical']}|{metric_name}"].append(
-                    (_item_timestamp(item), number, item["evidence_id"])
-                )
-    result: dict[str, tuple[str, str, float]] = {}
+        for identity_item in identity:
+            if catalog.get(identity_item["canonical"]):
+                series[
+                    f"{identity_item['canonical']}|{metric_name}|{_metric_series_identity(record)}"
+                ].append((_item_timestamp(item), number, item["evidence_id"], metric_type))
+    result: dict[str, tuple[str, str, float, str | None]] = {}
     for key, values in series.items():
         if len(values) < 2:
             continue
-        ordered = sorted(values, key=lambda item: item[0] or "")
-        first, last = ordered[0][1], ordered[-1][1]
-        relative = abs(last - first) / max(abs(first), 1e-9)
-        if relative < 0.20:
+        deduped = {
+            (stamp, value, ref): (stamp, value, ref, kind) for stamp, value, ref, kind in values
+        }
+        ordered = sorted(deduped.values(), key=lambda item: (item[0] or "", item[2]))
+        timestamps = tuple(item[0] for item in ordered if item[0] is not None)
+        numbers = [item[1] for item in ordered]
+        summary = _metric_summary_for_type(numbers, timestamps, ordered[0][3])
+        if not summary["anomaly"]:
             continue
-        canonical = key.rsplit("|", 1)[0]
-        score = min(7.0, 2.0 + relative * 3.0)
-        result[canonical] = (
+        canonical, metric_name, _label_hash = key.split("|", 2)
+        score = min(7.0, 2.0 + abs(float(summary["relative_change"] or 0.0)) * 3.0)
+        ref, detail, _score, timestamp = result.get(canonical, ("", "", -1.0, None))
+        signal = (
             ordered[-1][2],
-            f"{key.rsplit('|', 1)[1]} changed {relative:.0%} across observed samples",
+            f"{metric_name} {summary['direction']} ({summary['metric_type']})",
             score,
+            ordered[-1][0],
         )
+        if signal[2] > _score or (signal[2] == _score and signal[0] < ref):
+            result[canonical] = signal
     return result
 
 
-def _metric_is_anomaly_candidate(metric_name: str) -> bool:
-    """Reject counters/histogram buckets whose delta is not an anomaly."""
+def _metric_semantics(record: dict[str, Any], metric_name: str) -> str:
+    raw = record.get("metric_type", record.get("MetricType", record.get("type")))
+    value = str(raw).casefold() if raw is not None else ""
+    if value in {"counter", "cumulative", "monotonic"}:
+        return "counter"
+    if value in {"gauge", "value", "instant"}:
+        return "gauge"
+    if value in {"histogram", "bucket"} or metric_name.casefold().endswith("_bucket"):
+        return "histogram"
+    if value == "summary":
+        return "summary"
+    if metric_name.casefold().endswith("_total") or metric_name.casefold().endswith("_count"):
+        return "counter"
+    return "unknown"
+
+
+def _metric_series_identity(record: dict[str, Any]) -> str:
+    """Keep independently labelled metric series independent during ranking."""
+    labels: dict[str, str] = {}
+    for key in ("tags", "labels", "resource", "ResourceAttributes", "resource_attributes"):
+        value = record.get(key)
+        if isinstance(value, dict):
+            labels.update({str(label): str(item) for label, item in value.items()})
+    for key in (
+        "service",
+        "service_name",
+        "service.name",
+        "pod",
+        "pod_name",
+        "workload",
+        "deployment",
+        "namespace",
+        "instance",
+    ):
+        if record.get(key) is not None:
+            labels[key] = str(record[key])
+    encoded = json.dumps(labels, sort_keys=True, separators=(",", ":"), default=str)
+    return sha256(encoded.encode("utf-8")).hexdigest()[:16]
+
+
+def _metric_is_anomaly_candidate(metric_name: str, metric_type: str = "unknown") -> bool:
+    """Exclude only non-diagnostic resource/histogram series before semantics."""
     name = metric_name.casefold()
-    diagnostic_tokens = (
-        "error",
-        "fail",
-        "drop",
-        "restart",
-        "timeout",
-        "latency",
-        "queue",
-        "lag",
-        "availability",
-        "throttl",
-    )
-    if any(token in name for token in diagnostic_tokens):
-        return True
-    if name.endswith("_bucket") or name.endswith("_total"):
+    if metric_type in {"histogram", "summary"} or name.endswith("_bucket"):
         return False
     if "resource_requests" in name or "resource_limits" in name:
         return False
     return True
+
+
+def _metric_summary_for_type(
+    values: list[float], timestamps: tuple[str, ...], metric_type: str
+) -> dict[str, Any]:
+    ordered = (
+        sorted(zip(timestamps, values, strict=True), key=lambda item: item[0])
+        if len(timestamps) == len(values)
+        else []
+    )
+    series = [value for _timestamp, value in ordered] if ordered else values
+    summary = {
+        "first": series[0],
+        "last": series[-1],
+        "relative_change": ((series[-1] - series[0]) / abs(series[0]) if series[0] else None),
+        "direction": "increase"
+        if series[-1] > series[0]
+        else "decrease"
+        if series[-1] < series[0]
+        else "stable",
+    }
+    summary["metric_type"] = metric_type
+    if metric_type != "counter":
+        summary["anomaly"] = abs(float(summary.get("relative_change") or 0.0)) >= 0.20
+        return summary
+    ordered = (
+        sorted(zip(timestamps, values, strict=True), key=lambda item: item[0])
+        if len(timestamps) == len(values)
+        else []
+    )
+    rates: list[float] = []
+    for (before, before_value), (after, after_value) in zip(ordered, ordered[1:], strict=False):
+        delta_seconds = _time_delta_seconds(after, before)
+        if delta_seconds and delta_seconds > 0:
+            rates.append((after_value - before_value) / delta_seconds)
+    if len(rates) < 2:
+        summary["rate_change"] = None
+        summary["anomaly"] = False
+        return summary
+    baseline = sum(rates[: max(1, len(rates) // 2)]) / max(1, len(rates) // 2)
+    incident = sum(rates[-max(1, len(rates) // 2) :]) / max(1, len(rates) // 2)
+    change = incident - baseline
+    summary["baseline_rate"] = baseline
+    summary["incident_rate"] = incident
+    summary["rate_change"] = change
+    summary["relative_change"] = change / abs(baseline) if baseline else None
+    summary["direction"] = "increase" if change > 0 else "decrease" if change < 0 else "stable"
+    summary["anomaly"] = abs(change) >= max(0.001, abs(baseline) * 0.20)
+    return summary
 
 
 def _fast_source_records(
@@ -1160,7 +1282,14 @@ def _fast_source_records(
 def _first_evidence_time(
     entity: ObservedEntity, evidence: dict[str, list[RetrievalEvidence]]
 ) -> str | None:
-    return entity.first_observed
+    return (
+        entity.first_failure_signal or entity.first_anomaly_signal or entity.first_diagnostic_signal
+    )
+
+
+def _temporal_detail(delta: float) -> str:
+    seconds = int(abs(delta))
+    return f"signal occurred {seconds}s {'before' if delta < 0 else 'after/near'} incident onset"
 
 
 def _time_delta_seconds(left: str, right: str) -> float | None:

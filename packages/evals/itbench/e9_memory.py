@@ -63,6 +63,7 @@ class E9CaseMemory:
             "recovered_action_rejections": 0,
             "last_rejection": None,
             "evidence": {},
+            "ranking_history": [],
         }
         self.append("CASE_STARTED", 0, {"execution_id": execution_id, "scenario_id": scenario_id})
 
@@ -205,6 +206,7 @@ class E9CaseMemory:
             "consecutive_rejections": self.state["consecutive_rejections"],
             "last_rejection": self.state["last_rejection"],
             "evidence": list(self.state["evidence"].values())[-12:],
+            "ranking_history": self.state["ranking_history"][-8:],
         }
 
     def persist(self, path: Path) -> None:
@@ -247,6 +249,7 @@ class E9CaseMemory:
             "recovered_action_rejections": 0,
             "last_rejection": None,
             "evidence": {},
+            "ranking_history": [],
         }
         for raw in payload.get("events", []):
             event = E9Event(
@@ -328,6 +331,19 @@ class E9CaseMemory:
                     if candidate not in self.state["tested_candidates"]:
                         self.state["tested_candidates"].append(candidate)
             self.state["semantic_actions_used"] += 1
+        elif event.event_type == "EVIDENCE_ASSESSMENT":
+            evidence_handle = payload.get("evidence_handle")
+            if isinstance(evidence_handle, str) and evidence_handle in self.state["evidence"]:
+                self.state["evidence"][evidence_handle]["assessment"] = payload.get("assessment")
+                self.state["evidence"][evidence_handle]["dimension"] = payload.get("dimension")
+        elif event.event_type == "RANKING_REVISION":
+            self.state["ranking_history"].append(
+                {
+                    "revision": payload.get("revision"),
+                    "triggering_evidence_ref": payload.get("triggering_evidence_ref"),
+                    "handles": list(payload.get("handles", []))[:20],
+                }
+            )
         elif event.event_type == "ACTION_REJECTED":
             self.state["action_rejections"] += 1
             self.state["rejection_count"] += 1

@@ -33,4 +33,9 @@ The complete observed entity catalog is built from Kubernetes objects/events, di
 
 The verification surface records operation-to-target scopes for the current hypothesis and bounded visible alternatives, so comparison does not require an irreversible `REVISE` first. Empty results remain non-supporting evidence, and `SUBMIT` requires a supported candidate with valid supporting evidence and no contradiction.
 
-The fake-provider canary is a control-plane test, not an RCA-quality result. `E11 LIVE BENCHMARK: NOT RUN`.
+The fake-provider canary is a control-plane test, not an RCA-quality result.
+`E11InvestigationRuntime` is the provider-injected production loop used by
+that canary and by the future OpenAI adapter; there is no separate fake FSM.
+Its persisted trajectory includes context metadata, semantic evidence,
+assessment history, ranking revisions, event state, usage, and termination
+reason. `E11 LIVE BENCHMARK: NOT RUN`.

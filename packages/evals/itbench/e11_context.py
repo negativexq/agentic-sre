@@ -7,7 +7,7 @@ from typing import Any
 
 from packages.evals.itbench.e11_observability import RankedCandidate
 
-E11_CONTEXT_VERSION = "itbench_e11_compact_context_v1"
+E11_CONTEXT_VERSION = "itbench_e11_investigation_context_v2"
 E11_CONTEXT_MAX_CHARS = 20_000
 
 
@@ -19,6 +19,7 @@ def build_e11_context(
     remaining_model_calls: int,
     remaining_semantic_actions: int,
     topology: tuple[dict[str, Any], ...] = (),
+    investigation_state: dict[str, Any] | None = None,
     max_chars: int = E11_CONTEXT_MAX_CHARS,
 ) -> str:
     """Build a compact deterministic context packet without raw telemetry."""
@@ -33,6 +34,8 @@ def build_e11_context(
         "active_candidates": [candidate.as_dict() for candidate in candidates],
         "directed_topology": list(topology[:24]),
     }
+    if investigation_state:
+        packet["investigation"] = _bounded_investigation(investigation_state)
     encoded = json.dumps(packet, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     if len(encoded) <= max_chars:
         return encoded
@@ -56,6 +59,32 @@ def build_e11_context(
     if len(encoded) > max_chars:
         raise ValueError("minimal E11 context exceeds the configured bound")
     return encoded
+
+
+def _bounded_investigation(value: dict[str, Any]) -> dict[str, Any]:
+    """Keep causal memory ahead of low-priority topology when context is tight."""
+    result: dict[str, Any] = {}
+    for key in (
+        "current_hypothesis",
+        "candidate_status",
+        "supporting_evidence",
+        "contradicting_evidence",
+        "inconclusive_evidence",
+        "recent_operations",
+        "unresolved_questions",
+        "ranking_revisions",
+        "rejected_candidates",
+    ):
+        if key not in value:
+            continue
+        item = value[key]
+        if isinstance(item, (str, int, float, bool)) or item is None:
+            result[key] = item
+        elif isinstance(item, (list, tuple)):
+            result[key] = [str(entry)[:500] for entry in item[-8:]]
+        elif isinstance(item, dict):
+            result[key] = {str(k): str(v)[:500] for k, v in list(item.items())[-12:]}
+    return result
 
 
 def _bounded_mapping(value: dict[str, Any]) -> dict[str, Any]:

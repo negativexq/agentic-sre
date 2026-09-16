@@ -8,6 +8,7 @@ authorized.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import Any, Literal
@@ -19,7 +20,7 @@ from packages.evals.itbench.e11_observability import (
 )
 from packages.evals.itbench.e11_operations import available_e11_operations, comparable_peer_count
 
-E11_PROMPT_VERSION = "itbench_e11_observe_verify_v1"
+E11_PROMPT_VERSION = "itbench_e11_observe_verify_v2"
 E11_PROMPT = """You are a read-only SRE investigator. Observe bounded incident evidence before choosing a hypothesis. Treat candidates as hypotheses, distinguish causes from downstream symptoms, prefer incident-specific and temporally aligned evidence, use discriminating verification, revise when evidence contradicts a hypothesis, submit only a causally supported candidate, and STOP when evidence is insufficient. The runtime owns identity, handles, provenance, budgets, and safety."""
 E11_OBSERVATION_OPERATIONS = (
     "INCIDENT_OVERVIEW",
@@ -27,6 +28,19 @@ E11_OBSERVATION_OPERATIONS = (
     "TOPOLOGY_OVERVIEW",
     "ANOMALY_DISCOVERY",
 )
+E11_EVIDENCE_DIMENSIONS = frozenset(
+    {
+        "causal",
+        "causal_mechanism",
+        "temporal",
+        "failure_signature",
+        "comparative",
+        "resource_pressure",
+        "dependency",
+        "configuration",
+    }
+)
+E11_UNUSABLE_RESULT_STATUSES = frozenset({"NO_DATA", "UNAVAILABLE", "ERROR", "INCONCLUSIVE"})
 
 
 class EvidenceAssessment:
@@ -51,14 +65,16 @@ class EvidenceAssessmentRecord:
     assessment: str
     dimension: str
     rationale: str
+    supersedes_evidence_ref: str | None = None
 
-    def as_dict(self) -> dict[str, str]:
+    def as_dict(self) -> dict[str, str | None]:
         return {
             "evidence_ref": self.evidence_ref,
             "entity_handle": self.handle,
             "assessment": self.assessment,
             "dimension": self.dimension,
             "rationale": self.rationale[:300],
+            "supersedes_evidence_ref": self.supersedes_evidence_ref,
         }
 
 
@@ -122,8 +138,9 @@ class E11CaseMemory:
         self.candidate_status[handle] = CandidateStatus.ACTIVE
         self.phase = "VERIFY"
 
-    def add_evidence(self, handle: str, operation: str, summary: dict[str, Any]) -> str:
-        self._require_catalog_handle(handle)
+    def add_evidence(self, handle: str | None, operation: str, summary: dict[str, Any]) -> str:
+        if handle is not None:
+            self._require_catalog_handle(handle)
         evidence_ref = f"E{len(self.evidence) + 1:03d}"
         self.evidence[evidence_ref] = {
             "evidence_ref": evidence_ref,
@@ -142,6 +159,7 @@ class E11CaseMemory:
         *,
         dimension: str,
         rationale: str = "",
+        supersedes_evidence_ref: str | None = None,
     ) -> EvidenceAssessmentRecord:
         self._require_catalog_handle(handle)
         if evidence_ref not in self.evidence:
@@ -154,12 +172,22 @@ class E11CaseMemory:
             EvidenceAssessment.INCONCLUSIVE,
         }:
             raise ValueError("unsupported evidence assessment")
+        if dimension not in E11_EVIDENCE_DIMENSIONS:
+            raise ValueError("unsupported evidence dimension")
+        evidence_summary = self.evidence[evidence_ref].get("summary", {})
+        if assessment == EvidenceAssessment.SUPPORTS and not _evidence_usable(evidence_summary):
+            raise ValueError("unusable evidence cannot support a candidate")
+        if supersedes_evidence_ref is not None:
+            superseded = self.evidence.get(supersedes_evidence_ref)
+            if superseded is None or superseded.get("entity_handle") != handle:
+                raise ValueError("superseded evidence must belong to this candidate")
         record = EvidenceAssessmentRecord(
             evidence_ref=evidence_ref,
             handle=handle,
             assessment=assessment,
             dimension=dimension[:64],
             rationale=rationale,
+            supersedes_evidence_ref=supersedes_evidence_ref,
         )
         self.assessments.append(record)
         self._refresh_status(handle)
@@ -198,7 +226,15 @@ class E11CaseMemory:
 
     def _refresh_status(self, handle: str) -> None:
         candidate = [item for item in self.assessments if item.handle == handle]
-        if any(item.assessment == EvidenceAssessment.CONTRADICTS for item in candidate):
+        active_contradictions = {
+            item.evidence_ref
+            for item in candidate
+            if item.assessment == EvidenceAssessment.CONTRADICTS
+        }
+        for item in candidate:
+            if item.supersedes_evidence_ref in active_contradictions:
+                active_contradictions.discard(item.supersedes_evidence_ref)
+        if active_contradictions:
             self.candidate_status[handle] = CandidateStatus.CONTRADICTED
         elif any(item.assessment == EvidenceAssessment.SUPPORTS for item in candidate):
             self.candidate_status[handle] = CandidateStatus.SUPPORTED
@@ -288,8 +324,50 @@ def _operations_for_handle(memory: E11CaseMemory, handle: str) -> tuple[str, ...
 
 
 def _bounded_summary(summary: dict[str, Any]) -> dict[str, Any]:
-    encoded = str(summary)
-    return {"summary": encoded[:2_000], "summary_hash": sha256(encoded.encode()).hexdigest()}
+    encoded = json.dumps(summary, ensure_ascii=False, sort_keys=True, default=str)
+    status = str(summary.get("result_status", "POSITIVE_FINDING"))
+    usable = summary.get("usable")
+    if not isinstance(usable, bool):
+        usable = status not in E11_UNUSABLE_RESULT_STATUSES
+    important = {
+        key: summary[key]
+        for key in (
+            "error_count",
+            "patterns",
+            "metric",
+            "metric_name",
+            "direction",
+            "peer_count",
+            "event_category",
+            "reason",
+            "count",
+            "data_available",
+        )
+        if key in summary
+    }
+    return {
+        "summary": encoded[:2_000],
+        "structured_fields": _bounded_fields(important),
+        "summary_hash": sha256(encoded.encode()).hexdigest(),
+        "result_status": status,
+        "usable": usable,
+    }
+
+
+def _bounded_fields(value: dict[str, Any]) -> dict[str, Any]:
+    return {
+        str(key): item if isinstance(item, (str, int, float, bool)) else str(item)[:600]
+        for key, item in value.items()
+    }
+
+
+def _evidence_usable(summary: Any) -> bool:
+    return (
+        isinstance(summary, dict)
+        and summary.get("usable", True) is not False
+        and str(summary.get("result_status", "POSITIVE_FINDING"))
+        not in E11_UNUSABLE_RESULT_STATUSES
+    )
 
 
 def e11_prompt_hash() -> str:

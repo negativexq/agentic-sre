@@ -12,7 +12,10 @@ import argparse
 import json
 from pathlib import Path
 
-from packages.evals.itbench.e11_canary import run_e11_fake_provider_canary
+from packages.evals.itbench.e11_canary import (
+    run_e11_fake_provider_canary,
+    run_e11_snapshot_runtime_canary,
+)
 from packages.evals.itbench.e11_official import (
     E11_OFFICIAL_RELEVANT_PATHS,
     build_e11_manifest,
@@ -34,6 +37,8 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     canary = sub.add_parser("canary")
     canary.add_argument("--count", type=int, default=35)
+    runtime_canary = sub.add_parser("runtime-canary")
+    runtime_canary.add_argument("--dataset-root", default=".local/itbench-lite")
     manifest = sub.add_parser("manifest-template")
     manifest.add_argument("--output", required=True)
     preflight = sub.add_parser("preflight")
@@ -52,6 +57,8 @@ def main() -> int:
         result = run_e11_fake_provider_canary(
             tuple(f"Scenario-{i}" for i in range(1, args.count + 1))
         )
+    elif args.command == "runtime-canary":
+        result = run_e11_snapshot_runtime_canary(_path(args.dataset_root))
     elif args.command == "manifest-template":
         result = build_e11_manifest(ROOT).model_dump(mode="json")
         _path(args.output).write_text(

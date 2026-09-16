@@ -7,7 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from packages.evals.itbench.dataset import ITBenchLiteDataset
+import packages.evals.itbench.e10_official as e10_official
+from packages.evals.itbench.dataset import (
+    ITBENCH_DATASET_REVISION,
+    ITBENCH_SCENARIO_IDS,
+    ITBENCH_SRE_VERSION,
+    ITBenchLiteDataset,
+)
 from packages.evals.itbench.e10_local_grading import grade_local_e10
 from packages.evals.itbench.e10_official import (
     E10_OFFICIAL_RELEVANT_PATHS,
@@ -31,6 +37,52 @@ from packages.provider.contracts import (
 from packages.provider.fake import FakeModelProvider
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+@pytest.fixture(autouse=True)
+def _temporary_prediction_dataset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep E10 orchestration tests independent of the optional local snapshot download."""
+    dataset_root = tmp_path / "itbench-lite"
+    snapshot_root = dataset_root / "snapshots" / "sre" / ITBENCH_SRE_VERSION
+    for scenario_id in ITBENCH_SCENARIO_IDS:
+        scenario_root = snapshot_root / scenario_id
+        (scenario_root / "alerts").mkdir(parents=True)
+        (scenario_root / "metrics").mkdir()
+        (scenario_root / "alerts" / "alerts.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "state": "firing",
+                        "labels": {"alertname": "OfflineQualification", "service": "demo"},
+                        "annotations": {"summary": "offline qualification"},
+                        "activeAt": "2024-01-01T00:00:00Z",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (scenario_root / "metrics" / "metrics.tsv").write_text("name\tvalue\n", encoding="utf-8")
+        for filename in (
+            "k8s_events_raw.tsv",
+            "k8s_objects_raw.tsv",
+            "otel_logs_raw.tsv",
+            "otel_traces_raw.tsv",
+        ):
+            (scenario_root / filename).write_text("name\tvalue\n", encoding="utf-8")
+    atomic_json_write(
+        dataset_root / ".itbench-lite-manifest.json",
+        {
+            "source": "ibm-research/ITBench-Lite",
+            "revision": ITBENCH_DATASET_REVISION,
+            "sre_version": ITBENCH_SRE_VERSION,
+            "scenario_ids": list(ITBENCH_SCENARIO_IDS),
+        },
+    )
+    atomic_json_write(
+        dataset_root / ".itbench-source-completeness.json",
+        {"status": "PASS", "files": []},
+    )
+    monkeypatch.setattr(e10_official, "E10_DATA_ROOT", str(dataset_root))
 
 
 def _manifest_and_paths(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:

@@ -6,6 +6,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
+import packages.evals.itbench.e10_official as e10_official
 from packages.evals.itbench.contracts import ITBenchAgentOutput
 from packages.evals.itbench.dataset import ITBenchLiteDataset
 from packages.evals.itbench.e10_official import (
@@ -50,7 +51,7 @@ def grade_local_e10(
     verify_e10_seal(
         root, manifest_path=manifest_path, predictions_root=predictions_root, seal_path=seal_path
     )
-    dataset = ITBenchLiteDataset.open(root / ".local/itbench-lite")
+    dataset = ITBenchLiteDataset.open(root / e10_official.E10_DATA_ROOT)
     grades: list[ITBenchEntityGrade] = []
     scenarios: list[dict[str, Any]] = []
     for scenario_id in manifest.scenario_order:

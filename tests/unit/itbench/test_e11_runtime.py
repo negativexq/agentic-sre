@@ -98,6 +98,10 @@ def test_fake_provider_uses_real_e11_runtime_path(tmp_path: Path) -> None:
     }
     assert provider.accounting_snapshot().provider_invocations == 4
     assert any(item.get("operation") == "EVENT_ANALYSIS" for item in result["turn_trace"])
+    assert len(result["case_state"]["ranking_history"]) >= 2
+    later_context = provider.requests[3].messages[-1].content
+    assert "investigation" in later_context
+    assert "supporting_evidence" in later_context
 
 
 def test_no_data_evidence_cannot_support_candidate() -> None:

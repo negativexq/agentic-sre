@@ -249,6 +249,21 @@ def execute_live_smoke(
             "execution": manifest.execution,
             "manifest_sha256": _sha256(manifest_path),
             "runtime_identity": preflight["runtime_identity"],
+            "identity": {
+                "runtime_source_sha": preflight["runtime_identity"]["git_head"],
+                "runtime_bundle_sha": preflight["runtime_identity"]["bundle_sha256"],
+                "dataset_revision": manifest.dataset_revision,
+                "control_policy_hash": manifest.control_policy_hash,
+                "semantic_registry_hash": manifest.semantic_registry_hash,
+                "semantic_capability_policy_hash": manifest.semantic_capability_policy_hash,
+                "provider_schema_hash": manifest.provider_schema_hash,
+                "context_planner_hash": manifest.context_planner_hash,
+                "candidate_discovery_hash": manifest.candidate_discovery_hash,
+                "prompt_version": manifest.prompt_version,
+                "prompt_hash": manifest.prompt_hash,
+                "protocol_version": manifest.protocol_version,
+                "protocol_hash": manifest.protocol_hash,
+            },
             "fixture": manifest.fixture.model_dump(mode="json"),
             "model_policy": {
                 "provider": manifest.provider,
@@ -272,6 +287,7 @@ def execute_live_smoke(
                 "output_tokens": result["usage"].get("output_tokens", 0),
                 "provider_invocations": provider_invocations,
                 "provider_outbound_attempts": outbound_attempts,
+                "provider_latency_ms": result["usage"].get("provider_latency_ms", 0),
                 "semantic_actions_requested": result["usage"].get("semantic_actions_requested", 0),
                 "semantic_actions_executed": result["usage"].get("semantic_actions_executed", 0),
                 "action_rejections": result["usage"].get("action_rejections", 0),
@@ -281,6 +297,14 @@ def execute_live_smoke(
                 "evidence_count": len(result.get("evidence", ())),
                 "wall_time_ms": int((time.monotonic() - started) * 1000),
             },
+            "provider_accounting": (
+                provider_after.model_dump(mode="json")
+                if provider_after is not None
+                else {
+                    "provider_invocations": provider_invocations,
+                    "outbound_api_attempts": outbound_attempts,
+                }
+            ),
             "budget": {
                 "cap": after_budget.limit,
                 "calls_used": after_budget.calls_used,

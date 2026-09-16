@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -23,8 +22,11 @@ def grade_sealed_e11_predictions(
     grades = []
     for scenario_id in manifest.scenario_order:
         trial = predictions_root / scenario_id / "1"
-        output = ITBenchAgentOutput.model_validate(
-            json.loads((trial / "agent_output.json").read_text(encoding="utf-8"))
+        # Persisted JSON represents tuples as arrays.  Validate the JSON
+        # boundary directly so strict Python-model validation is not confused
+        # with the on-disk representation.
+        output = ITBenchAgentOutput.model_validate_json(
+            (trial / "agent_output.json").read_text(encoding="utf-8")
         )
         grades.append(grade_root_cause_entities(output, dataset.load_ground_truth(scenario_id)))
     macro = macro_average(grades)

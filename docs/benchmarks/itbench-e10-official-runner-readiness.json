@@ -1,0 +1,114 @@
+{
+  "status": "E10_OFFICIAL_RUNNER_READY_FOR_REVIEW",
+  "qualification": "offline_only",
+  "source_commit_qualified": "b3e942ed97d41d0488dc72469aff64167c4607c3",
+  "execution": "ITB-E10",
+  "experiment": "itbench-lite-sre-external-eval-v10",
+  "trial_count": 1,
+  "scenario_count": 35,
+  "scenario_order_source": "ITBENCH_SCENARIO_IDS",
+  "scenario_order_frozen": true,
+  "runtime_envelope": {
+    "max_model_calls": 12,
+    "max_tool_calls": 24,
+    "max_agent_turns": 12,
+    "max_wall_time_seconds": 240,
+    "max_consecutive_rejected_actions": 2,
+    "basis": "explicit copy of reviewed historical E9Limits defaults; not tuned"
+  },
+  "ledger": {
+    "cap_formula": "scenario_count * runtime_limits.max_model_calls",
+    "derived_cap": 420,
+    "fresh_status": "NOT_STARTED",
+    "one_outbound_attempt_per_consumed_unit": true
+  },
+  "architecture": [
+    "provider-free preflight",
+    "prediction generation without ground truth or judge",
+    "immutable per-scenario checkpoints",
+    "35-scenario prediction seal with artifact hashes",
+    "provider-free deterministic local grading after verified seal",
+    "official judge deferred until separate authorization"
+  ],
+  "prediction_phase": {
+    "ground_truth_access": 0,
+    "judge_access": 0,
+    "provider_constructed_before_preflight": false,
+    "checkpoint_files": [
+      "native_artifact.json",
+      "agent_output.json",
+      "turn_trace.json",
+      "case_state.json",
+      "event_log.json",
+      "usage.json",
+      "trial_manifest.json"
+    ],
+    "fake_qualification": {
+      "scenario_count": 35,
+      "trial_count": 1,
+      "provider_invocations": 35,
+      "live_outbound_attempts": 0,
+      "ground_truth_loader_calls": 0,
+      "result": "PASS"
+    }
+  },
+  "seal": {
+    "requires_all_scenarios": true,
+    "completion_count": 35,
+    "recomputes_checkpoint_hashes": true,
+    "immutable": true,
+    "verified_offline": true
+  },
+  "gt_barrier": {
+    "policy": "POST_SEAL_ONLY",
+    "prediction_path_can_load_ground_truth": false,
+    "grade_local_requires_verified_seal": true
+  },
+  "resume": {
+    "completed_checkpoint": "validate hashes and skip",
+    "pending_checkpoint": "continue in canonical order",
+    "partial_checkpoint": "fail closed with human review required",
+    "different_manifest_or_identity": "fail closed"
+  },
+  "failure_policy": {
+    "model_control_terminal": "persist and continue",
+    "provider_or_harness_failure": "persist failure evidence, mark ledger FAILED, abort",
+    "automatic_rerun": false
+  },
+  "smoke005_prerequisite": {
+    "classification": "LIVE_SMOKE_PASS",
+    "v5_contract_live_gate": "PASS",
+    "action_rejections": 0,
+    "result_and_review_hashes_pinned": true
+  },
+  "local_grading": {
+    "provider_calls": 0,
+    "requires_prediction_seal": true,
+    "official_judge": "DEFERRED_UNTIL_PREDICTIONS_FROZEN_AND_HUMAN_AUTHORIZED"
+  },
+  "historical_e9_runner_not_reused": [
+    "uses implicit E9Limits defaults rather than an E10 typed frozen envelope",
+    "loads ground truth and grades inside prediction execution",
+    "writes historical E9 result paths",
+    "does not provide prediction seal and post-seal grading barriers",
+    "hard-codes the historical 420-call cap"
+  ],
+  "validation": {
+    "targeted_e10_tests": "PASS",
+    "semantic_budget_invariant": "PASS",
+    "simulated_smoke_v2": "PASS",
+    "full_make_check": "PASS (521 tests)",
+    "a1_eval_check": "PASS",
+    "pre_commit_all_files": "PASS",
+    "ci": "PENDING_PUSH"
+  },
+  "network_accounting": {
+    "live_agent_calls": 0,
+    "openai_outbound_attempts": 0,
+    "luna_calls": 0,
+    "judge_calls": 0,
+    "official_benchmark_scenarios": 0,
+    "live_smoke_scenarios": 0,
+    "ground_truth_accesses_during_prediction_qualification": 0
+  }
+}

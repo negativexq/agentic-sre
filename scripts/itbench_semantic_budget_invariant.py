@@ -69,7 +69,10 @@ def run_case(
         allowed_targets=surface.target_handles,
         allowed_action_capabilities=surface.capabilities(),
     )
-    branches = request_schemas["request_itbench_tools"].get("anyOf", [])
+    decision_schema = (
+        request_schemas["request_itbench_tools"].get("properties", {}).get("decision", {})
+    )
+    branches = decision_schema.get("anyOf", [])
     provider_branches = [
         {
             "action": branch.get("properties", {}).get("action", {}).get("enum", []),

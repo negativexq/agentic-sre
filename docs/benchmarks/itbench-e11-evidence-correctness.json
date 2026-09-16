@@ -1,0 +1,39 @@
+{
+  "execution": "ITB-E10.1-E11-OFFLINE",
+  "provider_invocations": 0,
+  "ground_truth_access_during_runtime": 0,
+  "checks": {
+    "metric_timestamp_order_invariance": "PASS",
+    "metric_identity_exact_matching": "PASS",
+    "container_and_init_container_resources": "PASS",
+    "bounded_log_analysis_wiring": "PASS",
+    "owner_based_replica_peer_resolution": "PASS",
+    "singleton_replica_capability_unavailable": "PASS",
+    "recent_change_without_history_unavailable": "PASS"
+  },
+  "metric_contract": {
+    "canonicalization": "sort (timestamp, value) pairs ascending before windows, delta, trend, and anomaly direction",
+    "identity_fields": [
+      "service.name",
+      "service_name",
+      "service",
+      "k8s.service.name",
+      "pod",
+      "pod_name",
+      "workload",
+      "deployment",
+      "namespace",
+      "instance"
+    ],
+    "matching": "case-insensitive exact structured identity; no substring identity matching"
+  },
+  "resource_contract": {
+    "sources": ["spec.containers[].resources", "spec.initContainers[].resources"],
+    "aggregate_policy": "single-container bounds may be surfaced at aggregate level; multi-container values remain per-container"
+  },
+  "semantic_operations": {
+    "LOG_ANALYSIS": "bounded, target-scoped, structured log error summaries only",
+    "COMPARE_REPLICAS": "available only when an owner/label-related peer is observable",
+    "RECENT_CHANGE_ANALYSIS": "unavailable when immutable snapshots contain no trusted change history"
+  }
+}

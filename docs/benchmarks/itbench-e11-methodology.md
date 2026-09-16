@@ -1,6 +1,6 @@
 # ITB-E11 methodology and runbook
 
-E11 is a new experiment, distinct from the immutable E10 result. Before any future provider execution:
+E11 is a new experiment, distinct from the immutable E10 result. It is a frozen post-engineering benchmark run on the known ITBench scenario set, not an untouched or unseen generalization test. Before any future provider execution:
 
 1. Freeze and review one source SHA, prompt hash, dataset revision, canonical 35-scenario order, model policy, and runtime limits.
 2. Build candidate/catalog outputs without ground truth and freeze their hashes where the offline qualification requires it.

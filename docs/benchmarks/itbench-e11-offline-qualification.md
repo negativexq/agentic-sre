@@ -5,7 +5,7 @@ All candidate/catalog outputs were built without GT and frozen before post-hoc g
 - scenarios: 35
 - provider invocations: 0
 - build GT accesses: 0
-- frozen outputs SHA256: `2ad7f66b8cc97ff3b0f43432946a96d0c033670095d85dd608033acdaa91c215`
+- frozen outputs SHA256: `beb1cc46384a9ad13d56eb6d445e19dfac2e4509db220315c71ad4ea08884002`
 - telemetry bound: 100 rows/source-file/scenario
 - E7 baseline is immutable historical evidence; deltas below are post-hoc comparisons only.
 
@@ -17,5 +17,6 @@ All candidate/catalog outputs were built without GT and frozen before post-hoc g
 | R3 | 0.857 | 0.000 | 0.029 | 0.086 | 0.429 | 0.500 |
 | R4 | 0.857 | 0.000 | 0.029 | 0.114 | 0.486 | 0.567 |
 | R5 | 0.857 | 0.000 | 0.029 | 0.143 | 0.657 | 0.767 |
+| R6 | 0.857 | 0.000 | 0.029 | 0.143 | 0.657 | 0.767 |
 
 R5 vs frozen E7: catalog coverage delta +0.514; Recall@10 delta +0.314.

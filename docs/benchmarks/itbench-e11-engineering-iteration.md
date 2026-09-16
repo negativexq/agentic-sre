@@ -36,11 +36,12 @@ handles remain stable.
 ## Qualification and boundary
 
 The full snapshot runtime canary was completed as 35/35 runs. It used the
-repository-owned E11 runtime with `FakeModelProvider`, produced 420 simulated
+repository-owned E11 runtime with `FakeModelProvider`, produced 140 simulated
 model responses, made zero real provider invocations, and accessed GT zero
-times. The scripted canary reached the bounded `MODEL_STEP_LIMIT` terminal in
-each scenario; this qualifies construction, parsing, semantic execution,
-memory, evidence, and termination plumbing, not RCA quality.
+times. The terminal distribution was `STOP=31`, `SUBMIT=4`, with zero action
+rejections, runtime errors, replay errors, and `MODEL_STEP_LIMIT` terminals.
+This qualifies construction, parsing, semantic execution, memory, evidence,
+and termination plumbing, not RCA quality.
 
 The canary is also available as:
 

@@ -35,6 +35,20 @@
     "gt_isolation": "PASS",
     "real_provider_calls": 0
   },
+  "runtime_canary": {
+    "scenario_count": 35,
+    "fake_provider_responses": 140,
+    "terminals": {
+      "STOP": 31,
+      "SUBMIT": 4,
+      "MODEL_STEP_LIMIT": 0
+    },
+    "action_rejections": 0,
+    "runtime_errors": 0,
+    "replay_errors": 0,
+    "ground_truth_access": 0,
+    "provider_invocations": 0
+  },
   "retrieval_qualification": {
     "artifact": "itbench-e11-retrieval-qualification-v2.json",
     "selected_default": "B1",

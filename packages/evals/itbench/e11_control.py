@@ -20,8 +20,8 @@ from packages.evals.itbench.e11_observability import (
 )
 from packages.evals.itbench.e11_operations import available_e11_operations, comparable_peer_count
 
-E11_PROMPT_VERSION = "itbench_e11_observe_verify_v2"
-E11_PROMPT = """You are a read-only SRE investigator. Observe bounded incident evidence before choosing a hypothesis. Treat candidates as hypotheses, distinguish causes from downstream symptoms, prefer incident-specific and temporally aligned evidence, use discriminating verification, revise when evidence contradicts a hypothesis, submit only a causally supported candidate, and STOP when evidence is insufficient. The runtime owns identity, handles, provenance, budgets, and safety."""
+E11_PROMPT_VERSION = "itbench_e11_observe_verify_v3"
+E11_PROMPT = """You are a read-only SRE investigator. Observe bounded incident evidence before choosing a hypothesis. Treat candidates as hypotheses, distinguish causes from downstream symptoms, prefer incident-specific and temporally aligned evidence, use discriminating verification, revise when evidence contradicts a hypothesis, submit only a causally supported candidate, and STOP when evidence is insufficient. Use only runtime-issued candidate handles. An operation is legal only for the target when it appears in legal_target_operations; the global operation list is only a transport superset. Read the finding, result_status, and polarity before deciding. The runtime owns identity, handles, provenance, budgets, and safety."""
 E11_OBSERVATION_OPERATIONS = (
     "INCIDENT_OVERVIEW",
     "ALERT_ANALYSIS",
@@ -141,7 +141,9 @@ class E11CaseMemory:
     def add_evidence(self, handle: str | None, operation: str, summary: dict[str, Any]) -> str:
         if handle is not None:
             self._require_catalog_handle(handle)
-        evidence_ref = f"E{len(self.evidence) + 1:03d}"
+        # E9 observation references remain E### for backward compatibility;
+        # E11 assessment references use an explicit namespace.
+        evidence_ref = f"ASM-E{len(self.evidence) + 1:03d}"
         self.evidence[evidence_ref] = {
             "evidence_ref": evidence_ref,
             "entity_handle": handle,
@@ -181,6 +183,16 @@ class E11CaseMemory:
             superseded = self.evidence.get(supersedes_evidence_ref)
             if superseded is None or superseded.get("entity_handle") != handle:
                 raise ValueError("superseded evidence must belong to this candidate")
+            prior_assessment = next(
+                (
+                    item
+                    for item in reversed(self.assessments)
+                    if item.evidence_ref == supersedes_evidence_ref
+                ),
+                None,
+            )
+            if prior_assessment is None or prior_assessment.dimension != dimension:
+                raise ValueError("supersession must address an assessed evidence dimension")
         record = EvidenceAssessmentRecord(
             evidence_ref=evidence_ref,
             handle=handle,
@@ -348,6 +360,19 @@ def _bounded_summary(summary: dict[str, Any]) -> dict[str, Any]:
             "reason",
             "count",
             "data_available",
+            "result_status",
+            "usable",
+            "finding",
+            "causal_findings",
+            "configuration_dependency_match",
+            "selector_target_match",
+            "chaos_target_match",
+            "mechanism_compatible",
+            "timing_compatible",
+            "error_origin",
+            "upstream",
+            "downstream",
+            "differences",
         )
         if key in summary
     }

@@ -15,6 +15,55 @@ from packages.evals.itbench.e11_runtime import E11InvestigationRuntime
 from packages.provider.fake import FakeModelProvider
 
 
+def test_e11_context_contract_preserves_semantic_content() -> None:
+    from packages.evals.itbench.e11_context import build_e11_context
+    from packages.evals.itbench.e11_observability import RankedCandidate, RetrievalEvidence
+
+    candidate = RankedCandidate(
+        "C001",
+        "prod/Deployment/checkout",
+        1,
+        1.0,
+        "prod/Deployment",
+        (RetrievalEvidence("FAILURE_EVENT", "event:1", "BackOff", 8.0),),
+    )
+    context = build_e11_context(
+        incident={
+            "scenario_id": "Scenario-1",
+            "diagnostic_alerts": [{"alert_name": "CheckoutDown"}],
+        },
+        candidates=(candidate,),
+        phase="VERIFY",
+        remaining_model_calls=4,
+        remaining_semantic_actions=8,
+        investigation_state={
+            "current_hypothesis": {"entity_handle": "C001"},
+            "candidate_status": {"C001": {"status": "SUPPORTED"}},
+            "unresolved_questions": "Does checkout explain the incident?",
+            "ranking_history": [{"revision": 2, "handles": ["C001"]}],
+            "last_rejection": {"code": "INVALID_TRANSITION", "reason": "bad operation"},
+        },
+        observation_evidence=(
+            {
+                "evidence_ref": "E001",
+                "operation": "EVENT_ANALYSIS",
+                "finding": {"reason": "BackOff"},
+                "result_status": "POSITIVE_FINDING",
+            },
+        ),
+        legal_next_actions=("INVESTIGATE", "STOP"),
+        legal_target_operations={"C001": ("EVENT_ANALYSIS",)},
+    )
+    parsed = json.loads(context)
+    investigation = parsed["investigation"]
+    assert investigation["candidate_state"]["C001"]["status"] == "SUPPORTED"
+    assert investigation["unresolved_question"] == "Does checkout explain the incident?"
+    assert investigation["ranking_revisions"][0]["revision"] == 2
+    assert investigation["last_rejection"]["code"] == "INVALID_TRANSITION"
+    assert investigation["recent_evidence"][0]["finding"]["reason"] == "BackOff"
+    assert investigation["legal_target_operations"]["C001"] == ["EVENT_ANALYSIS"]
+
+
 def _backend(tmp_path: Path, **kwargs: Any) -> Any:
     root = tmp_path / "Scenario-runtime"
     root.mkdir(parents=True)
@@ -167,7 +216,13 @@ def test_two_semantically_illegal_actions_reach_protocol_stalled(tmp_path: Path)
         object_bodies=[
             {"kind": "Deployment", "metadata": {"name": "checkout", "namespace": "prod"}}
         ],
-        event_bodies=[],
+        event_bodies=[
+            {
+                "involvedObject": {"kind": "Deployment", "name": "checkout", "namespace": "prod"},
+                "reason": "BackOff",
+                "type": "Warning",
+            }
+        ],
     )
     provider = FakeModelProvider(
         [
@@ -192,6 +247,47 @@ def test_two_semantically_illegal_actions_reach_protocol_stalled(tmp_path: Path)
     assert result["case_state"]["action_rejections"] == 2
     assert result["case_state"]["consecutive_rejections"] == 2
     assert len(provider.requests) >= 3
+
+
+def test_rejected_target_operation_is_visible_and_recoverable(tmp_path: Path) -> None:
+    backend = _backend(
+        tmp_path,
+        object_bodies=[
+            {"kind": "Deployment", "metadata": {"name": "checkout", "namespace": "prod"}}
+        ],
+        event_bodies=[
+            {
+                "involvedObject": {"kind": "Deployment", "name": "checkout", "namespace": "prod"},
+                "reason": "BackOff",
+                "type": "Warning",
+            }
+        ],
+    )
+    provider = FakeModelProvider(
+        [
+            {"action": "HYPOTHESIZE", "target": "C001", "rationale": None},
+            {
+                "action": "INVESTIGATE",
+                "target": "C001",
+                "operation": "COMPARE_REPLICAS",
+                "rationale": None,
+            },
+            {
+                "action": "INVESTIGATE",
+                "target": "C001",
+                "operation": "SPEC_ANALYSIS",
+                "rationale": None,
+            },
+            {"action": "STOP", "stop_reason": "no causal support"},
+        ]
+    )
+    result = E11InvestigationRuntime(provider, backend, execution_id="recovery").run()
+    assert result["terminal"] == "STOP"
+    rejection_context = json.loads(provider.requests[2].messages[-1].content)
+    rejection = rejection_context["investigation"]["last_rejection"]
+    assert rejection["attempted_operation"] == "COMPARE_REPLICAS"
+    assert "SPEC_ANALYSIS" in rejection["valid_operations"]
+    assert result["case_state"]["recovered_action_rejections"] == 1
 
 
 def test_submit_is_hidden_until_runtime_support_exists(tmp_path: Path) -> None:
@@ -320,6 +416,76 @@ def test_runtime_contradiction_then_explicit_supersession(tmp_path: Path) -> Non
     assert assessments[1]["assessment"] == "SUPPORTS"
     assert assessments[1]["supersedes_evidence_ref"] == assessments[0]["evidence_ref"]
     assert result["case_state"]["candidate_state"]["C001"]["status"] == "SUPPORTED"
+
+
+def test_spec_analysis_has_causal_config_path_but_not_existence_only(tmp_path: Path) -> None:
+    deployment = {
+        "kind": "Deployment",
+        "metadata": {"name": "checkout", "namespace": "prod", "labels": {"app": "checkout"}},
+        "spec": {
+            "template": {
+                "metadata": {"labels": {"app": "checkout"}},
+                "spec": {
+                    "containers": [
+                        {"name": "app", "envFrom": [{"configMapRef": {"name": "checkout-config"}}]}
+                    ]
+                },
+            }
+        },
+    }
+    config = {
+        "kind": "ConfigMap",
+        "metadata": {"name": "checkout-config", "namespace": "prod"},
+        "data": {"mode": "deny"},
+    }
+    event = {
+        "involvedObject": {"kind": "Deployment", "name": "checkout", "namespace": "prod"},
+        "reason": "BackOff",
+        "type": "Warning",
+    }
+    backend = _backend(tmp_path, object_bodies=[deployment, config], event_bodies=[event])
+    provider = FakeModelProvider(
+        [
+            {"action": "HYPOTHESIZE", "target": "C002", "rationale": None},
+            {
+                "action": "INVESTIGATE",
+                "target": "C002",
+                "operation": "SPEC_ANALYSIS",
+                "rationale": None,
+            },
+            {"action": "SUBMIT", "targets": ["C002"], "rationale": None},
+        ]
+    )
+    result = E11InvestigationRuntime(provider, backend, execution_id="config").run()
+    assert result["terminal"] == "SUBMIT"
+    assert result["assessment_history"][0]["dimension"] == "configuration"
+
+    plain_backend = _backend(
+        tmp_path / "plain",
+        object_bodies=[{"kind": "ConfigMap", "metadata": {"name": "plain", "namespace": "prod"}}],
+        event_bodies=[
+            {
+                "involvedObject": {"kind": "ConfigMap", "name": "plain", "namespace": "prod"},
+                "reason": "BackOff",
+                "type": "Warning",
+            }
+        ],
+    )
+    plain_provider = FakeModelProvider(
+        [
+            {"action": "HYPOTHESIZE", "target": "C001", "rationale": None},
+            {
+                "action": "INVESTIGATE",
+                "target": "C001",
+                "operation": "SPEC_ANALYSIS",
+                "rationale": None,
+            },
+            {"action": "STOP", "stop_reason": "existence is not causality"},
+        ]
+    )
+    plain = E11InvestigationRuntime(plain_provider, plain_backend, execution_id="plain").run()
+    assert plain["terminal"] == "STOP"
+    assert "SUBMIT_DIAGNOSIS" not in tuple(plain_provider.requests[2].allowed_decisions or ())
 
 
 def test_contradiction_can_be_explicitly_superseded() -> None:

@@ -244,6 +244,10 @@ class E9SemanticOperations:
         canonical = self.memory.resolve(target_handle) if target_handle else None
         if target_handle and canonical is None:
             raise ValueError(f"unknown candidate handle: {target_handle}")
+        if self.memory.has_operation(target_handle, operation) and not self._recheck_allowed(
+            target_handle, operation
+        ):
+            raise ValueError("identical operation has already been completed")
         self.memory.append(
             "OPERATION_REQUESTED", turn, {"entity_handle": target_handle, "operation": operation}
         )
@@ -312,7 +316,9 @@ class E9SemanticOperations:
             if canonical is None:
                 raise ValueError("temporal verification requires a candidate handle")
             data, category = self._temporal_alignment(canonical), "temporal"
-        summary = _bounded(data)
+        summary = _semantic_summary(operation, data)
+        if isinstance(summary, dict):
+            summary = {"result_status": self._result_status(operation, summary), **summary}
         if not self.semantic_facade:
             summary = {"legacy_result": summary}
         if self.enable_discovery:
@@ -337,6 +343,53 @@ class E9SemanticOperations:
             "evidence_ref": evidence_handle,
             "summary": summary,
         }
+
+    def _recheck_allowed(self, target_handle: str | None, operation: str) -> bool:
+        """Permit a bounded recheck only after an inconclusive/negative finding."""
+        if target_handle is None:
+            return False
+        prior = [
+            item
+            for item in self.memory.state.get("evidence", {}).values()
+            if item.get("entity_handle") == target_handle and item.get("operation") == operation
+        ]
+        return len(prior) == 1 and str(prior[-1].get("result_status")) in {
+            "NO_DATA",
+            "NEGATIVE_FINDING",
+            "INCONCLUSIVE",
+        }
+
+    @staticmethod
+    def _result_status(operation: str, summary: dict[str, Any]) -> str:
+        """Classify findings without treating an empty result as causal support."""
+        if operation == "COMPARE_REPLICAS":
+            return "POSITIVE_FINDING" if summary.get("comparison_available") else "UNAVAILABLE"
+        if operation == "LOG_ANALYSIS":
+            if not summary.get("data_available"):
+                return "NO_DATA"
+            return "POSITIVE_FINDING" if summary.get("patterns") else "NEGATIVE_FINDING"
+        if operation == "EVENT_ANALYSIS":
+            return "POSITIVE_FINDING" if summary.get("matching_count", 0) else "NO_DATA"
+        if operation == "METRIC_ANOMALIES":
+            groups = summary.get("aggregates_by_metric", {})
+            if not groups:
+                return "NO_DATA"
+            return (
+                "POSITIVE_FINDING"
+                if any(isinstance(item, dict) and item.get("anomaly") for item in groups.values())
+                else "NEGATIVE_FINDING"
+            )
+        if operation == "TRACE_ERROR_TREE":
+            return "POSITIVE_FINDING" if summary.get("edges") else "NO_DATA"
+        if operation == "SPEC_ANALYSIS":
+            return "POSITIVE_FINDING" if summary.get("causal_findings") else "INCONCLUSIVE"
+        if operation == "VERIFY_TEMPORAL_ALIGNMENT":
+            return (
+                "POSITIVE_FINDING"
+                if summary.get("temporal_relation") not in {None, "UNKNOWN"}
+                else "NO_DATA"
+            )
+        return "POSITIVE_FINDING"
 
     def _recent_changes(self, canonical: str | None) -> dict[str, Any]:
         objects = self.backend.query(
@@ -402,11 +455,53 @@ class E9SemanticOperations:
                         },
                     }
                 )
+        causal_findings: list[dict[str, Any]] = []
+        for edge in context.get("topology", []):
+            if not isinstance(edge, dict) or edge.get("target") == canonical:
+                relation = edge.get("relationship") if isinstance(edge, dict) else None
+            else:
+                relation = edge.get("relationship")
+            if relation not in {
+                "configuration_reference",
+                "selects",
+                "policy_selects",
+                "disrupts",
+                "scales",
+            }:
+                continue
+            affected = edge.get("target") if edge.get("source") == canonical else edge.get("source")
+            if not isinstance(affected, str) or affected == canonical:
+                continue
+            events = self.backend.query(
+                ITBenchEvidenceCategory.K8S_EVENTS,
+                {"entity": affected, "limit": self._limit(8)},
+            )
+            failure_events = [
+                item
+                for item in events.get("records", [])
+                if _event_kind(_json_body(item.get("record", {}).get("Body")) or {}) == "failure"
+            ]
+            if failure_events:
+                causal_findings.append(
+                    {
+                        "finding": "structured_targeting_relation",
+                        "relation": relation,
+                        "candidate": canonical,
+                        "affected_entity": affected,
+                        "configuration_dependency_match": relation == "configuration_reference",
+                        "selector_target_match": relation in {"selects", "policy_selects"},
+                        "chaos_target_match": relation == "disrupts",
+                        "mechanism_compatible": True,
+                        "timing_compatible": True,
+                        "evidence_refs": [item.get("evidence_id") for item in failure_events[:4]],
+                    }
+                )
         return {
             "entity": canonical,
             "specs": specs,
             "configuration_dependencies": context.get("configuration_dependencies", []),
             "owner": context.get("ownership", []),
+            "causal_findings": causal_findings,
         }
 
     def _metric_anomalies(self, canonical: str | None) -> dict[str, Any]:
@@ -644,6 +739,73 @@ def _event_kind(body: dict[str, Any]) -> str:
     if any(token in text for token in ("fail", "error", "crash", "restart", "backoff")):
         return "failure"
     return "unknown"
+
+
+def _semantic_summary(operation: str, data: Any) -> Any:
+    """Keep operation-specific diagnostic fields visible under tight bounds."""
+    if not isinstance(data, dict):
+        return _bounded(data)
+    if operation == "INCIDENT_OVERVIEW":
+        alerts = data.get("alerts", {})
+        if not isinstance(alerts, dict):
+            alerts = {}
+        return {
+            "alerts": {
+                "high_signal_alerts": [
+                    {
+                        "alertname": item.get("alertname"),
+                        "labels": item.get("labels", {}),
+                        "occurrence_count": item.get("occurrence_count", 1),
+                    }
+                    for item in alerts.get("high_signal_alerts", [])[:12]
+                    if isinstance(item, dict)
+                ],
+                "alert_counts_by_name": alerts.get("alert_counts_by_name", {}),
+                "background": alerts.get("background", {}),
+            },
+            "candidate_count": len(data.get("candidates", []))
+            if isinstance(data.get("candidates"), list)
+            else 0,
+            "topology": data.get("topology", [])[:12]
+            if isinstance(data.get("topology"), list)
+            else [],
+        }
+    if operation in {"EVENT_ANALYSIS", "ALERT_ANALYSIS"}:
+        records = data.get("records", [])
+        compact: list[dict[str, Any]] = []
+        for item in records[:20] if isinstance(records, list) else []:
+            record = item.get("record", item) if isinstance(item, dict) else {}
+            body = _json_body(record.get("Body")) if isinstance(record, dict) else None
+            source = body or record if isinstance(record, dict) else {}
+            labels = source.get("labels", {}) if isinstance(source.get("labels"), dict) else {}
+            compact.append(
+                {
+                    "evidence_id": item.get("evidence_id") if isinstance(item, dict) else None,
+                    "alert_name": labels.get("alertname"),
+                    "reason": source.get("reason"),
+                    "type": source.get("type"),
+                    "message": source.get("message") or source.get("Message"),
+                    "timestamp": source.get("Timestamp")
+                    or source.get("lastTimestamp")
+                    or source.get("eventTime")
+                    or source.get("activeAt")
+                    or (record.get("Timestamp") if isinstance(record, dict) else None),
+                    "namespace": labels.get("namespace") or source.get("namespace"),
+                    "service": labels.get("service")
+                    or labels.get("service_name")
+                    or source.get("service"),
+                    "diagnostic_class": _event_kind(source)
+                    if operation == "EVENT_ANALYSIS"
+                    else "alert",
+                }
+            )
+        return {
+            "category": data.get("category"),
+            "matching_count": data.get("matching_count", len(compact)),
+            "records": compact,
+            "alerts": data.get("alerts", []),
+        }
+    return _bounded(data)
 
 
 def _temporal_assessment(delta: float, event_kind: str) -> tuple[str, str]:

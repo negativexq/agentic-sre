@@ -52,6 +52,9 @@ class E11RuntimeLimits:
     max_consecutive_rejected_actions: int = 2
 
 
+MAX_OBSERVE_ACTIONS = 3
+
+
 class E11InvestigationRuntime:
     """One runtime loop with a replaceable provider, never a replaceable FSM."""
 
@@ -94,6 +97,7 @@ class E11InvestigationRuntime:
         self.shortlist_size = config.shortlist_size
         self._runtime_signals: dict[str, list[RetrievalEvidence]] = {}
         self._incident_available = False
+        self._incident_context: dict[str, Any] = {}
 
     def run(self) -> dict[str, Any]:
         self._runtime_signals = {}
@@ -134,14 +138,17 @@ class E11InvestigationRuntime:
             },
         )
         try:
-            incident, _alerts = build_observable_incident(self.backend)
+            incident, alerts = build_observable_incident(self.backend)
+            self._incident_context = _incident_context(scenario_id, incident, alerts)
         except ValueError:
             # Small unit fixtures may intentionally omit alerts; temporal
             # capability is then unavailable rather than fabricated.
             incident = None
+            self._incident_context = {"scenario_id": scenario_id}
         self._incident_available = incident is not None
         operations = E9SemanticOperations(self.backend, memory, incident, enable_discovery=True)
         turns: list[dict[str, Any]] = []
+        recent_observations: list[dict[str, Any]] = []
         usage = {"model_calls": 0, "input_tokens": 0, "output_tokens": 0, "latency_ms": 0}
         terminal = "MODEL_STEP_LIMIT"
         consecutive_rejections = 0
@@ -152,13 +159,16 @@ class E11InvestigationRuntime:
             candidates = self._ranked_for_memory(ranking, memory)
             surface = self._surface(memory, candidates, catalog, turn)
             context = build_e11_context(
-                incident={"scenario_id": scenario_id},
+                incident=self._incident_context,
                 candidates=candidates,
                 phase=str(memory.state.get("current_phase", "OBSERVE")),
                 remaining_model_calls=self.limits.max_model_calls - turn + 1,
                 remaining_semantic_actions=self.limits.max_tool_calls
                 - int(memory.state.get("semantic_actions_used", 0)),
                 investigation_state=self._investigation_state(memory),
+                observation_evidence=tuple(recent_observations[-8:]),
+                legal_next_actions=tuple(surface["actions"]),
+                legal_target_operations=surface.get("target_operations", {}),
             )
             request = self._request(run_id, context, surface)
             trace: dict[str, Any] = {
@@ -169,6 +179,7 @@ class E11InvestigationRuntime:
                 + list(request.allowed_decisions or ()),
                 "provider_exposed_operations": list(request.allowed_v5_operations or ()),
                 "provider_exposed_targets": list(request.allowed_v5_targets or ()),
+                "provider_exposed_target_operations": surface.get("target_operations", {}),
                 "accepted": False,
             }
             memory.append("MODEL_STEP", turn, {})
@@ -187,7 +198,16 @@ class E11InvestigationRuntime:
                 memory.append(
                     "ACTION_REJECTED",
                     turn,
-                    {"code": "INVALID_MODEL_ACTION", "reason": str(error)[:200]},
+                    {
+                        "code": "INVALID_MODEL_ACTION",
+                        "reason": str(error)[:200],
+                        "attempted_action": payload.get("action"),
+                        "attempted_target": payload.get("target"),
+                        "attempted_targets": payload.get("targets", []),
+                        "attempted_operation": payload.get("operation"),
+                        "valid_actions": list(request.allowed_v5_actions or ()),
+                        "valid_operations": list(request.allowed_v5_operations or ()),
+                    },
                 )
                 trace.update(
                     {"decision": "ACTION_REJECTED", "rejection_code": "INVALID_MODEL_ACTION"}
@@ -206,7 +226,16 @@ class E11InvestigationRuntime:
                 memory.append(
                     "ACTION_REJECTED",
                     turn,
-                    {"code": "INVALID_TRANSITION", "reason": str(error)[:200]},
+                    {
+                        "code": "INVALID_TRANSITION",
+                        "reason": str(error)[:200],
+                        "attempted_action": decision.action.value,
+                        "attempted_target": decision.target,
+                        "attempted_targets": list(decision.targets),
+                        "attempted_operation": decision.operation,
+                        "valid_actions": list(request.allowed_v5_actions or ()),
+                        "valid_operations": list(request.allowed_v5_operations or ()),
+                    },
                 )
                 trace.update(
                     {"decision": "ACTION_REJECTED", "rejection_code": "INVALID_TRANSITION"}
@@ -221,6 +250,16 @@ class E11InvestigationRuntime:
             consecutive_rejections = 0
             trace.update(result)
             trace["accepted"] = True
+            if isinstance(result.get("evidence_summary"), dict):
+                recent_observations.append(
+                    {
+                        "evidence_ref": result.get("evidence_created", [None])[0],
+                        "operation": result.get("operation"),
+                        "target": result.get("target"),
+                        "result_status": result.get("result_status"),
+                        "finding": result["evidence_summary"],
+                    }
+                )
             memory.append("ACTION_ACCEPTED", turn, {"action": decision.action.value})
             turns.append(trace)
             if result.get("terminal"):
@@ -343,12 +382,26 @@ class E11InvestigationRuntime:
         actions: tuple[str, ...]
         operations: tuple[str, ...]
         if phase == "OBSERVE":
-            actions = ("OBSERVE", "HYPOTHESIZE", "STOP")
-            operations = (
-                "INCIDENT_OVERVIEW",
-                "ALERT_ANALYSIS",
-                "TOPOLOGY_ANALYSIS",
-                "ANOMALY_DISCOVERY",
+            completed = {
+                item.get("operation")
+                for item in memory.state.get("operations_already_run", [])
+                if item.get("entity_handle") is None
+            }
+            operations = tuple(
+                operation
+                for operation in (
+                    "INCIDENT_OVERVIEW",
+                    "ALERT_ANALYSIS",
+                    "TOPOLOGY_ANALYSIS",
+                    "ANOMALY_DISCOVERY",
+                )
+                if operation not in completed
+            )
+            observe_used = int(memory.state.get("observe_actions_used", 0))
+            actions = (
+                ("OBSERVE", "HYPOTHESIZE", "STOP")
+                if observe_used < MAX_OBSERVE_ACTIONS and operations
+                else ("HYPOTHESIZE", "STOP")
             )
             capabilities = {
                 "OBSERVE": {"targets": (), "operations": operations},
@@ -363,11 +416,16 @@ class E11InvestigationRuntime:
                 if handle == current_handle:
                     entity = catalog.by_handle(handle)
                     available[handle] = (
-                        available_e11_operations(
-                            entity,
-                            comparable_peers=comparable_peer_count(catalog, entity),
-                            backend=self.backend,
-                            incident_available=self._incident_available,
+                        tuple(
+                            operation
+                            for operation in available_e11_operations(
+                                entity,
+                                comparable_peers=comparable_peer_count(catalog, entity),
+                                backend=self.backend,
+                                incident_available=self._incident_available,
+                            )
+                            if not memory.has_operation(handle, operation)
+                            or memory.recheck_allowed(handle, operation)
                         )
                         if entity is not None
                         else ()
@@ -379,11 +437,16 @@ class E11InvestigationRuntime:
                     # full telemetry scan for every visible candidate.
                     entity = catalog.by_handle(handle)
                     available[handle] = (
-                        available_e11_operations(
-                            entity,
-                            comparable_peers=comparable_peer_count(catalog, entity),
-                            backend=self.backend,
-                            incident_available=self._incident_available,
+                        tuple(
+                            operation
+                            for operation in available_e11_operations(
+                                entity,
+                                comparable_peers=comparable_peer_count(catalog, entity),
+                                backend=self.backend,
+                                incident_available=self._incident_available,
+                            )
+                            if not memory.has_operation(handle, operation)
+                            or memory.recheck_allowed(handle, operation)
                         )
                         if entity is not None
                         else ()
@@ -446,6 +509,8 @@ class E11InvestigationRuntime:
                 "model_action": action,
                 "operation": decision.operation,
                 "evidence_created": [evidence["evidence_ref"]],
+                "result_status": evidence.get("summary", {}).get("result_status"),
+                "evidence_summary": evidence.get("summary", {}),
             }
         if action == "HYPOTHESIZE":
             evidence_memory.hypothesize(decision.target or "")
@@ -486,6 +551,8 @@ class E11InvestigationRuntime:
                 "target": decision.target,
                 "operation": decision.operation,
                 "evidence_created": [evidence["evidence_ref"]],
+                "result_status": evidence.get("summary", {}).get("result_status"),
+                "evidence_summary": evidence.get("summary", {}),
             }
         if action == "SUBMIT":
             supported = self._supported_handles(memory)
@@ -648,6 +715,23 @@ class E11InvestigationRuntime:
                 EvidenceAssessment.INCONCLUSIVE,
                 "failure_signature",
                 "no diagnostic event support",
+                None,
+                0.0,
+            )
+        if operation == "SPEC_ANALYSIS":
+            findings = summary.get("causal_findings", [])
+            if isinstance(findings, list) and findings:
+                return (
+                    EvidenceAssessment.SUPPORTS,
+                    "configuration",
+                    "structured configuration or targeting relation explains the incident",
+                    "OBSERVED_RELATION",
+                    8.0,
+                )
+            return (
+                EvidenceAssessment.INCONCLUSIVE,
+                "configuration",
+                "object/spec context without a discriminating causal relation",
                 None,
                 0.0,
             )
@@ -873,6 +957,37 @@ def _event_text(item: Any) -> str:
                 return " ".join(str(parsed.get(key, "")) for key in ("reason", "message", "type"))
         return " ".join(str(record.get(key, "")) for key in ("reason", "message", "type"))
     return ""
+
+
+def _incident_context(scenario_id: str, incident: Any, alerts: tuple[Any, ...]) -> dict[str, Any]:
+    """Serialize only observable incident metadata for the model context."""
+    raw = incident.model_dump(mode="json") if hasattr(incident, "model_dump") else {}
+    diagnostic = []
+    affected: set[str] = set()
+    for alert in alerts[:12]:
+        item = alert.model_dump(mode="json") if hasattr(alert, "model_dump") else {}
+        diagnostic.append(
+            {
+                "alert_name": item.get("alert_name"),
+                "service": item.get("service"),
+                "namespace": item.get("namespace"),
+                "starts_at": item.get("starts_at"),
+                "labels": item.get("labels", {}),
+            }
+        )
+        for key in ("service", "namespace"):
+            if item.get(key):
+                affected.add(f"{key}:{item[key]}")
+    return {
+        "scenario_id": scenario_id,
+        "incident_id": str(raw.get("incident_id", "")),
+        "title": raw.get("title"),
+        "description": raw.get("description"),
+        "incident_start": raw.get("created_at"),
+        "diagnostic_alerts": diagnostic,
+        "affected_identities": sorted(affected),
+        "observation_window": "snapshot-bounded",
+    }
 
 
 __all__ = ["E11InvestigationRuntime", "E11RuntimeLimits"]

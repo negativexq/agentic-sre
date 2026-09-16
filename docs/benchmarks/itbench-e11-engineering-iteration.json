@@ -21,6 +21,15 @@
     "e7_catalog_root_coverage": 0.34285714285714286
   },
   "implemented_offline_gates": {
+    "context_contract_v3": "PASS",
+    "semantic_result_content_visible": "PASS",
+    "incident_summary_visible": "PASS",
+    "rejection_feedback_visible": "PASS",
+    "target_operation_surface": "PASS",
+    "observe_budget": "PASS",
+    "operation_deduplication": "PASS",
+    "structured_spec_causal_findings": "PASS",
+    "explicit_evidence_namespaces": "PASS",
     "structured_log_classification": "PASS",
     "trace_status_normalization": "PASS",
     "metric_series_identity": "PASS",
@@ -33,17 +42,22 @@
     "fake_provider_same_runtime_path": "PASS",
     "evidence_polarity_validation": "PASS",
     "gt_isolation": "PASS",
-    "real_provider_calls": 0
+    "real_provider_calls": 0,
+    "second_smoke": "NOT_RUN"
   },
   "runtime_canary": {
     "scenario_count": 35,
-    "fake_provider_responses": 140,
+    "fake_provider_responses": 218,
     "terminals": {
       "STOP": 31,
       "SUBMIT": 4,
-      "MODEL_STEP_LIMIT": 0
+      "MODEL_STEP_LIMIT": 0,
+      "PROTOCOL_STALLED": 0
     },
     "action_rejections": 0,
+    "recovered_action_rejections": 0,
+    "repeated_operations": 0,
+    "first_hypothesis_turn": {"min": 2, "median": 2, "p95": 2, "max": 2},
     "runtime_errors": 0,
     "replay_errors": 0,
     "ground_truth_access": 0,

@@ -63,9 +63,11 @@ class E9CaseMemory:
             "recovered_action_rejections": 0,
             "last_rejection": None,
             "evidence": {},
+            "recent_evidence": [],
             "ranking_history": [],
             "submitted_targets": [],
             "active_shortlist": [],
+            "observe_actions_used": 0,
         }
         self.append("CASE_STARTED", 0, {"execution_id": execution_id, "scenario_id": scenario_id})
 
@@ -170,6 +172,10 @@ class E9CaseMemory:
                 "operation": operation,
                 "category": category,
                 "compact_summary": _compact(summary),
+                "result_status": summary.get("result_status")
+                if isinstance(summary, dict)
+                else None,
+                "usable": summary.get("usable") if isinstance(summary, dict) else None,
             },
         )
         return evidence_handle
@@ -186,6 +192,21 @@ class E9CaseMemory:
             item.get("entity_handle") == handle and item.get("operation") == operation
             for item in self.state["operations_already_run"]
         )
+
+    def recheck_allowed(self, handle: str | None, operation: str) -> bool:
+        """Allow one further check only after a negative/inconclusive result."""
+        if handle is None:
+            return False
+        prior = [
+            item
+            for item in self.state.get("evidence", {}).values()
+            if item.get("entity_handle") == handle and item.get("operation") == operation
+        ]
+        return len(prior) == 1 and str(prior[-1].get("result_status")) in {
+            "NO_DATA",
+            "NEGATIVE_FINDING",
+            "INCONCLUSIVE",
+        }
 
     def set_active_shortlist(self, handles: tuple[str, ...], *, turn: int) -> None:
         """Persist the runtime-visible shortlist shared with E11 memory."""
@@ -216,6 +237,7 @@ class E9CaseMemory:
             "consecutive_rejections": self.state["consecutive_rejections"],
             "last_rejection": self.state["last_rejection"],
             "evidence": list(self.state["evidence"].values())[-12:],
+            "recent_evidence": list(self.state.get("recent_evidence", []))[-8:],
             "ranking_history": self.state["ranking_history"][-8:],
             "submitted_targets": self.state["submitted_targets"],
             "active_shortlist": self.state["active_shortlist"],
@@ -261,9 +283,11 @@ class E9CaseMemory:
             "recovered_action_rejections": 0,
             "last_rejection": None,
             "evidence": {},
+            "recent_evidence": [],
             "ranking_history": [],
             "submitted_targets": [],
             "active_shortlist": [],
+            "observe_actions_used": 0,
         }
         for raw in payload.get("events", []):
             event = E9Event(
@@ -339,12 +363,17 @@ class E9CaseMemory:
             handle = payload.get("evidence_handle")
             if isinstance(handle, str):
                 self.state["evidence"][handle] = payload
+                self.state.setdefault("recent_evidence", []).append(payload)
+                self.state["recent_evidence"] = self.state["recent_evidence"][-8:]
                 candidate = payload.get("entity_handle")
                 if isinstance(candidate, str):
                     self.state["evidence_by_candidate"].setdefault(candidate, []).append(handle)
                     if candidate not in self.state["tested_candidates"]:
                         self.state["tested_candidates"].append(candidate)
             self.state["semantic_actions_used"] += 1
+        elif event.event_type == "OBSERVATION_COMPLETED":
+            if payload.get("entity_handle") is None:
+                self.state["observe_actions_used"] += 1
         elif event.event_type == "EVIDENCE_ASSESSMENT":
             evidence_handle = payload.get("evidence_handle")
             if isinstance(evidence_handle, str) and evidence_handle in self.state["evidence"]:

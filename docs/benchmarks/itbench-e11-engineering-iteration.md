@@ -27,21 +27,33 @@ analysis remains unavailable without trustworthy history.
 `E11InvestigationRuntime` is provider-injected. Fake and future OpenAI providers
 enter the same request/response boundary, protocol validation, controlled
 semantic execution, E9 event memory, E11 evidence memory, support gating, and
-bounded termination path. OBSERVE is available before HYPOTHESIZE; VERIFY may
-investigate any currently visible runtime-owned handle with an available
-operation. Evidence assessments are deterministic and `NO_DATA` cannot be
-used as support. Ranking revisions are recorded after semantic evidence while
-handles remain stable.
+bounded termination path. The v3 context contract carries incident facts,
+operation-specific structured findings, candidate state, polarity, unresolved
+questions, rejection feedback, and target-specific legal operations. OBSERVE is
+bounded to three accepted global observations; successful global and
+target-operation pairs are not repeated without a bounded recheck condition.
+Evidence assessments are deterministic and `NO_DATA` cannot be used as
+support. Ranking revisions are recorded after semantic evidence while handles
+remain stable. E11 assessment references use the explicit `ASM-E###` namespace
+and E9 observation references retain their `E###` compatibility namespace.
 
 ## Qualification and boundary
 
-The full snapshot runtime canary was completed as 35/35 runs. It used the
-repository-owned E11 runtime with `FakeModelProvider`, produced 140 simulated
-model responses, made zero real provider invocations, and accessed GT zero
-times. The terminal distribution was `STOP=31`, `SUBMIT=4`, with zero action
-rejections, runtime errors, replay errors, and `MODEL_STEP_LIMIT` terminals.
-This qualifies construction, parsing, semantic execution, memory, evidence,
-and termination plumbing, not RCA quality.
+The context-aware full snapshot runtime canary was completed as 35/35 runs. It
+used the repository-owned E11 runtime with a fake provider that reads the exact
+serialized model context, produced 218 simulated model responses, made zero
+real provider invocations, and accessed GT zero times. The terminal
+distribution was `STOP=31`, `SUBMIT=4`; `MODEL_STEP_LIMIT=0`,
+`PROTOCOL_STALLED=0`, action rejections `0`, repeated operations `0`, runtime
+errors `0`, and replay errors `0`. This qualifies construction, context
+visibility, parsing, semantic execution, memory, evidence, and termination
+plumbing, not RCA quality.
+
+The first real three-scenario Luna smoke remains immutable historical evidence:
+it was blocked by observation content not being sufficiently model-visible,
+context-key mismatches, missing rejection feedback, target-operation ambiguity,
+and unbounded generic observation. It is not evidence that Luna cannot perform
+RCA. No second smoke was run after these offline repairs.
 
 The canary is also available as:
 

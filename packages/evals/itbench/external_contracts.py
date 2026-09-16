@@ -9,6 +9,14 @@ from uuid import UUID
 from pydantic import Field, field_validator, model_validator
 
 from packages.investigation.contracts import InvestigationModel, ToolRequestSpec
+from packages.itbench_v5_contract import (
+    V5_OPERATION_MAX_LENGTH,
+    V5_RATIONALE_MAX_LENGTH,
+    V5_STOP_REASON_MAX_LENGTH,
+    V5_SUBMIT_MIN_TARGETS,
+    V5_TARGET_MAX_LENGTH,
+    V5_TARGETS_MAX_ITEMS,
+)
 
 ITBENCH_EXTERNAL_PROTOCOL_VERSION = "itbench_investigation_decision_v1"
 ITBENCH_EXTERNAL_PROTOCOL_V2 = "itbench_investigation_decision_v2"
@@ -348,11 +356,11 @@ class ITBenchInvestigationDecisionV5(InvestigationModel):
     """Minimal E9 action contract using scenario-local runtime handles."""
 
     action: E9Action
-    target: str | None = Field(default=None, max_length=16)
-    targets: list[str] = Field(default_factory=list, max_length=3)
-    operation: str | None = Field(default=None, max_length=64)
-    rationale: str | None = Field(default=None, max_length=300)
-    stop_reason: str | None = Field(default=None, max_length=128)
+    target: str | None = Field(default=None, max_length=V5_TARGET_MAX_LENGTH)
+    targets: list[str] = Field(default_factory=list, max_length=V5_TARGETS_MAX_ITEMS)
+    operation: str | None = Field(default=None, max_length=V5_OPERATION_MAX_LENGTH)
+    rationale: str | None = Field(default=None, max_length=V5_RATIONALE_MAX_LENGTH)
+    stop_reason: str | None = Field(default=None, max_length=V5_STOP_REASON_MAX_LENGTH)
 
     @field_validator("target")
     @classmethod
@@ -372,7 +380,7 @@ class ITBenchInvestigationDecisionV5(InvestigationModel):
 
     @model_validator(mode="after")
     def validate_action_shape(self) -> ITBenchInvestigationDecisionV5:
-        if self.action is E9Action.SUBMIT and not self.targets:
+        if self.action is E9Action.SUBMIT and len(self.targets) < V5_SUBMIT_MIN_TARGETS:
             raise ValueError("SUBMIT requires at least one candidate target")
         if self.action is E9Action.HYPOTHESIZE and self.target is None:
             raise ValueError("HYPOTHESIZE requires one candidate target")

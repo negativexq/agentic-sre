@@ -9,6 +9,14 @@ from threading import Lock
 from time import monotonic
 from typing import Any, Protocol, cast
 
+from packages.itbench_v5_contract import (
+    V5_OPERATION_MAX_LENGTH,
+    V5_RATIONALE_MAX_LENGTH,
+    V5_STOP_REASON_MAX_LENGTH,
+    V5_SUBMIT_MIN_TARGETS,
+    V5_TARGET_MAX_LENGTH,
+    V5_TARGETS_MAX_ITEMS,
+)
 from packages.model_policy import ModelPolicyError, validate_agent_config
 from packages.provider.budget import LiveModelBudget
 from packages.provider.contracts import (
@@ -567,15 +575,28 @@ def _itbench_v5_decision_function_schemas(
     allowed_action_capabilities: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Build V5 functions from the same dynamic surface used by the runtime."""
-    nullable_string = {"anyOf": [{"type": "string"}, {"type": "null"}]}
+    nullable_rationale = {
+        "anyOf": [
+            {"type": "string", "maxLength": V5_RATIONALE_MAX_LENGTH},
+            {"type": "null"},
+        ]
+    }
     action_values = list(allowed_actions or ("OBSERVE", "HYPOTHESIZE", "INVESTIGATE", "REVISE"))
     operation_values = list(allowed_operations or [])
-    operation = {"type": "string", "enum": operation_values}
-    target_string: dict[str, Any] = {"type": "string"}
+    operation = {
+        "type": "string",
+        "enum": operation_values,
+        "maxLength": V5_OPERATION_MAX_LENGTH,
+    }
+    target_string: dict[str, Any] = {"type": "string", "maxLength": V5_TARGET_MAX_LENGTH}
     if allowed_targets is not None:
         target_string["enum"] = list(allowed_targets)
     target_or_null: dict[str, Any] = {"anyOf": [target_string, {"type": "null"}]}
-    target_array: dict[str, Any] = {"type": "array", "items": target_string}
+    target_array: dict[str, Any] = {
+        "type": "array",
+        "items": target_string,
+        "maxItems": V5_TARGETS_MAX_ITEMS,
+    }
 
     def obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
         return {
@@ -587,10 +608,10 @@ def _itbench_v5_decision_function_schemas(
 
     request_properties = {
         "action": {"type": "string", "enum": action_values},
-        "target": target_or_null if allowed_targets is not None else nullable_string,
+        "target": target_or_null,
         "targets": target_array,
         "operation": {"anyOf": [operation, {"type": "null"}]},
-        "rationale": nullable_string,
+        "rationale": nullable_rationale,
     }
     request_schema: dict[str, Any] = obj(request_properties, list(request_properties))
     if allowed_action_capabilities is not None:
@@ -601,11 +622,19 @@ def _itbench_v5_decision_function_schemas(
                 continue
             targets = [str(item) for item in capability.get("targets", ())]
             operations = [str(item) for item in capability.get("operations", ())]
-            target_branch: dict[str, Any] = {"type": "string", "enum": targets}
-            operation_branch: dict[str, Any] = {"type": "string", "enum": operations}
+            target_branch: dict[str, Any] = {
+                "type": "string",
+                "enum": targets,
+                "maxLength": V5_TARGET_MAX_LENGTH,
+            }
+            operation_branch: dict[str, Any] = {
+                "type": "string",
+                "enum": operations,
+                "maxLength": V5_OPERATION_MAX_LENGTH,
+            }
             branch_properties = {
                 "action": {"type": "string", "enum": [action]},
-                "rationale": nullable_string,
+                "rationale": nullable_rationale,
             }
             if action in {"HYPOTHESIZE", "REVISE"}:
                 branch_properties["target"] = target_branch
@@ -621,13 +650,28 @@ def _itbench_v5_decision_function_schemas(
         submit_capability = allowed_action_capabilities.get("SUBMIT", {})
         if isinstance(submit_capability, dict):
             submit_targets = [str(item) for item in submit_capability.get("targets", ())]
-    submit_target_schema: dict[str, Any] = {"type": "string", "enum": submit_targets}
+    submit_target_schema: dict[str, Any] = {
+        "type": "string",
+        "enum": submit_targets,
+        "maxLength": V5_TARGET_MAX_LENGTH,
+    }
     return {
         "request_itbench_tools": request_schema,
         "submit_itbench_diagnosis": obj(
-            {"targets": {"type": "array", "items": submit_target_schema}}, ["targets"]
+            {
+                "targets": {
+                    "type": "array",
+                    "items": submit_target_schema,
+                    "minItems": V5_SUBMIT_MIN_TARGETS,
+                    "maxItems": V5_TARGETS_MAX_ITEMS,
+                }
+            },
+            ["targets"],
         ),
-        "stop_itbench_investigation": obj({"stop_reason": {"type": "string"}}, ["stop_reason"]),
+        "stop_itbench_investigation": obj(
+            {"stop_reason": {"type": "string", "maxLength": V5_STOP_REASON_MAX_LENGTH}},
+            ["stop_reason"],
+        ),
     }
 
 
@@ -1251,7 +1295,7 @@ def _json_schema_error(
     path: str = "$",
     root_schema: dict[str, Any] | None = None,
 ) -> str | None:
-    """Validate the response shape without applying provider-unsupported limits."""
+    """Validate response shape, including the bounded V5 wire constraints."""
     root_schema = root_schema or schema
     if "$ref" in schema:
         reference = schema["$ref"]
@@ -1288,7 +1332,12 @@ def _json_schema_error(
     if schema_type == "null":
         return None if value is None else path
     if schema_type == "string":
-        return None if isinstance(value, str) else path
+        if not isinstance(value, str):
+            return path
+        max_length = schema.get("maxLength")
+        if isinstance(max_length, int) and len(value) > max_length:
+            return path
+        return None
     if schema_type == "boolean":
         return None if isinstance(value, bool) else path
     if schema_type == "integer":
@@ -1297,6 +1346,12 @@ def _json_schema_error(
         return None if isinstance(value, int | float) and not isinstance(value, bool) else path
     if schema_type == "array":
         if not isinstance(value, list):
+            return path
+        min_items = schema.get("minItems")
+        if isinstance(min_items, int) and len(value) < min_items:
+            return path
+        max_items = schema.get("maxItems")
+        if isinstance(max_items, int) and len(value) > max_items:
             return path
         item_schema = schema.get("items")
         if isinstance(item_schema, dict):

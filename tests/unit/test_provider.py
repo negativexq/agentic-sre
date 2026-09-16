@@ -11,6 +11,12 @@ import pytest
 
 from packages.investigation import A1CausalDecision, InvestigationDecision
 from packages.investigation.registry import live_observability_registry
+from packages.itbench_v5_contract import (
+    V5_RATIONALE_MAX_LENGTH,
+    V5_STOP_REASON_MAX_LENGTH,
+    V5_SUBMIT_MIN_TARGETS,
+    V5_TARGETS_MAX_ITEMS,
+)
 from packages.provider import (
     FakeModelProvider,
     LiveModelBudget,
@@ -962,6 +968,7 @@ def test_v5_function_root_contains_nested_decision_union() -> None:
     branch = decision["anyOf"][0]
     assert branch["properties"]["action"]["enum"] == ["HYPOTHESIZE"]
     assert branch["properties"]["target"]["enum"] == ["C001", "C002"]
+    assert branch["properties"]["rationale"]["anyOf"][0]["maxLength"] == (V5_RATIONALE_MAX_LENGTH)
     assert branch["required"] == ["action", "rationale", "target"]
     assert branch["additionalProperties"] is False
 
@@ -1162,6 +1169,73 @@ def test_v5_investigate_wire_arguments_unwrap_to_flat_internal_decision() -> Non
     assert normalized.structured_output["action"] == "INVESTIGATE"  # type: ignore[attr-defined]
     assert normalized.structured_output["target"] == "C001"  # type: ignore[attr-defined]
     assert normalized.structured_output["operation"] == "ENTITY_CONTEXT"  # type: ignore[attr-defined]
+
+
+def test_v5_rationale_length_matches_local_contract() -> None:
+    """The provider prevents the SMOKE-004 301-character local rejection."""
+    schema = _itbench_v5_decision_function_schemas(
+        allowed_actions=("INVESTIGATE",),
+        allowed_operations=("SPEC_ANALYSIS",),
+        allowed_targets=("C001",),
+        allowed_action_capabilities={
+            "INVESTIGATE": {"targets": ("C001",), "operations": ("SPEC_ANALYSIS",)}
+        },
+    )["request_itbench_tools"]
+    valid = {
+        "decision": {
+            "action": "INVESTIGATE",
+            "target": "C001",
+            "operation": "SPEC_ANALYSIS",
+            "rationale": "x" * V5_RATIONALE_MAX_LENGTH,
+        }
+    }
+    invalid = {
+        "decision": {
+            **valid["decision"],
+            "rationale": "x" * (V5_RATIONALE_MAX_LENGTH + 1),
+        }
+    }
+    assert _json_schema_error(valid, schema) is None
+    assert _json_schema_error(invalid, schema) is not None
+
+
+def test_v5_submit_target_cardinality_matches_local_contract() -> None:
+    """SUBMIT cannot emit empty or over-bounded target arrays."""
+    schemas = _itbench_v5_decision_function_schemas(
+        allowed_targets=("C001", "C002", "C003", "C004"),
+        allowed_action_capabilities={
+            "SUBMIT": {
+                "targets": ("C001", "C002", "C003", "C004"),
+                "operations": (),
+            }
+        },
+    )
+    schema = schemas["submit_itbench_diagnosis"]
+    targets_schema = schema["properties"]["targets"]
+    assert targets_schema["minItems"] == V5_SUBMIT_MIN_TARGETS
+    assert targets_schema["maxItems"] == V5_TARGETS_MAX_ITEMS
+    assert _json_schema_error({"targets": []}, schema) is not None
+    assert _json_schema_error({"targets": ["C001"]}, schema) is None
+    assert _json_schema_error({"targets": ["C001", "C002", "C003"]}, schema) is None
+    assert _json_schema_error({"targets": ["C001", "C002", "C003", "C004"]}, schema) is not None
+
+
+def test_v5_stop_reason_length_matches_local_contract() -> None:
+    """STOP reason uses the same bound as ITBenchInvestigationDecisionV5."""
+    schema = _itbench_v5_decision_function_schemas()["stop_itbench_investigation"]
+    reason_schema = schema["properties"]["stop_reason"]
+    assert reason_schema["maxLength"] == V5_STOP_REASON_MAX_LENGTH
+    assert _json_schema_error({"stop_reason": "x" * V5_STOP_REASON_MAX_LENGTH}, schema) is None
+    assert (
+        _json_schema_error({"stop_reason": "x" * (V5_STOP_REASON_MAX_LENGTH + 1)}, schema)
+        is not None
+    )
+
+
+def test_v5_fallback_schema_has_defensive_target_bounds() -> None:
+    """The non-capability V5 fallback also preserves local array bounds."""
+    request_schema = _itbench_v5_decision_function_schemas()["request_itbench_tools"]
+    assert request_schema["properties"]["targets"]["maxItems"] == V5_TARGETS_MAX_ITEMS
 
 
 @pytest.mark.parametrize(

@@ -167,6 +167,9 @@ def _run_and_read_failure(
             provider_factory=provider_factory,
         )
     assert result_path.is_file()
+    failure_artifact = tmp_path / "run" / "Scenario-999" / "failure_artifact.json"
+    assert failure_artifact.is_file()
+    assert json.loads(failure_artifact.read_text(encoding="utf-8"))["status"] == "FAILED"
     return (
         json.loads(result_path.read_text(encoding="utf-8")),
         json.loads(ledger_path.read_text(encoding="utf-8")),
@@ -295,6 +298,14 @@ def test_nonzero_runtime_safety_persists_harness_failure(
     assert result["failure_stage"] == "RUNTIME"
     assert result["runtime_measured_safety"]["writes"] == 1
     assert ledger["status"] == "FAILED"
+
+
+def test_execution_module_has_no_judge_or_ground_truth_loader_dependency() -> None:
+    import packages.evals.itbench.live_smoke_execution as execution
+
+    source = Path(execution.__file__ or "").read_text(encoding="utf-8")
+    assert "itbench_e9_judge" not in source
+    assert "load_ground_truth" not in source
 
 
 def test_preflight_failure_does_not_invoke_provider_factory(tmp_path: Path) -> None:

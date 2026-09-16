@@ -1,0 +1,103 @@
+{
+  "document": "itbench-control-live-smoke-evidence-integrity",
+  "scope": "offline evidence-integrity repair",
+  "historical_smoke_001": {
+    "immutable": true,
+    "classification": "LIVE_SMOKE_PREFLIGHT_FAILED",
+    "provider_constructed": false,
+    "live_agent_calls": 0,
+    "openai_outbound_attempts": 0,
+    "luna_calls": 0,
+    "judge_calls": 0,
+    "live_smoke_scenarios": 0,
+    "official_benchmark_scenarios": 0,
+    "ledger": {"cap": 8, "calls_used": 0, "remaining": 8, "status": "NOT_STARTED"}
+  },
+  "source_audit": {
+    "failure_summary_missing_on_controlled_failure": {
+      "status": "CONFIRMED",
+      "file": "packages/evals/itbench/live_smoke_execution.py",
+      "symbol": "execute_live_smoke",
+      "defect": "The exception path previously marked the ledger FAILED and re-raised without publishing result_path.",
+      "consequence": "A started failed attempt could lack its immutable terminal summary.",
+      "repair": "All post-RUNNING failures now publish a bounded summary and ledger FAILED before propagation."
+    },
+    "bad_terminal_not_summarized": {
+      "status": "CONFIRMED",
+      "file": "packages/evals/itbench/live_smoke_execution.py",
+      "symbol": "execute_live_smoke / terminal policy",
+      "defect": "Non-terminal runtime outcomes were raised before the old success summary was written.",
+      "consequence": "MODEL_STEP_LIMIT, PROTOCOL_STALLED, and provider terminal outcomes could lose final evidence.",
+      "repair": "Terminal outcomes are classified, summarized, atomically written, and then propagated."
+    },
+    "literal_smoke_safety_summary": {
+      "status": "CONFIRMED",
+      "file": "packages/evals/itbench/live_smoke_execution.py",
+      "symbol": "success summary",
+      "defect": "The old result used a literal safety object instead of the runtime safety counters.",
+      "consequence": "A nonzero measured runtime safety counter could be hidden.",
+      "repair": "runtime_measured_safety is mapped from result.safety and nonzero values fail closed."
+    },
+    "rerun_refusal": {
+      "status": "ALREADY_PRESENT_AND_PRESERVED",
+      "file": "packages/evals/itbench/live_smoke_execution.py",
+      "symbol": "execute_live_smoke",
+      "defect": "Existing result/run directory checks are retained.",
+      "consequence": "Failed evidence cannot be overwritten or rerun."
+    }
+  },
+  "classification_matrix": {
+    "LIVE_SMOKE_PASS": "terminal SUBMIT or STOP, evidence, accounting, persistence, replay, trace, and safety checks pass",
+    "LIVE_SMOKE_INTERACTION_NOT_READY": "MODEL_STEP_LIMIT, PROTOCOL_STALLED, or WALL_TIME_LIMIT",
+    "LIVE_SMOKE_HARNESS_FAILURE": "persistence, replay, accounting, invalid terminal, or measured safety failure",
+    "LIVE_SMOKE_PROVIDER_FAILURE": "provider construction/transport or runtime PROVIDER_ERROR after preflight",
+    "preflight_failure": "outside this result artifact lifecycle; provider construction remains unreachable"
+  },
+  "offline_tests": {
+    "execution_test_file": "tests/unit/itbench/test_live_smoke_execution.py",
+    "tests_passed": 22,
+    "pass_path": "result artifact exists; classification LIVE_SMOKE_PASS; ledger COMPLETE",
+    "model_step_limit_path": "result artifact and failure artifact exist; interaction-not-ready; ledger FAILED; rerun refused",
+    "protocol_stalled_path": "result artifact and failure artifact exist; interaction-not-ready; ledger FAILED",
+    "provider_failure_path": "typed provider error summarized as LIVE_SMOKE_PROVIDER_FAILURE; ledger FAILED",
+    "replay_mismatch_path": "summary persisted as LIVE_SMOKE_HARNESS_FAILURE; ledger FAILED",
+    "accounting_mismatch_path": "summary persisted before propagated failure; ledger FAILED",
+    "nonzero_safety_path": "runtime writes=1 summarized as LIVE_SMOKE_HARNESS_FAILURE",
+    "structural_isolation_path": "execution module has no judge or ground-truth-loader dependency"
+  },
+  "persistence": {
+    "atomic_result_write": true,
+    "failure_artifact": "failure_artifact.json",
+    "persisted_artifact_names_recorded": true,
+    "native_reload_checked": true,
+    "event_replay_checked": true,
+    "result_immutable_after_first_publish": true,
+    "ledger_mapping": {"LIVE_SMOKE_PASS": "COMPLETE", "all_failure_classifications": "FAILED"}
+  },
+  "safety": {
+    "runtime_measured_fields": ["ground_truth_exposure", "cross_scenario_evidence", "writes", "arbitrary_execution"],
+    "nonzero_measured_counter": "LIVE_SMOKE_HARNESS_FAILURE",
+    "structural_invariants": {
+      "judge_path_present": false,
+      "ground_truth_loader_present": false,
+      "provider_fallback_available": false,
+      "shell_execution_path_present": false,
+      "sql_execution_path_present": false,
+      "arbitrary_promql_path_present": false,
+      "remediation_path_present": false,
+      "cross_scenario_loader_present": false
+    },
+    "non_instrumented_controls_not_falsely_reported_as_runtime_counters": true
+  },
+  "network_accounting": {
+    "live_agent_calls": 0,
+    "openai_outbound_attempts": 0,
+    "luna_calls": 0,
+    "judge_calls": 0,
+    "official_benchmark_scenarios": 0,
+    "live_smoke_scenarios": 0
+  },
+  "current_source_head": "a4199ac57f5b93b350858dc445713d5b0bc7e5e4",
+  "actual_smoke_002_prereg_created": false,
+  "actual_smoke_002_ledger_created": false
+}

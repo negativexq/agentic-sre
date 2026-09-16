@@ -1195,8 +1195,8 @@ def test_v5_rationale_length_matches_local_contract() -> None:
             "rationale": "x" * (V5_RATIONALE_MAX_LENGTH + 1),
         }
     }
-    assert _json_schema_error(valid, schema) is None
-    assert _json_schema_error(invalid, schema) is not None
+    assert _json_schema_error(valid, schema, enforce_bounds=True) is None
+    assert _json_schema_error(invalid, schema, enforce_bounds=True) is not None
 
 
 def test_v5_submit_target_cardinality_matches_local_contract() -> None:
@@ -1214,10 +1214,20 @@ def test_v5_submit_target_cardinality_matches_local_contract() -> None:
     targets_schema = schema["properties"]["targets"]
     assert targets_schema["minItems"] == V5_SUBMIT_MIN_TARGETS
     assert targets_schema["maxItems"] == V5_TARGETS_MAX_ITEMS
-    assert _json_schema_error({"targets": []}, schema) is not None
-    assert _json_schema_error({"targets": ["C001"]}, schema) is None
-    assert _json_schema_error({"targets": ["C001", "C002", "C003"]}, schema) is None
-    assert _json_schema_error({"targets": ["C001", "C002", "C003", "C004"]}, schema) is not None
+    assert _json_schema_error({"targets": []}, schema, enforce_bounds=True) is not None
+    assert _json_schema_error({"targets": ["C001"]}, schema, enforce_bounds=True) is None
+    assert (
+        _json_schema_error({"targets": ["C001", "C002", "C003"]}, schema, enforce_bounds=True)
+        is None
+    )
+    assert (
+        _json_schema_error(
+            {"targets": ["C001", "C002", "C003", "C004"]},
+            schema,
+            enforce_bounds=True,
+        )
+        is not None
+    )
 
 
 def test_v5_stop_reason_length_matches_local_contract() -> None:
@@ -1225,9 +1235,20 @@ def test_v5_stop_reason_length_matches_local_contract() -> None:
     schema = _itbench_v5_decision_function_schemas()["stop_itbench_investigation"]
     reason_schema = schema["properties"]["stop_reason"]
     assert reason_schema["maxLength"] == V5_STOP_REASON_MAX_LENGTH
-    assert _json_schema_error({"stop_reason": "x" * V5_STOP_REASON_MAX_LENGTH}, schema) is None
     assert (
-        _json_schema_error({"stop_reason": "x" * (V5_STOP_REASON_MAX_LENGTH + 1)}, schema)
+        _json_schema_error(
+            {"stop_reason": "x" * V5_STOP_REASON_MAX_LENGTH},
+            schema,
+            enforce_bounds=True,
+        )
+        is None
+    )
+    assert (
+        _json_schema_error(
+            {"stop_reason": "x" * (V5_STOP_REASON_MAX_LENGTH + 1)},
+            schema,
+            enforce_bounds=True,
+        )
         is not None
     )
 

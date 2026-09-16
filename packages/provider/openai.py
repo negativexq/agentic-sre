@@ -1079,7 +1079,11 @@ def _extract_decision_function(
             a1_protocol=a1_protocol,
         )
     )
-    schema_error_path = _json_schema_error(structured_output, schemas[function_name])
+    schema_error_path = _json_schema_error(
+        structured_output,
+        schemas[function_name],
+        enforce_bounds=external_protocol_v5,
+    )
     if schema_error_path is not None:
         error_code = (
             ProviderErrorCode.INVALID_STOP_REASON
@@ -1294,8 +1298,9 @@ def _json_schema_error(
     *,
     path: str = "$",
     root_schema: dict[str, Any] | None = None,
+    enforce_bounds: bool = False,
 ) -> str | None:
-    """Validate response shape, including the bounded V5 wire constraints."""
+    """Validate response shape, optionally enforcing V5 wire bounds."""
     root_schema = root_schema or schema
     if "$ref" in schema:
         reference = schema["$ref"]
@@ -1306,13 +1311,25 @@ def _json_schema_error(
         definition = definitions.get(definition_name) if isinstance(definitions, dict) else None
         if not isinstance(definition, dict):
             return path
-        return _json_schema_error(value, definition, path=path, root_schema=root_schema)
+        return _json_schema_error(
+            value,
+            definition,
+            path=path,
+            root_schema=root_schema,
+            enforce_bounds=enforce_bounds,
+        )
     if "anyOf" in schema:
         branches = schema["anyOf"]
         if not isinstance(branches, list):
             return path
         errors = [
-            _json_schema_error(value, branch, path=path, root_schema=root_schema)
+            _json_schema_error(
+                value,
+                branch,
+                path=path,
+                root_schema=root_schema,
+                enforce_bounds=enforce_bounds,
+            )
             for branch in branches
         ]
         if any(error is None for error in errors):
@@ -1324,7 +1341,14 @@ def _json_schema_error(
     schema_type = schema.get("type")
     if isinstance(schema_type, list):
         if any(
-            _json_schema_error(value, {"type": item}, path=path, root_schema=root_schema) is None
+            _json_schema_error(
+                value,
+                {"type": item},
+                path=path,
+                root_schema=root_schema,
+                enforce_bounds=enforce_bounds,
+            )
+            is None
             for item in schema_type
         ):
             return None
@@ -1335,7 +1359,7 @@ def _json_schema_error(
         if not isinstance(value, str):
             return path
         max_length = schema.get("maxLength")
-        if isinstance(max_length, int) and len(value) > max_length:
+        if enforce_bounds and isinstance(max_length, int) and len(value) > max_length:
             return path
         return None
     if schema_type == "boolean":
@@ -1348,16 +1372,20 @@ def _json_schema_error(
         if not isinstance(value, list):
             return path
         min_items = schema.get("minItems")
-        if isinstance(min_items, int) and len(value) < min_items:
+        if enforce_bounds and isinstance(min_items, int) and len(value) < min_items:
             return path
         max_items = schema.get("maxItems")
-        if isinstance(max_items, int) and len(value) > max_items:
+        if enforce_bounds and isinstance(max_items, int) and len(value) > max_items:
             return path
         item_schema = schema.get("items")
         if isinstance(item_schema, dict):
             for index, item in enumerate(value):
                 error_path = _json_schema_error(
-                    item, item_schema, path=f"{path}[{index}]", root_schema=root_schema
+                    item,
+                    item_schema,
+                    path=f"{path}[{index}]",
+                    root_schema=root_schema,
+                    enforce_bounds=enforce_bounds,
                 )
                 if error_path is not None:
                     return error_path
@@ -1380,7 +1408,11 @@ def _json_schema_error(
         for key, property_schema in properties.items():
             if key in value and isinstance(property_schema, dict):
                 error_path = _json_schema_error(
-                    value[key], property_schema, path=f"{path}.{key}", root_schema=root_schema
+                    value[key],
+                    property_schema,
+                    path=f"{path}.{key}",
+                    root_schema=root_schema,
+                    enforce_bounds=enforce_bounds,
                 )
                 if error_path is not None:
                     return error_path

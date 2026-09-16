@@ -418,12 +418,20 @@ def _terminal_failure(result: dict[str, Any]) -> _FailureInfo | None:
             RuntimeError(f"runtime terminal: {terminal}"),
         )
     if terminal == "PROVIDER_ERROR":
+        provider_error = next(
+            (
+                turn.get("provider_error")
+                for turn in reversed(result.get("turns", ()))
+                if isinstance(turn, dict) and turn.get("provider_error")
+            ),
+            None,
+        )
         return _FailureInfo(
             "LIVE_SMOKE_PROVIDER_FAILURE",
             "PROVIDER_TRANSPORT",
             _TerminalError(
                 "runtime returned PROVIDER_ERROR",
-                code=(str(result.get("provider_error")) if result.get("provider_error") else None),
+                code=str(provider_error) if provider_error else None,
             ),
         )
     if terminal not in {"SUBMIT", "STOP"}:

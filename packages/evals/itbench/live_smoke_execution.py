@@ -505,7 +505,13 @@ def execute_live_smoke(
             budget_snapshot = budget.snapshot()
         except BaseException:
             budget_snapshot = None
-        _persist_failure_artifact(run_dir, manifest, failure, persisted)
+        failure_artifact_error: BaseException | None = None
+        try:
+            _persist_failure_artifact(run_dir, manifest, failure, persisted)
+        except BaseException as error:
+            # The terminal summary is the primary evidence.  A secondary
+            # failure artifact must not prevent it from being published.
+            failure_artifact_error = error
         summary = _summary(
             root=root,
             manifest=manifest,
@@ -520,6 +526,11 @@ def execute_live_smoke(
             run_dir=run_dir,
             started=started,
         )
+        if failure_artifact_error is not None:
+            summary["artifacts"]["failure_artifact_error"] = {
+                "error_type": type(failure_artifact_error).__name__,
+                "error_message_bounded": str(failure_artifact_error)[:1_000],
+            }
         if result_path.exists():
             raise LiveSmokeExecutionError("live smoke result already exists; result is immutable")
         atomic_json_write(result_path, summary)

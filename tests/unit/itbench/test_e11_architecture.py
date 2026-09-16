@@ -397,6 +397,51 @@ def test_compare_replicas_requires_explicit_shared_owner() -> None:
     assert "COMPARE_REPLICAS" in available_e11_operations(first, comparable_peers=1)
 
 
+def test_verify_surface_exposes_bounded_alternative_operation_scopes() -> None:
+    catalog = ObservedEntityCatalog(scenario_id="alternatives")
+    first = catalog.add(
+        canonical="default/Service/first",
+        identity_type="ServiceIdentity",
+        namespace="default",
+        kind="Service",
+        name="first",
+        source_category="logs",
+        provenance="LOG_RESOURCE",
+        evidence_ref="log:first",
+    )
+    second = catalog.add(
+        canonical="default/Service/second",
+        identity_type="ServiceIdentity",
+        namespace="default",
+        kind="Service",
+        name="second",
+        source_category="metrics",
+        provenance="METRIC_RESOURCE",
+        evidence_ref="metric:second",
+    )
+    candidates = tuple(
+        RankedCandidate(
+            handle=entity.handle,
+            canonical=entity.canonical,
+            rank=index,
+            score=1.0,
+            family="default/Service",
+            retrieval_evidence=(),
+        )
+        for index, entity in enumerate((first, second), start=1)
+    )
+    memory = E11CaseMemory(scenario_id="alternatives", catalog=catalog)
+    memory.initialize(candidates)
+    memory.hypothesize(first.handle)
+    surface = e11_control_surface(memory)
+    assert "LOG_ANALYSIS" in surface.operations
+    assert "METRIC_ANOMALIES" in surface.operations
+    assert dict(surface.operation_targets)[second.handle] == (
+        "ENTITY_CONTEXT",
+        "METRIC_ANOMALIES",
+    )
+
+
 def test_context_is_bounded_and_has_budget_state() -> None:
     candidate = _candidate("C001", "default/Deployment/checkout")
     context = build_e11_context(

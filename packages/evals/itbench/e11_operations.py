@@ -36,6 +36,8 @@ def available_e11_operations(
     sources = entity.source_categories | entity.provenance
     if "k8s_events" in sources or "DIRECT_K8S_EVENT" in sources:
         operations.append("EVENT_ANALYSIS")
+    if "logs" in sources or "LOG_RESOURCE" in sources:
+        operations.append("LOG_ANALYSIS")
     if "metrics" in sources or "METRIC_RESOURCE" in sources:
         operations.append("METRIC_ANOMALIES")
     if "traces" in sources or "TRACE_RESOURCE" in sources:

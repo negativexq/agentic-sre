@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import csv
 import json
 import re
@@ -238,7 +239,10 @@ class ITBenchSnapshotBackend:
         items = [
             item
             for item in self.records(ITBenchEvidenceCategory.LOGS)
-            if parsed.name.casefold() in json.dumps(item.get("record", {}), default=str).casefold()
+            if _record_matches_entity(
+                item.get("record", {}),
+                f"{parsed.namespace or '_cluster'}/{parsed.kind}/{parsed.name}",
+            )
         ]
         return {"patterns": items[:limit], "data_available": bool(items)}
 
@@ -246,7 +250,10 @@ class ITBenchSnapshotBackend:
         items = [
             item
             for item in self.records(ITBenchEvidenceCategory.TRACES)
-            if parsed.name.casefold() in json.dumps(item.get("record", {}), default=str).casefold()
+            if _record_matches_entity(
+                item.get("record", {}),
+                f"{parsed.namespace or '_cluster'}/{parsed.kind}/{parsed.name}",
+            )
         ]
         return {"records": items[:limit], "data_available": bool(items)}
 
@@ -257,6 +264,7 @@ class ITBenchSnapshotBackend:
         backend operation and never exposes a query language to the model.
         """
         values: list[float] = []
+        timestamps: list[str] = []
         for item in self._iter_metric_records(arguments):
             if not _metric_matches(item, arguments):
                 continue
@@ -267,17 +275,32 @@ class ITBenchSnapshotBackend:
                 try:
                     if key in record:
                         values.append(float(record[key]))
+                        timestamp = record.get("timestamp", record.get("Timestamp"))
+                        if isinstance(timestamp, str):
+                            timestamps.append(timestamp)
                         break
                 except (TypeError, ValueError):
                     continue
+        summary = (
+            _metric_summary(values, tuple(timestamps))
+            if values
+            else {
+                "min": None,
+                "max": None,
+                "mean": None,
+                "first": None,
+                "last": None,
+                "delta": None,
+            }
+        )
         return {
             "count": len(values),
-            "min": min(values) if values else None,
-            "max": max(values) if values else None,
-            "mean": sum(values) / len(values) if values else None,
-            "first": values[0] if values else None,
-            "last": values[-1] if values else None,
-            "delta": values[-1] - values[0] if len(values) > 1 else None,
+            "min": summary["min"],
+            "max": summary["max"],
+            "mean": summary["mean"],
+            "first": summary["first"],
+            "last": summary["last"],
+            "delta": summary["delta"],
         }
 
     def metric_analysis(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -287,6 +310,7 @@ class ITBenchSnapshotBackend:
             raise ValueError("limit must be within the bounded snapshot query limit")
         selected: list[dict[str, Any]] = []
         values: list[float] = []
+        timestamps: list[str] = []
         values_by_metric: dict[str, list[float]] = {}
         timestamps_by_metric: dict[str, list[str]] = {}
         metric_identity_fields: dict[str, dict[str, Any]] = {}
@@ -305,15 +329,14 @@ class ITBenchSnapshotBackend:
                     if key in record:
                         value = float(record[key])
                         values.append(value)
+                        timestamp = record.get("timestamp", record.get("Timestamp"))
+                        if isinstance(timestamp, str):
+                            timestamps.append(timestamp)
                         metric_name = str(
                             record.get("metric_name", record.get("MetricName", "unknown"))
                         )
-                        metric_service = str(
-                            record.get(
-                                "service_name", record.get("service", record.get("ServiceName", ""))
-                            )
-                        )
-                        metric_namespace = str(record.get("namespace", record.get("Namespace", "")))
+                        metric_service = next(iter(_identity_values(record, "service")), "")
+                        metric_namespace = next(iter(_identity_values(record, "namespace")), "")
                         label_identity = _metric_label_identity(record)
                         metric_key = "|".join(
                             (metric_name, metric_service, metric_namespace, label_identity)
@@ -351,6 +374,14 @@ class ITBenchSnapshotBackend:
         aggregates_by_metric = {
             name: all_aggregates_by_metric[name] for name in bounded_metric_names
         }
+        aggregate_summary = _metric_summary(values, tuple(timestamps)) if values else {}
+        aggregate = {
+            "count": len(values),
+            **{
+                key: aggregate_summary.get(key)
+                for key in ("min", "max", "mean", "first", "last", "delta")
+            },
+        }
         return {
             "records": list(bounded),
             "category": ITBenchEvidenceCategory.METRICS.value,
@@ -358,15 +389,7 @@ class ITBenchSnapshotBackend:
             "matching_count": matching_count,
             "returned_count": len(bounded),
             "truncated": matching_count > len(bounded),
-            "aggregate": {
-                "count": len(values),
-                "min": min(values) if values else None,
-                "max": max(values) if values else None,
-                "mean": sum(values) / len(values) if values else None,
-                "first": values[0] if values else None,
-                "last": values[-1] if values else None,
-                "delta": values[-1] - values[0] if len(values) > 1 else None,
-            },
+            "aggregate": aggregate,
             "aggregates_by_metric": aggregates_by_metric,
             "aggregate_group_count": len(all_aggregates_by_metric),
             "aggregate_groups_returned": len(aggregates_by_metric),
@@ -1049,6 +1072,83 @@ def _summarize_k8s_event(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _mapping_value(value: Any) -> dict[str, Any]:
+    """Parse structured TSV label/resource fields without text matching."""
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str) or not value.strip():
+        return {}
+    for parser in (json.loads, ast.literal_eval):
+        try:
+            parsed = parser(value)
+        except (ValueError, SyntaxError, json.JSONDecodeError):
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return {}
+
+
+def _identity_values(record: dict[str, Any], identity: str) -> tuple[str, ...]:
+    """Return exact structured telemetry identity values for one dimension."""
+    fields = {
+        "service": ("ServiceName", "service", "service_name", "service.name", "k8s.service.name"),
+        "pod": ("pod", "pod_name", "k8s.pod.name", "ResourceName"),
+        "workload": ("workload", "deployment", "statefulset", "daemonset", "job"),
+        "namespace": ("Namespace", "namespace", "k8s.namespace.name"),
+        "node": ("node", "node_name", "k8s.node.name"),
+        "instance": ("instance",),
+    }[identity]
+    mappings = [record]
+    for key in ("tags", "resource", "ResourceAttributes", "resource_attributes", "labels"):
+        mappings.append(_mapping_value(record.get(key)))
+    values: list[str] = []
+    for mapping in mappings:
+        for key in fields:
+            value = mapping.get(key)
+            if isinstance(value, str) and value and value not in values:
+                values.append(value)
+    return tuple(values)
+
+
+def _record_matches_entity(record: Any, canonical: str) -> bool:
+    """Match canonical K8s/telemetry identities exactly, never by substring."""
+    if not isinstance(record, dict):
+        return False
+    parsed = parse_canonical_entity(canonical)
+    body = _json_object(record.get("Body"))
+    if body:
+        candidate = body.get("object") if isinstance(body.get("object"), dict) else body
+        involved = (
+            body.get("involvedObject") if isinstance(body.get("involvedObject"), dict) else None
+        )
+        if involved is not None:
+            candidate = {"kind": involved.get("kind"), "metadata": involved}
+        if isinstance(candidate, dict):
+            metadata = candidate.get("metadata")
+            if isinstance(metadata, dict):
+                actual = f"{metadata.get('namespace', '_cluster')}/{candidate.get('kind')}/{metadata.get('name')}"
+                if actual.casefold() == canonical.casefold():
+                    return True
+    namespace_values = _identity_values(record, "namespace")
+    if parsed.namespace and parsed.namespace != "_cluster":
+        if not namespace_values or parsed.namespace.casefold() not in {
+            value.casefold() for value in namespace_values
+        }:
+            return False
+    kind = parsed.kind.casefold()
+    if kind == "service":
+        values = _identity_values(record, "service")
+    elif kind == "pod":
+        values = _identity_values(record, "pod")
+    elif kind in {"deployment", "statefulset", "daemonset", "replicaset", "job", "cronjob"}:
+        values = _identity_values(record, "workload")
+    elif kind == "node":
+        values = _identity_values(record, "node")
+    else:
+        values = _identity_values(record, "instance")
+    return parsed.name.casefold() in {value.casefold() for value in values}
+
+
 def _matches(
     item: dict[str, Any],
     *,
@@ -1103,25 +1203,24 @@ def _matches(
             if actual and status.casefold() not in actual.casefold():
                 return False
         if isinstance(service, str):
-            service_values = [record.get(key) for key in ("ServiceName", "service", "service.name")]
-            if any(
-                isinstance(value, str) and service.casefold() == value.casefold()
-                for value in service_values
-            ):
-                service = None
-            elif any(value is not None for value in service_values):
+            service_values = _identity_values(record, "service")
+            if not service_values or service.casefold() not in {
+                value.casefold() for value in service_values
+            }:
                 return False
+            service = None
         if isinstance(namespace, str):
-            namespace_values = [
-                record.get(key) for key in ("Namespace", "namespace", "k8s.namespace.name")
-            ]
-            if any(
-                isinstance(value, str) and namespace.casefold() == value.casefold()
-                for value in namespace_values
-            ):
+            namespace_values = _identity_values(record, "namespace")
+            if namespace_values and namespace.casefold() in {
+                value.casefold() for value in namespace_values
+            }:
                 namespace = None
-            elif any(value is not None for value in namespace_values):
+            elif namespace_values:
                 return False
+            else:
+                return False
+        if isinstance(entity, str) and not _record_matches_entity(record, entity):
+            return False
         if not any(isinstance(value, str) for value in (pattern, service, namespace, entity)):
             return True
     record_text = json.dumps(record, sort_keys=True, default=str).casefold()
@@ -1131,7 +1230,7 @@ def _matches(
         return False
     if isinstance(namespace, str) and namespace.casefold() not in record_text:
         return False
-    if isinstance(entity, str) and entity.casefold() not in record_text:
+    if isinstance(entity, str) and not _record_matches_entity(record, entity):
         return False
     return True
 
@@ -1150,15 +1249,16 @@ def _metric_matches(item: dict[str, Any], arguments: dict[str, Any]) -> bool:
         return False
     if isinstance(arguments.get("service"), str):
         service = arguments["service"].casefold()
-        tags = str(record.get("tags", "")).casefold()
-        pod = str(record.get("pod_name", record.get("ResourceName", ""))).casefold()
-        service_field = str(record.get("service", record.get("ServiceName", ""))).casefold()
-        if service not in tags and service not in pod and service != service_field:
+        service_values = _identity_values(record, "service")
+        if service not in {value.casefold() for value in service_values}:
             return False
-    actual_namespace = record.get("namespace", record.get("Namespace", ""))
-    if (
-        isinstance(arguments.get("namespace"), str)
-        and str(actual_namespace).casefold() != arguments["namespace"].casefold()
+    actual_namespace = _identity_values(record, "namespace")
+    if isinstance(arguments.get("namespace"), str) and arguments["namespace"].casefold() not in {
+        value.casefold() for value in actual_namespace
+    }:
+        return False
+    if isinstance(arguments.get("entity"), str) and not _record_matches_entity(
+        record, arguments["entity"]
     ):
         return False
     pattern = arguments.get("pattern", arguments.get("contains"))
@@ -1172,7 +1272,11 @@ def _metric_summary(values: list[float], timestamps: tuple[str, ...]) -> dict[st
     """Summarize one metric family, never mixing names or label identities."""
     time_start: str | None
     time_end: str | None
-    ordered = list(zip(timestamps, values, strict=False)) if timestamps else []
+    ordered = (
+        list(zip(timestamps, values, strict=True))
+        if timestamps and len(timestamps) == len(values)
+        else []
+    )
     if ordered:
         ordered.sort(key=lambda pair: pair[0])
         series = [value for _timestamp, value in ordered]
@@ -1181,12 +1285,16 @@ def _metric_summary(values: list[float], timestamps: tuple[str, ...]) -> dict[st
         time_start = ordered[0][0]
         time_end = ordered[-1][0]
     else:
+        series = values
         first = values[0]
         last = values[-1]
         time_start = None
         time_end = None
-    baseline = values[: max(1, len(values) // 3)]
-    incident = values[-max(1, len(values) // 3) :]
+    # Window construction must use the same chronological series as first/last
+    # and delta.  Using source-file order here made anomaly direction depend on
+    # whether a TSV happened to be reversed.
+    baseline = series[: max(1, len(series) // 3)]
+    incident = series[-max(1, len(series) // 3) :]
     baseline_median = sorted(baseline)[len(baseline) // 2]
     incident_median = sorted(incident)[len(incident) // 2]
     delta = incident_median - baseline_median

@@ -31,7 +31,7 @@ def main() -> int:
     evaluations = evaluate_retrieval_ablations(dataset, ablations)
     payload: dict[str, Any] = {
         "execution": "ITB-E10.1-E11-OFFLINE",
-        "dataset_revision": ablations["R5"].get("dataset_revision"),
+        "dataset_revision": ablations["R6"].get("dataset_revision"),
         "scenario_count": 35,
         "provider_invocations": 0,
         "ground_truth_access_during_build": 0,
@@ -68,6 +68,16 @@ def main() -> int:
         ),
         "recall_at_10": (
             payload["ablations"]["R5"]["recall_at_k"]["10"]
+            - payload["frozen_e7_baseline"]["recall_at_k"]["10"]
+        ),
+    }
+    payload["r6_delta_vs_e7"] = {
+        "catalog_root_coverage": (
+            payload["ablations"]["R6"]["catalog_root_coverage"]
+            - payload["frozen_e7_baseline"]["catalog_root_coverage"]
+        ),
+        "recall_at_10": (
+            payload["ablations"]["R6"]["recall_at_k"]["10"]
             - payload["frozen_e7_baseline"]["recall_at_k"]["10"]
         ),
     }

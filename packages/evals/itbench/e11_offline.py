@@ -194,14 +194,24 @@ def build_retrieval_ablations(
     shortlist_size: int = 10,
     max_telemetry_records: int = 5_000,
 ) -> dict[str, dict[str, Any]]:
-    """Build R0-R5 observable outputs before any ground-truth access."""
-    configurations = {
+    """Build R0-R6 observable outputs before any ground-truth access."""
+    configurations: dict[str, dict[str, Any]] = {
         "R0": {"legacy": True},
         "R1": {"telemetry": False, "topology": False, "temporal": False, "diversity": False},
         "R2": {"telemetry": True, "topology": False, "temporal": False, "diversity": False},
         "R3": {"telemetry": True, "topology": True, "temporal": False, "diversity": False},
         "R4": {"telemetry": True, "topology": True, "temporal": True, "diversity": False},
         "R5": {"telemetry": True, "topology": True, "temporal": True, "diversity": True},
+        # R6 keeps the R5 evidence policy but measures a wider bounded active
+        # shortlist.  This isolates reachability from the top-K presentation
+        # limit without changing any scoring signal.
+        "R6": {
+            "telemetry": True,
+            "topology": True,
+            "temporal": True,
+            "diversity": True,
+            "shortlist_size": max(20, shortlist_size),
+        },
     }
     result: dict[str, dict[str, Any]] = {}
     scenario_cache: dict[str, dict[str, Any]] = {}
@@ -257,7 +267,7 @@ def build_retrieval_ablations(
                 ranked = rank_observed_candidates(
                     backend,
                     catalog_object,
-                    limit=shortlist_size,
+                    limit=int(config.get("shortlist_size", shortlist_size)),
                     diversity=bool(config["diversity"]),
                     include_telemetry=bool(config["telemetry"]),
                     max_telemetry_records=max_telemetry_records,

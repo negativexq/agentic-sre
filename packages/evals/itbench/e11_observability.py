@@ -928,7 +928,10 @@ def _telemetry_identities(
                         "aliases": (value,),
                     }
                 )
-    service = values.get("service.name", values.get("ServiceName", values.get("service")))
+    service = values.get(
+        "service.name",
+        values.get("service_name", values.get("ServiceName", values.get("service"))),
+    )
     if isinstance(service, str) and service:
         result.append(
             {
@@ -974,11 +977,14 @@ def _mapping(value: Any) -> dict[str, Any]:
         return value
     if not isinstance(value, str):
         return {}
-    try:
-        parsed = ast.literal_eval(value)
-    except (SyntaxError, ValueError):
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
+    for parser in (json.loads, ast.literal_eval):
+        try:
+            parsed = parser(value)
+        except (SyntaxError, ValueError, json.JSONDecodeError):
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return {}
 
 
 def _item_timestamp(item: dict[str, Any]) -> str | None:

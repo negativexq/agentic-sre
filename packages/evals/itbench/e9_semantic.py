@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from packages.contracts import Incident
-from packages.evals.itbench.contracts import ITBenchEvidenceCategory
+from packages.evals.itbench.contracts import ITBenchEvidenceCategory, parse_canonical_entity
 from packages.evals.itbench.e9_memory import E9CaseMemory
 from packages.evals.itbench.e9_packing import bounded_pack
 from packages.evals.itbench.external_context import normalize_alerts
@@ -22,6 +22,7 @@ E9_SEMANTIC_OPERATIONS = (
     "RECENT_CHANGE_ANALYSIS",
     "ENTITY_CONTEXT",
     "EVENT_ANALYSIS",
+    "LOG_ANALYSIS",
     "METRIC_ANOMALIES",
     "TRACE_ERROR_TREE",
     "SPEC_ANALYSIS",
@@ -43,6 +44,7 @@ _TARGET_OPERATIONS = frozenset(
     {
         "ENTITY_CONTEXT",
         "EVENT_ANALYSIS",
+        "LOG_ANALYSIS",
         "METRIC_ANOMALIES",
         "TRACE_ERROR_TREE",
         "SPEC_ANALYSIS",
@@ -103,6 +105,7 @@ class SemanticCapabilityResolver:
             "VERIFY": (
                 "ENTITY_CONTEXT",
                 "EVENT_ANALYSIS",
+                "LOG_ANALYSIS",
                 "METRIC_ANOMALIES",
                 "TRACE_ERROR_TREE",
                 "SPEC_ANALYSIS",
@@ -139,7 +142,26 @@ class SemanticCapabilityResolver:
         }:
             return {"available": True, "reason": None}
         if operation == "EVENT_ANALYSIS":
-            return {"available": canonical is not None, "reason": None}
+            value = (
+                operations.backend.query(
+                    ITBenchEvidenceCategory.K8S_EVENTS,
+                    {"entity": canonical, "limit": operations._limit(1)},
+                )
+                if canonical
+                else {}
+            )
+            available = bool(value.get("matching_count"))
+            return {
+                "available": available,
+                "reason": None if available else "no matching event evidence",
+            }
+        if operation == "LOG_ANALYSIS":
+            value = operations._log_analysis(canonical)
+            available = bool(value.get("data_available") and value.get("patterns"))
+            return {
+                "available": available,
+                "reason": None if available else "no structured log error evidence",
+            }
         if operation in {"ENTITY_CONTEXT", "SPEC_ANALYSIS"}:
             return {"available": canonical is not None, "reason": None}
         if operation == "RECENT_CHANGE_ANALYSIS":
@@ -175,14 +197,12 @@ class SemanticCapabilityResolver:
             }
         if operation == "COMPARE_REPLICAS":
             value = operations._compare_replicas(canonical)
-            available = bool(value.get("comparison_available")) and bool(
-                value.get("spec_differences") or value.get("event_differences")
-            )
+            available = bool(value.get("comparison_available"))
             return {
                 "available": available,
                 "reason": None
                 if available
-                else "no comparable peer state/difference is observable",
+                else "fewer than two comparable peer identities are observable",
             }
         if operation == "VERIFY_TEMPORAL_ALIGNMENT":
             value = operations._temporal_alignment(canonical)
@@ -273,6 +293,10 @@ class E9SemanticOperations:
                 ),
                 "events",
             )
+        elif operation == "LOG_ANALYSIS":
+            if canonical is None:
+                raise ValueError("log analysis requires a candidate handle")
+            data, category = self._log_analysis(canonical), "logs"
         elif operation == "METRIC_ANOMALIES":
             data, category = self._metric_anomalies(canonical), "metrics"
         elif operation == "TRACE_ERROR_TREE":
@@ -379,31 +403,136 @@ class E9SemanticOperations:
         }
 
     def _metric_anomalies(self, canonical: str | None) -> dict[str, Any]:
-        service = canonical.rsplit("/", 1)[-1] if canonical else None
-        arguments = (
-            {"service": service, "limit": self._limit(12)}
-            if service
-            else {"limit": self._limit(12)}
-        )
+        arguments: dict[str, Any] = {"limit": self._limit(12)}
+        if canonical:
+            parsed = parse_canonical_entity(canonical)
+            key = {
+                "service": "service",
+                "pod": "pod",
+                "deployment": "workload",
+                "statefulset": "workload",
+                "daemonset": "workload",
+                "replicaset": "workload",
+                "job": "workload",
+                "node": "node",
+            }.get(parsed.kind.casefold())
+            if key:
+                arguments[key] = parsed.name
+            arguments["entity"] = canonical
         return self.backend.metric_analysis(arguments)
 
+    def _log_analysis(self, canonical: str | None) -> dict[str, Any]:
+        return self.backend.log_analysis(
+            {"entity": canonical, "limit": self._limit(12)}
+            if canonical
+            else {"limit": self._limit(12)}
+        )
+
     def _compare_replicas(self, canonical: str) -> dict[str, Any]:
-        context = self.backend.query_entity_context(canonical, 20, include_telemetry=False)
-        peers = []
-        for item in context.get("object_records", []):
+        parsed_target = parse_canonical_entity(canonical)
+        objects: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
+        for item in self.backend.complete_source_records(ITBenchEvidenceCategory.K8S_OBJECTS):
             record = item.get("record", {})
             body = _json_body(record.get("Body")) if isinstance(record, dict) else None
-            peer = _canonical_from_body(body or {})
-            if peer and peer != canonical:
-                peers.append(item)
+            if not body or not isinstance(body.get("metadata"), dict):
+                continue
+            metadata = body["metadata"]
+            kind, name = body.get("kind"), metadata.get("name")
+            if not isinstance(kind, str) or not isinstance(name, str):
+                continue
+            namespace = metadata.get("namespace", "_cluster")
+            objects.append((f"{namespace}/{kind}/{name}", body, metadata))
+        target = next((item for item in objects if item[0] == canonical), None)
+        if target is None:
+            return {
+                "comparison_available": False,
+                "peer_count": 0,
+                "spec_differences": [],
+                "event_differences": [],
+                "reason": "target object is not observable",
+            }
+        _target_canonical, target_body, target_metadata = target
+        target_kind = str(target_body.get("kind", ""))
+        target_owners = {
+            (str(owner.get("kind")), str(owner.get("name")))
+            for owner in target_metadata.get("ownerReferences", [])
+            if isinstance(owner, dict)
+            and isinstance(owner.get("kind"), str)
+            and isinstance(owner.get("name"), str)
+        }
+        target_labels = target_metadata.get("labels", {})
+        target_labels = target_labels if isinstance(target_labels, dict) else {}
+        peers: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
+        for candidate in objects:
+            if (
+                candidate[0] == canonical
+                or candidate[2].get("namespace", "_cluster") != parsed_target.namespace
+            ):
+                continue
+            candidate_body, candidate_metadata = candidate[1], candidate[2]
+            candidate_kind = str(candidate_body.get("kind", ""))
+            if target_kind == "Pod":
+                if candidate_kind != "Pod":
+                    continue
+                owners = {
+                    (str(owner.get("kind")), str(owner.get("name")))
+                    for owner in candidate_metadata.get("ownerReferences", [])
+                    if isinstance(owner, dict)
+                    and isinstance(owner.get("kind"), str)
+                    and isinstance(owner.get("name"), str)
+                }
+                same_owner = bool(target_owners & owners)
+                same_labels = (
+                    bool(target_labels)
+                    and all(
+                        candidate_metadata.get("labels", {}).get(key) == value
+                        for key, value in target_labels.items()
+                    )
+                    if isinstance(candidate_metadata.get("labels"), dict)
+                    else False
+                )
+                if same_owner or same_labels:
+                    peers.append(candidate)
+            elif candidate_kind == target_kind and target_owners:
+                owners = {
+                    (str(owner.get("kind")), str(owner.get("name")))
+                    for owner in candidate_metadata.get("ownerReferences", [])
+                    if isinstance(owner, dict)
+                    and isinstance(owner.get("kind"), str)
+                    and isinstance(owner.get("name"), str)
+                }
+                if target_owners & owners:
+                    peers.append(candidate)
+        peer_summaries = [_comparison_snapshot(item[1]) for item in peers]
+        target_summary = _comparison_snapshot(target_body)
+        spec_differences = _dict_differences(target_summary, peer_summaries)
+        event_differences = []
+        for peer in peers:
+            peer_events = self.backend.query(
+                ITBenchEvidenceCategory.K8S_EVENTS,
+                {"entity": peer[0], "limit": self._limit(8)},
+            )
+            target_events = self.backend.query(
+                ITBenchEvidenceCategory.K8S_EVENTS,
+                {"entity": canonical, "limit": self._limit(8)},
+            )
+            if peer_events.get("matching_count") != target_events.get("matching_count"):
+                event_differences.append(
+                    {
+                        "peer": peer[0],
+                        "target_event_count": target_events.get("matching_count", 0),
+                        "peer_event_count": peer_events.get("matching_count", 0),
+                    }
+                )
         return {
             "comparison_available": bool(peers),
             "peer_count": len(peers),
-            "spec_differences": [],
-            "event_differences": [],
+            "peers": [peer[0] for peer in peers],
+            "spec_differences": spec_differences,
+            "event_differences": event_differences,
             "reason": None
             if peers
-            else "peer replica identities are not observable from this entity query",
+            else "no owner/selector-related sibling identities are observable",
         }
 
     def _trace_error_tree(self, canonical: str | None) -> dict[str, Any]:
@@ -524,7 +653,76 @@ def _temporal_assessment(delta: float, event_kind: str) -> tuple[str, str]:
 
 
 def _resources(spec: dict[str, Any], workload_spec: dict[str, Any]) -> Any:
-    return workload_spec.get("resources", spec.get("resources"))
+    direct = workload_spec.get("resources", spec.get("resources"))
+    result: dict[str, Any] = dict(direct) if isinstance(direct, dict) else {}
+    containers: list[dict[str, Any]] = []
+    for key, container_type in (("containers", "container"), ("initContainers", "initContainer")):
+        values = workload_spec.get(key, [])
+        if not isinstance(values, list):
+            continue
+        for index, container in enumerate(values):
+            if not isinstance(container, dict) or not isinstance(container.get("resources"), dict):
+                continue
+            containers.append(
+                {
+                    "name": container.get("name", f"{container_type}-{index}"),
+                    "type": container_type,
+                    "resources": container["resources"],
+                }
+            )
+    if containers:
+        result["container_resources"] = containers
+        # A single container's requests/limits are safe to expose at the
+        # aggregate level.  For multiple containers retain per-container
+        # values instead of pretending they are one scalar resource.
+        for bound in ("requests", "limits"):
+            if bound not in result:
+                matching = [
+                    entry["resources"][bound]
+                    for entry in containers
+                    if isinstance(entry["resources"].get(bound), dict)
+                ]
+                if len(matching) == 1:
+                    result[bound] = matching[0]
+    return result or None
+
+
+def _comparison_snapshot(body: dict[str, Any]) -> dict[str, Any]:
+    metadata = body.get("metadata", {}) if isinstance(body.get("metadata"), dict) else {}
+    spec = body.get("spec", {}) if isinstance(body.get("spec"), dict) else {}
+    status = body.get("status", {}) if isinstance(body.get("status"), dict) else {}
+    return {
+        "kind": body.get("kind"),
+        "labels": metadata.get("labels", {}),
+        "spec": {
+            key: spec.get(key)
+            for key in ("replicas", "selector", "nodeName", "containers", "initContainers")
+            if spec.get(key) is not None
+        },
+        "status": {
+            key: status.get(key)
+            for key in ("phase", "readyReplicas", "availableReplicas", "restartCount")
+            if status.get(key) is not None
+        },
+    }
+
+
+def _dict_differences(target: dict[str, Any], peers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    differences: list[dict[str, Any]] = []
+    for index, peer in enumerate(peers):
+        for section in ("spec", "status", "labels"):
+            target_section = target.get(section, {})
+            peer_section = peer.get(section, {})
+            if target_section != peer_section:
+                differences.append(
+                    {
+                        "peer_index": index,
+                        "section": section,
+                        "target": target_section,
+                        "peer": peer_section,
+                    }
+                )
+    return differences
 
 
 def _json_body(value: Any) -> dict[str, Any] | None:

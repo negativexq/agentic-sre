@@ -224,6 +224,7 @@ class E11ControlSurface:
     operations: tuple[str, ...]
     targets: tuple[str, ...]
     current_hypothesis: str | None
+    operation_targets: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
 def e11_control_surface(memory: E11CaseMemory, *, final_turn: bool = False) -> E11ControlSurface:
@@ -246,21 +247,39 @@ def e11_control_surface(memory: E11CaseMemory, *, final_turn: bool = False) -> E
         )
     if memory.phase == "VERIFY":
         operations = _verification_operations(memory)
+        operation_targets = tuple(
+            (
+                handle,
+                _operations_for_handle(memory, handle),
+            )
+            for handle in targets
+            if _operations_for_handle(memory, handle)
+        )
         actions = (
             ("INVESTIGATE", "REVISE", "SUBMIT", "STOP")
             if operations
             else ("REVISE", "SUBMIT", "STOP")
         )
         return E11ControlSurface(
-            memory.phase, actions, operations, targets, memory.current_hypothesis
+            memory.phase,
+            actions,
+            operations,
+            targets,
+            memory.current_hypothesis,
+            operation_targets,
         )
     return E11ControlSurface(memory.phase, ("STOP",), (), targets, memory.current_hypothesis)
 
 
 def _verification_operations(memory: E11CaseMemory) -> tuple[str, ...]:
-    if memory.current_hypothesis is None:
-        return ()
-    entity = memory.catalog.by_handle(memory.current_hypothesis)
+    operations: list[str] = []
+    for candidate in memory.active_shortlist:
+        operations.extend(_operations_for_handle(memory, candidate.handle))
+    return tuple(dict.fromkeys(operations))
+
+
+def _operations_for_handle(memory: E11CaseMemory, handle: str) -> tuple[str, ...]:
+    entity = memory.catalog.by_handle(handle)
     if entity is None:
         return ()
     return available_e11_operations(

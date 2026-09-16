@@ -24,6 +24,7 @@ from packages.evals.itbench.dataset import ITBenchLiteDataset, iter_tsv
 from packages.evals.itbench.sparse_index import trace_index_path
 
 _EVIDENCE_NAMESPACE = UUID("2e6bbd95-4c2a-47d5-8b7c-cf19ccf9a3c4")
+_SEMANTIC_METRIC_SCAN_LIMIT = 5_000
 
 
 class ITBenchSnapshotBackend:
@@ -265,7 +266,11 @@ class ITBenchSnapshotBackend:
         """
         values: list[float] = []
         timestamps: list[str] = []
+        scanned = 0
         for item in self._iter_metric_records(arguments):
+            if scanned >= _SEMANTIC_METRIC_SCAN_LIMIT:
+                break
+            scanned += 1
             if not _metric_matches(item, arguments):
                 continue
             record = item.get("record", {})
@@ -315,7 +320,11 @@ class ITBenchSnapshotBackend:
         timestamps_by_metric: dict[str, list[str]] = {}
         metric_identity_fields: dict[str, dict[str, Any]] = {}
         matching_count = 0
+        scanned = 0
         for item in self._iter_metric_records(arguments):
+            if scanned >= _SEMANTIC_METRIC_SCAN_LIMIT:
+                break
+            scanned += 1
             if not _metric_matches(item, arguments):
                 continue
             matching_count += 1
@@ -396,6 +405,7 @@ class ITBenchSnapshotBackend:
             "aggregate_groups_truncated": len(aggregates_by_metric) < len(all_aggregates_by_metric),
             "sample_count": len(bounded),
             "sample_truncated": matching_count > len(bounded),
+            "scan_truncated": scanned >= _SEMANTIC_METRIC_SCAN_LIMIT,
         }
 
     def log_analysis(self, arguments: dict[str, Any]) -> dict[str, Any]:

@@ -9,7 +9,10 @@ from typing import Any
 import pytest
 
 from packages.evals.itbench.e9_identity import collect_e9_identity
-from packages.evals.itbench.live_smoke_contract import build_live_smoke_manifest
+from packages.evals.itbench.live_smoke_contract import (
+    LIVE_SMOKE_RELEVANT_PATHS,
+    build_live_smoke_manifest,
+)
 from packages.evals.itbench.live_smoke_preflight import (
     LivePreflightError,
     load_manifest,
@@ -17,18 +20,7 @@ from packages.evals.itbench.live_smoke_preflight import (
 )
 
 ROOT = Path(__file__).resolve().parents[3]
-RELEVANT_PATHS = (
-    "packages/evals/itbench/e9_control.py",
-    "packages/evals/itbench/e9_runtime.py",
-    "packages/evals/itbench/e9_context.py",
-    "packages/evals/itbench/e9_semantic.py",
-    "packages/evals/itbench/e9_memory.py",
-    "packages/evals/itbench/e9_packing.py",
-    "packages/evals/itbench/external_contracts.py",
-    "packages/provider/openai.py",
-    "packages/provider/contracts.py",
-    "packages/model_policy.py",
-)
+RELEVANT_PATHS = LIVE_SMOKE_RELEVANT_PATHS
 
 
 def _manifest_payload() -> dict[str, Any]:

@@ -1,0 +1,304 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "VERIFIED: otel-demo/ConfigMap/flagd-config: ConfigMap data changed: demo.flagd.json. Verified (configuration changed near onset and is used by or names an alerting component). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/fraud-detection, otel-demo/Deployment/frontend.",
+        "entity": {
+          "kind": "ConfigMap",
+          "name": "flagd-config",
+          "namespace": "otel-demo"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-5",
+    "native_terminal": "VERIFIED",
+    "reasoning": "otel-demo/ConfigMap/flagd-config: ConfigMap data changed: demo.flagd.json. Verified (configuration changed near onset and is used by or names an alerting component). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/fraud-detection, otel-demo/Deployment/frontend.",
+    "scenario_id": "Scenario-5"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "entity": {
+          "kind": "Deployment",
+          "name": "ad",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:49:02.498484Z",
+            "details": {
+              "changed_paths": [
+                ".spec.template.metadata.annotations.kubectl.kubernetes.io/restartedAt"
+              ],
+              "previous_observed_at": "2025-12-15T17:28:59.894236+00:00"
+            },
+            "entity": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:284",
+              "k8s_objects_raw.tsv:3235"
+            ],
+            "kind": "ROLLOUT_RESTART",
+            "related": [],
+            "summary": "rollout restart"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/recommendation"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 7.0
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "ad-554b849958-w5fhc",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:15:28Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedMount"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "ad-554b849958-w5fhc",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:350"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedMount x1: MountVolume.SetUp failed for volume \"kube-api-access-llncg\" : failed to sync configmap cache: timed out waiting for the condition"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/recommendation"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.25
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "frontend-proxy-6b4d584985-kxdcl",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:15:28Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedMount"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "frontend-proxy-6b4d584985-kxdcl",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:527"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedMount x1: MountVolume.SetUp failed for volume \"kube-api-access-4xb4m\" : failed to sync configmap cache: timed out waiting for the condition"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/recommendation"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.25
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-chphh",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:15:32Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-chphh",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:588"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: Get \"http://100.96.3.133:13133/\": dial tcp 100.96.3.133:13133: connect: connection refused"
+          },
+          {
+            "at": "2025-12-15T17:15:28Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedMount"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-chphh",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:580"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedMount x1: MountVolume.SetUp failed for volume \"kube-api-access-rmnfv\" : failed to sync configmap cache: timed out waiting for the condition"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/recommendation"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      }
+    ],
+    "confidence": "VERIFIED",
+    "evidence": [
+      {
+        "at": "2025-12-15T17:48:59.342089Z",
+        "details": {
+          "changed_keys": [
+            "demo.flagd.json"
+          ],
+          "changed_paths": [
+            ".data.demo.flagd.json"
+          ],
+          "excerpts": {
+            "demo.flagd.json": {
+              "changed_paths": ".flags.adFailure.defaultVariant"
+            }
+          },
+          "previous_observed_at": "2025-12-15T17:28:59.327655+00:00"
+        },
+        "entity": {
+          "kind": "ConfigMap",
+          "name": "flagd-config",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_objects_raw.tsv:196",
+          "k8s_objects_raw.tsv:2890"
+        ],
+        "kind": "CONFIG_CHANGE",
+        "related": [],
+        "summary": "ConfigMap data changed: demo.flagd.json"
+      }
+    ],
+    "incident_id": "Scenario-5",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Revert ConfigMap flagd-config (demo.flagd.json) to its previous version; then restart flagd if they do not reload config",
+        "command": "kubectl get configmap/flagd-config -n otel-demo -o yaml  # compare with the previous version, then kubectl apply",
+        "requires_approval": true,
+        "risk": "low: restores the last known configuration"
+      }
+    ],
+    "root_cause": {
+      "kind": "ConfigMap",
+      "name": "flagd-config",
+      "namespace": "otel-demo"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "4 diagnostic alert type(s) on ad, fraud-detection, frontend, frontend-proxy, prometheus-kube-prometheus-kubelet, recommendation; 210 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "16 finding(s) over 668 object(s) and 389 event(s); 530 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "otel-demo/ConfigMap/flagd-config 8.5; otel-demo/Deployment/ad 7.0; otel-demo/Pod/ad-554b849958-w5fhc 5.2; otel-demo/Pod/frontend-proxy-6b4d584985-kxdcl 5.2; otel-demo/Pod/otel-collector-564d9c7987-chphh 4.9"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "VERIFIED: configuration changed near onset and is used by or names an alerting component"
+      }
+    ],
+    "summary": "otel-demo/ConfigMap/flagd-config: ConfigMap data changed: demo.flagd.json. Verified (configuration changed near onset and is used by or names an alerting component). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/fraud-detection, otel-demo/Deployment/frontend.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "NoRequestsDetected",
+        "PendingPodsDetected",
+        "RequestErrorRate"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 36,
+        "KubeClientCertificateExpiration": 34,
+        "KubeControllerManagerDown": 32,
+        "KubeSchedulerDown": 32,
+        "PrometheusNotConnectedToAlertmanagers": 36,
+        "Watchdog": 40
+      },
+      "last_seen": "2025-12-15T18:08:13.894961Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T17:24:20.347555Z",
+      "services": [
+        "ad",
+        "fraud-detection",
+        "frontend",
+        "frontend-proxy",
+        "prometheus-kube-prometheus-kubelet",
+        "recommendation"
+      ]
+    }
+  }
+}

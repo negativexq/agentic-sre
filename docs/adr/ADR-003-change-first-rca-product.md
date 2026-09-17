@@ -40,7 +40,7 @@ broke, and what is the evidence?*
 
 ## Consequences
 
-- The engine runs offline in about half a second per incident and is fully
+- The engine runs offline in one to two seconds per ITBench snapshot and is fully
   unit tested; model quality is an add-on, not a dependency.
 - The control plane needs read access to objects and events (never Secrets)
   and keeps a journal of object versions to see changes.

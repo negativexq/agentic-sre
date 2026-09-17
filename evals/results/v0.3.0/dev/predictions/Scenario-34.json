@@ -1,0 +1,286 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "LIKELY: otel-demo/Pod/valkey-cart-58df56c79c-bf4lr: cart logged 67 connection error(s) and depends on valkey-cart: Wasn't able to connect to redis. Likely (strong signal with a structural link, no verifying rule). Linked to otel-demo/Deployment/accounting, otel-demo/Deployment/cart, otel-demo/Deployment/checkout.",
+        "entity": {
+          "kind": "Pod",
+          "name": "valkey-cart-58df56c79c-bf4lr",
+          "namespace": "otel-demo"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-34",
+    "native_terminal": "LIKELY",
+    "reasoning": "otel-demo/Pod/valkey-cart-58df56c79c-bf4lr: cart logged 67 connection error(s) and depends on valkey-cart: Wasn't able to connect to redis. Likely (strong signal with a structural link, no verifying rule). Linked to otel-demo/Deployment/accounting, otel-demo/Deployment/cart, otel-demo/Deployment/checkout.",
+    "scenario_id": "Scenario-34"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "cart-9fd895bb7-kg98s",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:53:24Z",
+            "details": {
+              "count": 59,
+              "reason": "FailedKillPod"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "cart-9fd895bb7-kg98s",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:394",
+              "k8s_events_raw.tsv:853"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedKillPod x59: error killing pod: [failed to \"KillContainer\" for \"cart\" with KillContainerError: \"rpc error: code = DeadlineExceeded desc = context deadline exceeded\", failed "
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/cart",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/currency",
+          "otel-demo/Deployment/email"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 6.5
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-vpmw7",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:17:28Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-vpmw7",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:590"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: Get \"http://100.96.1.218:13133/\": dial tcp 100.96.1.218:13133: connect: connection refused"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/cart",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/currency",
+          "otel-demo/Deployment/email"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "product-catalog-7c7f8b68dc-cjqmd",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:17:24Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedMount"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "product-catalog-7c7f8b68dc-cjqmd",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:624"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedMount x1: MountVolume.SetUp failed for volume \"product-catalog-products\" : failed to sync configmap cache: timed out waiting for the condition"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/cart",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/currency",
+          "otel-demo/Deployment/email"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.75
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "topology-monitor-0",
+          "namespace": "kube-system"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:30:05Z",
+            "details": {
+              "count": 9,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "topology-monitor-0",
+              "namespace": "kube-system"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:8",
+              "k8s_events_raw.tsv:10",
+              "k8s_events_raw.tsv:102",
+              "k8s_events_raw.tsv:104"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "Unhealthy x9: Startup probe failed: dial tcp 100.96.3.36:7474: connect: connection refused"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 0.75
+      }
+    ],
+    "confidence": "LIKELY",
+    "evidence": [
+      {
+        "at": "2025-12-15T17:57:11.241178Z",
+        "details": {
+          "caller": "otel-demo/Deployment/cart",
+          "dependencies_of_caller": 3,
+          "errors": 67,
+          "service": "otel-demo/Service/valkey-cart"
+        },
+        "entity": {
+          "kind": "Pod",
+          "name": "valkey-cart-58df56c79c-bf4lr",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "otel_logs_raw.tsv:64188",
+          "otel_logs_raw.tsv:64283",
+          "otel_logs_raw.tsv:64332",
+          "otel_logs_raw.tsv:64433"
+        ],
+        "kind": "DEPENDENCY_ERRORS",
+        "related": [
+          {
+            "kind": "Service",
+            "name": "valkey-cart",
+            "namespace": "otel-demo"
+          }
+        ],
+        "summary": "cart logged 67 connection error(s) and depends on valkey-cart: Wasn't able to connect to redis"
+      }
+    ],
+    "incident_id": "Scenario-34",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Inspect valkey-cart-58df56c79c-bf4lr, then restart deployment/valkey-cart -n otel-demo if it stays unhealthy",
+        "command": "kubectl describe pod/valkey-cart-58df56c79c-bf4lr -n otel-demo && kubectl rollout restart deployment/valkey-cart -n otel-demo",
+        "requires_approval": true,
+        "risk": "medium: restart drops in-flight requests"
+      }
+    ],
+    "root_cause": {
+      "kind": "Pod",
+      "name": "valkey-cart-58df56c79c-bf4lr",
+      "namespace": "otel-demo"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "4 diagnostic alert type(s) on accounting, cart, checkout, currency, email, fraud-detection; 191 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "8 finding(s) over 672 object(s) and 377 event(s); 530 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "otel-demo/Pod/valkey-cart-58df56c79c-bf4lr 8.0; otel-demo/Pod/cart-9fd895bb7-kg98s 6.5; otel-demo/Pod/otel-collector-564d9c7987-vpmw7 4.9; otel-demo/Pod/product-catalog-7c7f8b68dc-cjqmd 4.8; kube-system/Pod/topology-monitor-0 0.8"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "LIKELY: strong signal with a structural link, no verifying rule"
+      }
+    ],
+    "summary": "otel-demo/Pod/valkey-cart-58df56c79c-bf4lr: cart logged 67 connection error(s) and depends on valkey-cart: Wasn't able to connect to redis. Likely (strong signal with a structural link, no verifying rule). Linked to otel-demo/Deployment/accounting, otel-demo/Deployment/cart, otel-demo/Deployment/checkout.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "NoRequestsDetected",
+        "RequestErrorRate",
+        "RequestLatency"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 33,
+        "KubeClientCertificateExpiration": 44,
+        "KubeControllerManagerDown": 25,
+        "KubeSchedulerDown": 25,
+        "PrometheusNotConnectedToAlertmanagers": 30,
+        "Watchdog": 34
+      },
+      "last_seen": "2025-12-15T18:04:35.424627Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T17:26:52.616212Z",
+      "services": [
+        "accounting",
+        "cart",
+        "checkout",
+        "currency",
+        "email",
+        "fraud-detection",
+        "frontend",
+        "frontend-proxy",
+        "payment",
+        "prometheus-kube-prometheus-kubelet",
+        "quote",
+        "shipping"
+      ]
+    }
+  }
+}

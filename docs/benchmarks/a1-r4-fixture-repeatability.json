@@ -1,0 +1,80 @@
+{
+  "artifact_type": "A1_R4_FIXTURE_REPEATABILITY",
+  "generated_at": "2026-09-14T02:21:03.281948+00:00",
+  "model_calls": 0,
+  "pass_count": 5,
+  "plans": [
+    {
+      "fixture": "payment_config_change",
+      "repeat_count": 5
+    }
+  ],
+  "record_count": 5,
+  "records": [
+    {
+      "alert_resolved": true,
+      "baseline_restored": true,
+      "cleanup": true,
+      "error": null,
+      "fixture": "payment_config_change",
+      "incident": true,
+      "prometheus_firing": null,
+      "repeat": 1,
+      "scenario_id": "V020-010",
+      "status": "PASS",
+      "stimulus": null
+    },
+    {
+      "alert_resolved": true,
+      "baseline_restored": true,
+      "cleanup": true,
+      "error": null,
+      "fixture": "payment_config_change",
+      "incident": true,
+      "prometheus_firing": null,
+      "repeat": 2,
+      "scenario_id": "V020-010",
+      "status": "PASS",
+      "stimulus": null
+    },
+    {
+      "alert_resolved": true,
+      "baseline_restored": true,
+      "cleanup": true,
+      "error": null,
+      "fixture": "payment_config_change",
+      "incident": true,
+      "prometheus_firing": null,
+      "repeat": 3,
+      "scenario_id": "V020-010",
+      "status": "PASS",
+      "stimulus": null
+    },
+    {
+      "alert_resolved": true,
+      "baseline_restored": true,
+      "cleanup": true,
+      "error": null,
+      "fixture": "payment_config_change",
+      "incident": true,
+      "prometheus_firing": null,
+      "repeat": 4,
+      "scenario_id": "V020-010",
+      "status": "PASS",
+      "stimulus": null
+    },
+    {
+      "alert_resolved": true,
+      "baseline_restored": true,
+      "cleanup": true,
+      "error": null,
+      "fixture": "payment_config_change",
+      "incident": true,
+      "prometheus_firing": null,
+      "repeat": 5,
+      "scenario_id": "V020-010",
+      "status": "PASS",
+      "stimulus": null
+    }
+  ]
+}

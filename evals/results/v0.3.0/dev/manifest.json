@@ -1,0 +1,95 @@
+{
+  "benchmark": "ITBench-Lite SRE",
+  "created_at": "2026-09-17T04:37:04.398067+00:00",
+  "engine_config": {
+    "alternatives": 4,
+    "ranking": {
+      "distance_bonus": [
+        3.0,
+        2.5,
+        2.0,
+        1.0
+      ],
+      "extra_finding_weight": 0.3,
+      "grace": "0:30:00",
+      "in_window_bonus": 1.0,
+      "lookback": "2:00:00",
+      "mention_bonus": 2.0,
+      "namespace_bonus": 1.5,
+      "symptom_event_factor": 0.5,
+      "unlinked_penalty": 2.0,
+      "verify_score": 7.0
+    }
+  },
+  "git_dirty": false,
+  "git_head": "1f3a6487172d3a6736f76b1a39461696a2815504",
+  "ground_truth_read_during_prediction": false,
+  "mode": "deterministic",
+  "model_calls_total": 0,
+  "records": [
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-4",
+      "seconds": 1.667
+    },
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-7",
+      "seconds": 1.341
+    },
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-8",
+      "seconds": 1.483
+    },
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-11",
+      "seconds": 1.311
+    },
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-12",
+      "seconds": 1.67
+    },
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-17",
+      "seconds": 1.322
+    },
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-21",
+      "seconds": 1.454
+    },
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-29",
+      "seconds": 1.526
+    },
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-34",
+      "seconds": 1.062
+    },
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-91",
+      "seconds": 1.742
+    }
+  ],
+  "scenario_ids": [
+    "Scenario-4",
+    "Scenario-7",
+    "Scenario-8",
+    "Scenario-11",
+    "Scenario-12",
+    "Scenario-17",
+    "Scenario-21",
+    "Scenario-29",
+    "Scenario-34",
+    "Scenario-91"
+  ],
+  "seconds_total": 14.617,
+  "split": "dev"
+}

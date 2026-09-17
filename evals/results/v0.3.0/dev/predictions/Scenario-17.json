@@ -1,0 +1,345 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "VERIFIED: chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-26dqc: NetworkChaos applied fault (1 application(s)). Verified (fault injection targets an alerting component). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+        "entity": {
+          "kind": "NetworkChaos",
+          "name": "otel-demo-product-catalog-network-delay-26dqc",
+          "namespace": "chaos-mesh"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-17",
+    "native_terminal": "VERIFIED",
+    "reasoning": "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-26dqc: NetworkChaos applied fault (1 application(s)). Verified (fault injection targets an alerting component). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+    "scenario_id": "Scenario-17"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "entity": {
+          "kind": "Schedule",
+          "name": "otel-demo-product-catalog-network-delay",
+          "namespace": "chaos-mesh"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T18:00:00Z",
+            "details": {
+              "failed_applications": 0,
+              "first_at": "2025-12-15T16:28:00+00:00",
+              "last_at": "2025-12-15T18:00:00+00:00",
+              "reasons": {
+                "Spawned": 25,
+                "Updated": 26
+              },
+              "targets": [
+                "otel-demo/Pod/product-catalog-7c7f8b68dc-7rqh9",
+                "otel-demo/Pod/product-catalog-7c7f8b68dc-p564n"
+              ]
+            },
+            "entity": {
+              "kind": "Schedule",
+              "name": "otel-demo-product-catalog-network-delay",
+              "namespace": "chaos-mesh"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:37",
+              "k8s_events_raw.tsv:38",
+              "k8s_events_raw.tsv:40",
+              "k8s_events_raw.tsv:82",
+              "k8s_events_raw.tsv:83",
+              "k8s_events_raw.tsv:216"
+            ],
+            "kind": "FAULT_SCHEDULE",
+            "related": [
+              {
+                "kind": "Pod",
+                "name": "product-catalog-7c7f8b68dc-7rqh9",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "product-catalog-7c7f8b68dc-p564n",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "chaos schedule spawned 25 experiment(s)"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/postgresql",
+          "otel-demo/Deployment/product-catalog"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 9.0
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "recommendation-5f45f75855-tvqbl",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:16:09Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedMount"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "recommendation-5f45f75855-tvqbl",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1191"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedMount x1: MountVolume.SetUp failed for volume \"kube-api-access-vpwjj\" : failed to sync configmap cache: timed out waiting for the condition"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/postgresql",
+          "otel-demo/Deployment/product-catalog"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.25
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "load-generator-57ffcd644-4jmc9",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:16:08Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedMount"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "load-generator-57ffcd644-4jmc9",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1112"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedMount x1: MountVolume.SetUp failed for volume \"kube-api-access-6lxxl\" : failed to sync configmap cache: timed out waiting for the condition"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/postgresql",
+          "otel-demo/Deployment/product-catalog"
+        ],
+        "reasons": [
+          "1 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.0
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-rhgn4",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:16:13Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-rhgn4",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1134"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: Get \"http://100.96.4.64:13133/\": dial tcp 100.96.4.64:13133: connect: connection refused"
+          },
+          {
+            "at": "2025-12-15T17:16:08Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedMount"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-rhgn4",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1127"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedMount x1: MountVolume.SetUp failed for volume \"kube-api-access-8f6l6\" : failed to sync configmap cache: timed out waiting for the condition"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/postgresql",
+          "otel-demo/Deployment/product-catalog"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      }
+    ],
+    "confidence": "VERIFIED",
+    "evidence": [
+      {
+        "at": "2025-12-15T18:00:00Z",
+        "details": {
+          "failed_applications": 0,
+          "first_at": "2025-12-15T17:59:00+00:00",
+          "last_at": "2025-12-15T18:00:00+00:00",
+          "reasons": {
+            "Applied": 1,
+            "FinalizerInited": 2,
+            "Recovered": 1,
+            "Started": 1,
+            "TimeUp": 1,
+            "Updated": 8
+          },
+          "targets": [
+            "otel-demo/Pod/product-catalog-7c7f8b68dc-7rqh9"
+          ]
+        },
+        "entity": {
+          "kind": "NetworkChaos",
+          "name": "otel-demo-product-catalog-network-delay-26dqc",
+          "namespace": "chaos-mesh"
+        },
+        "evidence_ids": [
+          "k8s_events_raw.tsv:1657",
+          "k8s_events_raw.tsv:1659",
+          "k8s_events_raw.tsv:1661",
+          "k8s_events_raw.tsv:1663",
+          "k8s_events_raw.tsv:1666",
+          "k8s_events_raw.tsv:1670"
+        ],
+        "kind": "FAULT_INJECTION",
+        "related": [
+          {
+            "kind": "Pod",
+            "name": "product-catalog-7c7f8b68dc-7rqh9",
+            "namespace": "otel-demo"
+          }
+        ],
+        "summary": "NetworkChaos applied fault (1 application(s))"
+      }
+    ],
+    "incident_id": "Scenario-17",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Pause the fault experiment Schedule otel-demo-product-catalog-network-delay",
+        "command": "kubectl annotate schedule/otel-demo-product-catalog-network-delay -n chaos-mesh experiment.chaos-mesh.org/pause=true --overwrite",
+        "requires_approval": true,
+        "risk": "low: stops further fault injection"
+      },
+      {
+        "action": "Delete the running experiment NetworkChaos otel-demo-product-catalog-network-delay-26dqc",
+        "command": "kubectl delete networkchaos/otel-demo-product-catalog-network-delay-26dqc -n chaos-mesh",
+        "requires_approval": true,
+        "risk": "low: removes the active fault"
+      }
+    ],
+    "root_cause": {
+      "kind": "NetworkChaos",
+      "name": "otel-demo-product-catalog-network-delay-26dqc",
+      "namespace": "chaos-mesh"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "5 diagnostic alert type(s) on checkout, frontend, frontend-proxy, product-catalog, prometheus-kube-prometheus-kubelet, recommendation; 203 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "42 finding(s) over 725 object(s) and 811 event(s); 629 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-26dqc 12.5; chaos-mesh/Schedule/otel-demo-product-catalog-network-delay 9.0; otel-demo/Pod/recommendation-5f45f75855-tvqbl 5.2; otel-demo/Pod/load-generator-57ffcd644-4jmc9 5.0; otel-demo/Pod/otel-collector-564d9c7987-rhgn4 4.9"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "VERIFIED: fault injection targets an alerting component"
+      }
+    ],
+    "summary": "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-26dqc: NetworkChaos applied fault (1 application(s)). Verified (fault injection targets an alerting component). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "KafkaConnectionClosureRate",
+        "NoRequestsDetected",
+        "RequestErrorRate",
+        "RequestLatency"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 33,
+        "KubeClientCertificateExpiration": 36,
+        "KubeControllerManagerDown": 30,
+        "KubeSchedulerDown": 31,
+        "PrometheusNotConnectedToAlertmanagers": 35,
+        "Watchdog": 38
+      },
+      "last_seen": "2025-12-15T18:06:56.632268Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T17:33:01.200506Z",
+      "services": [
+        "checkout",
+        "frontend",
+        "frontend-proxy",
+        "product-catalog",
+        "prometheus-kube-prometheus-kubelet",
+        "recommendation"
+      ]
+    }
+  }
+}

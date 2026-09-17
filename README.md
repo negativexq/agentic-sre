@@ -17,15 +17,15 @@ and every miss: [`evals/results/v0.5.0`](evals/results/v0.5.0/README.md).
 | Run | Split | Scenarios | Macro F1 | Root cause ranked first | In top 3 | Model calls |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | **Engine v0.5.0** (run once) | Test | 25 | **0.68** | 68% | 80% | 0 |
+| Engine v0.5.0 + LLM investigator | Test | 25 | 0.64 | 64% | 80% | 44 |
 | Engine v0.4.0 (run once) | Test | 25 | 0.64 | 64% | 76% | 0 |
-| Engine v0.4.0 + LLM investigator (run once) | Test | 25 | 0.64 | 64% | 76% | 50 |
 | Engine v0.5.0 (used for tuning) | Dev | 10 | 0.90 | 90% | 90% | 0 |
 | Previous LLM agent (E10) | All | 35 | 0.00 | — | — | — |
 
 On the v0.5.0 test split, 16 of 23 answers labelled `VERIFIED` were correct.
 Part of the gain comes from rules chosen after reading v0.4.0 test misses;
-the results page discloses which. In v0.4.0 the LLM investigator agreed with
-the engine in 23 of 25 scenarios and did not change the score, so the
+the results page discloses which. The LLM investigator agreed with the engine
+in 23 of 25 scenarios and lost one correct answer (Scenario-31), so the
 deterministic engine is the default. Three test scenarios cannot be scored by
 the published label filters; see [`evals/README.md`](evals/README.md) for the
 method and a disclosure of prior exposure to this dataset.
@@ -114,7 +114,7 @@ the incident page shows the diagnosis. `make recover` rolls back;
 `make rbac-check` confirms the control plane can read but not write.
 
 The LLM investigator is off by default. To enable it, set
-`SRE_LLM_ENABLED=true`, a call budget in `SRE_LLM_MAX_CALLS`, and
+`SRE_LLM_ENABLED=true`, a total call budget for the process in `SRE_LLM_MAX_CALLS` (a test-split run uses about 50), and
 `OPENAI_API_KEY`; the CLI takes `--llm`.
 
 ## Repository

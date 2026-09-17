@@ -141,6 +141,7 @@ def predict(
         "git_head": _git_head(),
         "git_dirty": _git_dirty(),
         "mode": investigator.name if investigator else "deterministic",
+        "model": getattr(getattr(investigator, "client", None), "model", None),
         "engine_config": json.loads(json.dumps(asdict(config), default=str)),
         "ground_truth_read_during_prediction": False,
         "seconds_total": round(time.monotonic() - started, 3),
@@ -243,6 +244,7 @@ def grade(dataset: ITBenchLiteDataset, out_dir: Path) -> dict[str, Any]:
         "benchmark": manifest["benchmark"],
         "split": manifest["split"],
         "mode": manifest["mode"],
+        "model": manifest.get("model"),
         "git_head": manifest["git_head"],
         "git_dirty": manifest["git_dirty"],
         "scenarios": count,
@@ -273,7 +275,9 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines = [
         f"# {report['benchmark']} — {report['split']} split",
         "",
-        f"Mode `{report['mode']}`, commit `{report['git_head'][:12]}`"
+        f"Mode `{report['mode']}`"
+        + (f" (`{report['model']}`)" if report.get("model") else "")
+        + f", commit `{report['git_head'][:12]}`"
         + (" (dirty tree)" if report["git_dirty"] else "")
         + f", {report['scenarios']} scenarios, {report['model_calls_total']} model calls, "
         f"{report['seconds_total']:.1f} s.",

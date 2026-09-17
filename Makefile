@@ -47,14 +47,17 @@ itbench-setup:
 itbench-index:
 	$(PY) scripts/itbench_lite_build_index.py
 
+# EVAL_FLAGS=--llm adds the LLM investigator (needs SRE_LLM_* and OPENAI_API_KEY).
+EVAL_FLAGS ?=
+
 eval-dev:
-	$(CLI) eval --split dev --out .local/runs/dev-$(RUN_ID)
+	$(CLI) eval --split dev $(EVAL_FLAGS) --out .local/runs/dev-$(RUN_ID)
 
 # Test-split numbers are published once per tagged release (see evals/README.md).
 eval-test:
 	test -z "$$(git status --porcelain -- apps packages)"
 	git describe --exact-match --tags HEAD
-	$(CLI) eval --split test --confirm-test --out .local/runs/test-$$(git describe --tags)-$(RUN_ID)
+	$(CLI) eval --split test --confirm-test $(EVAL_FLAGS) --out .local/runs/test-$$(git describe --tags)$(if $(EVAL_FLAGS),-llm)-$(RUN_ID)
 
 # --- live demo on kind ---------------------------------------------------------
 

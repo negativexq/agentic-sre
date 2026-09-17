@@ -55,6 +55,7 @@ def test_prediction_never_reads_truth_and_grading_reports_the_funnel(tmp_path: P
     assert dataset.truth_reads == 0
     assert manifest["ground_truth_read_during_prediction"] is False
     assert manifest["model_calls_total"] == 0
+    assert manifest["mode"] == "deterministic" and manifest["model"] is None
     report = grade(cast(ITBenchLiteDataset, dataset), out)
     assert report["macro_f1"] == 1.0
     assert report["verified_macro_f1"] == 1.0

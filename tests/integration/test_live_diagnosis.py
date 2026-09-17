@@ -161,6 +161,20 @@ class ScopedCluster(FakeCluster):
         return ObjectListing(tuple(bodies), frozenset(completed), failures)
 
 
+class PartialWorkloadCluster(FakeCluster):
+    """Reader double with one failed workload scope and one successful scope."""
+
+    def list_objects(self, namespaces: Sequence[str]) -> ObjectListing:
+        del namespaces
+        deployment_scope = ListingScope("sre-demo", "Deployment")
+        service_scope = ListingScope("sre-demo", "Service")
+        return ObjectListing(
+            (),
+            frozenset({service_scope}),
+            (ListingFailure(deployment_scope, "timeout"),),
+        )
+
+
 class Clock:
     def __init__(self) -> None:
         self.now = T0
@@ -338,6 +352,38 @@ def test_successful_empty_object_scope_records_a_tombstone(setup: Any) -> None:
             namespaces={"chaos-mesh"}, starts_at=T0, ends_at=T0 + timedelta(hours=1)
         )
     assert [entry.lifecycle.value for entry in history] == ["OBSERVED", "DELETED"]
+
+
+def test_failed_workload_scope_does_not_hide_real_deletion_in_completed_scope(setup: Any) -> None:
+    factory, _cluster, clock, _incident = setup
+    cluster = PartialWorkloadCluster()
+    with factory() as session:
+        repository = ObjectVersionRepository(session)
+        repository.record(_deployment("0"), T0)
+        repository.record(cluster.objects[2], T0)
+    service = DiagnosisService(
+        session_factory=factory, namespaces=("sre-demo",), reader=cluster, clock=clock
+    )
+    service.snapshot()
+    with factory() as session:
+        deployments = ObjectVersionRepository(session).history(
+            namespaces={"sre-demo"},
+            starts_at=T0,
+            ends_at=T0 + timedelta(hours=1),
+        )
+        services = ObjectVersionRepository(session).history(
+            namespaces={"sre-demo"},
+            starts_at=T0,
+            ends_at=T0 + timedelta(hours=1),
+        )
+    deployment_history = [entry for entry in deployments if "/Deployment/" in entry.object_key]
+    service_history = [entry for entry in services if "/Service/" in entry.object_key]
+    assert [entry.lifecycle.value for entry in deployment_history] == ["OBSERVED"]
+    assert [entry.lifecycle.value for entry in service_history] == ["OBSERVED", "DELETED"]
+    assert service.last_snapshot_result is not None
+    assert service.last_snapshot_result.failed_scopes[0].scope == ListingScope(
+        "sre-demo", "Deployment"
+    )
 
 
 def test_journal_records_a_rollback_that_repeats_earlier_content(setup: Any) -> None:

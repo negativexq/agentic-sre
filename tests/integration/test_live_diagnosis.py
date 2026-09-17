@@ -197,6 +197,28 @@ def test_journal_stores_only_content_changes(setup: Any) -> None:
     assert [entry.observed_at for entry in history] == [T0, T0 + timedelta(minutes=2)]
 
 
+def test_event_listing_failure_keeps_object_journal_consistent(setup: Any) -> None:
+    factory, cluster, clock, _incident = setup
+    original = cluster.list_events
+
+    def fail_events(namespaces: Sequence[str]) -> list[dict[str, Any]]:
+        del namespaces
+        raise RuntimeError("event API unavailable")
+
+    cluster.list_events = fail_events
+    service = DiagnosisService(
+        session_factory=factory, namespaces=("sre-demo",), reader=cluster, clock=clock
+    )
+    assert service.snapshot() == 5
+    with factory() as session:
+        repository = ObjectVersionRepository(session)
+        history = repository.history(
+            namespaces={"sre-demo"}, starts_at=T0, ends_at=T0 + timedelta(minutes=1)
+        )
+    cluster.list_events = original
+    assert len(history) == 5
+
+
 def test_journal_records_a_rollback_that_repeats_earlier_content(setup: Any) -> None:
     """A -> B -> A must not collide on the old (object_key, content_hash) uniqueness."""
     factory, _cluster, _clock, _incident = setup
@@ -393,6 +415,60 @@ def test_resolved_incident_window_is_frozen_at_its_resolution(setup: Any) -> Non
             namespaces={"sre-demo"}, starts_at=T0, ends_at=T0 + timedelta(hours=4)
         )
     assert any(entry.observed_at == T0 + timedelta(hours=3) for entry in history)
+
+
+def test_resolved_replay_excludes_event_state_observed_after_resolution(
+    setup: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    factory, cluster, clock, incident_id = setup
+    event = {
+        "kind": "Event",
+        "metadata": {"name": "checkout-backoff.sre-demo", "namespace": "sre-demo", "uid": "e1"},
+        "involvedObject": {
+            "kind": "Pod",
+            "name": "checkout-1",
+            "namespace": "sre-demo",
+            "uid": "p1",
+        },
+        "reason": "BackOff",
+        "type": "Warning",
+        "message": "back-off restarting failed container",
+        "firstTimestamp": (T0 + timedelta(minutes=2)).isoformat(),
+        "lastTimestamp": (T0 + timedelta(minutes=2)).isoformat(),
+        "count": 1,
+    }
+    cluster.events = [event]
+    service = DiagnosisService(
+        session_factory=factory, namespaces=("sre-demo",), reader=cluster, clock=clock
+    )
+    assert service.snapshot() == 6
+    resolved_at = T0 + timedelta(minutes=15)
+    with factory() as session:
+        row = session.get(IncidentRow, incident_id)
+        assert row is not None
+        row.status = "CLOSED"
+        row.updated_at = resolved_at
+        session.commit()
+
+    late = dict(event)
+    late["lastTimestamp"] = (T0 + timedelta(minutes=30)).isoformat()
+    late["count"] = 20
+    cluster.events = [late]
+    clock.now = T0 + timedelta(minutes=30)
+    captured: dict[str, list[Any]] = {}
+
+    import importlib
+
+    diagnosis_module = importlib.import_module("apps.control_plane.diagnosis")
+    original = diagnosis_module.diagnose
+
+    def spy(source: Any, **kwargs: Any) -> Any:
+        captured["events"] = list(source.events())
+        return original(source, **kwargs)
+
+    monkeypatch.setattr(diagnosis_module, "diagnose", spy)
+    service.run(incident_id)
+    assert [item.count for item in captured["events"]] == [1]
 
 
 def test_concurrent_snapshots_are_serialized(setup: Any) -> None:

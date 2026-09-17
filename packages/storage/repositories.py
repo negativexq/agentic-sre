@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -321,6 +323,60 @@ class EvidenceRepository:
         ]
 
 
+def event_identity(body: dict[str, Any], namespace: str) -> str:
+    """Return a stable logical identity, separate from an observed version key.
+
+    Kubernetes ``metadata.uid`` is the preferred identity.  Older or synthetic
+    Event payloads may omit it, so the fallback uses stable object/source
+    fields and deliberately excludes mutable ``count`` and timestamp fields.
+    """
+    metadata = child(body, "metadata")
+    uid = metadata.get("uid")
+    if isinstance(uid, str) and uid:
+        return f"uid:{namespace}:{uid}"
+    involved = child(body, "involvedObject")
+    source = body.get("source")
+    source_component = source.get("component") if isinstance(source, dict) else None
+    stable = {
+        "namespace": namespace,
+        "involved_uid": involved.get("uid"),
+        "involved_kind": involved.get("kind"),
+        "involved_name": involved.get("name"),
+        "reason": body.get("reason"),
+        "reporting_component": body.get("reportingComponent") or source_component,
+        "event_name": metadata.get("name"),
+    }
+    encoded = json.dumps(stable, sort_keys=True, separators=(",", ":"))
+    return f"fallback:{hashlib.sha256(encoded.encode()).hexdigest()}"
+
+
+def event_version_key(identity: str, body: dict[str, Any]) -> str:
+    """Hash the stable mutable Event state to key an append-only observation."""
+    metadata = child(body, "metadata")
+    involved = child(body, "involvedObject")
+    source = body.get("source")
+    stable_state = {
+        "identity": identity,
+        "count": body.get("count"),
+        "firstTimestamp": body.get("firstTimestamp"),
+        "lastTimestamp": body.get("lastTimestamp"),
+        "eventTime": body.get("eventTime"),
+        "reason": body.get("reason"),
+        "type": body.get("type"),
+        "message": body.get("message"),
+        "involvedObject": {
+            "uid": involved.get("uid"),
+            "kind": involved.get("kind"),
+            "name": involved.get("name"),
+        },
+        "reportingComponent": body.get("reportingComponent"),
+        "source": source,
+        "event_name": metadata.get("name"),
+    }
+    encoded = json.dumps(stable_state, sort_keys=True, separators=(",", ":"), default=str)
+    return f"{identity}|{hashlib.sha256(encoded.encode()).hexdigest()}"
+
+
 class EventRepository:
     """Append-only journal of observed Kubernetes events.
 
@@ -339,8 +395,8 @@ class EventRepository:
         if not isinstance(kind, str) or not isinstance(name, str):
             return False
         namespace = str(involved.get("namespace") or CLUSTER_SCOPE)
-        metadata = child(body, "metadata")
-        key = f"{metadata.get('uid') or metadata.get('name') or ''}|{body.get('count')}|{body.get('lastTimestamp')}"
+        identity = event_identity(body, namespace)
+        key = event_version_key(identity, body)
         exists = self._session.scalar(
             select(EventVersionRow.version_id).where(
                 EventVersionRow.namespace == namespace, EventVersionRow.dedup_key == key
@@ -368,20 +424,59 @@ class EventRepository:
         self._session.commit()
         return True
 
-    def history(
+    def history_versions(
         self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
     ) -> list[dict[str, Any]]:
-        """Event bodies observed in the window, oldest first."""
+        """Return every persisted Event version observed by the cutoff.
+
+        ``event_at`` describes when Kubernetes says the Event occurred.  It is
+        not the replay boundary: an Event can be updated after an incident has
+        resolved while retaining an old ``firstTimestamp``.  The lower bound
+        keeps the incident lookback useful for Events whose occurrence began
+        before the window but whose state was first observed during it.
+        """
         rows = self._session.scalars(
             select(EventVersionRow)
             .where(
                 EventVersionRow.namespace.in_(namespaces),
-                EventVersionRow.event_at >= starts_at,
-                EventVersionRow.event_at <= ends_at,
+                EventVersionRow.observed_at <= ends_at,
+                (EventVersionRow.event_at >= starts_at)
+                | (EventVersionRow.observed_at >= starts_at),
             )
-            .order_by(EventVersionRow.event_at, EventVersionRow.version_id)
+            .order_by(EventVersionRow.observed_at, EventVersionRow.version_id)
         ).all()
         return [dict(row.body) for row in rows]
+
+    def analysis_view(
+        self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
+    ) -> list[dict[str, Any]]:
+        """Return the latest visible state of each logical Kubernetes Event.
+
+        The append-only journal is deliberately kept separate from this view:
+        coalesced Kubernetes updates remain available for provenance, while
+        RCA receives one state per stable Event identity at the frozen cutoff.
+        """
+        rows = self._session.scalars(
+            select(EventVersionRow)
+            .where(
+                EventVersionRow.namespace.in_(namespaces),
+                EventVersionRow.observed_at <= ends_at,
+                (EventVersionRow.event_at >= starts_at)
+                | (EventVersionRow.observed_at >= starts_at),
+            )
+            .order_by(EventVersionRow.observed_at, EventVersionRow.version_id)
+        ).all()
+        latest: dict[str, EventVersionRow] = {}
+        for row in rows:
+            identity = event_identity(row.body, row.namespace)
+            latest[identity] = row
+        return [dict(row.body) for row in sorted(latest.values(), key=lambda item: item.version_id)]
+
+    def history(
+        self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
+    ) -> list[dict[str, Any]]:
+        """Compatibility name for the deduplicated Event analysis/replay view."""
+        return self.analysis_view(namespaces=namespaces, starts_at=starts_at, ends_at=ends_at)
 
 
 class ObjectVersionRepository:

@@ -77,9 +77,17 @@ class DiagnosisService:
             stored = watcher.snapshot()
             now = self.clock()
             events = EventRepository(session)
-            stored += sum(
-                events.record(body, now) for body in self.reader.list_events(self.namespaces)
-            )
+            try:
+                event_bodies = self.reader.list_events(self.namespaces)
+            except Exception:
+                # Object journaling has already committed its own facts. A
+                # transient Event-list failure is missing evidence, not a
+                # reason to roll back or synthesize object lifecycle state.
+                logger.warning(
+                    "event snapshot failed; continuing without new Events", exc_info=True
+                )
+                event_bodies = []
+            stored += sum(events.record(body, now) for body in event_bodies)
             return stored
 
     def watch(self, stop: threading.Event, interval_seconds: float) -> None:
@@ -129,7 +137,7 @@ class DiagnosisService:
             journal = ObjectVersionRepository(session).history(
                 namespaces=set(self.namespaces), starts_at=starts_at, ends_at=ends_at
             )
-            event_bodies = EventRepository(session).history(
+            event_bodies = EventRepository(session).analysis_view(
                 namespaces=set(self.namespaces), starts_at=starts_at, ends_at=ends_at
             )
         logs = []

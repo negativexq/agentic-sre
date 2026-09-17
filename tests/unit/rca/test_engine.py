@@ -150,6 +150,8 @@ def test_no_signal_returns_explicit_empty_diagnosis() -> None:
     diagnosis = diagnose(source)
     assert diagnosis.root_cause is None
     assert diagnosis.confidence is Confidence.UNVERIFIED
+    assert diagnosis.resolution.value == "INSUFFICIENT_EVIDENCE"
+    assert diagnosis.resolution_trace is not None
 
 
 def test_investigator_cannot_replace_a_verified_answer_with_an_unverified_one() -> None:

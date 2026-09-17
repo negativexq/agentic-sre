@@ -46,7 +46,7 @@ jobs:
         run: |
           curl -fsSL -o ./kind https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64
           curl -fsSL -o ./kind.sha256sum https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64.sha256sum
-          grep 'kind-linux-amd64$' ./kind.sha256sum | sha256sum --check --status -
+          awk '$2 == "kind-linux-amd64" {print $1 "  kind"}' ./kind.sha256sum | sha256sum --check --status -
           chmod +x ./kind
           sudo mv ./kind /usr/local/bin/kind
       - name: Install project

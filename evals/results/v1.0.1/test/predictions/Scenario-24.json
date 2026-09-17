@@ -1,0 +1,333 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "VERIFIED: otel-demo/Deployment/checkout: spec changed: [checkout].env[KAFKA_ADDR].value: kafka:9092 -> kafka:9999. Verified (workload changed in the incident window next to the alerts). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+        "entity": {
+          "kind": "Deployment",
+          "name": "checkout",
+          "namespace": "otel-demo"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-24",
+    "native_terminal": "VERIFIED",
+    "reasoning": "otel-demo/Deployment/checkout: spec changed: [checkout].env[KAFKA_ADDR].value: kafka:9092 -> kafka:9999. Verified (workload changed in the incident window next to the alerts). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+    "scenario_id": "Scenario-24"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "causal_path": [
+          {
+            "direction": "reverse",
+            "relation": "dependency_of",
+            "source": {
+              "kind": "Service",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "accounting",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "Pod",
+          "name": "kafka-ff7884766-ntckh",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:55:37.248930Z",
+            "details": {
+              "caller": "otel-demo/Deployment/checkout",
+              "dependencies_of_caller": 9,
+              "errors": 2,
+              "service": "otel-demo/Service/kafka"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "kafka-ff7884766-ntckh",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "otel_logs_raw.tsv:73235",
+              "otel_logs_raw.tsv:80924"
+            ],
+            "kind": "DEPENDENCY_ERRORS",
+            "related": [
+              {
+                "kind": "Service",
+                "name": "kafka",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "checkout logged 2 connection error(s) and depends on kafka: kafka: client has run out of available brokers to talk to: dial tcp 100.66.162.182:9999: i/o timeout"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Pod/accounting-58d4b6c958-rmc4p"
+        ],
+        "reasons": [
+          "1 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 8.0
+      },
+      {
+        "causal_path": [],
+        "entity": {
+          "kind": "Pod",
+          "name": "checkout-849d65649b-qqtsz",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:57:03Z",
+            "details": {
+              "count": 1,
+              "reason": "BackOff"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "checkout-849d65649b-qqtsz",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:808"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "BackOff x1: Back-off restarting failed container checkout in pod checkout-849d65649b-qqtsz_otel-demo(a2cf8bf6-5298-4831-9c35-e56e345b7901)"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/checkout-5dccddf8bb-9d9c8",
+          "otel-demo/Pod/checkout-849d65649b-qqtsz"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.25
+      },
+      {
+        "causal_path": [
+          {
+            "direction": "reverse",
+            "relation": "serves",
+            "source": {
+              "kind": "Deployment",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "direction": "reverse",
+            "relation": "dependency_of",
+            "source": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "accounting",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-pgrj2",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:16:42Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-pgrj2",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:582"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: Get \"http://100.96.4.161:13133/\": dial tcp 100.96.4.161:13133: connect: connection refused"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/currency",
+          "otel-demo/Deployment/email"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      },
+      {
+        "causal_path": [],
+        "entity": {
+          "kind": "Namespace",
+          "name": "agent",
+          "namespace": "_cluster"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:48:05Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "agent",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:2638"
+            ],
+            "kind": "OBJECT_CREATED",
+            "related": [],
+            "summary": "Namespace created"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 2.0
+      }
+    ],
+    "causal_path": [],
+    "confidence": "VERIFIED",
+    "evidence": [
+      {
+        "at": "2025-12-15T17:52:10.968484Z",
+        "details": {
+          "changed_paths": [
+            ".spec.template.spec.containers[checkout].env[KAFKA_ADDR].value"
+          ],
+          "previous_observed_at": "2025-12-15T17:32:10.174894+00:00"
+        },
+        "entity": {
+          "kind": "Deployment",
+          "name": "checkout",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_objects_raw.tsv:444",
+          "k8s_objects_raw.tsv:3273"
+        ],
+        "kind": "SPEC_CHANGE",
+        "related": [],
+        "summary": "spec changed: [checkout].env[KAFKA_ADDR].value: kafka:9092 -> kafka:9999"
+      }
+    ],
+    "incident_id": "Scenario-24",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Roll back Deployment checkout to the previous revision",
+        "command": "kubectl rollout undo deployment/checkout -n otel-demo",
+        "requires_approval": true,
+        "risk": "medium: reverts every change in the last rollout"
+      }
+    ],
+    "root_cause": {
+      "kind": "Deployment",
+      "name": "checkout",
+      "namespace": "otel-demo"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "6 diagnostic alert type(s) on accounting, ad, checkout, currency, email, fraud-detection; 786 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "11 finding(s) over 671 object(s) and 361 event(s); 542 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "otel-demo/Deployment/checkout 11.5; otel-demo/Pod/kafka-ff7884766-ntckh 8.0; otel-demo/Pod/checkout-849d65649b-qqtsz 5.2; otel-demo/Pod/otel-collector-564d9c7987-pgrj2 4.9; _cluster/Namespace/agent 2.0"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "VERIFIED: workload changed in the incident window next to the alerts"
+      }
+    ],
+    "summary": "otel-demo/Deployment/checkout: spec changed: [checkout].env[KAFKA_ADDR].value: kafka:9092 -> kafka:9999. Verified (workload changed in the incident window next to the alerts). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "CrashLoopBackOffPodsDetected",
+        "KubePodCrashLooping",
+        "NoRequestsDetected",
+        "PendingPodsDetected",
+        "RequestErrorRate"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 109,
+        "KubeClientCertificateExpiration": 78,
+        "KubeControllerManagerDown": 142,
+        "KubeSchedulerDown": 142,
+        "PrometheusNotConnectedToAlertmanagers": 151,
+        "Watchdog": 164
+      },
+      "last_seen": "2025-12-15T18:03:19.038370Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T15:21:30.030908Z",
+      "services": [
+        "accounting",
+        "ad",
+        "checkout",
+        "currency",
+        "email",
+        "fraud-detection",
+        "frontend",
+        "frontend-proxy",
+        "payment",
+        "prometheus-kube-prometheus-kubelet",
+        "prometheus-kube-state-metrics",
+        "quote",
+        "recommendation",
+        "shipping"
+      ]
+    }
+  }
+}

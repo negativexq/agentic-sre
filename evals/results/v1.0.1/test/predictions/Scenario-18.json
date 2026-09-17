@@ -1,0 +1,391 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "VERIFIED: chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-g5vwr: PodChaos applied fault at 16:44 (1 application(s)); schedule otel-demo-product-catalog-network-delay has injected this fault repeatedly from 16:28 to 18:02. Verified (fault injection targets an alerting component). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+        "entity": {
+          "kind": "PodChaos",
+          "name": "otel-demo-product-catalog-network-delay-g5vwr",
+          "namespace": "chaos-mesh"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-18",
+    "native_terminal": "VERIFIED",
+    "reasoning": "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-g5vwr: PodChaos applied fault at 16:44 (1 application(s)); schedule otel-demo-product-catalog-network-delay has injected this fault repeatedly from 16:28 to 18:02. Verified (fault injection targets an alerting component). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+    "scenario_id": "Scenario-18"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "causal_path": [],
+        "entity": {
+          "kind": "Pod",
+          "name": "checkout-5dccddf8bb-9dn2q",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:57:00Z",
+            "details": {
+              "problems": [
+                {
+                  "at": "2025-12-15T17:57:00Z",
+                  "container": "checkout",
+                  "message": "back-off 40s restarting failed container=checkout pod=checkout-5dccddf8bb-9dn2q_otel-demo(6b803e7a-86b0-47d4-b95d-e4c9bee17da2)",
+                  "reason": "CrashLoopBackOff",
+                  "restarts": 8
+                }
+              ],
+              "reason": "CrashLoopBackOff"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "checkout-5dccddf8bb-9dn2q",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:3853"
+            ],
+            "kind": "CONTAINER_FAILURE",
+            "related": [],
+            "summary": "container checkout CrashLoopBackOff (8 restart(s)) back-off 40s restarting failed container=checkout pod=checkout-5dccddf8bb-9dn2q_otel-demo(6b803e7a-86b0-47d4-b95d-e4c9bee17da2)"
+          },
+          {
+            "at": "2025-12-15T18:00:48Z",
+            "details": {
+              "count": 351,
+              "reason": "BackOff"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "checkout-5dccddf8bb-9dn2q",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1395",
+              "k8s_events_raw.tsv:1397",
+              "k8s_events_raw.tsv:1456",
+              "k8s_events_raw.tsv:1458"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "BackOff x351: Back-off restarting failed container checkout in pod checkout-5dccddf8bb-9dn2q_otel-demo(6b803e7a-86b0-47d4-b95d-e4c9bee17da2)"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/checkout-5dccddf8bb-9dn2q",
+          "otel-demo/Pod/frontend-675fd7b5c5-gc9hg"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 10.45
+      },
+      {
+        "causal_path": [],
+        "entity": {
+          "kind": "Schedule",
+          "name": "otel-demo-product-catalog-network-delay",
+          "namespace": "chaos-mesh"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T16:28:00Z",
+            "details": {
+              "failed_applications": 0,
+              "first_at": "2025-12-15T16:28:00+00:00",
+              "last_at": "2025-12-15T18:02:00+00:00",
+              "reasons": {
+                "Spawned": 26,
+                "Updated": 27
+              },
+              "targets": [
+                "otel-demo/Pod/checkout-5dccddf8bb-4vs6w",
+                "otel-demo/Pod/checkout-5dccddf8bb-9dn2q"
+              ]
+            },
+            "entity": {
+              "kind": "Schedule",
+              "name": "otel-demo-product-catalog-network-delay",
+              "namespace": "chaos-mesh"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:26",
+              "k8s_events_raw.tsv:27",
+              "k8s_events_raw.tsv:65",
+              "k8s_events_raw.tsv:66",
+              "k8s_events_raw.tsv:180",
+              "k8s_events_raw.tsv:182"
+            ],
+            "kind": "FAULT_SCHEDULE",
+            "related": [
+              {
+                "kind": "Pod",
+                "name": "checkout-5dccddf8bb-4vs6w",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "checkout-5dccddf8bb-9dn2q",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "chaos schedule injecting faults since 16:28, last run 18:02 (26 experiment(s))"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/checkout-5dccddf8bb-9dn2q",
+          "otel-demo/Pod/frontend-675fd7b5c5-gc9hg"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 9.0
+      },
+      {
+        "causal_path": [
+          {
+            "direction": "reverse",
+            "relation": "serves",
+            "source": {
+              "kind": "Deployment",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "direction": "reverse",
+            "relation": "dependency_of",
+            "source": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "accounting",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-sxzfd",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:16:22Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-sxzfd",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1042"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: Get \"http://100.96.4.235:13133/\": dial tcp 100.96.4.235:13133: connect: connection refused"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/currency",
+          "otel-demo/Deployment/email"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      },
+      {
+        "causal_path": [],
+        "entity": {
+          "kind": "Namespace",
+          "name": "agent",
+          "namespace": "_cluster"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:51:06Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "agent",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:3445"
+            ],
+            "kind": "OBJECT_CREATED",
+            "related": [],
+            "summary": "Namespace created"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 2.0
+      }
+    ],
+    "causal_path": [],
+    "confidence": "VERIFIED",
+    "evidence": [
+      {
+        "at": "2025-12-15T16:44:00Z",
+        "details": {
+          "failed_applications": 0,
+          "first_at": "2025-12-15T16:44:00+00:00",
+          "last_at": "2025-12-15T16:44:51+00:00",
+          "reasons": {
+            "Applied": 1,
+            "FinalizerInited": 2,
+            "Paused": 1,
+            "Recovered": 1,
+            "Started": 1,
+            "Updated": 6
+          },
+          "schedule": "chaos-mesh/Schedule/otel-demo-product-catalog-network-delay",
+          "schedule_active_from": "2025-12-15T16:28:00+00:00",
+          "schedule_active_to": "2025-12-15T18:02:00+00:00",
+          "targets": [
+            "otel-demo/Pod/checkout-5dccddf8bb-4vs6w"
+          ]
+        },
+        "entity": {
+          "kind": "PodChaos",
+          "name": "otel-demo-product-catalog-network-delay-g5vwr",
+          "namespace": "chaos-mesh"
+        },
+        "evidence_ids": [
+          "k8s_events_raw.tsv:420",
+          "k8s_events_raw.tsv:422",
+          "k8s_events_raw.tsv:424",
+          "k8s_events_raw.tsv:427",
+          "k8s_events_raw.tsv:429",
+          "k8s_events_raw.tsv:431"
+        ],
+        "kind": "FAULT_INJECTION",
+        "related": [
+          {
+            "kind": "Pod",
+            "name": "checkout-5dccddf8bb-4vs6w",
+            "namespace": "otel-demo"
+          }
+        ],
+        "summary": "PodChaos applied fault at 16:44 (1 application(s)); schedule otel-demo-product-catalog-network-delay has injected this fault repeatedly from 16:28 to 18:02"
+      }
+    ],
+    "incident_id": "Scenario-18",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Pause the fault experiment Schedule otel-demo-product-catalog-network-delay",
+        "command": "kubectl annotate schedule/otel-demo-product-catalog-network-delay -n chaos-mesh experiment.chaos-mesh.org/pause=true --overwrite",
+        "requires_approval": true,
+        "risk": "low: stops further fault injection"
+      },
+      {
+        "action": "Delete the running experiment PodChaos otel-demo-product-catalog-network-delay-g5vwr",
+        "command": "kubectl delete podchaos/otel-demo-product-catalog-network-delay-g5vwr -n chaos-mesh",
+        "requires_approval": true,
+        "risk": "low: removes the active fault"
+      }
+    ],
+    "root_cause": {
+      "kind": "PodChaos",
+      "name": "otel-demo-product-catalog-network-delay-g5vwr",
+      "namespace": "chaos-mesh"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "5 diagnostic alert type(s) on accounting, ad, checkout, currency, email, fraud-detection; 189 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "47 finding(s) over 724 object(s) and 791 event(s); 628 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-g5vwr 12.5; otel-demo/Pod/checkout-5dccddf8bb-9dn2q 10.4; chaos-mesh/Schedule/otel-demo-product-catalog-network-delay 9.0; otel-demo/Pod/otel-collector-564d9c7987-sxzfd 4.9; _cluster/Namespace/agent 2.0"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "VERIFIED: fault injection targets an alerting component"
+      }
+    ],
+    "summary": "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-g5vwr: PodChaos applied fault at 16:44 (1 application(s)); schedule otel-demo-product-catalog-network-delay has injected this fault repeatedly from 16:28 to 18:02. Verified (fault injection targets an alerting component). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "CrashLoopBackOffPodsDetected",
+        "KubePodCrashLooping",
+        "NoRequestsDetected",
+        "RequestErrorRate"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 23,
+        "KubeClientCertificateExpiration": 38,
+        "KubeControllerManagerDown": 29,
+        "KubeSchedulerDown": 29,
+        "PrometheusNotConnectedToAlertmanagers": 34,
+        "Watchdog": 36
+      },
+      "last_seen": "2025-12-15T18:10:09.861805Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T17:35:07.970990Z",
+      "services": [
+        "accounting",
+        "ad",
+        "checkout",
+        "currency",
+        "email",
+        "fraud-detection",
+        "frontend",
+        "frontend-proxy",
+        "payment",
+        "prometheus-kube-prometheus-kubelet",
+        "prometheus-kube-state-metrics",
+        "quote",
+        "recommendation",
+        "shipping"
+      ]
+    }
+  }
+}

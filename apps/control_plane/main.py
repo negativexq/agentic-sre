@@ -35,7 +35,7 @@ from packages.contracts import (
 )
 from packages.incident import IncidentManager, normalize_alert
 from packages.rca.model import Diagnosis
-from packages.rca.report import diagnosis_html, incidents_html
+from packages.rca.report import diagnosis_html, diagnosis_pending_html, incidents_html
 from packages.storage import (
     AlertRepository,
     ChangeRecordRepository,
@@ -80,8 +80,9 @@ def _require_api_token(request: Request) -> None:
     Unset ``SRE_API_TOKEN`` keeps today's default-open behavior (the offline
     demo and kind walkthrough need no setup); setting it requires every
     caller, including Alertmanager's webhook, to send it as
-    ``Authorization: Bearer <token>``. Read-only endpoints are never gated:
-    they expose no Secrets and change nothing.
+    ``Authorization: Bearer <token>``. Read-only endpoints remain open in the
+    built-in local/demo deployment, but they do not generate diagnoses or
+    otherwise mutate state.
     """
     token = os.environ.get(API_TOKEN_ENV)
     if not token:
@@ -301,7 +302,7 @@ def create_app(
             raise IncidentNotFoundError(str(incident_id))
         document = DiagnosisRepository(session).latest(incident_id)
         if document is None:
-            document = diagnoser.run(incident_id).model_dump(mode="json")
+            return diagnosis_pending_html(str(incident_id), back_link="/")
         return diagnosis_html(Diagnosis.model_validate(document), back_link="/")
 
     @app.post(

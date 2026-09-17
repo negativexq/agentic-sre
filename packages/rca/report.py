@@ -144,4 +144,16 @@ def incidents_html(rows: Sequence[dict[str, str]]) -> str:
     return _page("Incidents", f"<h1>Incidents</h1>{table}")
 
 
-__all__ = ["diagnosis_html", "incidents_html"]
+def diagnosis_pending_html(incident_id: str, *, back_link: str | None = None) -> str:
+    """Render a read-only state when diagnosis has not been generated yet."""
+    back = f"<p><a href='{escape(back_link)}'>&larr; All incidents</a></p>" if back_link else ""
+    body = (
+        f"{back}<h1>Incident {escape(incident_id)}</h1>"
+        "<div class='card'><h2>Diagnosis not generated yet</h2>"
+        "<p>No diagnosis has been generated for this incident yet.</p>"
+        "<p>Use the authenticated diagnosis API action to generate one.</p></div>"
+    )
+    return _page(f"Diagnosis pending {incident_id}", body)
+
+
+__all__ = ["diagnosis_html", "diagnosis_pending_html", "incidents_html"]

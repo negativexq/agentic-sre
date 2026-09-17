@@ -85,19 +85,32 @@ flowchart LR
 - Kubernetes events are journaled the same way objects are (`event_versions`),
   because Kubernetes itself only keeps them for about an hour; without this, a
   resolved incident re-diagnosed later would silently lose event-based
-  evidence. The journal still excludes the `chaos-mesh` namespace from its
-  historical window query even when RBAC allows reading it live (only current,
-  open-incident diagnosis sees chaos objects/events today).
+  evidence. Storage is append-only, while `EventRepository.analysis_view()`
+  selects the latest state visible by `observed_at` for each stable Kubernetes
+  Event identity before RCA; changing `count` or `lastTimestamp` never creates
+  multiple physical warning events in one replay. The journal still excludes
+  the `chaos-mesh` namespace from its historical window query even when RBAC
+  allows reading it live (only current, open-incident diagnosis sees chaos
+  objects/events today).
 - `DiagnosisService`'s snapshot lock (`threading.Lock`) is per process. It is
   correct for today's single-worker, single-replica deployment
   (`infra/kubernetes/control-plane.yaml` runs one replica, no `--workers`).
   Running more than one worker or replica against the same database would
   reopen the read-then-write race it guards against; that needs a
   database-level lock (e.g. a Postgres advisory lock) before scaling out.
-- Every control-plane endpoint is open by default, matching the offline demo
-  and kind walkthrough. Setting `SRE_API_TOKEN` requires a bearer token on
-  every endpoint that changes state; read endpoints stay open since they
-  expose no Secrets. There is no per-caller identity or rate limiting yet.
+- The built-in local/demo deployment leaves read endpoints unauthenticated and
+  setting `SRE_API_TOKEN` protects state-changing endpoints with a shared bearer
+  token. The Kubernetes reader deliberately does not read Secret objects; that
+  does not make incident, evidence, change-history, topology, or log-derived
+  data safe for public exposure. Keep the control plane on a trusted network or
+  put an external authentication boundary in front of it. The secured demo
+  overlay also configures Alertmanager with the same operator-provided token;
+  see `infra/kubernetes/secure-api-auth/`.
+- `GET /incidents/{id}` is read-only and shows a pending state when no diagnosis
+  exists. Diagnosis generation is the authenticated
+  `POST /api/v1/incidents/{id}/diagnosis` action; a GET never snapshots,
+  journals, calls Loki, invokes the optional investigator, or writes a result.
+- There is no per-caller identity or rate limiting yet.
 
 ## Configuration
 
@@ -110,4 +123,4 @@ flowchart LR
 | `SRE_AUTO_DIAGNOSE` | off | Diagnose incidents as alerts arrive |
 | `SRE_LOKI_URL` | unset | Read error logs for dependency findings |
 | `SRE_LLM_ENABLED`, `SRE_LLM_MAX_CALLS`, `SRE_LLM_MODEL` | off, 0, `gpt-5.6-luna` | Optional LLM investigator |
-| `SRE_API_TOKEN` | unset | Require `Authorization: Bearer <token>` on every write endpoint (`POST /api/v1/changes`, `.../diagnosis`, `.../cluster/snapshot`, `.../webhooks/alertmanager`); unset keeps them open, as the offline demo and kind walkthrough expect. Read endpoints are never gated. |
+| `SRE_API_TOKEN` | unset | Require `Authorization: Bearer <token>` on every write endpoint (`POST /api/v1/changes`, `.../diagnosis`, `.../cluster/snapshot`, `.../webhooks/alertmanager`); unset keeps them open, as the offline demo and kind walkthrough expect. Read endpoints remain unauthenticated in the built-in deployment but may expose operationally sensitive data. |

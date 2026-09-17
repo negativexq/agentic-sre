@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-plane
+  namespace: sre-demo
+spec:
+  template:
+    spec:
+      containers:
+        - name: control-plane
+          env:
+            - name: SRE_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: agentic-sre-api
+                  key: token

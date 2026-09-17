@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: observability
+data:
+  alertmanager.yml: |
+    route:
+      receiver: control-plane
+      group_by: [alertname, service, namespace]
+      group_wait: 1s
+      group_interval: 5s
+      repeat_interval: 1h
+    receivers:
+      - name: control-plane
+        webhook_configs:
+          - url: http://control-plane.sre-demo.svc.cluster.local:8000/api/v1/webhooks/alertmanager
+            http_config:
+              authorization:
+                type: Bearer
+                credentials_file: /etc/alertmanager/api-token/token

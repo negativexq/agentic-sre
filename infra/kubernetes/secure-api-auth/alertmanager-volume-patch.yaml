@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: observability
+spec:
+  template:
+    spec:
+      containers:
+        - name: alertmanager
+          volumeMounts:
+            - name: api-token
+              mountPath: /etc/alertmanager/api-token
+              readOnly: true
+      volumes:
+        - name: api-token
+          secret:
+            secretName: agentic-sre-api
+            items:
+              - key: token
+                path: token

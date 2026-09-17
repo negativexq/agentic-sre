@@ -45,6 +45,20 @@ def test_release_contains_required_observability_and_runtime_boundaries() -> Non
         assert f"alert: {alert_name}" in rules
 
 
+def test_secure_api_overlay_wires_the_token_without_committing_a_credential() -> None:
+    overlay = Path("infra/kubernetes/secure-api-auth")
+    assert (overlay / "kustomization.yaml").is_file()
+    secrets = (overlay / "api-secrets.yaml").read_text(encoding="utf-8")
+    control_plane = (overlay / "control-plane-env-patch.yaml").read_text(encoding="utf-8")
+    alertmanager = (overlay / "alertmanager-config-patch.yaml").read_text(encoding="utf-8")
+    volume = (overlay / "alertmanager-volume-patch.yaml").read_text(encoding="utf-8")
+    assert secrets.count("name: agentic-sre-api") == 2
+    assert secrets.count("REPLACE_BEFORE_APPLY") == 2
+    assert "SRE_API_TOKEN" in control_plane and "secretKeyRef" in control_plane
+    assert "credentials_file: /etc/alertmanager/api-token/token" in alertmanager
+    assert "secretName: agentic-sre-api" in volume
+
+
 def test_python_source_contains_no_agent_runtime_imports() -> None:
     forbidden = ("langgraph", "langchain", "anthropic", "crewai", "autogen", "mcp")
     source_files = (

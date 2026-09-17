@@ -88,21 +88,27 @@ _HOST = re.compile(
 _ENDPOINT_NAMES = ("_ADDR", "_HOST", "_URL", "_URI", "_ENDPOINT", "_SERVICE", "_ADDRESS")
 
 
-def _declared_hosts(pod_spec: Mapping[str, Any]) -> set[tuple[str, str]]:
-    """Hosts referenced by container environment values, as (host, env name)."""
+def _declared_hosts(
+    pod_spec: Mapping[str, Any], config_data: Mapping[str, Mapping[str, Any]] | None = None
+) -> set[tuple[str, str]]:
+    """Hosts referenced by container environment values, as (host, env name).
+
+    ``config_data`` maps ConfigMap names to their data so ``envFrom`` values count too.
+    """
     hosts: set[tuple[str, str]] = set()
     containers = pod_spec.get("containers") or []
     for container in containers if isinstance(containers, list) else []:
-        env = container.get("env") if isinstance(container, dict) else None
-        if not isinstance(env, list):
+        if not isinstance(container, dict):
             continue
-        values = {
-            str(item["name"]): str(item["value"])
-            for item in env
-            if isinstance(item, dict)
-            and isinstance(item.get("name"), str)
-            and isinstance(item.get("value"), str)
-        }
+        values: dict[str, str] = {}
+        for env_from in container.get("envFrom") or []:
+            ref = mapping(mapping(env_from).get("configMapRef"))
+            data = (config_data or {}).get(str(ref.get("name")), {})
+            values.update({str(k): str(v) for k, v in data.items() if isinstance(v, str)})
+        env = container.get("env")
+        for item in env if isinstance(env, list) else []:
+            if isinstance(item, dict) and isinstance(item.get("value"), str):
+                values[str(item.get("name"))] = item["value"]
 
         def resolve(match: re.Match[str], known: dict[str, str] = values) -> str:
             return known.get(match.group(1), "")
@@ -139,6 +145,10 @@ def derive_edges(
     edges: set[Edge] = set()
     pods_by_namespace: dict[str, list[tuple[EntityRef, dict[str, str]]]] = {}
     services = {(ref.namespace, ref.name): ref for ref in latest if ref.kind == "Service"}
+    config_data: dict[str, dict[str, dict[str, Any]]] = {}
+    for ref, version in latest.items():
+        if ref.kind == "ConfigMap":
+            config_data.setdefault(ref.namespace, {})[ref.name] = child(version.body, "data")
     for ref, version in latest.items():
         if ref.kind == "Pod":
             pods_by_namespace.setdefault(ref.namespace, []).append((ref, _labels(version.body)))
@@ -187,7 +197,7 @@ def derive_edges(
                             edges.add(Edge(source=ref, target=pod, relation="disrupts"))
         pod_spec = _pod_spec(body)
         if pod_spec is not None and ref.kind != "Pod":
-            for host, _env_name in _declared_hosts(pod_spec):
+            for host, _env_name in _declared_hosts(pod_spec, config_data.get(ref.namespace)):
                 parts = host.split(".")
                 namespace = parts[1] if len(parts) > 1 and parts[1] != "svc" else ref.namespace
                 target_service = services.get((namespace, parts[0]))

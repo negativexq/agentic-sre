@@ -240,3 +240,24 @@ def test_connection_errors_with_several_dependencies_need_a_named_target() -> No
     assert dependency_findings([log("connection reset")], topology, alerting) == []
     named = dependency_findings([log("kafka: connection refused")], topology, alerting)
     assert [f.related for f in named] == [(ref("shop/Service/kafka"),)]
+
+
+def test_env_from_configmap_values_become_call_edges() -> None:
+    from rca_builders import microservice
+
+    order = microservice("order", 0)
+    order[0].body["spec"]["template"]["spec"]["containers"][0]["envFrom"] = [
+        {"configMapRef": {"name": "shared"}}
+    ]
+    source = InMemorySource(
+        name="env-from",
+        versions=[
+            *order,
+            *microservice("payment", 0),
+            version("shop/ConfigMap/shared", 0, {"data": {"PAYMENT_URL": "http://payment:8000"}}),
+        ],
+    )
+    topology = _topology(source)
+    assert topology.outgoing(ref("shop/Deployment/order"), "calls") == (
+        ref("shop/Service/payment"),
+    )

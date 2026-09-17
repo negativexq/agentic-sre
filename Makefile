@@ -1,5 +1,5 @@
 .PHONY: install lock lint typecheck test check demo serve-local \
-	itbench-setup itbench-index eval-dev eval-test \
+	itbench-setup itbench-index eval-dev eval-test benchmark-qualify \
 	images cluster-up build-images deploy load status ui inject-bad-rollout recover rbac-check \
 	cluster-down precommit offline-demo e2e-kind e2e-kind-clean release-check \
 	verify-release-provenance
@@ -68,6 +68,9 @@ eval-test:
 	test -z "$$(git status --porcelain)"
 	git describe --exact-match --tags HEAD
 	$(CLI) eval --split test --confirm-test $(EVAL_FLAGS) --out .local/runs/test-$$(git describe --tags)$(if $(EVAL_FLAGS),-llm)-$(RUN_ID)
+
+benchmark-qualify:
+	$(CLI) benchmark-qualify --split dev --out .local/diagnostics/qualification-$(RUN_ID)
 
 verify-release-provenance:
 	$(PY) scripts/verify_release_provenance.py evals/results/$$(git describe --tags --abbrev=0)/test

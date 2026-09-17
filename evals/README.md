@@ -30,6 +30,10 @@ are dev) and was committed before the diagnosis engine was written.
    pinned ground truth only after verifying that seal, then writes a separate
    `report-seal.json` for derived reports. `make verify-release-provenance`
    checks a published version directory against its release tag.
+8. `agentic-sre benchmark-qualify --split dev --out .local/diagnostics/qualification`
+   is a diagnostic-only entity-contract check. It reports invalid filters,
+   exact observable matches, and relation-backed parent/child equivalence; it
+   does not change official exact-match scoring or add production aliases.
 
 ## Disclosure
 

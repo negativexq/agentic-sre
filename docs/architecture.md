@@ -24,7 +24,7 @@ flowchart LR
 | `packages/rca/model.py` | Entities, alerts, object versions, events, findings, diagnosis |
 | `packages/rca/source.py` | `ObservationSource` protocol and an in-memory source |
 | `packages/rca/topology.py` | Ownership, selectors, config references, HPA, policies, chaos targets, env-declared service calls |
-| `packages/rca/signals.py` | Symptoms and findings: config/spec/image/scale changes, restarts, fault injection, network policies, quota rejections, container failures, resource pressure, dependency errors, warning events |
+| `packages/rca/signals.py` | Symptoms and findings: config/spec/image/scale changes, restarts, fault injection, network policies, quota rejections, container failures, resource pressure, dependency errors, warning events, HPA failures, and temporal traffic changes |
 | `packages/rca/ranking.py` | Explainable scoring and deterministic verification rules |
 | `packages/rca/engine.py` | Pipeline: observe → signals → rank → investigate → verify → propose |
 | `packages/rca/agent.py`, `llm.py` | Optional LLM investigator with read-only tools; opt-in OpenAI client |
@@ -32,7 +32,7 @@ flowchart LR
 | `packages/rca/live.py` | Kubernetes reader, Loki reader, change watcher, live source |
 | `packages/rca/report.py` | HTML for the web UI and static reports |
 | `apps/control_plane` | FastAPI: Alertmanager webhook, incidents, diagnoses, web UI |
-| `apps/cli` | `agentic-sre demo`, `diagnose`, `eval`, `grade`, `serve` |
+| `apps/cli` | `agentic-sre demo`, `diagnose`, `eval`, `grade`, `benchmark-qualify`, `serve` |
 | `packages/evals/itbench` | Snapshot source, sealed predict/grade runner, ITBench grader |
 
 ## Pipeline
@@ -54,6 +54,11 @@ flowchart LR
    benchmark-only for now.
    When an alerting service logs connection errors, its declared dependencies
    become suspects; shared infrastructure called by most workloads is skipped.
+   Request-rate findings require a baseline-to-incident metric change; a high
+   steady-state value alone is not treated as a load cause. HPA conditions and
+   metric-failure Events are normalized with their controlled workload so an
+   upstream autoscaler failure can be distinguished from a later workload
+   failure.
 3. **Ranking.** Each finding scores by kind, topology distance to alerting
    components, namespace, whether the change names an alerting service, and
    timing relative to onset. Warnings on the alerting component itself count
@@ -63,8 +68,12 @@ flowchart LR
    `neighbors`, `logs`) before choosing one. Invalid replies or budget
    exhaustion fall back to the ranking.
 5. **Verification.** Rules decide the confidence label for the chosen
-   candidate, for example "configuration changed near onset and is used by an
-   alerting component or its dependency".
+   candidate. Findings expose an onset delta and a temporal role
+   (`INITIATING`, `SUPPORTING`, `CONSEQUENCE`, or `AMBIGUOUS`). A late linked
+   change can remain a candidate but cannot verify the original incident onset;
+   downstream-only evidence may produce `UNVERIFIED`. The structured
+   `VerificationTrace` records passed, failed, weak, and unknown predicates
+   without using an LLM.
 6. **Remediation.** The strongest finding maps to a reversible proposal:
    revert a ConfigMap, `rollout undo`, pause a chaos schedule, restore
    replicas, raise a quota or memory limit.

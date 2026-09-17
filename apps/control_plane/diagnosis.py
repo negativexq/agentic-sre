@@ -210,6 +210,7 @@ class DiagnosisService:
                 incident_id=incident_id, starts_at=starts_at, ends_at=ends_at
             )
         if self.log_reader is not None and not resolved:
+            fetched_logs: list[LogRecord] = []
             try:
                 services = sorted(
                     {
@@ -220,6 +221,9 @@ class DiagnosisService:
                     | {alert.service for alert in alerts if alert.service}
                 )
                 fetched_logs = self.log_reader.error_logs(services, starts_at, ends_at)
+            except Exception:
+                logger.warning("log backend unavailable; diagnosing without logs", exc_info=True)
+            else:
                 # Loki records are queried for the cycle's bounded window. The
                 # collection itself may finish a little later, so extend the
                 # open diagnosis boundary to the end of that intentional
@@ -231,8 +235,6 @@ class DiagnosisService:
                     )
                 logs = _merge_logs(logs, fetched_logs)
                 window_end = max(window_end, log_observed_at)
-            except Exception:
-                logger.warning("log backend unavailable; diagnosing without logs", exc_info=True)
         starts_at, ends_at = incident_window(alerts, window_end)
         if not resolved:
             with self.session_factory() as session:

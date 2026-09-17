@@ -56,6 +56,7 @@ def test_secure_api_overlay_wires_the_token_without_committing_a_credential() ->
     assert secrets.count("REPLACE_BEFORE_APPLY") == 2
     assert "SRE_API_TOKEN" in control_plane and "secretKeyRef" in control_plane
     assert "credentials_file: /etc/alertmanager/api-token/token" in alertmanager
+    assert "send_resolved: true" in alertmanager
     assert "secretName: agentic-sre-api" in volume
 
 

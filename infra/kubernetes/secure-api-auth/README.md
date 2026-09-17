@@ -7,10 +7,13 @@ separately because the workloads run in `sre-demo` and `observability`.
 
 1. Replace `REPLACE_BEFORE_APPLY` in `api-secrets.yaml` in both Secret objects
    with the same value, without committing the edit.
-2. Apply the overlay after the normal base resources:
+2. Build with the explicit load restriction override (the overlay intentionally
+   reuses the checked-in base manifests one directory above) and apply it after
+   the normal base resources:
 
 ```bash
-kubectl apply -k infra/kubernetes/secure-api-auth
+kubectl kustomize --load-restrictor LoadRestrictionsNone \
+  infra/kubernetes/secure-api-auth | kubectl apply -f -
 ```
 
 Alertmanager 0.28.1 reads the bearer credential through its supported

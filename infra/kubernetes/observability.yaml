@@ -550,6 +550,7 @@ data:
       - name: control-plane
         webhook_configs:
           - url: http://control-plane.sre-demo.svc.cluster.local:8000/api/v1/webhooks/alertmanager
+            send_resolved: true
 ---
 apiVersion: v1
 kind: Service

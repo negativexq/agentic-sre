@@ -113,7 +113,7 @@ def create_app(
             if watcher is not None:
                 watcher.join(timeout=5)
 
-    app = FastAPI(title="Agentic SRE", version="0.4.0", lifespan=lifespan)
+    app = FastAPI(title="Agentic SRE", version="0.5.0", lifespan=lifespan)
     app.add_middleware(TelemetryMiddleware, runtime=telemetry)
     app.mount("/metrics", make_asgi_app(registry=registry))
     app.dependency_overrides[get_session] = session_dependency

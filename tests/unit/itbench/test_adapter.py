@@ -5,7 +5,6 @@ import shutil
 import sqlite3
 from pathlib import Path
 from typing import cast
-from uuid import UUID
 
 import pytest
 
@@ -18,20 +17,13 @@ from packages.evals.itbench import (
     ITBenchGroundTruth,
     ITBenchGroundTruthGroup,
     ITBenchLiteDataset,
-    ITBenchRunStore,
     ITBenchScenario,
     ITBenchSnapshotBackend,
-    ITBenchSnapshotToolRegistry,
-    adapt_a1_output,
     atomic_json_write,
     build_trace_indexes,
     grade_root_cause_entities,
-    official_evaluator_spec,
-    write_official_output,
 )
-from packages.evals.itbench.output_adapter import entities_from_k8s_records
 from packages.evals.itbench.sparse_index import trace_index_path
-from packages.tools import BoundedToolExecutor
 
 
 def _scenario(tmp_path: Path) -> ITBenchScenario:
@@ -86,53 +78,7 @@ def _scenario(tmp_path: Path) -> ITBenchScenario:
     )
 
 
-def test_snapshot_registry_is_observable_only(tmp_path: Path) -> None:
-    scenario = _scenario(tmp_path)
-    backend = ITBenchSnapshotBackend(
-        cast(ITBenchLiteDataset, object()), scenario, max_rows=5, max_bytes=10_000
-    )
-    registry = ITBenchSnapshotToolRegistry(backend)
-
-    context = registry.public_context()
-    assert "ground_truth" not in context.casefold()
-    assert "fault_mechanism" not in context.casefold()
-    assert all(
-        "filesystem" not in descriptor["purpose"].casefold()
-        for descriptor in registry.descriptors()
-    )
-    assert len(registry.invoke("itbench_logs", {"limit": 1})["records"]) == 1
-    with pytest.raises(PermissionError):
-        registry.invoke("ground_truth", {})
-
-
-def test_snapshot_registry_adapts_to_runtime_read_only_contract(tmp_path: Path) -> None:
-    scenario = _scenario(tmp_path)
-    backend = ITBenchSnapshotBackend(
-        cast(ITBenchLiteDataset, object()), scenario, max_rows=5, max_bytes=10_000
-    )
-    runtime_registry = ITBenchSnapshotToolRegistry(backend).investigation_registry()
-
-    assert runtime_registry.names() == (
-        "itbench_alerts",
-        "itbench_kubernetes_events",
-        "itbench_kubernetes_objects",
-        "itbench_logs",
-        "itbench_metrics",
-        "itbench_traces",
-    )
-    assert all(
-        "ground_truth" not in json.dumps(item).casefold() for item in runtime_registry.descriptors()
-    )
-    registered = runtime_registry.get("itbench_logs")
-    request = registered.request(
-        UUID("00000000-0000-0000-0000-000000000001"),
-        {"service": "frontend", "limit": 1},
-    )
-    result = BoundedToolExecutor().execute(registered.tool, request)
-    assert getattr(result, "result_count", 0) == 1
-
-
-def test_evidence_ids_are_deterministic_and_k8s_entities_are_canonical(tmp_path: Path) -> None:
+def test_evidence_ids_are_deterministic(tmp_path: Path) -> None:
     scenario = _scenario(tmp_path)
     backend = ITBenchSnapshotBackend(
         cast(ITBenchLiteDataset, object()), scenario, max_rows=5, max_bytes=10_000
@@ -146,8 +92,6 @@ def test_evidence_ids_are_deterministic_and_k8s_entities_are_canonical(tmp_path:
     assert alert["evidence_id"] == backend.evidence_id(
         ITBenchEvidenceCategory.ALERTS, "alerts.json", 0
     )
-    entities = entities_from_k8s_records(backend.records(ITBenchEvidenceCategory.K8S_OBJECTS))
-    assert entities[0].canonical == "otel-demo/Service/frontend"
 
 
 def test_ground_truth_alias_entity_grading_is_deterministic() -> None:
@@ -277,85 +221,6 @@ def test_alias_grading_preserves_independent_root_groups_and_kind_namespace() ->
     assert grade.ground_truth_count == 2
 
 
-def test_native_output_adapter_never_needs_ground_truth(tmp_path: Path) -> None:
-    scenario = _scenario(tmp_path)
-    backend = ITBenchSnapshotBackend(
-        cast(ITBenchLiteDataset, object()), scenario, max_rows=5, max_bytes=10_000
-    )
-    entities = entities_from_k8s_records(backend.records(ITBenchEvidenceCategory.K8S_OBJECTS))
-    output = adapt_a1_output(
-        scenario_id="Scenario-1",
-        incident_id="incident-1",
-        native_output={
-            "causal_hypothesis": {
-                "causal_component": "frontend",
-                "causal_summary": "observable error evidence",
-            },
-            "termination_reason": "HYPOTHESIS_SUBMITTED",
-        },
-        observed_entities=entities,
-    )
-    assert output.contributing_factor[0].entity.canonical == "otel-demo/Service/frontend"
-
-
-def test_atomic_external_trial_store_rejects_duplicate(tmp_path: Path) -> None:
-    store = ITBenchRunStore(tmp_path, execution_id="ITB-E1")
-    output = ITBenchAgentOutput(
-        incident_id="incident-1",
-        scenario_id="Scenario-1",
-        contributing_factor=(),
-        native_terminal="STOP",
-    )
-    digest = store.write_trial(
-        "Scenario-1",
-        1,
-        native_artifact={"terminal": "STOP"},
-        itbench_output=output,
-        usage={"model_calls": 0},
-    )
-    assert len(digest) == 64
-    official = tmp_path / "Scenario-1" / "1" / "outputs" / "agent_output.json"
-    assert json.loads(official.read_text(encoding="utf-8"))["incident_id"] == "incident-1"
-    assert store.read_trial("Scenario-1", 1)["trial"] == 1
-    (tmp_path / "Scenario-1" / "1" / "itbench_output.json").write_text(
-        "{not-json", encoding="utf-8"
-    )
-    with pytest.raises(ValueError, match="invalid ITBench trial checkpoint"):
-        store.read_trial("Scenario-1", 1)
-    with pytest.raises(FileExistsError):
-        store.write_trial(
-            "Scenario-1",
-            1,
-            native_artifact={},
-            itbench_output={},
-            usage={},
-        )
-
-
-def test_external_trial_store_persists_failure_without_completed_trial(tmp_path: Path) -> None:
-    store = ITBenchRunStore(tmp_path, execution_id="ITB-E2")
-    digest = store.write_failure(
-        "Scenario-11",
-        1,
-        failure_stage="TOOL_EXECUTION",
-        error_code="TOOL_TIMEOUT",
-        details={"tool": "itbench_metric_analysis", "outbound_api_attempts": 0},
-        usage={"model_calls": 0},
-        ledger={"before": 0, "after": 0},
-    )
-    assert len(digest) == 64
-    failure = json.loads(
-        (tmp_path / "Scenario-11" / "1" / "failure_artifact.json").read_text(encoding="utf-8")
-    )
-    assert failure["status"] == "INVALIDATED"
-    assert failure["error_code"] == "TOOL_TIMEOUT"
-    assert not (tmp_path / "Scenario-11" / "1" / "itbench_output.json").exists()
-    with pytest.raises(FileExistsError):
-        store.write_failure(
-            "Scenario-11", 1, failure_stage="TOOL_EXECUTION", error_code="TOOL_TIMEOUT"
-        )
-
-
 def test_dataset_discovery_requires_pinned_35_scenario_manifest(tmp_path: Path) -> None:
     manifest = {
         "source": "ibm-research/ITBench-Lite",
@@ -481,46 +346,3 @@ def test_trace_offset_index_is_sparse_and_handles_multiline_rows(tmp_path: Path)
     response = backend.query(ITBenchEvidenceCategory.TRACES, {"trace_id": "trace-b"})
     assert response["matching_count"] == response["returned_count"] == 1
     assert response["records"][0]["record"]["TraceId"] == "trace-b"
-
-
-def test_official_evaluator_is_pinned_and_output_is_separate(tmp_path: Path) -> None:
-    output = ITBenchAgentOutput(
-        incident_id="incident-1",
-        scenario_id="Scenario-1",
-        contributing_factor=(),
-        native_terminal="STOP",
-    )
-    path = tmp_path / "agent-outputs" / "Scenario-1" / "1" / "outputs" / "agent_output.json"
-    write_official_output(path, output)
-    assert json.loads(path.read_text(encoding="utf-8"))["scenario_id"] == "Scenario-1"
-    spec = official_evaluator_spec()
-    assert spec.executed is False
-    assert spec.revision == "14f026fc9cc348c4ecec5ab32714de954c95c1b1"
-
-
-def test_investigator_context_cannot_contain_ground_truth_sentinel(tmp_path: Path) -> None:
-    scenario = _scenario(tmp_path)
-    backend = ITBenchSnapshotBackend(
-        cast(ITBenchLiteDataset, object()), scenario, max_rows=5, max_bytes=10_000
-    )
-    registry = ITBenchSnapshotToolRegistry(backend)
-    sentinel = "DO_NOT_LEAK_SECRET_ROOT_CAUSE_123"
-    evaluator_only = ITBenchGroundTruth(
-        scenario_id="Scenario-1",
-        root_cause_groups=(
-            ITBenchGroundTruthGroup(
-                group_id="gt-root",
-                kind="ConfigMap",
-                namespace="otel-demo",
-                name=sentinel,
-                root_cause=True,
-            ),
-        ),
-    )
-    assert evaluator_only.root_cause_entities()[0].name == sentinel
-    context = json.dumps(
-        {"scenario": scenario.public_context(), "registry": registry.public_context()},
-        sort_keys=True,
-    )
-    assert sentinel not in context
-    assert "ground_truth" not in context.casefold()

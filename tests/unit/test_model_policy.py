@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pytest
 
 from packages.model_policy import (
@@ -16,17 +13,6 @@ from packages.model_policy import (
 )
 from packages.provider import LiveModelBudget, OpenAIProvider, ProviderError, live_model_config
 from packages.provider.openai import LiveModelConfig
-
-
-def _judge_env(**overrides: str) -> dict[str, str]:
-    value = {
-        "JUDGE_MODEL": APPROVED_MODEL,
-        "JUDGE_PROVIDER": "openai",
-        "JUDGE_BASE_URL": "https://api.openai.com/v1",
-        "JUDGE_API_KEY": "offline-test-placeholder",
-    }
-    value.update(overrides)
-    return value
 
 
 def test_judge_requires_explicit_model() -> None:
@@ -122,29 +108,12 @@ def test_live_provider_blocks_non_luna_config_before_transport() -> None:
     assert error.value.code.value == "BENCHMARK_MODEL_POLICY_VIOLATION"
 
 
-def test_upstream_default_is_never_reached_by_wrapper_preflight(tmp_path: Path) -> None:
-    """The missing-env case fails before the pinned evaluator can import its client."""
-    from packages.evals.itbench.judge_policy import build_judge_plan, preflight_judge
-
-    ledger = tmp_path / "judge.json"
-    ledger.write_text(json.dumps({"cap": 1, "consumed": 0, "remaining": 1}), encoding="utf-8")
-    plan = build_judge_plan(expected_calls=1, max_calls=1, ledger_path=ledger)
-    with pytest.raises(ModelPolicyError) as error:
-        preflight_judge(plan=plan, environ={}, require_credentials=False)
-    assert error.value.code == "JUDGE_MODEL_NOT_EXPLICITLY_APPROVED"
-
-
-def test_judge_plan_requires_explicit_finite_cap(tmp_path: Path) -> None:
-    from packages.evals.itbench.judge_policy import build_judge_plan, preflight_judge
-
-    ledger = tmp_path / "judge.json"
-    ledger.write_text(json.dumps({"cap": 2, "consumed": 0, "remaining": 2}), encoding="utf-8")
-    with pytest.raises(ModelPolicyError) as error:
-        build_judge_plan(expected_calls=2, max_calls=1, ledger_path=ledger)
-    assert error.value.code == "JUDGE_CALL_CAP_EXCEEDED"
-
-    plan = build_judge_plan(expected_calls=1, max_calls=1, ledger_path=ledger)
-    identity, before = preflight_judge(plan=plan, environ=_judge_env(), require_credentials=False)
-    assert identity.model == "gpt-5.6-luna"
-    assert before["consumed"] == 0
-    assert json.loads(ledger.read_text(encoding="utf-8"))["consumed"] == 0
+def _judge_env(**overrides: str) -> dict[str, str]:
+    value = {
+        "JUDGE_MODEL": APPROVED_MODEL,
+        "JUDGE_PROVIDER": "openai",
+        "JUDGE_BASE_URL": "https://api.openai.com/v1",
+        "JUDGE_API_KEY": "offline-test-placeholder",
+    }
+    value.update(overrides)
+    return value

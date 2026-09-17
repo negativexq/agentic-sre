@@ -98,9 +98,9 @@ connectivity, not a claim that the shared resource cannot itself be causal.
 - Cluster access is list/get/watch only, never Secrets
   (`infra/kubernetes/tools-rbac.yaml`, `make rbac-check`).
 - Chaos Mesh experiments are only readable if `infra/kubernetes/chaos-mesh-rbac.yaml`
-  is also applied (its own namespace, same read-only verbs); without it the
-  reader's chaos lookups fail silently, so fault-injection findings are
-  quietly missing rather than erroring.
+  is also applied (its own namespace, same read-only verbs). A failed resource
+  scope is surfaced in snapshot metadata and never becomes a fabricated
+  `OBJECT_DELETED` tombstone; optional fault-injection findings may be missing.
 - Remediation is text; no code path applies it.
 - Live model calls need `SRE_LLM_ENABLED=true` and `SRE_LLM_MAX_CALLS`; tests
   use scripted models.
@@ -115,10 +115,13 @@ connectivity, not a claim that the shared resource cannot itself be causal.
   multiple physical warning events in one replay. Historical replay includes
   explicitly configured evidence namespaces (`SRE_EVIDENCE_NAMESPACES`,
   default `chaos-mesh`) without treating unrelated evidence-namespace objects
-  as application workload symptoms. Loki error lines used by an open diagnosis
-  are normalized into `log_observations`, so a resolved replay does not depend
-  on current Loki retention. An unavailable source is missing evidence, not a
-  fabricated contradiction.
+  as application workload symptoms. Loki error lines captured by an open
+  diagnosis are normalized into `log_observations`, so those captured records
+  survive Loki retention. This is a bounded captured-observation journal, not
+  a complete historical log archive: an incident resolved before diagnosis/log
+  capture may have no persisted logs. Resolved replay never queries current
+  Loki. An unavailable source is missing evidence, not a fabricated
+  contradiction.
 - `DiagnosisService`'s snapshot lock (`threading.Lock`) is per process. It is
   correct for today's single-worker, single-replica deployment
   (`infra/kubernetes/control-plane.yaml` runs one replica, no `--workers`).

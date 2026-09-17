@@ -11,10 +11,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
 
-# Dependencies first, so code edits do not reinstall them.
-COPY pyproject.toml README.md ./
-RUN python -c "import tomllib; print('\n'.join(tomllib.load(open('pyproject.toml', 'rb'))['project']['dependencies']))" > /tmp/requirements.txt \
-    && pip install -r /tmp/requirements.txt
+# Dependencies first, so code edits do not reinstall them. The lock is the
+# same resolution used by local development and CI; the project itself is
+# installed separately below so the image remains a normal pip environment.
+ARG UV_VERSION=0.12.15
+COPY pyproject.toml uv.lock README.md ./
+RUN pip install --no-cache-dir "uv==${UV_VERSION}" \
+    && uv export --locked --no-dev --no-emit-project --format requirements-txt --output-file /tmp/requirements.txt \
+    && pip install --no-cache-dir -r /tmp/requirements.txt
 
 COPY apps ./apps
 COPY packages ./packages

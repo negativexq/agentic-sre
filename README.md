@@ -40,7 +40,7 @@ method and a disclosure of prior exposure to this dataset.
 ## Try it
 
 ```bash
-make install
+uv sync --locked --extra dev   # or: make install when uv is installed
 make demo
 ```
 
@@ -99,7 +99,9 @@ make eval-test         # only from a clean, tagged commit
 ```
 
 Prediction never reads ground truth, and grading refuses modified predictions.
-Re-grade a stored run with `agentic-sre grade --out evals/results/v1.0.0/test`.
+Re-grade a stored run with `agentic-sre grade --out evals/results/v1.0.1/test`.
+`seal.json` protects the prediction manifest and prediction files;
+`report-seal.json` separately protects derived grading reports.
 Add the investigator to a run with `make eval-dev EVAL_FLAGS=--llm` and the `SRE_LLM_*` settings.
 
 ## Live demo on kind
@@ -151,6 +153,9 @@ The LLM investigator is off by default. To enable it, set
 The earlier single-agent runtime and the E1–E11 experiment series are kept in
 the `archive/experiments-2026-09` tag.
 
+Development and CI use the checked-in `uv.lock`. Refresh it deliberately with
+`make lock` (or `uv lock`) and review the complete dependency diff.
+
 ## Limits
 
 - Causes without an observable change, fault, or error signal (for example a
@@ -166,3 +171,7 @@ the `archive/experiments-2026-09` tag.
   change history, topology, and log-derived errors may still be sensitive; do
   not expose read endpoints outside a trusted network without external auth.
   The deployment is single-process; see `docs/architecture.md` before scaling.
+- Loki evidence is bounded captured observation data, not a complete historical
+  log archive. Open-incident diagnosis persists the records it reads; an
+  incident resolved before any diagnosis/log capture may have no persisted log
+  evidence. Resolved replay never falls back to post-cutoff Loki data.

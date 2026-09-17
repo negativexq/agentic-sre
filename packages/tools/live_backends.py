@@ -17,6 +17,7 @@ from urllib.request import Request, urlopen
 
 from packages.contracts import ChangeRecord, ChangeScope
 from packages.tools.contracts import BackendProtocolError, ToolErrorCode
+from packages.tools.trace_ids import normalize_trace_id
 
 MAX_INCIDENT_WINDOW_SECONDS = 900
 CHANGE_LOOKBACK_SECONDS = 900
@@ -301,12 +302,7 @@ class TempoBackend(LiveBackend):
             }
         if operation == "get_trace":
             trace_id = parameters.get("trace_id")
-            if not isinstance(trace_id, str) or len(trace_id) != 32:
-                raise ValueError("trace_id must be a 32-character hexadecimal ID")
-            try:
-                int(trace_id, 16)
-            except ValueError as error:
-                raise ValueError("trace_id must be hexadecimal") from error
+            trace_id = normalize_trace_id(trace_id)
             payload = self._get(
                 f"/api/traces/{trace_id}",
                 {},

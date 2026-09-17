@@ -49,6 +49,7 @@
     "diagnostic_onset_anchoring": "PASS",
     "trace_support_requires_error_origin": "PASS",
     "spec_support_requires_onset_alignment": "EXPERIMENTAL",
+    "experimental_spec_support_guard": "PASS",
     "structured_context_bounding": "PASS"
   },
   "runtime_canary": {
@@ -71,11 +72,18 @@
     },
     "context_chars": {
       "min": 7609,
-      "median": 11650,
-      "p95": 17713,
-      "max": 19717
+      "median": 11631,
+      "p95": 17837,
+      "max": 19970
     },
     "context_evidence_visible_requests": 183,
+    "submit_by_operation": {
+      "TRACE_ERROR_TREE": 4
+    },
+    "support_by_operation": {
+      "TRACE_ERROR_TREE": 4
+    },
+    "submit_explanations_artifact": "itbench-e11-runtime-canary-v2.json",
     "runtime_errors": 0,
     "replay_errors": 0,
     "ground_truth_access": 0,
@@ -96,6 +104,9 @@
   "notes": [
     "The historical E10 artifacts are immutable.",
     "The fake-provider canary proves control-plane execution, not RCA quality.",
-    "Telemetry ranking is not selected as the default because corrected B2 remains below the R1 top-K regression gates."
+    "Telemetry ranking is not selected as the default because corrected B2 remains below the R1 top-K regression gates.",
+    "The previous four SUBMIT trajectories were all supported by candidate-is-error-origin TRACE_ERROR_TREE evidence; none was unlocked by SPEC_ANALYSIS. Full per-scenario provenance is frozen in itbench-e11-runtime-canary-v2.json.",
+    "EXPERIMENTAL SPEC findings are explicitly INCONCLUSIVE for submission unless an independently validated mechanism rule is introduced; the current runtime does not treat them as causal support.",
+    "The reported first hypothesis turn of 2 is a ContextAwareFakeProvider policy property, not a measurement of Luna behavior."
   ]
 }

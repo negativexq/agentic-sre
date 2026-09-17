@@ -16,6 +16,11 @@ from packages.evals.itbench.e11_canary import (
     run_e11_fake_provider_canary,
     run_e11_snapshot_runtime_canary,
 )
+from packages.evals.itbench.e11_live_smoke import (
+    E11LiveSmokeAuthorizationError,
+    require_live_authorization,
+    run_authorized_single_scenario,
+)
 from packages.evals.itbench.e11_official import (
     E11_OFFICIAL_RELEVANT_PATHS,
     build_e11_manifest,
@@ -24,6 +29,7 @@ from packages.evals.itbench.e11_official import (
     validate_e11_preflight,
     verify_e11_seal,
 )
+from packages.evals.itbench.persistence import atomic_json_write
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -39,6 +45,7 @@ def main() -> int:
     canary.add_argument("--count", type=int, default=35)
     runtime_canary = sub.add_parser("runtime-canary")
     runtime_canary.add_argument("--dataset-root", default=".local/itbench-lite")
+    runtime_canary.add_argument("--output")
     manifest = sub.add_parser("manifest-template")
     manifest.add_argument("--output", required=True)
     preflight = sub.add_parser("preflight")
@@ -52,13 +59,46 @@ def main() -> int:
     verify.add_argument("--manifest", required=True)
     verify.add_argument("--predictions-root", required=True)
     verify.add_argument("--seal", required=True)
+    live_smoke = sub.add_parser("live-smoke", help="explicitly authorized single-scenario smoke")
+    live_smoke.add_argument("--manifest", required=True)
+    live_smoke.add_argument("--scenario", required=True)
+    live_smoke.add_argument("--dataset-root", default=".local/itbench-lite")
+    live_smoke.add_argument("--output", required=True)
+    live_smoke.add_argument("--ledger", required=True)
+    live_smoke.add_argument("--authorize-live-provider", action="store_true")
     args = parser.parse_args()
-    if args.command == "canary":
+    if args.command == "live-smoke":
+        try:
+            require_live_authorization(args.authorize_live_provider)
+        except E11LiveSmokeAuthorizationError as error:
+            parser.error(str(error))
+        typed = load_e11_manifest(_path(args.manifest))
+        print(
+            json.dumps(
+                {
+                    "provider": typed.provider,
+                    "model": typed.model,
+                    "reasoning_effort": typed.reasoning_effort,
+                    "provider_retries": typed.provider_retries,
+                },
+                sort_keys=True,
+            )
+        )
+        result = run_authorized_single_scenario(
+            root=ROOT,
+            manifest=typed,
+            scenario_id=args.scenario,
+            output=_path(args.output),
+            ledger_path=_path(args.ledger),
+        )
+    elif args.command == "canary":
         result = run_e11_fake_provider_canary(
             tuple(f"Scenario-{i}" for i in range(1, args.count + 1))
         )
     elif args.command == "runtime-canary":
         result = run_e11_snapshot_runtime_canary(_path(args.dataset_root))
+        if args.output:
+            atomic_json_write(_path(args.output), result)
     elif args.command == "manifest-template":
         result = build_e11_manifest(ROOT).model_dump(mode="json")
         _path(args.output).write_text(

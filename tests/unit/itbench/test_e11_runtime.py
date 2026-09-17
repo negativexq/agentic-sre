@@ -211,6 +211,73 @@ def test_no_data_evidence_cannot_support_candidate() -> None:
         raise AssertionError("NO_DATA evidence was accepted as causal support")
 
 
+def test_identical_immutable_no_data_recheck_is_not_allowed() -> None:
+    from packages.evals.itbench.e11_observability import (
+        ObservedEntityCatalog,
+    )
+
+    catalog = ObservedEntityCatalog(scenario_id="offline")
+    entity = catalog.add(
+        canonical="prod/Deployment/checkout",
+        identity_type="KubernetesEntity",
+        namespace="prod",
+        kind="Deployment",
+        name="checkout",
+        source_category="k8s_objects",
+        provenance="DIRECT_K8S_OBJECT",
+        evidence_ref="object:checkout",
+    )
+    from packages.evals.itbench.e9_memory import E9CaseMemory
+
+    memory = E9CaseMemory(execution_id="offline", scenario_id="offline")
+    memory.discover_entities((entity.as_dict(),))
+    memory.append(
+        "OPERATION_REQUESTED",
+        1,
+        {"entity_handle": entity.handle, "operation": "EVENT_ANALYSIS"},
+    )
+    assert not memory.recheck_allowed(entity.handle, "EVENT_ANALYSIS")
+
+
+def test_same_operation_on_different_target_has_independent_identity() -> None:
+    from packages.evals.itbench.e11_observability import (
+        ObservedEntityCatalog,
+    )
+
+    catalog = ObservedEntityCatalog(scenario_id="offline")
+    first = catalog.add(
+        canonical="prod/Deployment/checkout",
+        identity_type="KubernetesEntity",
+        namespace="prod",
+        kind="Deployment",
+        name="checkout",
+        source_category="k8s_objects",
+        provenance="DIRECT_K8S_OBJECT",
+        evidence_ref="object:checkout",
+    )
+    second = catalog.add(
+        canonical="prod/Deployment/payment",
+        identity_type="KubernetesEntity",
+        namespace="prod",
+        kind="Deployment",
+        name="payment",
+        source_category="k8s_objects",
+        provenance="DIRECT_K8S_OBJECT",
+        evidence_ref="object:payment",
+    )
+    from packages.evals.itbench.e9_memory import E9CaseMemory
+
+    memory = E9CaseMemory(execution_id="offline", scenario_id="offline")
+    memory.discover_entities((first.as_dict(), second.as_dict()))
+    memory.append(
+        "OPERATION_REQUESTED",
+        1,
+        {"entity_handle": first.handle, "operation": "EVENT_ANALYSIS"},
+    )
+    assert not memory.recheck_allowed(first.handle, "EVENT_ANALYSIS")
+    assert not memory.has_operation(second.handle, "EVENT_ANALYSIS")
+
+
 def test_two_semantically_illegal_actions_reach_protocol_stalled(tmp_path: Path) -> None:
     """Parse success must not clear the rejection window before _apply()."""
     backend = _backend(
@@ -328,7 +395,7 @@ def test_submit_is_hidden_until_runtime_support_exists(tmp_path: Path) -> None:
     assert result["agent_output"]["contributing_factor"] == []
 
 
-def test_runtime_contradiction_then_explicit_supersession(tmp_path: Path) -> None:
+def test_runtime_contradiction_blocks_submission(tmp_path: Path) -> None:
     backend = _backend(
         tmp_path,
         object_bodies=[
@@ -364,29 +431,15 @@ def test_runtime_contradiction_then_explicit_supersession(tmp_path: Path) -> Non
             },
         ],
     )
-    metric_calls = 0
 
     def metric_analysis(_arguments: dict[str, Any]) -> dict[str, Any]:
-        nonlocal metric_calls
-        metric_calls += 1
-        if metric_calls == 1:
-            return {
-                "matching_count": 2,
-                "aggregates_by_metric": {
-                    "request_latency_seconds": {
-                        "delta": 0.0,
-                        "relative_change": 0.0,
-                        "anomaly": False,
-                    }
-                },
-            }
         return {
             "matching_count": 2,
             "aggregates_by_metric": {
                 "request_latency_seconds": {
-                    "delta": 5.0,
-                    "relative_change": 1.0,
-                    "anomaly": True,
+                    "delta": 0.0,
+                    "relative_change": 0.0,
+                    "anomaly": False,
                 }
             },
         }
@@ -402,22 +455,14 @@ def test_runtime_contradiction_then_explicit_supersession(tmp_path: Path) -> Non
                 "operation": "METRIC_ANOMALIES",
                 "rationale": None,
             },
-            {
-                "action": "INVESTIGATE",
-                "target": "C001",
-                "operation": "METRIC_ANOMALIES",
-                "rationale": None,
-            },
-            {"action": "SUBMIT", "targets": ["C001"], "rationale": None},
+            {"action": "STOP", "stop_reason": "metric evidence contradicts the hypothesis"},
         ]
     )
     result = E11InvestigationRuntime(provider, backend, execution_id="polarity").run()
-    assert result["terminal"] == "SUBMIT"
+    assert result["terminal"] == "STOP"
     assessments = result["assessment_history"]
     assert assessments[0]["assessment"] == "CONTRADICTS"
-    assert assessments[1]["assessment"] == "SUPPORTS"
-    assert assessments[1]["supersedes_evidence_ref"] == assessments[0]["evidence_ref"]
-    assert result["case_state"]["candidate_state"]["C001"]["status"] == "SUPPORTED"
+    assert result["case_state"]["candidate_state"]["C001"]["status"] == "CONTRADICTED"
 
 
 def _checkout_alert(active_at: str) -> dict[str, Any]:
@@ -475,7 +520,7 @@ def _spec_run(backend: Any, execution_id: str) -> tuple[dict[str, Any], FakeMode
     return E11InvestigationRuntime(provider, backend, execution_id=execution_id).run(), provider
 
 
-def test_spec_analysis_has_causal_config_path_but_not_existence_only(tmp_path: Path) -> None:
+def test_experimental_spec_finding_is_not_submit_support(tmp_path: Path) -> None:
     objects, events = _config_fixture("2025-01-01T00:01:00Z")
     backend = _backend(
         tmp_path,
@@ -484,8 +529,10 @@ def test_spec_analysis_has_causal_config_path_but_not_existence_only(tmp_path: P
         alerts=[_checkout_alert("2025-01-01T00:00:30Z")],
     )
     result, _provider = _spec_run(backend, "config")
-    assert result["terminal"] == "SUBMIT"
+    assert result["terminal"] == "STOP"
     assert result["assessment_history"][0]["dimension"] == "configuration"
+    assert result["assessment_history"][0]["assessment"] == "INCONCLUSIVE"
+    assert "SUBMIT_DIAGNOSIS" not in tuple(_provider.requests[2].allowed_decisions or ())
 
     plain_backend = _backend(
         tmp_path / "plain",
@@ -646,6 +693,36 @@ def test_context_bounding_never_emits_partial_json_strings() -> None:
     items = _bounded_item([{"n": index, "pad": "y" * 50} for index in range(12)], 300)
     assert items and items[-1]["n"] == 11
     assert len(json.dumps(items)) <= 300
+
+
+def test_canary_submit_explanation_uses_persisted_support_provenance() -> None:
+    from packages.evals.itbench.e11_canary import _submit_explanations
+
+    result = {
+        "case_state": {
+            "submitted_targets": ["C001"],
+            "hypothesis_history": [{"entity_handle": "C001"}],
+        },
+        "catalog": [{"handle": "C001", "canonical": "prod/Service/checkout"}],
+        "assessment_history": [
+            {
+                "entity_handle": "C001",
+                "evidence_ref": "ASM-E001",
+                "assessment": "SUPPORTS",
+                "dimension": "dependency",
+                "rationale": "candidate is the observed error origin",
+            }
+        ],
+        "evidence_ledger": {
+            "ASM-E001": {"operation": "TRACE_ERROR_TREE"},
+        },
+        "final_ranking": [{"handle": "C001", "rank": 1}],
+    }
+    explanation = _submit_explanations("Scenario-1", result)[0]
+    assert explanation["supporting_operations"] == ["TRACE_ERROR_TREE"]
+    assert explanation["support_dimensions"] == ["dependency"]
+    assert explanation["final_ranking_position"] == 1
+    assert explanation["submit_trigger_operation"] == "TRACE_ERROR_TREE"
 
 
 def test_real_runtime_empty_output_passes_official_checkpoint(tmp_path: Path) -> None:

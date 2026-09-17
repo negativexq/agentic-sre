@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 
+from packages.investigation.tool_contracts import TraceIdArgs
 from packages.tools import (
     BackendProtocolError,
     BoundedToolExecutor,
@@ -26,6 +27,7 @@ from packages.tools.live_backends import (
     _prometheus_time_params,
     _tempo_time_params,
 )
+from packages.tools.trace_ids import normalize_trace_id
 
 
 def make_request(tool_name: str, **parameters: object) -> ToolRequest:
@@ -119,6 +121,35 @@ def test_backend_time_serializers_use_backend_specific_units() -> None:
     assert 10**9 < float(prometheus["start"]) < 10**11
     assert 10**18 < int(loki["start"]) < 10**19
     assert 10**9 < float(tempo["start"]) < 10**11
+
+
+@pytest.mark.parametrize(
+    ("raw", "canonical"),
+    [("a" * 31, "0" + "a" * 31), ("A" * 32, "a" * 32)],
+)
+def test_tempo_trace_id_normalization(raw: str, canonical: str) -> None:
+    assert normalize_trace_id(raw) == canonical
+    assert TraceIdArgs.model_validate({"trace_id": raw}).trace_id == canonical
+
+
+@pytest.mark.parametrize("raw", ["", "g" * 32, "a" * 33])
+def test_tempo_trace_id_rejects_invalid_lengths_and_values(raw: str) -> None:
+    with pytest.raises(ValueError):
+        normalize_trace_id(raw)
+    with pytest.raises(ValueError):
+        TraceIdArgs.model_validate({"trace_id": raw})
+
+
+def test_tempo_backend_uses_canonical_trace_id(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    captured: dict[str, object] = {}
+
+    def fake_get(self, path, params, timeout_seconds, **kwargs):  # type: ignore[no-untyped-def]
+        captured["path"] = path
+        return {"batches": []}
+
+    monkeypatch.setattr(TempoBackend, "_get", fake_get)
+    TempoBackend("http://tempo").query("get_trace", {"trace_id": "a" * 31})
+    assert captured["path"] == "/api/traces/0" + "a" * 31
 
 
 def test_backend_http_failures_have_typed_classes(monkeypatch) -> None:  # type: ignore[no-untyped-def]

@@ -47,8 +47,10 @@ E11_OFFICIAL_RELEVANT_PATHS: Final[tuple[str, ...]] = (
     "packages/evals/itbench/e11_operations.py",
     "packages/evals/itbench/e11_official.py",
     "packages/evals/itbench/e11_canary.py",
+    "packages/evals/itbench/e11_live_smoke.py",
     "packages/evals/itbench/e11_runtime.py",
     "packages/evals/itbench/e11_local_grading.py",
+    "packages/tools/trace_ids.py",
     "scripts/itbench_e11_execute.py",
 )
 

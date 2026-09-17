@@ -2,7 +2,9 @@
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from packages.tools.trace_ids import normalize_trace_id
 
 
 class ToolArguments(BaseModel):
@@ -35,6 +37,12 @@ class ConsumerArgs(ToolArguments):
 
 class TraceIdArgs(ToolArguments):
     trace_id: str = Field(min_length=32, max_length=32)
+
+    @field_validator("trace_id", mode="before")
+    @classmethod
+    def canonicalize_trace_id(cls, value: object) -> str:
+        """Accept abbreviated hex from Tempo and validate its canonical form."""
+        return normalize_trace_id(value)
 
 
 class DeploymentArgs(ToolArguments):

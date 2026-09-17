@@ -163,6 +163,9 @@ def run_e11_snapshot_runtime_canary(root: Any) -> dict[str, Any]:
     context_chars: list[int] = []
     context_evidence_visible = 0
     terminals: dict[str, int] = {}
+    submit_explanations: list[dict[str, Any]] = []
+    submit_by_operation: dict[str, int] = {}
+    support_by_operation: dict[str, int] = {}
     for scenario in dataset.scenarios():
         backend = ITBenchSnapshotBackend(dataset, scenario, max_rows=20)
         provider = ContextAwareFakeProvider()
@@ -195,6 +198,18 @@ def run_e11_snapshot_runtime_canary(root: Any) -> dict[str, Any]:
             and '"recent_evidence":[]' not in request.messages[-1].content
         )
         terminals[result["terminal"]] = terminals.get(result["terminal"], 0) + 1
+        for assessment in result.get("assessment_history", []):
+            if assessment.get("assessment") == EvidenceAssessment.SUPPORTS:
+                operation = _evidence_operation(result, assessment.get("evidence_ref"))
+                if operation:
+                    support_by_operation[operation] = support_by_operation.get(operation, 0) + 1
+        if result["terminal"] == "SUBMIT":
+            submit_explanations.extend(_submit_explanations(scenario.scenario_id, result))
+            for explanation in submit_explanations:
+                if explanation["scenario_id"] == scenario.scenario_id:
+                    operation = explanation.get("submit_trigger_operation")
+                    if operation:
+                        submit_by_operation[operation] = submit_by_operation.get(operation, 0) + 1
     return {
         "scenario_count": completed,
         "completed": completed,
@@ -209,11 +224,86 @@ def run_e11_snapshot_runtime_canary(root: Any) -> dict[str, Any]:
         "context_distribution": _distribution(context_chars),
         "hypothesis_distribution": _distribution(first_hypothesis_turns),
         "context_evidence_visible_requests": context_evidence_visible,
+        "submit_explanations": submit_explanations,
+        "submit_by_operation": submit_by_operation,
+        "support_by_operation": support_by_operation,
         "runtime_errors": 0,
         "replay_errors": 0,
         "ground_truth_access": 0,
         "control_plane_only": True,
     }
+
+
+def _evidence_operation(result: dict[str, Any], evidence_ref: Any) -> str | None:
+    """Resolve an assessment's runtime evidence reference for reporting."""
+    if not isinstance(evidence_ref, str):
+        return None
+    evidence = result.get("evidence_ledger", {}).get(evidence_ref, {})
+    if isinstance(evidence, dict):
+        operation = evidence.get("operation")
+        if isinstance(operation, str):
+            return operation
+    for item in result.get("case_state", {}).get("evidence", []):
+        if isinstance(item, dict) and item.get("evidence_handle") == evidence_ref:
+            operation = item.get("operation")
+            return operation if isinstance(operation, str) else None
+    return None
+
+
+def _submit_explanations(scenario_id: str, result: dict[str, Any]) -> list[dict[str, Any]]:
+    """Explain each accepted SUBMIT from persisted runtime evidence only."""
+    targets = result.get("case_state", {}).get("submitted_targets", [])
+    assessments = result.get("assessment_history", [])
+    rows: list[dict[str, Any]] = []
+    final_ranking = result.get("final_ranking", [])
+    for handle in targets if isinstance(targets, list) else []:
+        supporting = [
+            item
+            for item in assessments
+            if item.get("entity_handle") == handle
+            and item.get("assessment") == EvidenceAssessment.SUPPORTS
+        ]
+        evidence_refs = [item.get("evidence_ref") for item in supporting]
+        operations = [
+            operation
+            for operation in (_evidence_operation(result, ref) for ref in evidence_refs)
+            if operation
+        ]
+        dimensions = [item.get("dimension") for item in supporting if item.get("dimension")]
+        reasons = [item.get("rationale") for item in supporting if item.get("rationale")]
+        entity = next(
+            (
+                item.get("canonical")
+                for item in result.get("catalog", [])
+                if isinstance(item, dict) and item.get("handle") == handle
+            ),
+            None,
+        )
+        rank = next(
+            (
+                item.get("rank")
+                for item in final_ranking
+                if isinstance(item, dict) and item.get("handle") == handle
+            ),
+            None,
+        )
+        rows.append(
+            {
+                "scenario_id": scenario_id,
+                "submitted_target_handle": handle,
+                "submitted_canonical_entity": entity,
+                "supporting_evidence_refs": evidence_refs,
+                "supporting_operations": operations,
+                "support_dimensions": dimensions,
+                "support_reasons": reasons,
+                "final_ranking_position": rank,
+                "latest_hypothesis_history": result.get("case_state", {}).get(
+                    "hypothesis_history", []
+                ),
+                "submit_trigger_operation": operations[-1] if operations else None,
+            }
+        )
+    return rows
 
 
 __all__ = [

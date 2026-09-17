@@ -113,3 +113,24 @@ and preserves the current R1 gate (`R@1=.257`, `R@3=.400`, `R@5=.600`,
 `R@10=.686`). Corrected telemetry is not the default because B2 regresses to
 `.057/.200/.257/.314`; it remains available for semantic investigation and
 future independent qualification. `E11 LIVE RUN = NOT RUN`.
+
+## Final hardening follow-up
+
+The prior offline canary's four `SUBMIT` terminals are individually explained
+in `itbench-e11-runtime-canary-v2.json`: all four were triggered by
+`TRACE_ERROR_TREE` support where the selected candidate was the observed error
+origin. None was unlocked by `SPEC_ANALYSIS`. A `rule_status=EXPERIMENTAL`
+SPEC finding is now explicitly `INCONCLUSIVE` and cannot independently make a
+candidate submit-ready. The canary remains a control-plane qualification, not
+an RCA-quality measurement.
+
+Identical target/operation checks are not repeated against the immutable
+snapshot. A future repeated check must change target, scope, arguments, or
+depend on genuinely transient/unavailable data. The checked-in live-smoke
+entry point is fail-closed unless an explicit authorization flag is supplied;
+it was not executed here. The A1 Tempo boundary now canonicalizes valid
+1–32-character hexadecimal IDs to lowercase 32-character trace IDs and rejects
+non-hex or overlong values.
+
+The first-hypothesis turn of `2` in this artifact is a property of the
+deterministic fake-provider policy, not a measurement of Luna behavior.

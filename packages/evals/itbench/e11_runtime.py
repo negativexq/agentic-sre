@@ -310,6 +310,7 @@ class E11InvestigationRuntime:
             "safety": safety,
             "catalog": [entity.as_dict() for entity in catalog.entities()],
             "initial_ranking": [candidate.as_dict() for candidate in initial_ranking],
+            "final_ranking": [candidate.as_dict() for candidate in ranking],
             "retrieval_config": self.retrieval_config.__dict__
             if hasattr(self.retrieval_config, "__dict__")
             else {
@@ -726,6 +727,25 @@ class E11InvestigationRuntime:
             )
         if operation == "SPEC_ANALYSIS":
             findings = summary.get("causal_findings", [])
+            experimental = (
+                any(
+                    isinstance(item, dict) and item.get("rule_status") == "EXPERIMENTAL"
+                    for item in findings
+                )
+                if isinstance(findings, list)
+                else False
+            )
+            # A topology relation plus a nearby failure is useful context,
+            # but an explicitly experimental rule must not independently
+            # unlock a graded diagnosis.
+            if experimental:
+                return (
+                    EvidenceAssessment.INCONCLUSIVE,
+                    "configuration",
+                    "experimental SPEC relation requires independent mechanism evidence",
+                    None,
+                    0.0,
+                )
             if isinstance(findings, list) and findings:
                 return (
                     EvidenceAssessment.SUPPORTS,

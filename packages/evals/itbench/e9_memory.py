@@ -194,19 +194,16 @@ class E9CaseMemory:
         )
 
     def recheck_allowed(self, handle: str | None, operation: str) -> bool:
-        """Allow one further check only after a negative/inconclusive result."""
-        if handle is None:
-            return False
-        prior = [
-            item
-            for item in self.state.get("evidence", {}).values()
-            if item.get("entity_handle") == handle and item.get("operation") == operation
-        ]
-        return len(prior) == 1 and str(prior[-1].get("result_status")) in {
-            "NO_DATA",
-            "NEGATIVE_FINDING",
-            "INCONCLUSIVE",
-        }
+        """Reject identical rechecks against the immutable snapshot.
+
+        E11 currently exposes no model-controlled query arguments, so the
+        same target and operation is the same bounded query.  A materially
+        different target remains legal because it has a different operation
+        identity.  Argument-bearing operations must include their scope in
+        this identity before a recheck can be enabled.
+        """
+        del handle, operation
+        return False
 
     def set_active_shortlist(self, handles: tuple[str, ...], *, turn: int) -> None:
         """Persist the runtime-visible shortlist shared with E11 memory."""

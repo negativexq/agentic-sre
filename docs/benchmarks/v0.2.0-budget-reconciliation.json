@@ -1,9 +1,0 @@
-{
-  "ledger_path": ".local/v0.2.0-live-budget.json",
-  "persisted_before": 43,
-  "untracked_actual_calls": 2,
-  "reason": "A prior live command ran without SRE_LIVE_MODEL_BUDGET_FILE and used process-local accounting.",
-  "corrected_total": 45,
-  "reconciliation": "guarded_atomic_add",
-  "secrets_persisted": false
-}

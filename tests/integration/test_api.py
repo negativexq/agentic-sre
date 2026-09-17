@@ -120,57 +120,6 @@ def test_change_journal_accepts_and_reads_harness_facts(client: tuple[TestClient
     assert queried.json()[0]["revision"] == "b"
 
 
-def test_benchmark_state_preparation_clears_only_incident_state(
-    client: tuple[TestClient, UUID], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The guarded local operation makes a clean canonical-alert namespace."""
-    test_client, incident_id = client
-    monkeypatch.setenv("SRE_BENCHMARK_ENVIRONMENT", "local-kind")
-
-    response = test_client.post(
-        "/api/v1/benchmark/state/prepare",
-        json={
-            "environment": "local-kind",
-            "scope": "incident-alert-state",
-            "confirmation": "reset-local-benchmark-state",
-            "execution_id": "test-execution",
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "environment": "local-kind",
-        "scope": "incident-alert-state",
-        "execution_id": "test-execution",
-        "deleted_incidents": 1,
-        "deleted_alerts": 0,
-        "remaining_incidents": 0,
-        "remaining_alerts": 0,
-    }
-    assert test_client.get("/api/v1/incidents").json() == []
-    assert test_client.get(f"/api/v1/incidents/{incident_id}").status_code == 404
-
-
-def test_benchmark_state_preparation_is_disabled_by_default(
-    client: tuple[TestClient, UUID], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    test_client, _ = client
-    monkeypatch.delenv("SRE_BENCHMARK_ENVIRONMENT", raising=False)
-
-    response = test_client.post(
-        "/api/v1/benchmark/state/prepare",
-        json={
-            "environment": "local-kind",
-            "scope": "incident-alert-state",
-            "confirmation": "reset-local-benchmark-state",
-            "execution_id": "test-execution",
-        },
-    )
-
-    assert response.status_code == 404
-    assert response.json()["error"]["code"] == "BENCHMARK_STATE_PREPARATION_DISABLED"
-
-
 def test_readiness_reports_database_unavailable() -> None:
     engine = create_engine(
         "postgresql+psycopg://postgres:postgres@127.0.0.1:1/agentic_sre?connect_timeout=1"

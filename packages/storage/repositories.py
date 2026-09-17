@@ -5,9 +5,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
 
-from sqlalchemy import delete, desc, func, select
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from packages.contracts import (
@@ -33,14 +32,9 @@ from packages.storage.models import (
     ChangeRecordRow,
     DiagnosisRow,
     EvidenceRow,
-    HypothesisRow,
     IncidentEventRow,
     IncidentRow,
     ObjectVersionRow,
-    PolicyDecisionRow,
-    RemediationProposalRow,
-    ToolCallRow,
-    VerificationResultRow,
 )
 
 if TYPE_CHECKING:
@@ -49,40 +43,6 @@ if TYPE_CHECKING:
 
 class IncidentNotFoundError(LookupError):
     """Raised when an incident is required but absent from storage."""
-
-
-class BenchmarkStateRepository:
-    """Narrow local-benchmark reset for incident and alert state only."""
-
-    _INCIDENT_CHILD_TABLES = (
-        IncidentEventRow,
-        EvidenceRow,
-        HypothesisRow,
-        RemediationProposalRow,
-        PolicyDecisionRow,
-        VerificationResultRow,
-        ToolCallRow,
-    )
-
-    def __init__(self, session: Session) -> None:
-        self._session = session
-
-    def reset_incident_alert_state(self) -> tuple[int, int]:
-        """Delete only incident/alert state, preserving change history."""
-        incident_count = self._session.scalar(select(func.count()).select_from(IncidentRow)) or 0
-        alert_count = self._session.scalar(select(func.count()).select_from(AlertRow)) or 0
-        for table in self._INCIDENT_CHILD_TABLES:
-            self._session.execute(delete(table))
-        self._session.execute(delete(AlertRow))
-        self._session.execute(delete(IncidentRow))
-        self._session.commit()
-        return int(incident_count), int(alert_count)
-
-    def incident_alert_counts(self) -> tuple[int, int]:
-        """Return current incident and alert counts for contamination checks."""
-        incidents = self._session.scalar(select(func.count()).select_from(IncidentRow)) or 0
-        alerts = self._session.scalar(select(func.count()).select_from(AlertRow)) or 0
-        return int(incidents), int(alerts)
 
 
 def _next_event_sequence(session: Session, incident_id: object) -> int:
@@ -357,67 +317,6 @@ class EvidenceRepository:
             )
             for row in rows
         ]
-
-
-class ToolCallRepository:
-    """Persistence operations for audited tool invocations."""
-
-    def __init__(self, session: Session) -> None:
-        self._session = session
-
-    def append(
-        self,
-        tool_call_id: UUID,
-        incident_id: UUID,
-        tool_name: str,
-        tool_version: str,
-        request: dict[str, Any],
-        response: dict[str, Any],
-        started_at: datetime,
-        finished_at: datetime,
-    ) -> None:
-        """Append one immutable tool-call audit record."""
-        self._session.add(
-            ToolCallRow(
-                tool_call_id=tool_call_id,
-                incident_id=incident_id,
-                tool_name=tool_name,
-                tool_version=tool_version,
-                request=request,
-                response=response,
-                started_at=started_at,
-                finished_at=finished_at,
-            )
-        )
-        self._session.commit()
-
-
-class EvidenceWriteRepository:
-    """Persistence boundary for provenance-validated evidence."""
-
-    def __init__(self, session: Session) -> None:
-        self._session = session
-
-    def append(self, evidence: Evidence) -> Evidence:
-        """Reject missing or cross-incident tool references before insert."""
-        tool_call = self._session.get(ToolCallRow, evidence.tool_call_id)
-        if tool_call is None or tool_call.incident_id != evidence.incident_id:
-            raise ValueError("tool call does not belong to evidence incident")
-        self._session.add(
-            EvidenceRow(
-                evidence_id=evidence.evidence_id,
-                incident_id=evidence.incident_id,
-                source_type=evidence.source_type.value,
-                source_system=evidence.source_system,
-                observation=evidence.observation,
-                time_window=evidence.time_window.model_dump(mode="json"),
-                tool_call_id=evidence.tool_call_id,
-                raw_result_reference=evidence.raw_result_reference,
-                collected_at=evidence.collected_at,
-            )
-        )
-        self._session.commit()
-        return evidence
 
 
 class ObjectVersionRepository:

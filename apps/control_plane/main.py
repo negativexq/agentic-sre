@@ -18,8 +18,6 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from apps.control_plane.diagnosis import DiagnosisService, service_from_environment
 from apps.control_plane.schemas import (
-    BenchmarkStatePreparationRequest,
-    BenchmarkStatePreparationResponse,
     ErrorDetail,
     ErrorResponse,
 )
@@ -37,7 +35,6 @@ from packages.rca.model import Diagnosis
 from packages.rca.report import diagnosis_html, incidents_html
 from packages.storage import (
     AlertRepository,
-    BenchmarkStateRepository,
     ChangeRecordRepository,
     DiagnosisRepository,
     EvidenceRepository,
@@ -50,8 +47,6 @@ from packages.storage import (
 from packages.telemetry import TelemetryMiddleware, create_runtime
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/agentic_sre"
-BENCHMARK_ENVIRONMENT = "local-kind"
-BENCHMARK_DATABASE_NAME = "agentic_sre"
 
 
 def _correlation_id(request: Request) -> str:
@@ -98,7 +93,7 @@ def create_app(
         registry=registry,
         otlp_endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
     )
-    app = FastAPI(title="Agentic SRE Control Plane", version="0.1.1")
+    app = FastAPI(title="Agentic SRE", version="0.3.0")
     app.add_middleware(TelemetryMiddleware, runtime=telemetry)
     app.mount("/metrics", make_asgi_app(registry=registry))
     app.dependency_overrides[get_session] = session_dependency
@@ -129,71 +124,6 @@ def create_app(
         except SQLAlchemyError:
             return _error(request, "DATABASE_UNAVAILABLE", "Database is unavailable.", 503)
         return {"status": "ready"}
-
-    @app.post(
-        "/api/v1/benchmark/state/prepare",
-        response_model=BenchmarkStatePreparationResponse,
-        responses={404: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
-    )
-    def prepare_benchmark_state(
-        request: Request,
-        payload: BenchmarkStatePreparationRequest,
-        session: Session = Depends(get_session),  # noqa: B008
-    ) -> BenchmarkStatePreparationResponse | JSONResponse:
-        """Prepare only the local benchmark's incident/alert persistence state."""
-        if os.getenv("SRE_BENCHMARK_ENVIRONMENT") != BENCHMARK_ENVIRONMENT:
-            return _error(
-                request,
-                "BENCHMARK_STATE_PREPARATION_DISABLED",
-                "Benchmark state preparation is disabled outside local-kind.",
-                404,
-            )
-        if payload.environment != BENCHMARK_ENVIRONMENT:
-            return _error(
-                request,
-                "BENCHMARK_ENVIRONMENT_MISMATCH",
-                "Benchmark environment does not match the enabled local environment.",
-                403,
-            )
-        bind = session.get_bind()
-        if bind.dialect.name == "postgresql":
-            database_name = session.execute(text("SELECT current_database()")).scalar_one()
-            if database_name != BENCHMARK_DATABASE_NAME:
-                return _error(
-                    request,
-                    "BENCHMARK_DATABASE_MISMATCH",
-                    "Benchmark state preparation refused for this database.",
-                    403,
-                )
-        elif bind.dialect.name != "sqlite":
-            return _error(
-                request,
-                "BENCHMARK_DATABASE_UNSUPPORTED",
-                "Benchmark state preparation requires the local PostgreSQL database.",
-                403,
-            )
-        deleted_incidents, deleted_alerts = BenchmarkStateRepository(
-            session
-        ).reset_incident_alert_state()
-        remaining_incidents, remaining_alerts = BenchmarkStateRepository(
-            session
-        ).incident_alert_counts()
-        if remaining_incidents or remaining_alerts:
-            return _error(
-                request,
-                "A1_BENCHMARK_STATE_CONTAMINATED",
-                "Benchmark incident/alert state was not fully cleared.",
-                500,
-            )
-        return BenchmarkStatePreparationResponse(
-            environment=BENCHMARK_ENVIRONMENT,
-            scope=payload.scope,
-            execution_id=payload.execution_id,
-            deleted_incidents=deleted_incidents,
-            deleted_alerts=deleted_alerts,
-            remaining_incidents=remaining_incidents,
-            remaining_alerts=remaining_alerts,
-        )
 
     @app.get("/api/v1/incidents", response_model=list[Incident])
     def list_incidents(session: Session = Depends(get_session)) -> list[Incident]:  # noqa: B008

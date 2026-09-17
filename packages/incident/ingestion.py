@@ -6,6 +6,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from packages.contracts import (
@@ -83,19 +84,13 @@ class IncidentManager:
 
     def ingest(self, alert: Alert, *, now: datetime) -> Incident:
         """Create or update one occurrence without reopening terminal state."""
-        rows = self._session.scalars(
-            select(AlertRow)
-            .where(
+        row = self._session.scalar(
+            select(AlertRow).where(
                 AlertRow.fingerprint == alert.fingerprint,
                 AlertRow.starts_at == alert.starts_at,
             )
-            .order_by(AlertRow.alert_id.desc())
-        ).all()
-        active = next((item for item in rows if item.status == AlertStatus.FIRING.value), None)
-        row = (
-            active if alert.status is AlertStatus.FIRING else active or (rows[0] if rows else None)
         )
-        if row is None or (alert.status is AlertStatus.FIRING and row.status != AlertStatus.FIRING):
+        if row is None:
             incident = Incident(
                 incident_id=uuid4(),
                 status=IncidentStatus.OPEN,
@@ -106,26 +101,41 @@ class IncidentManager:
                 created_at=now,
                 updated_at=now,
             )
-            IncidentRepository(self._session).create(incident)
-            self._session.add(
-                AlertRow(
-                    alert_id=alert.alert_id,
-                    incident_id=incident.incident_id,
-                    alert_name=alert.alert_name,
-                    service=alert.service,
-                    namespace=alert.namespace,
-                    cluster=alert.cluster,
-                    starts_at=alert.starts_at,
-                    ends_at=alert.ends_at,
-                    labels=alert.labels,
-                    annotations=alert.annotations,
-                    fingerprint=alert.fingerprint,
-                    status=alert.status.value,
-                    source=alert.source.value,
+            try:
+                # Keep the parent and occurrence in one transaction. If a
+                # concurrent delivery wins the unique occurrence constraint,
+                # this transaction rolls back both rows and then returns the
+                # canonical winner below.
+                IncidentRepository(self._session).create(incident, commit=False)
+                self._session.add(
+                    AlertRow(
+                        alert_id=alert.alert_id,
+                        incident_id=incident.incident_id,
+                        alert_name=alert.alert_name,
+                        service=alert.service,
+                        namespace=alert.namespace,
+                        cluster=alert.cluster,
+                        starts_at=alert.starts_at,
+                        ends_at=alert.ends_at,
+                        labels=alert.labels,
+                        annotations=alert.annotations,
+                        fingerprint=alert.fingerprint,
+                        status=alert.status.value,
+                        source=alert.source.value,
+                    )
                 )
-            )
-            self._session.commit()
-            return incident
+                self._session.commit()
+                return incident
+            except IntegrityError:
+                self._session.rollback()
+                row = self._session.scalar(
+                    select(AlertRow).where(
+                        AlertRow.fingerprint == alert.fingerprint,
+                        AlertRow.starts_at == alert.starts_at,
+                    )
+                )
+                if row is None:
+                    raise
 
         existing_incident = IncidentRepository(self._session).get(row.incident_id)
         if existing_incident is None:
@@ -133,6 +143,11 @@ class IncidentManager:
         if row.status == alert.status.value and alert.status is AlertStatus.RESOLVED:
             # Alertmanager retries a resolved delivery; no new timeline event
             # or state mutation is needed for an already terminal occurrence.
+            return existing_incident
+        # A late/retried firing for an already resolved occurrence is still
+        # the same historical occurrence. Never reopen it and never create a
+        # second incident with the same uniqueness key.
+        if alert.status is AlertStatus.FIRING and row.status != AlertStatus.FIRING:
             return existing_incident
         unchanged = (
             row.status == alert.status.value

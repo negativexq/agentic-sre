@@ -80,6 +80,11 @@ class AlertRow(Base):
     """
 
     __tablename__ = "alerts"
+    __table_args__ = (
+        UniqueConstraint(
+            "fingerprint", "starts_at", name="uq_alert_occurrence_fingerprint_starts_at"
+        ),
+    )
 
     alert_id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     incident_id: Mapped[UUID | None] = mapped_column(

@@ -82,7 +82,7 @@ class IncidentRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def create(self, incident: Incident) -> Incident:
+    def create(self, incident: Incident, *, commit: bool = True) -> Incident:
         """Insert an incident and its creation event atomically."""
         row = IncidentRow(
             incident_id=incident.incident_id,
@@ -116,7 +116,8 @@ class IncidentRepository:
                 correlation_id=event.correlation_id,
             )
         )
-        self._session.commit()
+        if commit:
+            self._session.commit()
         return incident
 
     def get(self, incident_id: object) -> Incident | None:

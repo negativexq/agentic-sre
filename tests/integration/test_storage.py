@@ -195,6 +195,8 @@ def test_alembic_migration_up_and_down(tmp_path: Path) -> None:
         "verification_results",
     }
     assert set(inspect_database(engine).get_table_names()) == expected_tables | {"alembic_version"}
+    constraints = inspect_database(engine).get_unique_constraints("alerts")
+    assert {item["name"] for item in constraints} >= {"uq_alert_occurrence_fingerprint_starts_at"}
     engine.dispose()
 
     command.downgrade(config, "base")

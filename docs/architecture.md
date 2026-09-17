@@ -21,18 +21,19 @@ flowchart LR
 
 | Path | Role |
 | --- | --- |
-| `packages/rca/model.py` | Entities, alerts, object versions, events, findings, diagnosis |
+| `packages/rca/model.py` | Entities, alerts, object versions, events, findings, hypotheses, diagnosis |
 | `packages/rca/source.py` | `ObservationSource` protocol and an in-memory source |
 | `packages/rca/topology.py` | Ownership, selectors, config references, HPA, policies, chaos targets, env-declared service calls |
 | `packages/rca/signals.py` | Symptoms and findings: config/spec/image/scale changes, restarts, fault injection, network policies, quota rejections, container failures, resource pressure, dependency errors, warning events, HPA failures, and temporal traffic changes |
 | `packages/rca/ranking.py` | Explainable scoring and deterministic verification rules |
+| `packages/rca/hypotheses.py` | Evidence-coherent causal episode grouping and hypothesis diagnostics |
 | `packages/rca/engine.py` | Pipeline: observe → signals → rank → investigate → verify → propose |
 | `packages/rca/agent.py`, `llm.py` | Optional LLM investigator with read-only tools; opt-in OpenAI client |
 | `packages/rca/remediation.py` | Proposed commands; never executed |
 | `packages/rca/live.py` | Kubernetes reader, Loki reader, change watcher, live source |
 | `packages/rca/report.py` | HTML for the web UI and static reports |
 | `apps/control_plane` | FastAPI: Alertmanager webhook, incidents, diagnoses, web UI |
-| `apps/cli` | `agentic-sre demo`, `diagnose`, `eval`, `grade`, `benchmark-qualify`, `serve` |
+| `apps/cli` | `agentic-sre demo`, `diagnose`, `eval`, `grade`, `benchmark-qualify`, `hypothesis-report`, `serve` |
 | `packages/evals/itbench` | Snapshot source, sealed predict/grade runner, ITBench grader |
 
 ## Pipeline
@@ -59,22 +60,30 @@ flowchart LR
    metric-failure Events are normalized with their controlled workload so an
    upstream autoscaler failure can be distinguished from a later workload
    failure.
-3. **Ranking.** Each finding scores by kind, topology distance to alerting
+3. **Hypothesis formation.** Entity identity is not hypothesis identity.
+   Candidate evidence is grouped only when a directional causal path and
+   temporally coherent initiating/supporting evidence connect the entities. A
+   Deployment image change and a later owned Pod failure therefore form one
+   hypothesis with the Deployment as actor and the Pod as manifestation. An
+   unchanged Deployment does not absorb a Pod-local OOM merely because it owns
+   that Pod. Findings are deduplicated by evidence identity for scoring while
+   all provenance remains available for explanation.
+4. **Ranking.** Each finding scores by kind, topology distance to alerting
    components, namespace, whether the change names an alerting service, and
    timing relative to onset. Warnings on the alerting component itself count
    for less, because they restate the symptom.
-4. **Investigation.** With an investigator configured, the model sees the top
+5. **Investigation.** With an investigator configured, the model sees the top
    candidates and may inspect them (`describe`, `history`, `events`,
    `neighbors`, `logs`) before choosing one. Invalid replies or budget
    exhaustion fall back to the ranking.
-5. **Verification.** Rules decide the confidence label for the chosen
+6. **Verification.** Rules decide the confidence label for the chosen
    candidate. Findings expose an onset delta and a temporal role
    (`INITIATING`, `SUPPORTING`, `CONSEQUENCE`, or `AMBIGUOUS`). A late linked
    change can remain a candidate but cannot verify the original incident onset;
    downstream-only evidence may produce `UNVERIFIED`. The structured
    `VerificationTrace` records passed, failed, weak, and unknown predicates
    without using an LLM.
-6. **Remediation.** The strongest finding maps to a reversible proposal:
+7. **Remediation.** The causal actor maps to a reversible proposal:
    revert a ConfigMap, `rollout undo`, pause a chaos schedule, restore
    replicas, raise a quota or memory limit.
 
@@ -114,6 +123,32 @@ Shared ConfigMaps and broad NetworkPolicies remain direct candidates for their
 own targets, but causal traversal does not use them as bridges between
 unrelated sibling workloads. This is deliberate abstention from structural
 connectivity, not a claim that the shared resource cannot itself be causal.
+
+## Candidate evidence and causal hypotheses
+
+The deterministic pipeline is explicitly:
+
+```text
+Finding → candidate evidence → Hypothesis → verification → Diagnosis
+```
+
+Kubernetes object identity is not causal-hypothesis identity. A hypothesis has
+a stable ID, a `causal_actor`, member entities, manifestations, grouped
+findings, evidence-role partitions, causal paths, and deterministic reasons.
+For example, a Deployment image change followed by an owned Pod's
+`ImagePullBackOff` is one episode: the Deployment is the actor, the Pod is a
+manifestation, and the two findings retain their separate provenance. The
+same ownership edge does not group an unchanged Deployment with a Pod-local
+OOM, and sibling workloads are never grouped merely because they share a
+namespace or resource.
+
+Grouping requires both an allowlisted causal path and evidence coherence. A
+Schedule can act as the actor for a spawned Chaos execution when the schedule
+and injection findings establish that lineage; a directly injected Chaos
+object remains its own actor. Evidence IDs are counted once for hypothesis
+scoring, while duplicate references remain visible in the grouped provenance.
+This layer represents episodes but does not yet resolve ambiguity between
+separate hypotheses.
 
 ## Safety
 

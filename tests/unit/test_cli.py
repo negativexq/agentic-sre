@@ -32,6 +32,9 @@ def test_demo_text_output_names_the_cause(capsys: pytest.CaptureFixture[str]) ->
     assert "Root cause   shop/Deployment/payment" in out
     assert "Causal path" in out
     assert "Proposed remediation (not executed)" in out
+    assert "Causal hypothesis" in out
+    assert "Actor          shop/Deployment/payment" in out
+    assert "Initiating evidence" in out
 
 
 def test_html_causal_path_escapes_entities_and_omits_empty_path() -> None:
@@ -55,6 +58,46 @@ def test_html_causal_path_escapes_entities_and_omits_empty_path() -> None:
         diagnosis.model_copy(update={"causal_path": (), "causal_explanation": "DIRECT"})
     )
     assert "Why this cause / Direct evidence" in direct
+
+
+def test_html_renders_hypothesis_actor_and_escaped_manifestation() -> None:
+    diagnosis = diagnose(demo_source())
+    assert diagnosis.hypothesis is not None
+    html = diagnosis_html(
+        diagnosis.model_copy(
+            update={
+                "hypothesis": diagnosis.hypothesis.model_copy(
+                    update={
+                        "manifestations": (EntityRef(kind="Pod", name="<payment>"),),
+                    }
+                )
+            }
+        )
+    )
+    assert "Causal hypothesis" in html
+    assert "Causal actor" in html
+    assert "&lt;payment&gt;" in html
+    assert "<payment>" not in html
+
+
+def test_hypothesis_report_reads_stored_diagnoses_without_ground_truth(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    run = tmp_path / "run" / "predictions"
+    run.mkdir(parents=True)
+    diagnosis = diagnose(demo_source())
+    (run / "Scenario-1.json").write_text(
+        json.dumps({"diagnosis": diagnosis.model_dump(mode="json")}), encoding="utf-8"
+    )
+
+    assert main(["hypothesis-report", "--run", str(run.parent), "--json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["scenario_count"] == 1
+    assert diagnosis.hypothesis_diagnostics is not None
+    assert (
+        report["grouping"]["hypothesis_count"] == diagnosis.hypothesis_diagnostics.hypothesis_count
+    )
+    assert report["selection_changes"] == "not inferable from one run"
 
 
 @pytest.mark.parametrize(

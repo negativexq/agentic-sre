@@ -10,6 +10,7 @@ from pathlib import Path
 
 from packages.evals.itbench.dataset import ITBenchLiteDataset
 from packages.rca.engine import Investigator
+from packages.rca.hypotheses import summarize_diagnoses
 from packages.rca.model import Diagnosis
 
 DEFAULT_DATASET = Path(os.environ.get("ITBENCH_LITE_ROOT", ".local/itbench-lite"))
@@ -24,6 +25,23 @@ def _print_diagnosis(diagnosis: Diagnosis) -> None:
     print(
         f"Symptoms     {', '.join(symptoms.alert_names) or '-'} on {', '.join(symptoms.services[:6]) or '-'}"
     )
+    if diagnosis.hypothesis:
+        hypothesis = diagnosis.hypothesis
+        print("Causal hypothesis")
+        print(f"  Actor          {hypothesis.causal_actor}")
+        if hypothesis.manifestations:
+            print("  Manifestations")
+            for entity in hypothesis.manifestations[:6]:
+                print(f"    - {entity}")
+        for title, findings in (
+            ("Initiating evidence", hypothesis.initiating_findings),
+            ("Supporting evidence", hypothesis.supporting_findings),
+            ("Contradictory evidence", hypothesis.contradictory_findings),
+        ):
+            if findings:
+                print(f"  {title}")
+                for finding in findings[:6]:
+                    print(f"    - [{finding.kind.value}] {finding.summary}")
     if diagnosis.causal_path:
         print("Causal path")
         for hop in diagnosis.causal_path:
@@ -160,6 +178,33 @@ def cmd_benchmark_qualify(args: argparse.Namespace) -> int:
     return 0 if report["scenarios"] else 1
 
 
+def cmd_hypothesis_report(args: argparse.Namespace) -> int:
+    """Summarize grouping diagnostics stored in a prediction/run directory."""
+    prediction_dir = args.run / "predictions"
+    paths = sorted(prediction_dir.glob("*.json"))
+    if not paths:
+        raise SystemExit(f"no prediction files found under {prediction_dir}")
+    diagnoses = [
+        Diagnosis.model_validate(json.loads(path.read_text(encoding="utf-8"))["diagnosis"])
+        for path in paths
+    ]
+    grouping = summarize_diagnoses(diagnoses)
+    report = {
+        "run": str(args.run),
+        "scenario_count": len(diagnoses),
+        "grouping": grouping,
+        "selection_changes": "not inferable from one run",
+    }
+    if args.json:
+        print(json.dumps(report, indent=2))
+    else:
+        print(f"Hypothesis grouping report: {args.run}")
+        for key, value in grouping.items():
+            print(f"{key}: {value}")
+        print("selection_changes: not inferable from one run")
+    return 0
+
+
 def _add_output_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="print the diagnosis as JSON")
     parser.add_argument("--html", type=Path, default=None, help="also write an HTML report")
@@ -217,6 +262,14 @@ def build_parser() -> argparse.ArgumentParser:
     qualify_cmd.add_argument("--out", type=Path, required=True)
     qualify_cmd.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
     qualify_cmd.set_defaults(handler=cmd_benchmark_qualify)
+
+    hypothesis_cmd = sub.add_parser(
+        "hypothesis-report",
+        help="summarize stored candidate-to-hypothesis grouping diagnostics",
+    )
+    hypothesis_cmd.add_argument("--run", type=Path, required=True)
+    hypothesis_cmd.add_argument("--json", action="store_true")
+    hypothesis_cmd.set_defaults(handler=cmd_hypothesis_report)
     return parser
 
 

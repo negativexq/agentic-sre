@@ -19,6 +19,7 @@ behavior.
 - Append-only object observations, replayable Kubernetes Events, and bounded persisted Loki error observations.
 - Explicit incident observation cutoffs and deterministic resolved-incident replay.
 - Relation-aware directional causal traversal rather than generic undirected proximity.
+- Causal hypotheses group coherent actor/manifestation evidence across ownership chains without double-counting observations.
 - Deterministic confidence and verification: `VERIFIED`, `LIKELY`, or `UNVERIFIED`.
 - Causal paths visible in JSON/API output, the CLI, and the HTML report.
 - Real Kind lifecycle validation through Prometheus, Alertmanager, and the control plane.
@@ -97,11 +98,18 @@ flowchart LR
 2. Object, Event, and bounded log observations are normalized with explicit observation times.
 3. The engine extracts deterministic signals from changes, failures, policies, dependencies, and Events.
 4. Directional topology links a candidate cause to the alerting symptom.
-5. Ranking proposes candidates; deterministic verification assigns confidence.
+5. Candidate evidence is grouped into deterministic causal hypotheses; verification assigns confidence to the selected actor.
 6. The optional investigator may review bounded candidates with read-only tools. It is not authoritative.
 
 More detail is in [`docs/architecture.md`](docs/architecture.md) and
 [ADR-003](docs/adr/ADR-003-change-first-rca-product.md).
+
+For a stored prediction run, grouping measurements can be summarized without
+loading benchmark ground truth:
+
+```bash
+agentic-sre hypothesis-report --run .local/runs/dev-<run-id> --json
+```
 
 ## Example diagnosis
 

@@ -80,6 +80,34 @@ def diagnosis_html(diagnosis: Diagnosis, *, back_link: str | None = None) -> str
         f"<div class='card'><div class='muted'>Background alerts ignored</div>{background}</div>"
         "</div>"
     )
+    if diagnosis.hypothesis:
+        hypothesis = diagnosis.hypothesis
+        hypothesis_parts = [
+            "<h2>Causal hypothesis</h2><div class='card'>"
+            f"<div class='muted'>Causal actor</div><div class='cause'>{escape(hypothesis.causal_actor.canonical)}</div>"
+        ]
+        if hypothesis.manifestations:
+            hypothesis_parts.append(
+                "<div class='muted'>Manifestations</div><ul>"
+                + "".join(
+                    f"<li><code>{escape(entity.canonical)}</code></li>"
+                    for entity in hypothesis.manifestations[:6]
+                )
+                + "</ul>"
+            )
+        for title, findings in (
+            ("Initiating evidence", hypothesis.initiating_findings),
+            ("Supporting evidence", hypothesis.supporting_findings),
+            ("Contradictory evidence", hypothesis.contradictory_findings),
+        ):
+            if findings:
+                hypothesis_parts.append(
+                    f"<div class='muted'>{escape(title)}</div><ul>"
+                    + "".join(f"<li>{escape(finding.summary)}</li>" for finding in findings[:6])
+                    + "</ul>"
+                )
+        hypothesis_parts.append("</div>")
+        parts.append("".join(hypothesis_parts))
     if diagnosis.causal_path:
         hops = "".join(
             "<div class='card'><code>"

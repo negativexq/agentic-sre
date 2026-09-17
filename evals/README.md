@@ -26,6 +26,10 @@ are dev) and was committed before the diagnosis engine was written.
    and the retired E10 agent (macro F1 0.0).
 6. Runs that use a live model record provider, model, calls, and tokens.
    Offline runs use no model and say so.
+7. `seal.json` covers prediction inputs/outputs before grading. Grading reads
+   pinned ground truth only after verifying that seal, then writes a separate
+   `report-seal.json` for derived reports. `make verify-release-provenance`
+   checks a published version directory against its release tag.
 
 ## Disclosure
 

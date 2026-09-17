@@ -70,7 +70,7 @@ eval-test:
 	$(CLI) eval --split test --confirm-test $(EVAL_FLAGS) --out .local/runs/test-$$(git describe --tags)$(if $(EVAL_FLAGS),-llm)-$(RUN_ID)
 
 verify-release-provenance:
-	$(PY) scripts/verify_release_provenance.py evals/results/$$(git describe --tags --abbrev=0)
+	$(PY) scripts/verify_release_provenance.py evals/results/$$(git describe --tags --abbrev=0)/test
 
 # --- live demo on kind ---------------------------------------------------------
 

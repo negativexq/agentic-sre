@@ -69,6 +69,19 @@ flowchart LR
    revert a ConfigMap, `rollout undo`, pause a chaos schedule, restore
    replicas, raise a quota or memory limit.
 
+Alertmanager occurrence identity is `(fingerprint, starts_at)`. Repeated
+delivery of one active occurrence is idempotent; after resolution, a later
+firing with a new start time creates a new incident episode. The database
+constraint is named `uq_alert_occurrence_fingerprint_starts_at`, so this
+property also holds when duplicate webhooks arrive concurrently.
+
+Object snapshots carry completed and failed namespace/kind scopes. Tombstones
+are inferred only for a scope whose enumeration completed successfully; a
+partial Kubernetes or optional Chaos Mesh listing is missing evidence, never
+proof of deletion. A diagnosis cycle uses the cycle's completed observation
+boundary for the current object/Event view rather than deriving a cutoff from
+the last object mutation.
+
 ## Structural and causal topology
 
 The topology keeps two questions separate. `Topology.reachable()` is an
@@ -106,6 +119,10 @@ connectivity, not a claim that the shared resource cannot itself be causal.
   use scripted models.
 - Benchmark prediction never reads ground truth; grading refuses unsealed or
   modified predictions.
+- `seal.json` protects only the prediction manifest and prediction files.
+  Grading is a separate phase and its generated `report.json`/`report.md` are
+  protected by `report-seal.json`; `scripts/verify_release_provenance.py`
+  checks both against the immutable release tag target.
 - Kubernetes events are journaled the same way objects are (`event_versions`),
   because Kubernetes itself only keeps them for about an hour; without this, a
   resolved incident re-diagnosed later would silently lose event-based

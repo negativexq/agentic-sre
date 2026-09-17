@@ -42,7 +42,7 @@ flowchart LR
    counted and ignored.
 2. **Signals.** Consecutive object versions are diffed; named list items such
    as containers and environment variables are matched by name, so a finding
-   says `containers[payment].env[FAULT_DELAY_MS].value`, not "spec changed".
+   says `[payment].env[FAULT_DELAY_MS].value: 0 -> 2500`, not "spec changed".
    Chaos Mesh events, restrictive policies, and warning events add findings.
    When an alerting service logs connection errors, its declared dependencies
    become suspects; shared infrastructure called by most workloads is skipped.

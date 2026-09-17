@@ -39,7 +39,7 @@ make demo
 Root cause   shop/Deployment/payment
 Confidence   VERIFIED
 Summary      shop/Deployment/payment: spec changed:
-             .spec.template.spec.containers[payment].env[FAULT_DELAY_MS].value ...
+             [payment].env[FAULT_DELAY_MS].value: 0 -> 2500 ...
 Proposed remediation (not executed)
   - Roll back Deployment payment to the previous revision
       $ kubectl rollout undo deployment/payment -n shop

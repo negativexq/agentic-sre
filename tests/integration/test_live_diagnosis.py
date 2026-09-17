@@ -446,3 +446,28 @@ def test_concurrent_snapshots_are_serialized(setup: Any) -> None:
         entry for entry in history if entry.object_key == "sre-demo/Deployment/payment-service"
     ]
     assert len(deployment_versions) == 2  # the initial version, then exactly one update
+
+
+def test_resolved_incident_diagnosis_is_stable_across_reruns(setup: Any) -> None:
+    """The Phase 1 gate: same incident, same snapshot -> same diagnosis, always."""
+    factory, cluster, clock, incident_id = setup
+    service = DiagnosisService(
+        session_factory=factory, namespaces=("sre-demo",), reader=cluster, clock=clock
+    )
+    assert service.snapshot() == 5
+    clock.now = T0 + timedelta(minutes=10)
+    cluster.objects[0] = _deployment("5000")
+    assert service.snapshot() == 1
+    with factory() as session:
+        row = session.get(IncidentRow, incident_id)
+        assert row is not None
+        row.status = "CLOSED"
+        row.updated_at = T0 + timedelta(minutes=15)
+        session.commit()
+
+    clock.now = T0 + timedelta(minutes=20)
+    first = service.run(incident_id)
+    clock.now = T0 + timedelta(days=30)  # long after resolution, cluster drifts further
+    cluster.objects[0] = _deployment("9999")
+    second = service.run(incident_id)
+    assert first == second

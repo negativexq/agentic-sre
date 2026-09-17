@@ -94,6 +94,10 @@ flowchart LR
   Running more than one worker or replica against the same database would
   reopen the read-then-write race it guards against; that needs a
   database-level lock (e.g. a Postgres advisory lock) before scaling out.
+- Every control-plane endpoint is open by default, matching the offline demo
+  and kind walkthrough. Setting `SRE_API_TOKEN` requires a bearer token on
+  every endpoint that changes state; read endpoints stay open since they
+  expose no Secrets. There is no per-caller identity or rate limiting yet.
 
 ## Configuration
 
@@ -106,3 +110,4 @@ flowchart LR
 | `SRE_AUTO_DIAGNOSE` | off | Diagnose incidents as alerts arrive |
 | `SRE_LOKI_URL` | unset | Read error logs for dependency findings |
 | `SRE_LLM_ENABLED`, `SRE_LLM_MAX_CALLS`, `SRE_LLM_MODEL` | off, 0, `gpt-5.6-luna` | Optional LLM investigator |
+| `SRE_API_TOKEN` | unset | Require `Authorization: Bearer <token>` on every write endpoint (`POST /api/v1/changes`, `.../diagnosis`, `.../cluster/snapshot`, `.../webhooks/alertmanager`); unset keeps them open, as the offline demo and kind walkthrough expect. Read endpoints are never gated. |

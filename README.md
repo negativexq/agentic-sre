@@ -141,3 +141,6 @@ the `archive/experiments-2026-09` tag.
 - Namespace-level causes are not named directly.
 - The LLM investigator matched the engine's score on ITBench-Lite; its effect
   on harder or messier incidents has not been measured.
+- The control plane's API is open by default (set `SRE_API_TOKEN` to require a
+  bearer token on write endpoints) and runs as a single process; see
+  `docs/architecture.md` for what that means before scaling out.

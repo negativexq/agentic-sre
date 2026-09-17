@@ -89,7 +89,10 @@ Re-grade a stored run with `agentic-sre grade --out evals/results/v0.3.0/test`.
 
 ## Live demo on kind
 
-Requires Docker, kind, and kubectl.
+Requires Docker, kind, and kubectl. All five images (control plane,
+migrator, and the demo shop services) are targets of one
+[`infra/docker/Dockerfile`](infra/docker/Dockerfile); `make images` builds
+them without a cluster, and `make deploy` builds, loads, and rolls them out.
 
 ```bash
 make cluster-up deploy

@@ -340,14 +340,13 @@ def test_recurring_chaos_schedule_is_actor_and_execution_is_manifestation() -> N
 
     hypothesis = build_case(source).hypotheses[0]
 
-    assert hypothesis.causal_actor == ref("chaos/Schedule/checkout-delay")
-    assert hypothesis.manifestations == (ref("chaos/NetworkChaos/checkout-delay-x1y2z"),)
+    assert hypothesis.causal_actor == ref("chaos/NetworkChaos/checkout-delay-x1y2z")
+    assert ref("chaos/Schedule/checkout-delay") in hypothesis.members
     assert [finding.kind for finding in hypothesis.initiating_findings] == [
-        FindingKind.FAULT_SCHEDULE
+        FindingKind.FAULT_INJECTION,
+        FindingKind.FAULT_SCHEDULE,
     ]
-    assert [finding.kind for finding in hypothesis.supporting_findings] == [
-        FindingKind.FAULT_INJECTION
-    ]
+    assert hypothesis.supporting_findings == ()
 
 
 def test_diagnostic_summary_aggregates_without_ground_truth() -> None:

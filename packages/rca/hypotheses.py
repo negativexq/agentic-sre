@@ -227,24 +227,25 @@ def _actor_candidate(
             if path is not None:
                 paths_by_actor.setdefault(candidate.entity, []).append((other.entity, path))
 
-    def key(candidate: Candidate) -> tuple[int, int, int, str, float, str]:
-        schedule_actor = int(
-            candidate.entity.kind == "Schedule"
-            and any(
-                path and path[0].relation == "spawns"
-                for _target, path in paths_by_actor.get(candidate.entity, ())
-            )
-        )
+    def key(candidate: Candidate) -> tuple[int, float, int, int, str, str]:
+        """Prefer an initiating candidate using the existing ranking order.
+
+        A Schedule is retained in the same episode as its spawned execution,
+        but it is not promoted solely because it has a ``spawns`` edge. The
+        concrete fault object remains the actor when its initiating evidence
+        is stronger; a Schedule becomes the actor when it is the only or
+        strongest causal control point represented by the evidence.
+        """
         return (
-            schedule_actor,
-            len(paths_by_actor.get(candidate.entity, ())),
             int(_has_initiating_evidence(candidate)),
-            _earliest_initiating(candidate),
             candidate.score,
+            len(paths_by_actor.get(candidate.entity, ())),
+            int(candidate.entity.kind == "Schedule"),
+            _earliest_initiating(candidate),
             candidate.entity.canonical,
         )
 
-    # Reverse only the numeric dimensions; canonical identity remains the
+    # Reverse only the evidence dimensions; canonical identity remains the
     # deterministic final tie-break, never causal evidence.
     actor = sorted(
         candidates,
@@ -252,8 +253,8 @@ def _actor_candidate(
             -key(candidate)[0],
             -key(candidate)[1],
             -key(candidate)[2],
-            key(candidate)[3],
-            -key(candidate)[4],
+            -key(candidate)[3],
+            key(candidate)[4],
             key(candidate)[5],
         ),
     )[0]

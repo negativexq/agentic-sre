@@ -28,7 +28,8 @@ flowchart LR
 | `packages/rca/signals.py` | Symptoms and findings: config/spec/image/scale changes, restarts, fault injection, network policies, quota rejections, container failures, resource pressure, dependency errors, warning events, HPA failures, and temporal traffic changes |
 | `packages/rca/ranking.py` | Explainable scoring and deterministic verification rules |
 | `packages/rca/hypotheses.py` | Evidence-coherent causal episode grouping and hypothesis diagnostics |
-| `packages/rca/resolution.py` | Structural hypothesis signatures and evidence-based resolution state |
+| `packages/rca/resolution.py` | Structural hypothesis signatures, auditable resolution decisions, and evidence-based resolution state |
+| `packages/rca/information_gap.py` | Deterministic missing-fact descriptions and bounded capability metadata; no tool execution |
 | `packages/rca/engine.py` | Pipeline: observe → signals → group → rank → investigate → verify → resolve → propose |
 | `packages/rca/agent.py`, `llm.py` | Optional LLM investigator with read-only tools; opt-in OpenAI client |
 | `packages/rca/remediation.py` | Proposed commands; never executed |
@@ -160,12 +161,22 @@ This layer represents episodes but does not yet resolve ambiguity between
 separate hypotheses. `packages/rca/resolution.py` compares deterministic
 signatures containing initiating/supporting/contradictory finding classes,
 qualitative temporal roles, provenance classes, manifestation shape, and
-directional causal path shape. It never compares benchmark labels, raw entity
-names, or score margins. Equivalent onset-aligned HPA hypotheses can therefore
-be reported as `AMBIGUOUS`, while a configuration change with an upstream path
+  directional causal path shape. It never compares benchmark labels, raw entity
+  names, or score margins. Resolution traces retain structured elimination
+  codes, evidence references, verification audits, discriminators, and
+  dominance relations. Equivalent onset-aligned HPA hypotheses can therefore
+  be reported as `AMBIGUOUS`, while a configuration change with an upstream path
 is not made ambiguous merely because a downstream container failure happens to
 have the same score. A hypothesis with no onset-capable causal evidence remains
-`INSUFFICIENT_EVIDENCE`.
+`INSUFFICIENT_EVIDENCE`. For `AMBIGUOUS` or evidence-poor diagnoses,
+`information_gaps` describes typed missing facts such as autoscaling target
+state, event sequence, or dependency health. The gap maps only to currently
+available read-only capabilities (`describe`, `history`, `events`,
+`neighbors`, and `logs`); missing metric tools are explicitly not invented.
+
+The CLI command `agentic-sre resolution-audit --run RUN --out OUT` writes a
+bounded `summary.json` and `report.md` for structural near-collisions. It is a
+diagnostic aid, not a benchmark result or a decision-maker.
 
 The selected `root_cause` remains the deterministic leading actor for backward
 compatibility, but `resolution_trace` and `ambiguous_hypotheses` make the

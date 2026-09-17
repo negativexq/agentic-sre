@@ -185,6 +185,11 @@ causal evidence. If two onset-aligned hypotheses have equivalent evidence
 structure, the diagnosis exposes `AMBIGUOUS` and the leading hypotheses rather
 than presenting the first name as uniquely established. A diagnosis with no
 sufficiently supported causal hypothesis produces `INSUFFICIENT_EVIDENCE`.
+Resolution traces record the considered hypotheses, eliminated predicates,
+evidence-backed discriminators, and any structural dominance relation. For an
+ambiguous diagnosis, deterministic `InformationGap` records describe the
+missing fact, the hypotheses it could distinguish, and the bounded read-only
+capabilities that could observe it; no capability is executed by this layer.
 
 ## Evidence and replay
 

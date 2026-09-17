@@ -180,8 +180,10 @@ def diagnose(
     if investigator is not None:
         mode = investigator.name
         choice = investigator.investigate(case)
+        client = getattr(investigator, "client", None)
+        model_calls = int(getattr(client, "calls", 0))
         if choice is not None:
-            model_calls = choice.model_calls
+            model_calls = max(model_calls, choice.model_calls)
             match = next((c for c in case.candidates if c.entity == choice.entity), None)
             if match is not None:
                 chosen = match

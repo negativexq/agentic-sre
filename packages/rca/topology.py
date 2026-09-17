@@ -43,27 +43,75 @@ class RelationSemantics:
     description: str
     forward: bool
     backward: bool
+    forward_relation: str
+    backward_relation: str
     fan_out: bool = False
 
 
 RELATION_SEMANTICS: dict[str, RelationSemantics] = {
-    "owned_by": RelationSemantics("owner and managed child", forward=True, backward=True),
-    "selects": RelationSemantics("service selector and selected pod", forward=True, backward=True),
-    "routes_to": RelationSemantics("service routes to workload", forward=True, backward=True),
+    "owned_by": RelationSemantics(
+        "owner and managed child",
+        forward=False,
+        backward=True,
+        forward_relation="managed_by",
+        backward_relation="owns",
+    ),
+    "selects": RelationSemantics(
+        "service selector and selected pod",
+        forward=False,
+        backward=True,
+        forward_relation="selected_by",
+        backward_relation="backs",
+    ),
+    "routes_to": RelationSemantics(
+        "service routes to workload",
+        forward=False,
+        backward=True,
+        forward_relation="routed_by",
+        backward_relation="serves",
+    ),
     "uses_config": RelationSemantics(
-        "workload consumes configuration", forward=True, backward=True, fan_out=True
+        "workload consumes configuration",
+        forward=False,
+        backward=True,
+        forward_relation="used_by",
+        backward_relation="configures",
     ),
     "calls": RelationSemantics(
-        "caller and declared backend dependency", forward=True, backward=True
+        "caller and declared backend dependency",
+        forward=False,
+        backward=True,
+        forward_relation="called_by",
+        backward_relation="dependency_of",
     ),
     "restricts": RelationSemantics(
-        "policy applies to selected pod", forward=True, backward=True, fan_out=True
+        "policy applies to selected pod",
+        forward=True,
+        backward=False,
+        forward_relation="restricts",
+        backward_relation="restricted_by",
     ),
     "disrupts": RelationSemantics(
-        "fault or experiment targets workload", forward=True, backward=True
+        "fault or experiment targets workload",
+        forward=True,
+        backward=False,
+        forward_relation="disrupts",
+        backward_relation="disrupted_by",
     ),
-    "spawns": RelationSemantics("schedule creates fault instance", forward=True, backward=True),
-    "scales": RelationSemantics("autoscaler controls workload", forward=True, backward=True),
+    "spawns": RelationSemantics(
+        "schedule creates fault instance",
+        forward=True,
+        backward=False,
+        forward_relation="spawns",
+        backward_relation="spawned_by",
+    ),
+    "scales": RelationSemantics(
+        "autoscaler controls workload",
+        forward=True,
+        backward=False,
+        forward_relation="scales",
+        backward_relation="scaled_by",
+    ),
 }
 
 
@@ -297,10 +345,9 @@ class Topology:
     """Structural lookups plus explicit causal traversal over derived edges.
 
     ``reachable`` is intentionally structural and undirected. RCA uses
-    ``causal_reachable`` or ``causal_path``, which apply
-    :data:`RELATION_SEMANTICS` and the shared-hub guard. Keeping these APIs
-    separate prevents UI/neighborhood discovery from silently becoming a
-    causal claim.
+    ``causal_reachable`` or ``causal_path``, which apply the allowlisted,
+    direction-aware :data:`RELATION_SEMANTICS`. Keeping these APIs separate
+    prevents UI/neighborhood discovery from silently becoming a causal claim.
     """
 
     def __init__(self, edges: Iterable[Edge], latest: Mapping[EntityRef, ObjectVersion]) -> None:
@@ -315,20 +362,11 @@ class Topology:
         self._causal_parents: dict[
             tuple[EntityRef, int], dict[EntityRef, tuple[EntityRef, CausalHop]]
         ] = {}
-        self._relation_degree: dict[tuple[EntityRef, str], int] = {}
         for edge in self.edges:
             self._adjacent.setdefault(edge.source, set()).add((edge.target, edge.relation))
             self._adjacent.setdefault(edge.target, set()).add((edge.source, edge.relation))
             self._out.setdefault(edge.source, []).append(edge)
             self._in.setdefault(edge.target, []).append(edge)
-            semantics = RELATION_SEMANTICS.get(edge.relation)
-            if semantics is not None and semantics.fan_out:
-                # Count degree on both ends: a NetworkPolicy is a hub by how
-                # many pods it restricts (its outgoing side); a ConfigMap is a
-                # hub by how many workloads use it (its incoming side).
-                for node in (edge.source, edge.target):
-                    key = (node, edge.relation)
-                    self._relation_degree[key] = self._relation_degree.get(key, 0) + 1
 
     def neighbors(self, entity: EntityRef) -> tuple[tuple[EntityRef, str], ...]:
         return tuple(
@@ -429,20 +467,21 @@ class Topology:
         found = [depths[target] for target in targets if target in depths]
         return min(found) if found else None
 
-    def _is_fan_out_hub(self, node: EntityRef, relation: str) -> bool:
-        return self._relation_degree.get((node, relation), 0) > FAN_OUT_THRESHOLD
-
     def _causal_neighbors(self, node: EntityRef) -> tuple[tuple[EntityRef, str, bool], ...]:
-        """Return causal neighbors as ``(entity, relation, forward)`` tuples."""
+        """Return allowlisted cause-to-effect neighbors.
+
+        Unknown relations remain available to structural traversal but are
+        deliberately excluded here until their causal meaning is specified.
+        """
         neighbors: list[tuple[EntityRef, str, bool]] = []
         for edge in self._out.get(node, ()):
             semantics = RELATION_SEMANTICS.get(edge.relation)
-            if semantics is None or semantics.forward:
-                neighbors.append((edge.target, edge.relation, True))
+            if semantics is not None and semantics.forward:
+                neighbors.append((edge.target, semantics.forward_relation, True))
         for edge in self._in.get(node, ()):
             semantics = RELATION_SEMANTICS.get(edge.relation)
-            if semantics is None or semantics.backward:
-                neighbors.append((edge.source, edge.relation, False))
+            if semantics is not None and semantics.backward:
+                neighbors.append((edge.source, semantics.backward_relation, False))
         return tuple(sorted(neighbors, key=lambda item: (item[0].canonical, item[1], item[2])))
 
     def _causal_walk(
@@ -464,14 +503,6 @@ class Topology:
             for neighbor, relation, _forward in self._causal_neighbors(node):
                 if neighbor in depths:
                     continue
-                # A hub may explain its own direct targets (the start node's
-                # primary claim); it may not hand off to a third, unrelated one.
-                if (
-                    relation in FAN_OUT_RELATIONS
-                    and node != start
-                    and self._is_fan_out_hub(node, relation)
-                ):
-                    continue
                 depths[neighbor] = depth + 1
                 parents[neighbor] = (
                     node,
@@ -479,6 +510,7 @@ class Topology:
                         source=node,
                         relation=relation,
                         target=neighbor,
+                        direction="forward" if _forward else "reverse",
                     ),
                 )
                 queue.append(neighbor)
@@ -487,12 +519,7 @@ class Topology:
         return depths, parents
 
     def causal_reachable(self, start: EntityRef, *, max_depth: int = 4) -> dict[EntityRef, int]:
-        """Causal reachability with explicit relation direction semantics.
-
-        Shared ConfigMaps and NetworkPolicies may explain their direct targets,
-        but cannot bridge a third unrelated target once reached through a
-        fan-out relation.
-        """
+        """Causal reachability with explicit relation direction semantics."""
         return self._causal_walk(start, max_depth=max_depth)[0]
 
     def causal_path(

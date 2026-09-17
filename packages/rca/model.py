@@ -142,13 +142,14 @@ class Edge(BaseModel):
 
 
 class CausalHop(BaseModel):
-    """One traversed relation in a cause-to-symptom explanation path."""
+    """One cause-to-symptom hop with an honest rendered relation."""
 
     model_config = ConfigDict(frozen=True)
 
     source: EntityRef
     relation: str
     target: EntityRef
+    direction: str = "forward"
 
 
 class FindingKind(StrEnum):

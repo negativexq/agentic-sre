@@ -1,4 +1,4 @@
-"""Graph algorithms on top of derived edges: distance, causal_distance, fan-out."""
+"""Graph algorithms on top of structural edges and directional causal paths."""
 
 from __future__ import annotations
 
@@ -12,17 +12,18 @@ def _topology(edges: list[Edge]) -> Topology:
     return Topology(edges, {})
 
 
-def test_causal_distance_matches_distance_below_the_fan_out_threshold() -> None:
-    """A ConfigMap used by a few workloads still links them causally."""
+def test_shared_configmap_does_not_bridge_two_sibling_workloads() -> None:
+    """A shared resource is a cause, not a causal path between its consumers."""
     config = ref("shop/ConfigMap/flags")
     edges = [
         Edge(source=ref(f"shop/Deployment/app{i}"), target=config, relation="uses_config")
-        for i in range(FAN_OUT_THRESHOLD)
+        for i in range(2)
     ]
     topology = _topology(edges)
     targets = {ref("shop/Deployment/app1")}
     assert topology.distance(ref("shop/Deployment/app0"), targets) == 2
-    assert topology.causal_distance(ref("shop/Deployment/app0"), targets) == 2
+    assert topology.causal_distance(ref("shop/Deployment/app0"), targets) is None
+    assert topology.causal_distance(config, targets) == 1
 
 
 def test_causal_distance_does_not_cross_a_shared_configmap_hub() -> None:
@@ -38,8 +39,8 @@ def test_causal_distance_does_not_cross_a_shared_configmap_hub() -> None:
     assert topology.distance(ref("shop/Deployment/app0"), targets) == 2
     # ...but causal_distance refuses to treat sharing a config as a causal link.
     assert topology.causal_distance(ref("shop/Deployment/app0"), targets) is None
-    # The ConfigMap itself is still reachable either way (it is the actual finding).
-    assert topology.causal_distance(ref("shop/Deployment/app0"), {config}) == 1
+    # The ConfigMap itself is the valid cause, reached in the stored reverse direction.
+    assert topology.causal_distance(config, {ref("shop/Deployment/app0")}) == 1
 
 
 def test_causal_distance_does_not_cross_a_shared_network_policy_hub() -> None:
@@ -95,15 +96,46 @@ def test_causal_path_explains_owner_to_selected_service_direction() -> None:
     )
     path = topology.causal_path(deployment, {service})
     assert path is not None
-    assert [(hop.source, hop.relation, hop.target) for hop in path] == [
-        (deployment, "owned_by", replicaset),
-        (replicaset, "owned_by", pod),
-        (pod, "selects", service),
+    assert [(hop.source, hop.relation, hop.target, hop.direction) for hop in path] == [
+        (deployment, "owns", replicaset, "reverse"),
+        (replicaset, "owns", pod, "reverse"),
+        (pod, "backs", service, "reverse"),
     ]
 
 
 def test_relation_semantics_make_structural_and_causal_direction_explicit() -> None:
     assert RELATION_SEMANTICS["owned_by"].backward is True
-    assert RELATION_SEMANTICS["calls"].forward is True
+    assert RELATION_SEMANTICS["owned_by"].forward is False
+    assert RELATION_SEMANTICS["calls"].forward is False
     assert RELATION_SEMANTICS["calls"].backward is True
-    assert RELATION_SEMANTICS["uses_config"].fan_out is True
+    assert RELATION_SEMANTICS["uses_config"].forward is False
+
+
+def test_unknown_relations_are_structural_but_not_causal() -> None:
+    source = ref("shop/Deployment/source")
+    target = ref("shop/Service/target")
+    topology = _topology([Edge(source=source, target=target, relation="future_unknown_relation")])
+    assert topology.distance(source, {target}) == 1
+    assert topology.causal_distance(source, {target}) is None
+
+
+def test_backend_failure_propagates_to_caller_not_the_reverse() -> None:
+    caller = ref("shop/Deployment/checkout")
+    backend = ref("shop/Service/payment")
+    topology = _topology([Edge(source=caller, target=backend, relation="calls")])
+    assert topology.causal_distance(backend, {caller}) == 1
+    assert topology.causal_distance(caller, {backend}) is None
+
+
+def test_network_policy_is_causal_cause_but_does_not_bridge_two_pods() -> None:
+    policy = ref("shop/NetworkPolicy/deny-all")
+    pod_a = ref("shop/Pod/a")
+    pod_b = ref("shop/Pod/b")
+    topology = _topology(
+        [
+            Edge(source=policy, target=pod_a, relation="restricts"),
+            Edge(source=policy, target=pod_b, relation="restricts"),
+        ]
+    )
+    assert topology.causal_distance(policy, {pod_a}) == 1
+    assert topology.causal_distance(pod_a, {pod_b}) is None

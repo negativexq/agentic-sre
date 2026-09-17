@@ -9,6 +9,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import urllib.request
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
@@ -67,13 +68,36 @@ def _download(remote_path: str, destination: Path, *, expected_size: int) -> Non
             raise
 
 
+DOWNLOAD_ATTEMPTS = 4
+
+
 def _download_job(job: tuple[str, Path, int]) -> None:
+    """Download one file, retrying dropped or truncated transfers with backoff."""
     remote_path, destination, expected_size = job
-    _download(remote_path, destination, expected_size=expected_size)
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        try:
+            _download(remote_path, destination, expected_size=expected_size)
+            return
+        except (OSError, TimeoutError) as error:  # URLError is an OSError
+            if attempt == DOWNLOAD_ATTEMPTS:
+                raise
+            print(f"retry {attempt}/{DOWNLOAD_ATTEMPTS - 1} {remote_path}: {error}", flush=True)
+            time.sleep(2**attempt)
+
+
+def _remove_partial_downloads(root: Path) -> int:
+    """Delete temporary files left by an interrupted earlier run."""
+    removed = 0
+    for path in root.rglob(".*.download"):
+        path.unlink(missing_ok=True)
+        removed += 1
+    return removed
 
 
 def prepare(root: Path, *, workers: int = 16) -> dict[str, Any]:
     snapshot_root = root / "snapshots" / "sre" / ITBENCH_SRE_VERSION
+    if root.exists():
+        _remove_partial_downloads(root)
     entries: list[dict[str, Any]] = []
     jobs: list[tuple[str, Path, int]] = []
     entry_jobs: list[dict[str, Any]] = []

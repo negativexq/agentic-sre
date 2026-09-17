@@ -11,6 +11,12 @@ from packages.rca.json_access import child, mapping
 from packages.rca.model import CLUSTER_SCOPE, ClusterEvent, Edge, EntityRef, ObjectVersion
 
 WORKLOAD_KINDS = frozenset({"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"})
+# Relations where one object is legitimately shared by many unrelated workloads
+# (a NetworkPolicy selecting many pods, a ConfigMap used by many deployments).
+# Crossing one of these to reach a third, unrelated object is not a causal
+# claim: sharing a policy or a ConfigMap does not mean two workloads share fate.
+FAN_OUT_RELATIONS = frozenset({"restricts", "uses_config"})
+FAN_OUT_THRESHOLD = 3
 _CHAOS_TARGET = re.compile(r"apply chaos for ([a-z0-9.-]+)/([a-z0-9.-]+)", re.IGNORECASE)
 _NAME_LABELS = ("app.kubernetes.io/name", "app.kubernetes.io/component", "app", "k8s-app")
 
@@ -252,11 +258,20 @@ class Topology:
         self._in: dict[EntityRef, list[Edge]] = {}
         self._names: dict[EntityRef, set[str]] = {}
         self._reach: dict[tuple[EntityRef, int], dict[EntityRef, int]] = {}
+        self._causal_reach: dict[tuple[EntityRef, int], dict[EntityRef, int]] = {}
+        self._relation_degree: dict[tuple[EntityRef, str], int] = {}
         for edge in self.edges:
             self._adjacent.setdefault(edge.source, set()).add((edge.target, edge.relation))
             self._adjacent.setdefault(edge.target, set()).add((edge.source, edge.relation))
             self._out.setdefault(edge.source, []).append(edge)
             self._in.setdefault(edge.target, []).append(edge)
+            if edge.relation in FAN_OUT_RELATIONS:
+                # Count degree on both ends: a NetworkPolicy is a hub by how
+                # many pods it restricts (its outgoing side); a ConfigMap is a
+                # hub by how many workloads use it (its incoming side).
+                for node in (edge.source, edge.target):
+                    key = (node, edge.relation)
+                    self._relation_degree[key] = self._relation_degree.get(key, 0) + 1
 
     def neighbors(self, entity: EntityRef) -> tuple[tuple[EntityRef, str], ...]:
         return tuple(
@@ -357,6 +372,49 @@ class Topology:
         found = [depths[target] for target in targets if target in depths]
         return min(found) if found else None
 
+    def _is_fan_out_hub(self, node: EntityRef, relation: str) -> bool:
+        return self._relation_degree.get((node, relation), 0) > FAN_OUT_THRESHOLD
+
+    def causal_reachable(self, start: EntityRef, *, max_depth: int = 4) -> dict[EntityRef, int]:
+        """Like ``reachable``, but does not cross a shared policy or config to a
+        third object: two workloads that merely use the same ConfigMap, or sit
+        behind the same NetworkPolicy along with many others, are not linked.
+        """
+        key = (start, max_depth)
+        cached = self._causal_reach.get(key)
+        if cached is not None:
+            return cached
+        depths = {start: 0}
+        queue: deque[EntityRef] = deque([start])
+        while queue:
+            node = queue.popleft()
+            depth = depths[node]
+            if depth >= max_depth:
+                continue
+            for neighbor, relation in self._adjacent.get(node, ()):
+                if neighbor in depths:
+                    continue
+                # A hub may explain its own direct targets (the start node's
+                # primary claim); it may not hand off to a third, unrelated one.
+                if (
+                    relation in FAN_OUT_RELATIONS
+                    and node != start
+                    and self._is_fan_out_hub(node, relation)
+                ):
+                    continue
+                depths[neighbor] = depth + 1
+                queue.append(neighbor)
+        self._causal_reach[key] = depths
+        return depths
+
+    def causal_distance(
+        self, start: EntityRef, targets: set[EntityRef], *, max_depth: int = 4
+    ) -> int | None:
+        """Shortest hop count from ``start`` to any target, not through a shared hub."""
+        depths = self.causal_reachable(start, max_depth=max_depth)
+        found = [depths[target] for target in targets if target in depths]
+        return min(found) if found else None
+
 
 def pod_workload_name(pod_name: str) -> str:
     """Strip ReplicaSet/StatefulSet suffixes from a pod name."""
@@ -371,6 +429,8 @@ def pod_workload_name(pod_name: str) -> str:
 
 
 __all__ = [
+    "FAN_OUT_RELATIONS",
+    "FAN_OUT_THRESHOLD",
     "WORKLOAD_KINDS",
     "Topology",
     "derive_edges",

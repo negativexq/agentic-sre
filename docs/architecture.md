@@ -24,7 +24,7 @@ flowchart LR
 | `packages/rca/model.py` | Entities, alerts, object versions, events, findings, diagnosis |
 | `packages/rca/source.py` | `ObservationSource` protocol and an in-memory source |
 | `packages/rca/topology.py` | Ownership, selectors, config references, HPA, policies, chaos targets, env-declared service calls |
-| `packages/rca/signals.py` | Symptoms and findings: config/spec/image/scale changes, restarts, fault injection, restrictive policies, dependency errors, warning events |
+| `packages/rca/signals.py` | Symptoms and findings: config/spec/image/scale changes, restarts, fault injection, network policies, quota rejections, container failures, resource pressure, dependency errors, warning events |
 | `packages/rca/ranking.py` | Explainable scoring and deterministic verification rules |
 | `packages/rca/engine.py` | Pipeline: observe → signals → rank → investigate → verify → propose |
 | `packages/rca/agent.py`, `llm.py` | Optional LLM investigator with read-only tools; opt-in OpenAI client |
@@ -43,7 +43,15 @@ flowchart LR
 2. **Signals.** Consecutive object versions are diffed; named list items such
    as containers and environment variables are matched by name, so a finding
    says `[payment].env[FAULT_DELAY_MS].value: 0 -> 2500`, not "spec changed".
-   Chaos Mesh events, restrictive policies, and warning events add findings.
+   Chaos Mesh events, network policies (deny-all ones score higher than
+   port or peer restrictions), and warning events add findings. A quota or
+   LimitRange is a finding only when `FailedCreate` events show it rejecting
+   pods, or when its `used` reaches `hard`. Pod status adds container
+   failures (OOM kills, crash loops, image pull and config errors). Where
+   metrics exist, memory-to-limit and CPU throttling of alerting pods are
+   compared before and after onset; pressure that was already there is
+   ignored. The live stack does not scrape cAdvisor yet, so this signal is
+   benchmark-only for now.
    When an alerting service logs connection errors, its declared dependencies
    become suspects; shared infrastructure called by most workloads is skipped.
 3. **Ranking.** Each finding scores by kind, topology distance to alerting
@@ -59,7 +67,7 @@ flowchart LR
    alerting component or its dependency".
 6. **Remediation.** The strongest finding maps to a reversible proposal:
    revert a ConfigMap, `rollout undo`, pause a chaos schedule, restore
-   replicas.
+   replicas, raise a quota or memory limit.
 
 ## Safety
 

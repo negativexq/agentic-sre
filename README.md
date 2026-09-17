@@ -63,8 +63,10 @@ flowchart LR
 
 1. **Symptoms** from diagnostic alerts; always-on platform alerts are ignored.
 2. **Signals**: object version diffs (down to the env var or container that
-   changed), Chaos Mesh experiments, restrictive policies, dependency
-   connection errors, and warning events.
+   changed), Chaos Mesh experiments, network policies, quotas that reject
+   pods, container failures (OOM kills, crash loops, bad images), memory or
+   CPU pressure that appears with the incident, dependency connection errors,
+   and warning events.
 3. **Topology** from ownership, selectors, config references, and service
    calls declared in environment variables links each signal to the alerting
    components.
@@ -72,8 +74,8 @@ flowchart LR
    rules that decide `VERIFIED`, `LIKELY`, or `UNVERIFIED`.
 5. **Optional LLM investigator** inspects the top candidates with read-only
    tools and may choose another one; it cannot verify its own answer.
-6. **Remediation proposal** such as `rollout undo`, reverting a ConfigMap, or
-   pausing a chaos schedule. Nothing is executed.
+6. **Remediation proposal** such as `rollout undo`, reverting a ConfigMap,
+   pausing a chaos schedule, or raising a quota or memory limit. Nothing is executed.
 
 More in [`docs/architecture.md`](docs/architecture.md) and
 [ADR-003](docs/adr/ADR-003-change-first-rca-product.md).

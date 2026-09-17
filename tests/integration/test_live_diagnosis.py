@@ -31,7 +31,11 @@ from packages.rca.live import LokiLogReader
 from packages.rca.model import Confidence, EntityRef, FindingKind, LogRecord
 from packages.storage.database import create_session_factory
 from packages.storage.models import AlertRow, Base, IncidentRow, LogObservationRow
-from packages.storage.repositories import IncidentRepository, ObjectVersionRepository
+from packages.storage.repositories import (
+    EventRepository,
+    IncidentRepository,
+    ObjectVersionRepository,
+)
 
 T0 = datetime(2026, 9, 17, 10, 0, tzinfo=UTC)
 
@@ -677,6 +681,70 @@ def test_events_persist_past_kubernetes_garbage_collection(setup: Any) -> None:
     assert diagnosis.root_cause == EntityRef.parse("sre-demo/Deployment/order-service")
     assert diagnosis.evidence[0].kind is FindingKind.FAILURE_EVENT
     assert "BackOff" in diagnosis.evidence[0].summary
+
+
+def test_chaos_evidence_namespace_survives_resolution_and_resource_removal(setup: Any) -> None:
+    factory, cluster, clock, incident_id = setup
+    cluster.objects.append(
+        {
+            "kind": "NetworkChaos",
+            "metadata": {"name": "payment-delay", "namespace": "chaos-mesh"},
+            "spec": {
+                "selector": {
+                    "namespaces": ["sre-demo"],
+                    "labelSelectors": {"app": "payment-service"},
+                }
+            },
+        }
+    )
+    cluster.events = [
+        {
+            "kind": "Event",
+            "metadata": {
+                "uid": "chaos-event-1",
+                "name": "payment-delay.chaos-mesh",
+                "namespace": "chaos-mesh",
+            },
+            "involvedObject": {
+                "kind": "NetworkChaos",
+                "name": "payment-delay",
+                "namespace": "chaos-mesh",
+            },
+            "reason": "Applied",
+            "type": "Normal",
+            "firstTimestamp": (T0 + timedelta(minutes=2)).isoformat(),
+            "lastTimestamp": (T0 + timedelta(minutes=2)).isoformat(),
+            "count": 1,
+        }
+    ]
+    service = DiagnosisService(
+        session_factory=factory,
+        namespaces=("sre-demo",),
+        evidence_namespaces=("chaos-mesh",),
+        reader=cluster,
+        clock=clock,
+    )
+    assert service.snapshot() >= 2
+    del cluster.objects[-1]
+    cluster.events = []
+    resolved_at = T0 + timedelta(minutes=15)
+    with factory() as session:
+        row = session.get(IncidentRow, incident_id)
+        assert row is not None
+        row.status = "CLOSED"
+        row.updated_at = resolved_at
+        session.commit()
+    clock.now = T0 + timedelta(minutes=30)
+    service.run(incident_id)
+    with factory() as session:
+        history = ObjectVersionRepository(session).history(
+            namespaces={"chaos-mesh"}, starts_at=T0, ends_at=resolved_at
+        )
+        events = EventRepository(session).analysis_view(
+            namespaces={"chaos-mesh"}, starts_at=T0, ends_at=resolved_at
+        )
+    assert any(entry.object_key == "chaos-mesh/NetworkChaos/payment-delay" for entry in history)
+    assert len(events) == 1 and events[0]["reason"] == "Applied"
 
 
 def test_resolved_incident_events_are_also_frozen_at_resolution(setup: Any) -> None:

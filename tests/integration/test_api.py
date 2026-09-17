@@ -130,3 +130,56 @@ def test_readiness_reports_database_unavailable() -> None:
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "DATABASE_UNAVAILABLE"
     engine.dispose()
+
+
+def test_write_endpoints_require_the_configured_api_token(
+    client: tuple[TestClient, UUID], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    test_client, incident_id = client
+    monkeypatch.setenv("SRE_API_TOKEN", "secret-token")
+    record = ChangeRecord(
+        timestamp=NOW,
+        resource_type="Deployment",
+        resource_name="payment-service",
+        change_type=ChangeType.UPDATED,
+        before={"revision": "a"},
+        after={"revision": "b"},
+        revision="b",
+        source="deterministic-harness",
+    ).model_dump(mode="json")
+
+    unauthenticated = test_client.post("/api/v1/changes", json=record)
+    assert unauthenticated.status_code == 401
+    assert unauthenticated.json()["detail"] == "missing or invalid bearer token"
+
+    wrong_token = test_client.post(
+        "/api/v1/changes", json=record, headers={"Authorization": "Bearer wrong"}
+    )
+    assert wrong_token.status_code == 401
+
+    authenticated = test_client.post(
+        "/api/v1/changes", json=record, headers={"Authorization": "Bearer secret-token"}
+    )
+    assert authenticated.status_code == 200
+
+    # Read-only endpoints stay open even when a token is configured.
+    assert test_client.get("/api/v1/incidents").status_code == 200
+    assert test_client.get(f"/api/v1/incidents/{incident_id}").status_code == 200
+
+    # The other write endpoints are gated the same way.
+    assert test_client.post("/api/v1/cluster/snapshot").status_code == 401
+    assert (
+        test_client.post(
+            "/api/v1/cluster/snapshot", headers={"Authorization": "Bearer secret-token"}
+        ).status_code
+        == 200
+    )
+    assert test_client.post(f"/api/v1/incidents/{incident_id}/diagnosis").status_code == 401
+
+
+def test_write_endpoints_are_open_when_no_api_token_is_configured(
+    client: tuple[TestClient, UUID],
+) -> None:
+    """The default, unconfigured state matches the offline demo and kind walkthrough."""
+    test_client, _ = client
+    assert test_client.post("/api/v1/cluster/snapshot").status_code == 200

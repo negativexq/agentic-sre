@@ -1,5 +1,6 @@
 """FastAPI application for the deterministic incident control plane."""
 
+import hmac
 import json
 import os
 import threading
@@ -68,6 +69,32 @@ def get_session() -> Iterator[Session]:
     """Dependency placeholder replaced by ``create_app``."""
     raise RuntimeError("database session dependency is not configured")
     yield  # pragma: no cover
+
+
+API_TOKEN_ENV = "SRE_API_TOKEN"
+
+
+def _require_api_token(request: Request) -> None:
+    """Guard state-changing endpoints with a shared-secret bearer token.
+
+    Unset ``SRE_API_TOKEN`` keeps today's default-open behavior (the offline
+    demo and kind walkthrough need no setup); setting it requires every
+    caller, including Alertmanager's webhook, to send it as
+    ``Authorization: Bearer <token>``. Read-only endpoints are never gated:
+    they expose no Secrets and change nothing.
+    """
+    token = os.environ.get(API_TOKEN_ENV)
+    if not token:
+        return
+    header = request.headers.get("authorization", "")
+    prefix = "Bearer "
+    presented = header[len(prefix) :] if header.startswith(prefix) else ""
+    if not presented or not hmac.compare_digest(presented, token):
+        raise HTTPException(
+            status_code=401,
+            detail="missing or invalid bearer token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 def create_app(
@@ -202,7 +229,11 @@ def create_app(
             scope=scope,
         )
 
-    @app.post("/api/v1/changes", response_model=ChangeRecord)
+    @app.post(
+        "/api/v1/changes",
+        response_model=ChangeRecord,
+        dependencies=[Depends(_require_api_token)],
+    )
     def record_change(
         record: dict[str, Any],
         session: Session = Depends(get_session),  # noqa: B008
@@ -214,7 +245,10 @@ def create_app(
             raise HTTPException(status_code=422, detail="invalid change record") from error
         return ChangeRecordRepository(session).append(normalized)
 
-    @app.post("/api/v1/incidents/{incident_id}/diagnosis")
+    @app.post(
+        "/api/v1/incidents/{incident_id}/diagnosis",
+        dependencies=[Depends(_require_api_token)],
+    )
     def create_diagnosis(incident_id: UUID) -> dict[str, Any]:
         """Diagnose the incident now and store the result."""
         return diagnoser.run(incident_id).model_dump(mode="json")
@@ -231,7 +265,7 @@ def create_app(
             return _error(request, "DIAGNOSIS_NOT_FOUND", "No diagnosis yet.", 404)
         return document
 
-    @app.post("/api/v1/cluster/snapshot")
+    @app.post("/api/v1/cluster/snapshot", dependencies=[Depends(_require_api_token)])
     def snapshot_cluster() -> dict[str, int]:
         """Record changed cluster objects in the change journal."""
         return {"stored_versions": diagnoser.snapshot()}
@@ -270,7 +304,10 @@ def create_app(
             document = diagnoser.run(incident_id).model_dump(mode="json")
         return diagnosis_html(Diagnosis.model_validate(document), back_link="/")
 
-    @app.post("/api/v1/webhooks/alertmanager")
+    @app.post(
+        "/api/v1/webhooks/alertmanager",
+        dependencies=[Depends(_require_api_token)],
+    )
     def alertmanager_webhook(
         payload: AlertmanagerWebhook,
         background: BackgroundTasks,

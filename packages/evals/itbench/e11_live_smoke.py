@@ -32,6 +32,7 @@ def require_live_authorization(authorized: bool) -> None:
 def run_authorized_single_scenario(
     *,
     root: Path,
+    dataset_root: Path,
     manifest: E11OfficialManifestV1,
     scenario_id: str,
     output: Path,
@@ -62,7 +63,7 @@ def run_authorized_single_scenario(
     if manifest.provider_retries != 0:
         raise E11LiveSmokeAuthorizationError("provider retries must be zero")
 
-    dataset = ITBenchLiteDataset.open(root)
+    dataset = ITBenchLiteDataset.open(dataset_root)
     scenario = dataset._load_scenario(scenario_id)
     backend = ITBenchSnapshotBackend(dataset, scenario, max_rows=50, max_bytes=100_000)
     budget = LiveModelBudget(manifest.runtime_limits.max_model_calls, ledger_path=str(ledger_path))

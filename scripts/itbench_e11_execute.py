@@ -86,6 +86,7 @@ def main() -> int:
         )
         result = run_authorized_single_scenario(
             root=ROOT,
+            dataset_root=_path(args.dataset_root),
             manifest=typed,
             scenario_id=args.scenario,
             output=_path(args.output),

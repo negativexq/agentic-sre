@@ -11,19 +11,22 @@ and proposes a reversible fix. It never changes the cluster.
 ## Results
 
 Measured on [ITBench-Lite](https://huggingface.co/datasets/ibm-research/ITBench-Lite)
-SRE snapshots with a pre-registered dev/test split, from tag `v0.3.0`, with no
-model calls. Details and every miss: [`evals/results/v0.3.0`](evals/results/v0.3.0/README.md).
+SRE snapshots with a pre-registered dev/test split, from tag `v0.4.0`. Details
+and every miss: [`evals/results/v0.4.0`](evals/results/v0.4.0/README.md).
 
-| Split | Scenarios | Macro F1 | Root cause ranked first | In top 3 |
-| --- | ---: | ---: | ---: | ---: |
-| **Test** (run once) | 25 | **0.64** | 64% | 76% |
-| Dev (used for tuning) | 10 | 0.90 | 90% | 90% |
-| Previous LLM agent (E10), all 35 | 35 | 0.00 | — | — |
+| Run | Split | Scenarios | Macro F1 | Root cause ranked first | In top 3 | Model calls |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| **Engine** (run once) | Test | 25 | **0.64** | 64% | 76% | 0 |
+| Engine + LLM investigator (run once) | Test | 25 | 0.64 | 64% | 76% | 50 |
+| Engine (used for tuning) | Dev | 10 | 0.90 | 90% | 90% | 0 |
+| Previous LLM agent (E10) | All | 35 | 0.00 | — | — | — |
 
-On the test split, 16 of 22 answers labelled `VERIFIED` were correct. Three
-test scenarios cannot be scored by the published label filters; see the
-results page and [`evals/README.md`](evals/README.md) for the method and a
-disclosure of prior exposure to this dataset.
+On the test split, 16 of 22 answers labelled `VERIFIED` were correct. The LLM
+investigator agreed with the engine in 23 of 25 scenarios and did not change
+the score, so the deterministic engine is the default. Three test scenarios
+cannot be scored by the published label filters; see the results page and
+[`evals/README.md`](evals/README.md) for the method and a disclosure of prior
+exposure to this dataset.
 
 ## Try it
 
@@ -85,7 +88,8 @@ make eval-test         # only from a clean, tagged commit
 ```
 
 Prediction never reads ground truth, and grading refuses modified predictions.
-Re-grade a stored run with `agentic-sre grade --out evals/results/v0.3.0/test`.
+Re-grade a stored run with `agentic-sre grade --out evals/results/v0.4.0/test`.
+Add the investigator to a run with `make eval-dev EVAL_FLAGS=--llm` and the `SRE_LLM_*` settings.
 
 ## Live demo on kind
 
@@ -128,5 +132,5 @@ the `archive/experiments-2026-09` tag.
 - Causes without an observable change, fault, or error signal (for example a
   traffic spike from a load generator) are often missed.
 - Namespace-level causes are not named directly.
-- The LLM investigator has only been tested with scripted models; no live
-  model results are reported.
+- The LLM investigator matched the engine's score on ITBench-Lite; its effect
+  on harder or messier incidents has not been measured.

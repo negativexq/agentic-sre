@@ -1,0 +1,186 @@
+{
+  "benchmark": "ITBench-Lite SRE",
+  "created_at": "2026-09-17T11:21:08.675941+00:00",
+  "engine_config": {
+    "alternatives": 4,
+    "ranking": {
+      "distance_bonus": [
+        3.0,
+        2.5,
+        2.0,
+        1.0
+      ],
+      "extra_finding_weight": 0.3,
+      "grace": "0:30:00",
+      "in_window_bonus": 1.0,
+      "lookback": "2:00:00",
+      "mention_bonus": 2.0,
+      "namespace_bonus": 1.5,
+      "symptom_event_factor": 0.5,
+      "unlinked_penalty": 2.0,
+      "verify_score": 7.0
+    }
+  },
+  "git_dirty": false,
+  "git_head": "0eecbb95d971f908ca750280748d936c194547da",
+  "ground_truth_read_during_prediction": false,
+  "mode": "llm",
+  "model": "gpt-5.6-luna",
+  "model_calls_total": 50,
+  "records": [
+    {
+      "model_calls": 2,
+      "scenario_id": "Scenario-1",
+      "seconds": 28.316
+    },
+    {
+      "model_calls": 2,
+      "scenario_id": "Scenario-2",
+      "seconds": 19.158
+    },
+    {
+      "model_calls": 1,
+      "scenario_id": "Scenario-5",
+      "seconds": 9.204
+    },
+    {
+      "model_calls": 2,
+      "scenario_id": "Scenario-6",
+      "seconds": 22.064
+    },
+    {
+      "model_calls": 1,
+      "scenario_id": "Scenario-9",
+      "seconds": 8.958
+    },
+    {
+      "model_calls": 2,
+      "scenario_id": "Scenario-13",
+      "seconds": 16.028
+    },
+    {
+      "model_calls": 1,
+      "scenario_id": "Scenario-14",
+      "seconds": 12.139
+    },
+    {
+      "model_calls": 1,
+      "scenario_id": "Scenario-15",
+      "seconds": 10.413
+    },
+    {
+      "model_calls": 1,
+      "scenario_id": "Scenario-16",
+      "seconds": 8.221
+    },
+    {
+      "model_calls": 1,
+      "scenario_id": "Scenario-18",
+      "seconds": 6.612
+    },
+    {
+      "model_calls": 1,
+      "scenario_id": "Scenario-19",
+      "seconds": 8.65
+    },
+    {
+      "model_calls": 2,
+      "scenario_id": "Scenario-20",
+      "seconds": 16.049
+    },
+    {
+      "model_calls": 1,
+      "scenario_id": "Scenario-22",
+      "seconds": 9.246
+    },
+    {
+      "model_calls": 1,
+      "scenario_id": "Scenario-23",
+      "seconds": 8.086
+    },
+    {
+      "model_calls": 2,
+      "scenario_id": "Scenario-24",
+      "seconds": 20.726
+    },
+    {
+      "model_calls": 1,
+      "scenario_id": "Scenario-25",
+      "seconds": 7.233
+    },
+    {
+      "model_calls": 6,
+      "scenario_id": "Scenario-31",
+      "seconds": 51.527
+    },
+    {
+      "model_calls": 4,
+      "scenario_id": "Scenario-33",
+      "seconds": 34.179
+    },
+    {
+      "model_calls": 1,
+      "scenario_id": "Scenario-35",
+      "seconds": 6.154
+    },
+    {
+      "model_calls": 7,
+      "scenario_id": "Scenario-38",
+      "seconds": 65.721
+    },
+    {
+      "model_calls": 1,
+      "scenario_id": "Scenario-80",
+      "seconds": 7.667
+    },
+    {
+      "model_calls": 1,
+      "scenario_id": "Scenario-81",
+      "seconds": 7.082
+    },
+    {
+      "model_calls": 1,
+      "scenario_id": "Scenario-83",
+      "seconds": 7.099
+    },
+    {
+      "model_calls": 6,
+      "scenario_id": "Scenario-102",
+      "seconds": 52.712
+    },
+    {
+      "model_calls": 1,
+      "scenario_id": "Scenario-105",
+      "seconds": 8.907
+    }
+  ],
+  "scenario_ids": [
+    "Scenario-1",
+    "Scenario-2",
+    "Scenario-5",
+    "Scenario-6",
+    "Scenario-9",
+    "Scenario-13",
+    "Scenario-14",
+    "Scenario-15",
+    "Scenario-16",
+    "Scenario-18",
+    "Scenario-19",
+    "Scenario-20",
+    "Scenario-22",
+    "Scenario-23",
+    "Scenario-24",
+    "Scenario-25",
+    "Scenario-31",
+    "Scenario-33",
+    "Scenario-35",
+    "Scenario-38",
+    "Scenario-80",
+    "Scenario-81",
+    "Scenario-83",
+    "Scenario-102",
+    "Scenario-105"
+  ],
+  "seconds_total": 452.179,
+  "split": "test"
+}

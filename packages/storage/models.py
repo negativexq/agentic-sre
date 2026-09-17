@@ -110,6 +110,31 @@ class ChangeRecordRow(Base):
     source: Mapped[str] = mapped_column(String(255), nullable=False)
 
 
+class EventVersionRow(Base):
+    """One observed Kubernetes event, kept so a frozen incident window can be
+    re-read later without depending on the cluster's own event TTL (events are
+    garbage-collected by Kubernetes after about an hour).
+    """
+
+    __tablename__ = "event_versions"
+    __table_args__ = (UniqueConstraint("namespace", "dedup_key"),)
+
+    version_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    namespace: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    # involvedObject kind/name, for cheap filtering without a JSON query.
+    involved_kind: Mapped[str] = mapped_column(String(255), nullable=False)
+    involved_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # (uid or name)|count|lastTimestamp: identifies one observed state of one
+    # Kubernetes event object; a coalesced repeat (count/lastTimestamp advance)
+    # gets a new key and is stored again, matching the object journal's model
+    # of "one row per observed version".
+    dedup_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    # first_at (or last_at, or observed_at) -- used to filter by incident window.
+    event_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False, index=True)
+    observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    body: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
 class ObjectVersionRow(Base):
     """One observed version of a Kubernetes object: a content change or a lifecycle event.
 

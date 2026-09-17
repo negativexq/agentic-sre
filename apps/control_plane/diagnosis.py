@@ -27,6 +27,7 @@ from packages.rca.model import Alert, Diagnosis
 from packages.storage import (
     AlertRepository,
     DiagnosisRepository,
+    EventRepository,
     IncidentNotFoundError,
     IncidentRepository,
     ObjectVersionRepository,
@@ -50,10 +51,17 @@ class DiagnosisService:
     # Serializes ChangeWatcher.snapshot() runs: the periodic watch() loop and a
     # run()-triggered snapshot can otherwise race on the same read-then-write
     # (latest version, then insert) in ObjectVersionRepository.
+    #
+    # This is a process-local lock: it only protects a single DiagnosisService
+    # instance. Today's deployment runs exactly one (one uvicorn worker, one
+    # control-plane replica -- see infra/kubernetes/control-plane.yaml), so it
+    # is sufficient. It stops being sufficient the moment more than one worker
+    # or replica writes to the same database; that needs a database-level
+    # lock (e.g. a Postgres advisory lock) instead, or a single writer process.
     _snapshot_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def snapshot(self) -> int:
-        """Record changed and deleted objects in the journal; returns how many were stored."""
+        """Record changed objects, deletions, and new events; how many were stored."""
         if self.reader is None:
             return 0
         with self._snapshot_lock, self.session_factory() as session:
@@ -66,7 +74,13 @@ class DiagnosisService:
                 repository.tombstone,
                 self.clock,
             )
-            return watcher.snapshot()
+            stored = watcher.snapshot()
+            now = self.clock()
+            events = EventRepository(session)
+            stored += sum(
+                events.record(body, now) for body in self.reader.list_events(self.namespaces)
+            )
+            return stored
 
     def watch(self, stop: threading.Event, interval_seconds: float) -> None:
         """Snapshot the cluster until ``stop`` is set; errors are logged and retried."""
@@ -102,17 +116,20 @@ class DiagnosisService:
         # cannot show up as its "latest" object version.
         resolved = incident.status in _TERMINAL_STATUSES
         window_end = incident.updated_at if resolved else now
-        current, events = [], []
-        if self.reader is not None and not resolved:
+        current = []
+        if self.reader is not None:
+            # snapshot() also journals events, so both incidents read a
+            # consistent, replayable history instead of the cluster's live,
+            # garbage-collected event list.
             self.snapshot()
-            current = self.reader.list_objects(self.namespaces)
-            events = self.reader.list_events(self.namespaces)
-        elif self.reader is not None:
-            # Still keep the shared journal current for other, open incidents.
-            self.snapshot()
+            if not resolved:
+                current = self.reader.list_objects(self.namespaces)
         starts_at, ends_at = incident_window(alerts, window_end)
         with self.session_factory() as session:
             journal = ObjectVersionRepository(session).history(
+                namespaces=set(self.namespaces), starts_at=starts_at, ends_at=ends_at
+            )
+            event_bodies = EventRepository(session).history(
                 namespaces=set(self.namespaces), starts_at=starts_at, ends_at=ends_at
             )
         logs = []
@@ -134,7 +151,7 @@ class DiagnosisService:
             alert_items=alerts,
             journal=journal,
             current_objects=current,
-            event_bodies=events,
+            event_bodies=event_bodies,
             error_items=logs,
             observed_at=window_end,
             current_is_live=not resolved,

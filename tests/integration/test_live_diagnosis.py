@@ -471,3 +471,96 @@ def test_resolved_incident_diagnosis_is_stable_across_reruns(setup: Any) -> None
     cluster.objects[0] = _deployment("9999")
     second = service.run(incident_id)
     assert first == second
+
+
+def test_events_persist_past_kubernetes_garbage_collection(setup: Any) -> None:
+    """A warning event must still explain an incident after the cluster has
+    garbage collected it (Kubernetes keeps events for about an hour)."""
+    factory, cluster, clock, incident_id = setup
+    service = DiagnosisService(
+        session_factory=factory, namespaces=("sre-demo",), reader=cluster, clock=clock
+    )
+    warning_at = T0 + timedelta(minutes=2)
+    cluster.events = [
+        {
+            "kind": "Event",
+            "metadata": {"uid": "evt-1", "name": "order-service.warn"},
+            "involvedObject": {
+                "kind": "Deployment",
+                "name": "order-service",
+                "namespace": "sre-demo",
+            },
+            "reason": "BackOff",
+            "type": "Warning",
+            "message": "back-off restarting failed container",
+            "firstTimestamp": warning_at.isoformat().replace("+00:00", "Z"),
+            "lastTimestamp": warning_at.isoformat().replace("+00:00", "Z"),
+            "count": 9,
+        }
+    ]
+    assert service.snapshot() >= 1
+
+    # Simulate the cluster garbage collecting the event.
+    cluster.events = []
+    clock.now = T0 + timedelta(minutes=13)
+    diagnosis = service.run(incident_id)
+    assert diagnosis.root_cause == EntityRef.parse("sre-demo/Deployment/order-service")
+    assert diagnosis.evidence[0].kind is FindingKind.FAILURE_EVENT
+    assert "BackOff" in diagnosis.evidence[0].summary
+
+
+def test_resolved_incident_events_are_also_frozen_at_resolution(setup: Any) -> None:
+    """The event journal must respect the same frozen window as objects."""
+    factory, cluster, clock, incident_id = setup
+    service = DiagnosisService(
+        session_factory=factory, namespaces=("sre-demo",), reader=cluster, clock=clock
+    )
+    warning_at = T0 + timedelta(minutes=2)
+    cluster.events = [
+        {
+            "kind": "Event",
+            "metadata": {"uid": "evt-1", "name": "order-service.warn"},
+            "involvedObject": {
+                "kind": "Deployment",
+                "name": "order-service",
+                "namespace": "sre-demo",
+            },
+            "reason": "BackOff",
+            "type": "Warning",
+            "message": "back-off restarting failed container",
+            "firstTimestamp": warning_at.isoformat().replace("+00:00", "Z"),
+            "lastTimestamp": warning_at.isoformat().replace("+00:00", "Z"),
+            "count": 9,
+        }
+    ]
+    assert service.snapshot() >= 1
+    with factory() as session:
+        row = session.get(IncidentRow, incident_id)
+        assert row is not None
+        row.status = "CLOSED"
+        row.updated_at = T0 + timedelta(minutes=15)
+        session.commit()
+
+    # A new, unrelated warning fires long after resolution.
+    clock.now = T0 + timedelta(days=1)
+    cluster.events = [
+        {
+            "kind": "Event",
+            "metadata": {"uid": "evt-2", "name": "order-service.warn2"},
+            "involvedObject": {
+                "kind": "Deployment",
+                "name": "order-service",
+                "namespace": "sre-demo",
+            },
+            "reason": "Unrelated",
+            "type": "Warning",
+            "message": "something else, much later",
+            "firstTimestamp": clock.now.isoformat().replace("+00:00", "Z"),
+            "lastTimestamp": clock.now.isoformat().replace("+00:00", "Z"),
+            "count": 1,
+        }
+    ]
+    diagnosis = service.run(incident_id)
+    assert diagnosis.evidence[0].kind is FindingKind.FAILURE_EVENT
+    assert "BackOff" in diagnosis.evidence[0].summary
+    assert "Unrelated" not in diagnosis.evidence[0].summary

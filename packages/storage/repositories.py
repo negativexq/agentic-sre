@@ -32,6 +32,7 @@ from packages.storage.models import (
     AlertRow,
     ChangeRecordRow,
     DiagnosisRow,
+    EventVersionRow,
     EvidenceRow,
     IncidentEventRow,
     IncidentRow,
@@ -318,6 +319,69 @@ class EvidenceRepository:
             )
             for row in rows
         ]
+
+
+class EventRepository:
+    """Append-only journal of observed Kubernetes events.
+
+    A coalesced repeat (Kubernetes bumps ``count``/``lastTimestamp`` on the
+    same event object instead of creating a new one) is stored again under a
+    new dedup key, mirroring how the object journal treats each observed
+    version; an exact repeat is skipped.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def record(self, body: dict[str, Any], observed_at: datetime) -> bool:
+        involved = child(body, "involvedObject")
+        kind, name = involved.get("kind"), involved.get("name")
+        if not isinstance(kind, str) or not isinstance(name, str):
+            return False
+        namespace = str(involved.get("namespace") or CLUSTER_SCOPE)
+        metadata = child(body, "metadata")
+        key = f"{metadata.get('uid') or metadata.get('name') or ''}|{body.get('count')}|{body.get('lastTimestamp')}"
+        exists = self._session.scalar(
+            select(EventVersionRow.version_id).where(
+                EventVersionRow.namespace == namespace, EventVersionRow.dedup_key == key
+            )
+        )
+        if exists is not None:
+            return False
+        event_at = (
+            _timestamp(body.get("firstTimestamp"))
+            or _timestamp(body.get("lastTimestamp"))
+            or _timestamp(body.get("eventTime"))
+            or observed_at
+        )
+        self._session.add(
+            EventVersionRow(
+                namespace=namespace,
+                involved_kind=kind,
+                involved_name=name,
+                dedup_key=key,
+                event_at=event_at,
+                observed_at=observed_at,
+                body=body,
+            )
+        )
+        self._session.commit()
+        return True
+
+    def history(
+        self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
+    ) -> list[dict[str, Any]]:
+        """Event bodies observed in the window, oldest first."""
+        rows = self._session.scalars(
+            select(EventVersionRow)
+            .where(
+                EventVersionRow.namespace.in_(namespaces),
+                EventVersionRow.event_at >= starts_at,
+                EventVersionRow.event_at <= ends_at,
+            )
+            .order_by(EventVersionRow.event_at, EventVersionRow.version_id)
+        ).all()
+        return [dict(row.body) for row in rows]
 
 
 class ObjectVersionRepository:

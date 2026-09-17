@@ -73,6 +73,10 @@ flowchart LR
 
 - Cluster access is list/get/watch only, never Secrets
   (`infra/kubernetes/tools-rbac.yaml`, `make rbac-check`).
+- Chaos Mesh experiments are only readable if `infra/kubernetes/chaos-mesh-rbac.yaml`
+  is also applied (its own namespace, same read-only verbs); without it the
+  reader's chaos lookups fail silently, so fault-injection findings are
+  quietly missing rather than erroring.
 - Remediation is text; no code path applies it.
 - Live model calls need `SRE_LLM_ENABLED=true` and `SRE_LLM_MAX_CALLS`; tests
   use scripted models.

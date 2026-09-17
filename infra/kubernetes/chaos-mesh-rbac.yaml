@@ -1,0 +1,41 @@
+# Optional: read access to Chaos Mesh experiments, for clusters that have
+# Chaos Mesh installed in its default "chaos-mesh" namespace. Without this,
+# KubernetesClusterReader's chaos lookups fail silently (a Kubernetes 403 is
+# not distinguishable from "no experiments"), so fault-injection findings are
+# quietly missing rather than erroring.
+#
+# Apply after infra/kubernetes/tools-rbac.yaml, and only if the "chaos-mesh"
+# namespace already exists:
+#   kubectl apply -f infra/kubernetes/chaos-mesh-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agentic-sre-reader
+  namespace: chaos-mesh
+rules:
+  - apiGroups: ["chaos-mesh.org"]
+    resources:
+      - networkchaos
+      - podchaos
+      - stresschaos
+      - iochaos
+      - httpchaos
+      - schedules
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agentic-sre-reader
+  namespace: chaos-mesh
+subjects:
+  - kind: ServiceAccount
+    name: agentic-sre-reader
+    namespace: sre-demo
+roleRef:
+  kind: Role
+  name: agentic-sre-reader
+  apiGroup: rbac.authorization.k8s.io

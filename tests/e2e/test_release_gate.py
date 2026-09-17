@@ -5,11 +5,23 @@ from pathlib import Path
 
 
 def test_kubernetes_investigation_role_has_zero_write_verbs() -> None:
-    content = Path("infra/kubernetes/tools-rbac.yaml").read_text(encoding="utf-8")
-    verb_sets = re.findall(r"verbs:\s*\[([^]]+)\]", content)
-    assert verb_sets
-    for verbs in verb_sets:
-        assert {verb.strip().strip('"') for verb in verbs.split(",")} <= {"get", "list", "watch"}
+    manifests = (
+        "infra/kubernetes/tools-rbac.yaml",
+        "infra/kubernetes/chaos-mesh-rbac.yaml",
+    )
+    checked = 0
+    for manifest in manifests:
+        content = Path(manifest).read_text(encoding="utf-8")
+        verb_sets = re.findall(r"verbs:\s*\[([^]]+)\]", content)
+        assert verb_sets, manifest
+        checked += len(verb_sets)
+        for verbs in verb_sets:
+            assert {verb.strip().strip('"') for verb in verbs.split(",")} <= {
+                "get",
+                "list",
+                "watch",
+            }, manifest
+    assert checked >= 6
 
 
 def test_release_contains_required_observability_and_runtime_boundaries() -> None:

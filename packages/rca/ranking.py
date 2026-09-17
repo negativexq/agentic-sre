@@ -22,6 +22,7 @@ KIND_WEIGHT: dict[FindingKind, float] = {
     FindingKind.QUOTA_EXHAUSTED: 3.0,
     FindingKind.NETWORK_RESTRICTION: 2.5,
     FindingKind.CONTAINER_FAILURE: 3.0,
+    FindingKind.RESOURCE_PRESSURE: 2.5,
     FindingKind.SCALE_CHANGE: 3.0,
     FindingKind.ROLLOUT_RESTART: 1.5,
     FindingKind.FAILURE_EVENT: 1.0,

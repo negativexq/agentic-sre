@@ -20,6 +20,7 @@ from packages.rca.model import (
     EntityRef,
     LogRecord,
     ObjectVersion,
+    ResourcePressure,
 )
 
 # (API group client attribute, list method, kind). Secrets are deliberately not read.
@@ -286,6 +287,12 @@ class LiveSource:
 
     def error_logs(self) -> Sequence[LogRecord]:
         return self.error_items
+
+    def resource_pressure(
+        self, pods: Sequence[EntityRef], since: datetime
+    ) -> Sequence[ResourcePressure]:
+        # The live stack does not scrape cAdvisor yet; container status still covers OOM kills.
+        return []
 
     def logs(self, service: str, *, limit: int = 20) -> Sequence[dict[str, Any]]:
         return [

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import Protocol
 
 from packages.rca.model import (
@@ -32,6 +34,7 @@ from packages.rca.signals import (
     failure_findings,
     fault_event_findings,
     policy_findings,
+    resource_findings,
     symptom_entities,
 )
 from packages.rca.source import ObservationSource
@@ -73,6 +76,21 @@ class Investigator(Protocol):
 class EngineConfig:
     ranking: RankingConfig = field(default_factory=RankingConfig)
     alternatives: int = 4
+    # Metrics older than onset minus this gap are the pressure baseline.
+    pressure_baseline_gap: timedelta = timedelta(minutes=5)
+
+
+def _pods(entities: Iterable[EntityRef], topology: Topology) -> set[EntityRef]:
+    """Pods of the alerting services, including pods of alerting workloads."""
+    pods: set[EntityRef] = set()
+    for entity in entities:
+        if entity.kind == "Pod":
+            pods.add(entity)
+            continue
+        for neighbor in topology.reachable(entity, max_depth=2):
+            if neighbor.kind == "Pod" and topology.workload_of(neighbor) == entity:
+                pods.add(neighbor)
+    return pods
 
 
 def build_case(source: ObservationSource, config: EngineConfig | None = None) -> Case:
@@ -99,6 +117,16 @@ def build_case(source: ObservationSource, config: EngineConfig | None = None) ->
         *change_findings(history),
         *policy_findings(history, topology, set(symptoms.namespaces), events),
         *container_findings(history),
+        *(
+            resource_findings(
+                source.resource_pressure(
+                    sorted(_pods(entities, topology), key=str),
+                    symptoms.onset - config.pressure_baseline_gap,
+                )
+            )
+            if symptoms.onset is not None
+            else []
+        ),
         *fault_event_findings(events, topology),
         *failure_findings(events),
         *dependency_findings(list(source.error_logs()), topology, entities),

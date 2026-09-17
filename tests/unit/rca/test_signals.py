@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from rca_builders import (
     alert,
+    at,
     config_change_source,
     event,
     ref,
@@ -11,13 +12,14 @@ from rca_builders import (
     version,
 )
 
-from packages.rca.model import FindingKind
+from packages.rca.model import FindingKind, ResourcePressure
 from packages.rca.signals import (
     change_findings,
     extract_symptoms,
     failure_findings,
     fault_event_findings,
     parse_quantity,
+    resource_findings,
     symptom_entities,
 )
 from packages.rca.source import InMemorySource
@@ -338,3 +340,29 @@ def test_parse_quantity_handles_binary_and_decimal_suffixes() -> None:
     assert parse_quantity("250m") == 0.25
     assert parse_quantity("2") == 2.0
     assert parse_quantity("x") is None
+
+
+def _pressure(resource: str, baseline: float | None, peak: float) -> ResourcePressure:
+    return ResourcePressure(
+        pod=ref("shop/Pod/checkout-5d8f7c9b4-abcde"),
+        container="checkout",
+        resource=resource,
+        baseline=baseline,
+        peak=peak,
+        at=at(4),
+        evidence_id=f"metrics:{resource}",
+    )
+
+
+def test_only_new_resource_pressure_becomes_a_finding() -> None:
+    findings = resource_findings(
+        [
+            _pressure("memory", 0.5, 0.96),
+            _pressure("cpu", 0.4, 0.5),  # throttled before the incident too
+            _pressure("cpu", None, 0.9),  # nothing to compare with
+            _pressure("cpu", 0.0, 0.1),  # below threshold
+        ]
+    )
+    assert len(findings) == 1
+    assert findings[0].kind is FindingKind.RESOURCE_PRESSURE
+    assert findings[0].summary == "checkout memory use of limit rose from 50% to 96%"

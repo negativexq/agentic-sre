@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
@@ -19,6 +20,7 @@ from packages.rca.model import (
     EntityRef,
     LogRecord,
     ObjectVersion,
+    ResourcePressure,
 )
 
 _OBJECTS = "k8s_objects_raw.tsv"
@@ -26,6 +28,20 @@ _EVENTS = "k8s_events_raw.tsv"
 _LOGS = "otel_logs_raw.tsv"
 _ERROR_SEVERITIES = frozenset({"ERROR", "FATAL", "CRITICAL", "WARN", "WARNING"})
 _MAX_ERRORS_PER_SERVICE = 200
+_MEMORY_USAGE = "node_namespace_pod_container:container_memory_working_set_bytes"
+_MEMORY_LIMIT = "cluster:namespace:pod_memory:active:kube_pod_container_resource_limits"
+_CPU_THROTTLED = "container_cpu_cfs_throttled_periods_total"
+_CPU_PERIODS = "container_cpu_cfs_periods_total"
+_PRESSURE_METRICS = frozenset({_MEMORY_USAGE, _MEMORY_LIMIT, _CPU_THROTTLED, _CPU_PERIODS})
+_MIN_CPU_PERIODS = 100
+
+
+def _tags(value: str) -> dict[str, Any]:
+    try:
+        parsed = ast.literal_eval(value)
+    except (ValueError, SyntaxError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def parse_time(value: Any) -> datetime | None:
@@ -46,6 +62,104 @@ def _entity(kind: Any, name: Any, namespace: Any) -> EntityRef | None:
         name=name,
         namespace=namespace if isinstance(namespace, str) and namespace else CLUSTER_SCOPE,
     )
+
+
+class _Split:
+    """Before/after aggregates for one container resource."""
+
+    def __init__(self) -> None:
+        self.before: float | None = None
+        self.after: float | None = None
+        self.at: datetime | None = None
+        self.index = 0
+
+
+def pod_pressure(pod: EntityRef, path: Path, since: datetime) -> list[ResourcePressure]:
+    """Memory-to-limit peaks and CPU throttling ratios per container, before and after ``since``."""
+    memory: dict[str, _Split] = {}
+    limits: dict[str, float] = {}
+    # (container, metric, series) -> [first, last value before since, last value after]
+    counters: dict[tuple[str, str, str], list[float | None]] = {}
+    throttle_at: dict[str, datetime] = {}
+    for index, row in enumerate(iter_tsv(path)):
+        metric = row.get("metric_name")
+        if metric not in _PRESSURE_METRICS:
+            continue
+        tags = _tags(str(row.get("tags") or ""))
+        container = str(tags.get("container") or "")
+        at = parse_time(row.get("timestamp"))
+        if container in {"", "POD"} or at is None:
+            continue
+        try:
+            value = float(row.get("value") or "nan")
+        except ValueError:
+            continue
+        if value != value:  # NaN
+            continue
+        after = at >= since
+        if metric == _MEMORY_LIMIT:
+            limits[container] = max(limits.get(container, 0.0), value)
+        elif metric == _MEMORY_USAGE:
+            split = memory.setdefault(container, _Split())
+            if not after:
+                split.before = max(split.before or 0.0, value)
+            elif value > (split.after or 0.0):
+                split.after, split.at, split.index = value, at, index
+        else:
+            series = (container, metric, str(tags.get("id") or tags.get("name") or ""))
+            bounds = counters.setdefault(series, [value, None, None])
+            if after:
+                bounds[2] = value
+                if metric == _CPU_THROTTLED and container not in throttle_at:
+                    throttle_at[container] = at
+            else:
+                bounds[1] = value
+    relative = f"metrics/{path.name}"
+    result: list[ResourcePressure] = []
+    for container, split in sorted(memory.items()):
+        limit = limits.get(container)
+        if limit and split.after is not None:
+            result.append(
+                ResourcePressure(
+                    pod=pod,
+                    container=container,
+                    resource="memory",
+                    baseline=None if split.before is None else split.before / limit,
+                    peak=split.after / limit,
+                    at=split.at,
+                    evidence_id=f"{relative}:{split.index}",
+                )
+            )
+    earlier: dict[tuple[str, str], float] = {}
+    recent: dict[tuple[str, str], float] = {}
+    for (container, metric, _series), (first, middle, last) in counters.items():
+        key = (container, metric)
+        if middle is not None and first is not None:
+            earlier[key] = earlier.get(key, 0.0) + middle - first
+        if last is not None:
+            start = middle if middle is not None else first
+            recent[key] = recent.get(key, 0.0) + last - (start or 0.0)
+    for container in sorted({key[0] for key in recent}):
+        periods = recent.get((container, _CPU_PERIODS), 0.0)
+        if periods < _MIN_CPU_PERIODS:
+            continue
+        base_periods = earlier.get((container, _CPU_PERIODS), 0.0)
+        result.append(
+            ResourcePressure(
+                pod=pod,
+                container=container,
+                resource="cpu",
+                baseline=(
+                    earlier.get((container, _CPU_THROTTLED), 0.0) / base_periods
+                    if base_periods >= _MIN_CPU_PERIODS
+                    else None
+                ),
+                peak=recent.get((container, _CPU_THROTTLED), 0.0) / periods,
+                at=throttle_at.get(container),
+                evidence_id=f"{relative}:{_CPU_THROTTLED}",
+            )
+        )
+    return result
 
 
 class SnapshotSource:
@@ -206,6 +320,16 @@ class SnapshotSource:
     def error_logs(self) -> Sequence[LogRecord]:
         return self._error_logs
 
+    def resource_pressure(
+        self, pods: Sequence[EntityRef], since: datetime
+    ) -> Sequence[ResourcePressure]:
+        result: list[ResourcePressure] = []
+        for pod in pods:
+            path = self.root / "metrics" / f"pod_{pod.name}_raw.tsv"
+            if pod.kind == "Pod" and "/" not in pod.name and path.is_file():
+                result.extend(pod_pressure(pod, path, since))
+        return result
+
     def logs(self, service: str, *, limit: int = 20) -> Sequence[dict[str, Any]]:
         """Error-level log lines for one service, bounded."""
         result: list[dict[str, Any]] = []
@@ -227,4 +351,4 @@ class SnapshotSource:
         return result
 
 
-__all__ = ["SnapshotSource", "parse_time"]
+__all__ = ["SnapshotSource", "parse_time", "pod_pressure"]

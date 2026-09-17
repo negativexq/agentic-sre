@@ -4,9 +4,17 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Protocol
 
-from packages.rca.model import Alert, ClusterEvent, EntityRef, LogRecord, ObjectVersion
+from packages.rca.model import (
+    Alert,
+    ClusterEvent,
+    EntityRef,
+    LogRecord,
+    ObjectVersion,
+    ResourcePressure,
+)
 
 
 class ObservationSource(Protocol):
@@ -28,6 +36,12 @@ class ObservationSource(Protocol):
 
     def error_logs(self) -> Sequence[LogRecord]: ...
 
+    def resource_pressure(
+        self, pods: Sequence[EntityRef], since: datetime
+    ) -> Sequence[ResourcePressure]:
+        """Resource use of the given pods before and after ``since``; empty without metrics."""
+        ...
+
 
 @dataclass
 class InMemorySource:
@@ -39,6 +53,7 @@ class InMemorySource:
     event_items: list[ClusterEvent] = field(default_factory=list)
     log_items: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     error_items: list[LogRecord] = field(default_factory=list)
+    pressure_items: list[ResourcePressure] = field(default_factory=list)
 
     def incident_id(self) -> str:
         return self.name
@@ -60,6 +75,12 @@ class InMemorySource:
 
     def error_logs(self) -> Sequence[LogRecord]:
         return self.error_items
+
+    def resource_pressure(
+        self, pods: Sequence[EntityRef], since: datetime
+    ) -> Sequence[ResourcePressure]:
+        wanted = set(pods)
+        return [item for item in self.pressure_items if item.pod in wanted]
 
 
 __all__ = ["InMemorySource", "ObservationSource"]

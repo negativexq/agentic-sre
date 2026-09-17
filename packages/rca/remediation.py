@@ -117,6 +117,19 @@ def propose(candidate: Candidate, topology: Topology) -> tuple[Remediation, ...]
                 risk="medium: reverts the last rollout",
             ),
         )
+    if finding.kind is FindingKind.RESOURCE_PRESSURE and entity.kind == "Pod":
+        workload = topology.workload_of(entity)
+        target = (
+            _kubectl_ref(workload) if workload else f"deployment/{pod_workload_name(entity.name)}"
+        )
+        resource = "memory" if "memory" in finding.details.get("resources", []) else "cpu"
+        return (
+            Remediation(
+                action=f"Check what drives {resource} use in {target}, then raise its {resource} limit",
+                command=f"kubectl top pod {entity.name} -n {entity.namespace} --containers",
+                risk="medium: a higher limit uses more node capacity",
+            ),
+        )
     if finding.kind in {FindingKind.POLICY_CREATED, FindingKind.NETWORK_RESTRICTION}:
         return (
             Remediation(

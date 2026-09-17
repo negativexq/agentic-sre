@@ -18,6 +18,7 @@ from packages.rca.model import (
     FindingKind,
     LogRecord,
     ObjectVersion,
+    ResourcePressure,
     Symptoms,
 )
 from packages.rca.topology import WORKLOAD_KINDS, Topology, is_chaos_kind
@@ -561,6 +562,51 @@ def container_findings(history: Mapping[EntityRef, Sequence[ObjectVersion]]) -> 
     return findings
 
 
+PRESSURE_THRESHOLD = {"memory": 0.9, "cpu": 0.25}
+PRESSURE_BASELINE_FACTOR = 0.6
+
+
+def resource_findings(pressures: Sequence[ResourcePressure]) -> list[Finding]:
+    """Containers whose memory or CPU pressure appeared around the incident.
+
+    Pressure that already existed before the incident is normal for that
+    workload and is ignored, as is pressure without a baseline to compare with.
+    """
+    worst: dict[EntityRef, list[ResourcePressure]] = {}
+    for item in pressures:
+        threshold = PRESSURE_THRESHOLD.get(item.resource)
+        if threshold is None or item.baseline is None or item.peak < threshold:
+            continue
+        if item.baseline <= item.peak * PRESSURE_BASELINE_FACTOR:
+            worst.setdefault(item.pod, []).append(item)
+    findings: list[Finding] = []
+    for pod, items in worst.items():
+        items.sort(key=lambda item: item.peak, reverse=True)
+        parts = [
+            f"{item.container} {item.resource} {_PRESSURE_NOUN[item.resource]} rose from "
+            f"{item.baseline or 0:.0%} to {item.peak:.0%}"
+            for item in items[:3]
+        ]
+        times = [item.at for item in items if item.at is not None]
+        findings.append(
+            Finding(
+                kind=FindingKind.RESOURCE_PRESSURE,
+                entity=pod,
+                at=min(times) if times else None,
+                summary="; ".join(parts),
+                evidence_ids=tuple(item.evidence_id for item in items[:3]),
+                details={
+                    "resources": sorted({item.resource for item in items}),
+                    "peak": round(items[0].peak, 3),
+                },
+            )
+        )
+    return findings
+
+
+_PRESSURE_NOUN = {"memory": "use of limit", "cpu": "throttling"}
+
+
 def _parse(value: Any) -> datetime | None:
     if not isinstance(value, str):
         return None
@@ -766,6 +812,7 @@ def dependency_findings(
 
 __all__ = [
     "BACKGROUND_ALERTS",
+    "resource_findings",
     "container_findings",
     "parse_quantity",
     "dependency_findings",

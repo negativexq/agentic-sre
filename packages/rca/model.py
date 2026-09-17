@@ -70,6 +70,24 @@ class LogRecord(BaseModel):
     evidence_id: str
 
 
+class ResourcePressure(BaseModel):
+    """Use of one container resource relative to its limit, before and after a time.
+
+    memory: peak working set / limit. cpu: throttled / scheduled CFS periods.
+    ``baseline`` is None when no samples precede the split time.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    pod: EntityRef
+    container: str
+    resource: str
+    baseline: float | None
+    peak: float
+    at: datetime | None
+    evidence_id: str
+
+
 class ClusterEvent(BaseModel):
     """One Kubernetes event about an involved object."""
 
@@ -110,6 +128,7 @@ class FindingKind(StrEnum):
     QUOTA_EXHAUSTED = "QUOTA_EXHAUSTED"
     NETWORK_RESTRICTION = "NETWORK_RESTRICTION"
     CONTAINER_FAILURE = "CONTAINER_FAILURE"
+    RESOURCE_PRESSURE = "RESOURCE_PRESSURE"
     DEPENDENCY_ERRORS = "DEPENDENCY_ERRORS"
     FAILURE_EVENT = "FAILURE_EVENT"
 
@@ -220,5 +239,6 @@ __all__ = [
     "LogRecord",
     "ObjectVersion",
     "Remediation",
+    "ResourcePressure",
     "Symptoms",
 ]

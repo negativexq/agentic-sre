@@ -5,7 +5,7 @@ from __future__ import annotations
 from rca_builders import alert, at, config_change_source, event, ref, shop_objects, version
 
 from packages.rca.engine import Case, Choice, build_case, diagnose
-from packages.rca.model import Confidence, FindingKind
+from packages.rca.model import Confidence, FindingKind, ResourcePressure
 from packages.rca.source import InMemorySource
 
 
@@ -257,3 +257,27 @@ def test_oom_killed_container_proposes_more_memory() -> None:
     assert "OOMKilled" in diagnosis.evidence[0].summary
     assert "memory" in diagnosis.remediation[0].command
     assert diagnosis.confidence is not Confidence.VERIFIED
+
+
+def test_new_memory_pressure_on_the_alerting_pod_is_reported() -> None:
+    pod = ref("shop/Pod/checkout-5d8f7c9b4-abcde")
+    source = InMemorySource(
+        name="pressure",
+        alert_items=[alert("RequestErrorRate", "checkout", 10)],
+        versions=shop_objects(0),
+        pressure_items=[
+            ResourcePressure(
+                pod=pod,
+                container="checkout",
+                resource="memory",
+                baseline=0.4,
+                peak=0.98,
+                at=at(9),
+                evidence_id="metrics:1",
+            )
+        ],
+    )
+    diagnosis = diagnose(source)
+    assert diagnosis.root_cause == pod
+    assert diagnosis.evidence[0].kind is FindingKind.RESOURCE_PRESSURE
+    assert "memory limit" in diagnosis.remediation[0].action

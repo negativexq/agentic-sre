@@ -1,6 +1,6 @@
 # ITBench-Lite SRE — test split
 
-Mode `deterministic`, commit `00dd5bce3707`, 25 scenarios, 0 model calls, 61.0 s.
+Mode `deterministic`, commit `5ee06550b552`, 25 scenarios, 0 model calls, 60.8 s.
 
 | Metric | Value |
 | --- | ---: |
@@ -19,6 +19,7 @@ Mode `deterministic`, commit `00dd5bce3707`, 25 scenarios, 0 model calls, 61.0 s
 | Confidence | Count | Correct | Precision | Share |
 | --- | ---: | ---: | ---: | ---: |
 | LIKELY | 2 | 1 | 50.0% | 8.0% |
+| UNVERIFIED | 0 | 0 | 0.0% | 0.0% |
 | VERIFIED | 23 | 16 | 69.6% | 92.0% |
 
 | Scenario | Prediction | Confidence | Correct | Rank | GT observable |

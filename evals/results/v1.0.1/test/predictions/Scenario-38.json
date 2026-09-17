@@ -22,10 +22,10 @@
         "causal_path": [
           {
             "direction": "reverse",
-            "relation": "serves",
+            "relation": "backs",
             "source": {
-              "kind": "Deployment",
-              "name": "kafka",
+              "kind": "Pod",
+              "name": "kafka-ff7884766-vg9vr",
               "namespace": "otel-demo"
             },
             "target": {

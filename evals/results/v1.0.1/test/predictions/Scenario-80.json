@@ -19,36 +19,7 @@
   "diagnosis": {
     "alternatives": [
       {
-        "causal_path": [
-          {
-            "direction": "forward",
-            "relation": "spawns",
-            "source": {
-              "kind": "Schedule",
-              "name": "otel-demo-checkout-kafka-network-partition",
-              "namespace": "chaos-mesh"
-            },
-            "target": {
-              "kind": "NetworkChaos",
-              "name": "otel-demo-checkout-kafka-network-partition-96js2",
-              "namespace": "chaos-mesh"
-            }
-          },
-          {
-            "direction": "forward",
-            "relation": "disrupts",
-            "source": {
-              "kind": "NetworkChaos",
-              "name": "otel-demo-checkout-kafka-network-partition-96js2",
-              "namespace": "chaos-mesh"
-            },
-            "target": {
-              "kind": "Pod",
-              "name": "checkout-5dccddf8bb-vn95l",
-              "namespace": "otel-demo"
-            }
-          }
-        ],
+        "causal_path": [],
         "entity": {
           "kind": "Schedule",
           "name": "otel-demo-checkout-kafka-network-partition",
@@ -142,10 +113,10 @@
         "causal_path": [
           {
             "direction": "reverse",
-            "relation": "serves",
+            "relation": "backs",
             "source": {
-              "kind": "Deployment",
-              "name": "otel-collector",
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-vtgxj",
               "namespace": "otel-demo"
             },
             "target": {
@@ -271,36 +242,7 @@
         "score": 2.0
       }
     ],
-    "causal_path": [
-      {
-        "direction": "reverse",
-        "relation": "serves",
-        "source": {
-          "kind": "Deployment",
-          "name": "kafka",
-          "namespace": "otel-demo"
-        },
-        "target": {
-          "kind": "Service",
-          "name": "kafka",
-          "namespace": "otel-demo"
-        }
-      },
-      {
-        "direction": "reverse",
-        "relation": "dependency_of",
-        "source": {
-          "kind": "Service",
-          "name": "kafka",
-          "namespace": "otel-demo"
-        },
-        "target": {
-          "kind": "Deployment",
-          "name": "accounting",
-          "namespace": "otel-demo"
-        }
-      }
-    ],
+    "causal_path": [],
     "confidence": "VERIFIED",
     "evidence": [
       {

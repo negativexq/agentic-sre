@@ -21,30 +21,30 @@
       {
         "causal_path": [
           {
-            "direction": "reverse",
-            "relation": "backs",
+            "direction": "forward",
+            "relation": "spawns",
             "source": {
-              "kind": "Pod",
-              "name": "quote-6b5877698d-sdl5b",
-              "namespace": "otel-demo"
+              "kind": "Schedule",
+              "name": "otel-demo-shipping-quote-network-partition",
+              "namespace": "chaos-mesh"
             },
             "target": {
-              "kind": "Service",
-              "name": "quote",
-              "namespace": "otel-demo"
+              "kind": "NetworkChaos",
+              "name": "otel-demo-shipping-quote-network-partition-2c44x",
+              "namespace": "chaos-mesh"
             }
           },
           {
-            "direction": "reverse",
-            "relation": "dependency_of",
+            "direction": "forward",
+            "relation": "disrupts",
             "source": {
-              "kind": "Service",
-              "name": "quote",
-              "namespace": "otel-demo"
+              "kind": "NetworkChaos",
+              "name": "otel-demo-shipping-quote-network-partition-2c44x",
+              "namespace": "chaos-mesh"
             },
             "target": {
-              "kind": "Deployment",
-              "name": "shipping",
+              "kind": "Pod",
+              "name": "shipping-75d58f5d84-6xkt9",
               "namespace": "otel-demo"
             }
           }
@@ -142,10 +142,10 @@
         "causal_path": [
           {
             "direction": "reverse",
-            "relation": "serves",
+            "relation": "backs",
             "source": {
-              "kind": "Deployment",
-              "name": "otel-collector",
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-48mjc",
               "namespace": "otel-demo"
             },
             "target": {
@@ -271,36 +271,7 @@
         "score": 2.0
       }
     ],
-    "causal_path": [
-      {
-        "direction": "reverse",
-        "relation": "backs",
-        "source": {
-          "kind": "Pod",
-          "name": "quote-6b5877698d-sdl5b",
-          "namespace": "otel-demo"
-        },
-        "target": {
-          "kind": "Service",
-          "name": "quote",
-          "namespace": "otel-demo"
-        }
-      },
-      {
-        "direction": "reverse",
-        "relation": "dependency_of",
-        "source": {
-          "kind": "Service",
-          "name": "quote",
-          "namespace": "otel-demo"
-        },
-        "target": {
-          "kind": "Deployment",
-          "name": "shipping",
-          "namespace": "otel-demo"
-        }
-      }
-    ],
+    "causal_path": [],
     "confidence": "VERIFIED",
     "evidence": [
       {

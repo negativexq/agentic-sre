@@ -19,7 +19,36 @@
   "diagnosis": {
     "alternatives": [
       {
-        "causal_path": [],
+        "causal_path": [
+          {
+            "direction": "reverse",
+            "relation": "backs",
+            "source": {
+              "kind": "Pod",
+              "name": "email-59f69bc6cf-db9mn",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Service",
+              "name": "email",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "direction": "reverse",
+            "relation": "dependency_of",
+            "source": {
+              "kind": "Service",
+              "name": "email",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "checkout",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
         "entity": {
           "kind": "Schedule",
           "name": "otel-demo-email-checkout-network-partition",
@@ -315,7 +344,36 @@
         "score": 4.854
       }
     ],
-    "causal_path": [],
+    "causal_path": [
+      {
+        "direction": "reverse",
+        "relation": "serves",
+        "source": {
+          "kind": "Deployment",
+          "name": "email",
+          "namespace": "otel-demo"
+        },
+        "target": {
+          "kind": "Service",
+          "name": "email",
+          "namespace": "otel-demo"
+        }
+      },
+      {
+        "direction": "reverse",
+        "relation": "dependency_of",
+        "source": {
+          "kind": "Service",
+          "name": "email",
+          "namespace": "otel-demo"
+        },
+        "target": {
+          "kind": "Deployment",
+          "name": "checkout",
+          "namespace": "otel-demo"
+        }
+      }
+    ],
     "confidence": "VERIFIED",
     "evidence": [
       {

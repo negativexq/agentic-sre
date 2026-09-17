@@ -11,6 +11,12 @@
       "precision": 0.5,
       "share_of_predictions": 0.08
     },
+    "UNVERIFIED": {
+      "correct": 0,
+      "count": 0,
+      "precision": 0.0,
+      "share_of_predictions": 0.0
+    },
     "VERIFIED": {
       "correct": 16,
       "count": 23,
@@ -26,7 +32,7 @@
     "top_1": 0.68
   },
   "git_dirty": false,
-  "git_head": "00dd5bce3707d246981114c318797e9f62c98732",
+  "git_head": "5ee06550b552d762f5f2549c7fb9ec4268b95758",
   "investigator_errors": 0,
   "macro_f1": 0.68,
   "mode": "deterministic",
@@ -360,7 +366,7 @@
     }
   ],
   "scenarios": 25,
-  "seconds_total": 60.98,
+  "seconds_total": 60.83,
   "split": "test",
   "verified_accuracy": 0.6957,
   "verified_conditional_macro_f1": 0.6957,

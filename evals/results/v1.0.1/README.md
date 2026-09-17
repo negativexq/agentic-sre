@@ -1,6 +1,6 @@
 # v1.0.1 results
 
-Commit `00dd5bce` (tag `v1.0.1`), clean tree, deterministic engine, no model.
+Commit `5ee06550` (tag `v1.0.1`), clean tree, deterministic engine, no model.
 
 | Metric | Result |
 | --- | ---: |
@@ -13,7 +13,7 @@ Commit `00dd5bce` (tag `v1.0.1`), clean tree, deterministic engine, no model.
 | VERIFIED coverage | 92.0% |
 | VERIFIED accuracy | 69.6% |
 | Model calls | 0 |
-| Runtime | 61.0 s |
+| Runtime | 60.8 s |
 
 Prediction never read ground truth (`ground_truth_read_during_prediction=false`).
 The dataset revision and full sealed manifest are recorded in `test/manifest.json`;

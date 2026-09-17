@@ -64,10 +64,10 @@
         "causal_path": [
           {
             "direction": "reverse",
-            "relation": "serves",
+            "relation": "backs",
             "source": {
-              "kind": "Deployment",
-              "name": "otel-collector",
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-6j4x2",
               "namespace": "otel-demo"
             },
             "target": {
@@ -267,22 +267,7 @@
         "score": 4.75
       }
     ],
-    "causal_path": [
-      {
-        "direction": "forward",
-        "relation": "restricts",
-        "source": {
-          "kind": "NetworkPolicy",
-          "name": "frontend-block-all-ports",
-          "namespace": "otel-demo"
-        },
-        "target": {
-          "kind": "Pod",
-          "name": "frontend-675fd7b5c5-8qrfh",
-          "namespace": "otel-demo"
-        }
-      }
-    ],
+    "causal_path": [],
     "confidence": "LIKELY",
     "evidence": [
       {

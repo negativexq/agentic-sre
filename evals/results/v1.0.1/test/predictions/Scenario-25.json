@@ -19,7 +19,36 @@
   "diagnosis": {
     "alternatives": [
       {
-        "causal_path": [],
+        "causal_path": [
+          {
+            "direction": "forward",
+            "relation": "spawns",
+            "source": {
+              "kind": "Schedule",
+              "name": "otel-demo-recommendation-cpu-stress",
+              "namespace": "chaos-mesh"
+            },
+            "target": {
+              "kind": "StressChaos",
+              "name": "otel-demo-recommendation-cpu-stress-6p484",
+              "namespace": "chaos-mesh"
+            }
+          },
+          {
+            "direction": "forward",
+            "relation": "disrupts",
+            "source": {
+              "kind": "StressChaos",
+              "name": "otel-demo-recommendation-cpu-stress-6p484",
+              "namespace": "chaos-mesh"
+            },
+            "target": {
+              "kind": "Pod",
+              "name": "recommendation-5f45f75855-htttv",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
         "entity": {
           "kind": "Schedule",
           "name": "otel-demo-recommendation-cpu-stress",

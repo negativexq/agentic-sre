@@ -108,10 +108,10 @@
         "causal_path": [
           {
             "direction": "reverse",
-            "relation": "serves",
+            "relation": "backs",
             "source": {
-              "kind": "Deployment",
-              "name": "otel-collector",
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-cw2q8",
               "namespace": "otel-demo"
             },
             "target": {

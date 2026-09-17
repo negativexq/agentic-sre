@@ -1,177 +1,251 @@
 # Agentic SRE
 
-Root-cause analysis for Kubernetes incidents that starts from what changed.
-An alert arrives; Agentic SRE finds the config edit, rollout, injected fault,
-or failing dependency behind it, shows the evidence, labels how sure it is,
-and proposes a reversible fix. It never changes the cluster.
+Deterministic-first root-cause analysis for Kubernetes incidents. Agentic SRE
+starts with the incident symptoms, reconstructs what changed, connects
+candidate causes to those symptoms, verifies the strongest explanation, and
+shows the evidence and causal path. It proposes reversible remediation; the
+control plane never modifies the cluster.
+
+The model is optional. Evidence collection, temporal boundaries, ranking,
+verification, replay, and safety constraints remain deterministic system
+behavior.
 
 [![CI](https://github.com/negativexq/agentic-sre/actions/workflows/checks.yml/badge.svg)](https://github.com/negativexq/agentic-sre/actions/workflows/checks.yml)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
-## Results
+## What it does
 
-Measured on [ITBench-Lite](https://huggingface.co/datasets/ibm-research/ITBench-Lite)
-SRE snapshots with a pre-registered dev/test split. The v1.0.1 release result
-and every miss are in [`evals/results/v1.0.1`](evals/results/v1.0.1/README.md);
-the previous v1.0.0 result remains available for comparison.
+- Change-first RCA for Kubernetes alerts, rollouts, policies, faults, and dependency failures.
+- Append-only object observations, replayable Kubernetes Events, and bounded persisted Loki error observations.
+- Explicit incident observation cutoffs and deterministic resolved-incident replay.
+- Relation-aware directional causal traversal rather than generic undirected proximity.
+- Deterministic confidence and verification: `VERIFIED`, `LIKELY`, or `UNVERIFIED`.
+- Causal paths visible in JSON/API output, the CLI, and the HTML report.
+- Real Kind lifecycle validation through Prometheus, Alertmanager, and the control plane.
+- Optional bounded LLM investigation around deterministic candidates.
+- Remediation proposals only; no cluster writes or autonomous repair.
 
-| Run | Split | Scenarios | Macro F1 | Root cause ranked first | In top 3 | Model calls |
+## Measured results
+
+The frozen ITBench-Lite SRE snapshot benchmark is regression evidence, not a
+claim of pristine unseen generalization. Prior exposure to parts of the test
+data is documented in [`evals/README.md`](evals/README.md).
+
+| Run | Split | Scenarios | Macro F1 | Top-1 | Top-3 | Model calls |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| **Engine v1.0.1** (run once) | Test | 25 | **0.68** | 68% | 80% | 0 |
-| **Engine v1.0.0** (run once) | Test | 25 | **0.68** | 68% | 80% | 0 |
-| **Engine v0.7.0** (run once) | Test | 25 | **0.68** | 68% | 80% | 0 |
-| Engine v0.5.0 + LLM investigator | Test | 25 | 0.64 | 64% | 80% | 44 |
-| Engine v0.4.0 (run once) | Test | 25 | 0.64 | 64% | 76% | 0 |
-| Engine v0.7.0 (used for tuning) | Dev | 10 | 0.90 | 90% | 90% | 0 |
-| Previous LLM agent (E10) | All | 35 | 0.00 | — | — | — |
+| **Engine v1.0.1** | Test | 25 | **0.680** | **68%** | **80%** | **0** |
+| Engine v1.0.0 | Test | 25 | 0.680 | 68% | 80% | 0 |
+| Engine v0.7.0 | Dev | 10 | 0.900 | 90% | 90% | 0 |
+| Engine v0.5.0 + LLM investigator | Test | 25 | 0.640 | 64% | 80% | 44 |
 
-v0.8-quality live validation and v0.9-quality causal topology were added
-without changing the deterministic test predictions: v1.0.1 matches v1.0.0
-scenario for scenario. On
-the test split, 16 of 23 answers labelled `VERIFIED` were correct. Part of
-the v0.5.0 gain came from rules chosen after reading v0.4.0 test misses; the
-results page discloses which. The LLM investigator (last measured at v0.5.0,
-predictions unchanged since) agreed with the engine in 23 of 25 scenarios and
-lost one correct answer (Scenario-31), so the deterministic engine is the
-default. Three test scenarios cannot be scored by the published label
-filters; see [`evals/README.md`](evals/README.md) for the
-method and a disclosure of prior exposure to this dataset.
+Confidence is separate from benchmark correctness: 23/25 predictions were
+labelled `VERIFIED`, 16 of those were correct, giving 92.0% VERIFIED coverage
+and 69.6% VERIFIED accuracy. v1.0.1 hardening changed lifecycle, replay,
+causal-traversal, and release infrastructure without changing the v1.0.0
+root-cause or confidence predictions.
 
-## Try it
+The latest hardening validation passed 175 tests and the real Kind release
+gate. The stored [v1.0.1 result](evals/results/v1.0.1/README.md) records the
+tagged release SHA.
 
-```bash
-uv sync --locked --extra dev   # or: make install when uv is installed
-make demo
-```
+## Real Kubernetes validation
 
-`make demo` diagnoses a built-in bad-rollout incident offline and writes
-`.local/demo/diagnosis.html`:
+The canonical release gate runs a real incident lifecycle in a fresh Kind
+cluster:
 
 ```text
-Root cause   shop/Deployment/payment
-Confidence   VERIFIED
-Summary      shop/Deployment/payment: spec changed:
-             [payment].env[FAULT_DELAY_MS].value: 0 -> 2500 ...
-Proposed remediation (not executed)
-  - Roll back Deployment payment to the previous revision
-      $ kubectl rollout undo deployment/payment -n shop
+healthy payment-service
+  → baseline snapshot
+  → real bad Deployment rollout
+  → Prometheus alert
+  → Alertmanager webhook
+  → incident and persisted observations
+  → deterministic RCA: sre-demo/Deployment/payment-service VERIFIED
+  → rollback
+  → A → B → A object journal
+  → stable resolved diagnosis replay
+```
+
+The scenario also exercises Kubernetes Event persistence. It does not claim
+that every supported fault type has a real-cluster E2E scenario.
+
+Run the full gate with:
+
+```bash
+make e2e-kind
 ```
 
 ## How it works
 
 ```mermaid
 flowchart LR
-  AM[Alertmanager] --> CP[Control plane]
-  K8s[Kubernetes API<br/>read-only] --> J[Change journal]
-  J --> E[RCA engine]
-  CP --> E
-  Loki --> E
-  E -.optional.-> L[LLM investigator]
-  E --> D[Diagnosis<br/>evidence, confidence, fix]
+  K8s[Kubernetes API<br/>read-only] --> O[Persisted observations]
+  Loki[Loki] --> O
+  AM[Prometheus / Alertmanager] --> CP[Control plane]
+  CP --> O
+  O --> E[Deterministic RCA engine]
+  E --> T[Directional causal topology]
+  T --> R[Ranking + verification]
+  R -. optional review .-> L[Bounded LLM investigator]
+  R --> D[Diagnosis<br/>evidence + causal path + proposal]
+  L --> D
 ```
 
-1. **Symptoms** from diagnostic alerts; always-on platform alerts are ignored.
-2. **Signals**: object version diffs (down to the env var or container that
-   changed), Chaos Mesh experiments, network policies, quotas that reject
-   pods, container failures (OOM kills, crash loops, bad images), memory or
-   CPU pressure that appears with the incident, dependency connection errors,
-   and warning events.
-3. **Topology** from ownership, selectors, config references, and service
-   calls declared in environment variables links each signal to the alerting
-   components.
-4. **Ranking and verification** with explainable scores and deterministic
-   rules that decide `VERIFIED`, `LIKELY`, or `UNVERIFIED`.
-5. **Optional LLM investigator** inspects the top candidates with read-only
-   tools and may choose another one; it cannot verify its own answer.
-6. **Remediation proposal** such as `rollout undo`, reverting a ConfigMap,
-   pausing a chaos schedule, or raising a quota or memory limit. Nothing is executed.
+1. The control plane creates and freezes incident episodes from Alertmanager events.
+2. Object, Event, and bounded log observations are normalized with explicit observation times.
+3. The engine extracts deterministic signals from changes, failures, policies, dependencies, and Events.
+4. Directional topology links a candidate cause to the alerting symptom.
+5. Ranking proposes candidates; deterministic verification assigns confidence.
+6. The optional investigator may review bounded candidates with read-only tools. It is not authoritative.
 
-More in [`docs/architecture.md`](docs/architecture.md) and
+More detail is in [`docs/architecture.md`](docs/architecture.md) and
 [ADR-003](docs/adr/ADR-003-change-first-rca-product.md).
 
-## Reproduce the benchmark
+## Example diagnosis
 
-```bash
-make itbench-setup     # downloads the pinned ITBench-Lite snapshots (~29 GB)
-make itbench-index
-make eval-dev          # predict, seal, grade the dev split
-make eval-test         # only from a clean, tagged commit
+The offline demo produces a diagnosis like:
+
+```text
+Root cause   shop/Deployment/payment
+Confidence   VERIFIED
+
+Causal path
+  Deployment/payment --serves--> Service/payment
+  Service/payment --dependency_of--> Deployment/checkout
+
+Evidence
+  Deployment/payment changed FAULT_DELAY_MS from 0 to 2500
+  the diagnostic alerts began after the rollout
+
+Proposed remediation
+  kubectl rollout undo deployment/payment -n shop
+  [not executed]
 ```
 
-Prediction never reads ground truth, and grading refuses modified predictions.
-Re-grade a stored run with `agentic-sre grade --out evals/results/v1.0.1/test`.
-`seal.json` protects the prediction manifest and prediction files;
-`report-seal.json` separately protects derived grading reports.
-Add the investigator to a run with `make eval-dev EVAL_FLAGS=--llm` and the `SRE_LLM_*` settings.
+## Quick start
 
-## Live demo on kind
-
-Requires Docker, kind, and kubectl. All five images (control plane,
-migrator, and the demo shop services) are targets of one
-[`infra/docker/Dockerfile`](infra/docker/Dockerfile); `make images` builds
-them without a cluster, and `make deploy` builds, loads, and rolls them out.
+Offline:
 
 ```bash
-make cluster-up deploy
-make load                  # in another terminal: steady traffic
+make install
+make demo
+```
+
+The demo writes `.local/demo/diagnosis.html`. For a live local cluster,
+install Docker, Kind, and kubectl, then run:
+
+```bash
+make cluster-up
+make deploy
+make load                  # use another terminal; generates steady traffic
+make inject-bad-rollout
 make ui                    # http://localhost:8080
-make inject-bad-rollout    # payment requests now take 2.5 s
+make recover
 ```
 
-The control plane journals the rollout, Alertmanager fires on latency, and
-the incident page shows the diagnosis. `make recover` rolls back;
-`make rbac-check` confirms the control plane can read but not write.
+`make rbac-check` verifies that the control-plane service account can observe
+the cluster but cannot read Secrets or write workloads.
 
-The release gate runs this lifecycle against a fresh real cluster and cleans it
-up when finished:
+## Causal reasoning
+
+Structural connectivity answers “what is connected?”; causal traversal asks
+“could a change or failure here propagate to that symptom?”. The engine uses
+explicit direction for relationships such as:
+
+```text
+Deployment → ReplicaSet → Pod
+ConfigMap → consuming workload
+backend dependency → caller
+NetworkPolicy → selected Pod
+Chaos fault → target
+HPA → controlled workload
+```
+
+Unknown relations are structural-only until explicitly allowlisted. Shared
+ConfigMaps and broad NetworkPolicies do not causally bridge sibling workloads.
+Causal paths retain structured entities and relation labels and are rendered
+in the CLI and HTML report. This is relation-aware causal traversal, not formal
+causal inference.
+
+## Evidence and replay
+
+- **Objects:** append-only versions preserve `CREATED`, `UPDATED`, and `DELETED` lifecycle evidence, including A → B → A rollback history. A partial Kubernetes listing cannot fabricate deletion tombstones.
+- **Events:** observed Kubernetes Event versions remain in the journal; replay uses the latest visible logical Event state at the incident cutoff, so coalesced versions are not double-counted.
+- **Logs:** bounded error observations captured from Loki are persisted for replay. This is captured-observation replay, not a complete historical log archive.
+- **Cutoffs:** open diagnosis uses a coherent snapshot boundary; resolved diagnosis freezes at incident resolution. Evidence observed later cannot leak backward into a resolved incident.
+
+Alert fingerprints identify an alert shape, while `(fingerprint, starts_at)`
+identifies one occurrence. A firing alert after resolution creates a new
+incident episode; concurrent duplicate delivery of one occurrence is
+database-idempotent.
+
+## Optional LLM investigator
+
+The LLM investigator is off by default and bounded by a call budget. It reviews
+deterministically generated candidates through read-only tools; it cannot
+invent candidates, create evidence, or assign final confidence. The
+deterministic engine remains the default and source of truth.
+
+The measured v0.5.0 bounded LLM run did not improve the deterministic engine on
+ITBench-Lite, so the LLM remains optional and replaceable. It is not used by
+the published deterministic benchmark or the Kind release gate.
+
+## Safety and trust boundaries
+
+- Kubernetes access is read-only; Secrets are deliberately not read.
+- Remediation is proposal text and is never executed by the control plane.
+- Write API endpoints can use the shared `SRE_API_TOKEN` bearer token.
+- Built-in read endpoints are unauthenticated and may expose operationally sensitive incident, evidence, topology, and log-derived data.
+- There is no per-user identity, rate limiting, or built-in read authentication.
+- The supported writer model is one control-plane process / one replica; the journal lock is not multi-replica coordination.
+
+GitHub Actions runs `check`, `images`, and `kind-e2e` on pushes.
+
+## Reproducibility and benchmark methodology
+
+The tested Python dependency graph is captured in [`uv.lock`](uv.lock), and CI
+and Docker builds use the locked environment. The ITBench-Lite setup uses a
+pinned snapshot revision. Frozen test prediction requires a clean tagged
+commit and never reads ground truth; prediction files are sealed before
+grading. `seal.json` protects the prediction manifest and prediction files;
+`report-seal.json` separately protects derived grading reports.
 
 ```bash
-make e2e-kind
+make itbench-setup     # downloads the pinned ITBench-Lite snapshots
+make itbench-index
+make eval-dev
+make eval-test         # release-only: clean tagged commit
 ```
 
-It asserts the expected verified `sre-demo/Deployment/payment-service` cause,
-persisted Event evidence, rollback recovery, and replayable A → B → A object
-journal behavior. The benchmark results above and this live-cluster result are
-different kinds of evidence: one measures frozen snapshots, the other proves a
-real Kubernetes lifecycle.
+To re-grade the stored v1.0.1 run:
 
-The LLM investigator is off by default. To enable it, set
-`SRE_LLM_ENABLED=true`, a total call budget for the process in `SRE_LLM_MAX_CALLS` (a test-split run uses about 50), and
-`OPENAI_API_KEY`; the CLI takes `--llm`.
+```bash
+agentic-sre grade --out evals/results/v1.0.1/test
+```
 
-## Repository
+Do not repeatedly run the frozen test while tuning. The immutable `v1.0.1`
+tag remains at the release-code commit; its published result records that
+tagged SHA in the current release result directory.
 
-| Path | Contents |
-| --- | --- |
-| `packages/rca` | Engine, topology, signals, ranking, investigator, live readers, reports |
-| `apps/control_plane` | API, Alertmanager webhook, web UI, journal watcher |
-| `apps/cli` | `agentic-sre` commands: demo, diagnose, eval, grade, serve |
-| `packages/evals/itbench` | Snapshot source, sealed benchmark runner, grader |
-| `evals` | Split, method, stored results |
-| `workload`, `infra` | Demo shop services, kind manifests, observability stack |
+## Repository structure
 
-The earlier single-agent runtime and the E1–E11 experiment series are kept in
-the `archive/experiments-2026-09` tag.
+```text
+packages/rca          deterministic RCA engine, topology, ranking, reports
+packages/storage      incident, observation, and journal persistence
+apps/control_plane    API, Alertmanager webhook, UI, and live diagnosis
+apps/cli              agentic-sre CLI and benchmark entrypoints
+packages/evals        ITBench integration and grading
+evals                 splits, methods, and sealed results
+infra                 Docker, Kind, Kubernetes, and observability manifests
+tests                 unit, integration, and release regression coverage
+```
 
-Development and CI use the checked-in `uv.lock`. Refresh it deliberately with
-`make lock` (or `uv lock`) and review the complete dependency diff.
+## Current limitations
 
-## Limits
-
-- Causes without an observable change, fault, or error signal (for example a
-  traffic spike from a load generator) are often missed.
-- Namespace-level causes are not named directly.
-- The measured bounded LLM investigator did not improve the deterministic engine
-  on ITBench-Lite and remains optional; its effect on harder or messier
-  incidents has not been measured.
-- The local/demo control plane is open by default. Use the secure Kubernetes
-  overlay in `infra/kubernetes/secure-api-auth/` to wire the same
-  operator-provided bearer token into the control plane and Alertmanager.
-  Kubernetes Secret access is deliberately disabled, but incidents, evidence,
-  change history, topology, and log-derived errors may still be sensitive; do
-  not expose read endpoints outside a trusted network without external auth.
-  The deployment is single-process; see `docs/architecture.md` before scaling.
-- Loki evidence is bounded captured observation data, not a complete historical
-  log archive. Open-incident diagnosis persists the records it reads; an
-  incident resolved before any diagnosis/log capture may have no persisted log
-  evidence. Resolved replay never falls back to post-cutoff Loki data.
+- RCA quality depends on evidence that is observable and captured by the configured sources.
+- Bounded captured Loki observations are not a complete historical log archive.
+- The built-in deployment is single-process/single-replica and is not production HA.
+- Read endpoints are unauthenticated by default; the shared bearer token has no per-user identity or RBAC.
+- There is no autonomous remediation, arbitrary write tool, or formal causal-inference guarantee.
+- The deterministic benchmark is frozen regression evidence with prior-exposure caveats; generalization to unseen incidents is not established.
+- The value of the optional LLM investigator on harder, messier live incidents remains unproven.

@@ -28,6 +28,13 @@ def test_config_change_is_diagnosed_verified_with_revert_proposal() -> None:
     assert all(item.requires_approval for item in diagnosis.remediation)
     assert ref("infra/ConfigMap/recorder") in {c.entity for c in diagnosis.alternatives}
     assert diagnosis.mode == "deterministic" and diagnosis.model_calls == 0
+    assert diagnosis.causal_path
+    assert diagnosis.causal_path[0].source == ref("shop/ConfigMap/checkout-flags")
+    assert diagnosis.causal_path[-1].target in {
+        ref("shop/Deployment/checkout"),
+        ref("shop/Service/checkout"),
+        ref("shop/Pod/checkout-5d8f7c9b4-abcde"),
+    }
 
 
 def test_unlinked_change_ranks_below_linked_change() -> None:

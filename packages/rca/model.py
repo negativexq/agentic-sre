@@ -141,6 +141,16 @@ class Edge(BaseModel):
     relation: str
 
 
+class CausalHop(BaseModel):
+    """One traversed relation in a cause-to-symptom explanation path."""
+
+    model_config = ConfigDict(frozen=True)
+
+    source: EntityRef
+    relation: str
+    target: EntityRef
+
+
 class FindingKind(StrEnum):
     """Deterministic signal categories, ordered roughly by causal strength."""
 
@@ -200,6 +210,7 @@ class Candidate(BaseModel):
     findings: tuple[Finding, ...]
     linked_symptoms: tuple[str, ...] = ()
     reasons: tuple[str, ...] = ()
+    causal_path: tuple[CausalHop, ...] = ()
 
 
 class Confidence(StrEnum):
@@ -247,6 +258,7 @@ class Diagnosis(BaseModel):
     summary: str
     symptoms: Symptoms
     evidence: tuple[Finding, ...] = ()
+    causal_path: tuple[CausalHop, ...] = ()
     alternatives: tuple[Candidate, ...] = ()
     remediation: tuple[Remediation, ...] = ()
     steps: tuple[InvestigationStep, ...] = ()
@@ -258,6 +270,7 @@ __all__ = [
     "CLUSTER_SCOPE",
     "Alert",
     "Candidate",
+    "CausalHop",
     "ClusterEvent",
     "Confidence",
     "Diagnosis",

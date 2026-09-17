@@ -5,10 +5,18 @@ from __future__ import annotations
 import re
 from collections import deque
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from packages.rca.json_access import child, mapping
-from packages.rca.model import CLUSTER_SCOPE, ClusterEvent, Edge, EntityRef, ObjectVersion
+from packages.rca.model import (
+    CLUSTER_SCOPE,
+    CausalHop,
+    ClusterEvent,
+    Edge,
+    EntityRef,
+    ObjectVersion,
+)
 
 WORKLOAD_KINDS = frozenset({"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"})
 # Relations where one object is legitimately shared by many unrelated workloads
@@ -19,6 +27,44 @@ FAN_OUT_RELATIONS = frozenset({"restricts", "uses_config"})
 FAN_OUT_THRESHOLD = 3
 _CHAOS_TARGET = re.compile(r"apply chaos for ([a-z0-9.-]+)/([a-z0-9.-]+)", re.IGNORECASE)
 _NAME_LABELS = ("app.kubernetes.io/name", "app.kubernetes.io/component", "app", "k8s-app")
+
+
+@dataclass(frozen=True)
+class RelationSemantics:
+    """Causal traversal rules for one stored structural relation.
+
+    ``forward`` follows the stored ``Edge.source -> Edge.target`` direction;
+    ``backward`` follows it in reverse. Kubernetes owner references, for
+    example, are stored child -> owner, while a workload change can causally
+    propagate owner -> child, so both the storage and causal directions are
+    explicit rather than inferred from a generic undirected graph.
+    """
+
+    description: str
+    forward: bool
+    backward: bool
+    fan_out: bool = False
+
+
+RELATION_SEMANTICS: dict[str, RelationSemantics] = {
+    "owned_by": RelationSemantics("owner and managed child", forward=True, backward=True),
+    "selects": RelationSemantics("service selector and selected pod", forward=True, backward=True),
+    "routes_to": RelationSemantics("service routes to workload", forward=True, backward=True),
+    "uses_config": RelationSemantics(
+        "workload consumes configuration", forward=True, backward=True, fan_out=True
+    ),
+    "calls": RelationSemantics(
+        "caller and declared backend dependency", forward=True, backward=True
+    ),
+    "restricts": RelationSemantics(
+        "policy applies to selected pod", forward=True, backward=True, fan_out=True
+    ),
+    "disrupts": RelationSemantics(
+        "fault or experiment targets workload", forward=True, backward=True
+    ),
+    "spawns": RelationSemantics("schedule creates fault instance", forward=True, backward=True),
+    "scales": RelationSemantics("autoscaler controls workload", forward=True, backward=True),
+}
 
 
 def is_chaos_kind(kind: str) -> bool:
@@ -248,7 +294,14 @@ def derive_edges(
 
 
 class Topology:
-    """Undirected lookups over derived edges plus workload/service naming."""
+    """Structural lookups plus explicit causal traversal over derived edges.
+
+    ``reachable`` is intentionally structural and undirected. RCA uses
+    ``causal_reachable`` or ``causal_path``, which apply
+    :data:`RELATION_SEMANTICS` and the shared-hub guard. Keeping these APIs
+    separate prevents UI/neighborhood discovery from silently becoming a
+    causal claim.
+    """
 
     def __init__(self, edges: Iterable[Edge], latest: Mapping[EntityRef, ObjectVersion]) -> None:
         self.edges = tuple(edges)
@@ -259,13 +312,17 @@ class Topology:
         self._names: dict[EntityRef, set[str]] = {}
         self._reach: dict[tuple[EntityRef, int], dict[EntityRef, int]] = {}
         self._causal_reach: dict[tuple[EntityRef, int], dict[EntityRef, int]] = {}
+        self._causal_parents: dict[
+            tuple[EntityRef, int], dict[EntityRef, tuple[EntityRef, CausalHop]]
+        ] = {}
         self._relation_degree: dict[tuple[EntityRef, str], int] = {}
         for edge in self.edges:
             self._adjacent.setdefault(edge.source, set()).add((edge.target, edge.relation))
             self._adjacent.setdefault(edge.target, set()).add((edge.source, edge.relation))
             self._out.setdefault(edge.source, []).append(edge)
             self._in.setdefault(edge.target, []).append(edge)
-            if edge.relation in FAN_OUT_RELATIONS:
+            semantics = RELATION_SEMANTICS.get(edge.relation)
+            if semantics is not None and semantics.fan_out:
                 # Count degree on both ends: a NetworkPolicy is a hub by how
                 # many pods it restricts (its outgoing side); a ConfigMap is a
                 # hub by how many workloads use it (its incoming side).
@@ -375,23 +432,36 @@ class Topology:
     def _is_fan_out_hub(self, node: EntityRef, relation: str) -> bool:
         return self._relation_degree.get((node, relation), 0) > FAN_OUT_THRESHOLD
 
-    def causal_reachable(self, start: EntityRef, *, max_depth: int = 4) -> dict[EntityRef, int]:
-        """Like ``reachable``, but does not cross a shared policy or config to a
-        third object: two workloads that merely use the same ConfigMap, or sit
-        behind the same NetworkPolicy along with many others, are not linked.
-        """
+    def _causal_neighbors(self, node: EntityRef) -> tuple[tuple[EntityRef, str, bool], ...]:
+        """Return causal neighbors as ``(entity, relation, forward)`` tuples."""
+        neighbors: list[tuple[EntityRef, str, bool]] = []
+        for edge in self._out.get(node, ()):
+            semantics = RELATION_SEMANTICS.get(edge.relation)
+            if semantics is None or semantics.forward:
+                neighbors.append((edge.target, edge.relation, True))
+        for edge in self._in.get(node, ()):
+            semantics = RELATION_SEMANTICS.get(edge.relation)
+            if semantics is None or semantics.backward:
+                neighbors.append((edge.source, edge.relation, False))
+        return tuple(sorted(neighbors, key=lambda item: (item[0].canonical, item[1], item[2])))
+
+    def _causal_walk(
+        self, start: EntityRef, *, max_depth: int
+    ) -> tuple[dict[EntityRef, int], dict[EntityRef, tuple[EntityRef, CausalHop]]]:
+        """Walk causal edges while retaining parents for inspectable paths."""
         key = (start, max_depth)
         cached = self._causal_reach.get(key)
         if cached is not None:
-            return cached
+            return cached, self._causal_parents[key]
         depths = {start: 0}
+        parents: dict[EntityRef, tuple[EntityRef, CausalHop]] = {}
         queue: deque[EntityRef] = deque([start])
         while queue:
             node = queue.popleft()
             depth = depths[node]
             if depth >= max_depth:
                 continue
-            for neighbor, relation in self._adjacent.get(node, ()):
+            for neighbor, relation, _forward in self._causal_neighbors(node):
                 if neighbor in depths:
                     continue
                 # A hub may explain its own direct targets (the start node's
@@ -403,9 +473,50 @@ class Topology:
                 ):
                     continue
                 depths[neighbor] = depth + 1
+                parents[neighbor] = (
+                    node,
+                    CausalHop(
+                        source=node,
+                        relation=relation,
+                        target=neighbor,
+                    ),
+                )
                 queue.append(neighbor)
         self._causal_reach[key] = depths
-        return depths
+        self._causal_parents[key] = parents
+        return depths, parents
+
+    def causal_reachable(self, start: EntityRef, *, max_depth: int = 4) -> dict[EntityRef, int]:
+        """Causal reachability with explicit relation direction semantics.
+
+        Shared ConfigMaps and NetworkPolicies may explain their direct targets,
+        but cannot bridge a third unrelated target once reached through a
+        fan-out relation.
+        """
+        return self._causal_walk(start, max_depth=max_depth)[0]
+
+    def causal_path(
+        self,
+        start: EntityRef,
+        targets: set[EntityRef],
+        *,
+        max_depth: int = 4,
+    ) -> tuple[CausalHop, ...] | None:
+        """Return the shortest inspectable cause-to-symptom path, if any."""
+        if start in targets:
+            return ()
+        depths, parents = self._causal_walk(start, max_depth=max_depth)
+        reachable = [target for target in targets if target in depths]
+        if not reachable:
+            return None
+        current = min(reachable, key=lambda entity: (depths[entity], entity.canonical))
+        path: list[CausalHop] = []
+        while current != start:
+            parent, hop = parents[current]
+            path.append(hop)
+            current = parent
+        path.reverse()
+        return tuple(path)
 
     def causal_distance(
         self, start: EntityRef, targets: set[EntityRef], *, max_depth: int = 4
@@ -431,6 +542,8 @@ def pod_workload_name(pod_name: str) -> str:
 __all__ = [
     "FAN_OUT_RELATIONS",
     "FAN_OUT_THRESHOLD",
+    "RELATION_SEMANTICS",
+    "RelationSemantics",
     "WORKLOAD_KINDS",
     "Topology",
     "derive_edges",

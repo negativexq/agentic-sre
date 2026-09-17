@@ -7,7 +7,15 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from packages.rca.model import Candidate, Confidence, EntityRef, Finding, FindingKind, Symptoms
+from packages.rca.model import (
+    Candidate,
+    CausalHop,
+    Confidence,
+    EntityRef,
+    Finding,
+    FindingKind,
+    Symptoms,
+)
 from packages.rca.topology import Topology
 
 KIND_WEIGHT: dict[FindingKind, float] = {
@@ -166,8 +174,12 @@ def score_findings(
                 extras.setdefault(finding.kind, min(value, top_value))
         total = top_value + config.extra_finding_weight * sum(sorted(extras.values())[-2:])
         reached: set[EntityRef] = set()
+        causal_path: tuple[CausalHop, ...] = ()
         for affected in _affected_entities(scored[0][1], context.topology):
             reached.update(context.topology.causal_reachable(affected))
+            path = context.topology.causal_path(affected, context.symptom_entities)
+            if path is not None and (not causal_path or len(path) < len(causal_path)):
+                causal_path = path
         linked = sorted(ref.canonical for ref in context.symptom_entities & reached)[:5]
         candidates.append(
             Candidate(
@@ -176,6 +188,7 @@ def score_findings(
                 findings=tuple(item[1] for item in scored),
                 linked_symptoms=tuple(linked),
                 reasons=tuple(dict.fromkeys(top_reasons)),
+                causal_path=causal_path,
             )
         )
     candidates.sort(key=lambda c: (-c.score, c.entity.canonical))

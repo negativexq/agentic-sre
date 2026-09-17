@@ -5,7 +5,7 @@ from __future__ import annotations
 from rca_builders import ref
 
 from packages.rca.model import Edge
-from packages.rca.topology import FAN_OUT_THRESHOLD, Topology
+from packages.rca.topology import FAN_OUT_THRESHOLD, RELATION_SEMANTICS, Topology
 
 
 def _topology(edges: list[Edge]) -> Topology:
@@ -79,3 +79,31 @@ def test_causal_distance_is_unaffected_by_non_fan_out_relations() -> None:
     targets = {ref("shop/Service/checkout")}
     assert topology.distance(ref("shop/Deployment/checkout"), targets) == 3
     assert topology.causal_distance(ref("shop/Deployment/checkout"), targets) == 3
+
+
+def test_causal_path_explains_owner_to_selected_service_direction() -> None:
+    deployment = ref("shop/Deployment/checkout")
+    replicaset = ref("shop/ReplicaSet/checkout-rs")
+    pod = ref("shop/Pod/checkout-abc")
+    service = ref("shop/Service/checkout")
+    topology = _topology(
+        [
+            Edge(source=pod, target=replicaset, relation="owned_by"),
+            Edge(source=replicaset, target=deployment, relation="owned_by"),
+            Edge(source=service, target=pod, relation="selects"),
+        ]
+    )
+    path = topology.causal_path(deployment, {service})
+    assert path is not None
+    assert [(hop.source, hop.relation, hop.target) for hop in path] == [
+        (deployment, "owned_by", replicaset),
+        (replicaset, "owned_by", pod),
+        (pod, "selects", service),
+    ]
+
+
+def test_relation_semantics_make_structural_and_causal_direction_explicit() -> None:
+    assert RELATION_SEMANTICS["owned_by"].backward is True
+    assert RELATION_SEMANTICS["calls"].forward is True
+    assert RELATION_SEMANTICS["calls"].backward is True
+    assert RELATION_SEMANTICS["uses_config"].fan_out is True

@@ -8,6 +8,7 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session, sessionmaker
@@ -17,9 +18,11 @@ from packages.rca.live import (
     ChangeWatcher,
     ClusterReader,
     KubernetesClusterReader,
+    ListingFailure,
     LiveSource,
     LogReader,
     LokiLogReader,
+    ObjectSnapshot,
     incident_window,
 )
 from packages.rca.llm import LLMClient
@@ -37,6 +40,19 @@ from packages.storage import (
 logger = logging.getLogger(__name__)
 
 _TERMINAL_STATUSES = frozenset({"RESOLVED", "CLOSED", "FAILED"})
+
+
+@dataclass(frozen=True)
+class SnapshotResult:
+    """Evidence captured by one diagnosis/watch snapshot cycle."""
+
+    stored_versions: int
+    started_at: datetime
+    completed_at: datetime
+    objects: tuple[dict[str, Any], ...] = ()
+    event_bodies: tuple[dict[str, Any], ...] = ()
+    failed_scopes: tuple[ListingFailure, ...] = ()
+    event_listing_failed: bool = False
 
 
 @dataclass
@@ -61,11 +77,24 @@ class DiagnosisService:
     # or replica writes to the same database; that needs a database-level
     # lock (e.g. a Postgres advisory lock) instead, or a single writer process.
     _snapshot_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    _last_snapshot_result: SnapshotResult | None = field(default=None, init=False, repr=False)
+
+    @property
+    def last_snapshot_result(self) -> SnapshotResult | None:
+        """Return the latest cycle metadata, including incomplete scopes."""
+        return self._last_snapshot_result
 
     def snapshot(self) -> int:
         """Record changed objects, deletions, and new events; how many were stored."""
+        return self.snapshot_result().stored_versions
+
+    def snapshot_result(self) -> SnapshotResult:
+        """Capture one coherent object/Event cycle with an explicit boundary."""
         if self.reader is None:
-            return 0
+            now = self.clock()
+            result = SnapshotResult(0, now, now)
+            self._last_snapshot_result = result
+            return result
         journal_namespaces = tuple(dict.fromkeys((*self.namespaces, *self.evidence_namespaces)))
         with self._snapshot_lock, self.session_factory() as session:
             repository = ObjectVersionRepository(session)
@@ -77,9 +106,10 @@ class DiagnosisService:
                 repository.tombstone,
                 self.clock,
             )
-            stored = watcher.snapshot()
-            now = self.clock()
+            object_snapshot: ObjectSnapshot = watcher.snapshot_result()
+            event_observed_at = self.clock()
             events = EventRepository(session)
+            event_listing_failed = False
             try:
                 event_bodies = self.reader.list_events(journal_namespaces)
             except Exception:
@@ -90,8 +120,29 @@ class DiagnosisService:
                     "event snapshot failed; continuing without new Events", exc_info=True
                 )
                 event_bodies = []
-            stored += sum(events.record(body, now) for body in event_bodies)
-            return stored
+                event_listing_failed = True
+            stored = object_snapshot.stored_versions + sum(
+                events.record(body, event_observed_at) for body in event_bodies
+            )
+            result = SnapshotResult(
+                stored_versions=stored,
+                started_at=object_snapshot.started_at,
+                completed_at=self.clock(),
+                objects=object_snapshot.listing.objects,
+                event_bodies=tuple(event_bodies),
+                failed_scopes=object_snapshot.listing.failed_scopes,
+                event_listing_failed=event_listing_failed,
+            )
+            self._last_snapshot_result = result
+            if result.failed_scopes:
+                logger.warning(
+                    "cluster snapshot incomplete for scopes: %s",
+                    ", ".join(
+                        f"{failure.scope.namespace}/{failure.scope.kind} ({failure.error})"
+                        for failure in result.failed_scopes
+                    ),
+                )
+            return result
 
     def watch(self, stop: threading.Event, interval_seconds: float) -> None:
         """Snapshot the cluster until ``stop`` is set; errors are logged and retried."""
@@ -105,7 +156,6 @@ class DiagnosisService:
             stop.wait(interval_seconds)
 
     def run(self, incident_id: UUID) -> Diagnosis:
-        now = self.clock()
         with self.session_factory() as session:
             incident = IncidentRepository(session).get(incident_id)
             if incident is None:
@@ -126,15 +176,27 @@ class DiagnosisService:
         # live cluster snapshot for it, so unrelated changes made afterwards
         # cannot show up as its "latest" object version.
         resolved = incident.status in _TERMINAL_STATUSES
-        window_end = incident.updated_at if resolved else now
-        current = []
+        window_end = incident.updated_at if resolved else self.clock()
+        current: list[dict[str, Any]] = []
         if self.reader is not None:
-            # snapshot() also journals events, so both incidents read a
-            # consistent, replayable history instead of the cluster's live,
-            # garbage-collected event list.
-            self.snapshot()
             if not resolved:
-                current = self.reader.list_objects(self.namespaces)
+                # The current object view is the same listing that was
+                # journaled. Do not perform a second, later read whose data
+                # would fall outside the advertised diagnosis cutoff.
+                cycle = self.snapshot_result()
+                window_end = cycle.completed_at
+                current = list(cycle.objects)
+            else:
+                # Keep the shared journal current for later incidents, but do
+                # not use this live cycle as evidence for the frozen episode.
+                # A reader outage must not make historical diagnosis fail.
+                try:
+                    self.snapshot_result()
+                except Exception:
+                    logger.warning(
+                        "post-resolution journal refresh failed; using frozen evidence",
+                        exc_info=True,
+                    )
         starts_at, ends_at = incident_window(alerts, window_end)
         journal_namespaces = set(self.namespaces) | set(self.evidence_namespaces)
         with self.session_factory() as session:
@@ -158,11 +220,25 @@ class DiagnosisService:
                     | {alert.service for alert in alerts if alert.service}
                 )
                 fetched_logs = self.log_reader.error_logs(services, starts_at, ends_at)
+                # Loki records are queried for the cycle's bounded window. The
+                # collection itself may finish a little later, so extend the
+                # open diagnosis boundary to the end of that intentional
+                # capture rather than dropping its observations on replay.
+                log_observed_at = self.clock()
                 with self.session_factory() as session:
-                    LogObservationRepository(session).record(incident_id, fetched_logs, window_end)
+                    LogObservationRepository(session).record(
+                        incident_id, fetched_logs, log_observed_at
+                    )
                 logs = _merge_logs(logs, fetched_logs)
+                window_end = max(window_end, log_observed_at)
             except Exception:
                 logger.warning("log backend unavailable; diagnosing without logs", exc_info=True)
+        starts_at, ends_at = incident_window(alerts, window_end)
+        if not resolved:
+            with self.session_factory() as session:
+                logs = LogObservationRepository(session).list_for_incident(
+                    incident_id=incident_id, starts_at=starts_at, ends_at=ends_at
+                )
         source = LiveSource(
             incident=str(incident_id),
             alert_items=alerts,
@@ -175,7 +251,9 @@ class DiagnosisService:
         )
         diagnosis = diagnose(source, investigator=self.investigator_factory())
         with self.session_factory() as session:
-            DiagnosisRepository(session).save(incident_id, diagnosis.model_dump(mode="json"), now)
+            DiagnosisRepository(session).save(
+                incident_id, diagnosis.model_dump(mode="json"), self.clock()
+            )
         return diagnosis
 
 

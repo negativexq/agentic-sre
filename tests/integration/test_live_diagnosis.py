@@ -27,7 +27,7 @@ from packages.contracts import (
     IncidentSource,
     IncidentStatus,
 )
-from packages.rca.live import LokiLogReader
+from packages.rca.live import ListingFailure, ListingScope, LokiLogReader, ObjectListing
 from packages.rca.model import Confidence, EntityRef, FindingKind, LogRecord
 from packages.storage.database import create_session_factory
 from packages.storage.models import AlertRow, Base, IncidentRow, LogObservationRow
@@ -120,11 +120,45 @@ class FakeCluster:
         ]
         self.events: list[dict[str, Any]] = []
 
-    def list_objects(self, namespaces: Sequence[str]) -> list[dict[str, Any]]:
-        return copy.deepcopy(self.objects)
+    def list_objects(self, namespaces: Sequence[str]) -> ObjectListing:
+        del namespaces
+        bodies = tuple(copy.deepcopy(self.objects))
+        scopes = {
+            scope
+            for scope in (ListingScope.from_body(body) for body in bodies)
+            if scope is not None
+        }
+        return ObjectListing(bodies, frozenset(scopes))
 
     def list_events(self, namespaces: Sequence[str]) -> list[dict[str, Any]]:
         return copy.deepcopy(self.events)
+
+
+class ScopedCluster(FakeCluster):
+    """Reader double that exposes enumeration completeness per resource scope."""
+
+    def __init__(self, *, chaos: dict[str, Any], chaos_failed: bool = False) -> None:
+        super().__init__()
+        self.chaos = chaos
+        self.chaos_failed = chaos_failed
+
+    def list_objects(self, namespaces: Sequence[str]) -> ObjectListing:
+        del namespaces
+        bodies = [*copy.deepcopy(self.objects)]
+        completed = {
+            scope
+            for scope in (ListingScope.from_body(body) for body in bodies)
+            if scope is not None
+        }
+        failures: tuple[ListingFailure, ...] = ()
+        chaos_scope = ListingScope("chaos-mesh", "NetworkChaos")
+        if self.chaos_failed:
+            failures = (ListingFailure(chaos_scope, "403 forbidden"),)
+        else:
+            completed.add(chaos_scope)
+            if self.chaos:
+                bodies.append(copy.deepcopy(self.chaos))
+        return ObjectListing(tuple(bodies), frozenset(completed), failures)
 
 
 class Clock:
@@ -133,6 +167,16 @@ class Clock:
 
     def __call__(self) -> datetime:
         return self.now
+
+
+class AdvancingClock:
+    def __init__(self, start: datetime) -> None:
+        self.now = start
+
+    def __call__(self) -> datetime:
+        current = self.now
+        self.now += timedelta(milliseconds=150)
+        return current
 
 
 class FakeLogs:
@@ -237,6 +281,63 @@ def test_event_listing_failure_keeps_object_journal_consistent(setup: Any) -> No
         )
     cluster.list_events = original
     assert len(history) == 5
+
+
+def test_failed_object_scope_cannot_create_a_false_tombstone(setup: Any) -> None:
+    factory, _cluster, clock, _incident = setup
+    chaos = {
+        "kind": "NetworkChaos",
+        "metadata": {"name": "payment-delay", "namespace": "chaos-mesh"},
+        "spec": {"action": "delay"},
+    }
+    cluster = ScopedCluster(chaos=chaos)
+    with factory() as session:
+        repository = ObjectVersionRepository(session)
+        repository.record(chaos, T0)
+    cluster.chaos_failed = True
+    service = DiagnosisService(
+        session_factory=factory,
+        namespaces=("sre-demo",),
+        evidence_namespaces=("chaos-mesh",),
+        reader=cluster,
+        clock=clock,
+    )
+    service.snapshot()
+    with factory() as session:
+        history = ObjectVersionRepository(session).history(
+            namespaces={"chaos-mesh"}, starts_at=T0, ends_at=T0 + timedelta(hours=1)
+        )
+    assert [entry.lifecycle.value for entry in history] == ["OBSERVED"]
+    assert service.last_snapshot_result is not None
+    assert service.last_snapshot_result.failed_scopes == (
+        ListingFailure(ListingScope("chaos-mesh", "NetworkChaos"), "403 forbidden"),
+    )
+
+
+def test_successful_empty_object_scope_records_a_tombstone(setup: Any) -> None:
+    factory, _cluster, clock, _incident = setup
+    chaos = {
+        "kind": "NetworkChaos",
+        "metadata": {"name": "payment-delay", "namespace": "chaos-mesh"},
+        "spec": {"action": "delay"},
+    }
+    cluster = ScopedCluster(chaos=chaos)
+    service = DiagnosisService(
+        session_factory=factory,
+        namespaces=("sre-demo",),
+        evidence_namespaces=("chaos-mesh",),
+        reader=cluster,
+        clock=clock,
+    )
+    assert service.snapshot() == 6
+    cluster.chaos = {}
+    clock.now = T0 + timedelta(minutes=1)
+    assert service.snapshot() == 1
+    with factory() as session:
+        history = ObjectVersionRepository(session).history(
+            namespaces={"chaos-mesh"}, starts_at=T0, ends_at=T0 + timedelta(hours=1)
+        )
+    assert [entry.lifecycle.value for entry in history] == ["OBSERVED", "DELETED"]
 
 
 def test_journal_records_a_rollback_that_repeats_earlier_content(setup: Any) -> None:
@@ -565,6 +666,48 @@ def test_resolved_replay_excludes_event_state_observed_after_resolution(
         return original(source, **kwargs)
 
     monkeypatch.setattr(diagnosis_module, "diagnose", spy)
+    service.run(incident_id)
+    assert [item.count for item in captured["events"]] == [1]
+
+
+def test_open_diagnosis_includes_event_captured_by_its_own_snapshot_cycle(
+    setup: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    factory, cluster, _clock, incident_id = setup
+    event = {
+        "kind": "Event",
+        "metadata": {"name": "payment-backoff", "namespace": "sre-demo", "uid": "cycle-1"},
+        "involvedObject": {
+            "kind": "Pod",
+            "name": "payment-1",
+            "namespace": "sre-demo",
+            "uid": "pod-1",
+        },
+        "reason": "BackOff",
+        "type": "Warning",
+        "message": "back-off restarting failed container",
+        "firstTimestamp": (T0 + timedelta(minutes=12)).isoformat(),
+        "lastTimestamp": (T0 + timedelta(minutes=12)).isoformat(),
+        "count": 1,
+    }
+    cluster.events = [event]
+    captured: dict[str, list[Any]] = {}
+    import importlib
+
+    diagnosis_module = importlib.import_module("apps.control_plane.diagnosis")
+    original = diagnosis_module.diagnose
+
+    def spy(source: Any, **kwargs: Any) -> Any:
+        captured["events"] = list(source.events())
+        return original(source, **kwargs)
+
+    monkeypatch.setattr(diagnosis_module, "diagnose", spy)
+    service = DiagnosisService(
+        session_factory=factory,
+        namespaces=("sre-demo",),
+        reader=cluster,
+        clock=AdvancingClock(T0 + timedelta(minutes=20)),
+    )
     service.run(incident_id)
     assert [item.count for item in captured["events"]] == [1]
 

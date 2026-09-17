@@ -53,7 +53,7 @@ _LOG_ERRORS = "(?i)(error|exception|fatal|refused|timeout|unavailable|unreachabl
 class ClusterReader(Protocol):
     """Read-only view of the cluster."""
 
-    def list_objects(self, namespaces: Sequence[str]) -> list[dict[str, Any]]: ...
+    def list_objects(self, namespaces: Sequence[str]) -> ObjectListing: ...
 
     def list_events(self, namespaces: Sequence[str]) -> list[dict[str, Any]]: ...
 
@@ -62,6 +62,56 @@ class LogReader(Protocol):
     def error_logs(
         self, services: Sequence[str], starts_at: datetime, ends_at: datetime
     ) -> list[LogRecord]: ...
+
+
+@dataclass(frozen=True)
+class ListingScope:
+    """The smallest scope for which absence can imply deletion."""
+
+    namespace: str
+    kind: str
+
+    @classmethod
+    def from_body(cls, body: Mapping[str, Any]) -> ListingScope | None:
+        metadata = child(body, "metadata")
+        kind = body.get("kind")
+        if not isinstance(kind, str) or not kind:
+            return None
+        return cls(str(metadata.get("namespace") or CLUSTER_SCOPE), kind)
+
+    @classmethod
+    def from_key(cls, key: str) -> ListingScope | None:
+        parts = key.split("/", 2)
+        if len(parts) != 3:
+            return None
+        return cls(parts[0], parts[1])
+
+
+@dataclass(frozen=True)
+class ListingFailure:
+    """A resource scope that could not be enumerated."""
+
+    scope: ListingScope
+    error: str
+
+
+@dataclass(frozen=True)
+class ObjectListing:
+    """Object bodies plus explicit enumeration completeness metadata."""
+
+    objects: tuple[dict[str, Any], ...]
+    completed_scopes: frozenset[ListingScope]
+    failed_scopes: tuple[ListingFailure, ...] = ()
+
+
+@dataclass(frozen=True)
+class ObjectSnapshot:
+    """One object-journal cycle and the boundary at which it was captured."""
+
+    listing: ObjectListing
+    stored_versions: int
+    started_at: datetime
+    completed_at: datetime
 
 
 class KubernetesClusterReader:
@@ -92,31 +142,42 @@ class KubernetesClusterReader:
         child(body, "metadata").pop("managedFields", None)
         return body
 
-    def list_objects(self, namespaces: Sequence[str]) -> list[dict[str, Any]]:
+    def list_objects(self, namespaces: Sequence[str]) -> ObjectListing:
         kubernetes, _api_client = self._client()
         objects: list[dict[str, Any]] = []
+        completed: set[ListingScope] = set()
+        failures: list[ListingFailure] = []
         workload_namespaces = [
             namespace for namespace in namespaces if namespace not in self.chaos_namespaces
         ]
         for group, method, kind in _NAMESPACED_LISTS:
-            api = getattr(kubernetes.client, group)()
             for namespace in workload_namespaces:
-                items = getattr(api, method)(namespace).items
+                scope = ListingScope(namespace, kind)
+                try:
+                    api = getattr(kubernetes.client, group)()
+                    items = getattr(api, method)(namespace).items
+                except Exception as exc:
+                    failures.append(ListingFailure(scope, f"{type(exc).__name__}: {exc}"))
+                    continue
+                completed.add(scope)
                 objects.extend(self._serialize(item, kind, "v1") for item in items)
         custom = kubernetes.client.CustomObjectsApi()
         for namespace in self.chaos_namespaces:
             for kind, plural in _CHAOS_PLURALS:
+                scope = ListingScope(namespace, kind)
                 try:
                     listing = custom.list_namespaced_custom_object(
                         "chaos-mesh.org", "v1alpha1", namespace, plural
                     )
-                except Exception:  # CRD not installed or not readable
+                except Exception as exc:  # CRD not installed or not readable
+                    failures.append(ListingFailure(scope, f"{type(exc).__name__}: {exc}"))
                     continue
+                completed.add(scope)
                 for item in listing.get("items", []):
                     item["kind"] = kind
                     child(item, "metadata").pop("managedFields", None)
                     objects.append(item)
-        return objects
+        return ObjectListing(tuple(objects), frozenset(completed), tuple(failures))
 
     def list_events(self, namespaces: Sequence[str]) -> list[dict[str, Any]]:
         kubernetes, _api_client = self._client()
@@ -242,21 +303,52 @@ class ChangeWatcher:
     live_keys: Callable[[], set[str]] = lambda: set()
     tombstone: Callable[[str, datetime], bool] = lambda key, at: False
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
+    last_listing: ObjectListing | None = field(default=None, init=False)
 
     def snapshot(self) -> int:
-        now = self.clock()
-        bodies = self.reader.list_objects(self.namespaces)
+        return self.snapshot_result().stored_versions
+
+    def snapshot_result(self) -> ObjectSnapshot:
+        started_at = self.clock()
+        previous_live = self.live_keys()
+        raw_listing = self.reader.list_objects(self.namespaces)
+        if isinstance(raw_listing, ObjectListing):
+            listing = raw_listing
+        else:
+            # Compatibility for small test/demo readers that predate explicit
+            # completeness metadata. Treat scopes represented by either the
+            # returned objects or previously live keys as complete. Production
+            # Kubernetes readers always return ObjectListing.
+            bodies = tuple(raw_listing)
+            scopes = {
+                scope
+                for scope in (
+                    [ListingScope.from_body(body) for body in bodies]
+                    + [ListingScope.from_key(key) for key in previous_live]
+                )
+                if scope is not None
+            }
+            listing = ObjectListing(bodies, frozenset(scopes))
+        self.last_listing = listing
+        observed_at = self.clock()
         seen: set[str] = set()
         stored = 0
-        for body in bodies:
+        for body in listing.objects:
             entity = _entity(body)
             if entity is None:
                 continue
             seen.add(entity.canonical)
-            stored += self.record(body, now)
-        missing = self.live_keys() - seen
-        stored += sum(self.tombstone(key, now) for key in missing)
-        return stored
+            stored += self.record(body, observed_at)
+        # Absence is meaningful only for a scope whose enumeration completed.
+        # A failed API/RBAC call is missing evidence, never OBJECT_DELETED.
+        missing = set()
+        for key in previous_live - seen:
+            scope = ListingScope.from_key(key)
+            if scope is not None and scope in listing.completed_scopes:
+                missing.add(key)
+        stored += sum(self.tombstone(key, observed_at) for key in missing)
+        completed_at = self.clock()
+        return ObjectSnapshot(listing, stored, started_at, completed_at)
 
 
 @dataclass

@@ -269,6 +269,9 @@ def cmd_resolution_audit(args: argparse.Namespace) -> int:
                 "",
                 f"- selected: `{selected['hypothesis_id']}`",
                 f"- alternative: `{alternative['hypothesis_id']}`",
+                f"- resolution leader: `{record['resolution_leader']['hypothesis_id']}`"
+                if isinstance(record.get("resolution_leader"), dict)
+                else "- resolution leader: `none`",
                 f"- resolution: `{record['resolution']}`",
                 f"- reason: {record['resolution_reason']}",
                 f"- selected plausible: `{selected['plausible']}`",

@@ -551,6 +551,9 @@ def resolution_audit_records(diagnosis: Diagnosis) -> list[dict[str, object]]:
                     "incident_id": diagnosis.incident_id,
                     "selected": selected.model_dump(mode="json"),
                     "alternative": alternative.model_dump(mode="json"),
+                    "resolution_leader": (
+                        final_selected.model_dump(mode="json") if final_selected else None
+                    ),
                     "comparison_pair": [
                         left.model_dump(mode="json"),
                         right.model_dump(mode="json"),

@@ -40,6 +40,8 @@ KIND_WEIGHT: dict[FindingKind, float] = {
     FindingKind.SCALE_CHANGE: 3.0,
     FindingKind.ROLLOUT_RESTART: 1.5,
     FindingKind.FAILURE_EVENT: 1.0,
+    FindingKind.AUTOSCALING_FAILURE: 3.5,
+    FindingKind.TRAFFIC_INCREASE: 4.0,
 }
 STRONG_KINDS = frozenset(
     {
@@ -261,6 +263,8 @@ _INITIATING_KINDS = frozenset(
         FindingKind.POLICY_CREATED,
         FindingKind.QUOTA_EXCEEDED,
         FindingKind.NETWORK_RESTRICTION,
+        FindingKind.AUTOSCALING_FAILURE,
+        FindingKind.TRAFFIC_INCREASE,
     }
 )
 _SUPPORTING_KINDS = frozenset(
@@ -282,6 +286,8 @@ _VERIFIABLE_KINDS = frozenset(
         FindingKind.OBJECT_DELETED,
         FindingKind.POLICY_CREATED,
         FindingKind.QUOTA_EXCEEDED,
+        FindingKind.AUTOSCALING_FAILURE,
+        FindingKind.TRAFFIC_INCREASE,
     }
 )
 

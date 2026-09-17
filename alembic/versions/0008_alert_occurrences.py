@@ -54,6 +54,7 @@ def upgrade() -> None:
     metadata = MetaData()
     with op.batch_alter_table("alerts", recreate="always", copy_from=_alerts_table(metadata)):
         pass
+    op.create_index("ix_alerts_fingerprint", "alerts", ["fingerprint"])
 
 
 def downgrade() -> None:

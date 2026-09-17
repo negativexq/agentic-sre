@@ -58,7 +58,7 @@ def _git_head() -> str:
 def _git_dirty() -> bool:
     try:
         output = subprocess.run(
-            ["git", "status", "--porcelain", "--", "packages", "apps"],
+            ["git", "status", "--porcelain"],
             capture_output=True,
             text=True,
             check=True,
@@ -105,6 +105,8 @@ def predict(
     """Diagnose every scenario, write predictions, and seal them."""
     if (out_dir / "seal.json").exists():
         raise BenchmarkError(f"{out_dir} already holds a sealed run; use a new directory")
+    if split == "test" and _git_dirty():
+        raise BenchmarkError("test predictions require a clean repository")
     config = config or EngineConfig()
     predictions = out_dir / "predictions"
     records: list[dict[str, Any]] = []
@@ -244,11 +246,17 @@ def grade(dataset: ITBenchLiteDataset, out_dir: Path) -> dict[str, Any]:
     def rate(values: list[bool]) -> float:
         return round(sum(values) / count, 4) if count else 0.0
 
-    by_confidence: dict[str, dict[str, int]] = {}
+    by_confidence: dict[str, dict[str, float]] = {}
     for row in rows:
         bucket = by_confidence.setdefault(row["confidence"], {"count": 0, "correct": 0})
         bucket["count"] += 1
         bucket["correct"] += int(row["correct"])
+    for bucket in by_confidence.values():
+        bucket["precision"] = round(bucket["correct"] / bucket["count"], 4)
+        bucket["share_of_predictions"] = round(bucket["count"] / count, 4) if count else 0.0
+    verified_rows = [row for row in rows if row["confidence"] == Confidence.VERIFIED.value]
+    verified_count = len(verified_rows)
+    verified_correct = sum(int(row["correct"]) for row in verified_rows)
     report = {
         "benchmark": manifest["benchmark"],
         "split": manifest["split"],
@@ -258,9 +266,18 @@ def grade(dataset: ITBenchLiteDataset, out_dir: Path) -> dict[str, Any]:
         "git_dirty": manifest["git_dirty"],
         "scenarios": count,
         "macro_f1": round(sum(r["f1"] for r in rows) / count, 4) if count else 0.0,
-        "verified_macro_f1": round(sum(r["verified_f1"] for r in rows) / count, 4)
+        "coverage_weighted_verified_f1": round(sum(r["verified_f1"] for r in rows) / count, 4)
         if count
         else 0.0,
+        "verified_conditional_macro_f1": round(
+            sum(r["f1"] for r in verified_rows) / verified_count, 4
+        )
+        if verified_count
+        else 0.0,
+        "verified_count": verified_count,
+        "verified_correct": verified_correct,
+        "verified_coverage": round(verified_count / count, 4) if count else 0.0,
+        "verified_accuracy": round(verified_correct / verified_count, 4) if verified_count else 0.0,
         "funnel": {
             "root_cause_observable": rate([r["observable"] for r in rows]),
             "in_top_5": rate([r["position"] is not None for r in rows]),
@@ -305,7 +322,10 @@ def render_markdown(report: dict[str, Any]) -> str:
         "| Metric | Value |",
         "| --- | ---: |",
         f"| Macro F1 (all answers) | {report['macro_f1']:.3f} |",
-        f"| Macro F1 (verified answers only) | {report['verified_macro_f1']:.3f} |",
+        f"| Coverage-weighted VERIFIED F1 | {report['coverage_weighted_verified_f1']:.3f} |",
+        f"| VERIFIED conditional macro F1 | {report['verified_conditional_macro_f1']:.3f} |",
+        f"| VERIFIED coverage | {report['verified_coverage']:.1%} |",
+        f"| VERIFIED accuracy | {report['verified_accuracy']:.1%} |",
         f"| Answered | {report['answered']:.0%} |",
         f"| Root cause observable in snapshot | {funnel['root_cause_observable']:.0%} |",
         f"| Root cause in top 5 | {funnel['in_top_5']:.0%} |",
@@ -314,9 +334,16 @@ def render_markdown(report: dict[str, Any]) -> str:
     ]
     for name, value in report["baselines_macro_f1"].items():
         lines.append(f"| Baseline: {name} | {value:.3f} |")
-    lines += ["", "| Confidence | Answers | Correct |", "| --- | ---: | ---: |"]
+    lines += [
+        "",
+        "| Confidence | Count | Correct | Precision | Share |",
+        "| --- | ---: | ---: | ---: | ---: |",
+    ]
     for name, bucket in sorted(report["by_confidence"].items()):
-        lines.append(f"| {name} | {bucket['count']} | {bucket['correct']} |")
+        lines.append(
+            f"| {name} | {bucket['count']} | {bucket['correct']} | "
+            f"{bucket['precision']:.1%} | {bucket['share_of_predictions']:.1%} |"
+        )
     lines += [
         "",
         "| Scenario | Prediction | Confidence | Correct | Rank | GT observable |",

@@ -62,7 +62,7 @@ eval-dev:
 
 # Test-split numbers are published once per tagged release (see evals/README.md).
 eval-test:
-	test -z "$$(git status --porcelain -- apps packages)"
+	test -z "$$(git status --porcelain)"
 	git describe --exact-match --tags HEAD
 	$(CLI) eval --split test --confirm-test $(EVAL_FLAGS) --out .local/runs/test-$$(git describe --tags)$(if $(EVAL_FLAGS),-llm)-$(RUN_ID)
 

@@ -60,7 +60,17 @@ def test_prediction_never_reads_truth_and_grading_reports_the_funnel(tmp_path: P
     assert manifest["mode"] == "deterministic" and manifest["model"] is None
     report = grade(cast(ITBenchLiteDataset, dataset), out)
     assert report["macro_f1"] == 1.0
-    assert report["verified_macro_f1"] == 1.0
+    assert report["coverage_weighted_verified_f1"] == 1.0
+    assert report["verified_count"] == 1
+    assert report["verified_correct"] == 1
+    assert report["verified_coverage"] == 1.0
+    assert report["verified_accuracy"] == 1.0
+    assert report["by_confidence"]["VERIFIED"] == {
+        "count": 1,
+        "correct": 1,
+        "precision": 1.0,
+        "share_of_predictions": 1.0,
+    }
     assert report["funnel"] == {
         "root_cause_observable": 1.0,
         "in_top_5": 1.0,

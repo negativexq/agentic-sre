@@ -33,19 +33,21 @@ data is documented in [`evals/README.md`](evals/README.md).
 
 | Run | Split | Scenarios | Macro F1 | Top-1 | Top-3 | Model calls |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| **Engine v1.0.1** | Test | 25 | **0.680** | **68%** | **80%** | **0** |
+| **Engine v1.0.2** | Test | 25 | **0.680** | **68%** | **80%** | **0** |
+| Engine v1.0.1 | Test | 25 | 0.680 | 68% | 80% | 0 |
 | Engine v1.0.0 | Test | 25 | 0.680 | 68% | 80% | 0 |
 | Engine v0.7.0 | Dev | 10 | 0.900 | 90% | 90% | 0 |
 | Engine v0.5.0 + LLM investigator | Test | 25 | 0.640 | 64% | 80% | 44 |
 
-Confidence is separate from benchmark correctness: 23/25 predictions were
-labelled `VERIFIED`, 16 of those were correct, giving 92.0% VERIFIED coverage
-and 69.6% VERIFIED accuracy. v1.0.1 hardening changed lifecycle, replay,
-causal-traversal, and release infrastructure without changing the v1.0.0
-root-cause or confidence predictions.
+Confidence is separate from benchmark correctness. In v1.0.2, 9/25 predictions
+were labelled `VERIFIED`, 8 of those were correct, giving 36.0% VERIFIED
+coverage and 88.9% VERIFIED accuracy; the remaining 16 were `LIKELY`. The
+official root-cause score is unchanged from v1.0.1. Scenario-38 selected the
+new normalized HPA candidate instead of a Pod candidate; the published
+ground-truth cause is not observable, so this did not change the score.
 
-The latest hardening validation passed 175 tests and the real Kind release
-gate. The stored [v1.0.1 result](evals/results/v1.0.1/README.md) records the
+The latest hardening validation passed 185 tests and the real Kind release
+gate. The stored [v1.0.2 result](evals/results/v1.0.2/README.md) records the
 tagged release SHA.
 
 ## Real Kubernetes validation
@@ -217,15 +219,15 @@ make eval-dev
 make eval-test         # release-only: clean tagged commit
 ```
 
-To re-grade the stored v1.0.1 run:
+To re-grade the stored v1.0.2 run:
 
 ```bash
-agentic-sre grade --out evals/results/v1.0.1/test
+agentic-sre grade --out evals/results/v1.0.2/test
 ```
 
 Do not repeatedly run the frozen test while tuning. The immutable `v1.0.1`
-tag remains at the release-code commit; its published result records that
-tagged SHA in the current release result directory.
+tag remains at its release-code commit. The `v1.0.2` result is similarly
+sealed against the `v1.0.2` release tag.
 
 ## Repository structure
 

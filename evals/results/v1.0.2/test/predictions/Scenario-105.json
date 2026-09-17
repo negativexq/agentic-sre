@@ -1,0 +1,466 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "LIKELY: otel-demo/Deployment/product-catalog: spec changed: [product-catalog].command: unset -> [\"invalid-command\"]. Likely (strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+        "entity": {
+          "kind": "Deployment",
+          "name": "product-catalog",
+          "namespace": "otel-demo"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-105",
+    "native_terminal": "LIKELY",
+    "reasoning": "otel-demo/Deployment/product-catalog: spec changed: [product-catalog].command: unset -> [\"invalid-command\"]. Likely (strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+    "scenario_id": "Scenario-105"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "causal_explanation": "DIRECT",
+        "causal_path": [],
+        "entity": {
+          "kind": "Pod",
+          "name": "product-catalog-fcf7564cf-vjj7l",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:57:43Z",
+            "details": {
+              "problems": [
+                {
+                  "at": "2025-12-15T17:57:43Z",
+                  "container": "product-catalog",
+                  "message": "back-off 2m40s restarting failed container=product-catalog pod=product-catalog-fcf7564cf-vjj7l_otel-demo(7fe244c1-132e-4046-b822-b0a8f8388955)",
+                  "reason": "CrashLoopBackOff",
+                  "restarts": 5
+                }
+              ],
+              "reason": "CrashLoopBackOff"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "product-catalog-fcf7564cf-vjj7l",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:2902"
+            ],
+            "incident_onset": "2025-12-15T15:22:32.624000Z",
+            "kind": "CONTAINER_FAILURE",
+            "onset_delta_seconds": 9310.376,
+            "related": [],
+            "summary": "container product-catalog CrashLoopBackOff (5 restart(s)) back-off 2m40s restarting failed container=product-catalog pod=product-catalog-fcf7564cf-vjj7l_otel-demo(7fe244c1-132e-4046-b822-b0a8f8388955)",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:59:45Z",
+            "details": {
+              "count": 215,
+              "reason": "BackOff"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "product-catalog-fcf7564cf-vjj7l",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:814",
+              "k8s_events_raw.tsv:817",
+              "k8s_events_raw.tsv:825",
+              "k8s_events_raw.tsv:826"
+            ],
+            "incident_onset": "2025-12-15T15:22:32.624000Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 9432.376,
+            "related": [],
+            "summary": "BackOff x215: Back-off restarting failed container product-catalog in pod product-catalog-fcf7564cf-vjj7l_otel-demo(7fe244c1-132e-4046-b822-b0a8f8388955)",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:57:43Z",
+            "details": {
+              "count": 21,
+              "reason": "Failed"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "product-catalog-fcf7564cf-vjj7l",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:806",
+              "k8s_events_raw.tsv:812",
+              "k8s_events_raw.tsv:823",
+              "k8s_events_raw.tsv:832"
+            ],
+            "incident_onset": "2025-12-15T15:22:32.624000Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 9310.376,
+            "related": [],
+            "summary": "Failed x21: Error: failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: error dur",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/product-catalog",
+          "otel-demo/Deployment/recommendation"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 10.45
+      },
+      {
+        "causal_explanation": "DIRECT",
+        "causal_path": [],
+        "entity": {
+          "kind": "Pod",
+          "name": "product-catalog-fcf7564cf-2fvnx",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:54:18Z",
+            "details": {
+              "count": 3,
+              "reason": "Failed"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "product-catalog-fcf7564cf-2fvnx",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:776",
+              "k8s_events_raw.tsv:783"
+            ],
+            "incident_onset": "2025-12-15T15:22:32.624000Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 9105.376,
+            "related": [],
+            "summary": "Failed x3: Error: failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: error dur",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:54:18Z",
+            "details": {
+              "count": 1,
+              "reason": "BackOff"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "product-catalog-fcf7564cf-2fvnx",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:784"
+            ],
+            "incident_onset": "2025-12-15T15:22:32.624000Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 9105.376,
+            "related": [],
+            "summary": "BackOff x1: Back-off restarting failed container product-catalog in pod product-catalog-fcf7564cf-2fvnx_otel-demo(e34e1362-4708-44df-90ba-64a3c0725b82)",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/product-catalog",
+          "otel-demo/Deployment/recommendation"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.433
+      },
+      {
+        "causal_explanation": "DIRECT",
+        "causal_path": [],
+        "entity": {
+          "kind": "Pod",
+          "name": "postgresql-c7fd45b87-klrbg",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:24:14Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedMount"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "postgresql-c7fd45b87-klrbg",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:601"
+            ],
+            "incident_onset": "2025-12-15T15:22:32.624000Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 7301.376,
+            "related": [],
+            "summary": "FailedMount x1: MountVolume.SetUp failed for volume \"kube-api-access-tpshb\" : failed to sync configmap cache: timed out waiting for the condition",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/postgresql",
+          "otel-demo/Pod/postgresql-c7fd45b87-klrbg"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.25
+      },
+      {
+        "causal_explanation": "PATH",
+        "causal_path": [
+          {
+            "direction": "reverse",
+            "relation": "serves",
+            "source": {
+              "kind": "Deployment",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "direction": "reverse",
+            "relation": "dependency_of",
+            "source": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "accounting",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-gvg62",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:24:16Z",
+            "details": {
+              "count": 1,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-gvg62",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:581"
+            ],
+            "incident_onset": "2025-12-15T15:22:32.624000Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 7303.376,
+            "related": [],
+            "summary": "Unhealthy x1: Readiness probe failed: Get \"http://100.96.4.223:13133/\": dial tcp 100.96.4.223:13133: connect: connection refused",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/currency",
+          "otel-demo/Deployment/email",
+          "otel-demo/Deployment/fraud-detection"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.75
+      }
+    ],
+    "causal_explanation": "DIRECT",
+    "causal_path": [],
+    "confidence": "LIKELY",
+    "evidence": [
+      {
+        "at": "2025-12-15T17:59:08.462695Z",
+        "details": {
+          "changed_paths": [
+            ".spec.template.spec.containers[product-catalog].command"
+          ],
+          "previous_observed_at": "2025-12-15T17:39:07.862601+00:00"
+        },
+        "entity": {
+          "kind": "Deployment",
+          "name": "product-catalog",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_objects_raw.tsv:545",
+          "k8s_objects_raw.tsv:3280"
+        ],
+        "incident_onset": "2025-12-15T15:22:32.624000Z",
+        "kind": "SPEC_CHANGE",
+        "onset_delta_seconds": 9395.838695,
+        "related": [],
+        "summary": "spec changed: [product-catalog].command: unset -> [\"invalid-command\"]",
+        "temporal_role": "CONSEQUENCE"
+      }
+    ],
+    "incident_id": "Scenario-105",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Roll back Deployment product-catalog to the previous revision",
+        "command": "kubectl rollout undo deployment/product-catalog -n otel-demo",
+        "requires_approval": true,
+        "risk": "medium: reverts every change in the last rollout"
+      }
+    ],
+    "root_cause": {
+      "kind": "Deployment",
+      "name": "product-catalog",
+      "namespace": "otel-demo"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "7 diagnostic alert type(s) on accounting, checkout, currency, email, fraud-detection, frontend; 818 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "15 finding(s) over 666 object(s) and 401 event(s); 532 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "otel-demo/Deployment/product-catalog 11.5; otel-demo/Pod/product-catalog-fcf7564cf-vjj7l 10.4; otel-demo/Pod/product-catalog-fcf7564cf-2fvnx 5.4; otel-demo/Pod/postgresql-c7fd45b87-klrbg 5.2; otel-demo/Pod/otel-collector-564d9c7987-gvg62 4.8"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "LIKELY: strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous"
+      }
+    ],
+    "summary": "otel-demo/Deployment/product-catalog: spec changed: [product-catalog].command: unset -> [\"invalid-command\"]. Likely (strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "CrashLoopBackOffPodsDetected",
+        "KubeDeploymentReplicasMismatch",
+        "KubePodCrashLooping",
+        "NoRequestsDetected",
+        "PendingPodsDetected",
+        "RequestErrorRate"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 144,
+        "KubeClientCertificateExpiration": 82,
+        "KubeControllerManagerDown": 140,
+        "KubeSchedulerDown": 140,
+        "PrometheusNotConnectedToAlertmanagers": 149,
+        "Watchdog": 163
+      },
+      "last_seen": "2025-12-15T17:57:34.241921Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T15:22:32.624000Z",
+      "services": [
+        "accounting",
+        "checkout",
+        "currency",
+        "email",
+        "fraud-detection",
+        "frontend",
+        "frontend-proxy",
+        "payment",
+        "product-catalog",
+        "prometheus-kube-prometheus-kubelet",
+        "prometheus-kube-state-metrics",
+        "quote",
+        "recommendation",
+        "shipping"
+      ]
+    },
+    "verification": {
+      "candidate": {
+        "kind": "Deployment",
+        "name": "product-catalog",
+        "namespace": "otel-demo"
+      },
+      "contradictory_evidence": [
+        "k8s_objects_raw.tsv:545",
+        "k8s_objects_raw.tsv:3280"
+      ],
+      "decision": "LIKELY",
+      "onset_delta_seconds": 9395.838695,
+      "predicates": [
+        {
+          "detail": "candidate reaches an alerting entity through the causal graph",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:545",
+            "k8s_objects_raw.tsv:3280"
+          ],
+          "name": "candidate_linked_to_symptom",
+          "status": "PASS"
+        },
+        {
+          "detail": "no linked initiating observation is temporally consistent with onset",
+          "evidence_ids": [],
+          "name": "initiating_evidence_near_onset",
+          "status": "FAIL"
+        },
+        {
+          "detail": "linked change was observed after the onset grace and cannot explain the original incident onset",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:545",
+            "k8s_objects_raw.tsv:3280"
+          ],
+          "name": "late_change_contradiction",
+          "status": "FAIL"
+        },
+        {
+          "detail": "score margin over runner-up is 1.050",
+          "evidence_ids": [],
+          "name": "candidate_dominance",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous",
+      "score_margin": 1.0500000000000007,
+      "supporting_evidence": [
+        "k8s_objects_raw.tsv:545",
+        "k8s_objects_raw.tsv:3280"
+      ]
+    }
+  }
+}

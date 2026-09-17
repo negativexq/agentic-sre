@@ -1,0 +1,557 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "VERIFIED: chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-fntwp: NetworkChaos applied fault at 16:46 (2 application(s)); schedule otel-demo-email-checkout-network-partition has injected this fault repeatedly from 16:27 to 18:02. Verified (linked initiating evidence is temporally consistent with symptom onset). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+        "entity": {
+          "kind": "NetworkChaos",
+          "name": "otel-demo-email-checkout-network-partition-fntwp",
+          "namespace": "chaos-mesh"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-19",
+    "native_terminal": "VERIFIED",
+    "reasoning": "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-fntwp: NetworkChaos applied fault at 16:46 (2 application(s)); schedule otel-demo-email-checkout-network-partition has injected this fault repeatedly from 16:27 to 18:02. Verified (linked initiating evidence is temporally consistent with symptom onset). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+    "scenario_id": "Scenario-19"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "causal_explanation": "PATH",
+        "causal_path": [
+          {
+            "direction": "forward",
+            "relation": "spawns",
+            "source": {
+              "kind": "Schedule",
+              "name": "otel-demo-email-checkout-network-partition",
+              "namespace": "chaos-mesh"
+            },
+            "target": {
+              "kind": "NetworkChaos",
+              "name": "otel-demo-email-checkout-network-partition-5czjs",
+              "namespace": "chaos-mesh"
+            }
+          },
+          {
+            "direction": "forward",
+            "relation": "disrupts",
+            "source": {
+              "kind": "NetworkChaos",
+              "name": "otel-demo-email-checkout-network-partition-5czjs",
+              "namespace": "chaos-mesh"
+            },
+            "target": {
+              "kind": "Pod",
+              "name": "shipping-75d58f5d84-jgxvv",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "Schedule",
+          "name": "otel-demo-email-checkout-network-partition",
+          "namespace": "chaos-mesh"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T16:27:55Z",
+            "details": {
+              "failed_applications": 0,
+              "first_at": "2025-12-15T16:28:00+00:00",
+              "last_at": "2025-12-15T18:02:00+00:00",
+              "reasons": {
+                "Spawned": 29,
+                "Updated": 29
+              },
+              "targets": [
+                "otel-demo/Pod/quote-6b5877698d-8fn9w",
+                "otel-demo/Pod/quote-6b5877698d-snjn8",
+                "otel-demo/Pod/shipping-75d58f5d84-jgxvv",
+                "otel-demo/Pod/shipping-75d58f5d84-pkjdv"
+              ]
+            },
+            "entity": {
+              "kind": "Schedule",
+              "name": "otel-demo-email-checkout-network-partition",
+              "namespace": "chaos-mesh"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:40",
+              "k8s_events_raw.tsv:41",
+              "k8s_events_raw.tsv:92",
+              "k8s_events_raw.tsv:93",
+              "k8s_events_raw.tsv:216",
+              "k8s_events_raw.tsv:217"
+            ],
+            "incident_onset": "2025-12-15T17:31:52.769267Z",
+            "kind": "FAULT_SCHEDULE",
+            "onset_delta_seconds": -3837.769267,
+            "related": [
+              {
+                "kind": "Pod",
+                "name": "quote-6b5877698d-snjn8",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "shipping-75d58f5d84-pkjdv",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "quote-6b5877698d-8fn9w",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "shipping-75d58f5d84-jgxvv",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "chaos schedule injecting faults since 16:27, last run 18:02 (29 experiment(s))",
+            "temporal_role": "INITIATING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/shipping",
+          "otel-demo/Pod/checkout-5dccddf8bb-pd7qk"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 9.0
+      },
+      {
+        "causal_explanation": "UNLINKED",
+        "causal_path": [],
+        "entity": {
+          "kind": "Service",
+          "name": "prometheus-kube-state-metrics",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:32:08.543000Z",
+            "details": {
+              "baseline": 0.001,
+              "baseline_at": "2025-12-15T17:31:38.543000+00:00",
+              "incident_at": "2025-12-15T17:32:08.543000+00:00",
+              "incident_peak": 0.1,
+              "metric": "cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests",
+              "ratio": 100.0,
+              "threshold_factor": 1.5
+            },
+            "entity": {
+              "kind": "Service",
+              "name": "prometheus-kube-state-metrics",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "metrics/pod_image-provider-55cfd9d7d6-9b5xg_raw.tsv:167",
+              "metrics/pod_accounting-58d4b6c958-dxtv8_raw.tsv:135",
+              "metrics/pod_accounting-58d4b6c958-dxtv8_raw.tsv:136",
+              "metrics/pod_accounting-58d4b6c958-dxtv8_raw.tsv:137"
+            ],
+            "incident_onset": "2025-12-15T17:31:52.769267Z",
+            "kind": "TRAFFIC_INCREASE",
+            "onset_delta_seconds": 15.773733,
+            "related": [],
+            "summary": "cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests increased from 0.001 to 0.1 (100.00x baseline)",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:32:08.543000Z",
+            "details": {
+              "baseline": 5242880.0,
+              "baseline_at": "2025-12-15T17:31:38.543000+00:00",
+              "incident_at": "2025-12-15T17:32:08.543000+00:00",
+              "incident_peak": 262144000.0,
+              "metric": "cluster:namespace:pod_memory:active:kube_pod_container_resource_requests",
+              "ratio": 50.0,
+              "threshold_factor": 1.5
+            },
+            "entity": {
+              "kind": "Service",
+              "name": "prometheus-kube-state-metrics",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "metrics/pod_image-provider-55cfd9d7d6-9b5xg_raw.tsv:161",
+              "metrics/pod_accounting-58d4b6c958-dxtv8_raw.tsv:138",
+              "metrics/pod_accounting-58d4b6c958-dxtv8_raw.tsv:139",
+              "metrics/pod_accounting-58d4b6c958-dxtv8_raw.tsv:140"
+            ],
+            "incident_onset": "2025-12-15T17:31:52.769267Z",
+            "kind": "TRAFFIC_INCREASE",
+            "onset_delta_seconds": 15.773733,
+            "related": [],
+            "summary": "cluster:namespace:pod_memory:active:kube_pod_container_resource_requests increased from 5.24e+06 to 2.62e+08 (50.00x baseline)",
+            "temporal_role": "INITIATING"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 6.5
+      },
+      {
+        "causal_explanation": "PATH",
+        "causal_path": [
+          {
+            "direction": "reverse",
+            "relation": "serves",
+            "source": {
+              "kind": "Deployment",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "direction": "reverse",
+            "relation": "dependency_of",
+            "source": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "checkout",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-zrmgq",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:16:20Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-zrmgq",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1359"
+            ],
+            "incident_onset": "2025-12-15T17:31:52.769267Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": -932.769267,
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: Get \"http://100.96.3.55:13133/\": dial tcp 100.96.3.55:13133: connect: connection refused",
+            "temporal_role": "AMBIGUOUS"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/shipping",
+          "otel-demo/Pod/checkout-5dccddf8bb-pd7qk"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      },
+      {
+        "causal_explanation": "UNLINKED",
+        "causal_path": [],
+        "entity": {
+          "kind": "Job",
+          "name": "clickhouse-unified-recorder",
+          "namespace": "data-recorders"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T18:02:38.315224Z",
+            "details": {
+              "changed_paths": [
+                ".spec.selector.matchLabels.batch.kubernetes.io/controller-uid",
+                ".spec.template.metadata.labels.batch.kubernetes.io/controller-uid",
+                ".spec.template.metadata.labels.controller-uid"
+              ],
+              "previous_observed_at": "2025-12-15T17:37:39.317627+00:00"
+            },
+            "entity": {
+              "kind": "Job",
+              "name": "clickhouse-unified-recorder",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:1404",
+              "k8s_objects_raw.tsv:4923"
+            ],
+            "incident_onset": "2025-12-15T17:31:52.769267Z",
+            "kind": "SPEC_CHANGE",
+            "onset_delta_seconds": 1845.545957,
+            "related": [],
+            "summary": "spec changed: spec.selector.matchLabels.batch.kubernetes.io/controller-uid: f05bdff3-4de1-42f1-bcb7-661aa01a8b97 -> 8216cc62-64e5-4d29-ac35-0fc2aa45e308; spec.template.metadata.labels.batch.kubernetes.io/controller-uid: f05bdff3-4de1-42f1-bcb7-661aa01a8b97 -> 8216cc62-64e5-4d29-ac35-0fc2aa45e308; spec.template.metadata.labels.controller-uid: f05bdff3-4de1-42f1-bcb7-661aa01a8b97 -> 8216cc62-64e5-4d29-ac35-0fc2aa45e308",
+            "temporal_role": "CONSEQUENCE"
+          },
+          {
+            "at": "2025-12-15T17:37:38Z",
+            "details": {},
+            "entity": {
+              "kind": "Job",
+              "name": "clickhouse-unified-recorder",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:1404"
+            ],
+            "incident_onset": "2025-12-15T17:31:52.769267Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 345.230733,
+            "related": [],
+            "summary": "Job created",
+            "temporal_role": "INITIATING"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 3.6
+      }
+    ],
+    "causal_explanation": "PATH",
+    "causal_path": [
+      {
+        "direction": "reverse",
+        "relation": "serves",
+        "source": {
+          "kind": "Deployment",
+          "name": "quote",
+          "namespace": "otel-demo"
+        },
+        "target": {
+          "kind": "Service",
+          "name": "quote",
+          "namespace": "otel-demo"
+        }
+      },
+      {
+        "direction": "reverse",
+        "relation": "dependency_of",
+        "source": {
+          "kind": "Service",
+          "name": "quote",
+          "namespace": "otel-demo"
+        },
+        "target": {
+          "kind": "Deployment",
+          "name": "shipping",
+          "namespace": "otel-demo"
+        }
+      }
+    ],
+    "confidence": "VERIFIED",
+    "evidence": [
+      {
+        "at": "2025-12-15T16:46:00Z",
+        "details": {
+          "failed_applications": 0,
+          "first_at": "2025-12-15T16:46:00+00:00",
+          "last_at": "2025-12-15T16:47:16+00:00",
+          "reasons": {
+            "Applied": 2,
+            "FinalizerInited": 2,
+            "Recovered": 2,
+            "Started": 1,
+            "TimeUp": 1,
+            "Updated": 10
+          },
+          "schedule": "chaos-mesh/Schedule/otel-demo-email-checkout-network-partition",
+          "schedule_active_from": "2025-12-15T16:27:55+00:00",
+          "schedule_active_to": "2025-12-15T18:02:00+00:00",
+          "targets": [
+            "otel-demo/Pod/quote-6b5877698d-snjn8",
+            "otel-demo/Pod/shipping-75d58f5d84-pkjdv"
+          ]
+        },
+        "entity": {
+          "kind": "NetworkChaos",
+          "name": "otel-demo-email-checkout-network-partition-fntwp",
+          "namespace": "chaos-mesh"
+        },
+        "evidence_ids": [
+          "k8s_events_raw.tsv:525",
+          "k8s_events_raw.tsv:526",
+          "k8s_events_raw.tsv:529",
+          "k8s_events_raw.tsv:530",
+          "k8s_events_raw.tsv:532",
+          "k8s_events_raw.tsv:535"
+        ],
+        "incident_onset": "2025-12-15T17:31:52.769267Z",
+        "kind": "FAULT_INJECTION",
+        "onset_delta_seconds": -2752.769267,
+        "related": [
+          {
+            "kind": "Pod",
+            "name": "quote-6b5877698d-snjn8",
+            "namespace": "otel-demo"
+          },
+          {
+            "kind": "Pod",
+            "name": "shipping-75d58f5d84-pkjdv",
+            "namespace": "otel-demo"
+          }
+        ],
+        "summary": "NetworkChaos applied fault at 16:46 (2 application(s)); schedule otel-demo-email-checkout-network-partition has injected this fault repeatedly from 16:27 to 18:02",
+        "temporal_role": "INITIATING"
+      }
+    ],
+    "incident_id": "Scenario-19",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Pause the fault experiment Schedule otel-demo-email-checkout-network-partition",
+        "command": "kubectl annotate schedule/otel-demo-email-checkout-network-partition -n chaos-mesh experiment.chaos-mesh.org/pause=true --overwrite",
+        "requires_approval": true,
+        "risk": "low: stops further fault injection"
+      },
+      {
+        "action": "Delete the running experiment NetworkChaos otel-demo-email-checkout-network-partition-fntwp",
+        "command": "kubectl delete networkchaos/otel-demo-email-checkout-network-partition-fntwp -n chaos-mesh",
+        "requires_approval": true,
+        "risk": "low: removes the active fault"
+      }
+    ],
+    "root_cause": {
+      "kind": "NetworkChaos",
+      "name": "otel-demo-email-checkout-network-partition-fntwp",
+      "namespace": "chaos-mesh"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "3 diagnostic alert type(s) on checkout, frontend, frontend-proxy, prometheus-kube-prometheus-kubelet, shipping; 219 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "51 finding(s) over 724 object(s) and 992 event(s); 661 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-fntwp 12.5; chaos-mesh/Schedule/otel-demo-email-checkout-network-partition 9.0; otel-demo/Service/prometheus-kube-state-metrics 6.5; otel-demo/Pod/otel-collector-564d9c7987-zrmgq 4.9; data-recorders/Job/clickhouse-unified-recorder 3.6"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "VERIFIED: linked initiating evidence is temporally consistent with symptom onset"
+      }
+    ],
+    "summary": "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-fntwp: NetworkChaos applied fault at 16:46 (2 application(s)); schedule otel-demo-email-checkout-network-partition has injected this fault repeatedly from 16:27 to 18:02. Verified (linked initiating evidence is temporally consistent with symptom onset). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "RequestErrorRate",
+        "RequestLatency"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 41,
+        "KubeClientCertificateExpiration": 30,
+        "KubeControllerManagerDown": 34,
+        "KubeSchedulerDown": 34,
+        "PrometheusNotConnectedToAlertmanagers": 39,
+        "Watchdog": 41
+      },
+      "last_seen": "2025-12-15T18:08:06.920785Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T17:31:52.769267Z",
+      "services": [
+        "checkout",
+        "frontend",
+        "frontend-proxy",
+        "prometheus-kube-prometheus-kubelet",
+        "shipping"
+      ]
+    },
+    "verification": {
+      "candidate": {
+        "kind": "NetworkChaos",
+        "name": "otel-demo-email-checkout-network-partition-fntwp",
+        "namespace": "chaos-mesh"
+      },
+      "contradictory_evidence": [],
+      "decision": "VERIFIED",
+      "onset_delta_seconds": -2752.769267,
+      "predicates": [
+        {
+          "detail": "candidate reaches an alerting entity through the causal graph",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:525",
+            "k8s_events_raw.tsv:526",
+            "k8s_events_raw.tsv:529",
+            "k8s_events_raw.tsv:530",
+            "k8s_events_raw.tsv:532",
+            "k8s_events_raw.tsv:535"
+          ],
+          "name": "candidate_linked_to_symptom",
+          "status": "PASS"
+        },
+        {
+          "detail": "an initiating observation is at or shortly after symptom onset",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:525",
+            "k8s_events_raw.tsv:526",
+            "k8s_events_raw.tsv:529",
+            "k8s_events_raw.tsv:530",
+            "k8s_events_raw.tsv:532",
+            "k8s_events_raw.tsv:535"
+          ],
+          "name": "initiating_evidence_near_onset",
+          "status": "PASS"
+        },
+        {
+          "detail": "score margin over runner-up is 3.500",
+          "evidence_ids": [],
+          "name": "candidate_dominance",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "linked initiating evidence is temporally consistent with symptom onset",
+      "score_margin": 3.5,
+      "supporting_evidence": [
+        "k8s_events_raw.tsv:525",
+        "k8s_events_raw.tsv:526",
+        "k8s_events_raw.tsv:529",
+        "k8s_events_raw.tsv:530",
+        "k8s_events_raw.tsv:532",
+        "k8s_events_raw.tsv:535"
+      ]
+    }
+  }
+}

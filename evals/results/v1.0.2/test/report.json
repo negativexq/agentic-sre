@@ -1,0 +1,376 @@
+{
+  "answered": 1.0,
+  "baselines_macro_f1": {
+    "retired E10 agent (archive/experiments-2026-09)": 0.0
+  },
+  "benchmark": "ITBench-Lite SRE",
+  "by_confidence": {
+    "LIKELY": {
+      "correct": 9,
+      "count": 16,
+      "precision": 0.5625,
+      "share_of_predictions": 0.64
+    },
+    "UNVERIFIED": {
+      "correct": 0,
+      "count": 0,
+      "precision": 0.0,
+      "share_of_predictions": 0.0
+    },
+    "VERIFIED": {
+      "correct": 8,
+      "count": 9,
+      "precision": 0.8889,
+      "share_of_predictions": 0.36
+    }
+  },
+  "coverage_weighted_verified_f1": 0.32,
+  "funnel": {
+    "in_top_3": 0.8,
+    "in_top_5": 0.8,
+    "root_cause_observable": 0.88,
+    "top_1": 0.68
+  },
+  "git_dirty": false,
+  "git_head": "30f1ad755811f37862dc1eff4908a727ae6449bb",
+  "investigator_errors": 0,
+  "macro_f1": 0.68,
+  "mode": "deterministic",
+  "model": null,
+  "model_calls_total": 0,
+  "rows": [
+    {
+      "confidence": "LIKELY",
+      "correct": false,
+      "f1": 0.0,
+      "ground_truth": [
+        "otel-demo/Pod/load-generator-.*"
+      ],
+      "observable": true,
+      "position": null,
+      "prediction": "otel-demo/ConfigMap/flagd-config",
+      "scenario_id": "Scenario-1",
+      "verified_f1": 0.0
+    },
+    {
+      "confidence": "LIKELY",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "otel-demo/ConfigMap/flagd-config",
+      "scenario_id": "Scenario-2",
+      "verified_f1": 0.0
+    },
+    {
+      "confidence": "LIKELY",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "otel-demo/ConfigMap/flagd-config",
+      "scenario_id": "Scenario-5",
+      "verified_f1": 0.0
+    },
+    {
+      "confidence": "LIKELY",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "otel-demo/ConfigMap/flagd-config",
+      "scenario_id": "Scenario-6",
+      "verified_f1": 0.0
+    },
+    {
+      "confidence": "LIKELY",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "otel-demo/ConfigMap/flagd-config",
+      "scenario_id": "Scenario-9",
+      "verified_f1": 0.0
+    },
+    {
+      "confidence": "LIKELY",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "otel-demo/ConfigMap/flagd-config",
+      "scenario_id": "Scenario-13",
+      "verified_f1": 0.0
+    },
+    {
+      "confidence": "VERIFIED",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "otel-demo/ConfigMap/flagd-config",
+      "scenario_id": "Scenario-14",
+      "verified_f1": 1.0
+    },
+    {
+      "confidence": "LIKELY",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "otel-demo/ConfigMap/flagd-config",
+      "scenario_id": "Scenario-15",
+      "verified_f1": 0.0
+    },
+    {
+      "confidence": "LIKELY",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "otel-demo/Deployment/shipping\\b"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "otel-demo/Deployment/shipping",
+      "scenario_id": "Scenario-16",
+      "verified_f1": 0.0
+    },
+    {
+      "confidence": "VERIFIED",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "chaos-mesh/PodChaos/.*product-catalog-network-delay"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-g5vwr",
+      "scenario_id": "Scenario-18",
+      "verified_f1": 1.0
+    },
+    {
+      "confidence": "VERIFIED",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "chaos-mesh/NetworkChaos/.*email-checkout-network-partition"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-fntwp",
+      "scenario_id": "Scenario-19",
+      "verified_f1": 1.0
+    },
+    {
+      "confidence": "LIKELY",
+      "correct": false,
+      "f1": 0.0,
+      "ground_truth": [
+        "otel-demo/Deployment/product-catalog-.*"
+      ],
+      "observable": true,
+      "position": 2,
+      "prediction": "otel-demo/Deployment/product-catalog",
+      "scenario_id": "Scenario-20",
+      "verified_f1": 0.0
+    },
+    {
+      "confidence": "VERIFIED",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-6dgwf",
+      "scenario_id": "Scenario-22",
+      "verified_f1": 1.0
+    },
+    {
+      "confidence": "LIKELY",
+      "correct": false,
+      "f1": 0.0,
+      "ground_truth": [
+        "otel-demo/Deployment/checkout-.*"
+      ],
+      "observable": false,
+      "position": null,
+      "prediction": "otel-demo/Deployment/checkout",
+      "scenario_id": "Scenario-23",
+      "verified_f1": 0.0
+    },
+    {
+      "confidence": "LIKELY",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "otel-demo/Deployment/checkout\\b"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "otel-demo/Deployment/checkout",
+      "scenario_id": "Scenario-24",
+      "verified_f1": 0.0
+    },
+    {
+      "confidence": "VERIFIED",
+      "correct": false,
+      "f1": 0.0,
+      "ground_truth": [
+        "chaos-mesh/Schedule/.*recommendation"
+      ],
+      "observable": true,
+      "position": 2,
+      "prediction": "chaos-mesh/StressChaos/otel-demo-recommendation-cpu-stress-pfms4",
+      "scenario_id": "Scenario-25",
+      "verified_f1": 0.0
+    },
+    {
+      "confidence": "LIKELY",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "otel-demo/NetworkPolicy/frontend-block-all-ports"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "otel-demo/NetworkPolicy/frontend-block-all-ports",
+      "scenario_id": "Scenario-31",
+      "verified_f1": 0.0
+    },
+    {
+      "confidence": "LIKELY",
+      "correct": false,
+      "f1": 0.0,
+      "ground_truth": [
+        "otel-demo/Pod/ad-.*"
+      ],
+      "observable": true,
+      "position": 3,
+      "prediction": "otel-demo/Deployment/ad",
+      "scenario_id": "Scenario-33",
+      "verified_f1": 0.0
+    },
+    {
+      "confidence": "VERIFIED",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-g98db",
+      "scenario_id": "Scenario-35",
+      "verified_f1": 1.0
+    },
+    {
+      "confidence": "LIKELY",
+      "correct": false,
+      "f1": 0.0,
+      "ground_truth": [
+        "otel-demo/HorizontalPodAutoscaler/*.*"
+      ],
+      "observable": false,
+      "position": null,
+      "prediction": "otel-demo/HorizontalPodAutoscaler/ad",
+      "scenario_id": "Scenario-38",
+      "verified_f1": 0.0
+    },
+    {
+      "confidence": "VERIFIED",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-g8m6w",
+      "scenario_id": "Scenario-80",
+      "verified_f1": 1.0
+    },
+    {
+      "confidence": "VERIFIED",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-wg96t",
+      "scenario_id": "Scenario-81",
+      "verified_f1": 1.0
+    },
+    {
+      "confidence": "VERIFIED",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-dhs27",
+      "scenario_id": "Scenario-83",
+      "verified_f1": 1.0
+    },
+    {
+      "confidence": "LIKELY",
+      "correct": false,
+      "f1": 0.0,
+      "ground_truth": [
+        "_cluster/Namespace/otel-demo"
+      ],
+      "observable": true,
+      "position": null,
+      "prediction": "otel-demo/ResourceQuota/otel-demo-memory",
+      "scenario_id": "Scenario-102",
+      "verified_f1": 0.0
+    },
+    {
+      "confidence": "LIKELY",
+      "correct": false,
+      "f1": 0.0,
+      "ground_truth": [
+        "otel-demo/Deployment/product-catalog-.*"
+      ],
+      "observable": false,
+      "position": null,
+      "prediction": "otel-demo/Deployment/product-catalog",
+      "scenario_id": "Scenario-105",
+      "verified_f1": 0.0
+    }
+  ],
+  "scenarios": 25,
+  "seconds_total": 145.887,
+  "split": "test",
+  "verified_accuracy": 0.8889,
+  "verified_conditional_macro_f1": 0.8889,
+  "verified_correct": 8,
+  "verified_count": 9,
+  "verified_coverage": 0.36
+}

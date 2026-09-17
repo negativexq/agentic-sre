@@ -1,0 +1,401 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "LIKELY: otel-demo/ResourceQuota/otel-demo-memory: ResourceQuota rejected pod creation 45 time(s) for ad: (combined from similar events): Error creating: pods \"ad-554b849958-bnpsk\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m. Likely (strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+        "entity": {
+          "kind": "ResourceQuota",
+          "name": "otel-demo-memory",
+          "namespace": "otel-demo"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-102",
+    "native_terminal": "LIKELY",
+    "reasoning": "otel-demo/ResourceQuota/otel-demo-memory: ResourceQuota rejected pod creation 45 time(s) for ad: (combined from similar events): Error creating: pods \"ad-554b849958-bnpsk\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m. Likely (strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+    "scenario_id": "Scenario-102"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "causal_explanation": "PATH",
+        "causal_path": [
+          {
+            "direction": "reverse",
+            "relation": "owns",
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "ReplicaSet",
+          "name": "ad-554b849958",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T18:00:09Z",
+            "details": {
+              "count": 45,
+              "reason": "FailedCreate"
+            },
+            "entity": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:764",
+              "k8s_events_raw.tsv:766",
+              "k8s_events_raw.tsv:768",
+              "k8s_events_raw.tsv:770"
+            ],
+            "incident_onset": "2025-12-15T15:29:21.639554Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 9047.360446,
+            "related": [],
+            "summary": "FailedCreate x45: (combined from similar events): Error creating: pods \"ad-554b849958-bnpsk\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/ad-554b849958-p226w",
+          "otel-demo/Pod/frontend-675fd7b5c5-nkn95"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 6.5
+      },
+      {
+        "causal_explanation": "PATH",
+        "causal_path": [
+          {
+            "direction": "reverse",
+            "relation": "serves",
+            "source": {
+              "kind": "Deployment",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "direction": "reverse",
+            "relation": "dependency_of",
+            "source": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "accounting",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-5dr8d",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:24:08Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-5dr8d",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:579",
+              "k8s_events_raw.tsv:580"
+            ],
+            "incident_onset": "2025-12-15T15:29:21.639554Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 6886.360446,
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: HTTP probe failed with statuscode: 503",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/cart",
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Deployment/frontend"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      },
+      {
+        "causal_explanation": "UNLINKED",
+        "causal_path": [],
+        "entity": {
+          "kind": "Namespace",
+          "name": "agent",
+          "namespace": "_cluster"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:52:37Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "agent",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:1988"
+            ],
+            "incident_onset": "2025-12-15T15:29:21.639554Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 8595.360446,
+            "related": [],
+            "summary": "Namespace created",
+            "temporal_role": "CONSEQUENCE"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 2.0
+      },
+      {
+        "causal_explanation": "UNLINKED",
+        "causal_path": [],
+        "entity": {
+          "kind": "ConfigMap",
+          "name": "kube-root-ca.crt",
+          "namespace": "agent"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:52:37Z",
+            "details": {},
+            "entity": {
+              "kind": "ConfigMap",
+              "name": "kube-root-ca.crt",
+              "namespace": "agent"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:2535"
+            ],
+            "incident_onset": "2025-12-15T15:29:21.639554Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 8595.360446,
+            "related": [],
+            "summary": "ConfigMap created",
+            "temporal_role": "CONSEQUENCE"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 2.0
+      }
+    ],
+    "causal_explanation": "DIRECT",
+    "causal_path": [],
+    "confidence": "LIKELY",
+    "evidence": [
+      {
+        "at": "2025-12-15T17:54:41Z",
+        "details": {
+          "exhausted": [
+            "memory"
+          ],
+          "rejected": [
+            "otel-demo/ReplicaSet/ad-554b849958"
+          ]
+        },
+        "entity": {
+          "kind": "ResourceQuota",
+          "name": "otel-demo-memory",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_objects_raw.tsv:3243",
+          "k8s_events_raw.tsv:764",
+          "k8s_events_raw.tsv:766",
+          "k8s_events_raw.tsv:768"
+        ],
+        "incident_onset": "2025-12-15T15:29:21.639554Z",
+        "kind": "QUOTA_EXCEEDED",
+        "onset_delta_seconds": 8719.360446,
+        "related": [
+          {
+            "kind": "Deployment",
+            "name": "ad",
+            "namespace": "otel-demo"
+          }
+        ],
+        "summary": "ResourceQuota rejected pod creation 45 time(s) for ad: (combined from similar events): Error creating: pods \"ad-554b849958-bnpsk\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+        "temporal_role": "CONSEQUENCE"
+      }
+    ],
+    "incident_id": "Scenario-102",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Raise ResourceQuota otel-demo-memory limits for memory, or lower workload requests",
+        "command": "kubectl describe resourcequota/otel-demo-memory -n otel-demo  # compare used with hard, then kubectl edit resourcequota/otel-demo-memory -n otel-demo",
+        "requires_approval": true,
+        "risk": "medium: more capacity for the namespace"
+      }
+    ],
+    "root_cause": {
+      "kind": "ResourceQuota",
+      "name": "otel-demo-memory",
+      "namespace": "otel-demo"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "5 diagnostic alert type(s) on accounting, ad, fraud-detection, frontend, frontend-proxy, payment; 759 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "8 finding(s) over 666 object(s) and 357 event(s); 524 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "otel-demo/ResourceQuota/otel-demo-memory 10.5; otel-demo/ReplicaSet/ad-554b849958 6.5; otel-demo/Pod/otel-collector-564d9c7987-5dr8d 4.9; _cluster/Namespace/agent 2.0; agent/ConfigMap/kube-root-ca.crt 2.0"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "LIKELY: strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous"
+      }
+    ],
+    "summary": "otel-demo/ResourceQuota/otel-demo-memory: ResourceQuota rejected pod creation 45 time(s) for ad: (combined from similar events): Error creating: pods \"ad-554b849958-bnpsk\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m. Likely (strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "KubeDeploymentReplicasMismatch",
+        "KubeQuotaExceeded",
+        "NoRequestsDetected",
+        "RequestErrorRate"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 96,
+        "KubeClientCertificateExpiration": 76,
+        "KubeControllerManagerDown": 139,
+        "KubeSchedulerDown": 139,
+        "PrometheusNotConnectedToAlertmanagers": 147,
+        "Watchdog": 162
+      },
+      "last_seen": "2025-12-15T18:09:33.255943Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T15:29:21.639554Z",
+      "services": [
+        "accounting",
+        "ad",
+        "fraud-detection",
+        "frontend",
+        "frontend-proxy",
+        "payment",
+        "prometheus-kube-prometheus-kubelet",
+        "prometheus-kube-state-metrics",
+        "recommendation"
+      ]
+    },
+    "verification": {
+      "candidate": {
+        "kind": "ResourceQuota",
+        "name": "otel-demo-memory",
+        "namespace": "otel-demo"
+      },
+      "contradictory_evidence": [
+        "k8s_objects_raw.tsv:3243",
+        "k8s_events_raw.tsv:764",
+        "k8s_events_raw.tsv:766",
+        "k8s_events_raw.tsv:768"
+      ],
+      "decision": "LIKELY",
+      "onset_delta_seconds": 8719.360446,
+      "predicates": [
+        {
+          "detail": "candidate reaches an alerting entity through the causal graph",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:3243",
+            "k8s_events_raw.tsv:764",
+            "k8s_events_raw.tsv:766",
+            "k8s_events_raw.tsv:768"
+          ],
+          "name": "candidate_linked_to_symptom",
+          "status": "PASS"
+        },
+        {
+          "detail": "no linked initiating observation is temporally consistent with onset",
+          "evidence_ids": [],
+          "name": "initiating_evidence_near_onset",
+          "status": "FAIL"
+        },
+        {
+          "detail": "linked change was observed after the onset grace and cannot explain the original incident onset",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:3243",
+            "k8s_events_raw.tsv:764",
+            "k8s_events_raw.tsv:766",
+            "k8s_events_raw.tsv:768"
+          ],
+          "name": "late_change_contradiction",
+          "status": "FAIL"
+        },
+        {
+          "detail": "score margin over runner-up is 4.000",
+          "evidence_ids": [],
+          "name": "candidate_dominance",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous",
+      "score_margin": 4.0,
+      "supporting_evidence": [
+        "k8s_objects_raw.tsv:3243",
+        "k8s_events_raw.tsv:764",
+        "k8s_events_raw.tsv:766",
+        "k8s_events_raw.tsv:768"
+      ]
+    }
+  }
+}

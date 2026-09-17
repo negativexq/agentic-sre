@@ -1,10 +1,12 @@
-.PHONY: install lint typecheck test check demo serve-local \
+.PHONY: install lock lint typecheck test check demo serve-local \
 	itbench-setup itbench-index eval-dev eval-test \
 	images cluster-up build-images deploy load status ui inject-bad-rollout recover rbac-check \
-	cluster-down precommit offline-demo e2e-kind e2e-kind-clean release-check
+	cluster-down precommit offline-demo e2e-kind e2e-kind-clean release-check \
+	verify-release-provenance
 
 PY := .venv/bin/python
 CLI := .venv/bin/agentic-sre
+UV ?= uv
 RUN_ID := $(shell date -u +%Y%m%dT%H%M%SZ)
 LOCAL_DB ?= sqlite:///.local/agentic-sre.db
 NAMESPACE := sre-demo
@@ -12,9 +14,10 @@ NAMESPACE := sre-demo
 # --- development -------------------------------------------------------------
 
 install:
-	python3.12 -m venv .venv
-	$(PY) -m pip install --upgrade pip
-	$(PY) -m pip install -e '.[dev]'
+	$(UV) sync --locked --extra dev
+
+lock:
+	$(UV) lock
 
 lint:
 	$(PY) -m ruff check .
@@ -65,6 +68,9 @@ eval-test:
 	test -z "$$(git status --porcelain)"
 	git describe --exact-match --tags HEAD
 	$(CLI) eval --split test --confirm-test $(EVAL_FLAGS) --out .local/runs/test-$$(git describe --tags)$(if $(EVAL_FLAGS),-llm)-$(RUN_ID)
+
+verify-release-provenance:
+	$(PY) scripts/verify_release_provenance.py evals/results/$$(git describe --tags --abbrev=0)
 
 # --- live demo on kind ---------------------------------------------------------
 

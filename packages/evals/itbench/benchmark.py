@@ -185,6 +185,36 @@ def _verify_seal(out_dir: Path) -> dict[str, Any]:
     return manifest
 
 
+def _write_report_seal(out_dir: Path, manifest: dict[str, Any]) -> None:
+    """Seal grading output separately from prediction immutability."""
+    seal = {
+        "report_json_sha256": _sha(out_dir / "report.json"),
+        "report_md_sha256": _sha(out_dir / "report.md"),
+        "prediction_seal_sha256": _sha(out_dir / "seal.json"),
+        "git_head": manifest["git_head"],
+        "split": manifest["split"],
+    }
+    atomic_json_write(out_dir / "report-seal.json", seal)
+
+
+def verify_report_seal(out_dir: Path) -> dict[str, Any]:
+    """Verify the derived grading report and return its seal metadata."""
+    path = out_dir / "report-seal.json"
+    if not path.exists():
+        raise BenchmarkError("grading report is not sealed")
+    seal: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    if seal["report_json_sha256"] != _sha(out_dir / "report.json"):
+        raise BenchmarkError("report.json changed after grading")
+    if seal["report_md_sha256"] != _sha(out_dir / "report.md"):
+        raise BenchmarkError("report.md changed after grading")
+    if seal["prediction_seal_sha256"] != _sha(out_dir / "seal.json"):
+        raise BenchmarkError("report references a different prediction seal")
+    manifest = _verify_seal(out_dir)
+    if seal["git_head"] != manifest["git_head"] or seal["split"] != manifest["split"]:
+        raise BenchmarkError("report seal metadata does not match the prediction manifest")
+    return seal
+
+
 def _matches(entity_canonical: str, truth: ITBenchGroundTruth) -> bool:
     output = ITBenchAgentOutput(
         incident_id="grade",
@@ -298,6 +328,7 @@ def grade(dataset: ITBenchLiteDataset, out_dir: Path) -> dict[str, Any]:
     }
     atomic_json_write(out_dir / "report.json", report)
     (out_dir / "report.md").write_text(render_markdown(report), encoding="utf-8")
+    _write_report_seal(out_dir, manifest)
     return report
 
 
@@ -362,4 +393,12 @@ def render_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-__all__ = ["BenchmarkError", "agent_output", "grade", "load_split", "predict", "render_markdown"]
+__all__ = [
+    "BenchmarkError",
+    "agent_output",
+    "grade",
+    "load_split",
+    "predict",
+    "render_markdown",
+    "verify_report_seal",
+]

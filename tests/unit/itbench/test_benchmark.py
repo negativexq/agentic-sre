@@ -9,7 +9,13 @@ from typing import Any, cast
 import pytest
 from itbench_builders import snapshot_scenario
 
-from packages.evals.itbench.benchmark import BenchmarkError, grade, load_split, predict
+from packages.evals.itbench.benchmark import (
+    BenchmarkError,
+    grade,
+    load_split,
+    predict,
+    verify_report_seal,
+)
 from packages.evals.itbench.contracts import (
     ITBenchGroundTruth,
     ITBenchGroundTruthGroup,
@@ -90,6 +96,7 @@ def test_prediction_never_reads_truth_and_grading_reports_the_funnel(tmp_path: P
         "top_1": 1.0,
     }
     assert report["rows"][0]["prediction"] == "shop/ConfigMap/flags"
+    assert verify_report_seal(out)["git_head"] == manifest["git_head"]
     assert "| Scenario-1 | `shop/ConfigMap/flags` | VERIFIED | yes | 1 | yes |" in (
         out / "report.md"
     ).read_text(encoding="utf-8")
@@ -119,6 +126,16 @@ def test_tampered_or_repeated_runs_are_refused(tmp_path: Path) -> None:
         grade(cast(ITBenchLiteDataset, dataset), out)
     with pytest.raises(BenchmarkError, match="not sealed"):
         grade(cast(ITBenchLiteDataset, dataset), tmp_path / "empty")
+
+
+def test_report_seal_detects_derived_report_tampering(tmp_path: Path) -> None:
+    dataset = _dataset(tmp_path)
+    out = tmp_path / "run"
+    predict(cast(ITBenchLiteDataset, dataset), ["Scenario-1"], out, split="dev")
+    grade(cast(ITBenchLiteDataset, dataset), out)
+    (out / "report.md").write_text("edited\n", encoding="utf-8")
+    with pytest.raises(BenchmarkError, match="report.md changed"):
+        verify_report_seal(out)
 
 
 def test_frozen_test_prediction_requires_a_clean_repository(

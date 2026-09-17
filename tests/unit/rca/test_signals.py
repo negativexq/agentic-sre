@@ -261,3 +261,22 @@ def test_env_from_configmap_values_become_call_edges() -> None:
     assert topology.outgoing(ref("shop/Deployment/order"), "calls") == (
         ref("shop/Service/payment"),
     )
+
+
+def test_added_env_var_is_reported_with_its_values() -> None:
+    from rca_builders import deployment
+
+    before = deployment("payment")
+    after = deployment("payment")
+    after["spec"]["template"]["spec"]["containers"][0]["env"] = [
+        {"name": "FAULT_DELAY_MS", "value": "2500"}
+    ]
+    history = {
+        ref("shop/Deployment/payment"): [
+            version("shop/Deployment/payment", 0, before),
+            version("shop/Deployment/payment", 5, after, 1),
+        ]
+    }
+    finding = change_findings(history)[0]
+    assert finding.kind is FindingKind.SPEC_CHANGE
+    assert finding.summary == "spec changed: [payment].env[FAULT_DELAY_MS].value: unset -> 2500"

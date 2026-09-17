@@ -145,26 +145,58 @@ def _named(items: list[Any]) -> dict[str, Any] | None:
     return dict(zip(names, items, strict=True))
 
 
+def _diff(before: Any, after: Any, path: str = "") -> list[tuple[str, Any, Any]]:
+    """Differing leaves as (path, old, new); named list items are matched by name."""
+    if isinstance(before, dict) or isinstance(after, dict):
+        if (before is None or isinstance(before, dict)) and (
+            after is None or isinstance(after, dict)
+        ):
+            old_map, new_map = before or {}, after or {}
+            changes: list[tuple[str, Any, Any]] = []
+            for key in sorted(set(old_map) | set(new_map), key=str):
+                changes.extend(_diff(old_map.get(key), new_map.get(key), f"{path}.{key}"))
+            return changes
+    if (isinstance(before, list) or before is None) and (isinstance(after, list) or after is None):
+        old_list, new_list = before or [], after or []
+        if old_list != new_list:
+            old, new = _named(old_list), _named(new_list)
+            if old is not None and new is not None:
+                changes = []
+                for name in sorted(set(old) | set(new)):
+                    item_path = f"{path}[{name}]"
+                    changes.extend(
+                        change
+                        for change in _diff(old.get(name), new.get(name), item_path)
+                        if change[0] != f"{item_path}.name"
+                    )
+                return changes
+            if len(old_list) == len(new_list):
+                changes = []
+                for index, (left, right) in enumerate(zip(old_list, new_list, strict=True)):
+                    changes.extend(_diff(left, right, f"{path}[{index}]"))
+                return changes
+    return [] if before == after else [(path or ".", before, after)]
+
+
 def _diff_paths(before: Any, after: Any, path: str = "") -> list[str]:
-    """Paths whose values differ; named list items (containers, env) are matched by name."""
-    if isinstance(before, dict) and isinstance(after, dict):
-        paths: list[str] = []
-        for key in sorted(set(before) | set(after), key=str):
-            paths.extend(_diff_paths(before.get(key), after.get(key), f"{path}.{key}"))
-        return paths
-    if isinstance(before, list) and isinstance(after, list) and before != after:
-        old, new = _named(before), _named(after)
-        if old is not None and new is not None:
-            paths = []
-            for name in sorted(set(old) | set(new)):
-                paths.extend(_diff_paths(old.get(name), new.get(name), f"{path}[{name}]"))
-            return paths
-        if len(before) == len(after):
-            paths = []
-            for index, (left, right) in enumerate(zip(before, after, strict=True)):
-                paths.extend(_diff_paths(left, right, f"{path}[{index}]"))
-            return paths
-    return [] if before == after else [path or "."]
+    return [item[0] for item in _diff(before, after, path)]
+
+
+def _short(value: Any) -> str:
+    if value is None:
+        return "unset"
+    text = value if isinstance(value, str) else json.dumps(value, sort_keys=True, default=str)
+    return text if len(text) <= 40 else text[:37] + "..."
+
+
+def _describe_changes(changes: list[tuple[str, Any, Any]], limit: int = 3) -> str:
+    """``env[X].value: unset -> 2500`` style text for the first few leaf changes."""
+    parts = []
+    for path, old, new in changes[:limit]:
+        tail = path.replace(".spec.template.spec.containers", "").lstrip(".")
+        parts.append(f"{tail}: {_short(old)} -> {_short(new)}")
+    more = f" (+{len(changes) - limit} more)" if len(changes) > limit else ""
+    return "; ".join(parts) + more
 
 
 def _images(body: Mapping[str, Any]) -> list[str]:
@@ -217,7 +249,8 @@ def change_findings(history: Mapping[EntityRef, Sequence[ObjectVersion]]) -> lis
             continue
         for previous, current in zip(versions, versions[1:], strict=False):
             before, after = _content(previous.body), _content(current.body)
-            paths = _diff_paths(before, after)
+            leaves = _diff(before, after)
+            paths = [leaf[0] for leaf in leaves]
             if not paths:
                 continue
             details: dict[str, Any] = {
@@ -251,10 +284,12 @@ def change_findings(history: Mapping[EntityRef, Sequence[ObjectVersion]]) -> lis
                     summary = f"replicas {details['before']} -> {details['after']}"
                 else:
                     kind = FindingKind.SPEC_CHANGE
-                    summary = f"spec changed: {', '.join(meaningful[:3])}"
+                    summary = "spec changed: " + _describe_changes(
+                        [leaf for leaf in leaves if not leaf[0].endswith(_RESTART_ANNOTATION)]
+                    )
             else:
                 kind = FindingKind.SPEC_CHANGE
-                summary = f"{entity.kind} changed: {', '.join(paths[:3])}"
+                summary = f"{entity.kind} changed: {_describe_changes(leaves)}"
             findings.append(
                 Finding(
                     kind=kind,

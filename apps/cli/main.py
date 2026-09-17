@@ -12,7 +12,7 @@ from packages.evals.itbench.dataset import ITBenchLiteDataset
 from packages.rca.engine import Investigator
 from packages.rca.hypotheses import summarize_diagnoses
 from packages.rca.model import Diagnosis
-from packages.rca.resolution import summarize_resolutions
+from packages.rca.resolution import summarize_resolution_audit, summarize_resolutions
 
 DEFAULT_DATASET = Path(os.environ.get("ITBENCH_LITE_ROOT", ".local/itbench-lite"))
 
@@ -50,6 +50,14 @@ def _print_diagnosis(diagnosis: Diagnosis) -> None:
             print(f"  - {hypothesis.causal_actor} ({hypothesis.hypothesis_id})")
         if diagnosis.resolution_trace:
             print(f"  {diagnosis.resolution_trace.rationale}")
+    if diagnosis.information_gaps:
+        print("Information gaps")
+        for gap in diagnosis.information_gaps[:8]:
+            tools = ", ".join(gap.candidate_tools) or "none"
+            print(
+                f"  - {gap.dimension.value}: {gap.missing_fact} "
+                f"[{gap.resolvability.value}; capabilities: {tools}]"
+            )
     if diagnosis.causal_path:
         print("Causal path")
         for hop in diagnosis.causal_path:
@@ -222,6 +230,62 @@ def cmd_hypothesis_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_resolution_audit(args: argparse.Namespace) -> int:
+    """Write bounded resolution near-collision diagnostics for a stored run."""
+    prediction_dir = args.run / "predictions"
+    paths = sorted(prediction_dir.glob("*.json"))
+    if not paths:
+        raise SystemExit(f"no prediction files found under {prediction_dir}")
+    diagnoses = [
+        Diagnosis.model_validate(json.loads(path.read_text(encoding="utf-8"))["diagnosis"])
+        for path in paths
+    ]
+    report = summarize_resolution_audit(diagnoses)
+    args.out.mkdir(parents=True, exist_ok=True)
+    (args.out / "summary.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    lines = [
+        "# Resolution audit",
+        "",
+        f"Run: `{args.run}`",
+        f"Diagnoses audited: {report['diagnoses_audited']}",
+        f"Structural near-collisions: {report['structural_near_collisions']}",
+        "",
+        "## Classifications",
+        "",
+    ]
+    classifications = report["classifications"]
+    assert isinstance(classifications, dict)
+    lines.extend(f"- {key}: {value}" for key, value in sorted(classifications.items()))
+    lines += ["", "## Cases", ""]
+    records = report["records"]
+    assert isinstance(records, list)
+    for record in records:
+        selected = record["selected"]
+        alternative = record["alternative"]
+        assert isinstance(selected, dict) and isinstance(alternative, dict)
+        lines.extend(
+            [
+                f"### {record['incident_id']} — {record['classification']}",
+                "",
+                f"- selected: `{selected['hypothesis_id']}`",
+                f"- alternative: `{alternative['hypothesis_id']}`",
+                f"- resolution: `{record['resolution']}`",
+                f"- reason: {record['resolution_reason']}",
+                f"- selected plausible: `{selected['plausible']}`",
+                f"- alternative plausible: `{alternative['plausible']}`",
+                f"- selected onset: `{selected['onset_relation']}`",
+                f"- alternative onset: `{alternative['onset_relation']}`",
+                "",
+            ]
+        )
+    (args.out / "report.md").write_text("\n".join(lines), encoding="utf-8")
+    if args.json:
+        print(json.dumps(report, indent=2))
+    else:
+        print((args.out / "report.md").read_text(encoding="utf-8"))
+    return 0
+
+
 def _add_output_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="print the diagnosis as JSON")
     parser.add_argument("--html", type=Path, default=None, help="also write an HTML report")
@@ -287,6 +351,15 @@ def build_parser() -> argparse.ArgumentParser:
     hypothesis_cmd.add_argument("--run", type=Path, required=True)
     hypothesis_cmd.add_argument("--json", action="store_true")
     hypothesis_cmd.set_defaults(handler=cmd_hypothesis_report)
+
+    audit_cmd = sub.add_parser(
+        "resolution-audit",
+        help="write bounded audits for structurally similar resolution alternatives",
+    )
+    audit_cmd.add_argument("--run", type=Path, required=True)
+    audit_cmd.add_argument("--out", type=Path, required=True)
+    audit_cmd.add_argument("--json", action="store_true")
+    audit_cmd.set_defaults(handler=cmd_resolution_audit)
     return parser
 
 

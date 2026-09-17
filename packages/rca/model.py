@@ -312,6 +312,66 @@ class HypothesisSignature(BaseModel):
     provenance_classes: tuple[str, ...] = ()
 
 
+class ResolutionReasonCode(StrEnum):
+    """Stable reason codes used when a hypothesis is excluded from resolution."""
+
+    NO_CAUSAL_SYMPTOM_LINK = "NO_CAUSAL_SYMPTOM_LINK"
+    NO_ONSET_CAPABLE_INITIATING_EVIDENCE = "NO_ONSET_CAPABLE_INITIATING_EVIDENCE"
+    EXPLICIT_TEMPORAL_CONTRADICTION = "EXPLICIT_TEMPORAL_CONTRADICTION"
+    STRUCTURALLY_DOMINATED = "STRUCTURALLY_DOMINATED"
+
+
+class ResolutionElimination(BaseModel):
+    """A mechanically inspectable reason a hypothesis was not plausible."""
+
+    model_config = ConfigDict(frozen=True)
+
+    hypothesis_id: str
+    code: ResolutionReasonCode
+    evidence_ids: tuple[str, ...] = ()
+    detail: str = ""
+
+
+class ResolutionDiscriminator(BaseModel):
+    """A fact that distinguishes one leading hypothesis from another."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: str
+    hypothesis_ids: tuple[str, ...] = ()
+    evidence_ids: tuple[str, ...] = ()
+    finding_kinds: tuple[str, ...] = ()
+    temporal_relations: tuple[str, ...] = ()
+    causal_path_shapes: tuple[tuple[tuple[str, str, str], ...], ...] = ()
+    detail: str = ""
+
+
+class DominanceRelation(BaseModel):
+    """A structural, evidence-backed dominance relation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    stronger_hypothesis_id: str
+    weaker_hypothesis_id: str
+    evidence_ids: tuple[str, ...] = ()
+    detail: str = ""
+
+
+class HypothesisResolutionAudit(BaseModel):
+    """Bounded per-hypothesis audit data retained in a resolution trace."""
+
+    model_config = ConfigDict(frozen=True)
+
+    hypothesis_id: str
+    signature: HypothesisSignature
+    plausible: bool
+    plausibility_reasons: tuple[ResolutionReasonCode, ...] = ()
+    verification: VerificationTrace | None = None
+    contradictory_evidence_ids: tuple[str, ...] = ()
+    onset_relation: tuple[str, ...] = ()
+    causal_linkage: str = "UNLINKED"
+
+
 class ResolutionTrace(BaseModel):
     """Deterministic explanation of cross-hypothesis distinguishability."""
 
@@ -324,6 +384,89 @@ class ResolutionTrace(BaseModel):
     unresolved_dimensions: tuple[str, ...] = ()
     eliminated_hypotheses: tuple[str, ...] = ()
     elimination_reasons: tuple[str, ...] = ()
+    considered_hypotheses: tuple[str, ...] = ()
+    plausible_hypotheses: tuple[str, ...] = ()
+    eliminations: tuple[ResolutionElimination, ...] = ()
+    discriminators: tuple[ResolutionDiscriminator, ...] = ()
+    dominance_relations: tuple[DominanceRelation, ...] = ()
+    hypothesis_audits: tuple[HypothesisResolutionAudit, ...] = ()
+    decision_basis: str = ""
+    rationale: str = ""
+
+
+class GapDimension(StrEnum):
+    """Typed evidence dimensions that can distinguish causal hypotheses."""
+
+    CHANGE_TIMING = "CHANGE_TIMING"
+    ENTITY_STATE = "ENTITY_STATE"
+    METRIC_BASELINE = "METRIC_BASELINE"
+    METRIC_CHANGE = "METRIC_CHANGE"
+    DEPENDENCY_HEALTH = "DEPENDENCY_HEALTH"
+    EVENT_SEQUENCE = "EVENT_SEQUENCE"
+    LOG_ERROR_PATTERN = "LOG_ERROR_PATTERN"
+    TOPOLOGY_RELATION = "TOPOLOGY_RELATION"
+    CONFIG_DIFFERENCE = "CONFIG_DIFFERENCE"
+    AUTOSCALING_TARGET_STATE = "AUTOSCALING_TARGET_STATE"
+    RESOURCE_PRESSURE = "RESOURCE_PRESSURE"
+    FAILURE_ONSET = "FAILURE_ONSET"
+
+
+class GapResolvability(StrEnum):
+    """Whether a currently available evidence capability could answer a gap."""
+
+    RESOLVABLE = "RESOLVABLE"
+    UNRESOLVABLE_WITH_CURRENT_TOOLS = "UNRESOLVABLE_WITH_CURRENT_TOOLS"
+    ALREADY_OBSERVED = "ALREADY_OBSERVED"
+
+
+class GapOutcomeKind(StrEnum):
+    """Possible deterministic outcomes of an information request."""
+
+    SUPPORTS = "SUPPORTS"
+    CONTRADICTS = "CONTRADICTS"
+    NO_DATA = "NO_DATA"
+    UNKNOWN = "UNKNOWN"
+
+
+class GapOutcome(BaseModel):
+    """A typed outcome and its implication for a hypothesis set."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: GapOutcomeKind
+    hypothesis_ids: tuple[str, ...] = ()
+    condition: str = ""
+    implication: str = ""
+
+
+class ToolCapability(BaseModel):
+    """Metadata for a bounded, read-only evidence capability."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    dimensions: tuple[GapDimension, ...] = ()
+    required_inputs: tuple[str, ...] = ()
+    evidence_sources: tuple[str, ...] = ()
+
+
+class InformationGap(BaseModel):
+    """A deterministic fact missing between plausible hypotheses."""
+
+    model_config = ConfigDict(frozen=True)
+
+    gap_id: str
+    dimension: GapDimension
+    hypothesis_ids: tuple[str, ...] = ()
+    entity_scope: tuple[EntityRef, ...] = ()
+    known_facts: tuple[str, ...] = ()
+    missing_fact: str
+    required_relation: str | None = None
+    discriminating_outcomes: tuple[GapOutcome, ...] = ()
+    candidate_tools: tuple[str, ...] = ()
+    evidence_refs: tuple[str, ...] = ()
+    priority: int = 1
+    resolvability: GapResolvability = GapResolvability.UNRESOLVABLE_WITH_CURRENT_TOOLS
     rationale: str = ""
 
 
@@ -413,6 +556,7 @@ class Diagnosis(BaseModel):
     verification: VerificationTrace | None = None
     resolution_trace: ResolutionTrace | None = None
     ambiguous_hypotheses: tuple[Hypothesis, ...] = ()
+    information_gaps: tuple[InformationGap, ...] = ()
 
     @model_validator(mode="before")
     @classmethod
@@ -446,6 +590,11 @@ __all__ = [
     "Hypothesis",
     "HypothesisDiagnostics",
     "HypothesisSignature",
+    "ResolutionReasonCode",
+    "ResolutionElimination",
+    "ResolutionDiscriminator",
+    "DominanceRelation",
+    "HypothesisResolutionAudit",
     "JournalEntry",
     "Lifecycle",
     "LogRecord",
@@ -458,4 +607,10 @@ __all__ = [
     "VerificationPredicate",
     "VerificationTrace",
     "ResolutionTrace",
+    "GapDimension",
+    "GapResolvability",
+    "GapOutcomeKind",
+    "GapOutcome",
+    "ToolCapability",
+    "InformationGap",
 ]

@@ -12,6 +12,7 @@ from packages.rca.hypotheses import (
     group_candidates,
     hypothesis_candidate,
 )
+from packages.rca.information_gap import derive_information_gaps
 from packages.rca.model import (
     Candidate,
     Confidence,
@@ -268,6 +269,7 @@ def diagnose(
             steps=tuple(case.steps),
             hypothesis_diagnostics=case.hypothesis_diagnostics,
             resolution_trace=resolve_hypotheses(()),
+            information_gaps=(),
         )
     # Resolution compares immutable evidence structures.  Attach the same
     # signatures to the serialized hypotheses so API consumers can inspect the
@@ -276,7 +278,14 @@ def diagnose(
         hypothesis.model_copy(update={"signature": hypothesis_signature(hypothesis)})
         for hypothesis in case.hypotheses
     ]
-    resolution_trace = resolve_hypotheses(case.hypotheses)
+    verification_traces = {
+        hypothesis.hypothesis_id: verification_trace(
+            hypothesis_candidate(hypothesis), case.context, config.ranking
+        )
+        for hypothesis in case.hypotheses[: config.alternatives + 4]
+    }
+    resolution_trace = resolve_hypotheses(case.hypotheses, verification_traces=verification_traces)
+    information_gaps = derive_information_gaps(case.hypotheses, resolution_trace)
     selected = case.hypotheses[0]
     mode = "deterministic"
     model_calls = 0
@@ -362,6 +371,7 @@ def diagnose(
         verification=trace,
         resolution_trace=resolution_trace,
         ambiguous_hypotheses=ambiguous_hypotheses,
+        information_gaps=information_gaps,
     )
 
 

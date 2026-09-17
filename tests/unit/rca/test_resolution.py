@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from packages.rca.demo import demo_source
 from packages.rca.engine import diagnose
+from packages.rca.information_gap import derive_information_gaps
 from packages.rca.model import (
     CausalHop,
     EntityRef,
@@ -14,8 +15,10 @@ from packages.rca.model import (
     FindingKind,
     Hypothesis,
     Resolution,
+    ResolutionReasonCode,
 )
 from packages.rca.resolution import (
+    dominates,
     hypothesis_signature,
     resolve_hypotheses,
     structurally_equivalent,
@@ -148,6 +151,73 @@ def test_small_score_difference_does_not_resolve_equivalent_structure() -> None:
     assert trace.state is Resolution.AMBIGUOUS
 
 
+def test_resolution_is_invariant_to_rank_order_and_score() -> None:
+    left = _hpa("left", score=100)
+    right = _hpa("right", score=1)
+
+    forward = resolve_hypotheses((left, right))
+    reverse = resolve_hypotheses((right, left))
+
+    assert forward.state is reverse.state is Resolution.AMBIGUOUS
+    assert set(forward.leading_hypothesis_ids) == set(reverse.leading_hypothesis_ids)
+    assert not dominates(left, right)
+    assert not dominates(right, left)
+
+
+def test_resolution_trace_contains_structured_discriminator_and_audit() -> None:
+    selected = _hpa(
+        "selected",
+        extra=_finding(
+            _entity("ConfigMap", "selected-config"),
+            FindingKind.CONFIG_CHANGE,
+            "selected-config-change",
+        ),
+    )
+    alternative = _hpa("alternative")
+
+    trace = resolve_hypotheses((selected, alternative))
+
+    assert trace.state is Resolution.RESOLVED
+    assert trace.decision_basis == "VALID_DOMINANCE"
+    assert trace.considered_hypotheses == tuple(
+        sorted((selected.hypothesis_id, alternative.hypothesis_id))
+    )
+    assert trace.plausible_hypotheses
+    assert trace.dominance_relations
+    assert trace.discriminators[0].kind == "VALID_DOMINANCE"
+    assert {item.hypothesis_id for item in trace.hypothesis_audits} == {
+        selected.hypothesis_id,
+        alternative.hypothesis_id,
+    }
+
+
+def test_contradiction_is_a_structured_resolution_reason() -> None:
+    good = _hpa("good")
+    late_finding = _finding(
+        _entity("Deployment", "late"),
+        FindingKind.IMAGE_CHANGE,
+        "late-change",
+        role=EvidenceTemporalRole.CONSEQUENCE,
+        seconds=7200,
+    )
+    late = Hypothesis(
+        hypothesis_id="hypothesis:late-structured",
+        causal_actor=late_finding.entity,
+        members=(late_finding.entity,),
+        findings=(late_finding,),
+        contradictory_findings=(late_finding,),
+        causal_explanation="PATH",
+    )
+
+    trace = resolve_hypotheses((good, late))
+
+    elimination = next(
+        item for item in trace.eliminations if item.hypothesis_id == late.hypothesis_id
+    )
+    assert elimination.code is ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION
+    assert elimination.evidence_ids == ("late-change",)
+
+
 def test_unique_initiating_evidence_dominates_shared_support() -> None:
     h1 = _hpa(
         "a",
@@ -250,6 +320,85 @@ def test_duplicate_evidence_does_not_change_resolution() -> None:
 
     assert resolve_hypotheses((original, _hpa("two"))).state is Resolution.AMBIGUOUS
     assert resolve_hypotheses((duplicate, _hpa("two"))).state is Resolution.AMBIGUOUS
+
+
+def test_information_gap_describes_hpa_ambiguity_without_executing_tools() -> None:
+    left = _hpa("ad")
+    right = _hpa("recommendation")
+    trace = resolve_hypotheses((left, right))
+
+    gaps = derive_information_gaps((left, right), trace)
+
+    target_gap = next(gap for gap in gaps if gap.dimension.value == "AUTOSCALING_TARGET_STATE")
+    assert trace.state is Resolution.AMBIGUOUS
+    assert target_gap.resolvability.value == "RESOLVABLE"
+    assert "describe" in target_gap.candidate_tools
+    assert "events" in target_gap.candidate_tools
+    assert any(outcome.kind.value == "NO_DATA" for outcome in target_gap.discriminating_outcomes)
+    assert not any(
+        outcome.kind.value == "SUPPORTS" and not outcome.hypothesis_ids
+        for outcome in target_gap.discriminating_outcomes
+    )
+
+
+def test_information_gaps_are_order_and_name_invariant() -> None:
+    left = _hpa("one")
+    right = _hpa("two")
+    forward = derive_information_gaps((left, right), resolve_hypotheses((left, right)))
+    reverse = derive_information_gaps((right, left), resolve_hypotheses((right, left)))
+
+    assert [gap.dimension for gap in forward] == [gap.dimension for gap in reverse]
+    assert [gap.gap_id for gap in forward] == [gap.gap_id for gap in reverse]
+
+
+def test_discriminating_evidence_removes_ambiguity_and_gaps() -> None:
+    left = _hpa(
+        "left",
+        extra=_finding(
+            _entity("ConfigMap", "left-config"),
+            FindingKind.CONFIG_CHANGE,
+            "left-config-change",
+        ),
+    )
+    right = _hpa("right")
+    trace = resolve_hypotheses((left, right))
+
+    assert trace.state is Resolution.RESOLVED
+    assert derive_information_gaps((left, right), trace) == ()
+
+
+def test_unresolvable_metric_gap_is_not_presented_as_support() -> None:
+    left = _hpa(
+        "left",
+        extra=_finding(
+            _entity("Pod", "left-pod"),
+            FindingKind.RESOURCE_PRESSURE,
+            "left-pressure",
+            role=EvidenceTemporalRole.SUPPORTING,
+            seconds=60,
+            source_class="metric",
+        ),
+    )
+    right = _hpa(
+        "right",
+        extra=_finding(
+            _entity("Pod", "right-pod"),
+            FindingKind.RESOURCE_PRESSURE,
+            "right-pressure",
+            role=EvidenceTemporalRole.SUPPORTING,
+            seconds=60,
+            source_class="metric",
+        ),
+    )
+    trace = resolve_hypotheses((left, right))
+    gaps = derive_information_gaps((left, right), trace)
+
+    pressure_gap = next(gap for gap in gaps if gap.dimension.value == "RESOURCE_PRESSURE")
+    assert pressure_gap.resolvability.value == "UNRESOLVABLE_WITH_CURRENT_TOOLS"
+    assert all(
+        outcome.kind.value != "SUPPORTS" or outcome.hypothesis_ids
+        for outcome in pressure_gap.discriminating_outcomes
+    )
 
 
 def test_legacy_diagnosis_documents_backfill_resolution_without_losing_root_cause() -> None:

@@ -177,6 +177,28 @@ class DiagnosisRow(Base):
     document: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 
+class LogObservationRow(Base):
+    """One bounded, normalized log observation captured for replay."""
+
+    __tablename__ = "log_observations"
+    __table_args__ = (
+        UniqueConstraint("incident_id", "dedup_key", name="uq_log_observation_incident_key"),
+    )
+
+    observation_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    incident_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("incidents.incident_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    service: Mapped[str] = mapped_column(String(255), nullable=False)
+    event_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True, index=True)
+    observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False, index=True)
+    severity: Mapped[str] = mapped_column(String(32), nullable=False)
+    message: Mapped[str] = mapped_column(String(4000), nullable=False)
+    evidence_id: Mapped[str] = mapped_column(String(512), nullable=False)
+    dedup_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_system: Mapped[str] = mapped_column(String(255), nullable=False, default="loki")
+
+
 class EvidenceRow(Base):
     """Provenance-backed normalized evidence."""
 

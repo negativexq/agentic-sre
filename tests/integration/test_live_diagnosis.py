@@ -28,9 +28,9 @@ from packages.contracts import (
     IncidentStatus,
 )
 from packages.rca.live import LokiLogReader
-from packages.rca.model import Confidence, EntityRef, FindingKind
+from packages.rca.model import Confidence, EntityRef, FindingKind, LogRecord
 from packages.storage.database import create_session_factory
-from packages.storage.models import AlertRow, Base, IncidentRow
+from packages.storage.models import AlertRow, Base, IncidentRow, LogObservationRow
 from packages.storage.repositories import IncidentRepository, ObjectVersionRepository
 
 T0 = datetime(2026, 9, 17, 10, 0, tzinfo=UTC)
@@ -129,6 +129,22 @@ class Clock:
 
     def __call__(self) -> datetime:
         return self.now
+
+
+class FakeLogs:
+    def __init__(self, records: list[LogRecord]) -> None:
+        self.records = records
+        self.calls = 0
+        self.unavailable = False
+
+    def error_logs(
+        self, services: Sequence[str], starts_at: datetime, ends_at: datetime
+    ) -> list[LogRecord]:
+        del services, starts_at, ends_at
+        self.calls += 1
+        if self.unavailable:
+            raise RuntimeError("Loki unavailable")
+        return copy.deepcopy(self.records)
 
 
 @pytest.fixture
@@ -318,6 +334,84 @@ def test_diagnosis_without_cluster_access_is_explicit(setup: Any) -> None:
     diagnosis = service.run(incident_id)
     assert diagnosis.root_cause is None
     assert diagnosis.summary.startswith("No change")
+
+
+def test_open_diagnosis_persists_and_deduplicates_log_observations(setup: Any) -> None:
+    factory, cluster, clock, incident_id = setup
+    logs = FakeLogs(
+        [
+            LogRecord(
+                service="order-service",
+                at=T0 + timedelta(minutes=12),
+                severity="ERROR",
+                message="payment timeout",
+                evidence_id="loki:order-service:12:0",
+            )
+        ]
+    )
+    service = DiagnosisService(
+        session_factory=factory,
+        namespaces=("sre-demo",),
+        reader=cluster,
+        log_reader=logs,
+        clock=clock,
+    )
+    clock.now = T0 + timedelta(minutes=13)
+    service.run(incident_id)
+    service.run(incident_id)
+    with factory() as session:
+        rows = session.query(LogObservationRow).all()
+    assert logs.calls == 2
+    assert len(rows) == 1
+    assert rows[0].message == "payment timeout"
+
+
+def test_resolved_replay_uses_persisted_logs_when_loki_is_unavailable(
+    setup: Any,
+) -> None:
+    factory, cluster, clock, incident_id = setup
+    early = LogRecord(
+        service="order-service",
+        at=T0 + timedelta(minutes=12),
+        severity="ERROR",
+        message="payment timeout",
+        evidence_id="loki:order-service:12:0",
+    )
+    logs = FakeLogs([early])
+    service = DiagnosisService(
+        session_factory=factory,
+        namespaces=("sre-demo",),
+        reader=cluster,
+        log_reader=logs,
+        clock=clock,
+    )
+    clock.now = T0 + timedelta(minutes=13)
+    service.run(incident_id)
+    resolved_at = T0 + timedelta(minutes=15)
+    with factory() as session:
+        row = session.get(IncidentRow, incident_id)
+        assert row is not None
+        row.status = "CLOSED"
+        row.updated_at = resolved_at
+        session.commit()
+
+    logs.records = [
+        LogRecord(
+            service="order-service",
+            at=T0 + timedelta(minutes=30),
+            severity="ERROR",
+            message="post-resolution timeout",
+            evidence_id="loki:order-service:30:0",
+        )
+    ]
+    logs.unavailable = True
+    clock.now = T0 + timedelta(minutes=30)
+    diagnosis = service.run(incident_id)
+    assert logs.calls == 1
+    assert all(item.summary != "post-resolution timeout" for item in diagnosis.evidence)
+    with factory() as session:
+        rows = session.query(LogObservationRow).all()
+    assert len(rows) == 1 and rows[0].message == "payment timeout"
 
 
 def test_loki_reader_parses_streams_and_bounds_query() -> None:

@@ -95,9 +95,12 @@ class KubernetesClusterReader:
     def list_objects(self, namespaces: Sequence[str]) -> list[dict[str, Any]]:
         kubernetes, _api_client = self._client()
         objects: list[dict[str, Any]] = []
+        workload_namespaces = [
+            namespace for namespace in namespaces if namespace not in self.chaos_namespaces
+        ]
         for group, method, kind in _NAMESPACED_LISTS:
             api = getattr(kubernetes.client, group)()
-            for namespace in namespaces:
+            for namespace in workload_namespaces:
                 items = getattr(api, method)(namespace).items
                 objects.extend(self._serialize(item, kind, "v1") for item in items)
         custom = kubernetes.client.CustomObjectsApi()
@@ -119,7 +122,7 @@ class KubernetesClusterReader:
         kubernetes, _api_client = self._client()
         core = kubernetes.client.CoreV1Api()
         events: list[dict[str, Any]] = []
-        for namespace in (*namespaces, *self.chaos_namespaces):
+        for namespace in dict.fromkeys((*namespaces, *self.chaos_namespaces)):
             try:
                 items = core.list_namespaced_event(namespace).items
             except Exception:

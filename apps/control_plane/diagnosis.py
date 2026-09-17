@@ -23,13 +23,14 @@ from packages.rca.live import (
     incident_window,
 )
 from packages.rca.llm import LLMClient
-from packages.rca.model import Alert, Diagnosis
+from packages.rca.model import Alert, Diagnosis, LogRecord
 from packages.storage import (
     AlertRepository,
     DiagnosisRepository,
     EventRepository,
     IncidentNotFoundError,
     IncidentRepository,
+    LogObservationRepository,
     ObjectVersionRepository,
 )
 
@@ -44,6 +45,7 @@ class DiagnosisService:
 
     session_factory: sessionmaker[Session]
     namespaces: tuple[str, ...]
+    evidence_namespaces: tuple[str, ...] = ("chaos-mesh",)
     reader: ClusterReader | None = None
     log_reader: LogReader | None = None
     investigator_factory: Callable[[], Investigator | None] = lambda: None
@@ -64,13 +66,14 @@ class DiagnosisService:
         """Record changed objects, deletions, and new events; how many were stored."""
         if self.reader is None:
             return 0
+        journal_namespaces = tuple(dict.fromkeys((*self.namespaces, *self.evidence_namespaces)))
         with self._snapshot_lock, self.session_factory() as session:
             repository = ObjectVersionRepository(session)
             watcher = ChangeWatcher(
                 self.reader,
-                self.namespaces,
+                journal_namespaces,
                 repository.record,
-                lambda: repository.live_keys(set(self.namespaces)),
+                lambda: repository.live_keys(set(journal_namespaces)),
                 repository.tombstone,
                 self.clock,
             )
@@ -78,7 +81,7 @@ class DiagnosisService:
             now = self.clock()
             events = EventRepository(session)
             try:
-                event_bodies = self.reader.list_events(self.namespaces)
+                event_bodies = self.reader.list_events(journal_namespaces)
             except Exception:
                 # Object journaling has already committed its own facts. A
                 # transient Event-list failure is missing evidence, not a
@@ -133,15 +136,18 @@ class DiagnosisService:
             if not resolved:
                 current = self.reader.list_objects(self.namespaces)
         starts_at, ends_at = incident_window(alerts, window_end)
+        journal_namespaces = set(self.namespaces) | set(self.evidence_namespaces)
         with self.session_factory() as session:
             journal = ObjectVersionRepository(session).history(
-                namespaces=set(self.namespaces), starts_at=starts_at, ends_at=ends_at
+                namespaces=journal_namespaces, starts_at=starts_at, ends_at=ends_at
             )
             event_bodies = EventRepository(session).analysis_view(
-                namespaces=set(self.namespaces), starts_at=starts_at, ends_at=ends_at
+                namespaces=journal_namespaces, starts_at=starts_at, ends_at=ends_at
             )
-        logs = []
-        if self.log_reader is not None:
+            logs = LogObservationRepository(session).list_for_incident(
+                incident_id=incident_id, starts_at=starts_at, ends_at=ends_at
+            )
+        if self.log_reader is not None and not resolved:
             try:
                 services = sorted(
                     {
@@ -151,7 +157,10 @@ class DiagnosisService:
                     }
                     | {alert.service for alert in alerts if alert.service}
                 )
-                logs = self.log_reader.error_logs(services, starts_at, ends_at)
+                fetched_logs = self.log_reader.error_logs(services, starts_at, ends_at)
+                with self.session_factory() as session:
+                    LogObservationRepository(session).record(incident_id, fetched_logs, window_end)
+                logs = _merge_logs(logs, fetched_logs)
             except Exception:
                 logger.warning("log backend unavailable; diagnosing without logs", exc_info=True)
         source = LiveSource(
@@ -177,7 +186,16 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
         for item in os.getenv("SRE_WATCH_NAMESPACES", "sre-demo").split(",")
         if item.strip()
     )
-    reader = KubernetesClusterReader() if os.getenv("SRE_CLUSTER_ACCESS") == "true" else None
+    evidence_namespaces = tuple(
+        item.strip()
+        for item in os.getenv("SRE_EVIDENCE_NAMESPACES", "chaos-mesh").split(",")
+        if item.strip()
+    )
+    reader = (
+        KubernetesClusterReader(chaos_namespaces=evidence_namespaces)
+        if os.getenv("SRE_CLUSTER_ACCESS") == "true"
+        else None
+    )
     loki = os.getenv("SRE_LOKI_URL")
     log_reader = LokiLogReader(loki) if loki else None
 
@@ -200,6 +218,7 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
     return DiagnosisService(
         session_factory=session_factory,
         namespaces=namespaces,
+        evidence_namespaces=evidence_namespaces,
         reader=reader,
         log_reader=log_reader,
         investigator_factory=investigator,
@@ -207,3 +226,15 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
 
 
 __all__ = ["DiagnosisService", "service_from_environment"]
+
+
+def _merge_logs(existing: list[LogRecord], fetched: list[LogRecord]) -> list[LogRecord]:
+    """Merge replayed and newly fetched records without duplicate evidence."""
+    result: list[LogRecord] = []
+    seen: set[tuple[str, datetime | None, str, str]] = set()
+    for record in [*existing, *fetched]:
+        key = (record.service, record.at, record.severity, record.message)
+        if key not in seen:
+            seen.add(key)
+            result.append(record)
+    return result

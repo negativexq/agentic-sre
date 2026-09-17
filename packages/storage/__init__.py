@@ -11,6 +11,7 @@ from packages.storage.repositories import (
     IncidentEventRepository,
     IncidentNotFoundError,
     IncidentRepository,
+    LogObservationRepository,
     ObjectVersionRepository,
 )
 
@@ -23,6 +24,7 @@ __all__ = [
     "IncidentEventRepository",
     "IncidentNotFoundError",
     "IncidentRepository",
+    "LogObservationRepository",
     "JournalEntry",
     "ObjectVersionRepository",
     "create_database_engine",

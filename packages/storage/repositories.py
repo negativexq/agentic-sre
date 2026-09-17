@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from packages.contracts import (
@@ -29,7 +29,7 @@ from packages.contracts import (
     TimeWindow,
 )
 from packages.rca.json_access import child, object_content_hash
-from packages.rca.model import CLUSTER_SCOPE, JournalEntry, Lifecycle
+from packages.rca.model import CLUSTER_SCOPE, JournalEntry, Lifecycle, LogRecord
 from packages.storage.models import (
     AlertRow,
     ChangeRecordRow,
@@ -38,6 +38,7 @@ from packages.storage.models import (
     EvidenceRow,
     IncidentEventRow,
     IncidentRow,
+    LogObservationRow,
     ObjectVersionRow,
 )
 
@@ -318,6 +319,98 @@ class EvidenceRepository:
                 tool_call_id=row.tool_call_id,
                 raw_result_reference=row.raw_result_reference,
                 collected_at=row.collected_at,
+            )
+            for row in rows
+        ]
+
+
+class LogObservationRepository:
+    """Append-only bounded log observations used by diagnosis replay."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    @staticmethod
+    def _dedup_key(record: LogRecord) -> str:
+        value = json.dumps(
+            {
+                "service": record.service,
+                "at": record.at.isoformat() if record.at is not None else None,
+                "severity": record.severity,
+                "message": record.message,
+                "evidence_id": record.evidence_id,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(value.encode()).hexdigest()
+
+    def record(
+        self,
+        incident_id: object,
+        records: Sequence[LogRecord],
+        observed_at: datetime,
+        *,
+        source_system: str = "loki",
+    ) -> int:
+        """Persist new records and return the number added."""
+        stored = 0
+        for record in records:
+            dedup_key = self._dedup_key(record)
+            exists = self._session.scalar(
+                select(LogObservationRow.observation_id).where(
+                    LogObservationRow.incident_id == incident_id,
+                    LogObservationRow.dedup_key == dedup_key,
+                )
+            )
+            if exists is not None:
+                continue
+            self._session.add(
+                LogObservationRow(
+                    incident_id=incident_id,
+                    service=record.service,
+                    event_at=record.at,
+                    observed_at=observed_at,
+                    severity=record.severity,
+                    message=record.message[:4000],
+                    evidence_id=record.evidence_id[:512],
+                    dedup_key=dedup_key,
+                    source_system=source_system,
+                )
+            )
+            stored += 1
+        if stored:
+            self._session.commit()
+        return stored
+
+    def list_for_incident(
+        self, *, incident_id: object, starts_at: datetime, ends_at: datetime
+    ) -> list[LogRecord]:
+        """Return observations visible in an incident's frozen window."""
+        rows = self._session.scalars(
+            select(LogObservationRow)
+            .where(
+                LogObservationRow.incident_id == incident_id,
+                LogObservationRow.observed_at <= ends_at,
+                or_(
+                    LogObservationRow.event_at.is_(None),
+                    LogObservationRow.event_at <= ends_at,
+                ),
+                or_(
+                    LogObservationRow.event_at >= starts_at,
+                    LogObservationRow.event_at.is_(None),
+                    LogObservationRow.observed_at >= starts_at,
+                ),
+            )
+            .order_by(LogObservationRow.observed_at, LogObservationRow.observation_id)
+        ).all()
+        return [
+            LogRecord(
+                service=row.service,
+                at=row.event_at,
+                severity=row.severity,
+                message=row.message,
+                evidence_id=row.evidence_id,
             )
             for row in rows
         ]

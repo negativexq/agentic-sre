@@ -22,6 +22,7 @@ from packages.rca.live import (
     LokiLogReader,
     incident_window,
 )
+from packages.rca.llm import LLMClient
 from packages.rca.model import Alert, Diagnosis
 from packages.storage import (
     AlertRepository,
@@ -137,13 +138,21 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
     loki = os.getenv("SRE_LOKI_URL")
     log_reader = LokiLogReader(loki) if loki else None
 
+    # Built once and reused: OpenAIClient owns the call-budget counter, so a
+    # fresh client per incident would reset SRE_LLM_MAX_CALLS every time.
+    llm_client: LLMClient | None = None
+
     def investigator() -> Investigator | None:
+        nonlocal llm_client
         if os.getenv("SRE_LLM_ENABLED", "").casefold() != "true":
             return None
-        from packages.rca.agent import LLMInvestigator
-        from packages.rca.llm import OpenAIClient
+        if llm_client is None:
+            from packages.rca.llm import OpenAIClient
 
-        return LLMInvestigator(OpenAIClient())
+            llm_client = OpenAIClient()
+        from packages.rca.agent import LLMInvestigator
+
+        return LLMInvestigator(llm_client)
 
     return DiagnosisService(
         session_factory=session_factory,

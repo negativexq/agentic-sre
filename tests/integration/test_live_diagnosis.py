@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from apps.control_plane.diagnosis import DiagnosisService
+from apps.control_plane.diagnosis import DiagnosisService, service_from_environment
 from apps.control_plane.main import create_app
 from packages.contracts import (
     Alert,
@@ -345,3 +345,19 @@ def test_watch_loop_snapshots_until_stopped(setup: Any) -> None:
     service.snapshot = counting  # type: ignore[method-assign]
     service.watch(stop, interval_seconds=0.001)
     assert len(calls) == 2
+
+
+def test_llm_investigator_shares_one_client_and_budget_across_incidents(
+    setup: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fresh OpenAIClient per incident would reset SRE_LLM_MAX_CALLS every time."""
+    factory, _cluster, _clock, _incident = setup
+    monkeypatch.setenv("SRE_LLM_ENABLED", "true")
+    monkeypatch.setenv("SRE_LLM_MAX_CALLS", "5")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key-not-used")
+    service = service_from_environment(factory)
+    first = service.investigator_factory()
+    second = service.investigator_factory()
+    assert first is not None and second is not None
+    assert first.client is second.client  # type: ignore[attr-defined]
+    assert first.client.max_calls == 5  # type: ignore[attr-defined]

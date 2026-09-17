@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -107,6 +108,9 @@ class OpenAIClient:
         )
         self.calls = 0
         self._client = client
+        # Shared across concurrent callers (e.g. the control plane diagnosing
+        # more than one incident at once) so the budget is process-wide.
+        self._lock = threading.Lock()
 
     def readiness_problem(self) -> str | None:
         """Why live calls would fail before the first request, or None when ready."""
@@ -132,9 +136,10 @@ class OpenAIClient:
     ) -> dict[str, Any]:
         if not self.enabled:
             raise LLMError(f"live model calls are disabled; set {LIVE_ENABLED_ENV}=true")
-        if self.calls >= self.max_calls:
-            raise LLMError(f"model call budget exhausted ({self.max_calls})")
-        self.calls += 1
+        with self._lock:
+            if self.calls >= self.max_calls:
+                raise LLMError(f"model call budget exhausted ({self.max_calls})")
+            self.calls += 1
         try:
             response = self._sdk().responses.create(
                 model=self.model,

@@ -7,15 +7,16 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from prometheus_client import make_asgi_app
 from prometheus_client.registry import CollectorRegistry
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
+from apps.control_plane.diagnosis import DiagnosisService, service_from_environment
 from apps.control_plane.schemas import (
     BenchmarkStatePreparationRequest,
     BenchmarkStatePreparationResponse,
@@ -32,10 +33,13 @@ from packages.contracts import (
     IncidentEvent,
 )
 from packages.incident import IncidentManager, normalize_alert
+from packages.rca.model import Diagnosis
+from packages.rca.report import diagnosis_html, incidents_html
 from packages.storage import (
     AlertRepository,
     BenchmarkStateRepository,
     ChangeRecordRepository,
+    DiagnosisRepository,
     EvidenceRepository,
     IncidentEventRepository,
     IncidentNotFoundError,
@@ -69,12 +73,17 @@ def get_session() -> Iterator[Session]:
     yield  # pragma: no cover
 
 
-def create_app(session_factory: sessionmaker[Session] | None = None) -> FastAPI:
+def create_app(
+    session_factory: sessionmaker[Session] | None = None,
+    diagnosis_service: DiagnosisService | None = None,
+) -> FastAPI:
     """Create the control-plane application with injectable persistence."""
     if session_factory is None:
         database_url = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
         engine = create_database_engine(database_url)
         session_factory = create_session_factory(engine)
+    diagnoser = diagnosis_service or service_from_environment(session_factory)
+    auto_diagnose = os.getenv("SRE_AUTO_DIAGNOSE", "").casefold() == "true"
 
     def session_dependency() -> Iterator[Session]:
         session = session_factory()
@@ -255,15 +264,75 @@ def create_app(session_factory: sessionmaker[Session] | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail="invalid change record") from error
         return ChangeRecordRepository(session).append(normalized)
 
+    @app.post("/api/v1/incidents/{incident_id}/diagnosis")
+    def create_diagnosis(incident_id: UUID) -> dict[str, Any]:
+        """Diagnose the incident now and store the result."""
+        return diagnoser.run(incident_id).model_dump(mode="json")
+
+    @app.get("/api/v1/incidents/{incident_id}/diagnosis")
+    def get_diagnosis(
+        incident_id: UUID,
+        request: Request,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Any:
+        """Return the latest stored diagnosis."""
+        document = DiagnosisRepository(session).latest(incident_id)
+        if document is None:
+            return _error(request, "DIAGNOSIS_NOT_FOUND", "No diagnosis yet.", 404)
+        return document
+
+    @app.post("/api/v1/cluster/snapshot")
+    def snapshot_cluster() -> dict[str, int]:
+        """Record changed cluster objects in the change journal."""
+        return {"stored_versions": diagnoser.snapshot()}
+
+    @app.get("/", response_class=HTMLResponse)
+    def incidents_page(session: Session = Depends(get_session)) -> str:  # noqa: B008
+        """Incident list with the latest diagnosis of each."""
+        latest = DiagnosisRepository(session).summaries()
+        rows = []
+        for incident in sorted(
+            IncidentRepository(session).list(), key=lambda item: item.created_at, reverse=True
+        ):
+            summary = latest.get(str(incident.incident_id), {})
+            rows.append(
+                {
+                    "incident_id": str(incident.incident_id),
+                    "title": incident.title,
+                    "status": incident.status.value,
+                    "created_at": incident.created_at.isoformat(timespec="seconds"),
+                    "root_cause": summary.get("root_cause") or "",
+                    "confidence": summary.get("confidence") or "",
+                }
+            )
+        return incidents_html(rows)
+
+    @app.get("/incidents/{incident_id}", response_class=HTMLResponse)
+    def incident_page(
+        incident_id: UUID,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> str:
+        """Diagnosis page for one incident."""
+        if IncidentRepository(session).get(incident_id) is None:
+            raise IncidentNotFoundError(str(incident_id))
+        document = DiagnosisRepository(session).latest(incident_id)
+        if document is None:
+            document = diagnoser.run(incident_id).model_dump(mode="json")
+        return diagnosis_html(Diagnosis.model_validate(document), back_link="/")
+
     @app.post("/api/v1/webhooks/alertmanager")
     def alertmanager_webhook(
         payload: AlertmanagerWebhook,
+        background: BackgroundTasks,
         session: Session = Depends(get_session),  # noqa: B008
     ) -> dict[str, object]:
         """Normalize and ingest an Alertmanager delivery idempotently."""
         now = datetime.now(UTC)
         manager = IncidentManager(session)
         incidents = [manager.ingest(normalize_alert(alert), now=now) for alert in payload.alerts]
+        if auto_diagnose:
+            for incident_id in dict.fromkeys(item.incident_id for item in incidents):
+                background.add_task(diagnoser.run, incident_id)
         return {
             "accepted": len(incidents),
             "incident_ids": [str(incident.incident_id) for incident in incidents],

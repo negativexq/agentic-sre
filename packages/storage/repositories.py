@@ -27,13 +27,16 @@ from packages.contracts import (
     IncidentStatus,
     TimeWindow,
 )
+from packages.rca.json_access import child, object_content_hash
 from packages.storage.models import (
     AlertRow,
     ChangeRecordRow,
+    DiagnosisRow,
     EvidenceRow,
     HypothesisRow,
     IncidentEventRow,
     IncidentRow,
+    ObjectVersionRow,
     PolicyDecisionRow,
     RemediationProposalRow,
     ToolCallRow,
@@ -415,3 +418,117 @@ class EvidenceWriteRepository:
         )
         self._session.commit()
         return evidence
+
+
+class ObjectVersionRepository:
+    """Append-only journal of full object bodies, deduplicated by content."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    @staticmethod
+    def content_hash(body: dict[str, Any]) -> str:
+        return object_content_hash(body)
+
+    def record(self, body: dict[str, Any], observed_at: datetime) -> bool:
+        """Store ``body`` unless the object's latest stored version has the same content."""
+        metadata = child(body, "metadata")
+        kind, name = body.get("kind"), metadata.get("name")
+        if not isinstance(kind, str) or not isinstance(name, str):
+            raise ValueError("object body needs kind and metadata.name")
+        namespace = str(metadata.get("namespace") or "_cluster")
+        key = f"{namespace}/{kind}/{name}"
+        digest = self.content_hash(body)
+        latest = self._session.scalars(
+            select(ObjectVersionRow.content_hash)
+            .where(ObjectVersionRow.object_key == key)
+            .order_by(desc(ObjectVersionRow.observed_at), desc(ObjectVersionRow.version_id))
+            .limit(1)
+        ).first()
+        if latest == digest:
+            return False
+        self._session.add(
+            ObjectVersionRow(
+                object_key=key,
+                namespace=namespace,
+                kind=kind,
+                name=name,
+                observed_at=observed_at,
+                content_hash=digest,
+                body=body,
+            )
+        )
+        self._session.commit()
+        return True
+
+    def history(
+        self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
+    ) -> list[tuple[str, datetime, dict[str, Any], int]]:
+        """Versions in the window plus each object's last version before it, oldest first."""
+        rows = self._session.scalars(
+            select(ObjectVersionRow)
+            .where(
+                ObjectVersionRow.namespace.in_(namespaces | {"_cluster"}),
+                ObjectVersionRow.observed_at <= ends_at,
+            )
+            .order_by(ObjectVersionRow.observed_at, ObjectVersionRow.version_id)
+        ).all()
+        result: list[tuple[str, datetime, dict[str, Any], int]] = []
+        baseline: dict[str, ObjectVersionRow] = {}
+        for row in rows:
+            if row.observed_at < starts_at:
+                baseline[row.object_key] = row
+            else:
+                result.append((row.object_key, row.observed_at, row.body, row.version_id))
+        before = [
+            (row.object_key, row.observed_at, row.body, row.version_id) for row in baseline.values()
+        ]
+        return sorted([*before, *result], key=lambda item: (item[1], item[3]))
+
+
+class DiagnosisRepository:
+    """Stored diagnoses per incident."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def save(self, incident_id: object, document: dict[str, Any], created_at: datetime) -> None:
+        self._session.add(
+            DiagnosisRow(
+                incident_id=incident_id,
+                created_at=created_at,
+                root_cause=document.get("root_cause") and _canonical(document["root_cause"]),
+                confidence=str(document.get("confidence")),
+                mode=str(document.get("mode")),
+                document=document,
+            )
+        )
+        self._session.commit()
+
+    def latest(self, incident_id: object) -> dict[str, Any] | None:
+        row = self._session.scalars(
+            select(DiagnosisRow)
+            .where(DiagnosisRow.incident_id == incident_id)
+            .order_by(desc(DiagnosisRow.created_at), desc(DiagnosisRow.diagnosis_id))
+            .limit(1)
+        ).first()
+        return dict(row.document) if row is not None else None
+
+    def summaries(self) -> dict[str, dict[str, Any]]:
+        """Latest root cause and confidence per incident id."""
+        result: dict[str, dict[str, Any]] = {}
+        for row in self._session.scalars(
+            select(DiagnosisRow).order_by(DiagnosisRow.created_at, DiagnosisRow.diagnosis_id)
+        ).all():
+            result[str(row.incident_id)] = {
+                "root_cause": row.root_cause,
+                "confidence": row.confidence,
+                "created_at": row.created_at,
+            }
+        return result
+
+
+def _canonical(value: Any) -> str:
+    if isinstance(value, dict):
+        return f"{value.get('namespace')}/{value.get('kind')}/{value.get('name')}"
+    return str(value)

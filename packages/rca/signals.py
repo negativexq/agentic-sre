@@ -133,12 +133,37 @@ def _content(body: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _named(items: list[Any]) -> dict[str, Any] | None:
+    """Index a list of objects by their ``name`` field when every item has a unique one."""
+    names = [
+        str(item["name"])
+        for item in items
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    ]
+    if len(names) != len(items) or len(set(names)) != len(names):
+        return None
+    return dict(zip(names, items, strict=True))
+
+
 def _diff_paths(before: Any, after: Any, path: str = "") -> list[str]:
+    """Paths whose values differ; named list items (containers, env) are matched by name."""
     if isinstance(before, dict) and isinstance(after, dict):
         paths: list[str] = []
         for key in sorted(set(before) | set(after), key=str):
             paths.extend(_diff_paths(before.get(key), after.get(key), f"{path}.{key}"))
         return paths
+    if isinstance(before, list) and isinstance(after, list) and before != after:
+        old, new = _named(before), _named(after)
+        if old is not None and new is not None:
+            paths = []
+            for name in sorted(set(old) | set(new)):
+                paths.extend(_diff_paths(old.get(name), new.get(name), f"{path}[{name}]"))
+            return paths
+        if len(before) == len(after):
+            paths = []
+            for index, (left, right) in enumerate(zip(before, after, strict=True)):
+                paths.extend(_diff_paths(left, right, f"{path}[{index}]"))
+            return paths
     return [] if before == after else [path or "."]
 
 

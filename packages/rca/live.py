@@ -1,0 +1,314 @@
+"""Live cluster access: read-only object listing, change journal, and incident source."""
+
+from __future__ import annotations
+
+import importlib
+import json
+import re
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from typing import Any, Protocol
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+
+from packages.rca.json_access import child, object_content_hash
+from packages.rca.model import (
+    CLUSTER_SCOPE,
+    Alert,
+    ClusterEvent,
+    EntityRef,
+    LogRecord,
+    ObjectVersion,
+)
+
+# (API group client attribute, list method, kind). Secrets are deliberately not read.
+_NAMESPACED_LISTS: tuple[tuple[str, str, str], ...] = (
+    ("CoreV1Api", "list_namespaced_config_map", "ConfigMap"),
+    ("CoreV1Api", "list_namespaced_service", "Service"),
+    ("CoreV1Api", "list_namespaced_pod", "Pod"),
+    ("CoreV1Api", "list_namespaced_resource_quota", "ResourceQuota"),
+    ("CoreV1Api", "list_namespaced_limit_range", "LimitRange"),
+    ("AppsV1Api", "list_namespaced_deployment", "Deployment"),
+    ("AppsV1Api", "list_namespaced_stateful_set", "StatefulSet"),
+    ("AppsV1Api", "list_namespaced_daemon_set", "DaemonSet"),
+    ("AppsV1Api", "list_namespaced_replica_set", "ReplicaSet"),
+    ("NetworkingV1Api", "list_namespaced_network_policy", "NetworkPolicy"),
+    ("AutoscalingV2Api", "list_namespaced_horizontal_pod_autoscaler", "HorizontalPodAutoscaler"),
+)
+_CHAOS_PLURALS = (
+    ("NetworkChaos", "networkchaos"),
+    ("PodChaos", "podchaos"),
+    ("StressChaos", "stresschaos"),
+    ("IOChaos", "iochaos"),
+    ("HTTPChaos", "httpchaos"),
+    ("Schedule", "schedules"),
+)
+_LOG_ERRORS = "(?i)(error|exception|fatal|refused|timeout|unavailable|unreachable)"
+
+
+class ClusterReader(Protocol):
+    """Read-only view of the cluster."""
+
+    def list_objects(self, namespaces: Sequence[str]) -> list[dict[str, Any]]: ...
+
+    def list_events(self, namespaces: Sequence[str]) -> list[dict[str, Any]]: ...
+
+
+class LogReader(Protocol):
+    def error_logs(
+        self, namespaces: Sequence[str], starts_at: datetime, ends_at: datetime
+    ) -> list[LogRecord]: ...
+
+
+class KubernetesClusterReader:
+    """Lists objects and events with the Kubernetes Python client (read verbs only)."""
+
+    def __init__(self, *, chaos_namespaces: Sequence[str] = ("chaos-mesh",)) -> None:
+        self.chaos_namespaces = tuple(chaos_namespaces)
+        self._module: Any | None = None
+        self._api_client: Any | None = None
+
+    def _client(self) -> tuple[Any, Any]:
+        if self._module is None:
+            kubernetes = importlib.import_module("kubernetes")
+            config = importlib.import_module("kubernetes.config")
+            try:
+                config.load_incluster_config()
+            except Exception:  # not running in a pod
+                config.load_kube_config()
+            self._module = kubernetes
+            self._api_client = kubernetes.client.ApiClient()
+        return self._module, self._api_client
+
+    def _serialize(self, item: Any, kind: str, api_version: str) -> dict[str, Any]:
+        _module, api_client = self._client()
+        body: dict[str, Any] = api_client.sanitize_for_serialization(item)
+        body["kind"] = kind
+        body.setdefault("apiVersion", api_version)
+        child(body, "metadata").pop("managedFields", None)
+        return body
+
+    def list_objects(self, namespaces: Sequence[str]) -> list[dict[str, Any]]:
+        kubernetes, _api_client = self._client()
+        objects: list[dict[str, Any]] = []
+        for group, method, kind in _NAMESPACED_LISTS:
+            api = getattr(kubernetes.client, group)()
+            for namespace in namespaces:
+                items = getattr(api, method)(namespace).items
+                objects.extend(self._serialize(item, kind, "v1") for item in items)
+        custom = kubernetes.client.CustomObjectsApi()
+        for namespace in self.chaos_namespaces:
+            for kind, plural in _CHAOS_PLURALS:
+                try:
+                    listing = custom.list_namespaced_custom_object(
+                        "chaos-mesh.org", "v1alpha1", namespace, plural
+                    )
+                except Exception:  # CRD not installed or not readable
+                    continue
+                for item in listing.get("items", []):
+                    item["kind"] = kind
+                    child(item, "metadata").pop("managedFields", None)
+                    objects.append(item)
+        return objects
+
+    def list_events(self, namespaces: Sequence[str]) -> list[dict[str, Any]]:
+        kubernetes, _api_client = self._client()
+        core = kubernetes.client.CoreV1Api()
+        events: list[dict[str, Any]] = []
+        for namespace in (*namespaces, *self.chaos_namespaces):
+            try:
+                items = core.list_namespaced_event(namespace).items
+            except Exception:
+                continue
+            events.extend(self._serialize(item, "Event", "v1") for item in items)
+        return events
+
+
+@dataclass
+class LokiLogReader:
+    """Warning and error lines from Loki for the incident window."""
+
+    base_url: str
+    timeout_seconds: float = 5.0
+    limit: int = 500
+    opener: Callable[..., Any] = urlopen
+
+    def error_logs(
+        self, namespaces: Sequence[str], starts_at: datetime, ends_at: datetime
+    ) -> list[LogRecord]:
+        selector = "|".join(re.escape(ns) for ns in namespaces)
+        params = {
+            "query": f'{{namespace=~"{selector}"}} |~ "{_LOG_ERRORS}"',
+            "start": str(int(starts_at.timestamp() * 1e9)),
+            "end": str(int(ends_at.timestamp() * 1e9)),
+            "limit": str(self.limit),
+        }
+        request = Request(
+            f"{self.base_url.rstrip('/')}/loki/api/v1/query_range?{urlencode(params)}",
+            method="GET",
+        )
+        with self.opener(request, timeout=self.timeout_seconds) as response:
+            payload = json.loads(response.read(10_000_001))
+        records: list[LogRecord] = []
+        for stream in child(payload, "data").get("result") or []:
+            labels = child(stream, "stream")
+            service = labels.get("service_name") or labels.get("app") or labels.get("container")
+            if not service:
+                continue
+            for index, entry in enumerate(stream.get("values") or []):
+                if not isinstance(entry, list) or len(entry) < 2:
+                    continue
+                records.append(
+                    LogRecord(
+                        service=str(service),
+                        at=datetime.fromtimestamp(int(entry[0]) / 1e9, tz=UTC),
+                        severity=str(labels.get("level") or labels.get("detected_level") or ""),
+                        message=str(entry[1])[:300],
+                        evidence_id=f"loki:{service}:{entry[0]}:{index}",
+                    )
+                )
+        return records
+
+
+def _entity(body: Mapping[str, Any]) -> EntityRef | None:
+    metadata = child(body, "metadata")
+    kind, name = body.get("kind"), metadata.get("name")
+    if not isinstance(kind, str) or not isinstance(name, str):
+        return None
+    return EntityRef(
+        kind=kind, name=name, namespace=str(metadata.get("namespace") or CLUSTER_SCOPE)
+    )
+
+
+def _time(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    if isinstance(value, str) and value:
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+    return None
+
+
+def events_from_bodies(bodies: Sequence[Mapping[str, Any]]) -> list[ClusterEvent]:
+    events: list[ClusterEvent] = []
+    for index, body in enumerate(bodies):
+        involved = child(body, "involvedObject")
+        kind, name = involved.get("kind"), involved.get("name")
+        if not isinstance(kind, str) or not isinstance(name, str):
+            continue
+        first = _time(body.get("firstTimestamp")) or _time(body.get("eventTime"))
+        events.append(
+            ClusterEvent(
+                entity=EntityRef(
+                    kind=kind, name=name, namespace=str(involved.get("namespace") or CLUSTER_SCOPE)
+                ),
+                reason=str(body.get("reason") or ""),
+                type=str(body.get("type") or "Normal"),
+                message=str(body.get("message") or "")[:500],
+                first_at=first,
+                last_at=_time(body.get("lastTimestamp")) or first,
+                count=int(body.get("count") or 1),
+                evidence_id=f"event:{child(body, 'metadata').get('uid') or index}",
+            )
+        )
+    return events
+
+
+@dataclass
+class ChangeWatcher:
+    """Stores a version of every listed object whose content changed since last time."""
+
+    reader: ClusterReader
+    namespaces: tuple[str, ...]
+    record: Callable[[dict[str, Any], datetime], bool]
+    clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
+
+    def snapshot(self) -> int:
+        now = self.clock()
+        return sum(
+            1 for body in self.reader.list_objects(self.namespaces) if self.record(body, now)
+        )
+
+
+@dataclass
+class LiveSource:
+    """Observation source for one live incident.
+
+    ``history`` is the stored object journal (oldest first); the current cluster
+    state is appended as the latest version so topology reflects reality.
+    """
+
+    incident: str
+    alert_items: list[Alert]
+    journal: list[tuple[str, datetime, dict[str, Any], int]]
+    current_objects: list[dict[str, Any]]
+    event_bodies: list[dict[str, Any]]
+    error_items: list[LogRecord] = field(default_factory=list)
+    observed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+    def incident_id(self) -> str:
+        return self.incident
+
+    def alerts(self) -> Sequence[Alert]:
+        return self.alert_items
+
+    def object_history(self) -> Mapping[EntityRef, Sequence[ObjectVersion]]:
+        history: dict[EntityRef, list[ObjectVersion]] = {}
+        hashes: dict[EntityRef, str] = {}
+
+        def add(body: dict[str, Any], at: datetime, evidence: str) -> None:
+            entity = _entity(body)
+            if entity is None:
+                return
+            digest = object_content_hash(body)
+            if hashes.get(entity) == digest:
+                return
+            hashes[entity] = digest
+            history.setdefault(entity, []).append(
+                ObjectVersion(entity=entity, observed_at=at, body=body, evidence_id=evidence)
+            )
+
+        for _key, at, body, version_id in self.journal:
+            add(body, at, f"journal:{version_id}")
+        for body in self.current_objects:
+            add(body, self.observed_at, "cluster:current")
+        return history
+
+    def events(self) -> Sequence[ClusterEvent]:
+        return events_from_bodies(self.event_bodies)
+
+    def error_logs(self) -> Sequence[LogRecord]:
+        return self.error_items
+
+    def logs(self, service: str, *, limit: int = 20) -> Sequence[dict[str, Any]]:
+        return [
+            {
+                "timestamp": r.at.isoformat() if r.at else None,
+                "severity": r.severity,
+                "body": r.message,
+            }
+            for r in self.error_items
+            if r.service == service
+        ][:limit]
+
+
+def incident_window(alerts: Sequence[Alert], now: datetime) -> tuple[datetime, datetime]:
+    """Journal lookback of two hours before the first alert, through now."""
+    starts = min((a.starts_at for a in alerts), default=now)
+    return starts - timedelta(hours=2), now
+
+
+__all__ = [
+    "ChangeWatcher",
+    "ClusterReader",
+    "KubernetesClusterReader",
+    "LiveSource",
+    "LogReader",
+    "LokiLogReader",
+    "events_from_bodies",
+    "incident_window",
+]

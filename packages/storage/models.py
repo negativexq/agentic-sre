@@ -110,6 +110,38 @@ class ChangeRecordRow(Base):
     source: Mapped[str] = mapped_column(String(255), nullable=False)
 
 
+class ObjectVersionRow(Base):
+    """One observed version of a Kubernetes object, stored when its content changes."""
+
+    __tablename__ = "object_versions"
+    __table_args__ = (UniqueConstraint("object_key", "content_hash"),)
+
+    version_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    object_key: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
+    namespace: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False, index=True)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    body: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
+class DiagnosisRow(Base):
+    """A stored diagnosis for an incident; the latest one is shown."""
+
+    __tablename__ = "diagnoses"
+
+    diagnosis_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    incident_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("incidents.incident_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    root_cause: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    confidence: Mapped[str] = mapped_column(String(32), nullable=False)
+    mode: Mapped[str] = mapped_column(String(64), nullable=False)
+    document: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
 class EvidenceRow(Base):
     """Provenance-backed normalized evidence."""
 

@@ -2,7 +2,9 @@
 
 import json
 import os
-from collections.abc import Iterator
+import threading
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -93,7 +95,25 @@ def create_app(
         registry=registry,
         otlp_endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
     )
-    app = FastAPI(title="Agentic SRE", version="0.3.0")
+    watch_interval = float(os.getenv("SRE_WATCH_INTERVAL_SECONDS", "0"))
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        stop = threading.Event()
+        watcher = None
+        if watch_interval > 0 and diagnoser.reader is not None:
+            watcher = threading.Thread(
+                target=diagnoser.watch, args=(stop, watch_interval), daemon=True
+            )
+            watcher.start()
+        try:
+            yield
+        finally:
+            stop.set()
+            if watcher is not None:
+                watcher.join(timeout=5)
+
+    app = FastAPI(title="Agentic SRE", version="0.3.0", lifespan=lifespan)
     app.add_middleware(TelemetryMiddleware, runtime=telemetry)
     app.mount("/metrics", make_asgi_app(registry=registry))
     app.dependency_overrides[get_session] = session_dependency

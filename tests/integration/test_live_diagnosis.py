@@ -262,3 +262,25 @@ def test_loki_reader_parses_streams_and_bounds_query() -> None:
         ("order-service", "payment timeout", T0)
     ]
     assert "query_range" in captured["url"] and "limit=500" in captured["url"]
+
+
+def test_watch_loop_snapshots_until_stopped(setup: Any) -> None:
+    import threading
+
+    factory, cluster, clock, _incident = setup
+    service = DiagnosisService(
+        session_factory=factory, namespaces=("sre-demo",), reader=cluster, clock=clock
+    )
+    stop = threading.Event()
+    calls: list[int] = []
+    original = service.snapshot
+
+    def counting() -> int:
+        calls.append(1)
+        if len(calls) >= 2:
+            stop.set()
+        return original()
+
+    service.snapshot = counting  # type: ignore[method-assign]
+    service.watch(stop, interval_seconds=0.001)
+    assert len(calls) == 2

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -52,6 +53,17 @@ class DiagnosisService:
             repository = ObjectVersionRepository(session)
             watcher = ChangeWatcher(self.reader, self.namespaces, repository.record, self.clock)
             return watcher.snapshot()
+
+    def watch(self, stop: threading.Event, interval_seconds: float) -> None:
+        """Snapshot the cluster until ``stop`` is set; errors are logged and retried."""
+        while not stop.is_set():
+            try:
+                stored = self.snapshot()
+                if stored:
+                    logger.info("object journal stored %d changed object(s)", stored)
+            except Exception:
+                logger.warning("cluster snapshot failed", exc_info=True)
+            stop.wait(interval_seconds)
 
     def run(self, incident_id: UUID) -> Diagnosis:
         now = self.clock()

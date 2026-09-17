@@ -34,6 +34,8 @@ from packages.storage import (
 
 logger = logging.getLogger(__name__)
 
+_TERMINAL_STATUSES = frozenset({"RESOLVED", "CLOSED", "FAILED"})
+
 
 @dataclass
 class DiagnosisService:
@@ -76,7 +78,8 @@ class DiagnosisService:
     def run(self, incident_id: UUID) -> Diagnosis:
         now = self.clock()
         with self.session_factory() as session:
-            if IncidentRepository(session).get(incident_id) is None:
+            incident = IncidentRepository(session).get(incident_id)
+            if incident is None:
                 raise IncidentNotFoundError(str(incident_id))
             alerts = [
                 Alert(
@@ -88,12 +91,22 @@ class DiagnosisService:
                 )
                 for item in AlertRepository(session).list_for_incident(incident_id)
             ]
+        # Once resolved, the incident's causal window is frozen at its last
+        # transition; otherwise it keeps growing to "now" so an open incident
+        # keeps picking up fresh evidence. Freezing it also stops fetching a
+        # live cluster snapshot for it, so unrelated changes made afterwards
+        # cannot show up as its "latest" object version.
+        resolved = incident.status in _TERMINAL_STATUSES
+        window_end = incident.updated_at if resolved else now
         current, events = [], []
-        if self.reader is not None:
+        if self.reader is not None and not resolved:
             self.snapshot()
             current = self.reader.list_objects(self.namespaces)
             events = self.reader.list_events(self.namespaces)
-        starts_at, ends_at = incident_window(alerts, now)
+        elif self.reader is not None:
+            # Still keep the shared journal current for other, open incidents.
+            self.snapshot()
+        starts_at, ends_at = incident_window(alerts, window_end)
         with self.session_factory() as session:
             journal = ObjectVersionRepository(session).history(
                 namespaces=set(self.namespaces), starts_at=starts_at, ends_at=ends_at
@@ -119,7 +132,8 @@ class DiagnosisService:
             current_objects=current,
             event_bodies=events,
             error_items=logs,
-            observed_at=now,
+            observed_at=window_end,
+            current_is_live=not resolved,
         )
         diagnosis = diagnose(source, investigator=self.investigator_factory())
         with self.session_factory() as session:

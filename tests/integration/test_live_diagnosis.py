@@ -30,7 +30,7 @@ from packages.contracts import (
 from packages.rca.live import LokiLogReader
 from packages.rca.model import Confidence, EntityRef, FindingKind
 from packages.storage.database import create_session_factory
-from packages.storage.models import AlertRow, Base
+from packages.storage.models import AlertRow, Base, IncidentRow
 from packages.storage.repositories import IncidentRepository, ObjectVersionRepository
 
 T0 = datetime(2026, 9, 17, 10, 0, tzinfo=UTC)
@@ -361,3 +361,35 @@ def test_llm_investigator_shares_one_client_and_budget_across_incidents(
     assert first is not None and second is not None
     assert first.client is second.client  # type: ignore[attr-defined]
     assert first.client.max_calls == 5  # type: ignore[attr-defined]
+
+
+def test_resolved_incident_window_is_frozen_at_its_resolution(setup: Any) -> None:
+    """Diagnosing a closed incident later must not pick up unrelated later changes."""
+    factory, cluster, clock, incident_id = setup
+    service = DiagnosisService(
+        session_factory=factory, namespaces=("sre-demo",), reader=cluster, clock=clock
+    )
+    assert service.snapshot() == 5
+    resolved_at = T0 + timedelta(minutes=15)
+    with factory() as session:
+        row = session.get(IncidentRow, incident_id)
+        assert row is not None
+        row.status = "CLOSED"
+        row.updated_at = resolved_at
+        session.commit()
+
+    # A long time after resolution, something unrelated changes.
+    clock.now = T0 + timedelta(hours=3)
+    cluster.objects[0] = _deployment("5000")
+    diagnosis_after_close = service.run(incident_id)
+    assert diagnosis_after_close.root_cause is None
+    assert diagnosis_after_close.summary.startswith("No change")
+
+    # The same unrelated change must not have poisoned the shared journal for
+    # a second, open incident either -- it should be dated at "now", not the
+    # closed incident's frozen window.
+    with factory() as session:
+        history = ObjectVersionRepository(session).history(
+            namespaces={"sre-demo"}, starts_at=T0, ends_at=T0 + timedelta(hours=4)
+        )
+    assert any(entry.observed_at == T0 + timedelta(hours=3) for entry in history)

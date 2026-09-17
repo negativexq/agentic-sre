@@ -271,6 +271,10 @@ class LiveSource:
     event_bodies: list[dict[str, Any]]
     error_items: list[LogRecord] = field(default_factory=list)
     observed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    # False when ``current_objects`` was not fetched (e.g. a resolved incident,
+    # whose window is frozen): an empty, non-live list must not be read as
+    # "the cluster has none of these objects any more".
+    current_is_live: bool = True
 
     def incident_id(self) -> str:
         return self.incident
@@ -310,17 +314,18 @@ class LiveSource:
                 live.add(entity)
             add(body, self.observed_at, "cluster:current", Lifecycle.UPDATED)
         # An object the journal still shows live but the cluster no longer has is deleted.
-        for entity, versions in history.items():
-            if entity not in live and versions[-1].lifecycle is not Lifecycle.DELETED:
-                versions.append(
-                    ObjectVersion(
-                        entity=entity,
-                        observed_at=self.observed_at,
-                        body=versions[-1].body,
-                        evidence_id="cluster:missing",
-                        lifecycle=Lifecycle.DELETED,
+        if self.current_is_live:
+            for entity, versions in history.items():
+                if entity not in live and versions[-1].lifecycle is not Lifecycle.DELETED:
+                    versions.append(
+                        ObjectVersion(
+                            entity=entity,
+                            observed_at=self.observed_at,
+                            body=versions[-1].body,
+                            evidence_id="cluster:missing",
+                            lifecycle=Lifecycle.DELETED,
+                        )
                     )
-                )
         return history
 
     def events(self) -> Sequence[ClusterEvent]:
@@ -347,10 +352,15 @@ class LiveSource:
         ][:limit]
 
 
-def incident_window(alerts: Sequence[Alert], now: datetime) -> tuple[datetime, datetime]:
-    """Journal lookback of two hours before the first alert, through now."""
-    starts = min((a.starts_at for a in alerts), default=now)
-    return starts - timedelta(hours=2), now
+def incident_window(alerts: Sequence[Alert], ends_at: datetime) -> tuple[datetime, datetime]:
+    """Journal lookback of two hours before the first alert, through ``ends_at``.
+
+    Pass the current time for an open incident so fresh evidence keeps landing
+    in the window; pass a resolution time for a closed one so the window stops
+    growing and later, unrelated changes cannot become causal candidates.
+    """
+    starts = min((a.starts_at for a in alerts), default=ends_at)
+    return starts - timedelta(hours=2), ends_at
 
 
 __all__ = [

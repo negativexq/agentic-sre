@@ -155,3 +155,18 @@ def test_openai_client_parses_strict_json_output() -> None:
     assert client.calls == 1
     with pytest.raises(LLMError, match="budget"):
         client.complete_json(system="s", user="u", schema=DECISION_SCHEMA, name="rca")
+
+
+def test_first_object_is_used_when_a_reply_repeats_objects() -> None:
+    from packages.rca.llm import parse_first_object
+
+    one = '{"action": "conclude", "tool": null, "target": "C1", "rationale": "a"}'
+    two = '{"action": "conclude", "tool": null, "target": "C2", "rationale": "b"}'
+    assert parse_first_object(one + two)["target"] == "C1"
+    assert parse_first_object(f"  {one}\n{two}  ")["target"] == "C1"
+    with pytest.raises(LLMOutputError, match="trailing text"):
+        parse_first_object(one + " and more")
+    with pytest.raises(LLMOutputError, match="invalid JSON"):
+        parse_first_object('{"action": ')
+    with pytest.raises(LLMOutputError, match="non-object"):
+        parse_first_object("[1, 2]")

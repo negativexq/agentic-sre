@@ -54,6 +54,33 @@ class ScriptedLLM:
         return reply(user) if callable(reply) else dict(reply)
 
 
+def parse_first_object(text: str) -> dict[str, Any]:
+    """Parse a JSON object, accepting a reply that repeats objects back to back."""
+    decoder = json.JSONDecoder()
+    stripped = text.strip()
+    try:
+        value, end = decoder.raw_decode(stripped)
+    except ValueError as error:
+        raise LLMOutputError(
+            f"model returned invalid JSON ({len(text)} chars, ends {text[-20:]!r})"
+        ) from error
+    if not isinstance(value, dict):
+        raise LLMOutputError("model returned a non-object")
+    rest = stripped[end:].strip()
+    while rest:
+        # Extra objects are tolerated only if they are well-formed JSON objects.
+        try:
+            extra, end = decoder.raw_decode(rest)
+        except ValueError as error:
+            raise LLMOutputError(
+                f"model returned trailing text after JSON: {rest[:20]!r}"
+            ) from error
+        if not isinstance(extra, dict):
+            raise LLMOutputError("model returned trailing non-object JSON")
+        rest = rest[end:].strip()
+    return value
+
+
 class OpenAIClient:
     """OpenAI Responses API with strict JSON schema output.
 
@@ -122,15 +149,7 @@ class OpenAIClient:
         text = getattr(response, "output_text", None)
         if not isinstance(text, str) or not text:
             raise LLMOutputError("model returned no text (possibly a refusal)")
-        try:
-            value = json.loads(text)
-        except ValueError as error:
-            raise LLMOutputError(
-                f"model returned invalid JSON ({len(text)} chars, ends {text[-20:]!r})"
-            ) from error
-        if not isinstance(value, dict):
-            raise LLMOutputError("model returned a non-object")
-        return value
+        return parse_first_object(text)
 
 
 __all__ = [
@@ -140,5 +159,6 @@ __all__ = [
     "LLMError",
     "LLMOutputError",
     "OpenAIClient",
+    "parse_first_object",
     "ScriptedLLM",
 ]

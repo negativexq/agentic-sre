@@ -34,7 +34,8 @@ def test_qualification_reports_exact_and_relation_backed_entities() -> None:
 
     assert record["compiled_successfully"] is True
     assert record["exact_matches"] == []
-    assert record["related_entities"] == []
+    assert record["related_entities"]
+    assert record["related_entities"][0]["entity"] == deployment.canonical
     assert deployment.canonical not in record["exact_matches"]
 
 

@@ -88,6 +88,59 @@ def qualify_group(
                     }
                 )
                 break
+    # When a filter's naming convention does not match the observable parent
+    # kind (for example a Deployment filter matching its Pods), qualify the
+    # relation without changing exact official grading.
+    name_like = [
+        entity
+        for entity in observable
+        if not invalid
+        and (
+            (group.name is not None and entity.name == group.name)
+            or any(expression.search(entity.name) for expression in compiled)
+        )
+    ]
+    known_related = {(item["entity"], item["relation"]) for item in related}
+    for observed in name_like:
+        workload = topology.workload_of(observed)
+        if (
+            workload is not None
+            and workload not in exact_set
+            and workload.kind.casefold() == group.kind.casefold()
+        ):
+            key = (workload.canonical, "owned_by_chain")
+            if key not in known_related:
+                related.append(
+                    {
+                        "entity": workload.canonical,
+                        "relation": "owned_by_chain",
+                        "root_entity": observed.canonical,
+                    }
+                )
+                known_related.add(key)
+        for edge in topology.edges:
+            if edge.source == observed and edge.target.kind.casefold() == group.kind.casefold():
+                key = (edge.target.canonical, edge.relation)
+                if key not in known_related:
+                    related.append(
+                        {
+                            "entity": edge.target.canonical,
+                            "relation": edge.relation,
+                            "root_entity": observed.canonical,
+                        }
+                    )
+                    known_related.add(key)
+            elif edge.target == observed and edge.source.kind.casefold() == group.kind.casefold():
+                key = (edge.source.canonical, edge.relation)
+                if key not in known_related:
+                    related.append(
+                        {
+                            "entity": edge.source.canonical,
+                            "relation": edge.relation,
+                            "root_entity": observed.canonical,
+                        }
+                    )
+                    known_related.add(key)
     return {
         "group_id": group.group_id,
         "kind": group.kind,

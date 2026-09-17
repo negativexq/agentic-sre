@@ -124,6 +124,12 @@ class ITBenchLiteDataset:
             raise ITBenchDatasetError("expected exactly 35 SRE scenarios")
         return scenarios
 
+    def scenario(self, scenario_id: str) -> ITBenchScenario:
+        """Load one scenario's observable file layout without opening ground truth."""
+        if scenario_id not in ITBENCH_SCENARIO_IDS:
+            raise ITBenchDatasetError(f"unknown pinned scenario: {scenario_id}")
+        return self._load_scenario(scenario_id)
+
     def _load_scenario(self, scenario_id: str) -> ITBenchScenario:
         path = self.snapshot_root / scenario_id
         if not path.is_dir():

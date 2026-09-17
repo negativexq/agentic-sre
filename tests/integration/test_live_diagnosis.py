@@ -519,6 +519,40 @@ def test_resolved_replay_uses_persisted_logs_when_loki_is_unavailable(
     assert len(rows) == 1 and rows[0].message == "payment timeout"
 
 
+def test_resolved_before_any_log_capture_has_no_historical_log_claim(setup: Any) -> None:
+    factory, cluster, clock, incident_id = setup
+    logs = FakeLogs(
+        [
+            LogRecord(
+                service="order-service",
+                at=T0 + timedelta(minutes=12),
+                severity="ERROR",
+                message="never captured before resolution",
+                evidence_id="loki:order-service:12:1",
+            )
+        ]
+    )
+    with factory() as session:
+        row = session.get(IncidentRow, incident_id)
+        assert row is not None
+        row.status = "CLOSED"
+        row.updated_at = T0 + timedelta(minutes=15)
+        session.commit()
+    logs.unavailable = True
+    service = DiagnosisService(
+        session_factory=factory,
+        namespaces=("sre-demo",),
+        reader=cluster,
+        log_reader=logs,
+        clock=clock,
+    )
+    diagnosis = service.run(incident_id)
+    assert logs.calls == 0
+    assert all(item.summary != "never captured before resolution" for item in diagnosis.evidence)
+    with factory() as session:
+        assert session.query(LogObservationRow).count() == 0
+
+
 def test_loki_reader_parses_streams_and_bounds_query() -> None:
     captured: dict[str, Any] = {}
 

@@ -153,4 +153,4 @@ e2e-kind:
 e2e-kind-clean:
 	kind delete cluster --name agentic-sre
 
-release-check: check precommit offline-demo e2e-kind
+release-check: check precommit offline-demo verify-release-provenance e2e-kind

@@ -470,9 +470,32 @@ def verification_trace(
         predicate.name == "candidate_dominance" and predicate.status is PredicateStatus.WEAK
         for predicate in predicates
     )
+    weak_downstream_only = bool(relevant) and all(
+        finding.kind
+        in {
+            FindingKind.CONTAINER_FAILURE,
+            FindingKind.RESOURCE_PRESSURE,
+            FindingKind.FAILURE_EVENT,
+        }
+        for finding in relevant
+    )
+    if weak_downstream_only:
+        predicates.append(
+            VerificationPredicate(
+                name="initiating_signal_required",
+                status=PredicateStatus.FAIL,
+                evidence_ids=linked_ids[:8],
+                detail="downstream failure observations do not establish an initiating cause",
+            )
+        )
     if verified_kind and (relevant or config_mention) and not contradictions and not dominance_weak:
         decision = Confidence.VERIFIED
         rationale = "linked initiating evidence is temporally consistent with symptom onset"
+    elif weak_downstream_only:
+        decision = Confidence.UNVERIFIED
+        rationale = (
+            "only downstream failure observations were found; the initiating cause is unknown"
+        )
     elif candidate.score >= config.verify_score and relevant:
         decision = Confidence.LIKELY
         rationale = (

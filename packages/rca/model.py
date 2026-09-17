@@ -289,6 +289,44 @@ class Confidence(StrEnum):
     UNVERIFIED = "UNVERIFIED"
 
 
+class Resolution(StrEnum):
+    """Whether deterministic evidence distinguishes the leading hypotheses."""
+
+    RESOLVED = "RESOLVED"
+    AMBIGUOUS = "AMBIGUOUS"
+    INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
+
+
+class HypothesisSignature(BaseModel):
+    """Name-independent structure used to compare causal hypotheses."""
+
+    model_config = ConfigDict(frozen=True)
+
+    initiating_kinds: tuple[str, ...] = ()
+    supporting_kinds: tuple[str, ...] = ()
+    contradiction_kinds: tuple[str, ...] = ()
+    temporal_profile: tuple[str, ...] = ()
+    symptom_relation: str = "UNLINKED"
+    causal_path_shape: tuple[tuple[tuple[str, str, str], ...], ...] = ()
+    manifestation_shape: tuple[str, ...] = ()
+    provenance_classes: tuple[str, ...] = ()
+
+
+class ResolutionTrace(BaseModel):
+    """Deterministic explanation of cross-hypothesis distinguishability."""
+
+    model_config = ConfigDict(frozen=True)
+
+    state: Resolution
+    leading_hypothesis_ids: tuple[str, ...] = ()
+    signatures: tuple[HypothesisSignature, ...] = ()
+    distinguishing_facts: tuple[str, ...] = ()
+    unresolved_dimensions: tuple[str, ...] = ()
+    eliminated_hypotheses: tuple[str, ...] = ()
+    elimination_reasons: tuple[str, ...] = ()
+    rationale: str = ""
+
+
 class Hypothesis(BaseModel):
     """One causal episode assembled from one or more entity candidates.
 
@@ -312,6 +350,7 @@ class Hypothesis(BaseModel):
     causal_explanation: str = "UNLINKED"
     score: float = 0.0
     reasons: tuple[str, ...] = ()
+    signature: HypothesisSignature | None = None
 
 
 class HypothesisDiagnostics(BaseModel):
@@ -357,6 +396,7 @@ class Diagnosis(BaseModel):
     incident_id: str
     root_cause: EntityRef | None
     confidence: Confidence
+    resolution: Resolution = Resolution.INSUFFICIENT_EVIDENCE
     summary: str
     symptoms: Symptoms
     evidence: tuple[Finding, ...] = ()
@@ -371,6 +411,8 @@ class Diagnosis(BaseModel):
     mode: str = "deterministic"
     model_calls: int = 0
     verification: VerificationTrace | None = None
+    resolution_trace: ResolutionTrace | None = None
+    ambiguous_hypotheses: tuple[Hypothesis, ...] = ()
 
 
 __all__ = [
@@ -381,6 +423,7 @@ __all__ = [
     "EvidenceTemporalRole",
     "ClusterEvent",
     "Confidence",
+    "Resolution",
     "Diagnosis",
     "Edge",
     "EntityRef",
@@ -389,6 +432,7 @@ __all__ = [
     "InvestigationStep",
     "Hypothesis",
     "HypothesisDiagnostics",
+    "HypothesisSignature",
     "JournalEntry",
     "Lifecycle",
     "LogRecord",
@@ -400,4 +444,5 @@ __all__ = [
     "PredicateStatus",
     "VerificationPredicate",
     "VerificationTrace",
+    "ResolutionTrace",
 ]

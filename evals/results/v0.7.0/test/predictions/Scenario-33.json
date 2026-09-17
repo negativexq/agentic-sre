@@ -1,0 +1,278 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "VERIFIED: otel-demo/Deployment/ad: spec changed: spec.template.spec.nodeSelector.kubernetes.io/hostname: unset -> invalid-node. Verified (workload changed in the incident window next to the alerts). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/cart, otel-demo/Deployment/frontend.",
+        "entity": {
+          "kind": "Deployment",
+          "name": "ad",
+          "namespace": "otel-demo"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-33",
+    "native_terminal": "VERIFIED",
+    "reasoning": "otel-demo/Deployment/ad: spec changed: spec.template.spec.nodeSelector.kubernetes.io/hostname: unset -> invalid-node. Verified (workload changed in the incident window next to the alerts). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/cart, otel-demo/Deployment/frontend.",
+    "scenario_id": "Scenario-33"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "entity": {
+          "kind": "Deployment",
+          "name": "cart",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:59:40.134236Z",
+            "details": {
+              "changed_paths": [
+                ".spec.template.spec.nodeSelector.kubernetes.io/hostname"
+              ],
+              "previous_observed_at": "2025-12-15T17:34:39.132191+00:00"
+            },
+            "entity": {
+              "kind": "Deployment",
+              "name": "cart",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:495",
+              "k8s_objects_raw.tsv:3727"
+            ],
+            "kind": "SPEC_CHANGE",
+            "related": [],
+            "summary": "spec changed: spec.template.spec.nodeSelector.kubernetes.io/hostname: unset -> invalid-node"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/cart",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/ad-dd7f45975-mw86p"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 9.5
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "ad-dd7f45975-mw86p",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T18:05:14Z",
+            "details": {
+              "count": 6,
+              "reason": "FailedScheduling"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "ad-dd7f45975-mw86p",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:821",
+              "k8s_events_raw.tsv:842",
+              "k8s_events_raw.tsv:846"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedScheduling x6: 0/5 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, 4 node(s) didn't match Pod's node affinity/selector. preempt"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/cart",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/ad-dd7f45975-mw86p"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.612
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "cart-5b597c6db5-pkzkh",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T18:05:14Z",
+            "details": {
+              "count": 6,
+              "reason": "FailedScheduling"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "cart-5b597c6db5-pkzkh",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:827",
+              "k8s_events_raw.tsv:845",
+              "k8s_events_raw.tsv:848"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedScheduling x6: 0/5 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, 4 node(s) didn't match Pod's node affinity/selector. preempt"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/cart",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/ad-dd7f45975-mw86p"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.612
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-q96hk",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:17:31Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-q96hk",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:569"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: Get \"http://100.96.3.13:13133/\": dial tcp 100.96.3.13:13133: connect: connection refused"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/cart",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/ad-dd7f45975-mw86p"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      }
+    ],
+    "confidence": "VERIFIED",
+    "evidence": [
+      {
+        "at": "2025-12-15T17:59:40.134236Z",
+        "details": {
+          "changed_paths": [
+            ".spec.template.spec.nodeSelector.kubernetes.io/hostname"
+          ],
+          "previous_observed_at": "2025-12-15T17:34:39.132191+00:00"
+        },
+        "entity": {
+          "kind": "Deployment",
+          "name": "ad",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_objects_raw.tsv:494",
+          "k8s_objects_raw.tsv:3726"
+        ],
+        "kind": "SPEC_CHANGE",
+        "related": [],
+        "summary": "spec changed: spec.template.spec.nodeSelector.kubernetes.io/hostname: unset -> invalid-node"
+      }
+    ],
+    "incident_id": "Scenario-33",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Roll back Deployment ad to the previous revision",
+        "command": "kubectl rollout undo deployment/ad -n otel-demo",
+        "requires_approval": true,
+        "risk": "medium: reverts every change in the last rollout"
+      }
+    ],
+    "root_cause": {
+      "kind": "Deployment",
+      "name": "ad",
+      "namespace": "otel-demo"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "4 diagnostic alert type(s) on frontend-proxy, prometheus-kube-prometheus-kubelet; 202 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "19 finding(s) over 667 object(s) and 377 event(s); 537 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "otel-demo/Deployment/ad 9.5; otel-demo/Deployment/cart 9.5; otel-demo/Pod/ad-dd7f45975-mw86p 5.6; otel-demo/Pod/cart-5b597c6db5-pkzkh 5.6; otel-demo/Pod/otel-collector-564d9c7987-q96hk 4.9"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "VERIFIED: workload changed in the incident window next to the alerts"
+      }
+    ],
+    "summary": "otel-demo/Deployment/ad: spec changed: spec.template.spec.nodeSelector.kubernetes.io/hostname: unset -> invalid-node. Verified (workload changed in the incident window next to the alerts). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/cart, otel-demo/Deployment/frontend.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "KubePodNotReady",
+        "PendingPodsDetected",
+        "RequestErrorRate"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 33,
+        "KubeClientCertificateExpiration": 28,
+        "KubeControllerManagerDown": 33,
+        "KubeSchedulerDown": 32,
+        "PrometheusNotConnectedToAlertmanagers": 38,
+        "Watchdog": 38
+      },
+      "last_seen": "2025-12-15T18:08:36.002034Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T17:30:31.337741Z",
+      "services": [
+        "frontend-proxy",
+        "prometheus-kube-prometheus-kubelet"
+      ]
+    }
+  }
+}

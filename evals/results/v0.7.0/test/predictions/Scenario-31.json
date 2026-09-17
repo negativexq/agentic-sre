@@ -1,0 +1,284 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "LIKELY: otel-demo/NetworkPolicy/frontend-block-all-ports: NetworkPolicy filters 1 pod(s): ingress allows all traffic (empty rule). Likely (strong signal with a structural link, no verifying rule). Linked to otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy, otel-demo/Pod/frontend-675fd7b5c5-8qrfh.",
+        "entity": {
+          "kind": "NetworkPolicy",
+          "name": "frontend-block-all-ports",
+          "namespace": "otel-demo"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-31",
+    "native_terminal": "LIKELY",
+    "reasoning": "otel-demo/NetworkPolicy/frontend-block-all-ports: NetworkPolicy filters 1 pod(s): ingress allows all traffic (empty rule). Likely (strong signal with a structural link, no verifying rule). Linked to otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy, otel-demo/Pod/frontend-675fd7b5c5-8qrfh.",
+    "scenario_id": "Scenario-31"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "fraud-detection-9fb7d885b-wvrwx",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:22:42Z",
+            "details": {
+              "problems": [
+                {
+                  "at": "2025-12-15T17:22:42Z",
+                  "container": "fraud-detection",
+                  "message": "exit code 137",
+                  "reason": "OOMKilled",
+                  "restarts": 1
+                }
+              ],
+              "reason": "OOMKilled"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "fraud-detection-9fb7d885b-wvrwx",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:158"
+            ],
+            "kind": "CONTAINER_FAILURE",
+            "related": [],
+            "summary": "container fraud-detection OOMKilled (1 restart(s)) exit code 137"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/frontend-675fd7b5c5-8qrfh",
+          "otel-demo/Pod/frontend-proxy-6b4d584985-p6mgt",
+          "otel-demo/Service/frontend-proxy"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 7.5
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-6j4x2",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:17:22Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-6j4x2",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:581"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: Get \"http://100.96.2.170:13133/\": dial tcp 100.96.2.170:13133: connect: connection refused"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/frontend-675fd7b5c5-8qrfh",
+          "otel-demo/Pod/frontend-proxy-6b4d584985-p6mgt",
+          "otel-demo/Service/frontend-proxy"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "ad-554b849958-vhf56",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:17:18Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedMount"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "ad-554b849958-vhf56",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:352"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedMount x1: MountVolume.SetUp failed for volume \"kube-api-access-twj4c\" : failed to sync configmap cache: timed out waiting for the condition"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/frontend-675fd7b5c5-8qrfh",
+          "otel-demo/Pod/frontend-proxy-6b4d584985-p6mgt",
+          "otel-demo/Service/frontend-proxy"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.75
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "email-59f69bc6cf-ng88f",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:17:18Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedMount"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "email-59f69bc6cf-ng88f",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:419"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedMount x1: MountVolume.SetUp failed for volume \"kube-api-access-zngmf\" : failed to sync configmap cache: timed out waiting for the condition"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/frontend-675fd7b5c5-8qrfh",
+          "otel-demo/Pod/frontend-proxy-6b4d584985-p6mgt",
+          "otel-demo/Service/frontend-proxy"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.75
+      }
+    ],
+    "confidence": "LIKELY",
+    "evidence": [
+      {
+        "at": "2025-12-15T17:51:21Z",
+        "details": {
+          "affected": [
+            "otel-demo/Pod/frontend-675fd7b5c5-8qrfh"
+          ],
+          "ports": {
+            "Ingress": []
+          }
+        },
+        "entity": {
+          "kind": "NetworkPolicy",
+          "name": "frontend-block-all-ports",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_objects_raw.tsv:2859"
+        ],
+        "kind": "NETWORK_RESTRICTION",
+        "related": [
+          {
+            "kind": "Pod",
+            "name": "frontend-675fd7b5c5-8qrfh",
+            "namespace": "otel-demo"
+          }
+        ],
+        "summary": "NetworkPolicy filters 1 pod(s): ingress allows all traffic (empty rule)"
+      }
+    ],
+    "incident_id": "Scenario-31",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Review and relax NetworkPolicy frontend-block-all-ports",
+        "command": "kubectl describe networkpolicy/frontend-block-all-ports -n otel-demo",
+        "requires_approval": true,
+        "risk": "medium: loosening a policy can widen access"
+      }
+    ],
+    "root_cause": {
+      "kind": "NetworkPolicy",
+      "name": "frontend-block-all-ports",
+      "namespace": "otel-demo"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "2 diagnostic alert type(s) on frontend-proxy, prometheus-kube-prometheus-kubelet; 233 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "22 finding(s) over 670 object(s) and 371 event(s); 530 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "otel-demo/NetworkPolicy/frontend-block-all-ports 8.0; otel-demo/Pod/fraud-detection-9fb7d885b-wvrwx 7.5; otel-demo/Pod/otel-collector-564d9c7987-6j4x2 4.9; otel-demo/Pod/ad-554b849958-vhf56 4.8; otel-demo/Pod/email-59f69bc6cf-ng88f 4.8"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "LIKELY: strong signal with a structural link, no verifying rule"
+      }
+    ],
+    "summary": "otel-demo/NetworkPolicy/frontend-block-all-ports: NetworkPolicy filters 1 pod(s): ingress allows all traffic (empty rule). Likely (strong signal with a structural link, no verifying rule). Linked to otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy, otel-demo/Pod/frontend-675fd7b5c5-8qrfh.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "RequestErrorRate"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 52,
+        "KubeClientCertificateExpiration": 48,
+        "KubeControllerManagerDown": 30,
+        "KubeSchedulerDown": 30,
+        "PrometheusNotConnectedToAlertmanagers": 35,
+        "Watchdog": 38
+      },
+      "last_seen": "2025-12-15T18:00:13.229243Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T17:27:11.867622Z",
+      "services": [
+        "frontend-proxy",
+        "prometheus-kube-prometheus-kubelet"
+      ]
+    }
+  }
+}

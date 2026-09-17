@@ -1,0 +1,345 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "VERIFIED: chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-cx947: NetworkChaos applied fault at 16:51 (3 application(s)); schedule otel-demo-fraud-detection-kafka-network-partition has injected this fault repeatedly from 16:37 to 18:13. Verified (fault injection targets an alerting component). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/fraud-detection, otel-demo/Deployment/frontend.",
+        "entity": {
+          "kind": "NetworkChaos",
+          "name": "otel-demo-fraud-detection-kafka-network-partition-cx947",
+          "namespace": "chaos-mesh"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-91",
+    "native_terminal": "VERIFIED",
+    "reasoning": "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-cx947: NetworkChaos applied fault at 16:51 (3 application(s)); schedule otel-demo-fraud-detection-kafka-network-partition has injected this fault repeatedly from 16:37 to 18:13. Verified (fault injection targets an alerting component). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/fraud-detection, otel-demo/Deployment/frontend.",
+    "scenario_id": "Scenario-91"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "entity": {
+          "kind": "Schedule",
+          "name": "otel-demo-fraud-detection-kafka-network-partition",
+          "namespace": "chaos-mesh"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T16:37:25Z",
+            "details": {
+              "failed_applications": 3,
+              "first_at": "2025-12-15T16:37:25+00:00",
+              "last_at": "2025-12-15T18:13:00+00:00",
+              "reasons": {
+                "Failed": 3,
+                "Forbid": 96,
+                "Spawned": 29,
+                "Updated": 26
+              },
+              "targets": [
+                "otel-demo/Pod/fraud-detection-9fb7d885b-g8sq9",
+                "otel-demo/Pod/fraud-detection-9fb7d885b-kqd2b",
+                "otel-demo/Pod/fraud-detection-9fb7d885b-xdwst",
+                "otel-demo/Pod/fraud-detection-9fb7d885b-zlcnw",
+                "otel-demo/Pod/kafka-ff7884766-29vm9",
+                "otel-demo/Pod/kafka-ff7884766-lh5fr"
+              ]
+            },
+            "entity": {
+              "kind": "Schedule",
+              "name": "otel-demo-fraud-detection-kafka-network-partition",
+              "namespace": "chaos-mesh"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:102",
+              "k8s_events_raw.tsv:103",
+              "k8s_events_raw.tsv:115",
+              "k8s_events_raw.tsv:116",
+              "k8s_events_raw.tsv:117",
+              "k8s_events_raw.tsv:118"
+            ],
+            "kind": "FAULT_SCHEDULE",
+            "related": [
+              {
+                "kind": "Pod",
+                "name": "fraud-detection-9fb7d885b-g8sq9",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "fraud-detection-9fb7d885b-zlcnw",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "kafka-ff7884766-lh5fr",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "fraud-detection-9fb7d885b-kqd2b",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "fraud-detection-9fb7d885b-xdwst",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "kafka-ff7884766-29vm9",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "chaos schedule injecting faults since 16:37, last run 18:13 (29 experiment(s))"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/recommendation"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 9.0
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-4gp2q",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:24:07Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-4gp2q",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1574"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: Get \"http://100.96.4.102:13133/\": dial tcp 100.96.4.102:13133: connect: connection refused"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/recommendation"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      },
+      {
+        "entity": {
+          "kind": "Namespace",
+          "name": "agent",
+          "namespace": "_cluster"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:58:59Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "agent",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:3162"
+            ],
+            "kind": "OBJECT_CREATED",
+            "related": [],
+            "summary": "Namespace created"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 2.0
+      },
+      {
+        "entity": {
+          "kind": "Namespace",
+          "name": "data-recorders",
+          "namespace": "_cluster"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:45:18Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "data-recorders",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:915"
+            ],
+            "kind": "OBJECT_CREATED",
+            "related": [],
+            "summary": "Namespace created"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 2.0
+      }
+    ],
+    "confidence": "VERIFIED",
+    "evidence": [
+      {
+        "at": "2025-12-15T16:51:10Z",
+        "details": {
+          "failed_applications": 0,
+          "first_at": "2025-12-15T16:51:10+00:00",
+          "last_at": "2025-12-15T16:51:49+00:00",
+          "reasons": {
+            "Applied": 3,
+            "FinalizerInited": 2,
+            "Paused": 1,
+            "Recovered": 3,
+            "Started": 1,
+            "Updated": 12
+          },
+          "schedule": "chaos-mesh/Schedule/otel-demo-fraud-detection-kafka-network-partition",
+          "schedule_active_from": "2025-12-15T16:37:25+00:00",
+          "schedule_active_to": "2025-12-15T18:13:00+00:00",
+          "targets": [
+            "otel-demo/Pod/fraud-detection-9fb7d885b-g8sq9",
+            "otel-demo/Pod/fraud-detection-9fb7d885b-zlcnw",
+            "otel-demo/Pod/kafka-ff7884766-lh5fr"
+          ]
+        },
+        "entity": {
+          "kind": "NetworkChaos",
+          "name": "otel-demo-fraud-detection-kafka-network-partition-cx947",
+          "namespace": "chaos-mesh"
+        },
+        "evidence_ids": [
+          "k8s_events_raw.tsv:542",
+          "k8s_events_raw.tsv:545",
+          "k8s_events_raw.tsv:546",
+          "k8s_events_raw.tsv:548",
+          "k8s_events_raw.tsv:550",
+          "k8s_events_raw.tsv:553"
+        ],
+        "kind": "FAULT_INJECTION",
+        "related": [
+          {
+            "kind": "Pod",
+            "name": "fraud-detection-9fb7d885b-g8sq9",
+            "namespace": "otel-demo"
+          },
+          {
+            "kind": "Pod",
+            "name": "fraud-detection-9fb7d885b-zlcnw",
+            "namespace": "otel-demo"
+          },
+          {
+            "kind": "Pod",
+            "name": "kafka-ff7884766-lh5fr",
+            "namespace": "otel-demo"
+          }
+        ],
+        "summary": "NetworkChaos applied fault at 16:51 (3 application(s)); schedule otel-demo-fraud-detection-kafka-network-partition has injected this fault repeatedly from 16:37 to 18:13"
+      }
+    ],
+    "incident_id": "Scenario-91",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Pause the fault experiment Schedule otel-demo-fraud-detection-kafka-network-partition",
+        "command": "kubectl annotate schedule/otel-demo-fraud-detection-kafka-network-partition -n chaos-mesh experiment.chaos-mesh.org/pause=true --overwrite",
+        "requires_approval": true,
+        "risk": "low: stops further fault injection"
+      },
+      {
+        "action": "Delete the running experiment NetworkChaos otel-demo-fraud-detection-kafka-network-partition-cx947",
+        "command": "kubectl delete networkchaos/otel-demo-fraud-detection-kafka-network-partition-cx947 -n chaos-mesh",
+        "requires_approval": true,
+        "risk": "low: removes the active fault"
+      }
+    ],
+    "root_cause": {
+      "kind": "NetworkChaos",
+      "name": "otel-demo-fraud-detection-kafka-network-partition-cx947",
+      "namespace": "chaos-mesh"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "3 diagnostic alert type(s) on ad, fraud-detection, frontend-proxy, prometheus-kube-prometheus-kubelet, recommendation; 200 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "47 finding(s) over 722 object(s) and 1250 event(s); 693 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-cx947 12.5; chaos-mesh/Schedule/otel-demo-fraud-detection-kafka-network-partition 9.0; otel-demo/Pod/otel-collector-564d9c7987-4gp2q 4.9; _cluster/Namespace/agent 2.0; _cluster/Namespace/data-recorders 2.0"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "VERIFIED: fault injection targets an alerting component"
+      }
+    ],
+    "summary": "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-cx947: NetworkChaos applied fault at 16:51 (3 application(s)); schedule otel-demo-fraud-detection-kafka-network-partition has injected this fault repeatedly from 16:37 to 18:13. Verified (fault injection targets an alerting component). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/fraud-detection, otel-demo/Deployment/frontend.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "KafkaConnectionClosureRate",
+        "RequestErrorRate"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 39,
+        "KubeClientCertificateExpiration": 22,
+        "KubeControllerManagerDown": 32,
+        "KubeSchedulerDown": 32,
+        "PrometheusNotConnectedToAlertmanagers": 37,
+        "Watchdog": 38
+      },
+      "last_seen": "2025-12-15T18:18:01.226376Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T17:36:35.885227Z",
+      "services": [
+        "ad",
+        "fraud-detection",
+        "frontend-proxy",
+        "prometheus-kube-prometheus-kubelet",
+        "recommendation"
+      ]
+    }
+  }
+}

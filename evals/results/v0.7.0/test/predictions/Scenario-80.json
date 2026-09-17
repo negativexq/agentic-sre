@@ -1,0 +1,347 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "VERIFIED: chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-g8m6w: NetworkChaos applied fault at 16:44 (3 application(s)); schedule otel-demo-checkout-kafka-network-partition has injected this fault repeatedly from 16:32 to 18:02. Verified (fault injection targets an alerting component). Linked to otel-demo/Deployment/accounting, otel-demo/Deployment/ad, otel-demo/Deployment/checkout.",
+        "entity": {
+          "kind": "NetworkChaos",
+          "name": "otel-demo-checkout-kafka-network-partition-g8m6w",
+          "namespace": "chaos-mesh"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-80",
+    "native_terminal": "VERIFIED",
+    "reasoning": "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-g8m6w: NetworkChaos applied fault at 16:44 (3 application(s)); schedule otel-demo-checkout-kafka-network-partition has injected this fault repeatedly from 16:32 to 18:02. Verified (fault injection targets an alerting component). Linked to otel-demo/Deployment/accounting, otel-demo/Deployment/ad, otel-demo/Deployment/checkout.",
+    "scenario_id": "Scenario-80"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "entity": {
+          "kind": "Schedule",
+          "name": "otel-demo-checkout-kafka-network-partition",
+          "namespace": "chaos-mesh"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T16:32:52Z",
+            "details": {
+              "failed_applications": 0,
+              "first_at": "2025-12-15T16:32:52+00:00",
+              "last_at": "2025-12-15T18:02:00+00:00",
+              "reasons": {
+                "Forbid": 72,
+                "Spawned": 15,
+                "Updated": 15
+              },
+              "targets": [
+                "otel-demo/Pod/checkout-5dccddf8bb-8rt79",
+                "otel-demo/Pod/checkout-5dccddf8bb-vn95l",
+                "otel-demo/Pod/kafka-ff7884766-kr4kh",
+                "otel-demo/Pod/kafka-ff7884766-ljzp9",
+                "otel-demo/Pod/kafka-ff7884766-skk8d",
+                "otel-demo/Pod/kafka-ff7884766-xclnk"
+              ]
+            },
+            "entity": {
+              "kind": "Schedule",
+              "name": "otel-demo-checkout-kafka-network-partition",
+              "namespace": "chaos-mesh"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:9",
+              "k8s_events_raw.tsv:11",
+              "k8s_events_raw.tsv:60",
+              "k8s_events_raw.tsv:62",
+              "k8s_events_raw.tsv:63",
+              "k8s_events_raw.tsv:273"
+            ],
+            "kind": "FAULT_SCHEDULE",
+            "related": [
+              {
+                "kind": "Pod",
+                "name": "checkout-5dccddf8bb-vn95l",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "kafka-ff7884766-skk8d",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "kafka-ff7884766-xclnk",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "checkout-5dccddf8bb-8rt79",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "kafka-ff7884766-kr4kh",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "kafka-ff7884766-ljzp9",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "chaos schedule injecting faults since 16:32, last run 18:02 (15 experiment(s))"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 9.0
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-vtgxj",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:22:36Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-vtgxj",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1210"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: Get \"http://100.96.4.221:13133/\": dial tcp 100.96.4.221:13133: connect: connection refused"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      },
+      {
+        "entity": {
+          "kind": "Namespace",
+          "name": "agent",
+          "namespace": "_cluster"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:52:01Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "agent",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:2213"
+            ],
+            "kind": "OBJECT_CREATED",
+            "related": [],
+            "summary": "Namespace created"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 2.0
+      },
+      {
+        "entity": {
+          "kind": "Namespace",
+          "name": "data-recorders",
+          "namespace": "_cluster"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:39:18Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "data-recorders",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:1020"
+            ],
+            "kind": "OBJECT_CREATED",
+            "related": [],
+            "summary": "Namespace created"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 2.0
+      }
+    ],
+    "confidence": "VERIFIED",
+    "evidence": [
+      {
+        "at": "2025-12-15T16:44:44Z",
+        "details": {
+          "failed_applications": 26,
+          "first_at": "2025-12-15T16:44:44+00:00",
+          "last_at": "2025-12-15T16:50:51+00:00",
+          "reasons": {
+            "Applied": 3,
+            "Failed": 26,
+            "FinalizerInited": 2,
+            "Recovered": 3,
+            "Started": 1,
+            "TimeUp": 1,
+            "Updated": 35
+          },
+          "schedule": "chaos-mesh/Schedule/otel-demo-checkout-kafka-network-partition",
+          "schedule_active_from": "2025-12-15T16:32:52+00:00",
+          "schedule_active_to": "2025-12-15T18:02:00+00:00",
+          "targets": [
+            "otel-demo/Pod/checkout-5dccddf8bb-8rt79",
+            "otel-demo/Pod/kafka-ff7884766-kr4kh",
+            "otel-demo/Pod/kafka-ff7884766-ljzp9"
+          ]
+        },
+        "entity": {
+          "kind": "NetworkChaos",
+          "name": "otel-demo-checkout-kafka-network-partition-g8m6w",
+          "namespace": "chaos-mesh"
+        },
+        "evidence_ids": [
+          "k8s_events_raw.tsv:304",
+          "k8s_events_raw.tsv:306",
+          "k8s_events_raw.tsv:308",
+          "k8s_events_raw.tsv:311",
+          "k8s_events_raw.tsv:312",
+          "k8s_events_raw.tsv:314"
+        ],
+        "kind": "FAULT_INJECTION",
+        "related": [
+          {
+            "kind": "Pod",
+            "name": "checkout-5dccddf8bb-8rt79",
+            "namespace": "otel-demo"
+          },
+          {
+            "kind": "Pod",
+            "name": "kafka-ff7884766-kr4kh",
+            "namespace": "otel-demo"
+          },
+          {
+            "kind": "Pod",
+            "name": "kafka-ff7884766-ljzp9",
+            "namespace": "otel-demo"
+          }
+        ],
+        "summary": "NetworkChaos applied fault at 16:44 (3 application(s)); schedule otel-demo-checkout-kafka-network-partition has injected this fault repeatedly from 16:32 to 18:02"
+      }
+    ],
+    "incident_id": "Scenario-80",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Pause the fault experiment Schedule otel-demo-checkout-kafka-network-partition",
+        "command": "kubectl annotate schedule/otel-demo-checkout-kafka-network-partition -n chaos-mesh experiment.chaos-mesh.org/pause=true --overwrite",
+        "requires_approval": true,
+        "risk": "low: stops further fault injection"
+      },
+      {
+        "action": "Delete the running experiment NetworkChaos otel-demo-checkout-kafka-network-partition-g8m6w",
+        "command": "kubectl delete networkchaos/otel-demo-checkout-kafka-network-partition-g8m6w -n chaos-mesh",
+        "requires_approval": true,
+        "risk": "low: removes the active fault"
+      }
+    ],
+    "root_cause": {
+      "kind": "NetworkChaos",
+      "name": "otel-demo-checkout-kafka-network-partition-g8m6w",
+      "namespace": "chaos-mesh"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "4 diagnostic alert type(s) on accounting, ad, checkout, frontend, frontend-proxy, prometheus-kube-prometheus-kubelet; 184 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "34 finding(s) over 730 object(s) and 945 event(s); 640 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-g8m6w 12.5; chaos-mesh/Schedule/otel-demo-checkout-kafka-network-partition 9.0; otel-demo/Pod/otel-collector-564d9c7987-vtgxj 4.9; _cluster/Namespace/agent 2.0; _cluster/Namespace/data-recorders 2.0"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "VERIFIED: fault injection targets an alerting component"
+      }
+    ],
+    "summary": "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-g8m6w: NetworkChaos applied fault at 16:44 (3 application(s)); schedule otel-demo-checkout-kafka-network-partition has injected this fault repeatedly from 16:32 to 18:02. Verified (fault injection targets an alerting component). Linked to otel-demo/Deployment/accounting, otel-demo/Deployment/ad, otel-demo/Deployment/checkout.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "NoRequestsDetected",
+        "RequestErrorRate",
+        "RequestLatency"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 17,
+        "KubeClientCertificateExpiration": 36,
+        "KubeControllerManagerDown": 29,
+        "KubeSchedulerDown": 30,
+        "PrometheusNotConnectedToAlertmanagers": 34,
+        "Watchdog": 38
+      },
+      "last_seen": "2025-12-15T18:11:31.067025Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T17:32:50.798314Z",
+      "services": [
+        "accounting",
+        "ad",
+        "checkout",
+        "frontend",
+        "frontend-proxy",
+        "prometheus-kube-prometheus-kubelet"
+      ]
+    }
+  }
+}

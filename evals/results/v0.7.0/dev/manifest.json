@@ -1,0 +1,108 @@
+{
+  "benchmark": "ITBench-Lite SRE",
+  "created_at": "2026-09-17T15:15:46.738203+00:00",
+  "engine_config": {
+    "alternatives": 4,
+    "pressure_baseline_gap": "0:05:00",
+    "ranking": {
+      "distance_bonus": [
+        3.0,
+        2.5,
+        2.0,
+        1.0
+      ],
+      "extra_finding_weight": 0.3,
+      "grace": "0:30:00",
+      "in_window_bonus": 1.0,
+      "lookback": "2:00:00",
+      "mention_bonus": 2.0,
+      "namespace_bonus": 1.5,
+      "symptom_event_factor": 0.5,
+      "unlinked_penalty": 2.0,
+      "verify_score": 7.0
+    }
+  },
+  "git_dirty": false,
+  "git_head": "8f1f6861ad1713d603b494eccc8a1946cf2ffc8f",
+  "ground_truth_read_during_prediction": false,
+  "investigator_errors": 0,
+  "mode": "deterministic",
+  "model": null,
+  "model_calls_total": 0,
+  "records": [
+    {
+      "investigator_error": null,
+      "model_calls": 0,
+      "scenario_id": "Scenario-4",
+      "seconds": 2.026
+    },
+    {
+      "investigator_error": null,
+      "model_calls": 0,
+      "scenario_id": "Scenario-7",
+      "seconds": 2.262
+    },
+    {
+      "investigator_error": null,
+      "model_calls": 0,
+      "scenario_id": "Scenario-8",
+      "seconds": 1.912
+    },
+    {
+      "investigator_error": null,
+      "model_calls": 0,
+      "scenario_id": "Scenario-11",
+      "seconds": 1.943
+    },
+    {
+      "investigator_error": null,
+      "model_calls": 0,
+      "scenario_id": "Scenario-12",
+      "seconds": 1.898
+    },
+    {
+      "investigator_error": null,
+      "model_calls": 0,
+      "scenario_id": "Scenario-17",
+      "seconds": 2.511
+    },
+    {
+      "investigator_error": null,
+      "model_calls": 0,
+      "scenario_id": "Scenario-21",
+      "seconds": 2.499
+    },
+    {
+      "investigator_error": null,
+      "model_calls": 0,
+      "scenario_id": "Scenario-29",
+      "seconds": 2.623
+    },
+    {
+      "investigator_error": null,
+      "model_calls": 0,
+      "scenario_id": "Scenario-34",
+      "seconds": 3.008
+    },
+    {
+      "investigator_error": null,
+      "model_calls": 0,
+      "scenario_id": "Scenario-91",
+      "seconds": 3.345
+    }
+  ],
+  "scenario_ids": [
+    "Scenario-4",
+    "Scenario-7",
+    "Scenario-8",
+    "Scenario-11",
+    "Scenario-12",
+    "Scenario-17",
+    "Scenario-21",
+    "Scenario-29",
+    "Scenario-34",
+    "Scenario-91"
+  ],
+  "seconds_total": 24.054,
+  "split": "dev"
+}

@@ -1,0 +1,296 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "VERIFIED: otel-demo/ConfigMap/flagd-config: ConfigMap data changed: demo.flagd.json. Verified (configuration changed near onset and is used by or names an alerting component). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/checkout, otel-demo/Deployment/frontend-proxy.",
+        "entity": {
+          "kind": "ConfigMap",
+          "name": "flagd-config",
+          "namespace": "otel-demo"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-11",
+    "native_terminal": "VERIFIED",
+    "reasoning": "otel-demo/ConfigMap/flagd-config: ConfigMap data changed: demo.flagd.json. Verified (configuration changed near onset and is used by or names an alerting component). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/checkout, otel-demo/Deployment/frontend-proxy.",
+    "scenario_id": "Scenario-11"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "kafka-5c9d7cc485-hrd97",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:50:19.961773Z",
+            "details": {
+              "caller": "otel-demo/Deployment/checkout",
+              "dependencies_of_caller": 9,
+              "errors": 9,
+              "service": "otel-demo/Service/kafka"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "kafka-5c9d7cc485-hrd97",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "otel_logs_raw.tsv:73097",
+              "otel_logs_raw.tsv:73248",
+              "otel_logs_raw.tsv:73825",
+              "otel_logs_raw.tsv:74612"
+            ],
+            "kind": "DEPENDENCY_ERRORS",
+            "related": [
+              {
+                "kind": "Service",
+                "name": "kafka",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "checkout logged 9 connection error(s) and depends on kafka: Failed to write message: kafka: client has run out of available brokers to talk to: dial tcp 100.65.62.181:9092: connect"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/ad-554b849958-f8jhn",
+          "otel-demo/Pod/checkout-5dccddf8bb-6qppz"
+        ],
+        "reasons": [
+          "1 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 8.0
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "kafka-ff7884766-pn5m2",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:50:19.961773Z",
+            "details": {
+              "caller": "otel-demo/Deployment/checkout",
+              "dependencies_of_caller": 9,
+              "errors": 9,
+              "service": "otel-demo/Service/kafka"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "kafka-ff7884766-pn5m2",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "otel_logs_raw.tsv:73097",
+              "otel_logs_raw.tsv:73248",
+              "otel_logs_raw.tsv:73825",
+              "otel_logs_raw.tsv:74612"
+            ],
+            "kind": "DEPENDENCY_ERRORS",
+            "related": [
+              {
+                "kind": "Service",
+                "name": "kafka",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "checkout logged 9 connection error(s) and depends on kafka: Failed to write message: kafka: client has run out of available brokers to talk to: dial tcp 100.65.62.181:9092: connect"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/ad-554b849958-f8jhn",
+          "otel-demo/Pod/checkout-5dccddf8bb-6qppz"
+        ],
+        "reasons": [
+          "1 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 8.0
+      },
+      {
+        "entity": {
+          "kind": "Deployment",
+          "name": "kafka",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:49:24.576028Z",
+            "details": {
+              "changed_paths": [
+                ".spec.template.metadata.annotations.kubectl.kubernetes.io/restartedAt"
+              ],
+              "previous_observed_at": "2025-12-15T17:29:23.978755+00:00"
+            },
+            "entity": {
+              "kind": "Deployment",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:391",
+              "k8s_objects_raw.tsv:3054"
+            ],
+            "kind": "ROLLOUT_RESTART",
+            "related": [],
+            "summary": "rollout restart"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/ad-554b849958-f8jhn",
+          "otel-demo/Pod/checkout-5dccddf8bb-6qppz"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 6.0
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-crz7m",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:15:46Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-crz7m",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:579"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: Get \"http://100.96.4.208:13133/\": dial tcp 100.96.4.208:13133: connect: connection refused"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/ad-554b849958-f8jhn",
+          "otel-demo/Pod/checkout-5dccddf8bb-6qppz"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      }
+    ],
+    "confidence": "VERIFIED",
+    "evidence": [
+      {
+        "at": "2025-12-15T17:49:22.779799Z",
+        "details": {
+          "changed_keys": [
+            "demo.flagd.json"
+          ],
+          "changed_paths": [
+            ".data.demo.flagd.json"
+          ],
+          "excerpts": {
+            "demo.flagd.json": {
+              "changed_paths": ".flags.kafkaQueueProblems.defaultVariant"
+            }
+          },
+          "previous_observed_at": "2025-12-15T17:29:22.597421+00:00"
+        },
+        "entity": {
+          "kind": "ConfigMap",
+          "name": "flagd-config",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_objects_raw.tsv:122",
+          "k8s_objects_raw.tsv:2889"
+        ],
+        "kind": "CONFIG_CHANGE",
+        "related": [],
+        "summary": "ConfigMap data changed: demo.flagd.json"
+      }
+    ],
+    "incident_id": "Scenario-11",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Revert ConfigMap flagd-config (demo.flagd.json) to its previous version; then restart flagd if they do not reload config",
+        "command": "kubectl get configmap/flagd-config -n otel-demo -o yaml  # compare with the previous version, then kubectl apply",
+        "requires_approval": true,
+        "risk": "low: restores the last known configuration"
+      }
+    ],
+    "root_cause": {
+      "kind": "ConfigMap",
+      "name": "flagd-config",
+      "namespace": "otel-demo"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "2 diagnostic alert type(s) on ad, checkout, frontend-proxy; 0 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "13 finding(s) over 672 object(s) and 355 event(s); 533 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "otel-demo/ConfigMap/flagd-config 8.5; otel-demo/Pod/kafka-5c9d7cc485-hrd97 8.0; otel-demo/Pod/kafka-ff7884766-pn5m2 8.0; otel-demo/Deployment/kafka 6.0; otel-demo/Pod/otel-collector-564d9c7987-crz7m 4.9"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "VERIFIED: configuration changed near onset and is used by or names an alerting component"
+      }
+    ],
+    "summary": "otel-demo/ConfigMap/flagd-config: ConfigMap data changed: demo.flagd.json. Verified (configuration changed near onset and is used by or names an alerting component). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/checkout, otel-demo/Deployment/frontend-proxy.",
+    "symptoms": {
+      "alert_names": [
+        "RequestErrorRate",
+        "RequestLatency"
+      ],
+      "background_alert_counts": {},
+      "last_seen": "2025-12-15T17:52:18.783473Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T17:51:18.783473Z",
+      "services": [
+        "ad",
+        "checkout",
+        "frontend-proxy"
+      ]
+    }
+  }
+}

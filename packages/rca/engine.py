@@ -105,12 +105,11 @@ def build_case(source: ObservationSource, config: EngineConfig | None = None) ->
     topology = Topology(derive_edges(latest, events), latest)
     symptoms = extract_symptoms(alerts)
     entities = symptom_entities(alerts, topology)
-    observed = [v.observed_at for versions in history.values() for v in versions]
     context = Context(
         symptoms=symptoms,
         symptom_entities=entities,
         topology=topology,
-        window_end=max(observed) if observed else None,
+        window_end=source.observation_cutoff(),
         tokens=symptom_tokens(symptoms, entities, topology),
     )
     findings = [

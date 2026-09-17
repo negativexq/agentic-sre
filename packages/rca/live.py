@@ -279,6 +279,10 @@ class LiveSource:
     def incident_id(self) -> str:
         return self.incident
 
+    def observation_cutoff(self) -> datetime | None:
+        """Return the diagnosis snapshot or frozen resolution boundary."""
+        return self.observed_at
+
     def alerts(self) -> Sequence[Alert]:
         return self.alert_items
 

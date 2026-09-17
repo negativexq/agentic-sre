@@ -14,7 +14,7 @@ from rca_builders import (
 )
 
 from packages.rca.engine import Case, Choice, build_case, diagnose
-from packages.rca.model import Confidence, FindingKind, ResourcePressure
+from packages.rca.model import Confidence, FindingKind, LogRecord, ResourcePressure
 from packages.rca.source import InMemorySource
 
 
@@ -35,6 +35,41 @@ def test_config_change_is_diagnosed_verified_with_revert_proposal() -> None:
         ref("shop/Service/checkout"),
         ref("shop/Pod/checkout-5d8f7c9b4-abcde"),
     }
+
+
+def test_engine_uses_explicit_cutoff_for_late_events_and_logs() -> None:
+    source = InMemorySource(
+        name="cutoff",
+        alert_items=[alert("RequestErrorRate", "checkout", 5)],
+        versions=shop_objects(0),
+        event_items=[
+            event("shop/Pod/checkout-5d8f7c9b4-abcde", "BackOff", 10, type_="Warning"),
+            event("shop/Pod/checkout-5d8f7c9b4-abcde", "BackOff", 30, type_="Warning"),
+        ],
+        error_items=[
+            LogRecord(
+                service="checkout",
+                at=at(11),
+                severity="ERROR",
+                message="payment timeout",
+                evidence_id="log:11",
+            ),
+            LogRecord(
+                service="checkout",
+                at=at(31),
+                severity="ERROR",
+                message="post-resolution timeout",
+                evidence_id="log:31",
+            ),
+        ],
+        cutoff=at(20),
+    )
+
+    case = build_case(source)
+
+    assert case.context.window_end == at(20)
+    assert [item.last_at for item in source.events()] == [at(10)]
+    assert [item.evidence_id for item in source.error_logs()] == ["log:11"]
 
 
 def test_unlinked_change_ranks_below_linked_change() -> None:

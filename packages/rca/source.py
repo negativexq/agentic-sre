@@ -26,6 +26,8 @@ class ObservationSource(Protocol):
 
     def incident_id(self) -> str: ...
 
+    def observation_cutoff(self) -> datetime | None: ...
+
     def alerts(self) -> Sequence[Alert]: ...
 
     def object_history(self) -> Mapping[EntityRef, Sequence[ObjectVersion]]: ...
@@ -54,27 +56,44 @@ class InMemorySource:
     log_items: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     error_items: list[LogRecord] = field(default_factory=list)
     pressure_items: list[ResourcePressure] = field(default_factory=list)
+    cutoff: datetime | None = None
 
     def incident_id(self) -> str:
         return self.name
+
+    def observation_cutoff(self) -> datetime | None:
+        return self.cutoff
 
     def alerts(self) -> Sequence[Alert]:
         return self.alert_items
 
     def object_history(self) -> Mapping[EntityRef, Sequence[ObjectVersion]]:
         history: dict[EntityRef, list[ObjectVersion]] = {}
-        for version in sorted(self.versions, key=lambda item: item.observed_at):
+        versions = [
+            version
+            for version in self.versions
+            if self.cutoff is None or version.observed_at <= self.cutoff
+        ]
+        for version in sorted(versions, key=lambda item: item.observed_at):
             history.setdefault(version.entity, []).append(version)
         return history
 
     def events(self) -> Sequence[ClusterEvent]:
-        return self.event_items
+        if self.cutoff is None:
+            return self.event_items
+        return [
+            event
+            for event in self.event_items
+            if (event.last_at or event.first_at or self.cutoff) <= self.cutoff
+        ]
 
     def logs(self, service: str, *, limit: int = 20) -> Sequence[dict[str, Any]]:
         return self.log_items.get(service, [])[:limit]
 
     def error_logs(self) -> Sequence[LogRecord]:
-        return self.error_items
+        if self.cutoff is None:
+            return self.error_items
+        return [item for item in self.error_items if item.at is None or item.at <= self.cutoff]
 
     def resource_pressure(
         self, pods: Sequence[EntityRef], since: datetime

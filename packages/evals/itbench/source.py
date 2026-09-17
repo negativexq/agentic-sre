@@ -193,6 +193,26 @@ class SnapshotSource:
         return self.scenario.scenario_id
 
     @cached_property
+    def _observation_cutoff(self) -> datetime | None:
+        """Return snapshot metadata, or the latest observable record as fallback."""
+        explicit = parse_time(self.scenario.observation_end)
+        if explicit is not None:
+            return explicit
+        timestamps: list[datetime] = [
+            version.observed_at for versions in self._history.values() for version in versions
+        ]
+        for item in self._events:
+            event_at = item.last_at or item.first_at
+            if event_at is not None:
+                timestamps.append(event_at)
+        timestamps.extend(item.at for item in self._error_logs if item.at is not None)
+        timestamps.extend(item.starts_at for item in self._alerts)
+        return max(timestamps) if timestamps else None
+
+    def observation_cutoff(self) -> datetime | None:
+        return self._observation_cutoff
+
+    @cached_property
     def _alerts(self) -> list[Alert]:
         result: list[Alert] = []
         for relative in self.scenario.evidence_files.get(ITBenchEvidenceCategory.ALERTS, ()):

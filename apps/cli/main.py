@@ -12,6 +12,7 @@ from packages.evals.itbench.dataset import ITBenchLiteDataset
 from packages.rca.engine import Investigator
 from packages.rca.hypotheses import summarize_diagnoses
 from packages.rca.model import Diagnosis
+from packages.rca.resolution import summarize_resolutions
 
 DEFAULT_DATASET = Path(os.environ.get("ITBENCH_LITE_ROOT", ".local/itbench-lite"))
 
@@ -20,6 +21,7 @@ def _print_diagnosis(diagnosis: Diagnosis) -> None:
     print(f"Incident     {diagnosis.incident_id}")
     print(f"Root cause   {diagnosis.root_cause or '-'}")
     print(f"Confidence   {diagnosis.confidence.value}")
+    print(f"Resolution   {diagnosis.resolution.value}")
     print(f"Summary      {diagnosis.summary}")
     symptoms = diagnosis.symptoms
     print(
@@ -42,6 +44,12 @@ def _print_diagnosis(diagnosis: Diagnosis) -> None:
                 print(f"  {title}")
                 for finding in findings[:6]:
                     print(f"    - [{finding.kind.value}] {finding.summary}")
+    if diagnosis.resolution.value == "AMBIGUOUS":
+        print("Leading hypotheses")
+        for hypothesis in diagnosis.ambiguous_hypotheses:
+            print(f"  - {hypothesis.causal_actor} ({hypothesis.hypothesis_id})")
+        if diagnosis.resolution_trace:
+            print(f"  {diagnosis.resolution_trace.rationale}")
     if diagnosis.causal_path:
         print("Causal path")
         for hop in diagnosis.causal_path:
@@ -54,7 +62,12 @@ def _print_diagnosis(diagnosis: Diagnosis) -> None:
             when = finding.at.isoformat(timespec="seconds") if finding.at else "-"
             print(f"  - [{finding.kind.value}] {when} {finding.summary}")
     if diagnosis.remediation:
-        print("Proposed remediation (not executed)")
+        title = (
+            "Possible remediation (hypothesis-specific; not executed)"
+            if diagnosis.resolution.value == "AMBIGUOUS"
+            else "Proposed remediation (not executed)"
+        )
+        print(title)
         for item in diagnosis.remediation:
             print(f"  - {item.action}\n      $ {item.command}\n      risk: {item.risk}")
     if diagnosis.alternatives:
@@ -189,10 +202,12 @@ def cmd_hypothesis_report(args: argparse.Namespace) -> int:
         for path in paths
     ]
     grouping = summarize_diagnoses(diagnoses)
+    resolution = summarize_resolutions(diagnoses)
     report = {
         "run": str(args.run),
         "scenario_count": len(diagnoses),
         "grouping": grouping,
+        "resolution": resolution,
         "selection_changes": "not inferable from one run",
     }
     if args.json:
@@ -201,6 +216,8 @@ def cmd_hypothesis_report(args: argparse.Namespace) -> int:
         print(f"Hypothesis grouping report: {args.run}")
         for key, value in grouping.items():
             print(f"{key}: {value}")
+        for resolution_key, resolution_value in resolution.items():
+            print(f"resolution_{resolution_key}: {resolution_value}")
         print("selection_changes: not inferable from one run")
     return 0
 

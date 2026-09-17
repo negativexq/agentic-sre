@@ -68,8 +68,32 @@ def diagnosis_html(diagnosis: Diagnosis, *, back_link: str | None = None) -> str
         "<div class='card'>"
         f"<div class='muted'>Root cause {_badge(diagnosis.confidence)}</div>"
         f"<div class='cause'>{cause}</div>"
+        f"<div class='muted'>Resolution</div><div class='badge'>{escape(diagnosis.resolution.value)}</div>"
         f"<p>{escape(diagnosis.summary)}</p></div>"
     )
+    if diagnosis.resolution_trace:
+        trace = diagnosis.resolution_trace
+        resolution_parts = [
+            f"<h2>Resolution: {escape(trace.state.value)}</h2>",
+            f"<div class='card'><p>{escape(trace.rationale)}</p>",
+        ]
+        if trace.state.value == "AMBIGUOUS" and diagnosis.ambiguous_hypotheses:
+            resolution_parts.append(
+                "<div class='muted'>Leading hypotheses</div><ul>"
+                + "".join(
+                    f"<li><code>{escape(item.causal_actor.canonical)}</code></li>"
+                    for item in diagnosis.ambiguous_hypotheses
+                )
+                + "</ul>"
+            )
+        if trace.unresolved_dimensions:
+            resolution_parts.append(
+                "<div class='muted'>Unresolved dimensions</div><ul>"
+                + "".join(f"<li>{escape(item)}</li>" for item in trace.unresolved_dimensions)
+                + "</ul>"
+            )
+        resolution_parts.append("</div>")
+        parts.append("".join(resolution_parts))
     onset = symptoms.onset.isoformat(timespec="seconds") if symptoms.onset else "unknown"
     background = sum(symptoms.background_alert_counts.values())
     parts.append(
@@ -144,7 +168,12 @@ def diagnosis_html(diagnosis: Diagnosis, *, back_link: str | None = None) -> str
             f"{'needs approval' if r.requires_approval else 'read-only'} · not executed</div></div>"
             for r in diagnosis.remediation
         )
-        parts.append(f"<h2>Proposed remediation</h2>{items}")
+        title = (
+            "Possible remediation (hypothesis-specific)"
+            if diagnosis.resolution.value == "AMBIGUOUS"
+            else "Proposed remediation"
+        )
+        parts.append(f"<h2>{escape(title)}</h2>{items}")
     if diagnosis.alternatives:
         rows = "".join(
             f"<tr><td><code>{escape(c.entity.canonical)}</code></td><td>{c.score:.1f}</td>"

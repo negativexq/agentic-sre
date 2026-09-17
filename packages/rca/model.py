@@ -289,6 +289,45 @@ class Confidence(StrEnum):
     UNVERIFIED = "UNVERIFIED"
 
 
+class Hypothesis(BaseModel):
+    """One causal episode assembled from one or more entity candidates.
+
+    Kubernetes object identity is deliberately kept separate from hypothesis
+    identity.  ``causal_actor`` is the proposed intervention point while
+    ``manifestations`` retain the entities where the episode became visible.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    hypothesis_id: str
+    causal_actor: EntityRef
+    members: tuple[EntityRef, ...] = ()
+    manifestations: tuple[EntityRef, ...] = ()
+    findings: tuple[Finding, ...] = ()
+    initiating_findings: tuple[Finding, ...] = ()
+    supporting_findings: tuple[Finding, ...] = ()
+    contradictory_findings: tuple[Finding, ...] = ()
+    causal_paths: tuple[tuple[CausalHop, ...], ...] = ()
+    linked_symptoms: tuple[str, ...] = ()
+    causal_explanation: str = "UNLINKED"
+    score: float = 0.0
+    reasons: tuple[str, ...] = ()
+
+
+class HypothesisDiagnostics(BaseModel):
+    """Non-authoritative measurements of candidate-to-hypothesis grouping."""
+
+    model_config = ConfigDict(frozen=True)
+
+    raw_candidate_count: int = 0
+    hypothesis_count: int = 0
+    multi_entity_hypotheses: int = 0
+    ownership_chains_collapsed: int = 0
+    duplicate_evidence_ids_removed: int = 0
+    exact_score_ties: int = 0
+    structurally_similar_top_hypotheses: int = 0
+
+
 class Remediation(BaseModel):
     """A proposed, never executed, corrective action."""
 
@@ -324,6 +363,9 @@ class Diagnosis(BaseModel):
     causal_path: tuple[CausalHop, ...] = ()
     causal_explanation: str = "UNLINKED"
     alternatives: tuple[Candidate, ...] = ()
+    hypothesis: Hypothesis | None = None
+    alternative_hypotheses: tuple[Hypothesis, ...] = ()
+    hypothesis_diagnostics: HypothesisDiagnostics | None = None
     remediation: tuple[Remediation, ...] = ()
     steps: tuple[InvestigationStep, ...] = ()
     mode: str = "deterministic"
@@ -345,6 +387,8 @@ __all__ = [
     "Finding",
     "FindingKind",
     "InvestigationStep",
+    "Hypothesis",
+    "HypothesisDiagnostics",
     "JournalEntry",
     "Lifecycle",
     "LogRecord",

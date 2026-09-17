@@ -7,12 +7,19 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Protocol
 
+from packages.rca.hypotheses import (
+    GroupingResult,
+    group_candidates,
+    hypothesis_candidate,
+)
 from packages.rca.model import (
     Candidate,
     Confidence,
     Diagnosis,
     EntityRef,
     Finding,
+    Hypothesis,
+    HypothesisDiagnostics,
     InvestigationStep,
     ObjectVersion,
     Symptoms,
@@ -56,6 +63,8 @@ class Case:
     context: Context
     findings: list[Finding]
     candidates: list[Candidate]
+    hypotheses: list[Hypothesis]
+    hypothesis_diagnostics: HypothesisDiagnostics
     steps: list[InvestigationStep] = field(default_factory=list)
 
 
@@ -144,6 +153,8 @@ def build_case(source: ObservationSource, config: EngineConfig | None = None) ->
     candidates = collapse_fault_instances(
         score_findings(findings, context, config.ranking), topology, symptoms.onset
     )
+    grouping: GroupingResult = group_candidates(candidates, topology, context, config.ranking)
+    hypotheses = list(grouping.hypotheses)
     steps = [
         InvestigationStep(
             actor="engine",
@@ -166,7 +177,8 @@ def build_case(source: ObservationSource, config: EngineConfig | None = None) ->
             actor="engine",
             action="ranking",
             detail="; ".join(
-                f"{c.entity.canonical} {c.score:.1f}" for c in candidates[: config.alternatives + 1]
+                f"{h.causal_actor.canonical} {h.score:.1f} ({len(h.members)} member(s))"
+                for h in hypotheses[: config.alternatives + 1]
             )
             or "no candidates",
         ),
@@ -179,6 +191,8 @@ def build_case(source: ObservationSource, config: EngineConfig | None = None) ->
         context=context,
         findings=findings,
         candidates=candidates,
+        hypotheses=hypotheses,
+        hypothesis_diagnostics=grouping.diagnostics,
         steps=steps,
     )
 
@@ -193,6 +207,18 @@ def _summary(candidate: Candidate, confidence: Confidence, reason: str) -> str:
     return (
         f"{candidate.entity.canonical}: {finding.summary}. "
         f"{confidence.value.capitalize()} ({reason}).{linked}"
+    )
+
+
+def _selected_hypothesis(case: Case, entity: EntityRef) -> Hypothesis | None:
+    """Resolve an entity choice to its containing causal episode."""
+    return next(
+        (
+            hypothesis
+            for hypothesis in case.hypotheses
+            if entity == hypothesis.causal_actor or entity in hypothesis.members
+        ),
+        None,
     )
 
 
@@ -237,8 +263,9 @@ def diagnose(
             summary="No change, fault, or failure signal was observed.",
             symptoms=case.symptoms,
             steps=tuple(case.steps),
+            hypothesis_diagnostics=case.hypothesis_diagnostics,
         )
-    chosen = case.candidates[0]
+    selected = case.hypotheses[0]
     mode = "deterministic"
     model_calls = 0
     if investigator is not None:
@@ -257,34 +284,49 @@ def diagnose(
                     detail=f"{choice.entity.canonical}: {choice.rationale}"[:500],
                 )
             )
-            match = next((c for c in case.candidates if c.entity == choice.entity), None)
-            if match is not None and match.entity != chosen.entity:
-                chosen = _accept_override(case, chosen, match, config)
+            proposed = _selected_hypothesis(case, choice.entity)
+            if proposed is not None and proposed.hypothesis_id != selected.hypothesis_id:
+                current_candidate = hypothesis_candidate(selected)
+                proposed_candidate = hypothesis_candidate(proposed)
+                accepted = _accept_override(case, current_candidate, proposed_candidate, config)
+                if accepted.entity == proposed.causal_actor:
+                    selected = proposed
+    selected_candidate = hypothesis_candidate(selected)
     runner_up = (
-        case.candidates[1]
-        if chosen.entity == case.candidates[0].entity and len(case.candidates) > 1
+        hypothesis_candidate(case.hypotheses[1])
+        if selected.hypothesis_id == case.hypotheses[0].hypothesis_id and len(case.hypotheses) > 1
         else None
     )
-    trace = verification_trace(chosen, case.context, config.ranking, runner_up=runner_up)
+    trace = verification_trace(
+        selected_candidate, case.context, config.ranking, runner_up=runner_up
+    )
     assert trace.decision is not None
     confidence, reason = trace.decision, trace.rationale
-    alternatives = tuple(c for c in case.candidates if c.entity != chosen.entity)[
+    alternatives = tuple(c for c in case.candidates if c.entity not in selected.members)[
         : config.alternatives
     ]
+    alternative_hypotheses = tuple(
+        hypothesis
+        for hypothesis in case.hypotheses
+        if hypothesis.hypothesis_id != selected.hypothesis_id
+    )[: config.alternatives]
     case.steps.append(
         InvestigationStep(actor="engine", action="verify", detail=f"{confidence.value}: {reason}")
     )
     return Diagnosis(
         incident_id=case.incident_id,
-        root_cause=chosen.entity,
+        root_cause=selected.causal_actor,
         confidence=confidence,
-        summary=_summary(chosen, confidence, reason),
+        summary=_summary(selected_candidate, confidence, reason),
         symptoms=case.symptoms,
-        evidence=chosen.findings[:5],
-        causal_path=chosen.causal_path,
-        causal_explanation=chosen.causal_explanation,
+        evidence=selected.findings[:5],
+        causal_path=selected.causal_paths[0] if selected.causal_paths else (),
+        causal_explanation=selected.causal_explanation,
         alternatives=alternatives,
-        remediation=propose(chosen, case.topology),
+        hypothesis=selected,
+        alternative_hypotheses=alternative_hypotheses,
+        hypothesis_diagnostics=case.hypothesis_diagnostics,
+        remediation=propose(selected_candidate, case.topology),
         steps=tuple(case.steps),
         mode=mode,
         model_calls=model_calls,

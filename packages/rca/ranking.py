@@ -150,6 +150,31 @@ def _link(finding: Finding, context: Context, config: RankingConfig) -> tuple[fl
     return score, reasons
 
 
+def score_finding(
+    finding: Finding, context: Context, config: RankingConfig | None = None
+) -> tuple[float, tuple[str, ...]]:
+    """Return one finding's existing ranking contribution and reasons.
+
+    Hypothesis aggregation reuses this primitive so it can deduplicate
+    evidence before applying the same scoring mechanics.  It deliberately
+    does not introduce a hypothesis-specific bonus.
+    """
+    config = config or RankingConfig()
+    value = KIND_WEIGHT[finding.kind]
+    if finding.kind is FindingKind.FAILURE_EVENT:
+        value += min(1.5, 0.25 * float(finding.details.get("count", 1)) ** 0.5)
+    link, reasons = _link(finding, context, config)
+    value += link
+    window = _in_window(finding.at, context, config)
+    if window is True:
+        value += config.in_window_bonus
+        reasons.append("happened in the incident window")
+    elif window is False:
+        value -= config.in_window_bonus
+        reasons.append("outside the incident window")
+    return value, tuple(reasons)
+
+
 def score_findings(
     findings: Iterable[Finding], context: Context, config: RankingConfig | None = None
 ) -> list[Candidate]:
@@ -162,19 +187,8 @@ def score_findings(
     for entity, items in grouped.items():
         scored: list[tuple[float, Finding, list[str]]] = []
         for finding in items:
-            value = KIND_WEIGHT[finding.kind]
-            if finding.kind is FindingKind.FAILURE_EVENT:
-                value += min(1.5, 0.25 * float(finding.details.get("count", 1)) ** 0.5)
-            link, reasons = _link(finding, context, config)
-            value += link
-            window = _in_window(finding.at, context, config)
-            if window is True:
-                value += config.in_window_bonus
-                reasons.append("happened in the incident window")
-            elif window is False:
-                value -= config.in_window_bonus
-                reasons.append("outside the incident window")
-            scored.append((value, finding, reasons))
+            value, reasons = score_finding(finding, context, config)
+            scored.append((value, finding, list(reasons)))
         scored.sort(key=lambda item: -item[0])
         top_value, _top, top_reasons = scored[0]
         extras: dict[FindingKind, float] = {}
@@ -545,6 +559,7 @@ __all__ = [
     "annotate_temporal_roles",
     "normalize",
     "score_findings",
+    "score_finding",
     "symptom_tokens",
     "verify",
     "verification_trace",

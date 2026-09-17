@@ -100,11 +100,13 @@ def test_chaos_experiment_on_alerting_pod_is_verified_and_collapsed() -> None:
         ],
     )
     diagnosis = diagnose(source)
-    assert diagnosis.root_cause == ref("chaos/NetworkChaos/checkout-delay-bbbbb")
+    assert diagnosis.root_cause == ref("chaos/Schedule/checkout-delay")
     assert diagnosis.confidence is Confidence.VERIFIED
+    assert diagnosis.hypothesis is not None
+    assert ref("chaos/NetworkChaos/checkout-delay-bbbbb") in diagnosis.hypothesis.manifestations
     names = [c.entity.name for c in diagnosis.alternatives]
     assert "checkout-delay-aaaaa" not in names
-    assert "checkout-delay" in names
+    assert "checkout-delay-bbbbb" not in names
     assert "pause=true" in diagnosis.remediation[0].command
 
 

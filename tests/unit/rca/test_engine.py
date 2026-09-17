@@ -223,7 +223,7 @@ def test_partial_network_policy_is_a_candidate_but_not_verified() -> None:
         c for c in build_case(source).candidates if c.entity == ref("shop/NetworkPolicy/only-8080")
     ).findings[0]
     assert finding.kind is FindingKind.NETWORK_RESTRICTION
-    assert "TCP/8080" in finding.summary
+    assert "ingress allows TCP/8080 from any peer" in finding.summary
     assert diagnosis.confidence is not Confidence.VERIFIED
 
 

@@ -348,13 +348,25 @@ def _deny_all(spec: Mapping[str, Any]) -> list[str]:
     ]
 
 
-def _allowed_ports(rules: Any) -> list[str]:
+def _rule_summary(spec: Mapping[str, Any], direction: str) -> tuple[str, list[str]]:
+    """Describe what one direction's rules let through, following Kubernetes semantics."""
+    peers_key = "from" if direction == "Ingress" else "to"
     ports: list[str] = []
-    for rule in rules if isinstance(rules, list) else []:
-        for port in mapping(rule).get("ports") or []:
-            item = mapping(port)
-            ports.append(f"{item.get('protocol', 'TCP')}/{item.get('port', '*')}")
-    return sorted(set(ports))
+    any_port = any_peer = False
+    for rule in spec.get(direction.lower()) or []:
+        item = mapping(rule)
+        rule_ports = [mapping(port) for port in item.get("ports") or []]
+        if not rule_ports and not item.get(peers_key):
+            return f"{direction.lower()} allows all traffic (empty rule)", []
+        any_port = any_port or not rule_ports
+        any_peer = any_peer or not item.get(peers_key)
+        ports.extend(
+            f"{port.get('protocol', 'TCP')}/{port.get('port', '*')}" for port in rule_ports
+        )
+    ports = sorted(set(ports))
+    where = "any port" if any_port or not ports else ", ".join(ports)
+    who = "any peer" if any_peer else "listed peers"
+    return f"{direction.lower()} allows {where} from {who}", ports
 
 
 def _network_policy_finding(
@@ -376,23 +388,19 @@ def _network_policy_finding(
             related=affected,
             details={**details, "denied": denied},
         )
-    ingress_ports = _allowed_ports(spec.get("ingress"))
-    egress_ports = _allowed_ports(spec.get("egress"))
-    limits = []
-    if ingress_ports:
-        limits.append(f"ingress only on {', '.join(ingress_ports)}")
-    if egress_ports:
-        limits.append(f"egress only on {', '.join(egress_ports)}")
-    if not limits:
-        limits.append("traffic only from listed peers")
+    types = spec.get("policyTypes") or ["Ingress"]
+    rules = {direction: _rule_summary(spec, direction) for direction in types}
     return Finding(
         kind=FindingKind.NETWORK_RESTRICTION,
         entity=entity,
         at=_creation_time(version.body),
-        summary=f"NetworkPolicy allows {'; '.join(limits)} for {len(affected)} pod(s)",
+        summary=(
+            f"NetworkPolicy filters {len(affected)} pod(s): "
+            + "; ".join(text for text, _ports in rules.values())
+        ),
         evidence_ids=(version.evidence_id,),
         related=affected,
-        details={**details, "ingress_ports": ingress_ports, "egress_ports": egress_ports},
+        details={**details, "ports": {d: ports for d, (_text, ports) in rules.items()}},
     )
 
 
@@ -422,7 +430,7 @@ def _quota_finding(
             at=min(times) if times else None,
             summary=(
                 f"{entity.kind} rejected pod creation {sum(e.count for e in rejections)} time(s) "
-                f"for {', '.join(ref.name for ref in workloads[:3])}: {rejections[-1].message[:120]}"
+                f"for {', '.join(ref.name for ref in workloads[:3])}: {rejections[-1].message[:240]}"
             ),
             evidence_ids=(version.evidence_id, *(e.evidence_id for e in rejections[:3])),
             related=workloads,

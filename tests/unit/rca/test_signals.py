@@ -14,6 +14,7 @@ from rca_builders import (
 
 from packages.rca.model import FindingKind, ResourcePressure
 from packages.rca.signals import (
+    _rule_summary,
     change_findings,
     extract_symptoms,
     failure_findings,
@@ -366,3 +367,17 @@ def test_only_new_resource_pressure_becomes_a_finding() -> None:
     assert len(findings) == 1
     assert findings[0].kind is FindingKind.RESOURCE_PRESSURE
     assert findings[0].summary == "checkout memory use of limit rose from 50% to 96%"
+
+
+def test_network_policy_summary_follows_kubernetes_rule_semantics() -> None:
+    assert _rule_summary({"ingress": [{}]}, "Ingress")[0] == (
+        "ingress allows all traffic (empty rule)"
+    )
+    peers = {"ingress": [{"from": [{"podSelector": {}}], "ports": [{"port": 80}]}]}
+    assert _rule_summary(peers, "Ingress") == (
+        "ingress allows TCP/80 from listed peers",
+        ["TCP/80"],
+    )
+    assert _rule_summary({"egress": [{"to": [{"ipBlock": {}}]}]}, "Egress")[0] == (
+        "egress allows any port from listed peers"
+    )

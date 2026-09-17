@@ -1,4 +1,4 @@
-"""Static assertions for the deterministic v0.1.0 release boundary."""
+"""Static assertions for the deterministic v1.0 release boundary."""
 
 import re
 from pathlib import Path

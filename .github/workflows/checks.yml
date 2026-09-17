@@ -10,8 +10,6 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    env:
-      SRE_LIVE_MODEL_ENABLED: "false"
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -21,3 +19,14 @@ jobs:
         run: make install
       - name: Run checks
         run: make check
+      - name: Offline demo
+        run: .venv/bin/agentic-sre demo --json > /dev/null
+
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build every image target
+        run: make images
+      - name: Smoke-test the control plane image
+        run: docker run --rm agentic-sre/control-plane:dev agentic-sre demo

@@ -18,6 +18,7 @@ from packages.rca.model import (
     Alert,
     ClusterEvent,
     EntityRef,
+    Lifecycle,
     LogRecord,
     ObjectVersion,
     ResourcePressure,
@@ -162,6 +163,25 @@ def pod_pressure(pod: EntityRef, path: Path, since: datetime) -> list[ResourcePr
     return result
 
 
+def _mark_lifecycle(
+    history: dict[EntityRef, list[ObjectVersion]],
+) -> dict[EntityRef, list[ObjectVersion]]:
+    """First versions are CREATED when the object was created after recording began."""
+    firsts = [versions[0].observed_at for versions in history.values() if versions]
+    if not firsts:
+        return history
+    recording_started = min(firsts)
+    for versions in history.values():
+        created = parse_time(child(versions[0].body, "metadata").get("creationTimestamp"))
+        first = (
+            Lifecycle.CREATED
+            if created is not None and created > recording_started
+            else Lifecycle.OBSERVED
+        )
+        versions[0] = versions[0].model_copy(update={"lifecycle": first})
+    return history
+
+
 class SnapshotSource:
     """Reads alerts, object versions, and events from snapshot files."""
 
@@ -238,7 +258,7 @@ class SnapshotSource:
             )
         for versions in history.values():
             versions.sort(key=lambda item: item.observed_at)
-        return history
+        return _mark_lifecycle(history)
 
     def object_history(self) -> Mapping[EntityRef, Sequence[ObjectVersion]]:
         return self._history

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from packages.rca.model import Alert, ClusterEvent, EntityRef, ObjectVersion
+from packages.rca.model import Alert, ClusterEvent, EntityRef, Lifecycle, ObjectVersion
 from packages.rca.source import InMemorySource
 
 T0 = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
@@ -19,7 +19,14 @@ def ref(value: str) -> EntityRef:
     return EntityRef.parse(value)
 
 
-def version(value: str, minutes: float, body: dict[str, Any], index: int = 0) -> ObjectVersion:
+def version(
+    value: str,
+    minutes: float,
+    body: dict[str, Any],
+    index: int = 0,
+    *,
+    lifecycle: Lifecycle = Lifecycle.UPDATED,
+) -> ObjectVersion:
     entity = ref(value)
     metadata: dict[str, Any] = {"name": entity.name, **body.pop("metadata", {})}
     if entity.namespace != "_cluster":
@@ -29,6 +36,7 @@ def version(value: str, minutes: float, body: dict[str, Any], index: int = 0) ->
         observed_at=at(minutes),
         body={"kind": entity.kind, "metadata": metadata, **body},
         evidence_id=f"obj:{value}:{minutes}:{index}",
+        lifecycle=lifecycle,
     )
 
 

@@ -18,6 +18,8 @@ from packages.rca.model import (
     Alert,
     ClusterEvent,
     EntityRef,
+    JournalEntry,
+    Lifecycle,
     LogRecord,
     ObjectVersion,
     ResourcePressure,
@@ -224,18 +226,34 @@ def events_from_bodies(bodies: Sequence[Mapping[str, Any]]) -> list[ClusterEvent
 
 @dataclass
 class ChangeWatcher:
-    """Stores a version of every listed object whose content changed since last time."""
+    """Stores a version of every listed object that changed, and tombstones the rest.
+
+    ``live_keys`` returns every object key the journal currently considers live
+    (its last version is not a tombstone); anything missing from this listing is
+    recorded as deleted with ``tombstone``.
+    """
 
     reader: ClusterReader
     namespaces: tuple[str, ...]
     record: Callable[[dict[str, Any], datetime], bool]
+    live_keys: Callable[[], set[str]] = lambda: set()
+    tombstone: Callable[[str, datetime], bool] = lambda key, at: False
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
 
     def snapshot(self) -> int:
         now = self.clock()
-        return sum(
-            1 for body in self.reader.list_objects(self.namespaces) if self.record(body, now)
-        )
+        bodies = self.reader.list_objects(self.namespaces)
+        seen: set[str] = set()
+        stored = 0
+        for body in bodies:
+            entity = _entity(body)
+            if entity is None:
+                continue
+            seen.add(entity.canonical)
+            stored += self.record(body, now)
+        missing = self.live_keys() - seen
+        stored += sum(self.tombstone(key, now) for key in missing)
+        return stored
 
 
 @dataclass
@@ -248,7 +266,7 @@ class LiveSource:
 
     incident: str
     alert_items: list[Alert]
-    journal: list[tuple[str, datetime, dict[str, Any], int]]
+    journal: Sequence[JournalEntry]
     current_objects: list[dict[str, Any]]
     event_bodies: list[dict[str, Any]]
     error_items: list[LogRecord] = field(default_factory=list)
@@ -263,23 +281,46 @@ class LiveSource:
     def object_history(self) -> Mapping[EntityRef, Sequence[ObjectVersion]]:
         history: dict[EntityRef, list[ObjectVersion]] = {}
         hashes: dict[EntityRef, str] = {}
+        live: set[EntityRef] = set()
 
-        def add(body: dict[str, Any], at: datetime, evidence: str) -> None:
+        def add(body: dict[str, Any], at: datetime, evidence: str, lifecycle: Lifecycle) -> None:
             entity = _entity(body)
             if entity is None:
                 return
             digest = object_content_hash(body)
-            if hashes.get(entity) == digest:
+            # A tombstone always lands, even with the same content as the last version.
+            if lifecycle is not Lifecycle.DELETED and hashes.get(entity) == digest:
                 return
             hashes[entity] = digest
             history.setdefault(entity, []).append(
-                ObjectVersion(entity=entity, observed_at=at, body=body, evidence_id=evidence)
+                ObjectVersion(
+                    entity=entity,
+                    observed_at=at,
+                    body=body,
+                    evidence_id=evidence,
+                    lifecycle=lifecycle,
+                )
             )
 
-        for _key, at, body, version_id in self.journal:
-            add(body, at, f"journal:{version_id}")
+        for entry in self.journal:
+            add(entry.body, entry.observed_at, f"journal:{entry.version_id}", entry.lifecycle)
         for body in self.current_objects:
-            add(body, self.observed_at, "cluster:current")
+            entity = _entity(body)
+            if entity is not None:
+                live.add(entity)
+            add(body, self.observed_at, "cluster:current", Lifecycle.UPDATED)
+        # An object the journal still shows live but the cluster no longer has is deleted.
+        for entity, versions in history.items():
+            if entity not in live and versions[-1].lifecycle is not Lifecycle.DELETED:
+                versions.append(
+                    ObjectVersion(
+                        entity=entity,
+                        observed_at=self.observed_at,
+                        body=versions[-1].body,
+                        evidence_id="cluster:missing",
+                        lifecycle=Lifecycle.DELETED,
+                    )
+                )
         return history
 
     def events(self) -> Sequence[ClusterEvent]:

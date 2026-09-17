@@ -111,10 +111,12 @@ class ChangeRecordRow(Base):
 
 
 class ObjectVersionRow(Base):
-    """One observed version of a Kubernetes object, stored when its content changes."""
+    """One observed version of a Kubernetes object: a content change or a lifecycle event.
+
+    Consecutive duplicates are skipped; repeated content (A -> B -> A) is kept.
+    """
 
     __tablename__ = "object_versions"
-    __table_args__ = (UniqueConstraint("object_key", "content_hash"),)
 
     version_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     object_key: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
@@ -124,6 +126,9 @@ class ObjectVersionRow(Base):
     observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False, index=True)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     body: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    lifecycle: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="UPDATED", server_default="UPDATED"
+    )
 
 
 class DiagnosisRow(Base):

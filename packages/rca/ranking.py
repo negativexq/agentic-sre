@@ -18,6 +18,8 @@ KIND_WEIGHT: dict[FindingKind, float] = {
     FindingKind.POLICY_CREATED: 4.0,
     FindingKind.FAULT_SCHEDULE: 3.5,
     FindingKind.DEPENDENCY_ERRORS: 3.0,
+    FindingKind.OBJECT_DELETED: 4.5,
+    FindingKind.OBJECT_CREATED: 3.0,
     FindingKind.QUOTA_EXCEEDED: 5.0,
     FindingKind.QUOTA_EXHAUSTED: 3.0,
     FindingKind.NETWORK_RESTRICTION: 2.5,
@@ -232,7 +234,7 @@ def verify(
         window = _in_window(finding.at, context, config)
         # Configuration may reach an alerting component through the workload that
         # uses it and one service call: config - workload - service - caller.
-        depth = 3 if finding.kind is FindingKind.CONFIG_CHANGE else 2
+        depth = 3 if finding.kind in {FindingKind.CONFIG_CHANGE, FindingKind.OBJECT_DELETED} else 2
         linked = any(
             context.topology.distance(ref, context.symptom_entities, max_depth=depth) is not None
             for ref in _affected_entities(finding, context.topology)
@@ -256,6 +258,11 @@ def verify(
             and linked
         ):
             return Confidence.VERIFIED, "workload changed in the incident window next to the alerts"
+        if finding.kind is FindingKind.OBJECT_DELETED and window is True and linked:
+            return (
+                Confidence.VERIFIED,
+                "an object used by an alerting component was deleted near onset",
+            )
         if finding.kind is FindingKind.POLICY_CREATED and linked:
             return Confidence.VERIFIED, "restrictive policy applies to alerting pods"
         if finding.kind is FindingKind.QUOTA_EXCEEDED and linked:

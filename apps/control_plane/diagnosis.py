@@ -46,12 +46,19 @@ class DiagnosisService:
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
 
     def snapshot(self) -> int:
-        """Record changed objects in the journal; returns how many were stored."""
+        """Record changed and deleted objects in the journal; returns how many were stored."""
         if self.reader is None:
             return 0
         with self.session_factory() as session:
             repository = ObjectVersionRepository(session)
-            watcher = ChangeWatcher(self.reader, self.namespaces, repository.record, self.clock)
+            watcher = ChangeWatcher(
+                self.reader,
+                self.namespaces,
+                repository.record,
+                lambda: repository.live_keys(set(self.namespaces)),
+                repository.tombstone,
+                self.clock,
+            )
             return watcher.snapshot()
 
     def watch(self, stop: threading.Event, interval_seconds: float) -> None:

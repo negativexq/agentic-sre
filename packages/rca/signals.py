@@ -16,6 +16,7 @@ from packages.rca.model import (
     EntityRef,
     Finding,
     FindingKind,
+    Lifecycle,
     LogRecord,
     ObjectVersion,
     ResourcePressure,
@@ -56,6 +57,8 @@ ACCESS_KINDS = frozenset(
     {"ServiceAccount", "Role", "RoleBinding", "ClusterRole", "ClusterRoleBinding"}
 )
 CONFIG_KINDS = frozenset({"ConfigMap", "Secret"})
+# Kinds whose presence is judged by policy_findings rather than as a lifecycle event.
+POLICY_OBJECT_KINDS = frozenset({"NetworkPolicy", "ResourceQuota", "LimitRange"})
 _IGNORED_PATHS = ("metadata", "status")
 _RESTART_ANNOTATION = "kubectl.kubernetes.io/restartedAt"
 _LABEL_KEYS = ("service_name", "service", "job_name")
@@ -239,13 +242,48 @@ def _changed_excerpt(old: str, new: str) -> dict[str, str]:
     return {"before": old[start : index + 80], "after": new[start : index + 80]}
 
 
+_LIFECYCLE_SKIP = DERIVED_KINDS | ACCESS_KINDS | POLICY_OBJECT_KINDS
+
+
+def _lifecycle_finding(entity: EntityRef, version: ObjectVersion) -> Finding | None:
+    if entity.kind in _LIFECYCLE_SKIP or is_chaos_kind(entity.kind):
+        return None
+    if version.lifecycle is Lifecycle.DELETED:
+        return Finding(
+            kind=FindingKind.OBJECT_DELETED,
+            entity=entity,
+            at=version.observed_at,
+            summary=f"{entity.kind} deleted (first noticed missing at this time)",
+            evidence_ids=(version.evidence_id,),
+            details={"last_state_evidence": version.evidence_id},
+        )
+    if version.lifecycle is Lifecycle.CREATED:
+        return Finding(
+            kind=FindingKind.OBJECT_CREATED,
+            entity=entity,
+            at=_creation_time(version.body) or version.observed_at,
+            summary=f"{entity.kind} created",
+            evidence_ids=(version.evidence_id,),
+        )
+    return None
+
+
 def change_findings(history: Mapping[EntityRef, Sequence[ObjectVersion]]) -> list[Finding]:
-    """Findings for every observed change between consecutive object versions."""
+    """Findings for creations, deletions, and changes between consecutive live versions."""
     findings: list[Finding] = []
     for entity, versions in history.items():
-        if entity.kind in DERIVED_KINDS or entity.kind in ACCESS_KINDS or len(versions) < 2:
+        if entity.kind in DERIVED_KINDS or entity.kind in ACCESS_KINDS:
             continue
+        for version in versions:
+            if lifecycle := _lifecycle_finding(entity, version):
+                findings.append(lifecycle)
         for previous, current in zip(versions, versions[1:], strict=False):
+            # A deletion or re-creation is its own finding, not a content diff.
+            if (
+                current.lifecycle is not Lifecycle.UPDATED
+                or previous.lifecycle is Lifecycle.DELETED
+            ):
+                continue
             before, after = _content(previous.body), _content(current.body)
             leaves = _diff(before, after)
             paths = [leaf[0] for leaf in leaves]

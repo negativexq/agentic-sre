@@ -47,6 +47,33 @@ class Alert(BaseModel):
     labels: dict[str, str] = Field(default_factory=dict)
 
 
+class Lifecycle(StrEnum):
+    """How an object version came to be recorded.
+
+    OBSERVED: first sighting of an object that existed before observation began.
+    CREATED: the object appeared while it was being observed.
+    UPDATED: its desired state changed.
+    DELETED: tombstone; ``body`` is the last state seen before deletion.
+    """
+
+    OBSERVED = "OBSERVED"
+    CREATED = "CREATED"
+    UPDATED = "UPDATED"
+    DELETED = "DELETED"
+
+
+class JournalEntry(BaseModel):
+    """One stored object version, as the storage layer hands it to the engine."""
+
+    model_config = ConfigDict(frozen=True)
+
+    object_key: str
+    observed_at: datetime
+    body: dict[str, Any]
+    version_id: int
+    lifecycle: Lifecycle
+
+
 class ObjectVersion(BaseModel):
     """One observed version of a Kubernetes object."""
 
@@ -56,6 +83,7 @@ class ObjectVersion(BaseModel):
     observed_at: datetime
     body: dict[str, Any]
     evidence_id: str
+    lifecycle: Lifecycle = Lifecycle.UPDATED
 
 
 class LogRecord(BaseModel):
@@ -117,6 +145,8 @@ class FindingKind(StrEnum):
     """Deterministic signal categories, ordered roughly by causal strength."""
 
     CONFIG_CHANGE = "CONFIG_CHANGE"
+    OBJECT_CREATED = "OBJECT_CREATED"
+    OBJECT_DELETED = "OBJECT_DELETED"
     SPEC_CHANGE = "SPEC_CHANGE"
     IMAGE_CHANGE = "IMAGE_CHANGE"
     SCALE_CHANGE = "SCALE_CHANGE"
@@ -236,6 +266,8 @@ __all__ = [
     "Finding",
     "FindingKind",
     "InvestigationStep",
+    "JournalEntry",
+    "Lifecycle",
     "LogRecord",
     "ObjectVersion",
     "Remediation",

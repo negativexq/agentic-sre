@@ -28,6 +28,7 @@ from packages.contracts import (
     IncidentStatus,
 )
 from packages.rca.live import LokiLogReader
+from packages.rca.model import Confidence, EntityRef, FindingKind
 from packages.storage.database import create_session_factory
 from packages.storage.models import AlertRow, Base
 from packages.storage.repositories import IncidentRepository, ObjectVersionRepository
@@ -193,7 +194,49 @@ def test_journal_stores_only_content_changes(setup: Any) -> None:
             starts_at=T0 + timedelta(minutes=1),
             ends_at=T0 + timedelta(hours=1),
         )
-    assert [item[1] for item in history] == [T0, T0 + timedelta(minutes=2)]
+    assert [entry.observed_at for entry in history] == [T0, T0 + timedelta(minutes=2)]
+
+
+def test_journal_records_a_rollback_that_repeats_earlier_content(setup: Any) -> None:
+    """A -> B -> A must not collide on the old (object_key, content_hash) uniqueness."""
+    factory, _cluster, _clock, _incident = setup
+    with factory() as session:
+        repository = ObjectVersionRepository(session)
+        assert repository.record(_deployment("0"), T0) is True
+        assert repository.record(_deployment("5000"), T0 + timedelta(minutes=1)) is True
+        # Rollback: content equals the very first version again.
+        assert repository.record(_deployment("0"), T0 + timedelta(minutes=2)) is True
+        history = repository.history(
+            namespaces={"sre-demo"}, starts_at=T0, ends_at=T0 + timedelta(hours=1)
+        )
+    assert [entry.observed_at for entry in history] == [
+        T0,
+        T0 + timedelta(minutes=1),
+        T0 + timedelta(minutes=2),
+    ]
+    assert [entry.lifecycle.value for entry in history] == ["OBSERVED", "UPDATED", "UPDATED"]
+
+
+def test_deleted_object_is_tombstoned_and_can_be_recreated(setup: Any) -> None:
+    factory, _cluster, _clock, _incident = setup
+    with factory() as session:
+        repository = ObjectVersionRepository(session)
+        assert repository.record(_deployment("0"), T0) is True
+        assert (
+            repository.tombstone("sre-demo/Deployment/payment-service", T0 + timedelta(minutes=1))
+            is True
+        )
+        # Tombstoning twice in a row is a no-op.
+        assert (
+            repository.tombstone("sre-demo/Deployment/payment-service", T0 + timedelta(minutes=2))
+            is False
+        )
+        # A recreation after a tombstone is recorded even with the same content.
+        assert repository.record(_deployment("0"), T0 + timedelta(minutes=3)) is True
+        history = repository.history(
+            namespaces={"sre-demo"}, starts_at=T0, ends_at=T0 + timedelta(hours=1)
+        )
+    assert [entry.lifecycle.value for entry in history] == ["OBSERVED", "DELETED", "CREATED"]
 
 
 def test_watched_config_change_is_diagnosed_through_the_api(setup: Any) -> None:
@@ -229,6 +272,22 @@ def test_watched_config_change_is_diagnosed_through_the_api(setup: Any) -> None:
         assert "FAULT_PAYMENT_DELAY_MS" in page.text
         assert "not executed" in page.text
         assert client.post("/api/v1/cluster/snapshot").json() == {"stored_versions": 0}
+
+
+def test_deleted_object_becomes_a_verified_root_cause(setup: Any) -> None:
+    factory, cluster, clock, incident_id = setup
+    service = DiagnosisService(
+        session_factory=factory, namespaces=("sre-demo",), reader=cluster, clock=clock
+    )
+    assert service.snapshot() == 5
+    clock.now = T0 + timedelta(minutes=10)
+    del cluster.objects[1]  # order-service Deployment, the alerting component
+    assert service.snapshot() == 1
+    clock.now = T0 + timedelta(minutes=13)
+    diagnosis = service.run(incident_id)
+    assert diagnosis.root_cause == EntityRef.parse("sre-demo/Deployment/order-service")
+    assert diagnosis.evidence[0].kind is FindingKind.OBJECT_DELETED
+    assert diagnosis.confidence is Confidence.VERIFIED
 
 
 def test_diagnosis_without_cluster_access_is_explicit(setup: Any) -> None:

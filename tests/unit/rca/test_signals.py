@@ -12,7 +12,7 @@ from rca_builders import (
     version,
 )
 
-from packages.rca.model import FindingKind, ResourcePressure
+from packages.rca.model import FindingKind, Lifecycle, ResourcePressure
 from packages.rca.signals import (
     _rule_summary,
     change_findings,
@@ -381,3 +381,83 @@ def test_network_policy_summary_follows_kubernetes_rule_semantics() -> None:
     assert _rule_summary({"egress": [{"to": [{"ipBlock": {}}]}]}, "Egress")[0] == (
         "egress allows any port from listed peers"
     )
+
+
+def test_created_object_is_reported_once() -> None:
+    history = {
+        ref("shop/ConfigMap/new-flags"): [
+            version(
+                "shop/ConfigMap/new-flags",
+                5,
+                {"data": {"a": "1"}, "metadata": {"creationTimestamp": "2025-01-01T12:05:00Z"}},
+                lifecycle=Lifecycle.CREATED,
+            ),
+        ],
+    }
+    findings = change_findings(history)
+    assert len(findings) == 1
+    assert findings[0].kind is FindingKind.OBJECT_CREATED
+    assert findings[0].entity == ref("shop/ConfigMap/new-flags")
+
+
+def test_deleted_object_is_reported_and_content_diff_is_skipped() -> None:
+    history = {
+        ref("shop/Deployment/checkout"): [
+            version("shop/Deployment/checkout", 0, {"spec": {"replicas": 1}}),
+            version(
+                "shop/Deployment/checkout",
+                5,
+                {"spec": {"replicas": 1}},
+                1,
+                lifecycle=Lifecycle.DELETED,
+            ),
+        ],
+    }
+    findings = change_findings(history)
+    assert len(findings) == 1
+    assert findings[0].kind is FindingKind.OBJECT_DELETED
+    assert findings[0].at == at(5)
+
+
+def test_recreation_after_deletion_is_not_diffed_against_the_tombstone() -> None:
+    history = {
+        ref("shop/Deployment/checkout"): [
+            version("shop/Deployment/checkout", 0, {"spec": {"replicas": 1}}),
+            version(
+                "shop/Deployment/checkout",
+                5,
+                {"spec": {"replicas": 1}},
+                1,
+                lifecycle=Lifecycle.DELETED,
+            ),
+            version(
+                "shop/Deployment/checkout",
+                10,
+                {
+                    "spec": {"replicas": 3},
+                    "metadata": {"creationTimestamp": "2025-01-01T12:10:00Z"},
+                },
+                2,
+                lifecycle=Lifecycle.CREATED,
+            ),
+        ],
+    }
+    kinds = [f.kind for f in change_findings(history)]
+    assert kinds == [FindingKind.OBJECT_DELETED, FindingKind.OBJECT_CREATED]
+
+
+def test_policy_and_derived_kinds_are_not_lifecycle_findings() -> None:
+    history = {
+        ref("shop/NetworkPolicy/deny"): [
+            version(
+                "shop/NetworkPolicy/deny",
+                5,
+                {"spec": {}, "metadata": {"creationTimestamp": "2025-01-01T12:05:00Z"}},
+                lifecycle=Lifecycle.CREATED,
+            ),
+        ],
+        ref("shop/Pod/p"): [
+            version("shop/Pod/p", 5, {"spec": {}}, lifecycle=Lifecycle.DELETED),
+        ],
+    }
+    assert change_findings(history) == []

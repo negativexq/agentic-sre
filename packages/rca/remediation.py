@@ -79,6 +79,22 @@ def propose(candidate: Candidate, topology: Topology) -> tuple[Remediation, ...]
                 risk="low",
             ),
         )
+    if finding.kind is FindingKind.OBJECT_DELETED:
+        return (
+            Remediation(
+                action=f"Restore {entity.kind} {entity.name} from its last recorded state",
+                command=f"# re-apply the stored body of {entity.canonical} (journal evidence), then kubectl get {ref}",
+                risk="medium: recreates an object someone removed on purpose",
+            ),
+        )
+    if finding.kind is FindingKind.OBJECT_CREATED:
+        return (
+            Remediation(
+                action=f"Review the new {entity.kind} {entity.name}; delete it if it was not intended",
+                command=f"kubectl describe {ref}",
+                risk="medium: deleting it undoes the change",
+            ),
+        )
     if finding.kind in {FindingKind.QUOTA_EXCEEDED, FindingKind.QUOTA_EXHAUSTED}:
         exhausted = ", ".join(finding.details.get("exhausted", [])) or "the rejected resources"
         return (

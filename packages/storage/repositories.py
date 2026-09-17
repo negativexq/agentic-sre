@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from packages.contracts import (
@@ -27,6 +27,7 @@ from packages.contracts import (
     TimeWindow,
 )
 from packages.rca.json_access import child, object_content_hash
+from packages.rca.model import CLUSTER_SCOPE, JournalEntry, Lifecycle
 from packages.storage.models import (
     AlertRow,
     ChangeRecordRow,
@@ -320,7 +321,10 @@ class EvidenceRepository:
 
 
 class ObjectVersionRepository:
-    """Append-only journal of full object bodies, deduplicated by content."""
+    """Append-only journal of object versions and lifecycle events.
+
+    Writers must be serialized (the control plane holds a lock around snapshots).
+    """
 
     def __init__(self, session: Session) -> None:
         self._session = session
@@ -329,23 +333,45 @@ class ObjectVersionRepository:
     def content_hash(body: dict[str, Any]) -> str:
         return object_content_hash(body)
 
+    def _latest(self, key: str) -> ObjectVersionRow | None:
+        return self._session.scalars(
+            select(ObjectVersionRow)
+            .where(ObjectVersionRow.object_key == key)
+            .order_by(desc(ObjectVersionRow.version_id))
+            .limit(1)
+        ).first()
+
+    def _recording_started(self, namespace: str) -> datetime | None:
+        return self._session.scalar(
+            select(func.min(ObjectVersionRow.observed_at)).where(
+                ObjectVersionRow.namespace == namespace
+            )
+        )
+
     def record(self, body: dict[str, Any], observed_at: datetime) -> bool:
-        """Store ``body`` unless the object's latest stored version has the same content."""
+        """Store ``body`` unless it equals the object's latest live version."""
         metadata = child(body, "metadata")
         kind, name = body.get("kind"), metadata.get("name")
         if not isinstance(kind, str) or not isinstance(name, str):
             raise ValueError("object body needs kind and metadata.name")
-        namespace = str(metadata.get("namespace") or "_cluster")
+        namespace = str(metadata.get("namespace") or CLUSTER_SCOPE)
         key = f"{namespace}/{kind}/{name}"
         digest = self.content_hash(body)
-        latest = self._session.scalars(
-            select(ObjectVersionRow.content_hash)
-            .where(ObjectVersionRow.object_key == key)
-            .order_by(desc(ObjectVersionRow.observed_at), desc(ObjectVersionRow.version_id))
-            .limit(1)
-        ).first()
-        if latest == digest:
+        latest = self._latest(key)
+        if latest is None:
+            started = self._recording_started(namespace)
+            created = _timestamp(metadata.get("creationTimestamp"))
+            lifecycle = (
+                Lifecycle.CREATED
+                if started is not None and created is not None and created > started
+                else Lifecycle.OBSERVED
+            )
+        elif latest.lifecycle == Lifecycle.DELETED:
+            lifecycle = Lifecycle.CREATED
+        elif latest.content_hash == digest:
             return False
+        else:
+            lifecycle = Lifecycle.UPDATED
         self._session.add(
             ObjectVersionRow(
                 object_key=key,
@@ -355,34 +381,88 @@ class ObjectVersionRepository:
                 observed_at=observed_at,
                 content_hash=digest,
                 body=body,
+                lifecycle=lifecycle.value,
             )
         )
         self._session.commit()
         return True
 
+    def tombstone(self, key: str, observed_at: datetime) -> bool:
+        """Record that a live object is gone; its last body is kept as the tombstone body."""
+        latest = self._latest(key)
+        if latest is None or latest.lifecycle == Lifecycle.DELETED:
+            return False
+        self._session.add(
+            ObjectVersionRow(
+                object_key=key,
+                namespace=latest.namespace,
+                kind=latest.kind,
+                name=latest.name,
+                observed_at=observed_at,
+                content_hash=latest.content_hash,
+                body=latest.body,
+                lifecycle=Lifecycle.DELETED.value,
+            )
+        )
+        self._session.commit()
+        return True
+
+    def live_keys(self, namespaces: set[str]) -> set[str]:
+        """Object keys in these namespaces whose latest journal version is not a tombstone."""
+        newest = (
+            select(func.max(ObjectVersionRow.version_id))
+            .where(ObjectVersionRow.namespace.in_(namespaces))
+            .group_by(ObjectVersionRow.object_key)
+        )
+        rows = self._session.execute(
+            select(ObjectVersionRow.object_key, ObjectVersionRow.lifecycle).where(
+                ObjectVersionRow.version_id.in_(newest)
+            )
+        ).all()
+        return {key for key, lifecycle in rows if lifecycle != Lifecycle.DELETED}
+
     def history(
         self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
-    ) -> list[tuple[str, datetime, dict[str, Any], int]]:
+    ) -> list[JournalEntry]:
         """Versions in the window plus each object's last version before it, oldest first."""
         rows = self._session.scalars(
             select(ObjectVersionRow)
             .where(
-                ObjectVersionRow.namespace.in_(namespaces | {"_cluster"}),
+                ObjectVersionRow.namespace.in_(namespaces | {CLUSTER_SCOPE}),
                 ObjectVersionRow.observed_at <= ends_at,
             )
             .order_by(ObjectVersionRow.observed_at, ObjectVersionRow.version_id)
         ).all()
-        result: list[tuple[str, datetime, dict[str, Any], int]] = []
         baseline: dict[str, ObjectVersionRow] = {}
+        selected: list[ObjectVersionRow] = []
         for row in rows:
             if row.observed_at < starts_at:
                 baseline[row.object_key] = row
             else:
-                result.append((row.object_key, row.observed_at, row.body, row.version_id))
-        before = [
-            (row.object_key, row.observed_at, row.body, row.version_id) for row in baseline.values()
+                selected.append(row)
+        # Objects already deleted before the window are not part of the incident.
+        before = [row for row in baseline.values() if row.lifecycle != Lifecycle.DELETED]
+        ordered = sorted([*before, *selected], key=lambda row: (row.observed_at, row.version_id))
+        return [
+            JournalEntry(
+                object_key=row.object_key,
+                observed_at=row.observed_at,
+                body=row.body,
+                version_id=row.version_id,
+                lifecycle=Lifecycle(row.lifecycle),
+            )
+            for row in ordered
         ]
-        return sorted([*before, *result], key=lambda item: (item[1], item[3]))
+
+
+def _timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 class DiagnosisRepository:

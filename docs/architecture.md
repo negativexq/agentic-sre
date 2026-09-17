@@ -69,6 +69,27 @@ flowchart LR
    revert a ConfigMap, `rollout undo`, pause a chaos schedule, restore
    replicas, raise a quota or memory limit.
 
+## Structural and causal topology
+
+The topology keeps two questions separate. `Topology.reachable()` is an
+undirected structural neighborhood used for UI, ownership lookup, and
+investigation. RCA linking uses `causal_reachable()` and `causal_path()` with
+the explicit `RELATION_SEMANTICS` table in `packages/rca/topology.py`.
+
+The table documents whether a relation may be traversed in its stored or
+reverse direction. This matters for Kubernetes owner references: the API stores
+`Pod --owned_by--> ReplicaSet --owned_by--> Deployment`, while a Deployment
+change can explain a Pod symptom in the reverse traversal direction. The same
+model covers selectors, declared service calls, configuration use, policies,
+fault targets, schedules, and scaling relationships. A causal path is stored
+as structured `CausalHop` values on the candidate and diagnosis, so the
+engine can answer why a candidate is connected without inventing evidence.
+
+Shared ConfigMaps and broad NetworkPolicies remain direct candidates for their
+own targets, but causal traversal does not use them as bridges between
+unrelated sibling workloads. This is deliberate abstention from structural
+connectivity, not a claim that the shared resource cannot itself be causal.
+
 ## Safety
 
 - Cluster access is list/get/watch only, never Secrets
@@ -111,6 +132,21 @@ flowchart LR
   `POST /api/v1/incidents/{id}/diagnosis` action; a GET never snapshots,
   journals, calls Loki, invokes the optional investigator, or writes a result.
 - There is no per-caller identity or rate limiting yet.
+
+## Live validation and support boundary
+
+`make e2e-kind` creates a disposable `agentic-sre` kind cluster, builds and
+loads the repository images, deploys the demo stack, captures a baseline,
+injects the real payment rollout fault, waits for the Prometheus → Alertmanager
+→ control-plane webhook incident, diagnoses it, rolls the Deployment back, and
+asserts both persisted Kubernetes Events and the object-journal A → B → A
+sequence. It also replays the resolved incident and requires the same
+deterministic verified cause. `make e2e-kind-clean` removes the named cluster.
+
+The built-in deployment is intentionally limited to one control-plane replica
+and one uvicorn worker. The snapshot lock is process-local; multiple workers or
+replicas writing the same journal require database-level synchronization or a
+dedicated single writer.
 
 ## Configuration
 

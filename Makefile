@@ -1,6 +1,7 @@
 .PHONY: install lint typecheck test check demo serve-local \
 	itbench-setup itbench-index eval-dev eval-test \
-	images cluster-up build-images deploy load status ui inject-bad-rollout recover rbac-check cluster-down
+	images cluster-up build-images deploy load status ui inject-bad-rollout recover rbac-check \
+	cluster-down precommit offline-demo e2e-kind e2e-kind-clean release-check
 
 PY := .venv/bin/python
 CLI := .venv/bin/agentic-sre
@@ -26,6 +27,12 @@ test:
 	$(PY) -m pytest
 
 check: lint typecheck test
+
+precommit:
+	MYPY_CACHE_DIR=/tmp/agentic-sre-mypy-cache $(PY) -m pre_commit run --all-files
+
+offline-demo:
+	$(CLI) demo --json > /dev/null
 
 # --- product without a cluster -----------------------------------------------
 
@@ -83,6 +90,7 @@ deploy: build-images
 	kubectl apply -f infra/kubernetes/workload.yaml
 	kubectl apply -f infra/kubernetes/dependencies.yaml
 	kubectl rollout status deployment/kafka -n $(NAMESPACE) --timeout=300s
+	kubectl rollout status deployment/postgres -n $(NAMESPACE) --timeout=180s
 	ready=no; for attempt in $$(seq 1 60); do if kubectl exec -n $(NAMESPACE) deployment/kafka -- /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092 >/dev/null 2>&1; then ready=yes; break; fi; sleep 2; done; test "$$ready" = yes
 	kubectl exec -n $(NAMESPACE) deployment/kafka -- /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --topic orders.created --bootstrap-server localhost:9092
 	kubectl delete job db-migration -n $(NAMESPACE) --ignore-not-found
@@ -132,3 +140,11 @@ status:
 
 cluster-down:
 	kind delete cluster --name agentic-sre
+
+e2e-kind:
+	$(PY) scripts/kind_e2e.py
+
+e2e-kind-clean:
+	kind delete cluster --name agentic-sre
+
+release-check: check precommit offline-demo e2e-kind

@@ -116,6 +116,19 @@ The control plane journals the rollout, Alertmanager fires on latency, and
 the incident page shows the diagnosis. `make recover` rolls back;
 `make rbac-check` confirms the control plane can read but not write.
 
+The release gate runs this lifecycle against a fresh real cluster and cleans it
+up when finished:
+
+```bash
+make e2e-kind
+```
+
+It asserts the expected verified `sre-demo/Deployment/payment-service` cause,
+persisted Event evidence, rollback recovery, and replayable A → B → A object
+journal behavior. The benchmark results above and this live-cluster result are
+different kinds of evidence: one measures frozen snapshots, the other proves a
+real Kubernetes lifecycle.
+
 The LLM investigator is off by default. To enable it, set
 `SRE_LLM_ENABLED=true`, a total call budget for the process in `SRE_LLM_MAX_CALLS` (a test-split run uses about 50), and
 `OPENAI_API_KEY`; the CLI takes `--llm`.

@@ -22,6 +22,7 @@ from packages.rca.model import (
     HypothesisDiagnostics,
     InvestigationStep,
     ObjectVersion,
+    Resolution,
     Symptoms,
 )
 from packages.rca.ranking import (
@@ -35,6 +36,7 @@ from packages.rca.ranking import (
     verify,
 )
 from packages.rca.remediation import propose
+from packages.rca.resolution import hypothesis_signature, resolve_hypotheses
 from packages.rca.signals import (
     autoscaling_findings,
     change_findings,
@@ -260,11 +262,21 @@ def diagnose(
             incident_id=case.incident_id,
             root_cause=None,
             confidence=Confidence.UNVERIFIED,
+            resolution=Resolution.INSUFFICIENT_EVIDENCE,
             summary="No change, fault, or failure signal was observed.",
             symptoms=case.symptoms,
             steps=tuple(case.steps),
             hypothesis_diagnostics=case.hypothesis_diagnostics,
+            resolution_trace=resolve_hypotheses(()),
         )
+    # Resolution compares immutable evidence structures.  Attach the same
+    # signatures to the serialized hypotheses so API consumers can inspect the
+    # comparison without reconstructing it from entity names.
+    case.hypotheses = [
+        hypothesis.model_copy(update={"signature": hypothesis_signature(hypothesis)})
+        for hypothesis in case.hypotheses
+    ]
+    resolution_trace = resolve_hypotheses(case.hypotheses)
     selected = case.hypotheses[0]
     mode = "deterministic"
     model_calls = 0
@@ -313,10 +325,27 @@ def diagnose(
     case.steps.append(
         InvestigationStep(actor="engine", action="verify", detail=f"{confidence.value}: {reason}")
     )
+    case.steps.append(
+        InvestigationStep(
+            actor="engine",
+            action="resolution",
+            detail=f"{resolution_trace.state.value}: {resolution_trace.rationale}",
+        )
+    )
+    ambiguous_hypotheses = (
+        tuple(
+            hypothesis
+            for hypothesis in case.hypotheses
+            if hypothesis.hypothesis_id in resolution_trace.leading_hypothesis_ids
+        )
+        if resolution_trace.state is Resolution.AMBIGUOUS
+        else ()
+    )
     return Diagnosis(
         incident_id=case.incident_id,
         root_cause=selected.causal_actor,
         confidence=confidence,
+        resolution=resolution_trace.state,
         summary=_summary(selected_candidate, confidence, reason),
         symptoms=case.symptoms,
         evidence=selected.findings[:5],
@@ -331,6 +360,8 @@ def diagnose(
         mode=mode,
         model_calls=model_calls,
         verification=trace,
+        resolution_trace=resolution_trace,
+        ambiguous_hypotheses=ambiguous_hypotheses,
     )
 
 

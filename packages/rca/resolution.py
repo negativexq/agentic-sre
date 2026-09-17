@@ -493,57 +493,75 @@ def resolve_hypotheses(
 def resolution_audit_records(diagnosis: Diagnosis) -> list[dict[str, object]]:
     """Return bounded near-collision records for a stored diagnosis."""
     trace = diagnosis.resolution_trace
-    if trace is None or not trace.hypothesis_audits or not trace.leading_hypothesis_ids:
+    if trace is None or len(trace.hypothesis_audits) < 2:
         return []
-    selected_id = trace.leading_hypothesis_ids[0]
-    selected = next(
-        (audit for audit in trace.hypothesis_audits if audit.hypothesis_id == selected_id), None
+    audits = trace.hypothesis_audits
+    final_selected_id = trace.leading_hypothesis_ids[0] if trace.leading_hypothesis_ids else None
+    final_selected = next(
+        (audit for audit in audits if audit.hypothesis_id == final_selected_id), None
     )
-    if selected is None:
-        return []
     records: list[dict[str, object]] = []
-    for alternative in trace.hypothesis_audits:
-        if alternative.hypothesis_id == selected_id or alternative.signature != selected.signature:
-            continue
-        relation = next(
-            (
-                item
-                for item in trace.dominance_relations
-                if item.stronger_hypothesis_id == selected_id
-                and item.weaker_hypothesis_id == alternative.hypothesis_id
-            ),
-            None,
-        )
-        if relation is not None:
-            classification = "VALID_DOMINANCE"
-        elif not alternative.plausible:
-            classification = (
-                "VALID_CONTRADICTION"
-                if ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION
-                in alternative.plausibility_reasons
-                else "ONLY_ONE_PLAUSIBLE"
+    for index, left in enumerate(audits):
+        for right in audits[index + 1 :]:
+            if left.signature != right.signature:
+                continue
+            relation = next(
+                (
+                    item
+                    for item in trace.dominance_relations
+                    if {
+                        item.stronger_hypothesis_id,
+                        item.weaker_hypothesis_id,
+                    }
+                    == {left.hypothesis_id, right.hypothesis_id}
+                ),
+                None,
             )
-        elif diagnosis.resolution is Resolution.AMBIGUOUS:
-            classification = "AMBIGUOUS_PEER"
-        else:
-            classification = "SCORE_LEAKAGE"
-        discriminators = [
-            item.model_dump(mode="json")
-            for item in trace.discriminators
-            if alternative.hypothesis_id in item.hypothesis_ids
-        ]
-        records.append(
-            {
-                "incident_id": diagnosis.incident_id,
-                "selected": selected.model_dump(mode="json"),
-                "alternative": alternative.model_dump(mode="json"),
-                "dominance": relation.model_dump(mode="json") if relation else None,
-                "discriminators": discriminators,
-                "classification": classification,
-                "resolution": diagnosis.resolution.value,
-                "resolution_reason": trace.rationale,
-            }
-        )
+            if relation is not None:
+                classification = "VALID_DOMINANCE"
+            elif not left.plausible or not right.plausible:
+                classification = (
+                    "VALID_CONTRADICTION"
+                    if ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION
+                    in (*left.plausibility_reasons, *right.plausibility_reasons)
+                    else "ONLY_ONE_PLAUSIBLE"
+                )
+            elif diagnosis.resolution is Resolution.AMBIGUOUS:
+                classification = "AMBIGUOUS_PEER"
+            else:
+                classification = "SCORE_LEAKAGE"
+            if final_selected is not None and final_selected.hypothesis_id in {
+                left.hypothesis_id,
+                right.hypothesis_id,
+            }:
+                selected, alternative = (
+                    (final_selected, right)
+                    if final_selected.hypothesis_id == left.hypothesis_id
+                    else (final_selected, left)
+                )
+            else:
+                selected, alternative = left, right
+            discriminators = [
+                item.model_dump(mode="json")
+                for item in trace.discriminators
+                if set(item.hypothesis_ids) & {left.hypothesis_id, right.hypothesis_id}
+            ]
+            records.append(
+                {
+                    "incident_id": diagnosis.incident_id,
+                    "selected": selected.model_dump(mode="json"),
+                    "alternative": alternative.model_dump(mode="json"),
+                    "comparison_pair": [
+                        left.model_dump(mode="json"),
+                        right.model_dump(mode="json"),
+                    ],
+                    "dominance": relation.model_dump(mode="json") if relation else None,
+                    "discriminators": discriminators,
+                    "classification": classification,
+                    "resolution": diagnosis.resolution.value,
+                    "resolution_reason": trace.rationale,
+                }
+            )
     return records[:_MAX_TRACE_ITEMS]
 
 

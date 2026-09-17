@@ -1,32 +1,41 @@
+# Read-only identity for the Agentic SRE control plane. It lists and watches
+# objects and events to build the change journal; it can never write, and it
+# never reads Secrets.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: investigation-tools
+  name: agentic-sre-reader
   namespace: sre-demo
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: investigation-tools-read-only
+  name: agentic-sre-reader
   namespace: sre-demo
 rules:
   - apiGroups: [""]
-    resources: ["pods", "events"]
+    resources: ["pods", "events", "services", "configmaps", "resourcequotas", "limitranges"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
-    resources: ["deployments", "deployments/status", "replicasets"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
     verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: investigation-tools-read-only
+  name: agentic-sre-reader
   namespace: sre-demo
 subjects:
   - kind: ServiceAccount
-    name: investigation-tools
+    name: agentic-sre-reader
     namespace: sre-demo
 roleRef:
   kind: Role
-  name: investigation-tools-read-only
+  name: agentic-sre-reader
   apiGroup: rbac.authorization.k8s.io

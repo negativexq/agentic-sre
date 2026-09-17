@@ -257,11 +257,13 @@ def test_loki_reader_parses_streams_and_bounds_query() -> None:
         return io.BytesIO(json.dumps(payload).encode())
 
     reader = LokiLogReader("http://loki:3100", opener=opener)
-    records = reader.error_logs(["sre-demo"], T0, T0 + timedelta(minutes=5))
+    records = reader.error_logs(["order-service", "bad name!"], T0, T0 + timedelta(minutes=5))
     assert [(r.service, r.message, r.at) for r in records] == [
         ("order-service", "payment timeout", T0)
     ]
     assert "query_range" in captured["url"] and "limit=500" in captured["url"]
+    assert "order-service" in captured["url"] and "bad" not in captured["url"]
+    assert reader.error_logs(["$(x)"], T0, T0) == []
 
 
 def test_watch_loop_snapshots_until_stopped(setup: Any) -> None:

@@ -13,6 +13,7 @@ spec:
       labels:
         app: control-plane
     spec:
+      serviceAccountName: agentic-sre-reader
       containers:
         - name: control-plane
           image: agentic-sre/control-plane:dev
@@ -23,8 +24,16 @@ spec:
             - configMapRef:
                 name: workload-config
           env:
-            - name: SRE_BENCHMARK_ENVIRONMENT
-              value: local-kind
+            - name: SRE_CLUSTER_ACCESS
+              value: "true"
+            - name: SRE_WATCH_NAMESPACES
+              value: sre-demo
+            - name: SRE_WATCH_INTERVAL_SECONDS
+              value: "15"
+            - name: SRE_AUTO_DIAGNOSE
+              value: "true"
+            - name: SRE_LOKI_URL
+              value: http://loki.observability.svc.cluster.local:3100
           resources:
             requests:
               cpu: 100m

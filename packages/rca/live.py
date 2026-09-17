@@ -57,7 +57,7 @@ class ClusterReader(Protocol):
 
 class LogReader(Protocol):
     def error_logs(
-        self, namespaces: Sequence[str], starts_at: datetime, ends_at: datetime
+        self, services: Sequence[str], starts_at: datetime, ends_at: datetime
     ) -> list[LogRecord]: ...
 
 
@@ -135,11 +135,14 @@ class LokiLogReader:
     opener: Callable[..., Any] = urlopen
 
     def error_logs(
-        self, namespaces: Sequence[str], starts_at: datetime, ends_at: datetime
+        self, services: Sequence[str], starts_at: datetime, ends_at: datetime
     ) -> list[LogRecord]:
-        selector = "|".join(re.escape(ns) for ns in namespaces)
+        names = sorted({name for name in services if re.fullmatch(r"[a-z0-9][a-z0-9.-]*", name)})
+        if not names:
+            return []
+        selector = "|".join(name.replace(".", "\\.") for name in names)
         params = {
-            "query": f'{{namespace=~"{selector}"}} |~ "{_LOG_ERRORS}"',
+            "query": f'{{service_name=~"{selector}"}} |~ "{_LOG_ERRORS}"',
             "start": str(int(starts_at.timestamp() * 1e9)),
             "end": str(int(ends_at.timestamp() * 1e9)),
             "limit": str(self.limit),

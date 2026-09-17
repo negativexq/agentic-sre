@@ -93,7 +93,15 @@ class DiagnosisService:
         logs = []
         if self.log_reader is not None:
             try:
-                logs = self.log_reader.error_logs(self.namespaces, starts_at, ends_at)
+                services = sorted(
+                    {
+                        str(body.get("metadata", {}).get("name"))
+                        for body in current
+                        if body.get("kind") in {"Deployment", "StatefulSet", "DaemonSet"}
+                    }
+                    | {alert.service for alert in alerts if alert.service}
+                )
+                logs = self.log_reader.error_logs(services, starts_at, ends_at)
             except Exception:
                 logger.warning("log backend unavailable; diagnosing without logs", exc_info=True)
         source = LiveSource(

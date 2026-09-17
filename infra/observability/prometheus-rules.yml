@@ -6,6 +6,7 @@ groups:
         for: 2m
         labels:
           severity: critical
+          service: payment-service
           namespace: sre-demo
         annotations:
           runbook: https://example.invalid/runbooks/high-error-rate
@@ -14,6 +15,7 @@ groups:
         for: 2m
         labels:
           severity: warning
+          service: payment-service
           namespace: sre-demo
         annotations:
           runbook: https://example.invalid/runbooks/high-request-latency
@@ -46,11 +48,6 @@ groups:
         for: 15s
         labels: {severity: critical, namespace: sre-demo, service: payment-service}
         annotations: {summary: Payment service error rate is high}
-      - alert: A1SmokePaymentErrorRateHigh
-        expr: sum(rate(http_requests_total{service="payment-service",status=~"5.."}[30s])) > 0.05
-        for: 15s
-        labels: {severity: critical, namespace: sre-demo, service: payment-service}
-        annotations: {summary: A1 integration smoke payment error rate is high}
       - alert: OrderErrorRateHigh
         expr: sum(rate(http_requests_total{service="order-service",status=~"5.."}[30s])) > 0.05
         for: 15s

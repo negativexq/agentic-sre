@@ -80,6 +80,15 @@ def diagnosis_html(diagnosis: Diagnosis, *, back_link: str | None = None) -> str
         f"<div class='card'><div class='muted'>Background alerts ignored</div>{background}</div>"
         "</div>"
     )
+    if diagnosis.causal_path:
+        hops = "".join(
+            "<div class='card'><code>"
+            f"{escape(hop.source.canonical)}</code>"
+            f" <span class='muted'>--{escape(hop.relation)}--&gt;</span> "
+            f"<code>{escape(hop.target.canonical)}</code></div>"
+            for hop in diagnosis.causal_path
+        )
+        parts.append(f"<h2>Why this cause / Causal path</h2><div class='grid'>{hops}</div>")
     if diagnosis.evidence:
         rows = "".join(
             "<tr>"

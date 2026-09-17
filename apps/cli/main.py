@@ -24,6 +24,10 @@ def _print_diagnosis(diagnosis: Diagnosis) -> None:
     print(
         f"Symptoms     {', '.join(symptoms.alert_names) or '-'} on {', '.join(symptoms.services[:6]) or '-'}"
     )
+    if diagnosis.causal_path:
+        print("Causal path")
+        for hop in diagnosis.causal_path:
+            print(f"  {hop.source} --{hop.relation}--> {hop.target}")
     if diagnosis.evidence:
         print("Evidence")
         for finding in diagnosis.evidence:

@@ -39,6 +39,7 @@ _CHANGE_KINDS = frozenset(
         FindingKind.TRAFFIC_INCREASE,
     }
 )
+_MAX_TRACE_ITEMS = 8
 
 
 def _temporal_label(finding: Finding) -> str:
@@ -189,9 +190,9 @@ def resolve_hypotheses(hypotheses: Sequence[Hypothesis]) -> ResolutionTrace:
     if not plausible:
         return ResolutionTrace(
             state=Resolution.INSUFFICIENT_EVIDENCE,
-            signatures=signatures,
-            eliminated_hypotheses=tuple(h.hypothesis_id for h in eliminated),
-            elimination_reasons=tuple(elimination_reasons),
+            signatures=signatures[:_MAX_TRACE_ITEMS],
+            eliminated_hypotheses=tuple(h.hypothesis_id for h in eliminated[:_MAX_TRACE_ITEMS]),
+            elimination_reasons=tuple(elimination_reasons[:_MAX_TRACE_ITEMS]),
             rationale="No hypothesis contains sufficient initiating causal evidence.",
         )
 
@@ -207,15 +208,15 @@ def resolve_hypotheses(hypotheses: Sequence[Hypothesis]) -> ResolutionTrace:
     if peers:
         return ResolutionTrace(
             state=Resolution.AMBIGUOUS,
-            leading_hypothesis_ids=tuple(h.hypothesis_id for h in leading),
-            signatures=tuple(hypothesis_signature(h) for h in leading),
+            leading_hypothesis_ids=tuple(h.hypothesis_id for h in leading[:_MAX_TRACE_ITEMS]),
+            signatures=tuple(hypothesis_signature(h) for h in leading[:_MAX_TRACE_ITEMS]),
             unresolved_dimensions=(
                 "causal_actor_identity",
                 "initiating_evidence_source",
                 "symptom_attribution",
             ),
-            eliminated_hypotheses=tuple(h.hypothesis_id for h in eliminated),
-            elimination_reasons=tuple(elimination_reasons),
+            eliminated_hypotheses=tuple(h.hypothesis_id for h in eliminated[:_MAX_TRACE_ITEMS]),
+            elimination_reasons=tuple(elimination_reasons[:_MAX_TRACE_ITEMS]),
             rationale=(
                 "Two or more hypotheses have equivalent initiating evidence, temporal "
                 "alignment, and symptom linkage; no deterministic discriminating evidence "
@@ -233,8 +234,8 @@ def resolve_hypotheses(hypotheses: Sequence[Hypothesis]) -> ResolutionTrace:
         leading_hypothesis_ids=(selected.hypothesis_id,),
         signatures=(hypothesis_signature(selected),),
         distinguishing_facts=tuple(facts),
-        eliminated_hypotheses=tuple(h.hypothesis_id for h in eliminated),
-        elimination_reasons=tuple(elimination_reasons),
+        eliminated_hypotheses=tuple(h.hypothesis_id for h in eliminated[:_MAX_TRACE_ITEMS]),
+        elimination_reasons=tuple(elimination_reasons[:_MAX_TRACE_ITEMS]),
         rationale="The leading hypothesis is deterministically distinguished by its causal evidence.",
     )
 

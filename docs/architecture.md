@@ -77,13 +77,16 @@ investigation. RCA linking uses `causal_reachable()` and `causal_path()` with
 the explicit `RELATION_SEMANTICS` table in `packages/rca/topology.py`.
 
 The table documents whether a relation may be traversed in its stored or
-reverse direction. This matters for Kubernetes owner references: the API stores
+reverse direction and gives the human-facing cause-to-symptom label. This
+matters for Kubernetes owner references: the API stores
 `Pod --owned_by--> ReplicaSet --owned_by--> Deployment`, while a Deployment
-change can explain a Pod symptom in the reverse traversal direction. The same
-model covers selectors, declared service calls, configuration use, policies,
-fault targets, schedules, and scaling relationships. A causal path is stored
-as structured `CausalHop` values on the candidate and diagnosis, so the
-engine can answer why a candidate is connected without inventing evidence.
+change can explain a Pod symptom through reverse traversal rendered as
+`Deployment --owns--> ReplicaSet --owns--> Pod`. The same model covers
+selectors, declared service calls, configuration use, policies, fault targets,
+schedules, and scaling relationships. Unknown relations remain structural but
+are denied during causal traversal. A causal path is stored as structured
+`CausalHop` values on the candidate and diagnosis, so the engine can answer
+why a candidate is connected without inventing evidence.
 
 Shared ConfigMaps and broad NetworkPolicies remain direct candidates for their
 own targets, but causal traversal does not use them as bridges between
@@ -109,10 +112,13 @@ connectivity, not a claim that the shared resource cannot itself be causal.
   evidence. Storage is append-only, while `EventRepository.analysis_view()`
   selects the latest state visible by `observed_at` for each stable Kubernetes
   Event identity before RCA; changing `count` or `lastTimestamp` never creates
-  multiple physical warning events in one replay. The journal still excludes
-  the `chaos-mesh` namespace from its historical window query even when RBAC
-  allows reading it live (only current, open-incident diagnosis sees chaos
-  objects/events today).
+  multiple physical warning events in one replay. Historical replay includes
+  explicitly configured evidence namespaces (`SRE_EVIDENCE_NAMESPACES`,
+  default `chaos-mesh`) without treating unrelated evidence-namespace objects
+  as application workload symptoms. Loki error lines used by an open diagnosis
+  are normalized into `log_observations`, so a resolved replay does not depend
+  on current Loki retention. An unavailable source is missing evidence, not a
+  fabricated contradiction.
 - `DiagnosisService`'s snapshot lock (`threading.Lock`) is per process. It is
   correct for today's single-worker, single-replica deployment
   (`infra/kubernetes/control-plane.yaml` runs one replica, no `--workers`).
@@ -155,6 +161,7 @@ dedicated single writer.
 | `DATABASE_URL` | local PostgreSQL | Incident, journal, and diagnosis store |
 | `SRE_CLUSTER_ACCESS` | off | Read the cluster with the pod or kube config identity |
 | `SRE_WATCH_NAMESPACES` | `sre-demo` | Namespaces to journal and diagnose |
+| `SRE_EVIDENCE_NAMESPACES` | `chaos-mesh` | Evidence-only namespaces retained for historical object/Event replay |
 | `SRE_WATCH_INTERVAL_SECONDS` | `0` | Journal snapshot interval; `0` disables the watcher |
 | `SRE_AUTO_DIAGNOSE` | off | Diagnose incidents as alerts arrive |
 | `SRE_LOKI_URL` | unset | Read error logs for dependency findings |

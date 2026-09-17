@@ -98,7 +98,7 @@ make eval-test         # only from a clean, tagged commit
 ```
 
 Prediction never reads ground truth, and grading refuses modified predictions.
-Re-grade a stored run with `agentic-sre grade --out evals/results/v0.7.0/test`.
+Re-grade a stored run with `agentic-sre grade --out evals/results/v1.0.0/test`.
 Add the investigator to a run with `make eval-dev EVAL_FLAGS=--llm` and the `SRE_LLM_*` settings.
 
 ## Live demo on kind
@@ -155,8 +155,9 @@ the `archive/experiments-2026-09` tag.
 - Causes without an observable change, fault, or error signal (for example a
   traffic spike from a load generator) are often missed.
 - Namespace-level causes are not named directly.
-- The LLM investigator matched the engine's score on ITBench-Lite; its effect
-  on harder or messier incidents has not been measured.
+- The measured bounded LLM investigator did not improve the deterministic engine
+  on ITBench-Lite and remains optional; its effect on harder or messier
+  incidents has not been measured.
 - The local/demo control plane is open by default. Use the secure Kubernetes
   overlay in `infra/kubernetes/secure-api-auth/` to wire the same
   operator-provided bearer token into the control plane and Alertmanager.

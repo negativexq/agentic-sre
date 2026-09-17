@@ -109,6 +109,21 @@ def test_tampered_or_repeated_runs_are_refused(tmp_path: Path) -> None:
         grade(cast(ITBenchLiteDataset, dataset), tmp_path / "empty")
 
 
+def test_frozen_test_prediction_requires_a_clean_repository(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import packages.evals.itbench.benchmark as benchmark
+
+    monkeypatch.setattr(benchmark, "_git_dirty", lambda: True)
+    with pytest.raises(BenchmarkError, match="clean repository"):
+        predict(
+            cast(ITBenchLiteDataset, _dataset(tmp_path)),
+            ["Scenario-1"],
+            tmp_path / "test-run",
+            split="test",
+        )
+
+
 def test_split_file_is_disjoint_and_complete() -> None:
     dev, test = load_split("dev"), load_split("test")
     assert len(dev) == 10 and len(test) == 25

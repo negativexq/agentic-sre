@@ -282,6 +282,7 @@ def diagnose(
         symptoms=case.symptoms,
         evidence=chosen.findings[:5],
         causal_path=chosen.causal_path,
+        causal_explanation=chosen.causal_explanation,
         alternatives=alternatives,
         remediation=propose(chosen, case.topology),
         steps=tuple(case.steps),

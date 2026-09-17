@@ -89,6 +89,11 @@ def diagnosis_html(diagnosis: Diagnosis, *, back_link: str | None = None) -> str
             for hop in diagnosis.causal_path
         )
         parts.append(f"<h2>Why this cause / Causal path</h2><div class='grid'>{hops}</div>")
+    elif diagnosis.causal_explanation == "DIRECT":
+        parts.append(
+            "<h2>Why this cause / Direct evidence</h2>"
+            "<p class='muted'>The strongest evidence is attached directly to the symptom entity.</p>"
+        )
     if diagnosis.evidence:
         rows = "".join(
             "<tr>"

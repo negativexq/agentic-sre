@@ -51,6 +51,10 @@ def test_html_causal_path_escapes_entities_and_omits_empty_path() -> None:
     assert "<payment>" not in html
     empty = diagnosis_html(diagnosis.model_copy(update={"causal_path": ()}))
     assert "Why this cause / Causal path" not in empty
+    direct = diagnosis_html(
+        diagnosis.model_copy(update={"causal_path": (), "causal_explanation": "DIRECT"})
+    )
+    assert "Why this cause / Direct evidence" in direct
 
 
 @pytest.mark.parametrize(

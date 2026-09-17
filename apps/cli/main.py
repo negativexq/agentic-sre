@@ -28,6 +28,8 @@ def _print_diagnosis(diagnosis: Diagnosis) -> None:
         print("Causal path")
         for hop in diagnosis.causal_path:
             print(f"  {hop.source} --{hop.relation}--> {hop.target}")
+    elif diagnosis.causal_explanation == "DIRECT":
+        print("Causal explanation  direct evidence on the symptom entity")
     if diagnosis.evidence:
         print("Evidence")
         for finding in diagnosis.evidence:

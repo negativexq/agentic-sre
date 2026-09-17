@@ -322,6 +322,7 @@ class Diagnosis(BaseModel):
     symptoms: Symptoms
     evidence: tuple[Finding, ...] = ()
     causal_path: tuple[CausalHop, ...] = ()
+    causal_explanation: str = "UNLINKED"
     alternatives: tuple[Candidate, ...] = ()
     remediation: tuple[Remediation, ...] = ()
     steps: tuple[InvestigationStep, ...] = ()

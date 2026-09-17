@@ -20,6 +20,7 @@ from packages.rca.model import (
 from packages.rca.resolution import (
     dominates,
     hypothesis_signature,
+    resolution_audit_records,
     resolve_hypotheses,
     structurally_equivalent,
 )
@@ -399,6 +400,32 @@ def test_unresolvable_metric_gap_is_not_presented_as_support() -> None:
         outcome.kind.value != "SUPPORTS" or outcome.hypothesis_ids
         for outcome in pressure_gap.discriminating_outcomes
     )
+
+
+def test_resolution_audit_ignores_structurally_similar_eliminated_pairs() -> None:
+    good = _hpa("good")
+    weak_base = _hpa("weak-one").model_copy(
+        update={
+            "causal_explanation": "UNLINKED",
+            "causal_paths": (),
+            "findings": (),
+            "initiating_findings": (),
+            "supporting_findings": (),
+        }
+    )
+    weak_other = weak_base.model_copy(
+        update={
+            "hypothesis_id": "hypothesis:weak-two",
+            "causal_actor": _entity("HorizontalPodAutoscaler", "weak-two"),
+        }
+    )
+    trace = resolve_hypotheses((good, weak_base, weak_other))
+    diagnosis = diagnose(demo_source()).model_copy(
+        update={"resolution": trace.state, "resolution_trace": trace}
+    )
+
+    assert trace.state is Resolution.RESOLVED
+    assert resolution_audit_records(diagnosis) == []
 
 
 def test_legacy_diagnosis_documents_backfill_resolution_without_losing_root_cause() -> None:

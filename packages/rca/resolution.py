@@ -500,10 +500,17 @@ def resolution_audit_records(diagnosis: Diagnosis) -> list[dict[str, object]]:
     final_selected = next(
         (audit for audit in audits if audit.hypothesis_id == final_selected_id), None
     )
+    plausible_ids = {audit.hypothesis_id for audit in audits if audit.plausible}
     records: list[dict[str, object]] = []
     for index, left in enumerate(audits):
         for right in audits[index + 1 :]:
             if left.signature != right.signature:
+                continue
+            pair_ids = {left.hypothesis_id, right.hypothesis_id}
+            relevant_to_resolution = bool(pair_ids & plausible_ids) or bool(
+                final_selected is not None and final_selected.hypothesis_id in pair_ids
+            )
+            if not relevant_to_resolution:
                 continue
             relation = next(
                 (

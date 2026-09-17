@@ -246,13 +246,17 @@ def grade(dataset: ITBenchLiteDataset, out_dir: Path) -> dict[str, Any]:
     def rate(values: list[bool]) -> float:
         return round(sum(values) / count, 4) if count else 0.0
 
-    by_confidence: dict[str, dict[str, float]] = {}
+    by_confidence: dict[str, dict[str, float]] = {
+        confidence.value: {"count": 0, "correct": 0} for confidence in Confidence
+    }
     for row in rows:
         bucket = by_confidence.setdefault(row["confidence"], {"count": 0, "correct": 0})
         bucket["count"] += 1
         bucket["correct"] += int(row["correct"])
     for bucket in by_confidence.values():
-        bucket["precision"] = round(bucket["correct"] / bucket["count"], 4)
+        bucket["precision"] = (
+            round(bucket["correct"] / bucket["count"], 4) if bucket["count"] else 0.0
+        )
         bucket["share_of_predictions"] = round(bucket["count"] / count, 4) if count else 0.0
     verified_rows = [row for row in rows if row["confidence"] == Confidence.VERIFIED.value]
     verified_count = len(verified_rows)

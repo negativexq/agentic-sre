@@ -71,6 +71,18 @@ def test_prediction_never_reads_truth_and_grading_reports_the_funnel(tmp_path: P
         "precision": 1.0,
         "share_of_predictions": 1.0,
     }
+    assert report["by_confidence"]["LIKELY"] == {
+        "count": 0,
+        "correct": 0,
+        "precision": 0.0,
+        "share_of_predictions": 0.0,
+    }
+    assert report["by_confidence"]["UNVERIFIED"] == {
+        "count": 0,
+        "correct": 0,
+        "precision": 0.0,
+        "share_of_predictions": 0.0,
+    }
     assert report["funnel"] == {
         "root_cause_observable": 1.0,
         "in_top_5": 1.0,

@@ -26,6 +26,7 @@ from packages.rca.ranking import (
 from packages.rca.remediation import propose
 from packages.rca.signals import (
     change_findings,
+    dependency_findings,
     extract_symptoms,
     failure_findings,
     fault_event_findings,
@@ -98,6 +99,7 @@ def build_case(source: ObservationSource, config: EngineConfig | None = None) ->
         *policy_findings(history, topology, set(symptoms.namespaces)),
         *fault_event_findings(events, topology),
         *failure_findings(events),
+        *dependency_findings(list(source.error_logs()), topology, entities),
     ]
     candidates = collapse_fault_instances(
         score_findings(findings, context, config.ranking), topology

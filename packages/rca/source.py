@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from packages.rca.model import Alert, ClusterEvent, EntityRef, ObjectVersion
+from packages.rca.model import Alert, ClusterEvent, EntityRef, LogRecord, ObjectVersion
 
 
 class ObservationSource(Protocol):
@@ -26,6 +26,8 @@ class ObservationSource(Protocol):
 
     def logs(self, service: str, *, limit: int = 20) -> Sequence[dict[str, Any]]: ...
 
+    def error_logs(self) -> Sequence[LogRecord]: ...
+
 
 @dataclass
 class InMemorySource:
@@ -36,6 +38,7 @@ class InMemorySource:
     versions: list[ObjectVersion] = field(default_factory=list)
     event_items: list[ClusterEvent] = field(default_factory=list)
     log_items: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    error_items: list[LogRecord] = field(default_factory=list)
 
     def incident_id(self) -> str:
         return self.name
@@ -54,6 +57,9 @@ class InMemorySource:
 
     def logs(self, service: str, *, limit: int = 20) -> Sequence[dict[str, Any]]:
         return self.log_items.get(service, [])[:limit]
+
+    def error_logs(self) -> Sequence[LogRecord]:
+        return self.error_items
 
 
 __all__ = ["InMemorySource", "ObservationSource"]

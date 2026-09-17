@@ -151,3 +151,24 @@ def config_change_source() -> InMemorySource:
         versions=versions,
         event_items=[],
     )
+
+
+def env_deployment(name: str, env: dict[str, str]) -> dict[str, Any]:
+    body = deployment(name)
+    body["spec"]["template"]["spec"]["containers"][0]["env"] = [
+        {"name": key, "value": value} for key, value in env.items()
+    ]
+    return body
+
+
+def microservice(
+    name: str, minutes: float, env: dict[str, str] | None = None
+) -> list[ObjectVersion]:
+    """Deployment, ReplicaSet, pod, and Service for one app with optional env."""
+    rs = f"{name}-5d8f7c9b4"
+    return [
+        version(f"shop/Deployment/{name}", minutes, env_deployment(name, env or {})),
+        version(f"shop/ReplicaSet/{rs}", minutes, replicaset(rs, name)),
+        version(f"shop/Pod/{rs}-abcde", minutes, pod(f"{rs}-abcde", name, rs)),
+        version(f"shop/Service/{name}", minutes, service(name)),
+    ]

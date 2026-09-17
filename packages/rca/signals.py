@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from datetime import datetime
@@ -15,6 +16,7 @@ from packages.rca.model import (
     EntityRef,
     Finding,
     FindingKind,
+    LogRecord,
     ObjectVersion,
     Symptoms,
 )
@@ -385,8 +387,79 @@ def failure_findings(events: Sequence[ClusterEvent]) -> list[Finding]:
     return findings
 
 
+_CONNECTION_ERROR = re.compile(
+    r"connect|connection|refused|unreachable|unavailable|timed? ?out|timeout|no route|"
+    r"dial tcp|name resolution|no such host|broken pipe|reset by peer",
+    re.IGNORECASE,
+)
+
+
+def dependency_findings(
+    logs: Sequence[LogRecord], topology: Topology, alerting: set[EntityRef]
+) -> list[Finding]:
+    """Declared dependencies of alerting callers that log connection errors."""
+    errors: dict[str, list[LogRecord]] = {}
+    for record in logs:
+        if _CONNECTION_ERROR.search(record.message):
+            errors.setdefault(record.service, []).append(record)
+    fan_in: Counter[EntityRef] = Counter()
+    callers: set[EntityRef] = set()
+    for edge in topology.edges:
+        if edge.relation == "calls":
+            fan_in[edge.target] += 1
+            callers.add(edge.source)
+    shared = {service for service, count in fan_in.items() if count > max(2, len(callers) / 2)}
+    findings: list[Finding] = []
+    for caller in sorted(alerting, key=lambda ref: ref.canonical):
+        if caller.kind not in WORKLOAD_KINDS:
+            continue
+        records = [r for name in topology.service_names(caller) for r in errors.get(name, [])]
+        if not records:
+            continue
+        specific = [
+            service
+            for service in topology.outgoing(caller, "calls")
+            # Shared infrastructure (telemetry, gateways) is not a specific suspect.
+            if service not in alerting and service not in shared
+        ]
+        for service in specific:
+            if len(specific) > 1:
+                # With several dependencies, only blame the ones the errors name.
+                token = service.name.casefold()
+                named = [r for r in records if token in r.message.casefold()]
+                if not named:
+                    continue
+            else:
+                named = records
+            pods = topology.outgoing(service, "selects")
+            targets = pods or (service,)
+            times = [r.at for r in named if r.at is not None]
+            for target in targets:
+                findings.append(
+                    Finding(
+                        kind=FindingKind.DEPENDENCY_ERRORS,
+                        entity=target,
+                        at=max(times) if times else None,
+                        summary=(
+                            f"{caller.name} logged {len(named)} connection error(s) and depends "
+                            f"on {service.name}: {named[-1].message[:120]}"
+                        ),
+                        evidence_ids=tuple(r.evidence_id for r in named[:4]),
+                        related=(service,),
+                        details={
+                            "caller": caller.canonical,
+                            "service": service.canonical,
+                            "errors": len(named),
+                            "dependencies_of_caller": len(topology.outgoing(caller, "calls")),
+                        },
+                    )
+                )
+    return findings
+
+
 __all__ = [
     "BACKGROUND_ALERTS",
+    "dependency_findings",
     "change_findings",
     "extract_symptoms",
     "failure_findings",

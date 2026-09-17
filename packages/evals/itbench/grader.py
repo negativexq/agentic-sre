@@ -87,7 +87,7 @@ def _match_group(
     """Return the root group ID matching an entity, or ``None``."""
     groups_by_id = {group.group_id: group for group in gt.root_cause_groups}
     for group in groups:
-        if _entity_matches_group(entity, group):
+        if entity_matches_group(entity, group):
             return group.group_id
         # Every non-root group mapped to this root is an equally valid
         # representation of the same causal entity.  The previous traversal
@@ -97,12 +97,12 @@ def _match_group(
             if root_id != group.group_id:
                 continue
             alias_group = groups_by_id.get(alias_group_id)
-            if alias_group is not None and _entity_matches_group(entity, alias_group):
+            if alias_group is not None and entity_matches_group(entity, alias_group):
                 return root_id
     return None
 
 
-def _entity_matches_group(entity: ITBenchEntity, group: ITBenchGroundTruthGroup) -> bool:
+def entity_matches_group(entity: ITBenchEntity, group: ITBenchGroundTruthGroup) -> bool:
     if entity.kind.casefold() != group.kind.casefold():
         return False
     if group.namespace and entity.namespace != group.namespace:
@@ -133,4 +133,9 @@ def macro_average(grades: list[ITBenchEntityGrade]) -> dict[str, float | int]:
     }
 
 
-__all__ = ["ITBenchEntityGrade", "grade_root_cause_entities", "macro_average"]
+__all__ = [
+    "ITBenchEntityGrade",
+    "entity_matches_group",
+    "grade_root_cause_entities",
+    "macro_average",
+]

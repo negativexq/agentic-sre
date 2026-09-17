@@ -46,7 +46,10 @@ def test_topology_links_config_workload_pod_and_service() -> None:
     assert topology.incoming(config, "uses_config") == (ref("shop/Deployment/checkout"),)
     assert topology.workload_of(pod) == ref("shop/Deployment/checkout")
     assert ref("shop/Service/checkout") in topology.incoming(pod, "selects")
-    assert topology.distance(config, {ref("shop/Service/checkout")}) == 4
+    assert topology.distance(config, {ref("shop/Service/checkout")}) == 2
+    assert ref("shop/Deployment/checkout") in topology.outgoing(
+        ref("shop/Service/checkout"), "routes_to"
+    )
 
 
 def test_alert_service_maps_to_workload_service_and_pod() -> None:
@@ -147,3 +150,93 @@ def test_pod_workload_name_strips_generated_suffixes() -> None:
     assert pod_workload_name("product-catalog-7c7f8b68dc-p564n") == "product-catalog"
     assert pod_workload_name("valkey-cart-0") == "valkey-cart"
     assert pod_workload_name("standalone") == "standalone"
+
+
+def test_env_endpoints_become_call_edges_with_resolved_references() -> None:
+    from rca_builders import microservice
+
+    source = InMemorySource(
+        name="calls",
+        versions=[
+            *microservice(
+                "cart",
+                0,
+                {
+                    "COLLECTOR": "collector",
+                    "OTEL_ENDPOINT": "http://$(COLLECTOR):4317",
+                    "STORE_ADDR": "store:6379",
+                    "BIND_ADDR": ":8080",
+                    "GREETING": "hello",
+                },
+            ),
+            *microservice("store", 0),
+            *microservice("collector", 0),
+        ],
+    )
+    topology = _topology(source)
+    assert set(topology.outgoing(ref("shop/Deployment/cart"), "calls")) == {
+        ref("shop/Service/store"),
+        ref("shop/Service/collector"),
+    }
+
+
+def test_connection_errors_blame_the_only_specific_dependency() -> None:
+    from rca_builders import microservice
+
+    from packages.rca.model import LogRecord
+    from packages.rca.signals import dependency_findings
+
+    callers = [
+        microservice(name, 0, {"STORE_ADDR": f"{name}-db:1", "OTEL_ADDR": "collector:4317"})
+        for name in ("cart", "shipping", "quote")
+    ]
+    source = InMemorySource(
+        name="deps",
+        versions=[
+            *[item for group in callers for item in group],
+            *microservice("cart-db", 0),
+            *microservice("shipping-db", 0),
+            *microservice("quote-db", 0),
+            *microservice("collector", 0),
+        ],
+    )
+    topology = _topology(source)
+    logs = [
+        LogRecord(
+            service="cart",
+            at=None,
+            severity="ERROR",
+            message="Wasn't able to connect to redis",
+            evidence_id="log:1",
+        )
+    ]
+    findings = dependency_findings(logs, topology, {ref("shop/Deployment/cart")})
+    assert [f.entity for f in findings] == [ref("shop/Pod/cart-db-5d8f7c9b4-abcde")]
+    assert findings[0].related == (ref("shop/Service/cart-db"),)
+
+
+def test_connection_errors_with_several_dependencies_need_a_named_target() -> None:
+    from rca_builders import microservice
+
+    from packages.rca.model import LogRecord
+    from packages.rca.signals import dependency_findings
+
+    source = InMemorySource(
+        name="deps",
+        versions=[
+            *microservice("checkout", 0, {"PAY_ADDR": "payment:1", "MQ_ADDR": "kafka:9092"}),
+            *microservice("payment", 0),
+            *microservice("kafka", 0),
+        ],
+    )
+    topology = _topology(source)
+
+    def log(message: str) -> LogRecord:
+        return LogRecord(
+            service="checkout", at=None, severity="ERROR", message=message, evidence_id="l"
+        )
+
+    alerting = {ref("shop/Deployment/checkout")}
+    assert dependency_findings([log("connection reset")], topology, alerting) == []
+    named = dependency_findings([log("kafka: connection refused")], topology, alerting)
+    assert [f.related for f in named] == [(ref("shop/Service/kafka"),)]

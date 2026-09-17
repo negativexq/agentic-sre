@@ -17,6 +17,7 @@ KIND_WEIGHT: dict[FindingKind, float] = {
     FindingKind.SPEC_CHANGE: 4.0,
     FindingKind.POLICY_CREATED: 4.0,
     FindingKind.FAULT_SCHEDULE: 3.5,
+    FindingKind.DEPENDENCY_ERRORS: 3.0,
     FindingKind.SCALE_CHANGE: 3.0,
     FindingKind.ROLLOUT_RESTART: 1.5,
     FindingKind.FAILURE_EVENT: 1.0,
@@ -46,6 +47,7 @@ class RankingConfig:
     in_window_bonus: float = 1.0
     extra_finding_weight: float = 0.3
     verify_score: float = 7.0
+    symptom_event_factor: float = 0.5
 
 
 @dataclass
@@ -105,7 +107,9 @@ def _link(finding: Finding, context: Context, config: RankingConfig) -> tuple[fl
             best = distance
     score = 0.0
     if best is not None and best < len(config.distance_bonus):
-        score += config.distance_bonus[best]
+        # Warnings on or next to an alerting component mostly restate the symptom.
+        factor = config.symptom_event_factor if finding.kind is FindingKind.FAILURE_EVENT else 1.0
+        score += factor * config.distance_bonus[best]
         reasons.append(f"{best} hop(s) from an alerting component")
     namespaces = {ref.namespace for ref in _affected_entities(finding, context.topology)}
     if namespaces & set(context.symptoms.namespaces):
@@ -148,9 +152,11 @@ def score_findings(
             scored.append((value, finding, reasons))
         scored.sort(key=lambda item: -item[0])
         top_value, _top, top_reasons = scored[0]
-        total = top_value + config.extra_finding_weight * sum(
-            min(value, top_value) for value, _, _ in scored[1:3] if value > 0
-        )
+        extras: dict[FindingKind, float] = {}
+        for value, finding, _ in scored[1:]:
+            if finding.kind is not scored[0][1].kind and value > 0:
+                extras.setdefault(finding.kind, min(value, top_value))
+        total = top_value + config.extra_finding_weight * sum(sorted(extras.values())[-2:])
         reached: set[EntityRef] = set()
         for affected in _affected_entities(scored[0][1], context.topology):
             reached.update(context.topology.reachable(affected))
@@ -205,8 +211,11 @@ def verify(
     config = config or RankingConfig()
     for finding in candidate.findings:
         window = _in_window(finding.at, context, config)
+        # Configuration may reach an alerting component through the workload that
+        # uses it and one service call: config - workload - service - caller.
+        depth = 3 if finding.kind is FindingKind.CONFIG_CHANGE else 2
         linked = any(
-            context.topology.distance(ref, context.symptom_entities, max_depth=2) is not None
+            context.topology.distance(ref, context.symptom_entities, max_depth=depth) is not None
             for ref in _affected_entities(finding, context.topology)
         )
         mentions = _mentions(finding, context.tokens)

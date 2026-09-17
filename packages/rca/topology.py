@@ -81,6 +81,42 @@ def _config_refs(pod_spec: Mapping[str, Any]) -> set[tuple[str, str]]:
     return refs
 
 
+_ENV_REF = re.compile(r"\$\(([A-Za-z_][A-Za-z0-9_]*)\)")
+_HOST = re.compile(
+    r"^(?:[a-z][a-z0-9+.-]*://)?([a-z0-9](?:[a-z0-9.-]*[a-z0-9])?)(?::[0-9]+)?(?:/.*)?$"
+)
+_ENDPOINT_NAMES = ("_ADDR", "_HOST", "_URL", "_URI", "_ENDPOINT", "_SERVICE", "_ADDRESS")
+
+
+def _declared_hosts(pod_spec: Mapping[str, Any]) -> set[tuple[str, str]]:
+    """Hosts referenced by container environment values, as (host, env name)."""
+    hosts: set[tuple[str, str]] = set()
+    containers = pod_spec.get("containers") or []
+    for container in containers if isinstance(containers, list) else []:
+        env = container.get("env") if isinstance(container, dict) else None
+        if not isinstance(env, list):
+            continue
+        values = {
+            str(item["name"]): str(item["value"])
+            for item in env
+            if isinstance(item, dict)
+            and isinstance(item.get("name"), str)
+            and isinstance(item.get("value"), str)
+        }
+
+        def resolve(match: re.Match[str], known: dict[str, str] = values) -> str:
+            return known.get(match.group(1), "")
+
+        for name, raw in values.items():
+            value = _ENV_REF.sub(resolve, raw).strip()
+            if not value or not (name.endswith(_ENDPOINT_NAMES) or ":" in value):
+                continue
+            match = _HOST.match(value.lower())
+            if match and match.group(1) not in {"localhost", "0.0.0.0", "127.0.0.1"}:
+                hosts.add((match.group(1), name))
+    return hosts
+
+
 def _pod_spec(body: Mapping[str, Any]) -> Mapping[str, Any] | None:
     spec = body.get("spec")
     if not isinstance(spec, dict):
@@ -102,6 +138,7 @@ def derive_edges(
     """Derive owner, selection, configuration, scaling, policy, and fault edges."""
     edges: set[Edge] = set()
     pods_by_namespace: dict[str, list[tuple[EntityRef, dict[str, str]]]] = {}
+    services = {(ref.namespace, ref.name): ref for ref in latest if ref.kind == "Service"}
     for ref, version in latest.items():
         if ref.kind == "Pod":
             pods_by_namespace.setdefault(ref.namespace, []).append((ref, _labels(version.body)))
@@ -149,6 +186,13 @@ def derive_edges(
                         if _selector_matches(label_selector, labels):
                             edges.add(Edge(source=ref, target=pod, relation="disrupts"))
         pod_spec = _pod_spec(body)
+        if pod_spec is not None and ref.kind != "Pod":
+            for host, _env_name in _declared_hosts(pod_spec):
+                parts = host.split(".")
+                namespace = parts[1] if len(parts) > 1 and parts[1] != "svc" else ref.namespace
+                target_service = services.get((namespace, parts[0]))
+                if target_service is not None and target_service.name != ref.name:
+                    edges.add(Edge(source=ref, target=target_service, relation="calls"))
         if pod_spec is not None:
             for kind, name in _config_refs(pod_spec):
                 edges.add(
@@ -158,6 +202,13 @@ def derive_edges(
                         relation="uses_config",
                     )
                 )
+    owners = {edge.source: edge.target for edge in edges if edge.relation == "owned_by"}
+    for edge in [e for e in edges if e.relation == "selects"]:
+        current = edge.target
+        for _ in range(3):
+            current = owners.get(current, current)
+        if current.kind in WORKLOAD_KINDS:
+            edges.add(Edge(source=edge.source, target=current, relation="routes_to"))
     schedules = {ref for ref in latest if ref.kind == "Schedule"}
     for event in events:
         if not is_chaos_kind(event.entity.kind):

@@ -12,11 +12,20 @@ from typing import Any
 from packages.evals.itbench.contracts import ITBenchEvidenceCategory, ITBenchScenario
 from packages.evals.itbench.dataset import iter_tsv
 from packages.rca.json_access import child
-from packages.rca.model import CLUSTER_SCOPE, Alert, ClusterEvent, EntityRef, ObjectVersion
+from packages.rca.model import (
+    CLUSTER_SCOPE,
+    Alert,
+    ClusterEvent,
+    EntityRef,
+    LogRecord,
+    ObjectVersion,
+)
 
 _OBJECTS = "k8s_objects_raw.tsv"
 _EVENTS = "k8s_events_raw.tsv"
 _LOGS = "otel_logs_raw.tsv"
+_ERROR_SEVERITIES = frozenset({"ERROR", "FATAL", "CRITICAL", "WARN", "WARNING"})
+_MAX_ERRORS_PER_SERVICE = 200
 
 
 def parse_time(value: Any) -> datetime | None:
@@ -165,6 +174,37 @@ class SnapshotSource:
 
     def events(self) -> Sequence[ClusterEvent]:
         return self._events
+
+    @cached_property
+    def _error_logs(self) -> list[LogRecord]:
+        result: list[LogRecord] = []
+        per_service: dict[str, int] = {}
+        for index, row in enumerate(iter_tsv(self.root / _LOGS)):
+            severity = str(row.get("SeverityText") or "").upper()
+            number = (
+                int(row.get("SeverityNumber") or 0)
+                if str(row.get("SeverityNumber") or "").isdigit()
+                else 0
+            )
+            if severity not in _ERROR_SEVERITIES and number < 13:
+                continue
+            service = str(row.get("ServiceName") or "")
+            if not service or per_service.get(service, 0) >= _MAX_ERRORS_PER_SERVICE:
+                continue
+            per_service[service] = per_service.get(service, 0) + 1
+            result.append(
+                LogRecord(
+                    service=service,
+                    at=parse_time(row.get("Timestamp")),
+                    severity=severity or str(number),
+                    message=str(row.get("Body") or "")[:300],
+                    evidence_id=f"{_LOGS}:{index}",
+                )
+            )
+        return result
+
+    def error_logs(self) -> Sequence[LogRecord]:
+        return self._error_logs
 
     def logs(self, service: str, *, limit: int = 20) -> Sequence[dict[str, Any]]:
         """Error-level log lines for one service, bounded."""

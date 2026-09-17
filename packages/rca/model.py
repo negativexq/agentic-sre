@@ -58,6 +58,18 @@ class ObjectVersion(BaseModel):
     evidence_id: str
 
 
+class LogRecord(BaseModel):
+    """One warning or error log line from a service."""
+
+    model_config = ConfigDict(frozen=True)
+
+    service: str
+    at: datetime | None
+    severity: str
+    message: str
+    evidence_id: str
+
+
 class ClusterEvent(BaseModel):
     """One Kubernetes event about an involved object."""
 
@@ -94,6 +106,7 @@ class FindingKind(StrEnum):
     FAULT_INJECTION = "FAULT_INJECTION"
     FAULT_SCHEDULE = "FAULT_SCHEDULE"
     POLICY_CREATED = "POLICY_CREATED"
+    DEPENDENCY_ERRORS = "DEPENDENCY_ERRORS"
     FAILURE_EVENT = "FAILURE_EVENT"
 
 
@@ -200,6 +213,7 @@ __all__ = [
     "Finding",
     "FindingKind",
     "InvestigationStep",
+    "LogRecord",
     "ObjectVersion",
     "Remediation",
     "Symptoms",

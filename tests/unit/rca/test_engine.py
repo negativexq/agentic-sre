@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from rca_builders import alert, config_change_source, event, ref, shop_objects, version
+from rca_builders import alert, at, config_change_source, event, ref, shop_objects, version
 
 from packages.rca.engine import Case, Choice, diagnose
 from packages.rca.model import Confidence, FindingKind
@@ -103,3 +103,33 @@ def test_investigator_can_choose_another_candidate_but_not_self_verify() -> None
     assert diagnosis.confidence is Confidence.UNVERIFIED
     assert diagnosis.mode == "scripted" and diagnosis.model_calls == 2
     assert any(step.actor == "scripted" for step in diagnosis.steps)
+
+
+def test_dependency_outage_is_blamed_over_the_callers_own_warnings() -> None:
+    from rca_builders import microservice
+
+    from packages.rca.model import LogRecord
+
+    source = InMemorySource(
+        name="dependency",
+        alert_items=[alert("RequestErrorRate", "cart", 5)],
+        versions=[
+            *microservice("cart", 0, {"STORE_ADDR": "store:6379"}),
+            *microservice("store", 0),
+        ],
+        event_items=[
+            event("shop/Pod/cart-5d8f7c9b4-abcde", "FailedKillPod", 4, type_="Warning", count=40)
+        ],
+        error_items=[
+            LogRecord(
+                service="cart",
+                at=at(4),
+                severity="ERROR",
+                message="could not connect to store",
+                evidence_id="log:1",
+            )
+        ],
+    )
+    diagnosis = diagnose(source)
+    assert diagnosis.root_cause == ref("shop/Pod/store-5d8f7c9b4-abcde")
+    assert diagnosis.confidence is Confidence.LIKELY

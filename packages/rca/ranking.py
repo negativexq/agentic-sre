@@ -18,6 +18,10 @@ KIND_WEIGHT: dict[FindingKind, float] = {
     FindingKind.POLICY_CREATED: 4.0,
     FindingKind.FAULT_SCHEDULE: 3.5,
     FindingKind.DEPENDENCY_ERRORS: 3.0,
+    FindingKind.QUOTA_EXCEEDED: 5.0,
+    FindingKind.QUOTA_EXHAUSTED: 3.0,
+    FindingKind.NETWORK_RESTRICTION: 2.5,
+    FindingKind.CONTAINER_FAILURE: 3.0,
     FindingKind.SCALE_CHANGE: 3.0,
     FindingKind.ROLLOUT_RESTART: 1.5,
     FindingKind.FAILURE_EVENT: 1.0,
@@ -30,6 +34,7 @@ STRONG_KINDS = frozenset(
         FindingKind.SPEC_CHANGE,
         FindingKind.POLICY_CREATED,
         FindingKind.SCALE_CHANGE,
+        FindingKind.QUOTA_EXCEEDED,
     }
 )
 
@@ -252,6 +257,8 @@ def verify(
             return Confidence.VERIFIED, "workload changed in the incident window next to the alerts"
         if finding.kind is FindingKind.POLICY_CREATED and linked:
             return Confidence.VERIFIED, "restrictive policy applies to alerting pods"
+        if finding.kind is FindingKind.QUOTA_EXCEEDED and linked:
+            return Confidence.VERIFIED, "quota rejected pods of an alerting workload"
     if candidate.score >= config.verify_score and candidate.linked_symptoms:
         return Confidence.LIKELY, "strong signal with a structural link, no verifying rule"
     return Confidence.UNVERIFIED, "best available candidate without verifying evidence"

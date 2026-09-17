@@ -26,6 +26,7 @@ from packages.rca.ranking import (
 from packages.rca.remediation import propose
 from packages.rca.signals import (
     change_findings,
+    container_findings,
     dependency_findings,
     extract_symptoms,
     failure_findings,
@@ -96,7 +97,8 @@ def build_case(source: ObservationSource, config: EngineConfig | None = None) ->
     )
     findings = [
         *change_findings(history),
-        *policy_findings(history, topology, set(symptoms.namespaces)),
+        *policy_findings(history, topology, set(symptoms.namespaces), events),
+        *container_findings(history),
         *fault_event_findings(events, topology),
         *failure_findings(events),
         *dependency_findings(list(source.error_logs()), topology, entities),

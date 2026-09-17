@@ -9,7 +9,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
-from packages.rca.json_access import child
+from packages.rca.json_access import child, mapping
 from packages.rca.model import (
     Alert,
     ClusterEvent,
@@ -55,9 +55,6 @@ ACCESS_KINDS = frozenset(
     {"ServiceAccount", "Role", "RoleBinding", "ClusterRole", "ClusterRoleBinding"}
 )
 CONFIG_KINDS = frozenset({"ConfigMap", "Secret"})
-POLICY_KINDS = frozenset(
-    {"NetworkPolicy", "ResourceQuota", "LimitRange", "HorizontalPodAutoscaler"}
-)
 _IGNORED_PATHS = ("metadata", "status")
 _RESTART_ANNOTATION = "kubectl.kubernetes.io/restartedAt"
 _LABEL_KEYS = ("service_name", "service", "job_name")
@@ -303,26 +300,164 @@ def change_findings(history: Mapping[EntityRef, Sequence[ObjectVersion]]) -> lis
     return findings
 
 
-def _is_restrictive(entity: EntityRef, body: Mapping[str, Any]) -> bool:
-    spec = child(body, "spec")
-    if entity.kind == "NetworkPolicy":
-        types = spec.get("policyTypes") or ["Ingress"]
-        ingress = spec.get("ingress")
-        egress = spec.get("egress")
-        return ("Ingress" in types and not ingress) or ("Egress" in types and not egress)
-    if entity.kind == "ResourceQuota":
-        return True
-    if entity.kind == "LimitRange":
-        return True
-    return False
+_QUANTITY_SUFFIXES = {
+    "Ki": 2**10,
+    "Mi": 2**20,
+    "Gi": 2**30,
+    "Ti": 2**40,
+    "Pi": 2**50,
+    "Ei": 2**60,
+    "n": 1e-9,
+    "u": 1e-6,
+    "m": 1e-3,
+    "k": 1e3,
+    "M": 1e6,
+    "G": 1e9,
+    "T": 1e12,
+    "P": 1e15,
+    "E": 1e18,
+}
+
+
+def parse_quantity(value: Any) -> float | None:
+    """Parse a Kubernetes resource quantity such as ``512Mi`` or ``250m``."""
+    if isinstance(value, int | float):
+        return float(value)
+    if not isinstance(value, str) or not value:
+        return None
+    for suffix in sorted(_QUANTITY_SUFFIXES, key=len, reverse=True):
+        if value.endswith(suffix):
+            number = value[: -len(suffix)]
+            try:
+                return float(number) * _QUANTITY_SUFFIXES[suffix]
+            except ValueError:
+                return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
+def _deny_all(spec: Mapping[str, Any]) -> list[str]:
+    types = spec.get("policyTypes") or ["Ingress"]
+    return [
+        direction
+        for direction in ("Ingress", "Egress")
+        if direction in types and not spec.get(direction.lower())
+    ]
+
+
+def _allowed_ports(rules: Any) -> list[str]:
+    ports: list[str] = []
+    for rule in rules if isinstance(rules, list) else []:
+        for port in mapping(rule).get("ports") or []:
+            item = mapping(port)
+            ports.append(f"{item.get('protocol', 'TCP')}/{item.get('port', '*')}")
+    return sorted(set(ports))
+
+
+def _network_policy_finding(
+    entity: EntityRef, version: ObjectVersion, topology: Topology
+) -> Finding | None:
+    affected = topology.outgoing(entity, "restricts")
+    if not affected:
+        return None
+    spec = child(version.body, "spec")
+    denied = _deny_all(spec)
+    details: dict[str, Any] = {"affected": [ref.canonical for ref in affected[:10]]}
+    if denied:
+        return Finding(
+            kind=FindingKind.POLICY_CREATED,
+            entity=entity,
+            at=_creation_time(version.body),
+            summary=f"NetworkPolicy denies all {'/'.join(denied).lower()} for {len(affected)} pod(s)",
+            evidence_ids=(version.evidence_id,),
+            related=affected,
+            details={**details, "denied": denied},
+        )
+    ingress_ports = _allowed_ports(spec.get("ingress"))
+    egress_ports = _allowed_ports(spec.get("egress"))
+    limits = []
+    if ingress_ports:
+        limits.append(f"ingress only on {', '.join(ingress_ports)}")
+    if egress_ports:
+        limits.append(f"egress only on {', '.join(egress_ports)}")
+    if not limits:
+        limits.append("traffic only from listed peers")
+    return Finding(
+        kind=FindingKind.NETWORK_RESTRICTION,
+        entity=entity,
+        at=_creation_time(version.body),
+        summary=f"NetworkPolicy allows {'; '.join(limits)} for {len(affected)} pod(s)",
+        evidence_ids=(version.evidence_id,),
+        related=affected,
+        details={**details, "ingress_ports": ingress_ports, "egress_ports": egress_ports},
+    )
+
+
+def _quota_finding(
+    entity: EntityRef,
+    version: ObjectVersion,
+    rejections: Sequence[ClusterEvent],
+    topology: Topology,
+) -> Finding | None:
+    status = child(version.body, "status")
+    hard, used = mapping(status.get("hard")), mapping(status.get("used"))
+    exhausted = sorted(
+        name
+        for name, limit in hard.items()
+        if (h := parse_quantity(limit)) is not None
+        and (u := parse_quantity(used.get(name))) is not None
+        and h > 0
+        and u >= h
+    )
+    if rejections:
+        rejected = tuple(dict.fromkeys(event.entity for event in rejections))
+        workloads = tuple(dict.fromkeys(topology.workload_of(ref) or ref for ref in rejected))
+        times = [t for e in rejections if (t := e.first_at or e.last_at) is not None]
+        return Finding(
+            kind=FindingKind.QUOTA_EXCEEDED,
+            entity=entity,
+            at=min(times) if times else None,
+            summary=(
+                f"{entity.kind} rejected pod creation {sum(e.count for e in rejections)} time(s) "
+                f"for {', '.join(ref.name for ref in workloads[:3])}: {rejections[-1].message[:120]}"
+            ),
+            evidence_ids=(version.evidence_id, *(e.evidence_id for e in rejections[:3])),
+            related=workloads,
+            details={"exhausted": exhausted, "rejected": [ref.canonical for ref in rejected[:10]]},
+        )
+    if exhausted:
+        return Finding(
+            kind=FindingKind.QUOTA_EXHAUSTED,
+            entity=entity,
+            at=_creation_time(version.body),
+            summary=f"{entity.kind} fully used for {', '.join(exhausted)}",
+            evidence_ids=(version.evidence_id,),
+            details={"exhausted": exhausted},
+        )
+    return None
+
+
+_QUOTA_MESSAGE = re.compile(r"exceeded quota:?\s*([a-z0-9.-]+)?", re.IGNORECASE)
+_LIMIT_MESSAGE = re.compile(r"forbidden: (maximum|minimum) .* per (container|pod)", re.IGNORECASE)
 
 
 def policy_findings(
     history: Mapping[EntityRef, Sequence[ObjectVersion]],
     topology: Topology,
     namespaces: set[str],
+    events: Sequence[ClusterEvent] = (),
 ) -> list[Finding]:
-    """Restrictive policies in symptom namespaces, and fault objects present as objects."""
+    """Network restrictions, exhausted quotas, and fault objects present as objects."""
+    quota_events: dict[str, list[ClusterEvent]] = {}
+    limit_events: dict[str, list[ClusterEvent]] = {}
+    for event in events:
+        if match := _QUOTA_MESSAGE.search(event.message):
+            key = f"{event.entity.namespace}/{match.group(1) or ''}"
+            quota_events.setdefault(key, []).append(event)
+        elif _LIMIT_MESSAGE.search(event.message):
+            limit_events.setdefault(event.entity.namespace, []).append(event)
     findings: list[Finding] = []
     for entity, versions in history.items():
         latest = versions[-1]
@@ -344,23 +479,95 @@ def policy_findings(
                 )
             )
             continue
-        if entity.kind not in POLICY_KINDS or entity.namespace not in namespaces:
+        finding: Finding | None = None
+        if entity.kind == "NetworkPolicy" and entity.namespace in namespaces:
+            finding = _network_policy_finding(entity, latest, topology)
+        elif entity.kind == "ResourceQuota":
+            named = quota_events.get(f"{entity.namespace}/{entity.name}", [])
+            unnamed = quota_events.get(f"{entity.namespace}/", [])
+            finding = _quota_finding(entity, latest, [*named, *unnamed], topology)
+        elif entity.kind == "LimitRange" and limit_events.get(entity.namespace):
+            finding = _quota_finding(entity, latest, limit_events[entity.namespace], topology)
+        if finding is not None:
+            findings.append(finding)
+    return findings
+
+
+_CONTAINER_WAITING = {
+    "CrashLoopBackOff",
+    "ImagePullBackOff",
+    "ErrImagePull",
+    "InvalidImageName",
+    "CreateContainerConfigError",
+    "CreateContainerError",
+}
+_CONTAINER_TERMINATED = {"OOMKilled", "Error", "ContainerCannotRun", "DeadlineExceeded"}
+
+
+def container_findings(history: Mapping[EntityRef, Sequence[ObjectVersion]]) -> list[Finding]:
+    """Container states that explain failures: OOM kills, crash loops, bad images or config."""
+    findings: list[Finding] = []
+    for entity, versions in history.items():
+        if entity.kind != "Pod":
             continue
-        if entity.kind == "HorizontalPodAutoscaler" or not _is_restrictive(entity, latest.body):
+        latest = versions[-1]
+        status = child(latest.body, "status")
+        problems: list[dict[str, Any]] = []
+        for item in [
+            *(status.get("initContainerStatuses") or []),
+            *(status.get("containerStatuses") or []),
+        ]:
+            container = mapping(item)
+            waiting = mapping(mapping(container.get("state")).get("waiting"))
+            last = mapping(mapping(container.get("lastState")).get("terminated"))
+            restarts = int(container.get("restartCount") or 0)
+            if waiting.get("reason") in _CONTAINER_WAITING:
+                problems.append(
+                    {
+                        "container": container.get("name"),
+                        "reason": waiting["reason"],
+                        "message": str(waiting.get("message") or "")[:160],
+                        "restarts": restarts,
+                        "at": last.get("finishedAt") or status.get("startTime"),
+                    }
+                )
+            elif restarts and last.get("reason") in _CONTAINER_TERMINATED:
+                problems.append(
+                    {
+                        "container": container.get("name"),
+                        "reason": last["reason"],
+                        "message": f"exit code {last.get('exitCode')}",
+                        "restarts": restarts,
+                        "at": last.get("finishedAt"),
+                    }
+                )
+        if not problems:
             continue
-        affected = topology.outgoing(entity, "restricts")
+        first = problems[0]
+        when = [t for p in problems if (t := _parse(p.get("at"))) is not None]
         findings.append(
             Finding(
-                kind=FindingKind.POLICY_CREATED,
+                kind=FindingKind.CONTAINER_FAILURE,
                 entity=entity,
-                at=_creation_time(latest.body),
-                summary=f"restrictive {entity.kind} affecting {len(affected)} pod(s)",
+                at=min(when) if when else None,
+                summary=(
+                    f"container {first['container']} {first['reason']}"
+                    f" ({first['restarts']} restart(s)) {first['message']}".strip()
+                ),
                 evidence_ids=(latest.evidence_id,),
-                related=affected,
-                details={"affected": [ref.canonical for ref in affected[:10]]},
+                details={"problems": problems[:5], "reason": first["reason"]},
             )
         )
     return findings
+
+
+def _parse(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 def _creation_time(body: Mapping[str, Any]) -> datetime | None:
@@ -559,6 +766,8 @@ def dependency_findings(
 
 __all__ = [
     "BACKGROUND_ALERTS",
+    "container_findings",
+    "parse_quantity",
     "dependency_findings",
     "change_findings",
     "extract_symptoms",

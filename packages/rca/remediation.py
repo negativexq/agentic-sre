@@ -79,7 +79,45 @@ def propose(candidate: Candidate, topology: Topology) -> tuple[Remediation, ...]
                 risk="low",
             ),
         )
-    if finding.kind is FindingKind.POLICY_CREATED:
+    if finding.kind in {FindingKind.QUOTA_EXCEEDED, FindingKind.QUOTA_EXHAUSTED}:
+        exhausted = ", ".join(finding.details.get("exhausted", [])) or "the rejected resources"
+        return (
+            Remediation(
+                action=f"Raise {entity.kind} {entity.name} limits for {exhausted}, or lower workload requests",
+                command=f"kubectl describe {ref}  # compare used with hard, then kubectl edit {ref}",
+                risk="medium: more capacity for the namespace",
+            ),
+        )
+    if finding.kind is FindingKind.CONTAINER_FAILURE and entity.kind == "Pod":
+        workload = topology.workload_of(entity)
+        target = (
+            _kubectl_ref(workload) if workload else f"deployment/{pod_workload_name(entity.name)}"
+        )
+        reason = finding.details.get("reason", "")
+        if reason == "OOMKilled":
+            return (
+                Remediation(
+                    action=f"Raise the memory limit of {target} or find the memory growth",
+                    command=f"kubectl set resources {target} --limits=memory=<higher>",
+                    risk="medium: uses more node memory",
+                ),
+            )
+        if reason in {"ImagePullBackOff", "ErrImagePull", "InvalidImageName"}:
+            return (
+                Remediation(
+                    action=f"Fix the image reference of {target} or roll it back",
+                    command=f"kubectl rollout undo {target}",
+                    risk="medium: reverts the last rollout",
+                ),
+            )
+        return (
+            Remediation(
+                action=f"Read the logs of the failing container, then fix or roll back {target}",
+                command=f"kubectl logs {ref} --previous && kubectl rollout undo {target}",
+                risk="medium: reverts the last rollout",
+            ),
+        )
+    if finding.kind in {FindingKind.POLICY_CREATED, FindingKind.NETWORK_RESTRICTION}:
         return (
             Remediation(
                 action=f"Review and relax {entity.kind} {entity.name}",

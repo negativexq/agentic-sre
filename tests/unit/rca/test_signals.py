@@ -17,6 +17,7 @@ from packages.rca.signals import (
     extract_symptoms,
     failure_findings,
     fault_event_findings,
+    parse_quantity,
     symptom_entities,
 )
 from packages.rca.source import InMemorySource
@@ -330,3 +331,10 @@ def test_collapse_keeps_the_latest_experiment_started_before_onset() -> None:
     assert [(c.entity.name, c.score) for c in kept] == [("delay-b", 9.0)]
     early = collapse_fault_instances(ranked, topology, onset=at(0))
     assert [c.entity.name for c in early] == ["delay-a"]
+
+
+def test_parse_quantity_handles_binary_and_decimal_suffixes() -> None:
+    assert parse_quantity("1Gi") == 2**30
+    assert parse_quantity("250m") == 0.25
+    assert parse_quantity("2") == 2.0
+    assert parse_quantity("x") is None

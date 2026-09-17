@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from rca_builders import alert, at, config_change_source, event, ref, shop_objects, version
 
-from packages.rca.engine import Case, Choice, diagnose
+from packages.rca.engine import Case, Choice, build_case, diagnose
 from packages.rca.model import Confidence, FindingKind
 from packages.rca.source import InMemorySource
 
@@ -164,3 +164,96 @@ def test_builtin_demo_finds_the_bad_rollout() -> None:
     assert diagnosis.confidence is Confidence.VERIFIED
     assert "FAULT_DELAY_MS" in diagnosis.summary
     assert "rollout undo" in diagnosis.remediation[0].command
+
+
+def _quota(used: str) -> dict[str, object]:
+    return {"status": {"hard": {"limits.memory": "1Gi"}, "used": {"limits.memory": used}}}
+
+
+def test_quota_that_rejects_pods_is_verified_with_a_capacity_proposal() -> None:
+    source = InMemorySource(
+        name="quota",
+        alert_items=[alert("RequestErrorRate", "checkout", 5)],
+        versions=[*shop_objects(0), version("shop/ResourceQuota/mem", 0, _quota("1024Mi"))],
+        event_items=[
+            event(
+                "shop/ReplicaSet/checkout-5d8f7c9b4",
+                "FailedCreate",
+                3,
+                type_="Warning",
+                count=4,
+                message="pods is forbidden: exceeded quota: mem, requested: limits.memory=256Mi",
+            )
+        ],
+    )
+    diagnosis = diagnose(source)
+    assert diagnosis.root_cause == ref("shop/ResourceQuota/mem")
+    assert diagnosis.confidence is Confidence.VERIFIED
+    assert "limits.memory" in diagnosis.remediation[0].action
+
+
+def test_quota_with_headroom_is_not_a_candidate() -> None:
+    source = InMemorySource(
+        name="quota-ok",
+        alert_items=[alert("RequestErrorRate", "checkout", 5)],
+        versions=[*shop_objects(0), version("shop/ResourceQuota/mem", 0, _quota("512Mi"))],
+    )
+    assert all(c.entity.kind != "ResourceQuota" for c in build_case(source).candidates)
+
+
+def test_partial_network_policy_is_a_candidate_but_not_verified() -> None:
+    policy = version(
+        "shop/NetworkPolicy/only-8080",
+        0,
+        {
+            "spec": {
+                "podSelector": {"matchLabels": {"app": "checkout"}},
+                "policyTypes": ["Ingress"],
+                "ingress": [{"ports": [{"port": 8080}]}],
+            }
+        },
+    )
+    source = InMemorySource(
+        name="partial-policy",
+        alert_items=[alert("RequestErrorRate", "checkout", 3)],
+        versions=[*shop_objects(0), policy],
+    )
+    diagnosis = diagnose(source)
+    finding = next(
+        c for c in build_case(source).candidates if c.entity == ref("shop/NetworkPolicy/only-8080")
+    ).findings[0]
+    assert finding.kind is FindingKind.NETWORK_RESTRICTION
+    assert "TCP/8080" in finding.summary
+    assert diagnosis.confidence is not Confidence.VERIFIED
+
+
+def test_oom_killed_container_proposes_more_memory() -> None:
+    versions = shop_objects(0)
+    crashed = versions[2].model_copy(deep=True)
+    crashed.body["status"] = {
+        "containerStatuses": [
+            {
+                "name": "checkout",
+                "restartCount": 5,
+                "state": {"running": {}},
+                "lastState": {
+                    "terminated": {
+                        "reason": "OOMKilled",
+                        "exitCode": 137,
+                        "finishedAt": at(2).isoformat(),
+                    }
+                },
+            }
+        ]
+    }
+    source = InMemorySource(
+        name="oom",
+        alert_items=[alert("RequestErrorRate", "checkout", 3)],
+        versions=[*versions[:2], crashed, versions[3]],
+    )
+    diagnosis = diagnose(source)
+    assert diagnosis.root_cause == ref("shop/Pod/checkout-5d8f7c9b4-abcde")
+    assert diagnosis.evidence[0].kind is FindingKind.CONTAINER_FAILURE
+    assert "OOMKilled" in diagnosis.evidence[0].summary
+    assert "memory" in diagnosis.remediation[0].command
+    assert diagnosis.confidence is not Confidence.VERIFIED

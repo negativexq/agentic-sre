@@ -148,6 +148,16 @@ def cmd_grade(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_benchmark_qualify(args: argparse.Namespace) -> int:
+    from packages.evals.itbench.benchmark import load_split
+    from packages.evals.itbench.qualification import qualify_dataset
+
+    dataset = _dataset(args.dataset)
+    report = qualify_dataset(dataset, load_split(args.split), args.out)
+    print((args.out / "qualification.md").read_text(encoding="utf-8"))
+    return 0 if report["scenarios"] else 1
+
+
 def _add_output_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="print the diagnosis as JSON")
     parser.add_argument("--html", type=Path, default=None, help="also write an HTML report")
@@ -196,6 +206,15 @@ def build_parser() -> argparse.ArgumentParser:
     grade_cmd.add_argument("--out", type=Path, required=True)
     grade_cmd.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
     grade_cmd.set_defaults(handler=cmd_grade)
+
+    qualify_cmd = sub.add_parser(
+        "benchmark-qualify",
+        help="diagnose-only qualification of ground-truth entity contracts",
+    )
+    qualify_cmd.add_argument("--split", choices=["dev", "test", "all"], default="dev")
+    qualify_cmd.add_argument("--out", type=Path, required=True)
+    qualify_cmd.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
+    qualify_cmd.set_defaults(handler=cmd_benchmark_qualify)
     return parser
 
 

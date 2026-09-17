@@ -39,8 +39,10 @@ serve-local:
 
 # --- benchmark (ITBench-Lite, offline) ---------------------------------------
 
+ITBENCH_WORKERS ?= 16
+
 itbench-setup:
-	$(PY) scripts/itbench_lite_setup.py
+	$(PY) scripts/itbench_lite_setup.py --workers $(ITBENCH_WORKERS)
 
 itbench-index:
 	$(PY) scripts/itbench_lite_build_index.py

@@ -72,8 +72,7 @@ def _download_job(job: tuple[str, Path, int]) -> None:
     _download(remote_path, destination, expected_size=expected_size)
 
 
-def prepare(root: Path, *, sample_bytes: int = 0, all_metrics: bool = True) -> dict[str, Any]:
-    del sample_bytes, all_metrics
+def prepare(root: Path, *, workers: int = 16) -> dict[str, Any]:
     snapshot_root = root / "snapshots" / "sre" / ITBENCH_SRE_VERSION
     entries: list[dict[str, Any]] = []
     jobs: list[tuple[str, Path, int]] = []
@@ -121,7 +120,9 @@ def prepare(root: Path, *, sample_bytes: int = 0, all_metrics: bool = True) -> d
                     "complete": True,
                 }
             )
-    with ThreadPoolExecutor(max_workers=8, thread_name_prefix="itbench-download") as pool:
+    # Largest files first so parallel connections are spent on the slow transfers.
+    jobs.sort(key=lambda job: -job[2])
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="itbench-download") as pool:
         futures: list[Future[None]] = [pool.submit(_download_job, job) for job in jobs]
         for future in futures:
             future.result()
@@ -240,13 +241,10 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path(".local/itbench-lite"))
     parser.add_argument(
-        "--sample-bytes", type=int, default=0, help="deprecated; full files are always fetched"
-    )
-    parser.add_argument(
-        "--all-metrics", action="store_true", help="deprecated; all metrics are always fetched"
+        "--workers", type=int, default=16, help="parallel downloads (completed files are skipped)"
     )
     args = parser.parse_args()
-    manifest = prepare(args.root, sample_bytes=args.sample_bytes, all_metrics=args.all_metrics)
+    manifest = prepare(args.root, workers=args.workers)
     print(
         json.dumps(
             {"status": "PASS", "scenario_count": manifest["scenario_count"], "root": str(args.root)}

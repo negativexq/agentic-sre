@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from functools import cached_property
@@ -22,6 +23,7 @@ from packages.rca.model import (
     LogRecord,
     ObjectVersion,
     ResourcePressure,
+    TrafficObservation,
 )
 
 _OBJECTS = "k8s_objects_raw.tsv"
@@ -35,6 +37,8 @@ _CPU_THROTTLED = "container_cpu_cfs_throttled_periods_total"
 _CPU_PERIODS = "container_cpu_cfs_periods_total"
 _PRESSURE_METRICS = frozenset({_MEMORY_USAGE, _MEMORY_LIMIT, _CPU_THROTTLED, _CPU_PERIODS})
 _MIN_CPU_PERIODS = 100
+_TRAFFIC_METRIC = re.compile(r"(?:request|http|throughput|traffic|rps)", re.IGNORECASE)
+_TRAFFIC_LABELS = ("service_name", "service", "workload", "app", "k8s_app")
 
 
 def _tags(value: str) -> dict[str, Any]:
@@ -369,6 +373,51 @@ class SnapshotSource:
             if pod.kind == "Pod" and "/" not in pod.name and path.is_file():
                 result.extend(pod_pressure(pod, path, since))
         return result
+
+    @cached_property
+    def _traffic_observations(self) -> list[TrafficObservation]:
+        """Read only explicitly traffic-shaped metrics; steady-state values are not findings."""
+        result: list[TrafficObservation] = []
+        for path in sorted((self.root / "metrics").glob("*.tsv")):
+            for index, row in enumerate(iter_tsv(path)):
+                metric = str(row.get("metric_name") or "")
+                if not _TRAFFIC_METRIC.search(metric):
+                    continue
+                at = parse_time(row.get("timestamp"))
+                tags = _tags(str(row.get("tags") or ""))
+                label = next((str(tags[key]) for key in _TRAFFIC_LABELS if tags.get(key)), "")
+                if not label:
+                    label = str(row.get("service_name") or "")
+                if not label or at is None:
+                    continue
+                try:
+                    value = float(row.get("value") or "nan")
+                except ValueError:
+                    continue
+                if value != value:
+                    continue
+                result.append(
+                    TrafficObservation(
+                        entity=EntityRef(
+                            kind="Service",
+                            name=label,
+                            namespace=str(row.get("namespace") or CLUSTER_SCOPE),
+                        ),
+                        metric=metric,
+                        at=at,
+                        value=value,
+                        evidence_id=f"metrics/{path.name}:{index}",
+                    )
+                )
+                if len(result) >= 5_000:
+                    return result
+        return result
+
+    def traffic_observations(self) -> Sequence[TrafficObservation]:
+        cutoff = self.observation_cutoff()
+        if cutoff is None:
+            return self._traffic_observations
+        return [item for item in self._traffic_observations if item.at <= cutoff]
 
     def logs(self, service: str, *, limit: int = 20) -> Sequence[dict[str, Any]]:
         """Error-level log lines for one service, bounded."""

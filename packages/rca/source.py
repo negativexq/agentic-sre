@@ -14,6 +14,7 @@ from packages.rca.model import (
     LogRecord,
     ObjectVersion,
     ResourcePressure,
+    TrafficObservation,
 )
 
 
@@ -44,6 +45,10 @@ class ObservationSource(Protocol):
         """Resource use of the given pods before and after ``since``; empty without metrics."""
         ...
 
+    def traffic_observations(self) -> Sequence[TrafficObservation]:
+        """Bounded request-rate observations, empty when no metric source exists."""
+        ...
+
 
 @dataclass
 class InMemorySource:
@@ -56,6 +61,7 @@ class InMemorySource:
     log_items: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     error_items: list[LogRecord] = field(default_factory=list)
     pressure_items: list[ResourcePressure] = field(default_factory=list)
+    traffic_items: list[TrafficObservation] = field(default_factory=list)
     cutoff: datetime | None = None
 
     def incident_id(self) -> str:
@@ -100,6 +106,11 @@ class InMemorySource:
     ) -> Sequence[ResourcePressure]:
         wanted = set(pods)
         return [item for item in self.pressure_items if item.pod in wanted]
+
+    def traffic_observations(self) -> Sequence[TrafficObservation]:
+        if self.cutoff is None:
+            return self.traffic_items
+        return [item for item in self.traffic_items if item.at <= self.cutoff]
 
 
 __all__ = ["InMemorySource", "ObservationSource"]

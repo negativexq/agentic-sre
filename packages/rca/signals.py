@@ -21,6 +21,7 @@ from packages.rca.model import (
     ObjectVersion,
     ResourcePressure,
     Symptoms,
+    TrafficObservation,
 )
 from packages.rca.topology import WORKLOAD_KINDS, Topology, is_chaos_kind
 
@@ -856,12 +857,167 @@ def dependency_findings(
     return findings
 
 
+_HPA_FAILURE_REASONS = frozenset(
+    {
+        "FailedGetResourceMetric",
+        "FailedGetExternalMetric",
+        "FailedGetObjectMetric",
+        "FailedComputeMetricsReplicas",
+        "FailedRescale",
+    }
+)
+_HPA_FAILURE_CONDITIONS = frozenset({"AbleToScale", "ScalingActive", "ScalingLimited"})
+
+
+def autoscaling_findings(
+    history: Mapping[EntityRef, Sequence[ObjectVersion]],
+    events: Sequence[ClusterEvent],
+    topology: Topology,
+) -> list[Finding]:
+    """Normalize explicit HPA failure conditions/events into one bounded finding."""
+    events_by_hpa: dict[EntityRef, list[ClusterEvent]] = {}
+    for event in events:
+        if event.entity.kind == "HorizontalPodAutoscaler" and (
+            event.reason in _HPA_FAILURE_REASONS or event.type == "Warning"
+        ):
+            events_by_hpa.setdefault(event.entity, []).append(event)
+    findings: list[Finding] = []
+    for entity, versions in history.items():
+        if entity.kind != "HorizontalPodAutoscaler":
+            continue
+        latest = versions[-1]
+        status = child(latest.body, "status")
+        conditions = status.get("conditions") if isinstance(status, dict) else None
+        failures: list[dict[str, str]] = []
+        transition_times: list[datetime] = []
+        for item in conditions if isinstance(conditions, list) else []:
+            if not isinstance(item, dict) or str(item.get("type")) not in _HPA_FAILURE_CONDITIONS:
+                continue
+            condition_type = str(item.get("type"))
+            state = str(item.get("status"))
+            failed = (condition_type in {"AbleToScale", "ScalingActive"} and state != "True") or (
+                condition_type == "ScalingLimited" and state == "True"
+            )
+            if not failed:
+                continue
+            transition = _parse(item.get("lastTransitionTime"))
+            if transition is not None:
+                transition_times.append(transition)
+            failures.append(
+                {
+                    "type": condition_type,
+                    "status": state,
+                    "reason": str(item.get("reason") or ""),
+                    "message": str(item.get("message") or "")[:180],
+                }
+            )
+        hpa_events = events_by_hpa.get(entity, [])
+        for event in hpa_events:
+            failures.append(
+                {
+                    "type": "Event",
+                    "status": event.type,
+                    "reason": event.reason,
+                    "message": event.message[:180],
+                }
+            )
+        if not failures:
+            continue
+        event_times = [
+            time
+            for event in hpa_events
+            for time in (event.first_at, event.last_at)
+            if time is not None
+        ]
+        initiating_at = min([*event_times, *transition_times], default=latest.observed_at)
+        targets = topology.outgoing(entity, "scales")
+        reasons = sorted({item["reason"] for item in failures if item["reason"]})
+        details: dict[str, Any] = {
+            "conditions": failures[:8],
+            "failure_reasons": reasons,
+            "targets": [target.canonical for target in targets],
+            "initiating_at": initiating_at.isoformat(),
+        }
+        findings.append(
+            Finding(
+                kind=FindingKind.AUTOSCALING_FAILURE,
+                entity=entity,
+                at=initiating_at,
+                summary=(
+                    f"autoscaling failed for {', '.join(target.name for target in targets[:3]) or 'target'}: "
+                    f"{', '.join(reasons[:3]) or 'unhealthy HPA condition'}"
+                ),
+                evidence_ids=(latest.evidence_id, *(event.evidence_id for event in hpa_events[:4])),
+                related=targets,
+                details=details,
+            )
+        )
+    return findings
+
+
+TRAFFIC_INCREASE_FACTOR = 1.5
+
+
+def traffic_findings(
+    observations: Sequence[TrafficObservation],
+    onset: datetime | None,
+    cutoff: datetime | None,
+) -> list[Finding]:
+    """Detect request-rate changes, never high steady-state traffic alone."""
+    if onset is None:
+        return []
+    grouped: dict[tuple[EntityRef, str], list[TrafficObservation]] = {}
+    for observation in observations:
+        if cutoff is not None and observation.at > cutoff:
+            continue
+        grouped.setdefault((observation.entity, observation.metric), []).append(observation)
+    findings: list[Finding] = []
+    for (entity, metric), items in grouped.items():
+        before = sorted((item for item in items if item.at < onset), key=lambda item: item.at)
+        after = sorted((item for item in items if item.at >= onset), key=lambda item: item.at)
+        if not before or not after:
+            continue
+        baseline = before[-1].value
+        if baseline <= 0:
+            continue
+        crossing = next(
+            (item for item in after if item.value >= baseline * TRAFFIC_INCREASE_FACTOR), None
+        )
+        if crossing is None:
+            continue
+        peak = max(item.value for item in after)
+        evidence = (before[-1].evidence_id, *(item.evidence_id for item in after[:3]))
+        findings.append(
+            Finding(
+                kind=FindingKind.TRAFFIC_INCREASE,
+                entity=entity,
+                at=crossing.at,
+                summary=(
+                    f"{metric} increased from {baseline:.3g} to {peak:.3g} "
+                    f"({peak / baseline:.2f}x baseline)"
+                ),
+                evidence_ids=evidence,
+                details={
+                    "metric": metric,
+                    "baseline": baseline,
+                    "incident_peak": peak,
+                    "ratio": round(peak / baseline, 3),
+                    "baseline_at": before[-1].at.isoformat(),
+                    "incident_at": crossing.at.isoformat(),
+                    "threshold_factor": TRAFFIC_INCREASE_FACTOR,
+                },
+            )
+        )
+    return findings
+
+
 __all__ = [
     "BACKGROUND_ALERTS",
     "resource_findings",
     "container_findings",
     "parse_quantity",
     "dependency_findings",
+    "autoscaling_findings",
     "change_findings",
     "extract_symptoms",
     "failure_findings",
@@ -869,4 +1025,6 @@ __all__ = [
     "is_background_alert",
     "policy_findings",
     "symptom_entities",
+    "traffic_findings",
+    "TRAFFIC_INCREASE_FACTOR",
 ]

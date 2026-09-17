@@ -116,6 +116,18 @@ class ResourcePressure(BaseModel):
     evidence_id: str
 
 
+class TrafficObservation(BaseModel):
+    """One bounded request/traffic measurement used for change detection."""
+
+    model_config = ConfigDict(frozen=True)
+
+    entity: EntityRef
+    metric: str
+    at: datetime
+    value: float
+    evidence_id: str
+
+
 class ClusterEvent(BaseModel):
     """One Kubernetes event about an involved object."""
 
@@ -216,6 +228,8 @@ class FindingKind(StrEnum):
     RESOURCE_PRESSURE = "RESOURCE_PRESSURE"
     DEPENDENCY_ERRORS = "DEPENDENCY_ERRORS"
     FAILURE_EVENT = "FAILURE_EVENT"
+    AUTOSCALING_FAILURE = "AUTOSCALING_FAILURE"
+    TRAFFIC_INCREASE = "TRAFFIC_INCREASE"
 
 
 class Finding(BaseModel):
@@ -336,6 +350,7 @@ __all__ = [
     "ObjectVersion",
     "Remediation",
     "ResourcePressure",
+    "TrafficObservation",
     "Symptoms",
     "PredicateStatus",
     "VerificationPredicate",

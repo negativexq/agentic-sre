@@ -15,8 +15,15 @@ from rca_builders import (
 )
 
 from packages.rca.engine import Case, Choice, build_case, diagnose
-from packages.rca.model import Confidence, FindingKind, LogRecord, ResourcePressure
+from packages.rca.model import (
+    Confidence,
+    FindingKind,
+    LogRecord,
+    ResourcePressure,
+    TrafficObservation,
+)
 from packages.rca.ranking import verification_trace
+from packages.rca.signals import traffic_findings
 from packages.rca.source import InMemorySource
 
 
@@ -268,6 +275,88 @@ def test_near_tied_candidates_do_not_receive_unjustified_verified_confidence() -
         predicate.name == "candidate_dominance" and predicate.status.value == "WEAK"
         for predicate in trace.predicates
     )
+
+
+def test_steady_state_high_traffic_does_not_create_load_increase() -> None:
+    entity = ref("shop/Deployment/load-generator")
+    observations = [
+        TrafficObservation(
+            entity=entity, metric="http_requests_rate", at=at(0), value=350, evidence_id="m0"
+        ),
+        TrafficObservation(
+            entity=entity, metric="http_requests_rate", at=at(5), value=350, evidence_id="m1"
+        ),
+    ]
+
+    assert traffic_findings(observations, at(5), at(10)) == []
+
+
+def test_temporal_traffic_increase_is_a_normalized_finding() -> None:
+    entity = ref("shop/Deployment/load-generator")
+    observations = [
+        TrafficObservation(
+            entity=entity, metric="http_requests_rate", at=at(0), value=10, evidence_id="m0"
+        ),
+        TrafficObservation(
+            entity=entity, metric="http_requests_rate", at=at(6), value=25, evidence_id="m1"
+        ),
+    ]
+
+    findings = traffic_findings(observations, at(5), at(10))
+
+    assert len(findings) == 1
+    assert findings[0].kind is FindingKind.TRAFFIC_INCREASE
+    assert findings[0].details["baseline"] == 10
+    assert findings[0].details["ratio"] == 2.5
+
+
+def test_hpa_failure_before_workload_symptoms_is_verified() -> None:
+    hpa = version(
+        "shop/HorizontalPodAutoscaler/checkout-hpa",
+        1,
+        {
+            "spec": {
+                "scaleTargetRef": {
+                    "apiVersion": "apps/v1",
+                    "kind": "Deployment",
+                    "name": "checkout",
+                },
+                "minReplicas": 1,
+                "maxReplicas": 5,
+            },
+            "status": {
+                "conditions": [
+                    {
+                        "type": "ScalingActive",
+                        "status": "False",
+                        "reason": "FailedGetResourceMetric",
+                        "message": "unable to fetch metrics",
+                        "lastTransitionTime": at(1).isoformat(),
+                    }
+                ]
+            },
+        },
+    )
+    source = InMemorySource(
+        name="hpa-failure",
+        alert_items=[alert("RequestErrorRate", "checkout", 5)],
+        versions=[*shop_objects(0), hpa],
+        event_items=[
+            event(
+                "shop/HorizontalPodAutoscaler/checkout-hpa",
+                "FailedGetResourceMetric",
+                1,
+                type_="Warning",
+            )
+        ],
+        cutoff=at(10),
+    )
+
+    diagnosis = diagnose(source)
+
+    assert diagnosis.root_cause == ref("shop/HorizontalPodAutoscaler/checkout-hpa")
+    assert diagnosis.confidence is Confidence.VERIFIED
+    assert diagnosis.evidence[0].kind is FindingKind.AUTOSCALING_FAILURE
 
 
 def _quota(used: str) -> dict[str, object]:

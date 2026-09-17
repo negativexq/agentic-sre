@@ -29,6 +29,7 @@ from packages.rca.ranking import (
 )
 from packages.rca.remediation import propose
 from packages.rca.signals import (
+    autoscaling_findings,
     change_findings,
     container_findings,
     dependency_findings,
@@ -38,6 +39,7 @@ from packages.rca.signals import (
     policy_findings,
     resource_findings,
     symptom_entities,
+    traffic_findings,
 )
 from packages.rca.source import ObservationSource
 from packages.rca.topology import Topology, derive_edges
@@ -117,6 +119,7 @@ def build_case(source: ObservationSource, config: EngineConfig | None = None) ->
     findings = [
         *change_findings(history),
         *policy_findings(history, topology, set(symptoms.namespaces), events),
+        *autoscaling_findings(history, events, topology),
         *container_findings(history),
         *(
             resource_findings(
@@ -131,6 +134,9 @@ def build_case(source: ObservationSource, config: EngineConfig | None = None) ->
         *fault_event_findings(events, topology),
         *failure_findings(events),
         *dependency_findings(list(source.error_logs()), topology, entities),
+        *traffic_findings(
+            list(source.traffic_observations()), symptoms.onset, source.observation_cutoff()
+        ),
     ]
     findings = annotate_temporal_roles(
         findings, symptoms.onset, config.ranking.verification_onset_grace

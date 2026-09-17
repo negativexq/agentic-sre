@@ -110,7 +110,7 @@ def _link(finding: Finding, context: Context, config: RankingConfig) -> tuple[fl
     reasons: list[str] = []
     best: int | None = None
     for ref in _affected_entities(finding, context.topology):
-        distance = context.topology.distance(ref, context.symptom_entities)
+        distance = context.topology.causal_distance(ref, context.symptom_entities)
         if distance is not None and (best is None or distance < best):
             best = distance
     score = 0.0
@@ -167,7 +167,7 @@ def score_findings(
         total = top_value + config.extra_finding_weight * sum(sorted(extras.values())[-2:])
         reached: set[EntityRef] = set()
         for affected in _affected_entities(scored[0][1], context.topology):
-            reached.update(context.topology.reachable(affected))
+            reached.update(context.topology.causal_reachable(affected))
         linked = sorted(ref.canonical for ref in context.symptom_entities & reached)[:5]
         candidates.append(
             Candidate(
@@ -236,7 +236,8 @@ def verify(
         # uses it and one service call: config - workload - service - caller.
         depth = 3 if finding.kind in {FindingKind.CONFIG_CHANGE, FindingKind.OBJECT_DELETED} else 2
         linked = any(
-            context.topology.distance(ref, context.symptom_entities, max_depth=depth) is not None
+            context.topology.causal_distance(ref, context.symptom_entities, max_depth=depth)
+            is not None
             for ref in _affected_entities(finding, context.topology)
         )
         mentions = _mentions(finding, context.tokens)

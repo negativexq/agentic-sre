@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
-from rca_builders import alert, at, config_change_source, event, ref, shop_objects, version
+from rca_builders import (
+    alert,
+    at,
+    config_change_source,
+    event,
+    microservice,
+    ref,
+    shop_objects,
+    version,
+)
 
 from packages.rca.engine import Case, Choice, build_case, diagnose
 from packages.rca.model import Confidence, FindingKind, ResourcePressure
@@ -281,3 +290,60 @@ def test_new_memory_pressure_on_the_alerting_pod_is_reported() -> None:
     assert diagnosis.root_cause == pod
     assert diagnosis.evidence[0].kind is FindingKind.RESOURCE_PRESSURE
     assert "memory limit" in diagnosis.remediation[0].action
+
+
+def test_container_failure_behind_a_shared_policy_is_not_linked_to_a_sibling() -> None:
+    """A NetworkPolicy restricting many unrelated pods must not bridge them.
+
+    checkout is the alerting service; billing's own pod crashed, but the two
+    are only two hops apart through a NetworkPolicy that restricts both,
+    along with two other, unrelated services -- not a causal path.
+    """
+    policy = {
+        "spec": {
+            "podSelector": {},
+            "policyTypes": ["Ingress"],
+            "ingress": [{"ports": [{"port": 8080}]}],
+        }
+    }
+    versions = [
+        *microservice("checkout", 0),
+        *microservice("billing", 0),
+        *microservice("shipping", 0),
+        *microservice("catalog", 0),
+        version("shop/NetworkPolicy/broad", 0, policy),
+    ]
+    crashed = next(v for v in versions if v.entity == ref("shop/Pod/billing-5d8f7c9b4-abcde"))
+    crashed = crashed.model_copy(deep=True)
+    crashed.body["status"] = {
+        "containerStatuses": [
+            {
+                "name": "billing",
+                "restartCount": 5,
+                "state": {"running": {}},
+                "lastState": {
+                    "terminated": {
+                        "reason": "OOMKilled",
+                        "exitCode": 137,
+                        "finishedAt": at(2).isoformat(),
+                    }
+                },
+            }
+        ]
+    }
+    versions = [v for v in versions if v.entity != ref("shop/Pod/billing-5d8f7c9b4-abcde")] + [
+        crashed
+    ]
+    source = InMemorySource(
+        name="shared-policy",
+        alert_items=[alert("RequestErrorRate", "checkout", 10)],
+        versions=versions,
+    )
+    case = build_case(source)
+    billing_pod = next(
+        c for c in case.candidates if c.entity == ref("shop/Pod/billing-5d8f7c9b4-abcde")
+    )
+    # billing's crash has no bonus for being "linked": the only path to an
+    # alerting entity goes through the shared policy, which must not count.
+    assert billing_pod.linked_symptoms == ()
+    assert not any("hop(s) from an alerting component" in r for r in billing_pod.reasons)

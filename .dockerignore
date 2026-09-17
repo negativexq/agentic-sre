@@ -1,6 +1,7 @@
 # Keep the build context to the sources the images need.
 *
 !pyproject.toml
+!uv.lock
 !README.md
 !alembic.ini
 !alembic/

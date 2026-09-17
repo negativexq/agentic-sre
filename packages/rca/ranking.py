@@ -174,33 +174,46 @@ def score_findings(
     return candidates
 
 
-def collapse_fault_instances(candidates: list[Candidate], topology: Topology) -> list[Candidate]:
-    """Keep one experiment instance per chaos schedule: the most recently applied."""
-    parents: dict[EntityRef, EntityRef] = {}
-    for edge in topology.edges:
-        if edge.relation == "spawns":
-            parents[edge.target] = edge.source
-    kept: dict[EntityRef, Candidate] = {}
+def collapse_fault_instances(
+    candidates: list[Candidate], topology: Topology, onset: datetime | None = None
+) -> list[Candidate]:
+    """Keep one experiment per chaos schedule.
+
+    The kept experiment is the latest one that started at or before the onset,
+    or the earliest one when all started later. It takes the place of the
+    group's best-scoring member.
+    """
+    parents = {edge.target: edge.source for edge in topology.edges if edge.relation == "spawns"}
+    groups: dict[EntityRef, list[Candidate]] = {}
+    for candidate in candidates:
+        parent = parents.get(candidate.entity)
+        if parent is not None:
+            groups.setdefault(parent, []).append(candidate)
+
+    def started(candidate: Candidate) -> datetime | None:
+        return min((f.at for f in candidate.findings if f.at), default=None)
+
+    chosen: dict[EntityRef, Candidate] = {}
+    for parent, members in groups.items():
+        timed = [(started(m), m) for m in members if started(m) is not None]
+        before = [(t, m) for t, m in timed if onset is None or (t is not None and t <= onset)]
+        if before:
+            pick = max(before, key=lambda item: (item[0], item[1].score))[1]
+        elif timed:
+            pick = min(timed, key=lambda item: (item[0], -item[1].score))[1]
+        else:
+            pick = members[0]
+        best_score = max(m.score for m in members)
+        chosen[parent] = pick.model_copy(update={"score": best_score})
     result: list[Candidate] = []
+    placed: set[EntityRef] = set()
     for candidate in candidates:
         parent = parents.get(candidate.entity)
         if parent is None:
             result.append(candidate)
-            continue
-        current = kept.get(parent)
-        latest = max((f.at for f in candidate.findings if f.at), default=None)
-        if current is None:
-            kept[parent] = candidate
-            result.append(candidate)
-            continue
-        current_latest = max((f.at for f in current.findings if f.at), default=None)
-        if (
-            latest
-            and (current_latest is None or latest > current_latest)
-            and (candidate.score >= current.score - 0.5)
-        ):
-            result[result.index(current)] = candidate
-            kept[parent] = candidate
+        elif parent not in placed:
+            result.append(chosen[parent])
+            placed.add(parent)
     return result
 
 

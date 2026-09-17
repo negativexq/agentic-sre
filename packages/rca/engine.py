@@ -102,7 +102,7 @@ def build_case(source: ObservationSource, config: EngineConfig | None = None) ->
         *dependency_findings(list(source.error_logs()), topology, entities),
     ]
     candidates = collapse_fault_instances(
-        score_findings(findings, context, config.ranking), topology
+        score_findings(findings, context, config.ranking), topology, symptoms.onset
     )
     steps = [
         InvestigationStep(
@@ -156,6 +156,30 @@ def _summary(candidate: Candidate, confidence: Confidence, reason: str) -> str:
     )
 
 
+_RANK = {Confidence.VERIFIED: 2, Confidence.LIKELY: 1, Confidence.UNVERIFIED: 0}
+
+
+def _accept_override(
+    case: Case, top: Candidate, proposed: Candidate, config: EngineConfig
+) -> Candidate:
+    """Let the investigator replace the ranked answer only without losing verification."""
+    top_confidence, _ = verify(top, case.context, config.ranking)
+    new_confidence, _ = verify(proposed, case.context, config.ranking)
+    if _RANK[new_confidence] >= _RANK[top_confidence]:
+        return proposed
+    case.steps.append(
+        InvestigationStep(
+            actor="engine",
+            action="kept",
+            detail=(
+                f"kept {top.entity.canonical} ({top_confidence.value}); the proposed "
+                f"{proposed.entity.canonical} is only {new_confidence.value}"
+            ),
+        )
+    )
+    return top
+
+
 def diagnose(
     source: ObservationSource,
     *,
@@ -179,14 +203,13 @@ def diagnose(
     model_calls = 0
     if investigator is not None:
         mode = investigator.name
-        choice = investigator.investigate(case)
         client = getattr(investigator, "client", None)
-        model_calls = int(getattr(client, "calls", 0))
+        calls_before = int(getattr(client, "calls", 0))
+        choice = investigator.investigate(case)
+        model_calls = int(getattr(client, "calls", 0)) - calls_before
+        if client is None and choice is not None:
+            model_calls = choice.model_calls
         if choice is not None:
-            model_calls = max(model_calls, choice.model_calls)
-            match = next((c for c in case.candidates if c.entity == choice.entity), None)
-            if match is not None:
-                chosen = match
             case.steps.append(
                 InvestigationStep(
                     actor=investigator.name,
@@ -194,6 +217,9 @@ def diagnose(
                     detail=f"{choice.entity.canonical}: {choice.rationale}"[:500],
                 )
             )
+            match = next((c for c in case.candidates if c.entity == choice.entity), None)
+            if match is not None and match.entity != chosen.entity:
+                chosen = _accept_override(case, chosen, match, config)
     confidence, reason = verify(chosen, case.context, config.ranking)
     alternatives = tuple(c for c in case.candidates if c.entity != chosen.entity)[
         : config.alternatives

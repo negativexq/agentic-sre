@@ -374,48 +374,88 @@ def _creation_time(body: Mapping[str, Any]) -> datetime | None:
         return None
 
 
+def _span(items: Sequence[ClusterEvent]) -> tuple[datetime | None, datetime | None]:
+    times = [t for item in items for t in (item.first_at, item.last_at) if t is not None]
+    return (min(times), max(times)) if times else (None, None)
+
+
+def _clock(value: datetime | None) -> str:
+    return value.strftime("%H:%M") if value else "?"
+
+
 def fault_event_findings(events: Sequence[ClusterEvent], topology: Topology) -> list[Finding]:
-    """Chaos experiments applied during the observed period, one per experiment object."""
+    """Chaos experiments seen in events, one finding per experiment object.
+
+    A finding's time is when the experiment started. Experiments spawned by a
+    schedule also report how long the schedule has been injecting faults, because
+    a recurring fault that began before the alerts can be the cause even when its
+    latest run happened later.
+    """
     grouped: dict[EntityRef, list[ClusterEvent]] = {}
     for event in events:
         if is_chaos_kind(event.entity.kind):
             grouped.setdefault(event.entity, []).append(event)
+    parents = {edge.target: edge.source for edge in topology.edges if edge.relation == "spawns"}
+    schedule_events: dict[EntityRef, list[ClusterEvent]] = {}
+    for entity, items in grouped.items():
+        owner = entity if entity.kind == "Schedule" else parents.get(entity)
+        if owner is not None:
+            schedule_events.setdefault(owner, []).extend(items)
     findings: list[Finding] = []
     for entity, items in grouped.items():
         reasons = Counter(item.reason for item in items)
-        times = [t for item in items for t in (item.last_at, item.first_at) if t is not None]
-        applied = [item for item in items if item.reason in {"Applied", "Started"}]
+        first, last = _span(items)
+        parent = parents.get(entity)
+        details: dict[str, Any] = {
+            "first_at": first.isoformat() if first else None,
+            "last_at": last.isoformat() if last else None,
+            "reasons": dict(reasons),
+            "failed_applications": reasons.get("Failed", 0),
+        }
         if entity.kind == "Schedule":
             if not reasons.get("Spawned"):
                 continue
             kind = FindingKind.FAULT_SCHEDULE
-            summary = f"chaos schedule spawned {reasons['Spawned']} experiment(s)"
+            active_from, active_to = _span(schedule_events.get(entity, items))
+            summary = (
+                f"chaos schedule injecting faults since {_clock(active_from)}, "
+                f"last run {_clock(active_to)} ({reasons['Spawned']} experiment(s))"
+            )
+            first = active_from
             targets = tuple(
                 target
                 for child in topology.outgoing(entity, "spawns")
                 for target in topology.outgoing(child, "disrupts")
             )
         else:
-            if not applied:
+            # Started-but-failed experiments never injected a fault.
+            if not reasons.get("Applied"):
                 continue
             kind = FindingKind.FAULT_INJECTION
-            summary = f"{entity.kind} applied fault ({reasons.get('Applied', 0)} application(s))"
             targets = topology.outgoing(entity, "disrupts")
+            summary = (
+                f"{entity.kind} applied fault at {_clock(first)} "
+                f"({reasons.get('Applied', 0)} application(s))"
+            )
+            if parent is not None:
+                active_from, active_to = _span(schedule_events.get(parent, items))
+                summary += (
+                    f"; schedule {parent.name} has injected this fault repeatedly from "
+                    f"{_clock(active_from)} to {_clock(active_to)}"
+                )
+                details["schedule"] = parent.canonical
+                details["schedule_active_from"] = active_from.isoformat() if active_from else None
+                details["schedule_active_to"] = active_to.isoformat() if active_to else None
+        details["targets"] = sorted({t.canonical for t in targets})
         findings.append(
             Finding(
                 kind=kind,
                 entity=entity,
-                at=max(times) if times else None,
+                at=first,
                 summary=summary,
                 evidence_ids=tuple(item.evidence_id for item in items[:6]),
                 related=tuple(dict.fromkeys(targets)),
-                details={
-                    "first_at": min(times).isoformat() if times else None,
-                    "last_at": max(times).isoformat() if times else None,
-                    "reasons": dict(reasons),
-                    "targets": sorted({t.canonical for t in targets}),
-                    "failed_applications": reasons.get("Failed", 0),
-                },
+                details=details,
             )
         )
     return findings

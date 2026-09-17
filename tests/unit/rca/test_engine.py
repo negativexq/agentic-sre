@@ -90,7 +90,7 @@ def test_no_signal_returns_explicit_empty_diagnosis() -> None:
     assert diagnosis.confidence is Confidence.UNVERIFIED
 
 
-def test_investigator_can_choose_another_candidate_but_not_self_verify() -> None:
+def test_investigator_cannot_replace_a_verified_answer_with_an_unverified_one() -> None:
     class Picker:
         name = "scripted"
 
@@ -99,10 +99,31 @@ def test_investigator_can_choose_another_candidate_but_not_self_verify() -> None
             return Choice(entity=recorder.entity, rationale="looked suspicious", model_calls=2)
 
     diagnosis = diagnose(config_change_source(), investigator=Picker())
-    assert diagnosis.root_cause == ref("infra/ConfigMap/recorder")
-    assert diagnosis.confidence is Confidence.UNVERIFIED
+    assert diagnosis.root_cause == ref("shop/ConfigMap/checkout-flags")
+    assert diagnosis.confidence is Confidence.VERIFIED
     assert diagnosis.mode == "scripted" and diagnosis.model_calls == 2
     assert any(step.actor == "scripted" for step in diagnosis.steps)
+    kept = [step for step in diagnosis.steps if step.action == "kept"]
+    assert kept and "only UNVERIFIED" in kept[0].detail
+
+
+def test_investigator_may_reorder_candidates_of_equal_confidence() -> None:
+    source = config_change_source()
+    source.versions += [
+        version("shop/ConfigMap/routing", 0, {"data": {"route": "checkout-v1"}}),
+        version("shop/ConfigMap/routing", 9, {"data": {"route": "checkout-v2"}}, 1),
+    ]
+
+    class Picker:
+        name = "scripted"
+
+        def investigate(self, case: Case) -> Choice | None:
+            routing = next(c for c in case.candidates if c.entity.name == "routing")
+            return Choice(entity=routing.entity, rationale="also verified")
+
+    diagnosis = diagnose(source, investigator=Picker())
+    assert diagnosis.root_cause == ref("shop/ConfigMap/routing")
+    assert diagnosis.confidence is Confidence.VERIFIED
 
 
 def test_dependency_outage_is_blamed_over_the_callers_own_warnings() -> None:

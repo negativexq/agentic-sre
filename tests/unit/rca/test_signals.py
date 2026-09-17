@@ -280,3 +280,53 @@ def test_added_env_var_is_reported_with_its_values() -> None:
     finding = change_findings(history)[0]
     assert finding.kind is FindingKind.SPEC_CHANGE
     assert finding.summary == "spec changed: [payment].env[FAULT_DELAY_MS].value: unset -> 2500"
+
+
+def test_scheduled_fault_reports_its_start_and_schedule_span() -> None:
+    target = "Successfully apply chaos for shop/checkout-5d8f7c9b4-abcde"
+    events = [
+        event("chaos/Schedule/delay", "Spawned", 1),
+        event("chaos/NetworkChaos/delay-early", "Applied", 1, message=target),
+        event("chaos/NetworkChaos/delay-early", "Recovered", 2),
+        event("chaos/NetworkChaos/delay-late", "Applied", 50, message=target),
+        event("chaos/NetworkChaos/delay-failed", "Started", 30),
+        event("chaos/NetworkChaos/delay-failed", "Failed", 31, type_="Warning"),
+    ]
+    source = InMemorySource(name="chaos", versions=shop_objects(0), event_items=events)
+    topology = _topology(source)
+    findings = {f.entity.name: f for f in fault_event_findings(events, topology)}
+    assert "delay-failed" not in findings
+    early = findings["delay-early"]
+    assert early.at is not None and early.at.minute == 1
+    assert "from 12:01 to 12:50" in early.summary
+    assert findings["delay"].summary.startswith("chaos schedule injecting faults since 12:01")
+
+
+def test_collapse_keeps_the_latest_experiment_started_before_onset() -> None:
+    from rca_builders import at
+
+    from packages.rca.model import Candidate, Finding
+    from packages.rca.ranking import collapse_fault_instances
+
+    events = [
+        event("chaos/Schedule/delay", "Spawned", 0),
+        *(
+            event(f"chaos/NetworkChaos/delay-{name}", "Applied", minute)
+            for name, minute in (("a", 1), ("b", 5), ("c", 20))
+        ),
+    ]
+    source = InMemorySource(name="chaos", versions=shop_objects(0), event_items=events)
+    topology = _topology(source)
+
+    def candidate(name: str, minute: int, score: float) -> Candidate:
+        entity = ref(f"chaos/NetworkChaos/delay-{name}")
+        finding = Finding(
+            kind=FindingKind.FAULT_INJECTION, entity=entity, at=at(minute), summary=""
+        )
+        return Candidate(entity=entity, score=score, findings=(finding,))
+
+    ranked = [candidate("c", 20, 9.0), candidate("b", 5, 8.0), candidate("a", 1, 8.0)]
+    kept = collapse_fault_instances(ranked, topology, onset=at(10))
+    assert [(c.entity.name, c.score) for c in kept] == [("delay-b", 9.0)]
+    early = collapse_fault_instances(ranked, topology, onset=at(0))
+    assert [c.entity.name for c in early] == ["delay-a"]

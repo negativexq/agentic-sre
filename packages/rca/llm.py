@@ -18,6 +18,10 @@ class LLMError(RuntimeError):
     """The model could not be called or returned unusable output."""
 
 
+class LLMOutputError(LLMError):
+    """The call succeeded but the output was unusable; retrying may help."""
+
+
 class LLMClient(Protocol):
     model: str
     calls: int
@@ -110,15 +114,22 @@ class OpenAIClient:
             )
         except Exception as error:  # the SDK raises many transport-specific types
             raise LLMError(f"model call failed: {type(error).__name__}") from error
+        status = getattr(response, "status", None)
+        if status not in (None, "completed"):
+            details = getattr(response, "incomplete_details", None)
+            reason = getattr(details, "reason", None) or status
+            raise LLMOutputError(f"model response {status}: {reason}")
         text = getattr(response, "output_text", None)
         if not isinstance(text, str) or not text:
-            raise LLMError("model returned no text")
+            raise LLMOutputError("model returned no text (possibly a refusal)")
         try:
             value = json.loads(text)
         except ValueError as error:
-            raise LLMError("model returned invalid JSON") from error
+            raise LLMOutputError(
+                f"model returned invalid JSON ({len(text)} chars, ends {text[-20:]!r})"
+            ) from error
         if not isinstance(value, dict):
-            raise LLMError("model returned a non-object")
+            raise LLMOutputError("model returned a non-object")
         return value
 
 
@@ -127,6 +138,7 @@ __all__ = [
     "LIVE_ENABLED_ENV",
     "LLMClient",
     "LLMError",
+    "LLMOutputError",
     "OpenAIClient",
     "ScriptedLLM",
 ]

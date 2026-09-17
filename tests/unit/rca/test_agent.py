@@ -9,7 +9,7 @@ from rca_builders import config_change_source, ref
 
 from packages.rca.agent import DECISION_SCHEMA, LLMInvestigator
 from packages.rca.engine import diagnose
-from packages.rca.llm import LLMError, OpenAIClient, ScriptedLLM
+from packages.rca.llm import LLMError, LLMOutputError, OpenAIClient, ScriptedLLM
 from packages.rca.model import Confidence
 
 
@@ -32,8 +32,57 @@ def test_investigator_inspects_then_concludes_and_engine_verifies() -> None:
 def test_model_choice_is_rechecked_not_trusted() -> None:
     llm = ScriptedLLM([_reply("conclude", "C2")])
     diagnosis = diagnose(config_change_source(), investigator=LLMInvestigator(llm))
-    assert diagnosis.root_cause == ref("infra/ConfigMap/recorder")
-    assert diagnosis.confidence is Confidence.UNVERIFIED
+    assert diagnosis.root_cause == ref("shop/ConfigMap/checkout-flags")
+    assert diagnosis.confidence is Confidence.VERIFIED
+    assert any(step.action == "kept" for step in diagnosis.steps)
+
+
+def test_model_calls_are_counted_per_incident() -> None:
+    llm = ScriptedLLM(
+        [_reply("conclude", "C1"), _reply("inspect", "C1", "events"), _reply("conclude", "C1")]
+    )
+    investigator = LLMInvestigator(llm)
+    first = diagnose(config_change_source(), investigator=investigator)
+    second = diagnose(config_change_source(), investigator=investigator)
+    assert (first.model_calls, second.model_calls) == (1, 2)
+
+
+def test_unusable_output_is_retried_once() -> None:
+    def broken(_: str) -> dict[str, Any]:
+        raise LLMOutputError("model returned invalid JSON")
+
+    llm = ScriptedLLM([broken, _reply("conclude", "C1")])
+    diagnosis = diagnose(config_change_source(), investigator=LLMInvestigator(llm))
+    assert diagnosis.model_calls == 2
+    assert [s.action for s in diagnosis.steps if s.actor == "llm"] == ["retry", "conclude"]
+
+    twice = ScriptedLLM([broken, broken])
+    diagnosis = diagnose(config_change_source(), investigator=LLMInvestigator(twice))
+    assert [s.action for s in diagnosis.steps if s.actor == "llm"] == ["retry", "error"]
+    assert diagnosis.root_cause == ref("shop/ConfigMap/checkout-flags")
+
+
+def test_openai_client_reports_incomplete_and_invalid_output() -> None:
+    class Incomplete:
+        status = "incomplete"
+        incomplete_details = type("D", (), {"reason": "max_output_tokens"})()
+        output_text = '{"action": "concl'
+
+    class Truncated:
+        status = "completed"
+        output_text = '{"action": "concl'
+
+    def sdk_returning(result: Any) -> Any:
+        class Responses:
+            def create(self, **_: Any) -> Any:
+                return result
+
+        return type("SDK", (), {"responses": Responses()})()
+
+    for result, message in ((Incomplete(), "max_output_tokens"), (Truncated(), "invalid JSON")):
+        client = OpenAIClient(enabled=True, max_calls=1, client=sdk_returning(result))
+        with pytest.raises(LLMOutputError, match=message):
+            client.complete_json(system="s", user="u", schema=DECISION_SCHEMA, name="rca")
 
 
 def test_invalid_replies_fall_back_to_the_engine_ranking() -> None:

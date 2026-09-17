@@ -1,0 +1,97 @@
+{
+  "benchmark": "ITBench-Lite SRE",
+  "created_at": "2026-09-17T11:39:54.274773+00:00",
+  "engine_config": {
+    "alternatives": 4,
+    "pressure_baseline_gap": "0:05:00",
+    "ranking": {
+      "distance_bonus": [
+        3.0,
+        2.5,
+        2.0,
+        1.0
+      ],
+      "extra_finding_weight": 0.3,
+      "grace": "0:30:00",
+      "in_window_bonus": 1.0,
+      "lookback": "2:00:00",
+      "mention_bonus": 2.0,
+      "namespace_bonus": 1.5,
+      "symptom_event_factor": 0.5,
+      "unlinked_penalty": 2.0,
+      "verify_score": 7.0
+    }
+  },
+  "git_dirty": false,
+  "git_head": "a9e7a14cb8cd3ddafe9512b98469767b71e2e425",
+  "ground_truth_read_during_prediction": false,
+  "mode": "deterministic",
+  "model": null,
+  "model_calls_total": 0,
+  "records": [
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-4",
+      "seconds": 2.131
+    },
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-7",
+      "seconds": 2.396
+    },
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-8",
+      "seconds": 1.951
+    },
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-11",
+      "seconds": 2.026
+    },
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-12",
+      "seconds": 1.876
+    },
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-17",
+      "seconds": 2.505
+    },
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-21",
+      "seconds": 2.498
+    },
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-29",
+      "seconds": 2.645
+    },
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-34",
+      "seconds": 3.051
+    },
+    {
+      "model_calls": 0,
+      "scenario_id": "Scenario-91",
+      "seconds": 3.366
+    }
+  ],
+  "scenario_ids": [
+    "Scenario-4",
+    "Scenario-7",
+    "Scenario-8",
+    "Scenario-11",
+    "Scenario-12",
+    "Scenario-17",
+    "Scenario-21",
+    "Scenario-29",
+    "Scenario-34",
+    "Scenario-91"
+  ],
+  "seconds_total": 24.469,
+  "split": "dev"
+}

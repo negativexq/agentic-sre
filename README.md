@@ -11,22 +11,24 @@ and proposes a reversible fix. It never changes the cluster.
 ## Results
 
 Measured on [ITBench-Lite](https://huggingface.co/datasets/ibm-research/ITBench-Lite)
-SRE snapshots with a pre-registered dev/test split, from tag `v0.4.0`. Details
-and every miss: [`evals/results/v0.4.0`](evals/results/v0.4.0/README.md).
+SRE snapshots with a pre-registered dev/test split, from tag `v0.5.0`. Details
+and every miss: [`evals/results/v0.5.0`](evals/results/v0.5.0/README.md).
 
 | Run | Split | Scenarios | Macro F1 | Root cause ranked first | In top 3 | Model calls |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| **Engine** (run once) | Test | 25 | **0.64** | 64% | 76% | 0 |
-| Engine + LLM investigator (run once) | Test | 25 | 0.64 | 64% | 76% | 50 |
-| Engine (used for tuning) | Dev | 10 | 0.90 | 90% | 90% | 0 |
+| **Engine v0.5.0** (run once) | Test | 25 | **0.68** | 68% | 80% | 0 |
+| Engine v0.4.0 (run once) | Test | 25 | 0.64 | 64% | 76% | 0 |
+| Engine v0.4.0 + LLM investigator (run once) | Test | 25 | 0.64 | 64% | 76% | 50 |
+| Engine v0.5.0 (used for tuning) | Dev | 10 | 0.90 | 90% | 90% | 0 |
 | Previous LLM agent (E10) | All | 35 | 0.00 | — | — | — |
 
-On the test split, 16 of 22 answers labelled `VERIFIED` were correct. The LLM
-investigator agreed with the engine in 23 of 25 scenarios and did not change
-the score, so the deterministic engine is the default. Three test scenarios
-cannot be scored by the published label filters; see the results page and
-[`evals/README.md`](evals/README.md) for the method and a disclosure of prior
-exposure to this dataset.
+On the v0.5.0 test split, 16 of 23 answers labelled `VERIFIED` were correct.
+Part of the gain comes from rules chosen after reading v0.4.0 test misses;
+the results page discloses which. In v0.4.0 the LLM investigator agreed with
+the engine in 23 of 25 scenarios and did not change the score, so the
+deterministic engine is the default. Three test scenarios cannot be scored by
+the published label filters; see [`evals/README.md`](evals/README.md) for the
+method and a disclosure of prior exposure to this dataset.
 
 ## Try it
 
@@ -90,7 +92,7 @@ make eval-test         # only from a clean, tagged commit
 ```
 
 Prediction never reads ground truth, and grading refuses modified predictions.
-Re-grade a stored run with `agentic-sre grade --out evals/results/v0.4.0/test`.
+Re-grade a stored run with `agentic-sre grade --out evals/results/v0.5.0/test`.
 Add the investigator to a run with `make eval-dev EVAL_FLAGS=--llm` and the `SRE_LLM_*` settings.
 
 ## Live demo on kind

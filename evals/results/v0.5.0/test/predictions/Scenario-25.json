@@ -1,0 +1,332 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "VERIFIED: chaos-mesh/StressChaos/otel-demo-recommendation-cpu-stress-pfms4: StressChaos applied fault at 16:46 (1 application(s)); schedule otel-demo-recommendation-cpu-stress has injected this fault repeatedly from 16:32 to 18:03. Verified (fault injection targets an alerting component). Linked to otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy, otel-demo/Deployment/recommendation.",
+        "entity": {
+          "kind": "StressChaos",
+          "name": "otel-demo-recommendation-cpu-stress-pfms4",
+          "namespace": "chaos-mesh"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-25",
+    "native_terminal": "VERIFIED",
+    "reasoning": "chaos-mesh/StressChaos/otel-demo-recommendation-cpu-stress-pfms4: StressChaos applied fault at 16:46 (1 application(s)); schedule otel-demo-recommendation-cpu-stress has injected this fault repeatedly from 16:32 to 18:03. Verified (fault injection targets an alerting component). Linked to otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy, otel-demo/Deployment/recommendation.",
+    "scenario_id": "Scenario-25"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "entity": {
+          "kind": "Schedule",
+          "name": "otel-demo-recommendation-cpu-stress",
+          "namespace": "chaos-mesh"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T16:32:00Z",
+            "details": {
+              "failed_applications": 0,
+              "first_at": "2025-12-15T16:32:00+00:00",
+              "last_at": "2025-12-15T18:03:00+00:00",
+              "reasons": {
+                "Spawned": 23,
+                "Updated": 24
+              },
+              "targets": [
+                "otel-demo/Pod/recommendation-5f45f75855-c454g",
+                "otel-demo/Pod/recommendation-5f45f75855-htttv"
+              ]
+            },
+            "entity": {
+              "kind": "Schedule",
+              "name": "otel-demo-recommendation-cpu-stress",
+              "namespace": "chaos-mesh"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:31",
+              "k8s_events_raw.tsv:32",
+              "k8s_events_raw.tsv:71",
+              "k8s_events_raw.tsv:74",
+              "k8s_events_raw.tsv:75",
+              "k8s_events_raw.tsv:219"
+            ],
+            "kind": "FAULT_SCHEDULE",
+            "related": [
+              {
+                "kind": "Pod",
+                "name": "recommendation-5f45f75855-c454g",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "recommendation-5f45f75855-htttv",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "chaos schedule injecting faults since 16:32, last run 18:03 (23 experiment(s))"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/recommendation",
+          "otel-demo/Pod/frontend-675fd7b5c5-x7pxv",
+          "otel-demo/Pod/frontend-proxy-6b4d584985-p8qtl"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 9.0
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "recommendation-5f45f75855-htttv",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:40:20.549000Z",
+            "details": {
+              "peak": 0.513,
+              "resources": [
+                "cpu"
+              ]
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "recommendation-5f45f75855-htttv",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "metrics/pod_recommendation-5f45f75855-htttv_raw.tsv:container_cpu_cfs_throttled_periods_total"
+            ],
+            "kind": "RESOURCE_PRESSURE",
+            "related": [],
+            "summary": "recommendation cpu throttling rose from 5% to 51%"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/recommendation",
+          "otel-demo/Pod/frontend-675fd7b5c5-x7pxv",
+          "otel-demo/Pod/frontend-proxy-6b4d584985-p8qtl"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 8.0
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "fraud-detection-9fb7d885b-dz8j9",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:37:52Z",
+            "details": {
+              "count": 6,
+              "reason": "BackOff"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "fraud-detection-9fb7d885b-dz8j9",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:40",
+              "k8s_events_raw.tsv:1116",
+              "k8s_events_raw.tsv:1119"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "BackOff x6: Back-off restarting failed container fraud-detection in pod fraud-detection-9fb7d885b-dz8j9_otel-demo(b6d59f2c-c8f7-4133-9c63-5a806da3e09d)"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/recommendation",
+          "otel-demo/Pod/frontend-675fd7b5c5-x7pxv",
+          "otel-demo/Pod/frontend-proxy-6b4d584985-p8qtl"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.112
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-44mzm",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:16:45Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-44mzm",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:998",
+              "k8s_events_raw.tsv:1000"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: HTTP probe failed with statuscode: 503"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/recommendation",
+          "otel-demo/Pod/frontend-675fd7b5c5-x7pxv",
+          "otel-demo/Pod/frontend-proxy-6b4d584985-p8qtl"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      }
+    ],
+    "confidence": "VERIFIED",
+    "evidence": [
+      {
+        "at": "2025-12-15T16:46:00Z",
+        "details": {
+          "failed_applications": 0,
+          "first_at": "2025-12-15T16:46:00+00:00",
+          "last_at": "2025-12-15T16:47:17+00:00",
+          "reasons": {
+            "Applied": 1,
+            "FinalizerInited": 2,
+            "Recovered": 1,
+            "Started": 1,
+            "TimeUp": 1,
+            "Updated": 6
+          },
+          "schedule": "chaos-mesh/Schedule/otel-demo-recommendation-cpu-stress",
+          "schedule_active_from": "2025-12-15T16:32:00+00:00",
+          "schedule_active_to": "2025-12-15T18:03:00+00:00",
+          "targets": [
+            "otel-demo/Pod/recommendation-5f45f75855-c454g"
+          ]
+        },
+        "entity": {
+          "kind": "StressChaos",
+          "name": "otel-demo-recommendation-cpu-stress-pfms4",
+          "namespace": "chaos-mesh"
+        },
+        "evidence_ids": [
+          "k8s_events_raw.tsv:431",
+          "k8s_events_raw.tsv:433",
+          "k8s_events_raw.tsv:434",
+          "k8s_events_raw.tsv:436",
+          "k8s_events_raw.tsv:438",
+          "k8s_events_raw.tsv:440"
+        ],
+        "kind": "FAULT_INJECTION",
+        "related": [
+          {
+            "kind": "Pod",
+            "name": "recommendation-5f45f75855-c454g",
+            "namespace": "otel-demo"
+          }
+        ],
+        "summary": "StressChaos applied fault at 16:46 (1 application(s)); schedule otel-demo-recommendation-cpu-stress has injected this fault repeatedly from 16:32 to 18:03"
+      }
+    ],
+    "incident_id": "Scenario-25",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Pause the fault experiment Schedule otel-demo-recommendation-cpu-stress",
+        "command": "kubectl annotate schedule/otel-demo-recommendation-cpu-stress -n chaos-mesh experiment.chaos-mesh.org/pause=true --overwrite",
+        "requires_approval": true,
+        "risk": "low: stops further fault injection"
+      },
+      {
+        "action": "Delete the running experiment StressChaos otel-demo-recommendation-cpu-stress-pfms4",
+        "command": "kubectl delete stresschaos/otel-demo-recommendation-cpu-stress-pfms4 -n chaos-mesh",
+        "requires_approval": true,
+        "risk": "low: removes the active fault"
+      }
+    ],
+    "root_cause": {
+      "kind": "StressChaos",
+      "name": "otel-demo-recommendation-cpu-stress-pfms4",
+      "namespace": "chaos-mesh"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "4 diagnostic alert type(s) on frontend, frontend-proxy, prometheus-kube-prometheus-kubelet, recommendation; 204 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "34 finding(s) over 724 object(s) and 703 event(s); 622 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "chaos-mesh/StressChaos/otel-demo-recommendation-cpu-stress-pfms4 12.5; chaos-mesh/Schedule/otel-demo-recommendation-cpu-stress 9.0; otel-demo/Pod/recommendation-5f45f75855-htttv 8.0; otel-demo/Pod/fraud-detection-9fb7d885b-dz8j9 5.1; otel-demo/Pod/otel-collector-564d9c7987-44mzm 4.9"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "VERIFIED: fault injection targets an alerting component"
+      }
+    ],
+    "summary": "chaos-mesh/StressChaos/otel-demo-recommendation-cpu-stress-pfms4: StressChaos applied fault at 16:46 (1 application(s)); schedule otel-demo-recommendation-cpu-stress has injected this fault repeatedly from 16:32 to 18:03. Verified (fault injection targets an alerting component). Linked to otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy, otel-demo/Deployment/recommendation.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "NoRequestsDetected",
+        "RequestErrorRate",
+        "RequestLatency"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 42,
+        "KubeClientCertificateExpiration": 26,
+        "KubeControllerManagerDown": 31,
+        "KubeSchedulerDown": 31,
+        "PrometheusNotConnectedToAlertmanagers": 36,
+        "Watchdog": 38
+      },
+      "last_seen": "2025-12-15T18:08:04.551402Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T17:45:04.551402Z",
+      "services": [
+        "frontend",
+        "frontend-proxy",
+        "prometheus-kube-prometheus-kubelet",
+        "recommendation"
+      ]
+    }
+  }
+}

@@ -1,0 +1,165 @@
+{
+  "answered": 1.0,
+  "baselines_macro_f1": {
+    "retired E10 agent (archive/experiments-2026-09)": 0.0
+  },
+  "benchmark": "ITBench-Lite SRE",
+  "by_confidence": {
+    "LIKELY": {
+      "correct": 1,
+      "count": 1
+    },
+    "VERIFIED": {
+      "correct": 8,
+      "count": 9
+    }
+  },
+  "funnel": {
+    "in_top_3": 0.9,
+    "in_top_5": 0.9,
+    "root_cause_observable": 0.9,
+    "top_1": 0.9
+  },
+  "git_dirty": false,
+  "git_head": "a9e7a14cb8cd3ddafe9512b98469767b71e2e425",
+  "macro_f1": 0.9,
+  "mode": "deterministic",
+  "model": null,
+  "model_calls_total": 0,
+  "rows": [
+    {
+      "confidence": "VERIFIED",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "otel-demo/ConfigMap/flagd-config\\b"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "otel-demo/ConfigMap/flagd-config",
+      "scenario_id": "Scenario-4",
+      "verified_f1": 1.0
+    },
+    {
+      "confidence": "VERIFIED",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "otel-demo/ConfigMap/flagd-config",
+      "scenario_id": "Scenario-7",
+      "verified_f1": 1.0
+    },
+    {
+      "confidence": "VERIFIED",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "otel-demo/ConfigMap/flagd-config",
+      "scenario_id": "Scenario-8",
+      "verified_f1": 1.0
+    },
+    {
+      "confidence": "VERIFIED",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "otel-demo/ConfigMap/flagd-config",
+      "scenario_id": "Scenario-11",
+      "verified_f1": 1.0
+    },
+    {
+      "confidence": "VERIFIED",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "otel-demo/ConfigMap/flagd-config",
+      "scenario_id": "Scenario-12",
+      "verified_f1": 1.0
+    },
+    {
+      "confidence": "VERIFIED",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "chaos-mesh/NetworkChaos/.*product-catalog"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-b24p6",
+      "scenario_id": "Scenario-17",
+      "verified_f1": 1.0
+    },
+    {
+      "confidence": "VERIFIED",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-zbhwg",
+      "scenario_id": "Scenario-21",
+      "verified_f1": 1.0
+    },
+    {
+      "confidence": "VERIFIED",
+      "correct": false,
+      "f1": 0.0,
+      "ground_truth": [
+        "chaos-mesh/JVMChaos/.*adservice"
+      ],
+      "observable": false,
+      "position": null,
+      "prediction": "chaos-mesh/JVMChaos/otel-demo-ad-jvm-return-crqrb",
+      "scenario_id": "Scenario-29",
+      "verified_f1": 0.0
+    },
+    {
+      "confidence": "LIKELY",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "otel-demo/Pod/valkey-cart-.*"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "otel-demo/Pod/valkey-cart-58df56c79c-bf4lr",
+      "scenario_id": "Scenario-34",
+      "verified_f1": 0.0
+    },
+    {
+      "confidence": "VERIFIED",
+      "correct": true,
+      "f1": 1.0,
+      "ground_truth": [
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition"
+      ],
+      "observable": true,
+      "position": 1,
+      "prediction": "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-cx947",
+      "scenario_id": "Scenario-91",
+      "verified_f1": 1.0
+    }
+  ],
+  "scenarios": 10,
+  "seconds_total": 24.469,
+  "split": "dev",
+  "verified_macro_f1": 0.8
+}

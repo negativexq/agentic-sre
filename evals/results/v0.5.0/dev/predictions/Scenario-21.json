@@ -1,0 +1,366 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "VERIFIED: chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-zbhwg: StressChaos applied fault at 16:40 (1 application(s)); schedule otel-demo-valkey-memory-stress has injected this fault repeatedly from 16:28 to 18:01. Verified (fault injection targets an alerting component). Linked to otel-demo/Deployment/cart, otel-demo/Deployment/checkout, otel-demo/Deployment/frontend.",
+        "entity": {
+          "kind": "StressChaos",
+          "name": "otel-demo-valkey-memory-stress-zbhwg",
+          "namespace": "chaos-mesh"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-21",
+    "native_terminal": "VERIFIED",
+    "reasoning": "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-zbhwg: StressChaos applied fault at 16:40 (1 application(s)); schedule otel-demo-valkey-memory-stress has injected this fault repeatedly from 16:28 to 18:01. Verified (fault injection targets an alerting component). Linked to otel-demo/Deployment/cart, otel-demo/Deployment/checkout, otel-demo/Deployment/frontend.",
+    "scenario_id": "Scenario-21"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "valkey-cart-58df56c79c-4cvft",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T18:01:29.236821Z",
+            "details": {
+              "caller": "otel-demo/Deployment/cart",
+              "dependencies_of_caller": 3,
+              "errors": 103,
+              "service": "otel-demo/Service/valkey-cart"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "valkey-cart-58df56c79c-4cvft",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "otel_logs_raw.tsv:77655",
+              "otel_logs_raw.tsv:80102",
+              "otel_logs_raw.tsv:80349",
+              "otel_logs_raw.tsv:80566"
+            ],
+            "kind": "DEPENDENCY_ERRORS",
+            "related": [
+              {
+                "kind": "Service",
+                "name": "valkey-cart",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "cart logged 103 connection error(s) and depends on valkey-cart: Wasn't able to connect to redis"
+          },
+          {
+            "at": "2025-12-15T18:01:22Z",
+            "details": {
+              "count": 253,
+              "reason": "BackOff"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "valkey-cart-58df56c79c-4cvft",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1577",
+              "k8s_events_raw.tsv:1618",
+              "k8s_events_raw.tsv:1628",
+              "k8s_events_raw.tsv:1664"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "BackOff x253: Back-off restarting failed container valkey-cart in pod valkey-cart-58df56c79c-4cvft_otel-demo(2e514d76-921a-401b-a529-c922de788ff2)"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/cart",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/postgresql"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 10.45
+      },
+      {
+        "entity": {
+          "kind": "Schedule",
+          "name": "otel-demo-valkey-memory-stress",
+          "namespace": "chaos-mesh"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T16:28:36Z",
+            "details": {
+              "failed_applications": 0,
+              "first_at": "2025-12-15T16:29:00+00:00",
+              "last_at": "2025-12-15T18:01:13+00:00",
+              "reasons": {
+                "Forbid": 20,
+                "Spawned": 17,
+                "Updated": 17
+              },
+              "targets": [
+                "otel-demo/Pod/valkey-cart-58df56c79c-4cvft",
+                "otel-demo/Pod/valkey-cart-58df56c79c-dj5q5"
+              ]
+            },
+            "entity": {
+              "kind": "Schedule",
+              "name": "otel-demo-valkey-memory-stress",
+              "namespace": "chaos-mesh"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:27",
+              "k8s_events_raw.tsv:207",
+              "k8s_events_raw.tsv:208",
+              "k8s_events_raw.tsv:209",
+              "k8s_events_raw.tsv:774",
+              "k8s_events_raw.tsv:775"
+            ],
+            "kind": "FAULT_SCHEDULE",
+            "related": [
+              {
+                "kind": "Pod",
+                "name": "valkey-cart-58df56c79c-4cvft",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "valkey-cart-58df56c79c-dj5q5",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "chaos schedule injecting faults since 16:28, last run 18:01 (17 experiment(s))"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/cart",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/postgresql"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 9.0
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "cart-755465879b-4p8d9",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:32:12.521000Z",
+            "details": {
+              "peak": 0.347,
+              "resources": [
+                "cpu"
+              ]
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "cart-755465879b-4p8d9",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "metrics/pod_cart-755465879b-4p8d9_raw.tsv:container_cpu_cfs_throttled_periods_total"
+            ],
+            "kind": "RESOURCE_PRESSURE",
+            "related": [],
+            "summary": "cart cpu throttling rose from 20% to 35%"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/cart",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/postgresql"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 8.0
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "cart-9fd895bb7-m7zfz",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:51:54Z",
+            "details": {
+              "count": 30,
+              "reason": "FailedKillPod"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "cart-9fd895bb7-m7zfz",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1082",
+              "k8s_events_raw.tsv:1522"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedKillPod x30: error killing pod: [failed to \"KillContainer\" for \"cart\" with KillContainerError: \"rpc error: code = DeadlineExceeded desc = context deadline exceeded\", failed "
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/cart",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/valkey-cart"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 6.369
+      }
+    ],
+    "confidence": "VERIFIED",
+    "evidence": [
+      {
+        "at": "2025-12-15T16:40:32Z",
+        "details": {
+          "failed_applications": 0,
+          "first_at": "2025-12-15T16:40:32+00:00",
+          "last_at": "2025-12-15T16:41:27+00:00",
+          "reasons": {
+            "Applied": 1,
+            "FinalizerInited": 2,
+            "Recovered": 1,
+            "Started": 1,
+            "TimeUp": 1,
+            "Updated": 6
+          },
+          "schedule": "chaos-mesh/Schedule/otel-demo-valkey-memory-stress",
+          "schedule_active_from": "2025-12-15T16:28:36+00:00",
+          "schedule_active_to": "2025-12-15T18:01:13+00:00",
+          "targets": [
+            "otel-demo/Pod/valkey-cart-58df56c79c-dj5q5"
+          ]
+        },
+        "entity": {
+          "kind": "StressChaos",
+          "name": "otel-demo-valkey-memory-stress-zbhwg",
+          "namespace": "chaos-mesh"
+        },
+        "evidence_ids": [
+          "k8s_events_raw.tsv:750",
+          "k8s_events_raw.tsv:752",
+          "k8s_events_raw.tsv:755",
+          "k8s_events_raw.tsv:757",
+          "k8s_events_raw.tsv:759",
+          "k8s_events_raw.tsv:760"
+        ],
+        "kind": "FAULT_INJECTION",
+        "related": [
+          {
+            "kind": "Pod",
+            "name": "valkey-cart-58df56c79c-dj5q5",
+            "namespace": "otel-demo"
+          }
+        ],
+        "summary": "StressChaos applied fault at 16:40 (1 application(s)); schedule otel-demo-valkey-memory-stress has injected this fault repeatedly from 16:28 to 18:01"
+      }
+    ],
+    "incident_id": "Scenario-21",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Pause the fault experiment Schedule otel-demo-valkey-memory-stress",
+        "command": "kubectl annotate schedule/otel-demo-valkey-memory-stress -n chaos-mesh experiment.chaos-mesh.org/pause=true --overwrite",
+        "requires_approval": true,
+        "risk": "low: stops further fault injection"
+      },
+      {
+        "action": "Delete the running experiment StressChaos otel-demo-valkey-memory-stress-zbhwg",
+        "command": "kubectl delete stresschaos/otel-demo-valkey-memory-stress-zbhwg -n chaos-mesh",
+        "requires_approval": true,
+        "risk": "low: removes the active fault"
+      }
+    ],
+    "root_cause": {
+      "kind": "StressChaos",
+      "name": "otel-demo-valkey-memory-stress-zbhwg",
+      "namespace": "chaos-mesh"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "5 diagnostic alert type(s) on cart, checkout, frontend, frontend-proxy, prometheus-kube-prometheus-kubelet, prometheus-kube-state-metrics; 192 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "19 finding(s) over 725 object(s) and 930 event(s); 602 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-zbhwg 12.5; otel-demo/Pod/valkey-cart-58df56c79c-4cvft 10.4; chaos-mesh/Schedule/otel-demo-valkey-memory-stress 9.0; otel-demo/Pod/cart-755465879b-4p8d9 8.0; otel-demo/Pod/cart-9fd895bb7-m7zfz 6.4"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "VERIFIED: fault injection targets an alerting component"
+      }
+    ],
+    "summary": "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-zbhwg: StressChaos applied fault at 16:40 (1 application(s)); schedule otel-demo-valkey-memory-stress has injected this fault repeatedly from 16:28 to 18:01. Verified (fault injection targets an alerting component). Linked to otel-demo/Deployment/cart, otel-demo/Deployment/checkout, otel-demo/Deployment/frontend.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "CrashLoopBackOffPodsDetected",
+        "KubePodCrashLooping",
+        "RequestErrorRate",
+        "RequestLatency"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 26,
+        "KubeClientCertificateExpiration": 34,
+        "KubeControllerManagerDown": 30,
+        "KubeSchedulerDown": 30,
+        "PrometheusNotConnectedToAlertmanagers": 35,
+        "Watchdog": 37
+      },
+      "last_seen": "2025-12-15T18:11:06.215027Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T17:37:06.215027Z",
+      "services": [
+        "cart",
+        "checkout",
+        "frontend",
+        "frontend-proxy",
+        "prometheus-kube-prometheus-kubelet",
+        "prometheus-kube-state-metrics"
+      ]
+    }
+  }
+}

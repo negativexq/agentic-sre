@@ -1,0 +1,290 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "VERIFIED: otel-demo/ResourceQuota/otel-demo-memory: ResourceQuota rejected pod creation 45 time(s) for ad: (combined from similar events): Error creating: pods \"ad-554b849958-bnpsk\" is forbidden: exceeded quota: otel-demo-memor. Verified (quota rejected pods of an alerting workload). Linked to otel-demo/Deployment/accounting, otel-demo/Deployment/ad, otel-demo/Deployment/cart.",
+        "entity": {
+          "kind": "ResourceQuota",
+          "name": "otel-demo-memory",
+          "namespace": "otel-demo"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-102",
+    "native_terminal": "VERIFIED",
+    "reasoning": "otel-demo/ResourceQuota/otel-demo-memory: ResourceQuota rejected pod creation 45 time(s) for ad: (combined from similar events): Error creating: pods \"ad-554b849958-bnpsk\" is forbidden: exceeded quota: otel-demo-memor. Verified (quota rejected pods of an alerting workload). Linked to otel-demo/Deployment/accounting, otel-demo/Deployment/ad, otel-demo/Deployment/cart.",
+    "scenario_id": "Scenario-102"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "entity": {
+          "kind": "ReplicaSet",
+          "name": "ad-554b849958",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T18:00:09Z",
+            "details": {
+              "count": 45,
+              "reason": "FailedCreate"
+            },
+            "entity": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:764",
+              "k8s_events_raw.tsv:766",
+              "k8s_events_raw.tsv:768",
+              "k8s_events_raw.tsv:770"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedCreate x45: (combined from similar events): Error creating: pods \"ad-554b849958-bnpsk\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/cart",
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Deployment/frontend"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 6.5
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-5dr8d",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:24:08Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-5dr8d",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:579",
+              "k8s_events_raw.tsv:580"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: HTTP probe failed with statuscode: 503"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/cart",
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Deployment/frontend"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "topology-monitor-0",
+          "namespace": "kube-system"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:37:15Z",
+            "details": {
+              "count": 6,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "topology-monitor-0",
+              "namespace": "kube-system"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:8",
+              "k8s_events_raw.tsv:11",
+              "k8s_events_raw.tsv:106",
+              "k8s_events_raw.tsv:109"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "Unhealthy x6: Startup probe failed: dial tcp 100.96.3.145:7474: connect: connection refused"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 0.612
+      },
+      {
+        "entity": {
+          "kind": "Pod",
+          "name": "kube-apiserver-i-039cb1bb52ad823d2",
+          "namespace": "kube-system"
+        },
+        "findings": [
+          {
+            "at": "2025-12-11T02:21:42Z",
+            "details": {
+              "problems": [
+                {
+                  "at": "2025-12-11T02:21:42Z",
+                  "container": "kube-apiserver",
+                  "message": "exit code 1",
+                  "reason": "Error",
+                  "restarts": 1
+                }
+              ],
+              "reason": "Error"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "kube-apiserver-i-039cb1bb52ad823d2",
+              "namespace": "kube-system"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:355"
+            ],
+            "kind": "CONTAINER_FAILURE",
+            "related": [],
+            "summary": "container kube-apiserver Error (1 restart(s)) exit code 1"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "outside the incident window"
+        ],
+        "score": 0.0
+      }
+    ],
+    "confidence": "VERIFIED",
+    "evidence": [
+      {
+        "at": "2025-12-15T17:54:41Z",
+        "details": {
+          "exhausted": [
+            "memory"
+          ],
+          "rejected": [
+            "otel-demo/ReplicaSet/ad-554b849958"
+          ]
+        },
+        "entity": {
+          "kind": "ResourceQuota",
+          "name": "otel-demo-memory",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_objects_raw.tsv:3243",
+          "k8s_events_raw.tsv:764",
+          "k8s_events_raw.tsv:766",
+          "k8s_events_raw.tsv:768"
+        ],
+        "kind": "QUOTA_EXCEEDED",
+        "related": [
+          {
+            "kind": "Deployment",
+            "name": "ad",
+            "namespace": "otel-demo"
+          }
+        ],
+        "summary": "ResourceQuota rejected pod creation 45 time(s) for ad: (combined from similar events): Error creating: pods \"ad-554b849958-bnpsk\" is forbidden: exceeded quota: otel-demo-memor"
+      }
+    ],
+    "incident_id": "Scenario-102",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Raise ResourceQuota otel-demo-memory limits for memory, or lower workload requests",
+        "command": "kubectl describe resourcequota/otel-demo-memory -n otel-demo  # compare used with hard, then kubectl edit resourcequota/otel-demo-memory -n otel-demo",
+        "requires_approval": true,
+        "risk": "medium: more capacity for the namespace"
+      }
+    ],
+    "root_cause": {
+      "kind": "ResourceQuota",
+      "name": "otel-demo-memory",
+      "namespace": "otel-demo"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "5 diagnostic alert type(s) on accounting, ad, fraud-detection, frontend, frontend-proxy, payment; 759 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "6 finding(s) over 666 object(s) and 357 event(s); 524 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "otel-demo/ResourceQuota/otel-demo-memory 10.5; otel-demo/ReplicaSet/ad-554b849958 6.5; otel-demo/Pod/otel-collector-564d9c7987-5dr8d 4.9; kube-system/Pod/topology-monitor-0 0.6; kube-system/Pod/kube-apiserver-i-039cb1bb52ad823d2 0.0"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "VERIFIED: quota rejected pods of an alerting workload"
+      }
+    ],
+    "summary": "otel-demo/ResourceQuota/otel-demo-memory: ResourceQuota rejected pod creation 45 time(s) for ad: (combined from similar events): Error creating: pods \"ad-554b849958-bnpsk\" is forbidden: exceeded quota: otel-demo-memor. Verified (quota rejected pods of an alerting workload). Linked to otel-demo/Deployment/accounting, otel-demo/Deployment/ad, otel-demo/Deployment/cart.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "KubeDeploymentReplicasMismatch",
+        "KubeQuotaExceeded",
+        "NoRequestsDetected",
+        "RequestErrorRate"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 96,
+        "KubeClientCertificateExpiration": 76,
+        "KubeControllerManagerDown": 139,
+        "KubeSchedulerDown": 139,
+        "PrometheusNotConnectedToAlertmanagers": 147,
+        "Watchdog": 162
+      },
+      "last_seen": "2025-12-15T18:09:33.255943Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T15:29:21.639554Z",
+      "services": [
+        "accounting",
+        "ad",
+        "fraud-detection",
+        "frontend",
+        "frontend-proxy",
+        "payment",
+        "prometheus-kube-prometheus-kubelet",
+        "prometheus-kube-state-metrics",
+        "recommendation"
+      ]
+    }
+  }
+}

@@ -1,5 +1,6 @@
 """Alertmanager-to-incident deterministic ingestion tests."""
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -127,6 +128,49 @@ def test_resolved_fingerprint_creates_a_new_incident_episode(tmp_path: Path) -> 
         ).all()
         assert len(timelines) == 4
         assert {item.incident_id for item in timelines} == {first.incident_id, second.incident_id}
+    engine.dispose()
+
+
+def test_concurrent_duplicate_occurrence_is_one_incident(tmp_path: Path) -> None:
+    """Database uniqueness resolves the select-then-insert race."""
+    engine = create_engine(f"sqlite:///{tmp_path / 'concurrent.db'}", connect_args={"timeout": 10})
+    Base.metadata.create_all(engine)
+    payload = make_alert()
+
+    def ingest_once(_: int) -> str:
+        with Session(engine) as session:
+            incident = IncidentManager(session).ingest(normalize_alert(payload), now=NOW)
+            return str(incident.incident_id)
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        incident_ids = list(workers.map(ingest_once, range(2)))
+    with Session(engine) as session:
+        assert len(set(incident_ids)) == 1
+        assert session.scalar(select(func.count(IncidentRow.incident_id))) == 1
+        assert session.scalar(select(func.count(AlertRow.alert_id))) == 1
+    engine.dispose()
+
+
+def test_concurrent_distinct_occurrences_remain_distinct(tmp_path: Path) -> None:
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'concurrent-recurrence.db'}", connect_args={"timeout": 10}
+    )
+    Base.metadata.create_all(engine)
+    payloads = [make_alert(), make_alert().model_copy(update={"starts_at": NOW.replace(minute=20)})]
+
+    def ingest_once(index: int) -> str:
+        with Session(engine) as session:
+            incident = IncidentManager(session).ingest(
+                normalize_alert(payloads[index]), now=payloads[index].starts_at
+            )
+            return str(incident.incident_id)
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        incident_ids = list(workers.map(ingest_once, range(2)))
+    with Session(engine) as session:
+        assert len(set(incident_ids)) == 2
+        assert session.scalar(select(func.count(IncidentRow.incident_id))) == 2
+        assert session.scalar(select(func.count(AlertRow.alert_id))) == 2
     engine.dispose()
 
 

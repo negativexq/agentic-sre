@@ -71,17 +71,31 @@ def _severity(alert: Alert) -> IncidentSeverity:
 
 
 class IncidentManager:
-    """Attach normalized alerts to one persistent incident per fingerprint."""
+    """Attach alerts to stable, idempotent incident episodes.
+
+    A fingerprint is reusable. The ``starts_at`` value identifies one
+    Alertmanager occurrence; once that occurrence is resolved, a later firing
+    creates a new incident rather than reopening the historical episode.
+    """
 
     def __init__(self, session: Session) -> None:
         self._session = session
 
     def ingest(self, alert: Alert, *, now: datetime) -> Incident:
-        """Create or update the incident associated with an alert fingerprint."""
-        row = self._session.scalar(
-            select(AlertRow).where(AlertRow.fingerprint == alert.fingerprint)
+        """Create or update one occurrence without reopening terminal state."""
+        rows = self._session.scalars(
+            select(AlertRow)
+            .where(
+                AlertRow.fingerprint == alert.fingerprint,
+                AlertRow.starts_at == alert.starts_at,
+            )
+            .order_by(AlertRow.alert_id.desc())
+        ).all()
+        active = next((item for item in rows if item.status == AlertStatus.FIRING.value), None)
+        row = (
+            active if alert.status is AlertStatus.FIRING else active or (rows[0] if rows else None)
         )
-        if row is None:
+        if row is None or (alert.status is AlertStatus.FIRING and row.status != AlertStatus.FIRING):
             incident = Incident(
                 incident_id=uuid4(),
                 status=IncidentStatus.OPEN,
@@ -116,7 +130,18 @@ class IncidentManager:
         existing_incident = IncidentRepository(self._session).get(row.incident_id)
         if existing_incident is None:
             raise LookupError(f"incident {row.incident_id} was not found")
-        row.alert_id = alert.alert_id
+        if row.status == alert.status.value and alert.status is AlertStatus.RESOLVED:
+            # Alertmanager retries a resolved delivery; no new timeline event
+            # or state mutation is needed for an already terminal occurrence.
+            return existing_incident
+        unchanged = (
+            row.status == alert.status.value
+            and row.ends_at == alert.ends_at
+            and row.labels == alert.labels
+            and row.annotations == alert.annotations
+        )
+        if unchanged and alert.status is AlertStatus.FIRING:
+            return existing_incident
         row.ends_at = alert.ends_at
         row.status = alert.status.value
         row.labels = alert.labels

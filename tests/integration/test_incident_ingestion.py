@@ -67,7 +67,66 @@ def test_repeated_firing_and_resolution_share_one_incident(tmp_path: Path) -> No
         ).all()
         assert event_types[0] == IncidentEventType.INCIDENT_CREATED.value
         assert event_types[-1] == IncidentEventType.ALERT_RESOLVED.value
-        assert len(event_types) == 11
+        assert len(event_types) == 2
+    engine.dispose()
+
+
+def test_resolved_fingerprint_creates_a_new_incident_episode(tmp_path: Path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'recurrence.db'}")
+    Base.metadata.create_all(engine)
+    later = NOW.replace(minute=20)
+    with Session(engine) as session:
+        manager = IncidentManager(session)
+        first = manager.ingest(normalize_alert(make_alert()), now=NOW)
+        assert (
+            manager.ingest(normalize_alert(make_alert()), now=NOW).incident_id == first.incident_id
+        )
+        resolved = manager.ingest(
+            normalize_alert(make_alert("resolved")), now=NOW.replace(minute=10)
+        )
+        assert resolved.incident_id == first.incident_id
+        # A retry of the resolved delivery is idempotent.
+        assert (
+            manager.ingest(
+                normalize_alert(make_alert("resolved")), now=NOW.replace(minute=11)
+            ).incident_id
+            == first.incident_id
+        )
+
+        recurring_payload = make_alert().model_copy(update={"starts_at": later})
+        second = manager.ingest(normalize_alert(recurring_payload), now=later)
+        assert second.incident_id != first.incident_id
+        assert (
+            manager.ingest(normalize_alert(recurring_payload), now=later).incident_id
+            == second.incident_id
+        )
+        second_resolved = recurring_payload.model_copy(
+            update={"status": "resolved", "ends_at": later.replace(minute=25)}
+        )
+        assert (
+            manager.ingest(
+                normalize_alert(second_resolved), now=later.replace(minute=25)
+            ).incident_id
+            == second.incident_id
+        )
+        assert (
+            manager.ingest(
+                normalize_alert(second_resolved), now=later.replace(minute=26)
+            ).incident_id
+            == second.incident_id
+        )
+
+        rows = session.scalars(select(IncidentRow).order_by(IncidentRow.created_at)).all()
+        assert len(rows) == 2
+        assert [row.status for row in rows] == ["RESOLVED", "RESOLVED"]
+        assert session.scalar(select(func.count(AlertRow.alert_id))) == 2
+        timelines = session.scalars(
+            select(IncidentEventRow).order_by(
+                IncidentEventRow.incident_id, IncidentEventRow.sequence
+            )
+        ).all()
+        assert len(timelines) == 4
+        assert {item.incident_id for item in timelines} == {first.incident_id, second.incident_id}
     engine.dispose()
 
 

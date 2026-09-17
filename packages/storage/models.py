@@ -72,7 +72,12 @@ class IncidentEventRow(Base):
 
 
 class AlertRow(Base):
-    """Normalized alert and optional incident association."""
+    """One normalized alert occurrence attached to one incident episode.
+
+    ``fingerprint`` identifies the recurring alert shape, not a lifetime
+    incident. Multiple rows with the same fingerprint are therefore valid
+    after an alert resolves and fires again.
+    """
 
     __tablename__ = "alerts"
 
@@ -88,7 +93,7 @@ class AlertRow(Base):
     ends_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     labels: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False)
     annotations: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False)
-    fingerprint: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    fingerprint: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     source: Mapped[str] = mapped_column(String(32), nullable=False)
 

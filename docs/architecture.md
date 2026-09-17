@@ -82,6 +82,18 @@ flowchart LR
   use scripted models.
 - Benchmark prediction never reads ground truth; grading refuses unsealed or
   modified predictions.
+- Kubernetes events are journaled the same way objects are (`event_versions`),
+  because Kubernetes itself only keeps them for about an hour; without this, a
+  resolved incident re-diagnosed later would silently lose event-based
+  evidence. The journal still excludes the `chaos-mesh` namespace from its
+  historical window query even when RBAC allows reading it live (only current,
+  open-incident diagnosis sees chaos objects/events today).
+- `DiagnosisService`'s snapshot lock (`threading.Lock`) is per process. It is
+  correct for today's single-worker, single-replica deployment
+  (`infra/kubernetes/control-plane.yaml` runs one replica, no `--workers`).
+  Running more than one worker or replica against the same database would
+  reopen the read-then-write race it guards against; that needs a
+  database-level lock (e.g. a Postgres advisory lock) before scaling out.
 
 ## Configuration
 

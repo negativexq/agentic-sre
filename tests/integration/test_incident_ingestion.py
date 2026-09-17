@@ -57,6 +57,9 @@ def test_repeated_firing_and_resolution_share_one_incident(tmp_path: Path) -> No
         resolved = manager.ingest(normalize_alert(make_alert("resolved")), now=NOW)
 
         assert resolved.incident_id == first.incident_id
+        resolved_row = session.get(IncidentRow, first.incident_id)
+        assert resolved_row is not None
+        assert resolved_row.status == "RESOLVED"
         assert session.scalar(select(func.count(IncidentRow.incident_id))) == 1
         assert session.scalar(select(func.count(AlertRow.alert_id))) == 1
         event_types = session.scalars(

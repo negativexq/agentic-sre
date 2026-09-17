@@ -20,7 +20,7 @@ from packages.contracts import (
     IncidentSource,
     IncidentStatus,
 )
-from packages.storage.models import AlertRow
+from packages.storage.models import AlertRow, IncidentRow
 from packages.storage.repositories import IncidentEventRepository, IncidentRepository
 
 
@@ -121,6 +121,12 @@ class IncidentManager:
         row.status = alert.status.value
         row.labels = alert.labels
         row.annotations = alert.annotations
+        if alert.status is AlertStatus.RESOLVED:
+            incident_row = self._session.get(IncidentRow, existing_incident.incident_id)
+            if incident_row is None:
+                raise LookupError(f"incident {existing_incident.incident_id} was not found")
+            incident_row.status = IncidentStatus.RESOLVED.value
+            incident_row.updated_at = now
         event_type = (
             IncidentEventType.ALERT_RESOLVED
             if alert.status is AlertStatus.RESOLVED

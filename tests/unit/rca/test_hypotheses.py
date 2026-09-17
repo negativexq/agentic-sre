@@ -389,3 +389,30 @@ def test_irrelevant_sibling_does_not_change_the_clear_hypothesis() -> None:
 
     assert base.hypotheses[0].causal_actor == expanded.hypotheses[0].causal_actor
     assert base.hypotheses[0].hypothesis_id == expanded.hypotheses[0].hypothesis_id
+
+
+def test_renaming_an_unrelated_entity_does_not_change_selection() -> None:
+    source = _rollout_source(changed_body=deployment("catalog", image="app:2"))
+    case = build_case(source)
+    primary = case.candidates[0]
+    unrelated = Candidate(
+        entity=ref("shop/Deployment/ad"),
+        score=1,
+        findings=(
+            Finding(
+                kind=FindingKind.CONFIG_CHANGE,
+                entity=ref("shop/Deployment/ad"),
+                at=at(4),
+                summary="unrelated config changed",
+                evidence_ids=("unrelated",),
+                temporal_role=EvidenceTemporalRole.INITIATING,
+            ),
+        ),
+    )
+    renamed = unrelated.model_copy(update={"entity": ref("shop/Deployment/cart")})
+
+    first = group_candidates([primary, unrelated], case.topology, case.context, RankingConfig())
+    second = group_candidates([primary, renamed], case.topology, case.context, RankingConfig())
+
+    assert first.hypotheses[0].causal_actor == second.hypotheses[0].causal_actor
+    assert first.hypotheses[0].hypothesis_id == second.hypotheses[0].hypothesis_id

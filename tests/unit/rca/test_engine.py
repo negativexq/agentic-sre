@@ -359,6 +359,59 @@ def test_hpa_failure_before_workload_symptoms_is_verified() -> None:
     assert diagnosis.evidence[0].kind is FindingKind.AUTOSCALING_FAILURE
 
 
+def test_late_hpa_failure_does_not_verify_over_earlier_workload_failure() -> None:
+    hpa = version(
+        "shop/HorizontalPodAutoscaler/checkout-hpa",
+        120,
+        {
+            "spec": {
+                "scaleTargetRef": {
+                    "apiVersion": "apps/v1",
+                    "kind": "Deployment",
+                    "name": "checkout",
+                }
+            },
+            "status": {
+                "conditions": [
+                    {
+                        "type": "ScalingActive",
+                        "status": "False",
+                        "reason": "FailedGetResourceMetric",
+                        "message": "unable to fetch metrics",
+                        "lastTransitionTime": at(120).isoformat(),
+                    }
+                ]
+            },
+        },
+    )
+    source = InMemorySource(
+        name="late-hpa-failure",
+        alert_items=[alert("RequestErrorRate", "checkout", 5)],
+        versions=[*shop_objects(0), hpa],
+        event_items=[
+            event("shop/Pod/checkout-5d8f7c9b4-abcde", "BackOff", 6, type_="Warning"),
+            event(
+                "shop/HorizontalPodAutoscaler/checkout-hpa",
+                "FailedGetResourceMetric",
+                120,
+                type_="Warning",
+            ),
+        ],
+        cutoff=at(130),
+    )
+
+    diagnosis = diagnose(source)
+
+    assert diagnosis.root_cause == ref("shop/HorizontalPodAutoscaler/checkout-hpa")
+    assert diagnosis.confidence is Confidence.LIKELY
+    assert diagnosis.verification is not None
+    assert diagnosis.verification.onset_delta_seconds == 6900
+    assert any(
+        predicate.name == "late_change_contradiction" and predicate.status.value == "FAIL"
+        for predicate in diagnosis.verification.predicates
+    )
+
+
 def _quota(used: str) -> dict[str, object]:
     return {"status": {"hard": {"limits.memory": "1Gi"}, "used": {"limits.memory": used}}}
 

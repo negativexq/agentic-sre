@@ -133,3 +133,13 @@ def test_dependency_outage_is_blamed_over_the_callers_own_warnings() -> None:
     diagnosis = diagnose(source)
     assert diagnosis.root_cause == ref("shop/Pod/store-5d8f7c9b4-abcde")
     assert diagnosis.confidence is Confidence.LIKELY
+
+
+def test_builtin_demo_finds_the_bad_rollout() -> None:
+    from packages.rca.demo import demo_source
+
+    diagnosis = diagnose(demo_source())
+    assert diagnosis.root_cause == ref("shop/Deployment/payment")
+    assert diagnosis.confidence is Confidence.VERIFIED
+    assert "FAULT_DELAY_MS" in diagnosis.summary
+    assert "rollout undo" in diagnosis.remediation[0].command

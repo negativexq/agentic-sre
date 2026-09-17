@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentic-sre"
-version = "0.2.0"
-description = "Credit-aware single-agent investigation baseline for the Agentic SRE project."
+version = "0.3.0"
+description = "Change-first root-cause analysis agent for Kubernetes incidents, with reproducible benchmarks."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -27,6 +27,9 @@ dependencies = [
     "sqlalchemy>=2.0,<3.0",
     "uvicorn[standard]>=0.35,<1.0",
 ]
+
+[project.scripts]
+agentic-sre = "apps.cli.main:main"
 
 [project.optional-dependencies]
 dev = [

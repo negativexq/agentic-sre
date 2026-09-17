@@ -19,6 +19,8 @@ main { max-width:960px; margin:0 auto; padding:24px 16px 64px; }
 h1 { font-size:22px; margin:0 0 4px; } h2 { font-size:16px; margin:28px 0 8px; }
 a { color:var(--accent); }
 .muted { color:var(--muted); }
+p, td { overflow-wrap:anywhere; }
+td:first-child { white-space:nowrap; overflow-wrap:normal; }
 .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; }
 .cause { font:600 17px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; word-break:break-all; }
 .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:600;

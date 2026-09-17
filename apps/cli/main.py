@@ -66,10 +66,36 @@ def cmd_diagnose(args: argparse.Namespace) -> int:
     diagnosis = diagnose(
         SnapshotSource(dataset.scenario(args.scenario)), investigator=_investigator(args)
     )
+    _emit(diagnosis, args)
+    return 0
+
+
+def _emit(diagnosis: Diagnosis, args: argparse.Namespace) -> None:
+    if args.html:
+        from packages.rca.report import diagnosis_html
+
+        args.html.parent.mkdir(parents=True, exist_ok=True)
+        args.html.write_text(diagnosis_html(diagnosis), encoding="utf-8")
     if args.json:
         print(json.dumps(diagnosis.model_dump(mode="json"), indent=2))
     else:
         _print_diagnosis(diagnosis)
+        if args.html:
+            print(f"\nHTML report: {args.html}")
+
+
+def cmd_demo(args: argparse.Namespace) -> int:
+    from packages.rca.demo import demo_source
+    from packages.rca.engine import diagnose
+
+    _emit(diagnose(demo_source(), investigator=_investigator(args)), args)
+    return 0
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    import uvicorn
+
+    uvicorn.run("apps.control_plane.main:app", host=args.host, port=args.port)
     return 0
 
 
@@ -108,6 +134,11 @@ def cmd_grade(args: argparse.Namespace) -> int:
     return 0
 
 
+def _add_output_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--json", action="store_true", help="print the diagnosis as JSON")
+    parser.add_argument("--html", type=Path, default=None, help="also write an HTML report")
+
+
 def _add_llm_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--llm",
@@ -125,8 +156,18 @@ def build_parser() -> argparse.ArgumentParser:
     diagnose_cmd = sub.add_parser("diagnose", help="diagnose one ITBench-Lite snapshot")
     diagnose_cmd.add_argument("scenario", help="scenario id, e.g. Scenario-4")
     diagnose_cmd.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
-    diagnose_cmd.add_argument("--json", action="store_true")
+    _add_output_flags(diagnose_cmd)
     _add_llm_flags(diagnose_cmd)
+
+    demo_cmd = sub.add_parser("demo", help="diagnose the built-in bad-rollout incident offline")
+    _add_output_flags(demo_cmd)
+    _add_llm_flags(demo_cmd)
+    demo_cmd.set_defaults(handler=cmd_demo)
+
+    serve_cmd = sub.add_parser("serve", help="run the control plane API and web UI")
+    serve_cmd.add_argument("--host", default="127.0.0.1")
+    serve_cmd.add_argument("--port", type=int, default=8000)
+    serve_cmd.set_defaults(handler=cmd_serve)
     diagnose_cmd.set_defaults(handler=cmd_diagnose)
 
     eval_cmd = sub.add_parser("eval", help="predict, seal, and grade a split")

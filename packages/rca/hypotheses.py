@@ -339,7 +339,7 @@ def _make_hypothesis(
     )
     paths: list[tuple[CausalHop, ...]] = []
     primary = topology.causal_path(actor, context.symptom_entities, max_depth=6)
-    if primary is not None:
+    if primary:
         paths.append(primary)
     for member, path in sorted(member_paths, key=lambda item: item[0].canonical):
         if member == actor or not path or path in paths:

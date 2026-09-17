@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from rca_builders import alert, at, deployment, event, pod, ref, replicaset, service, version
 
-from packages.rca.engine import build_case
+from packages.rca.engine import build_case, diagnose
 from packages.rca.hypotheses import group_candidates, summarize_diagnostics
 from packages.rca.model import (
     Candidate,
@@ -100,6 +100,31 @@ def test_unchanged_deployment_is_not_promoted_over_pod_local_oom() -> None:
     assert len(case.hypotheses) == 1
     assert case.hypotheses[0].causal_actor == ref("shop/Pod/catalog-rs-abcde")
     assert case.hypotheses[0].members == (ref("shop/Pod/catalog-rs-abcde"),)
+
+
+def test_direct_symptom_hypothesis_does_not_store_an_empty_path() -> None:
+    body = pod("catalog-rs-abcde", "catalog", "catalog-rs")
+    body["status"] = {
+        "containerStatuses": [
+            {
+                "name": "catalog",
+                "restartCount": 3,
+                "lastState": {
+                    "terminated": {
+                        "reason": "OOMKilled",
+                        "finishedAt": at(6).isoformat(),
+                    }
+                },
+            }
+        ]
+    }
+
+    diagnosis = diagnose(_rollout_source(pod_body=body))
+
+    assert diagnosis.causal_path == ()
+    assert diagnosis.causal_explanation == "DIRECT"
+    assert diagnosis.hypothesis is not None
+    assert diagnosis.hypothesis.causal_paths == ()
 
 
 def test_unrelated_siblings_remain_separate_hypotheses() -> None:

@@ -12,7 +12,8 @@ flowchart LR
   CP --> SRC[Observation source]
   DB --> SRC
   Loki[Loki] --> SRC
-  SRC --> ENG[RCA engine]
+  SRC --> OBS[Normalized observations]
+  OBS --> ENG[RCA engine]
   ENG --> LLM[LLM investigator<br/>optional]
   ENG --> OUT[Diagnosis<br/>API, web UI, CLI]
 ```
@@ -27,7 +28,8 @@ flowchart LR
 | `packages/rca/signals.py` | Symptoms and findings: config/spec/image/scale changes, restarts, fault injection, network policies, quota rejections, container failures, resource pressure, dependency errors, warning events, HPA failures, and temporal traffic changes |
 | `packages/rca/ranking.py` | Explainable scoring and deterministic verification rules |
 | `packages/rca/hypotheses.py` | Evidence-coherent causal episode grouping and hypothesis diagnostics |
-| `packages/rca/engine.py` | Pipeline: observe → signals → rank → investigate → verify → propose |
+| `packages/rca/resolution.py` | Structural hypothesis signatures and evidence-based resolution state |
+| `packages/rca/engine.py` | Pipeline: observe → signals → group → rank → investigate → verify → resolve → propose |
 | `packages/rca/agent.py`, `llm.py` | Optional LLM investigator with read-only tools; opt-in OpenAI client |
 | `packages/rca/remediation.py` | Proposed commands; never executed |
 | `packages/rca/live.py` | Kubernetes reader, Loki reader, change watcher, live source |
@@ -77,13 +79,20 @@ flowchart LR
    `neighbors`, `logs`) before choosing one. Invalid replies or budget
    exhaustion fall back to the ranking.
 6. **Verification.** Rules decide the confidence label for the chosen
-   candidate. Findings expose an onset delta and a temporal role
+   hypothesis. Findings expose an onset delta and a temporal role
    (`INITIATING`, `SUPPORTING`, `CONSEQUENCE`, or `AMBIGUOUS`). A late linked
    change can remain a candidate but cannot verify the original incident onset;
    downstream-only evidence may produce `UNVERIFIED`. The structured
    `VerificationTrace` records passed, failed, weak, and unknown predicates
    without using an LLM.
-7. **Remediation.** The causal actor maps to a reversible proposal:
+7. **Resolution.** A separate structural comparison decides whether the leading
+   hypothesis is distinguishable from plausible alternatives. It reports
+   `RESOLVED`, `AMBIGUOUS`, or `INSUFFICIENT_EVIDENCE`; this axis is independent
+   of `VERIFIED`, `LIKELY`, and `UNVERIFIED` confidence. Ranking chooses an
+   order, verification tests one hypothesis, and resolution asks whether the
+   evidence distinguishes it. Canonical entity order is used only for stable
+   serialization, never as causal evidence.
+8. **Remediation.** The causal actor maps to a reversible proposal:
    revert a ConfigMap, `rollout undo`, pause a chaos schedule, restore
    replicas, raise a quota or memory limit.
 
@@ -129,7 +138,7 @@ connectivity, not a claim that the shared resource cannot itself be causal.
 The deterministic pipeline is explicitly:
 
 ```text
-Finding → candidate evidence → Hypothesis → verification → Diagnosis
+Finding → candidate evidence → Hypothesis → ranking → verification → resolution → Diagnosis
 ```
 
 Kubernetes object identity is not causal-hypothesis identity. A hypothesis has
@@ -148,7 +157,20 @@ and injection findings establish that lineage; a directly injected Chaos
 object remains its own actor. Evidence IDs are counted once for hypothesis
 scoring, while duplicate references remain visible in the grouped provenance.
 This layer represents episodes but does not yet resolve ambiguity between
-separate hypotheses.
+separate hypotheses. `packages/rca/resolution.py` compares deterministic
+signatures containing initiating/supporting/contradictory finding classes,
+qualitative temporal roles, provenance classes, manifestation shape, and
+directional causal path shape. It never compares benchmark labels, raw entity
+names, or score margins. Equivalent onset-aligned HPA hypotheses can therefore
+be reported as `AMBIGUOUS`, while a configuration change with an upstream path
+is not made ambiguous merely because a downstream container failure happens to
+have the same score. A hypothesis with no onset-capable causal evidence remains
+`INSUFFICIENT_EVIDENCE`.
+
+The selected `root_cause` remains the deterministic leading actor for backward
+compatibility, but `resolution_trace` and `ambiguous_hypotheses` make the
+distinction visible to API, CLI, and HTML consumers. Under ambiguity a proposed
+remediation is hypothesis-specific; the control plane never executes it.
 
 ## Safety
 

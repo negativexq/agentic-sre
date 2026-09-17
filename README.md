@@ -21,6 +21,7 @@ behavior.
 - Relation-aware directional causal traversal rather than generic undirected proximity.
 - Causal hypotheses group coherent actor/manifestation evidence across ownership chains without double-counting observations.
 - Deterministic confidence and verification: `VERIFIED`, `LIKELY`, or `UNVERIFIED`.
+- Separate deterministic resolution: `RESOLVED`, `AMBIGUOUS`, or `INSUFFICIENT_EVIDENCE`; confidence is not a proxy for distinguishability.
 - Causal paths visible in JSON/API output, the CLI, and the HTML report.
 - Real Kind lifecycle validation through Prometheus, Alertmanager, and the control plane.
 - Optional bounded LLM investigation around deterministic candidates.
@@ -89,8 +90,9 @@ flowchart LR
   O --> E[Deterministic RCA engine]
   E --> T[Directional causal topology]
   T --> R[Ranking + verification]
-  R -. optional review .-> L[Bounded LLM investigator]
-  R --> D[Diagnosis<br/>evidence + causal path + proposal]
+  R --> X[Resolution<br/>distinguish hypotheses]
+  X -. optional review .-> L[Bounded LLM investigator]
+  X --> D[Diagnosis<br/>evidence + causal path + proposal]
   L --> D
 ```
 
@@ -98,7 +100,7 @@ flowchart LR
 2. Object, Event, and bounded log observations are normalized with explicit observation times.
 3. The engine extracts deterministic signals from changes, failures, policies, dependencies, and Events.
 4. Directional topology links a candidate cause to the alerting symptom.
-5. Candidate evidence is grouped into deterministic causal hypotheses; verification assigns confidence to the selected actor.
+5. Candidate evidence is grouped into deterministic causal hypotheses; verification assigns confidence, while resolution checks whether competing hypotheses are actually distinguishable.
 6. The optional investigator may review bounded candidates with read-only tools. It is not authoritative.
 
 More detail is in [`docs/architecture.md`](docs/architecture.md) and
@@ -176,6 +178,13 @@ ConfigMaps and broad NetworkPolicies do not causally bridge sibling workloads.
 Causal paths retain structured entities and relation labels and are rendered
 in the CLI and HTML report. This is relation-aware causal traversal, not formal
 causal inference.
+
+Ranking, verification, resolution, and confidence are separate axes. A stable
+canonical order keeps serialization deterministic, but it is never treated as
+causal evidence. If two onset-aligned hypotheses have equivalent evidence
+structure, the diagnosis exposes `AMBIGUOUS` and the leading hypotheses rather
+than presenting the first name as uniquely established. A diagnosis with no
+sufficiently supported causal hypothesis produces `INSUFFICIENT_EVIDENCE`.
 
 ## Evidence and replay
 

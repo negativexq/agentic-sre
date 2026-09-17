@@ -10,7 +10,7 @@ import pytest
 from apps.cli.main import main
 from packages.rca.demo import demo_source
 from packages.rca.engine import diagnose
-from packages.rca.model import CausalHop, EntityRef
+from packages.rca.model import CausalHop, EntityRef, Resolution, ResolutionTrace
 from packages.rca.report import diagnosis_html
 
 
@@ -80,6 +80,42 @@ def test_html_renders_hypothesis_actor_and_escaped_manifestation() -> None:
     assert "<payment>" not in html
 
 
+def test_ambiguous_resolution_is_visible_in_cli_and_html(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    diagnosis = diagnose(demo_source())
+    assert diagnosis.hypothesis is not None
+    competing = diagnosis.hypothesis.model_copy(
+        update={"causal_actor": EntityRef(kind="HorizontalPodAutoscaler", name="other")}
+    )
+    ambiguous = diagnosis.model_copy(
+        update={
+            "resolution": Resolution.AMBIGUOUS,
+            "resolution_trace": ResolutionTrace(
+                state=Resolution.AMBIGUOUS,
+                leading_hypothesis_ids=(
+                    diagnosis.hypothesis.hypothesis_id,
+                    competing.hypothesis_id,
+                ),
+                unresolved_dimensions=("causal_actor_identity",),
+                rationale="Evidence does not distinguish the two actors.",
+            ),
+            "ambiguous_hypotheses": (diagnosis.hypothesis, competing),
+        }
+    )
+
+    from apps.cli.main import _print_diagnosis
+
+    _print_diagnosis(ambiguous)
+    out = capsys.readouterr().out
+    assert "Resolution   AMBIGUOUS" in out
+    assert "Leading hypotheses" in out
+    assert "Possible remediation (hypothesis-specific; not executed)" in out
+    html = diagnosis_html(ambiguous)
+    assert "Resolution: AMBIGUOUS" in html
+    assert "other" in html
+
+
 def test_hypothesis_report_reads_stored_diagnoses_without_ground_truth(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -97,6 +133,7 @@ def test_hypothesis_report_reads_stored_diagnoses_without_ground_truth(
     assert (
         report["grouping"]["hypothesis_count"] == diagnosis.hypothesis_diagnostics.hypothesis_count
     )
+    assert report["resolution"]["resolved"] == 1
     assert report["selection_changes"] == "not inferable from one run"
 
 

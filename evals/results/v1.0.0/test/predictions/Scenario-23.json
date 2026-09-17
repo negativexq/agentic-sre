@@ -1,0 +1,401 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "VERIFIED: otel-demo/Deployment/checkout: image changed to quay.io/it-bench/hello-bench-arm64\n:1.0.0. Verified (workload changed in the incident window next to the alerts). Linked to otel-demo/Deployment/accounting, otel-demo/Deployment/ad, otel-demo/Deployment/checkout.",
+        "entity": {
+          "kind": "Deployment",
+          "name": "checkout",
+          "namespace": "otel-demo"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-23",
+    "native_terminal": "VERIFIED",
+    "reasoning": "otel-demo/Deployment/checkout: image changed to quay.io/it-bench/hello-bench-arm64\n:1.0.0. Verified (workload changed in the incident window next to the alerts). Linked to otel-demo/Deployment/accounting, otel-demo/Deployment/ad, otel-demo/Deployment/checkout.",
+    "scenario_id": "Scenario-23"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "causal_path": [],
+        "entity": {
+          "kind": "Pod",
+          "name": "checkout-d75b77f99-hgc68",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:54:57Z",
+            "details": {
+              "problems": [
+                {
+                  "at": "2025-12-15T17:54:57Z",
+                  "container": "checkout",
+                  "message": "Failed to apply default image tag \"quay.io/it-bench/hello-bench-arm64\\n:1.0.0\": couldn't parse image name \"quay.io/it-bench/hello-bench-arm64\\n:1.0.0\": invalid ",
+                  "reason": "InvalidImageName",
+                  "restarts": 0
+                }
+              ],
+              "reason": "InvalidImageName"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "checkout-d75b77f99-hgc68",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:3215"
+            ],
+            "kind": "CONTAINER_FAILURE",
+            "related": [],
+            "summary": "container checkout InvalidImageName (0 restart(s)) Failed to apply default image tag \"quay.io/it-bench/hello-bench-arm64\\n:1.0.0\": couldn't parse image name \"quay.io/it-bench/hello-bench-arm64\\n:1.0.0\": invalid"
+          },
+          {
+            "at": "2025-12-15T18:00:11Z",
+            "details": {
+              "count": 118,
+              "reason": "InspectFailed"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "checkout-d75b77f99-hgc68",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:869",
+              "k8s_events_raw.tsv:873",
+              "k8s_events_raw.tsv:877",
+              "k8s_events_raw.tsv:880"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "InspectFailed x118: Failed to apply default image tag \"quay.io/it-bench/hello-bench-arm64\\n:1.0.0\": couldn't parse image name \"quay.io/it-bench/hello-bench-arm64\\n:1.0.0\": invalid "
+          },
+          {
+            "at": "2025-12-15T17:57:01Z",
+            "details": {
+              "count": 78,
+              "reason": "Failed"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "checkout-d75b77f99-hgc68",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:871",
+              "k8s_events_raw.tsv:874",
+              "k8s_events_raw.tsv:878",
+              "k8s_events_raw.tsv:882"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "Failed x78: Error: InvalidImageName"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/currency",
+          "otel-demo/Deployment/email"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 10.45
+      },
+      {
+        "causal_path": [],
+        "entity": {
+          "kind": "Pod",
+          "name": "fraud-detection-9fb7d885b-xwg9b",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:34:35Z",
+            "details": {
+              "problems": [
+                {
+                  "at": "2025-12-15T17:34:35Z",
+                  "container": "fraud-detection",
+                  "message": "exit code 137",
+                  "reason": "OOMKilled",
+                  "restarts": 1
+                }
+              ],
+              "reason": "OOMKilled"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "fraud-detection-9fb7d885b-xwg9b",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:586"
+            ],
+            "kind": "CONTAINER_FAILURE",
+            "related": [],
+            "summary": "container fraud-detection OOMKilled (1 restart(s)) exit code 137"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/currency",
+          "otel-demo/Deployment/email"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 8.5
+      },
+      {
+        "causal_path": [],
+        "entity": {
+          "kind": "Pod",
+          "name": "checkout-d75b77f99-5mcsx",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:54:50Z",
+            "details": {
+              "count": 3,
+              "reason": "InspectFailed"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "checkout-d75b77f99-5mcsx",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:836",
+              "k8s_events_raw.tsv:841"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "InspectFailed x3: Failed to apply default image tag \"quay.io/it-bench/hello-bench-arm64\\n:1.0.0\": couldn't parse image name \"quay.io/it-bench/hello-bench-arm64\\n:1.0.0\": invalid "
+          },
+          {
+            "at": "2025-12-15T17:54:50Z",
+            "details": {
+              "count": 3,
+              "reason": "Failed"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "checkout-d75b77f99-5mcsx",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:839",
+              "k8s_events_raw.tsv:843"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "Failed x3: Error: InvalidImageName"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/currency",
+          "otel-demo/Deployment/email"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.433
+      },
+      {
+        "causal_path": [
+          {
+            "relation": "selects",
+            "source": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-nzmlk",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "relation": "calls",
+            "source": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "accounting",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-nzmlk",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:16:51Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-nzmlk",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:578"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: Get \"http://100.96.1.164:13133/\": dial tcp 100.96.1.164:13133: connect: connection refused"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/currency",
+          "otel-demo/Deployment/email"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      }
+    ],
+    "causal_path": [],
+    "confidence": "VERIFIED",
+    "evidence": [
+      {
+        "at": "2025-12-15T17:57:44.672021Z",
+        "details": {
+          "after": [
+            "quay.io/it-bench/hello-bench-arm64\n:1.0.0"
+          ],
+          "before": [
+            "ghcr.io/open-telemetry/demo:2.1.3-checkout"
+          ],
+          "changed_paths": [
+            ".spec.template.spec.containers[checkout].image"
+          ],
+          "previous_observed_at": "2025-12-15T17:37:44.331371+00:00"
+        },
+        "entity": {
+          "kind": "Deployment",
+          "name": "checkout",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_objects_raw.tsv:206",
+          "k8s_objects_raw.tsv:2810"
+        ],
+        "kind": "IMAGE_CHANGE",
+        "related": [],
+        "summary": "image changed to quay.io/it-bench/hello-bench-arm64\n:1.0.0"
+      }
+    ],
+    "incident_id": "Scenario-23",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Roll back Deployment checkout to the previous revision",
+        "command": "kubectl rollout undo deployment/checkout -n otel-demo",
+        "requires_approval": true,
+        "risk": "medium: reverts every change in the last rollout"
+      }
+    ],
+    "root_cause": {
+      "kind": "Deployment",
+      "name": "checkout",
+      "namespace": "otel-demo"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "6 diagnostic alert type(s) on accounting, ad, checkout, currency, email, fraud-detection; 201 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "25 finding(s) over 671 object(s) and 418 event(s); 542 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "otel-demo/Deployment/checkout 12.0; otel-demo/Pod/checkout-d75b77f99-hgc68 10.4; otel-demo/Pod/fraud-detection-9fb7d885b-xwg9b 8.5; otel-demo/Pod/checkout-d75b77f99-5mcsx 5.4; otel-demo/Pod/otel-collector-564d9c7987-nzmlk 4.9"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "VERIFIED: workload changed in the incident window next to the alerts"
+      }
+    ],
+    "summary": "otel-demo/Deployment/checkout: image changed to quay.io/it-bench/hello-bench-arm64\n:1.0.0. Verified (workload changed in the incident window next to the alerts). Linked to otel-demo/Deployment/accounting, otel-demo/Deployment/ad, otel-demo/Deployment/checkout.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "KubeDeploymentReplicasMismatch",
+        "KubePodNotReady",
+        "NoRequestsDetected",
+        "PendingPodsDetected",
+        "RequestErrorRate"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 25,
+        "KubeClientCertificateExpiration": 44,
+        "KubeControllerManagerDown": 30,
+        "KubeSchedulerDown": 30,
+        "PrometheusNotConnectedToAlertmanagers": 35,
+        "Watchdog": 37
+      },
+      "last_seen": "2025-12-15T18:13:40.336305Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T17:39:40.336305Z",
+      "services": [
+        "accounting",
+        "ad",
+        "checkout",
+        "currency",
+        "email",
+        "fraud-detection",
+        "frontend",
+        "frontend-proxy",
+        "payment",
+        "prometheus-kube-prometheus-kubelet",
+        "prometheus-kube-state-metrics",
+        "quote",
+        "recommendation",
+        "shipping"
+      ]
+    }
+  }
+}

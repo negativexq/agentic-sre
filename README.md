@@ -11,19 +11,22 @@ and proposes a reversible fix. It never changes the cluster.
 ## Results
 
 Measured on [ITBench-Lite](https://huggingface.co/datasets/ibm-research/ITBench-Lite)
-SRE snapshots with a pre-registered dev/test split, from tag `v0.7.0`. Details
-and every miss: [`evals/results/v0.7.0`](evals/results/v0.7.0/README.md).
+SRE snapshots with a pre-registered dev/test split. The v1.0.0 release result
+and every miss are in [`evals/results/v1.0.0`](evals/results/v1.0.0/README.md);
+the previous v0.7.0 result remains available for comparison.
 
 | Run | Split | Scenarios | Macro F1 | Root cause ranked first | In top 3 | Model calls |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| **Engine v1.0.0** (run once) | Test | 25 | **0.68** | 68% | 80% | 0 |
 | **Engine v0.7.0** (run once) | Test | 25 | **0.68** | 68% | 80% | 0 |
 | Engine v0.5.0 + LLM investigator | Test | 25 | 0.64 | 64% | 80% | 44 |
 | Engine v0.4.0 (run once) | Test | 25 | 0.64 | 64% | 76% | 0 |
 | Engine v0.7.0 (used for tuning) | Dev | 10 | 0.90 | 90% | 90% | 0 |
 | Previous LLM agent (E10) | All | 35 | 0.00 | — | — | — |
 
-v0.6.0 and v0.7.0 changed journal correctness, temporal windows, and causal
-topology, not scoring; every test prediction is unchanged since v0.5.0. On
+v0.8-quality live validation and v0.9-quality causal topology were added
+without changing the deterministic test predictions: v1.0.0 matches v0.7.0
+scenario for scenario. On
 the test split, 16 of 23 answers labelled `VERIFIED` were correct. Part of
 the v0.5.0 gain came from rules chosen after reading v0.4.0 test misses; the
 results page discloses which. The LLM investigator (last measured at v0.5.0,

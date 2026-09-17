@@ -1,0 +1,455 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "LIKELY: otel-demo/Pod/kafka-ff7884766-lbw2w: container kafka Error (3 restart(s)) exit code 1. Likely (strong signal with a structural link, no verifying rule). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/fraud-detection, otel-demo/Deployment/otel-collector.",
+        "entity": {
+          "kind": "Pod",
+          "name": "kafka-ff7884766-lbw2w",
+          "namespace": "otel-demo"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-38",
+    "native_terminal": "LIKELY",
+    "reasoning": "otel-demo/Pod/kafka-ff7884766-lbw2w: container kafka Error (3 restart(s)) exit code 1. Likely (strong signal with a structural link, no verifying rule). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/fraud-detection, otel-demo/Deployment/otel-collector.",
+    "scenario_id": "Scenario-38"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "causal_path": [
+          {
+            "relation": "selects",
+            "source": {
+              "kind": "Pod",
+              "name": "kafka-ff7884766-vg9vr",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Service",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "relation": "calls",
+            "source": {
+              "kind": "Service",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "fraud-detection",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "Pod",
+          "name": "kafka-ff7884766-vg9vr",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:29:10Z",
+            "details": {
+              "problems": [
+                {
+                  "at": "2025-12-15T17:29:10Z",
+                  "container": "kafka",
+                  "message": "exit code 1",
+                  "reason": "Error",
+                  "restarts": 1
+                }
+              ],
+              "reason": "Error"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "kafka-ff7884766-vg9vr",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:304"
+            ],
+            "kind": "CONTAINER_FAILURE",
+            "related": [],
+            "summary": "container kafka Error (1 restart(s)) exit code 1"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Deployment/otel-collector",
+          "otel-demo/Deployment/recommendation",
+          "otel-demo/Pod/ad-554b849958-82fgc"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 7.5
+      },
+      {
+        "causal_path": [
+          {
+            "relation": "scales",
+            "source": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "HorizontalPodAutoscaler",
+          "name": "ad",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:38:11Z",
+            "details": {
+              "count": 6,
+              "reason": "FailedGetResourceMetric"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:208",
+              "k8s_events_raw.tsv:211",
+              "k8s_events_raw.tsv:311",
+              "k8s_events_raw.tsv:313"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedGetResourceMetric x6: failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable t"
+          },
+          {
+            "at": "2025-12-15T17:38:11Z",
+            "details": {
+              "count": 3,
+              "reason": "FailedComputeMetricsReplicas"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:213",
+              "k8s_events_raw.tsv:314"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedComputeMetricsReplicas x3: invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Deployment/otel-collector",
+          "otel-demo/Deployment/recommendation",
+          "otel-demo/Pod/ad-554b849958-82fgc"
+        ],
+        "reasons": [
+          "1 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.362
+      },
+      {
+        "causal_path": [
+          {
+            "relation": "scales",
+            "source": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "fraud-detection",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "fraud-detection",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "HorizontalPodAutoscaler",
+          "name": "fraud-detection",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:38:05Z",
+            "details": {
+              "count": 6,
+              "reason": "FailedGetResourceMetric"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "fraud-detection",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:161",
+              "k8s_events_raw.tsv:163",
+              "k8s_events_raw.tsv:274",
+              "k8s_events_raw.tsv:277"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedGetResourceMetric x6: failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable t"
+          },
+          {
+            "at": "2025-12-15T17:38:05Z",
+            "details": {
+              "count": 3,
+              "reason": "FailedComputeMetricsReplicas"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "fraud-detection",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:164",
+              "k8s_events_raw.tsv:279"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedComputeMetricsReplicas x3: invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Deployment/otel-collector",
+          "otel-demo/Deployment/recommendation",
+          "otel-demo/Pod/ad-554b849958-82fgc"
+        ],
+        "reasons": [
+          "1 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.362
+      },
+      {
+        "causal_path": [
+          {
+            "relation": "scales",
+            "source": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "recommendation",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "recommendation",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "HorizontalPodAutoscaler",
+          "name": "recommendation",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:38:08Z",
+            "details": {
+              "count": 6,
+              "reason": "FailedGetResourceMetric"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "recommendation",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:179",
+              "k8s_events_raw.tsv:180",
+              "k8s_events_raw.tsv:292",
+              "k8s_events_raw.tsv:294"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedGetResourceMetric x6: failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable t"
+          },
+          {
+            "at": "2025-12-15T17:38:08Z",
+            "details": {
+              "count": 3,
+              "reason": "FailedComputeMetricsReplicas"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "recommendation",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:182",
+              "k8s_events_raw.tsv:296"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "FailedComputeMetricsReplicas x3: invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Deployment/otel-collector",
+          "otel-demo/Deployment/recommendation",
+          "otel-demo/Pod/ad-554b849958-82fgc"
+        ],
+        "reasons": [
+          "1 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.362
+      }
+    ],
+    "causal_path": [
+      {
+        "relation": "calls",
+        "source": {
+          "kind": "Deployment",
+          "name": "kafka",
+          "namespace": "otel-demo"
+        },
+        "target": {
+          "kind": "Service",
+          "name": "otel-collector",
+          "namespace": "otel-demo"
+        }
+      },
+      {
+        "relation": "calls",
+        "source": {
+          "kind": "Service",
+          "name": "otel-collector",
+          "namespace": "otel-demo"
+        },
+        "target": {
+          "kind": "Deployment",
+          "name": "ad",
+          "namespace": "otel-demo"
+        }
+      }
+    ],
+    "confidence": "LIKELY",
+    "evidence": [
+      {
+        "at": "2025-12-15T17:34:07Z",
+        "details": {
+          "problems": [
+            {
+              "at": "2025-12-15T17:34:07Z",
+              "container": "kafka",
+              "message": "exit code 1",
+              "reason": "Error",
+              "restarts": 3
+            }
+          ],
+          "reason": "Error"
+        },
+        "entity": {
+          "kind": "Pod",
+          "name": "kafka-ff7884766-lbw2w",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_objects_raw.tsv:301"
+        ],
+        "kind": "CONTAINER_FAILURE",
+        "related": [],
+        "summary": "container kafka Error (3 restart(s)) exit code 1"
+      }
+    ],
+    "incident_id": "Scenario-38",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Read the logs of the failing container, then fix or roll back deployment/kafka -n otel-demo",
+        "command": "kubectl logs pod/kafka-ff7884766-lbw2w -n otel-demo --previous && kubectl rollout undo deployment/kafka -n otel-demo",
+        "requires_approval": true,
+        "risk": "medium: reverts the last rollout"
+      }
+    ],
+    "root_cause": {
+      "kind": "Pod",
+      "name": "kafka-ff7884766-lbw2w",
+      "namespace": "otel-demo"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "5 diagnostic alert type(s) on ad, fraud-detection, prometheus-kube-prometheus-kubelet, prometheus-kube-state-metrics, recommendation; 256 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "44 finding(s) over 784 object(s) and 988 event(s); 871 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "otel-demo/Pod/kafka-ff7884766-lbw2w 7.5; otel-demo/Pod/kafka-ff7884766-vg9vr 7.5; otel-demo/HorizontalPodAutoscaler/ad 5.4; otel-demo/HorizontalPodAutoscaler/fraud-detection 5.4; otel-demo/HorizontalPodAutoscaler/recommendation 5.4"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "LIKELY: strong signal with a structural link, no verifying rule"
+      }
+    ],
+    "summary": "otel-demo/Pod/kafka-ff7884766-lbw2w: container kafka Error (3 restart(s)) exit code 1. Likely (strong signal with a structural link, no verifying rule). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/fraud-detection, otel-demo/Deployment/otel-collector.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "KafkaConnectionClosureRate",
+        "KubeHpaMaxedOut",
+        "NoRequestsDetected",
+        "RequestErrorRate"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 35,
+        "KubeClientCertificateExpiration": 34,
+        "KubeControllerManagerDown": 43,
+        "KubeSchedulerDown": 44,
+        "PrometheusNotConnectedToAlertmanagers": 48,
+        "Watchdog": 52
+      },
+      "last_seen": "2025-12-15T18:29:44.847729Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T17:34:15.108341Z",
+      "services": [
+        "ad",
+        "fraud-detection",
+        "prometheus-kube-prometheus-kubelet",
+        "prometheus-kube-state-metrics",
+        "recommendation"
+      ]
+    }
+  }
+}

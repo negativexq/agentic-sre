@@ -1,0 +1,281 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "VERIFIED: otel-demo/Deployment/shipping: spec changed: [shipping].env[QUOTE_ADDR].value: http://quote:8080 -> quote:0000. Verified (workload changed in the incident window next to the alerts). Linked to otel-demo/Deployment/accounting, otel-demo/Deployment/checkout, otel-demo/Deployment/email.",
+        "entity": {
+          "kind": "Deployment",
+          "name": "shipping",
+          "namespace": "otel-demo"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-16",
+    "native_terminal": "VERIFIED",
+    "reasoning": "otel-demo/Deployment/shipping: spec changed: [shipping].env[QUOTE_ADDR].value: http://quote:8080 -> quote:0000. Verified (workload changed in the incident window next to the alerts). Linked to otel-demo/Deployment/accounting, otel-demo/Deployment/checkout, otel-demo/Deployment/email.",
+    "scenario_id": "Scenario-16"
+  },
+  "diagnosis": {
+    "alternatives": [
+      {
+        "causal_path": [
+          {
+            "relation": "routes_to",
+            "source": {
+              "kind": "Deployment",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "relation": "calls",
+            "source": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "accounting",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-ptl2r",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:16:22Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-ptl2r",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:572"
+            ],
+            "kind": "FAILURE_EVENT",
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: Get \"http://100.96.4.58:13133/\": dial tcp 100.96.4.58:13133: connect: connection refused"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/email",
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Deployment/frontend"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      },
+      {
+        "causal_path": [],
+        "entity": {
+          "kind": "Namespace",
+          "name": "agent",
+          "namespace": "_cluster"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:51:11Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "agent",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:3273"
+            ],
+            "kind": "OBJECT_CREATED",
+            "related": [],
+            "summary": "Namespace created"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 2.0
+      },
+      {
+        "causal_path": [],
+        "entity": {
+          "kind": "Namespace",
+          "name": "data-recorders",
+          "namespace": "_cluster"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:33:20Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "data-recorders",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:1126"
+            ],
+            "kind": "OBJECT_CREATED",
+            "related": [],
+            "summary": "Namespace created"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 2.0
+      },
+      {
+        "causal_path": [],
+        "entity": {
+          "kind": "ConfigMap",
+          "name": "kube-root-ca.crt",
+          "namespace": "agent"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:51:11Z",
+            "details": {},
+            "entity": {
+              "kind": "ConfigMap",
+              "name": "kube-root-ca.crt",
+              "namespace": "agent"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:3665"
+            ],
+            "kind": "OBJECT_CREATED",
+            "related": [],
+            "summary": "ConfigMap created"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 2.0
+      }
+    ],
+    "causal_path": [],
+    "confidence": "VERIFIED",
+    "evidence": [
+      {
+        "at": "2025-12-15T17:55:44.028059Z",
+        "details": {
+          "changed_paths": [
+            ".spec.template.spec.containers[shipping].env[QUOTE_ADDR].value"
+          ],
+          "previous_observed_at": "2025-12-15T17:30:42.829640+00:00"
+        },
+        "entity": {
+          "kind": "Deployment",
+          "name": "shipping",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_objects_raw.tsv:264",
+          "k8s_objects_raw.tsv:3852"
+        ],
+        "kind": "SPEC_CHANGE",
+        "related": [],
+        "summary": "spec changed: [shipping].env[QUOTE_ADDR].value: http://quote:8080 -> quote:0000"
+      }
+    ],
+    "incident_id": "Scenario-16",
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Roll back Deployment shipping to the previous revision",
+        "command": "kubectl rollout undo deployment/shipping -n otel-demo",
+        "requires_approval": true,
+        "risk": "medium: reverts every change in the last rollout"
+      }
+    ],
+    "root_cause": {
+      "kind": "Deployment",
+      "name": "shipping",
+      "namespace": "otel-demo"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "4 diagnostic alert type(s) on accounting, checkout, email, fraud-detection, frontend, frontend-proxy; 235 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "18 finding(s) over 671 object(s) and 378 event(s); 535 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "otel-demo/Deployment/shipping 11.5; otel-demo/Pod/otel-collector-564d9c7987-ptl2r 4.9; _cluster/Namespace/agent 2.0; _cluster/Namespace/data-recorders 2.0; agent/ConfigMap/kube-root-ca.crt 2.0"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "VERIFIED: workload changed in the incident window next to the alerts"
+      }
+    ],
+    "summary": "otel-demo/Deployment/shipping: spec changed: [shipping].env[QUOTE_ADDR].value: http://quote:8080 -> quote:0000. Verified (workload changed in the incident window next to the alerts). Linked to otel-demo/Deployment/accounting, otel-demo/Deployment/checkout, otel-demo/Deployment/email.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "NoRequestsDetected",
+        "PendingPodsDetected",
+        "RequestErrorRate"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 41,
+        "KubeClientCertificateExpiration": 35,
+        "KubeControllerManagerDown": 37,
+        "KubeSchedulerDown": 37,
+        "PrometheusNotConnectedToAlertmanagers": 41,
+        "Watchdog": 44
+      },
+      "last_seen": "2025-12-15T17:56:31.593872Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T17:28:07.148307Z",
+      "services": [
+        "accounting",
+        "checkout",
+        "email",
+        "fraud-detection",
+        "frontend",
+        "frontend-proxy",
+        "payment",
+        "prometheus-kube-prometheus-kubelet",
+        "quote",
+        "shipping"
+      ]
+    }
+  }
+}

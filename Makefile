@@ -1,6 +1,6 @@
 .PHONY: install lint typecheck test check demo serve-local \
 	itbench-setup itbench-index eval-dev eval-test \
-	cluster-up build-images deploy load status ui inject-bad-rollout recover rbac-check cluster-down
+	images cluster-up build-images deploy load status ui inject-bad-rollout recover rbac-check cluster-down
 
 PY := .venv/bin/python
 CLI := .venv/bin/agentic-sre
@@ -59,10 +59,16 @@ eval-test:
 cluster-up:
 	kind create cluster --config infra/kubernetes/kind-config.yaml
 
-build-images:
-	for image in order-service payment-service order-worker control-plane migrator; do \
-		docker build -f infra/docker/$$image.Dockerfile -t agentic-sre/$$image:dev . && \
-		kind load docker-image agentic-sre/$$image:dev --name agentic-sre; \
+IMAGES := control-plane migrator order-service payment-service order-worker
+
+images:
+	for image in $(IMAGES); do \
+		docker build -f infra/docker/Dockerfile --target $$image -t agentic-sre/$$image:dev . || exit 1; \
+	done
+
+build-images: images
+	for image in $(IMAGES); do \
+		kind load docker-image agentic-sre/$$image:dev --name agentic-sre || exit 1; \
 	done
 
 deploy: build-images
@@ -78,12 +84,13 @@ deploy: build-images
 	kubectl apply -f infra/kubernetes/db-migration.yaml
 	kubectl wait --for=condition=complete job/db-migration -n $(NAMESPACE) --timeout=180s
 	kubectl apply -f infra/kubernetes/control-plane.yaml
-	kubectl rollout restart deployment -n $(NAMESPACE)
+	# Restart only the app images; restarting Kafka would drop the in-memory topic.
+	kubectl rollout restart deployment/order-service deployment/payment-service deployment/order-worker deployment/control-plane -n $(NAMESPACE)
 	for name in order-service payment-service order-worker control-plane; do \
-		kubectl rollout status deployment/$$name -n $(NAMESPACE) --timeout=180s; \
+		kubectl rollout status deployment/$$name -n $(NAMESPACE) --timeout=180s || exit 1; \
 	done
 	for name in otel-collector prometheus loki tempo alertmanager grafana; do \
-		kubectl rollout status deployment/$$name -n observability --timeout=180s; \
+		kubectl rollout status deployment/$$name -n observability --timeout=180s || exit 1; \
 	done
 
 load:

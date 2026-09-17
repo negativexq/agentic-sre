@@ -1,0 +1,11 @@
+# Keep the build context to the sources the images need.
+*
+!pyproject.toml
+!README.md
+!alembic.ini
+!alembic/
+!apps/
+!packages/
+!workload/
+**/__pycache__
+**/*.py[cod]

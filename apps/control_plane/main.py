@@ -7,6 +7,7 @@ import threading
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -50,6 +51,11 @@ from packages.storage import (
 from packages.telemetry import TelemetryMiddleware, create_runtime
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/agentic_sre"
+
+try:
+    PROJECT_VERSION = version("agentic-sre")
+except PackageNotFoundError:  # pragma: no cover - source tree without installation metadata
+    PROJECT_VERSION = "unknown"
 
 
 def _correlation_id(request: Request) -> str:
@@ -141,7 +147,7 @@ def create_app(
             if watcher is not None:
                 watcher.join(timeout=5)
 
-    app = FastAPI(title="Agentic SRE", version="0.7.0", lifespan=lifespan)
+    app = FastAPI(title="Agentic SRE", version=PROJECT_VERSION, lifespan=lifespan)
     app.add_middleware(TelemetryMiddleware, runtime=telemetry)
     app.mount("/metrics", make_asgi_app(registry=registry))
     app.dependency_overrides[get_session] = session_dependency

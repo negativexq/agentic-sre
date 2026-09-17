@@ -19,12 +19,6 @@ from packages.rca.model import (
 )
 
 WORKLOAD_KINDS = frozenset({"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"})
-# Relations where one object is legitimately shared by many unrelated workloads
-# (a NetworkPolicy selecting many pods, a ConfigMap used by many deployments).
-# Crossing one of these to reach a third, unrelated object is not a causal
-# claim: sharing a policy or a ConfigMap does not mean two workloads share fate.
-FAN_OUT_RELATIONS = frozenset({"restricts", "uses_config"})
-FAN_OUT_THRESHOLD = 3
 _CHAOS_TARGET = re.compile(r"apply chaos for ([a-z0-9.-]+)/([a-z0-9.-]+)", re.IGNORECASE)
 _NAME_LABELS = ("app.kubernetes.io/name", "app.kubernetes.io/component", "app", "k8s-app")
 
@@ -45,7 +39,6 @@ class RelationSemantics:
     backward: bool
     forward_relation: str
     backward_relation: str
-    fan_out: bool = False
 
 
 RELATION_SEMANTICS: dict[str, RelationSemantics] = {
@@ -567,8 +560,6 @@ def pod_workload_name(pod_name: str) -> str:
 
 
 __all__ = [
-    "FAN_OUT_RELATIONS",
-    "FAN_OUT_THRESHOLD",
     "RELATION_SEMANTICS",
     "RelationSemantics",
     "WORKLOAD_KINDS",

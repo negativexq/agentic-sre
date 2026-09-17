@@ -5,7 +5,7 @@ from __future__ import annotations
 from rca_builders import ref
 
 from packages.rca.model import Edge
-from packages.rca.topology import FAN_OUT_THRESHOLD, RELATION_SEMANTICS, Topology
+from packages.rca.topology import RELATION_SEMANTICS, Topology
 
 
 def _topology(edges: list[Edge]) -> Topology:
@@ -31,7 +31,7 @@ def test_causal_distance_does_not_cross_a_shared_configmap_hub() -> None:
     config = ref("shop/ConfigMap/flags")
     edges = [
         Edge(source=ref(f"shop/Deployment/app{i}"), target=config, relation="uses_config")
-        for i in range(FAN_OUT_THRESHOLD + 2)
+        for i in range(5)
     ]
     topology = _topology(edges)
     targets = {ref("shop/Deployment/app1")}
@@ -47,8 +47,7 @@ def test_causal_distance_does_not_cross_a_shared_network_policy_hub() -> None:
     """Many pods restricted by the same NetworkPolicy are not linked to each other."""
     policy = ref("shop/NetworkPolicy/deny-all")
     edges = [
-        Edge(source=policy, target=ref(f"shop/Pod/pod-{i}"), relation="restricts")
-        for i in range(FAN_OUT_THRESHOLD + 2)
+        Edge(source=policy, target=ref(f"shop/Pod/pod-{i}"), relation="restricts") for i in range(5)
     ]
     topology = _topology(edges)
     targets = {ref("shop/Pod/pod-1")}
@@ -57,7 +56,7 @@ def test_causal_distance_does_not_cross_a_shared_network_policy_hub() -> None:
     assert topology.causal_distance(policy, {ref("shop/Pod/pod-0")}) == 1
 
 
-def test_causal_distance_is_unaffected_by_non_fan_out_relations() -> None:
+def test_causal_distance_is_unaffected_by_unrelated_relations() -> None:
     """Ownership chains (not restricted/config relations) are never cut."""
     edges = [
         Edge(

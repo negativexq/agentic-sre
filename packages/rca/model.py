@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 CLUSTER_SCOPE = "_cluster"
 
@@ -413,6 +413,19 @@ class Diagnosis(BaseModel):
     verification: VerificationTrace | None = None
     resolution_trace: ResolutionTrace | None = None
     ambiguous_hypotheses: tuple[Hypothesis, ...] = ()
+
+    @model_validator(mode="before")
+    @classmethod
+    def _backfill_resolution_for_legacy_documents(cls, value: Any) -> Any:
+        """Keep pre-resolution stored diagnoses meaningful when reloaded."""
+        if isinstance(value, dict) and "resolution" not in value:
+            value = dict(value)
+            value["resolution"] = (
+                Resolution.RESOLVED.value
+                if value.get("root_cause") is not None
+                else Resolution.INSUFFICIENT_EVIDENCE.value
+            )
+        return value
 
 
 __all__ = [

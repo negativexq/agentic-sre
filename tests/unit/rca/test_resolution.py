@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+from packages.rca.demo import demo_source
+from packages.rca.engine import diagnose
 from packages.rca.model import (
     CausalHop,
     EntityRef,
@@ -248,3 +250,16 @@ def test_duplicate_evidence_does_not_change_resolution() -> None:
 
     assert resolve_hypotheses((original, _hpa("two"))).state is Resolution.AMBIGUOUS
     assert resolve_hypotheses((duplicate, _hpa("two"))).state is Resolution.AMBIGUOUS
+
+
+def test_legacy_diagnosis_documents_backfill_resolution_without_losing_root_cause() -> None:
+    diagnosis = diagnose(demo_source())
+    document = diagnosis.model_dump(mode="json")
+    document.pop("resolution")
+    document.pop("resolution_trace")
+    document.pop("ambiguous_hypotheses")
+
+    restored = type(diagnosis).model_validate(document)
+
+    assert restored.root_cause == diagnosis.root_cause
+    assert restored.resolution is Resolution.RESOLVED

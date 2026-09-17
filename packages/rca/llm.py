@@ -108,6 +108,18 @@ class OpenAIClient:
         self.calls = 0
         self._client = client
 
+    def readiness_problem(self) -> str | None:
+        """Why live calls would fail before the first request, or None when ready."""
+        if not self.enabled:
+            return f"live model calls are disabled; set {LIVE_ENABLED_ENV}=true"
+        if self.max_calls <= 0:
+            return (
+                f"no model call budget; set {MAX_CALLS_ENV} to the total calls allowed for this run"
+            )
+        if self._client is None and not os.environ.get("OPENAI_API_KEY"):
+            return "OPENAI_API_KEY is not set"
+        return None
+
     def _sdk(self) -> Any:
         if self._client is None:
             from openai import OpenAI

@@ -16,6 +16,8 @@ from packages.evals.itbench.contracts import (
     ITBenchScenario,
 )
 from packages.evals.itbench.dataset import ITBenchLiteDataset
+from packages.rca.agent import LLMInvestigator
+from packages.rca.llm import ScriptedLLM
 
 
 class FakeDataset:
@@ -113,3 +115,20 @@ def test_cli_refuses_the_test_split_without_confirmation(tmp_path: Path) -> None
     code = main(["eval", "--split", "test", "--out", str(out), "--dataset", str(tmp_path)])
     assert code == 2
     assert not out.exists()
+
+
+def test_investigator_failures_are_counted_and_flagged(tmp_path: Path) -> None:
+    dataset = _dataset(tmp_path)
+    out = tmp_path / "run"
+    investigator = LLMInvestigator(ScriptedLLM(replies=[]))
+    manifest = predict(
+        cast(ITBenchLiteDataset, dataset),
+        ["Scenario-1"],
+        out,
+        split="dev",
+        investigator=investigator,
+    )
+    assert manifest["investigator_errors"] == 1
+    assert manifest["records"][0]["investigator_error"] == "scripted replies exhausted"
+    grade(cast(ITBenchLiteDataset, dataset), out)
+    assert "not a valid investigator run" in (out / "report.md").read_text(encoding="utf-8")

@@ -55,7 +55,11 @@ def _investigator(args: argparse.Namespace) -> Investigator | None:
     from packages.rca.agent import LLMInvestigator
     from packages.rca.llm import OpenAIClient
 
-    return LLMInvestigator(OpenAIClient(model=args.model))
+    client = OpenAIClient(model=args.model)
+    problem = client.readiness_problem()
+    if problem:
+        raise SystemExit(f"--llm: {problem}")
+    return LLMInvestigator(client)
 
 
 def cmd_diagnose(args: argparse.Namespace) -> int:
@@ -121,6 +125,12 @@ def cmd_eval(args: argparse.Namespace) -> int:
     )
     if manifest["git_dirty"] and args.split == "test":
         print("warning: predictions were made from a dirty tree", file=sys.stderr)
+    if manifest["investigator_errors"]:
+        print(
+            f"warning: the investigator failed in {manifest['investigator_errors']} scenario(s); "
+            "those answers are the engine's",
+            file=sys.stderr,
+        )
     report = grade(dataset, args.out)
     print((args.out / "report.md").read_text(encoding="utf-8"))
     return 0 if report["scenarios"] else 1

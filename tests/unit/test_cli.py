@@ -28,11 +28,20 @@ def test_demo_text_output_names_the_cause(capsys: pytest.CaptureFixture[str]) ->
     assert "Proposed remediation (not executed)" in out
 
 
-def test_demo_with_llm_flag_stays_offline(
-    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("env", "message"),
+    [
+        ({}, "live model calls are disabled"),
+        ({"SRE_LLM_ENABLED": "true"}, "no model call budget"),
+        ({"SRE_LLM_ENABLED": "true", "SRE_LLM_MAX_CALLS": "5"}, "OPENAI_API_KEY is not set"),
+    ],
+)
+def test_llm_flag_refuses_to_start_without_a_ready_client(
+    monkeypatch: pytest.MonkeyPatch, env: dict[str, str], message: str
 ) -> None:
-    monkeypatch.delenv("SRE_LLM_ENABLED", raising=False)
-    assert main(["demo", "--llm"]) == 0
-    out = capsys.readouterr().out
-    assert "live model calls are disabled" in out
-    assert "Root cause   shop/Deployment/payment" in out
+    for name in ("SRE_LLM_ENABLED", "SRE_LLM_MAX_CALLS", "OPENAI_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    with pytest.raises(SystemExit, match=message):
+        main(["demo", "--llm"])

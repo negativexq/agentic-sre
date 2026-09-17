@@ -129,6 +129,14 @@ def predict(
                 "scenario_id": scenario_id,
                 "seconds": round(time.monotonic() - tick, 3),
                 "model_calls": diagnosis.model_calls,
+                "investigator_error": next(
+                    (
+                        s.detail
+                        for s in diagnosis.steps
+                        if s.actor != "engine" and s.action == "error"
+                    ),
+                    None,
+                ),
             }
         )
         if progress:
@@ -146,6 +154,7 @@ def predict(
         "ground_truth_read_during_prediction": False,
         "seconds_total": round(time.monotonic() - started, 3),
         "model_calls_total": sum(r["model_calls"] for r in records),
+        "investigator_errors": sum(1 for r in records if r["investigator_error"]),
         "records": records,
     }
     atomic_json_write(out_dir / "manifest.json", manifest)
@@ -262,6 +271,7 @@ def grade(dataset: ITBenchLiteDataset, out_dir: Path) -> dict[str, Any]:
         "by_confidence": by_confidence,
         "baselines_macro_f1": BASELINES,
         "model_calls_total": manifest["model_calls_total"],
+        "investigator_errors": manifest.get("investigator_errors", 0),
         "seconds_total": manifest["seconds_total"],
         "rows": rows,
     }
@@ -282,6 +292,16 @@ def render_markdown(report: dict[str, Any]) -> str:
         + f", {report['scenarios']} scenarios, {report['model_calls_total']} model calls, "
         f"{report['seconds_total']:.1f} s.",
         "",
+        *(
+            [
+                f"**Warning:** the investigator failed in {report['investigator_errors']} "
+                "scenario(s); those answers are the engine's. This is not a valid "
+                "investigator run.",
+                "",
+            ]
+            if report.get("investigator_errors")
+            else []
+        ),
         "| Metric | Value |",
         "| --- | ---: |",
         f"| Macro F1 (all answers) | {report['macro_f1']:.3f} |",

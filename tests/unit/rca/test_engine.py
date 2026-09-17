@@ -6,6 +6,7 @@ from rca_builders import (
     alert,
     at,
     config_change_source,
+    deployment,
     event,
     microservice,
     ref,
@@ -15,6 +16,7 @@ from rca_builders import (
 
 from packages.rca.engine import Case, Choice, build_case, diagnose
 from packages.rca.model import Confidence, FindingKind, LogRecord, ResourcePressure
+from packages.rca.ranking import verification_trace
 from packages.rca.source import InMemorySource
 
 
@@ -215,6 +217,57 @@ def test_builtin_demo_finds_the_bad_rollout() -> None:
     assert diagnosis.confidence is Confidence.VERIFIED
     assert "FAULT_DELAY_MS" in diagnosis.summary
     assert "rollout undo" in diagnosis.remediation[0].command
+
+
+def test_late_linked_change_cannot_verify_original_incident_onset() -> None:
+    late = version(
+        "shop/Deployment/checkout",
+        120,
+        deployment("checkout", image="app:2"),
+        1,
+    )
+    source = InMemorySource(
+        name="late-change",
+        alert_items=[alert("RequestErrorRate", "checkout", 5)],
+        versions=[*shop_objects(0), late],
+        cutoff=at(180),
+    )
+
+    diagnosis = diagnose(source)
+
+    assert diagnosis.root_cause == ref("shop/Deployment/checkout")
+    assert diagnosis.confidence is not Confidence.VERIFIED
+    assert diagnosis.verification is not None
+    assert any(
+        predicate.name == "late_change_contradiction" and predicate.status.value == "FAIL"
+        for predicate in diagnosis.verification.predicates
+    )
+    assert diagnosis.verification.onset_delta_seconds == 6900.0
+
+
+def test_verification_trace_exposes_temporal_role_and_passed_predicates() -> None:
+    diagnosis = diagnose(config_change_source())
+
+    assert diagnosis.verification is not None
+    finding = diagnosis.evidence[0]
+    assert finding.temporal_role.value == "INITIATING"
+    assert finding.onset_delta_seconds == -120.0
+    assert {item.status.value for item in diagnosis.verification.predicates} >= {"PASS"}
+
+
+def test_near_tied_candidates_do_not_receive_unjustified_verified_confidence() -> None:
+    case = build_case(config_change_source())
+    top = case.candidates[0].model_copy(update={"score": 10.0})
+    runner_up = case.candidates[1].model_copy(update={"score": 9.5})
+
+    trace = verification_trace(top, case.context, runner_up=runner_up)
+
+    assert trace.score_margin == 0.5
+    assert trace.decision is not Confidence.VERIFIED
+    assert any(
+        predicate.name == "candidate_dominance" and predicate.status.value == "WEAK"
+        for predicate in trace.predicates
+    )
 
 
 def _quota(used: str) -> dict[str, object]:

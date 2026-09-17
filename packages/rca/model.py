@@ -152,6 +152,50 @@ class CausalHop(BaseModel):
     direction: str = "forward"
 
 
+class EvidenceTemporalRole(StrEnum):
+    """The deterministic role an observation can play around symptom onset."""
+
+    INITIATING = "INITIATING"
+    SUPPORTING = "SUPPORTING"
+    CONSEQUENCE = "CONSEQUENCE"
+    AMBIGUOUS = "AMBIGUOUS"
+
+
+class PredicateStatus(StrEnum):
+    """Outcome of one deterministic verification predicate."""
+
+    PASS = "PASS"
+    FAIL = "FAIL"
+    UNKNOWN = "UNKNOWN"
+    WEAK = "WEAK"
+
+
+class VerificationPredicate(BaseModel):
+    """An inspectable, non-LLM verification decision."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    status: PredicateStatus
+    evidence_ids: tuple[str, ...] = ()
+    detail: str = ""
+
+
+class VerificationTrace(BaseModel):
+    """The evidence and predicates behind the final confidence label."""
+
+    model_config = ConfigDict(frozen=True)
+
+    candidate: EntityRef
+    decision: Confidence | None = None
+    predicates: tuple[VerificationPredicate, ...] = ()
+    onset_delta_seconds: float | None = None
+    supporting_evidence: tuple[str, ...] = ()
+    contradictory_evidence: tuple[str, ...] = ()
+    score_margin: float | None = None
+    rationale: str = ""
+
+
 class FindingKind(StrEnum):
     """Deterministic signal categories, ordered roughly by causal strength."""
 
@@ -186,6 +230,9 @@ class Finding(BaseModel):
     evidence_ids: tuple[str, ...] = ()
     related: tuple[EntityRef, ...] = ()
     details: dict[str, Any] = Field(default_factory=dict)
+    temporal_role: EvidenceTemporalRole = EvidenceTemporalRole.AMBIGUOUS
+    incident_onset: datetime | None = None
+    onset_delta_seconds: float | None = None
 
 
 class Symptoms(BaseModel):
@@ -212,6 +259,7 @@ class Candidate(BaseModel):
     linked_symptoms: tuple[str, ...] = ()
     reasons: tuple[str, ...] = ()
     causal_path: tuple[CausalHop, ...] = ()
+    causal_explanation: str = "UNLINKED"
 
 
 class Confidence(StrEnum):
@@ -265,6 +313,7 @@ class Diagnosis(BaseModel):
     steps: tuple[InvestigationStep, ...] = ()
     mode: str = "deterministic"
     model_calls: int = 0
+    verification: VerificationTrace | None = None
 
 
 __all__ = [
@@ -272,6 +321,7 @@ __all__ = [
     "Alert",
     "Candidate",
     "CausalHop",
+    "EvidenceTemporalRole",
     "ClusterEvent",
     "Confidence",
     "Diagnosis",
@@ -287,4 +337,7 @@ __all__ = [
     "Remediation",
     "ResourcePressure",
     "Symptoms",
+    "PredicateStatus",
+    "VerificationPredicate",
+    "VerificationTrace",
 ]

@@ -20,9 +20,11 @@ from packages.rca.model import (
 from packages.rca.ranking import (
     Context,
     RankingConfig,
+    annotate_temporal_roles,
     collapse_fault_instances,
     score_findings,
     symptom_tokens,
+    verification_trace,
     verify,
 )
 from packages.rca.remediation import propose
@@ -130,6 +132,9 @@ def build_case(source: ObservationSource, config: EngineConfig | None = None) ->
         *failure_findings(events),
         *dependency_findings(list(source.error_logs()), topology, entities),
     ]
+    findings = annotate_temporal_roles(
+        findings, symptoms.onset, config.ranking.verification_onset_grace
+    )
     candidates = collapse_fault_instances(
         score_findings(findings, context, config.ranking), topology, symptoms.onset
     )
@@ -249,7 +254,14 @@ def diagnose(
             match = next((c for c in case.candidates if c.entity == choice.entity), None)
             if match is not None and match.entity != chosen.entity:
                 chosen = _accept_override(case, chosen, match, config)
-    confidence, reason = verify(chosen, case.context, config.ranking)
+    runner_up = (
+        case.candidates[1]
+        if chosen.entity == case.candidates[0].entity and len(case.candidates) > 1
+        else None
+    )
+    trace = verification_trace(chosen, case.context, config.ranking, runner_up=runner_up)
+    assert trace.decision is not None
+    confidence, reason = trace.decision, trace.rationale
     alternatives = tuple(c for c in case.candidates if c.entity != chosen.entity)[
         : config.alternatives
     ]
@@ -269,6 +281,7 @@ def diagnose(
         steps=tuple(case.steps),
         mode=mode,
         model_calls=model_calls,
+        verification=trace,
     )
 
 

@@ -12,9 +12,13 @@ from packages.rca.model import (
     CausalHop,
     Confidence,
     EntityRef,
+    EvidenceTemporalRole,
     Finding,
     FindingKind,
+    PredicateStatus,
     Symptoms,
+    VerificationPredicate,
+    VerificationTrace,
 )
 from packages.rca.topology import Topology
 
@@ -64,6 +68,9 @@ class RankingConfig:
     extra_finding_weight: float = 0.3
     verify_score: float = 7.0
     symptom_event_factor: float = 0.5
+    # A change shortly after alert onset can be part of the onset transition,
+    # but a late incident evolution must not be presented as its original cause.
+    verification_onset_grace: timedelta = timedelta(minutes=15)
 
 
 @dataclass
@@ -189,6 +196,9 @@ def score_findings(
                 linked_symptoms=tuple(linked),
                 reasons=tuple(dict.fromkeys(top_reasons)),
                 causal_path=causal_path,
+                causal_explanation=(
+                    "PATH" if causal_path else ("DIRECT" if linked else "UNLINKED")
+                ),
             )
         )
     candidates.sort(key=lambda c: (-c.score, c.entity.canonical))
@@ -238,52 +248,264 @@ def collapse_fault_instances(
     return result
 
 
+_INITIATING_KINDS = frozenset(
+    {
+        FindingKind.CONFIG_CHANGE,
+        FindingKind.OBJECT_CREATED,
+        FindingKind.OBJECT_DELETED,
+        FindingKind.SPEC_CHANGE,
+        FindingKind.IMAGE_CHANGE,
+        FindingKind.SCALE_CHANGE,
+        FindingKind.FAULT_INJECTION,
+        FindingKind.FAULT_SCHEDULE,
+        FindingKind.POLICY_CREATED,
+        FindingKind.QUOTA_EXCEEDED,
+        FindingKind.NETWORK_RESTRICTION,
+    }
+)
+_SUPPORTING_KINDS = frozenset(
+    {
+        FindingKind.CONTAINER_FAILURE,
+        FindingKind.RESOURCE_PRESSURE,
+        FindingKind.DEPENDENCY_ERRORS,
+        FindingKind.FAILURE_EVENT,
+    }
+)
+_VERIFIABLE_KINDS = frozenset(
+    {
+        FindingKind.CONFIG_CHANGE,
+        FindingKind.FAULT_INJECTION,
+        FindingKind.FAULT_SCHEDULE,
+        FindingKind.SPEC_CHANGE,
+        FindingKind.IMAGE_CHANGE,
+        FindingKind.SCALE_CHANGE,
+        FindingKind.OBJECT_DELETED,
+        FindingKind.POLICY_CREATED,
+        FindingKind.QUOTA_EXCEEDED,
+    }
+)
+
+
+def annotate_temporal_roles(
+    findings: Iterable[Finding], onset: datetime | None, grace: timedelta
+) -> list[Finding]:
+    """Attach onset deltas and conservative temporal roles to observations.
+
+    This is deliberately separate from scoring.  A role describes how an
+    observation may be used in verification; it does not create or remove a
+    candidate.
+    """
+    annotated: list[Finding] = []
+    for finding in findings:
+        delta = (
+            (finding.at - onset).total_seconds()
+            if finding.at is not None and onset is not None
+            else None
+        )
+        role = EvidenceTemporalRole.AMBIGUOUS
+        if delta is not None:
+            if finding.kind in _INITIATING_KINDS:
+                role = (
+                    EvidenceTemporalRole.INITIATING
+                    if delta <= grace.total_seconds()
+                    else EvidenceTemporalRole.CONSEQUENCE
+                )
+            elif finding.kind in _SUPPORTING_KINDS and delta >= 0:
+                role = EvidenceTemporalRole.SUPPORTING
+        annotated.append(
+            finding.model_copy(
+                update={
+                    "incident_onset": onset,
+                    "onset_delta_seconds": delta,
+                    "temporal_role": role,
+                }
+            )
+        )
+    return annotated
+
+
+def _causal_time(finding: Finding) -> datetime | None:
+    """Return an explicit initiating time when a finding carries one."""
+    raw = finding.details.get("initiating_at") or finding.details.get("schedule_active_from")
+    if isinstance(raw, datetime):
+        return raw
+    if isinstance(raw, str):
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+    return finding.at
+
+
+def _linked(finding: Finding, context: Context) -> bool:
+    depth = 3 if finding.kind in {FindingKind.CONFIG_CHANGE, FindingKind.OBJECT_DELETED} else 2
+    return any(
+        context.topology.causal_distance(ref, context.symptom_entities, max_depth=depth) is not None
+        for ref in _affected_entities(finding, context.topology)
+    )
+
+
+def verification_trace(
+    candidate: Candidate,
+    context: Context,
+    config: RankingConfig | None = None,
+    runner_up: Candidate | None = None,
+) -> VerificationTrace:
+    """Apply explicit deterministic predicates without consulting ground truth."""
+    config = config or RankingConfig()
+    relevant = [finding for finding in candidate.findings if _linked(finding, context)]
+    linked_ids = tuple(evidence for finding in relevant for evidence in finding.evidence_ids)
+    initiating: list[Finding] = []
+    contradictions: list[Finding] = []
+    for finding in relevant:
+        when = _causal_time(finding)
+        if finding.kind in _INITIATING_KINDS:
+            delta = (
+                (when - context.symptoms.onset).total_seconds()
+                if when is not None and context.symptoms.onset is not None
+                else None
+            )
+            if delta is not None and delta <= config.verification_onset_grace.total_seconds():
+                initiating.append(finding)
+            elif delta is not None and delta > config.verification_onset_grace.total_seconds():
+                contradictions.append(finding)
+
+    predicates: list[VerificationPredicate] = [
+        VerificationPredicate(
+            name="candidate_linked_to_symptom",
+            status=PredicateStatus.PASS if relevant else PredicateStatus.FAIL,
+            evidence_ids=linked_ids[:8],
+            detail=(
+                "candidate reaches an alerting entity through the causal graph"
+                if relevant
+                else "no bounded causal path reaches an alerting entity"
+            ),
+        ),
+        VerificationPredicate(
+            name="initiating_evidence_near_onset",
+            status=(
+                PredicateStatus.PASS
+                if initiating
+                else PredicateStatus.FAIL
+                if contradictions or context.symptoms.onset is not None
+                else PredicateStatus.UNKNOWN
+            ),
+            evidence_ids=tuple(
+                evidence for finding in initiating for evidence in finding.evidence_ids
+            )[:8],
+            detail=(
+                "an initiating observation is at or shortly after symptom onset"
+                if initiating
+                else "no linked initiating observation is temporally consistent with onset"
+            ),
+        ),
+    ]
+    if contradictions:
+        predicates.append(
+            VerificationPredicate(
+                name="late_change_contradiction",
+                status=PredicateStatus.FAIL,
+                evidence_ids=tuple(
+                    evidence for finding in contradictions for evidence in finding.evidence_ids
+                )[:8],
+                detail=(
+                    "linked change was observed after the onset grace and cannot explain "
+                    "the original incident onset"
+                ),
+            )
+        )
+    margin = runner_up.score if runner_up is not None else None
+    score_margin = candidate.score - margin if margin is not None else None
+    if runner_up is not None and score_margin is not None and score_margin <= 1.0:
+        predicates.append(
+            VerificationPredicate(
+                name="candidate_dominance",
+                status=PredicateStatus.WEAK,
+                detail=f"score margin over runner-up is only {score_margin:.3f}",
+            )
+        )
+    elif runner_up is not None:
+        predicates.append(
+            VerificationPredicate(
+                name="candidate_dominance",
+                status=PredicateStatus.PASS,
+                detail=f"score margin over runner-up is {score_margin:.3f}",
+            )
+        )
+
+    def temporally_valid(finding: Finding) -> bool:
+        when = _causal_time(finding)
+        onset = context.symptoms.onset
+        return onset is None or (
+            when is not None and when <= onset + config.verification_onset_grace
+        )
+
+    config_mention_findings = [
+        finding
+        for finding in candidate.findings
+        if finding.kind is FindingKind.CONFIG_CHANGE
+        and _mentions(finding, context.tokens)
+        and temporally_valid(finding)
+    ]
+    if config_mention_findings:
+        initiating.extend(item for item in config_mention_findings if item not in initiating)
+    verified_kind = any(
+        finding.kind in _VERIFIABLE_KINDS and _linked(finding, context) for finding in initiating
+    )
+    config_mention = any(
+        finding.kind is FindingKind.CONFIG_CHANGE and _mentions(finding, context.tokens)
+        for finding in candidate.findings
+    )
+    # Configuration mentions can identify a candidate even when the topology
+    # is incomplete, but they still need a temporally valid change.
+    if not verified_kind and config_mention and config_mention_findings:
+        verified_kind = True
+    dominance_weak = any(
+        predicate.name == "candidate_dominance" and predicate.status is PredicateStatus.WEAK
+        for predicate in predicates
+    )
+    if verified_kind and (relevant or config_mention) and not contradictions and not dominance_weak:
+        decision = Confidence.VERIFIED
+        rationale = "linked initiating evidence is temporally consistent with symptom onset"
+    elif candidate.score >= config.verify_score and relevant:
+        decision = Confidence.LIKELY
+        rationale = (
+            "strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous"
+        )
+    else:
+        decision = Confidence.UNVERIFIED
+        rationale = (
+            "best available candidate without sufficient deterministic verification evidence"
+        )
+    onset_delta = None
+    if candidate.findings:
+        timed = [
+            finding.onset_delta_seconds
+            for finding in candidate.findings
+            if finding.onset_delta_seconds is not None
+        ]
+        onset_delta = min(timed, key=abs) if timed else None
+    return VerificationTrace(
+        candidate=candidate.entity,
+        decision=decision,
+        predicates=tuple(predicates),
+        onset_delta_seconds=onset_delta,
+        supporting_evidence=linked_ids[:12],
+        contradictory_evidence=tuple(
+            evidence for finding in contradictions for evidence in finding.evidence_ids
+        )[:12],
+        score_margin=score_margin,
+        rationale=rationale,
+    )
+
+
 def verify(
     candidate: Candidate, context: Context, config: RankingConfig | None = None
 ) -> tuple[Confidence, str]:
-    """Apply rules that tie a candidate's finding to the symptoms."""
-    config = config or RankingConfig()
-    for finding in candidate.findings:
-        window = _in_window(finding.at, context, config)
-        # Configuration may reach an alerting component through the workload that
-        # uses it and one service call: config - workload - service - caller.
-        depth = 3 if finding.kind in {FindingKind.CONFIG_CHANGE, FindingKind.OBJECT_DELETED} else 2
-        linked = any(
-            context.topology.causal_distance(ref, context.symptom_entities, max_depth=depth)
-            is not None
-            for ref in _affected_entities(finding, context.topology)
-        )
-        mentions = _mentions(finding, context.tokens)
-        if (
-            finding.kind is FindingKind.CONFIG_CHANGE
-            and window is not False
-            and (linked or mentions)
-        ):
-            return (
-                Confidence.VERIFIED,
-                "configuration changed near onset and is used by or names an alerting component",
-            )
-        if finding.kind is FindingKind.FAULT_INJECTION and linked:
-            return Confidence.VERIFIED, "fault injection targets an alerting component"
-        if (
-            finding.kind
-            in {FindingKind.SPEC_CHANGE, FindingKind.IMAGE_CHANGE, FindingKind.SCALE_CHANGE}
-            and window is True
-            and linked
-        ):
-            return Confidence.VERIFIED, "workload changed in the incident window next to the alerts"
-        if finding.kind is FindingKind.OBJECT_DELETED and window is True and linked:
-            return (
-                Confidence.VERIFIED,
-                "an object used by an alerting component was deleted near onset",
-            )
-        if finding.kind is FindingKind.POLICY_CREATED and linked:
-            return Confidence.VERIFIED, "restrictive policy applies to alerting pods"
-        if finding.kind is FindingKind.QUOTA_EXCEEDED and linked:
-            return Confidence.VERIFIED, "quota rejected pods of an alerting workload"
-    if candidate.score >= config.verify_score and candidate.linked_symptoms:
-        return Confidence.LIKELY, "strong signal with a structural link, no verifying rule"
-    return Confidence.UNVERIFIED, "best available candidate without verifying evidence"
+    """Backward-compatible tuple API for callers that only need the decision."""
+    trace = verification_trace(candidate, context, config)
+    assert trace.decision is not None
+    return trace.decision, trace.rationale
 
 
 __all__ = [
@@ -291,8 +513,10 @@ __all__ = [
     "Context",
     "RankingConfig",
     "collapse_fault_instances",
+    "annotate_temporal_roles",
     "normalize",
     "score_findings",
     "symptom_tokens",
     "verify",
+    "verification_trace",
 ]

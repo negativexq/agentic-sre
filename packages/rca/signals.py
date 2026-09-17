@@ -420,7 +420,7 @@ def _network_policy_finding(
         return Finding(
             kind=FindingKind.POLICY_CREATED,
             entity=entity,
-            at=_creation_time(version.body),
+            at=_creation_time(version.body) or version.observed_at,
             summary=f"NetworkPolicy denies all {'/'.join(denied).lower()} for {len(affected)} pod(s)",
             evidence_ids=(version.evidence_id,),
             related=affected,
@@ -431,7 +431,7 @@ def _network_policy_finding(
     return Finding(
         kind=FindingKind.NETWORK_RESTRICTION,
         entity=entity,
-        at=_creation_time(version.body),
+        at=_creation_time(version.body) or version.observed_at,
         summary=(
             f"NetworkPolicy filters {len(affected)} pod(s): "
             + "; ".join(text for text, _ports in rules.values())

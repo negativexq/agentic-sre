@@ -47,12 +47,16 @@ class DiagnosisService:
     log_reader: LogReader | None = None
     investigator_factory: Callable[[], Investigator | None] = lambda: None
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
+    # Serializes ChangeWatcher.snapshot() runs: the periodic watch() loop and a
+    # run()-triggered snapshot can otherwise race on the same read-then-write
+    # (latest version, then insert) in ObjectVersionRepository.
+    _snapshot_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def snapshot(self) -> int:
         """Record changed and deleted objects in the journal; returns how many were stored."""
         if self.reader is None:
             return 0
-        with self.session_factory() as session:
+        with self._snapshot_lock, self.session_factory() as session:
             repository = ObjectVersionRepository(session)
             watcher = ChangeWatcher(
                 self.reader,

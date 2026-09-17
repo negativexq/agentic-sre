@@ -393,3 +393,56 @@ def test_resolved_incident_window_is_frozen_at_its_resolution(setup: Any) -> Non
             namespaces={"sre-demo"}, starts_at=T0, ends_at=T0 + timedelta(hours=4)
         )
     assert any(entry.observed_at == T0 + timedelta(hours=3) for entry in history)
+
+
+def test_concurrent_snapshots_are_serialized(setup: Any) -> None:
+    """The service's lock must keep two snapshot() calls from overlapping.
+
+    Without it, two threads could both read the same object's stale "latest"
+    version before either writes, and both decide it changed.
+    """
+    import threading
+    import time
+
+    factory, cluster, clock, _incident = setup
+    service = DiagnosisService(
+        session_factory=factory, namespaces=("sre-demo",), reader=cluster, clock=clock
+    )
+    assert service.snapshot() == 5
+
+    active = 0
+    max_active = 0
+    counter_lock = threading.Lock()
+    original_list_objects = cluster.list_objects
+
+    def slow_list_objects(namespaces: Any) -> Any:
+        nonlocal active, max_active
+        with counter_lock:
+            active += 1
+            max_active = max(max_active, active)
+        time.sleep(0.05)
+        try:
+            return original_list_objects(namespaces)
+        finally:
+            with counter_lock:
+                active -= 1
+
+    cluster.list_objects = slow_list_objects
+    clock.now = T0 + timedelta(minutes=10)
+    cluster.objects[0] = _deployment("5000")
+
+    threads = [threading.Thread(target=service.snapshot) for _ in range(5)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=3)
+
+    assert max_active == 1  # the reader was never entered by two threads at once
+    with factory() as session:
+        history = ObjectVersionRepository(session).history(
+            namespaces={"sre-demo"}, starts_at=T0, ends_at=T0 + timedelta(hours=1)
+        )
+    deployment_versions = [
+        entry for entry in history if entry.object_key == "sre-demo/Deployment/payment-service"
+    ]
+    assert len(deployment_versions) == 2  # the initial version, then exactly one update

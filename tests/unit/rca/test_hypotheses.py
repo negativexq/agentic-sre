@@ -12,7 +12,7 @@ from packages.rca.model import (
     Finding,
     FindingKind,
 )
-from packages.rca.ranking import RankingConfig
+from packages.rca.ranking import RankingConfig, score_findings
 from packages.rca.source import InMemorySource
 
 
@@ -202,6 +202,37 @@ def test_duplicate_evidence_is_scored_once_but_kept_for_provenance() -> None:
     assert result.diagnostics.duplicate_evidence_ids_removed == 1
     assert len(hypothesis.findings) == 2
     assert hypothesis.score == actor.score
+
+
+def test_singleton_hypothesis_preserves_existing_kind_aggregation() -> None:
+    source = _rollout_source()
+    case = build_case(source)
+    findings = (
+        Finding(
+            kind=FindingKind.FAILURE_EVENT,
+            entity=ref("shop/Pod/catalog-rs-abcde"),
+            at=at(6),
+            summary="first failure",
+            evidence_ids=("failure-1",),
+            temporal_role=EvidenceTemporalRole.SUPPORTING,
+            details={"count": 1},
+        ),
+        Finding(
+            kind=FindingKind.FAILURE_EVENT,
+            entity=ref("shop/Pod/catalog-rs-abcde"),
+            at=at(7),
+            summary="second failure",
+            evidence_ids=("failure-2",),
+            temporal_role=EvidenceTemporalRole.SUPPORTING,
+            details={"count": 4},
+        ),
+    )
+    candidate = Candidate(entity=ref("shop/Pod/catalog-rs-abcde"), score=0, findings=findings)
+    expected = score_findings(findings, case.context, RankingConfig())[0].score
+
+    result = group_candidates([candidate], case.topology, case.context, RankingConfig())
+
+    assert result.hypotheses[0].score == expected
 
 
 def test_grouping_is_deterministic_and_preserves_hypothesis_id() -> None:

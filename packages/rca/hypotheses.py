@@ -206,12 +206,11 @@ def _aggregate_score(
     scored = [(*score_finding(finding, context, config), finding) for finding in distinct]
     scored.sort(key=lambda item: (-item[0], item[2].kind.value, item[2].entity.canonical))
     top_value, _top_reasons, _top_finding = scored[0]
-    extras = [
-        value
-        for value, _reasons, finding in scored[1:]
-        if finding.kind is not _top_finding.kind and value > 0
-    ]
-    total = top_value + config.extra_finding_weight * sum(sorted(extras)[-2:])
+    extras_by_kind: dict[FindingKind, float] = {}
+    for value, _reasons, finding in scored[1:]:
+        if finding.kind is not _top_finding.kind and value > 0:
+            extras_by_kind[finding.kind] = max(extras_by_kind.get(finding.kind, 0.0), value)
+    total = top_value + config.extra_finding_weight * sum(sorted(extras_by_kind.values())[-2:])
     reasons = tuple(dict.fromkeys(scored[0][1]))
     return round(total, 3), reasons, duplicate_count
 

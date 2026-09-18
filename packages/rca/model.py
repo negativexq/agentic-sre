@@ -301,6 +301,14 @@ class Resolution(StrEnum):
     INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
 
 
+class HypothesisEpistemicState(StrEnum):
+    """The deterministic evidence state of one causal hypothesis."""
+
+    SUPPORTED = "SUPPORTED"
+    UNRESOLVED = "UNRESOLVED"
+    CONTRADICTED = "CONTRADICTED"
+
+
 class InvestigationStatus(StrEnum):
     """Whether bounded investigation has material work beyond RCA resolution."""
 
@@ -384,6 +392,7 @@ class HypothesisResolutionAudit(BaseModel):
 
     hypothesis_id: str
     signature: HypothesisSignature
+    epistemic_state: HypothesisEpistemicState = HypothesisEpistemicState.SUPPORTED
     plausible: bool
     plausibility_reasons: tuple[ResolutionReasonCode, ...] = ()
     verification: VerificationTrace | None = None
@@ -403,6 +412,7 @@ class ResolutionTrace(BaseModel):
     distinguishing_facts: tuple[str, ...] = ()
     unresolved_dimensions: tuple[str, ...] = ()
     eliminated_hypotheses: tuple[str, ...] = ()
+    unresolved_hypotheses: tuple[str, ...] = ()
     elimination_reasons: tuple[str, ...] = ()
     considered_hypotheses: tuple[str, ...] = ()
     plausible_hypotheses: tuple[str, ...] = ()
@@ -751,6 +761,7 @@ __all__ = [
     "ClusterEvent",
     "Confidence",
     "Resolution",
+    "HypothesisEpistemicState",
     "InvestigationStatus",
     "FrontierStatus",
     "Diagnosis",

@@ -414,6 +414,10 @@ def test_investigation_observation_can_reveal_a_temporal_contradiction() -> None
             "at": T0 + timedelta(hours=2),
             "onset_delta_seconds": 7180,
             "temporal_role": EvidenceTemporalRole.CONSEQUENCE,
+            "details": {
+                "source_class": "object_observation",
+                "previous_observed_at": (T0 + timedelta(hours=1)).isoformat(),
+            },
         }
     )
     result = investigate_diagnosis(

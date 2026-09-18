@@ -526,7 +526,8 @@ def derive_information_gaps(
         resolution.leading_hypothesis_ids
         if resolution.state is Resolution.AMBIGUOUS
         else (
-            resolution.plausible_hypotheses
+            resolution.unresolved_hypotheses
+            or resolution.plausible_hypotheses
             or tuple(
                 hypothesis.hypothesis_id
                 for hypothesis in hypotheses

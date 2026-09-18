@@ -25,7 +25,7 @@ from packages.rca.ranking import (
     RankingConfig,
     _causal_time,
 )
-from packages.rca.resolution import _CHANGE_KINDS
+from packages.rca.resolution import _CHANGE_KINDS, assess_hypothesis
 from packages.rca.source import ObservationSource
 
 MODEL_IDS = (
@@ -116,6 +116,7 @@ class HypothesisTemporalAudit:
     temporal_contradiction_certainties: tuple[str, ...]
     production_verification_decision: str | None
     finding_keys: tuple[str, ...]
+    production_epistemic_state: str = "SUPPORTED"
 
 
 @dataclass(frozen=True)
@@ -389,7 +390,7 @@ def _hypothesis_status(
         {"DEFINITE_TEMPORAL_CONTRADICTION", "POINT_TIME_TEMPORAL_CONTRADICTION"}
     )
     if model_id == "E0_CURRENT":
-        return "SUPPORTED" if hypothesis.production_plausible else "CONTRADICTED"
+        return hypothesis.production_epistemic_state
     if "NO_CAUSAL_SYMPTOM_LINK" in reasons or definite:
         return "CONTRADICTED"
     if (
@@ -457,10 +458,14 @@ def build_temporal_audit(
     hypotheses: list[HypothesisTemporalAudit] = []
     for hypothesis in sorted(case.hypotheses, key=lambda item: item.hypothesis_id):
         resolution_audit = audit_by_id.get(hypothesis.hypothesis_id)
+        assessment = assess_hypothesis(
+            hypothesis,
+            onset_grace=ranking.verification_onset_grace,
+        )
         reasons = (
             tuple(sorted(reason.value for reason in resolution_audit.plausibility_reasons))
             if resolution_audit is not None
-            else ()
+            else tuple(sorted(reason.value for reason in assessment.reason_codes))
         )
         hypotheses.append(
             HypothesisTemporalAudit(
@@ -483,6 +488,7 @@ def build_temporal_audit(
                 ),
                 production_verification_decision=_verification_decision(resolution_audit),
                 finding_keys=tuple(sorted(finding_key(item) for item in hypothesis.findings)),
+                production_epistemic_state=(assessment.state.value),
             )
         )
     hypothesis_audits = tuple(hypotheses)
@@ -537,6 +543,10 @@ def blind_audit_from_dict(value: Mapping[str, Any]) -> TemporalPlausibilityBlind
                         item["temporal_contradiction_certainties"]
                     ),
                     "finding_keys": tuple(item["finding_keys"]),
+                    "production_epistemic_state": item.get(
+                        "production_epistemic_state",
+                        "SUPPORTED" if item.get("production_plausible") else "CONTRADICTED",
+                    ),
                 }
             )
             for item in value["hypothesis_temporal_audits"]

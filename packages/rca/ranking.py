@@ -20,6 +20,7 @@ from packages.rca.model import (
     VerificationPredicate,
     VerificationTrace,
 )
+from packages.rca.temporal import causal_time
 from packages.rca.topology import Topology
 
 KIND_WEIGHT: dict[FindingKind, float] = {
@@ -345,16 +346,8 @@ def annotate_temporal_roles(
 
 
 def _causal_time(finding: Finding) -> datetime | None:
-    """Return an explicit initiating time when a finding carries one."""
-    raw = finding.details.get("initiating_at") or finding.details.get("schedule_active_from")
-    if isinstance(raw, datetime):
-        return raw
-    if isinstance(raw, str):
-        try:
-            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        except ValueError:
-            pass
-    return finding.at
+    """Compatibility wrapper for the shared causal-time helper."""
+    return causal_time(finding)
 
 
 def _linked(finding: Finding, context: Context) -> bool:

@@ -9,6 +9,8 @@ canonical ordering are deliberately absent from that decision.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import timedelta
 
 from packages.rca.model import (
     Diagnosis,
@@ -17,6 +19,7 @@ from packages.rca.model import (
     Finding,
     FindingKind,
     Hypothesis,
+    HypothesisEpistemicState,
     HypothesisResolutionAudit,
     HypothesisSignature,
     Resolution,
@@ -25,6 +28,11 @@ from packages.rca.model import (
     ResolutionReasonCode,
     ResolutionTrace,
     VerificationTrace,
+)
+from packages.rca.ranking import RankingConfig
+from packages.rca.temporal import (
+    TemporalContradictionCertainty,
+    temporal_contradiction_certainty,
 )
 
 _CHANGE_KINDS = frozenset(
@@ -136,6 +144,62 @@ def _has_aligned_initiating(hypothesis: Hypothesis) -> bool:
     )
 
 
+@dataclass(frozen=True)
+class HypothesisAssessment:
+    """One centralized epistemic assessment used by resolution and its audit."""
+
+    state: HypothesisEpistemicState
+    reason_codes: tuple[ResolutionReasonCode, ...]
+    hard_contradiction_findings: tuple[Finding, ...]
+
+
+def assess_hypothesis(
+    hypothesis: Hypothesis,
+    *,
+    onset_grace: timedelta | None = None,
+) -> HypothesisAssessment:
+    """Separate hard contradiction from missing positive causal proof."""
+    grace = onset_grace or RankingConfig().verification_onset_grace
+    reasons: list[ResolutionReasonCode] = []
+    if hypothesis.causal_explanation not in {"PATH", "DIRECT"}:
+        reasons.append(ResolutionReasonCode.NO_CAUSAL_SYMPTOM_LINK)
+    if not _has_aligned_initiating(hypothesis):
+        reasons.append(ResolutionReasonCode.NO_ONSET_CAPABLE_INITIATING_EVIDENCE)
+
+    hard_findings: list[Finding] = []
+    temporal_findings = tuple(
+        temporal_contradiction_certainty(finding, grace)
+        for finding in hypothesis.contradictory_findings
+    )
+    if hypothesis.contradictory_findings:
+        reasons.append(ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION)
+        hard_findings.extend(
+            finding
+            for finding, certainty in zip(
+                hypothesis.contradictory_findings,
+                temporal_findings,
+                strict=True,
+            )
+            if certainty is TemporalContradictionCertainty.DEFINITELY_LATE
+        )
+
+    if ResolutionReasonCode.NO_CAUSAL_SYMPTOM_LINK in reasons:
+        state = HypothesisEpistemicState.CONTRADICTED
+    elif hard_findings:
+        state = HypothesisEpistemicState.CONTRADICTED
+    elif hypothesis.contradictory_findings:
+        state = HypothesisEpistemicState.UNRESOLVED
+    elif _has_aligned_initiating(hypothesis):
+        state = HypothesisEpistemicState.SUPPORTED
+    else:
+        state = HypothesisEpistemicState.UNRESOLVED
+    return HypothesisAssessment(
+        state=state,
+        reason_codes=tuple(dict.fromkeys(reasons)),
+        hard_contradiction_findings=tuple(hard_findings),
+    )
+
+
 def _evidence_key(finding: Finding) -> tuple[str, str, str]:
     return finding.kind.value, finding.temporal_role.value, _provenance_class(finding)
 
@@ -148,25 +212,32 @@ def _evidence_ids(hypothesis: Hypothesis) -> tuple[str, ...]:
     )
 
 
-def _plausibility_reasons(hypothesis: Hypothesis) -> tuple[ResolutionReasonCode, ...]:
-    reasons: list[ResolutionReasonCode] = []
-    if hypothesis.causal_explanation not in {"PATH", "DIRECT"}:
-        reasons.append(ResolutionReasonCode.NO_CAUSAL_SYMPTOM_LINK)
-    if not _has_aligned_initiating(hypothesis):
-        reasons.append(ResolutionReasonCode.NO_ONSET_CAPABLE_INITIATING_EVIDENCE)
-    if hypothesis.contradictory_findings:
-        reasons.append(ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION)
-    return tuple(reasons)
+def _plausibility_reasons(
+    hypothesis: Hypothesis,
+    *,
+    onset_grace: timedelta | None = None,
+) -> tuple[ResolutionReasonCode, ...]:
+    return assess_hypothesis(hypothesis, onset_grace=onset_grace).reason_codes
 
 
-def dominates(stronger: Hypothesis, weaker: Hypothesis) -> bool:
+def dominates(
+    stronger: Hypothesis,
+    weaker: Hypothesis,
+    *,
+    onset_grace: timedelta | None = None,
+) -> bool:
     """Return true only for evidence inclusion with a causal discriminator.
 
     Scores, candidate rank, and canonical entity order are never used to
     eliminate a hypothesis.  A stronger hypothesis must contain the weaker
     evidence shape and add onset-capable causal support.
     """
-    if stronger.contradictory_findings or not _has_aligned_initiating(stronger):
+    if (
+        assess_hypothesis(stronger, onset_grace=onset_grace).state
+        is not HypothesisEpistemicState.SUPPORTED
+        or assess_hypothesis(weaker, onset_grace=onset_grace).state
+        is not HypothesisEpistemicState.SUPPORTED
+    ):
         return False
     stronger_keys = {_evidence_key(finding) for finding in stronger.findings}
     weaker_keys = {_evidence_key(finding) for finding in weaker.findings}
@@ -189,14 +260,17 @@ def dominates(stronger: Hypothesis, weaker: Hypothesis) -> bool:
     return stronger_initiating > weaker_initiating
 
 
-def _elimination_for(hypothesis: Hypothesis) -> ResolutionElimination:
-    reasons = _plausibility_reasons(hypothesis)
+def _elimination_for(
+    hypothesis: Hypothesis,
+    assessment: HypothesisAssessment,
+) -> ResolutionElimination:
+    reasons = assessment.reason_codes
     code = (
         ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION
-        if ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION in reasons
+        if assessment.hard_contradiction_findings
         else ResolutionReasonCode.NO_CAUSAL_SYMPTOM_LINK
         if ResolutionReasonCode.NO_CAUSAL_SYMPTOM_LINK in reasons
-        else ResolutionReasonCode.NO_ONSET_CAPABLE_INITIATING_EVIDENCE
+        else ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION
     )
     details = {
         ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION: "contains explicit temporal contradiction",
@@ -261,6 +335,7 @@ def _audit_items(
     hypotheses: Sequence[Hypothesis],
     verification_traces: Mapping[str, VerificationTrace] | None,
     focus_ids: Sequence[str] = (),
+    onset_grace: timedelta | None = None,
 ) -> tuple[HypothesisResolutionAudit, ...]:
     audits: list[HypothesisResolutionAudit] = []
     focused = tuple(
@@ -272,13 +347,15 @@ def _audit_items(
         if hypothesis.hypothesis_id not in {item.hypothesis_id for item in focused}
     )
     for hypothesis in (*focused, *remaining)[:_MAX_TRACE_ITEMS]:
-        reasons = _plausibility_reasons(hypothesis)
+        assessment = assess_hypothesis(hypothesis, onset_grace=onset_grace)
+        reasons = assessment.reason_codes
         signature = hypothesis_signature(hypothesis)
         audits.append(
             HypothesisResolutionAudit(
                 hypothesis_id=hypothesis.hypothesis_id,
                 signature=signature,
-                plausible=not reasons,
+                epistemic_state=assessment.state,
+                plausible=assessment.state is HypothesisEpistemicState.SUPPORTED,
                 plausibility_reasons=reasons,
                 verification=(verification_traces or {}).get(hypothesis.hypothesis_id),
                 contradictory_evidence_ids=tuple(
@@ -304,6 +381,7 @@ def _attach_audits(
     trace: ResolutionTrace,
     hypotheses: Sequence[Hypothesis],
     verification_traces: Mapping[str, VerificationTrace] | None,
+    onset_grace: timedelta | None = None,
 ) -> ResolutionTrace:
     focus_ids = tuple(
         dict.fromkeys(
@@ -315,7 +393,12 @@ def _attach_audits(
     )
     return trace.model_copy(
         update={
-            "hypothesis_audits": _audit_items(hypotheses, verification_traces, focus_ids),
+            "hypothesis_audits": _audit_items(
+                hypotheses,
+                verification_traces,
+                focus_ids,
+                onset_grace,
+            ),
         }
     )
 
@@ -324,15 +407,11 @@ def resolve_hypotheses(
     hypotheses: Sequence[Hypothesis],
     *,
     verification_traces: Mapping[str, VerificationTrace] | None = None,
+    onset_grace: timedelta | None = None,
 ) -> ResolutionTrace:
-    """Resolve distinguishability without a score or margin threshold.
-
-    Input order may be ranked order, but it is never used to establish a
-    causal winner.  A unique plausible hypothesis, a structural dominance
-    relation, or an explicit contradiction is required for RESOLVED.
-    """
+    """Resolve distinguishability without treating missing proof as contradiction."""
     considered = tuple(sorted(h.hypothesis_id for h in hypotheses))
-    audits = _audit_items(hypotheses, verification_traces)
+    audits = _audit_items(hypotheses, verification_traces, onset_grace=onset_grace)
     if not hypotheses:
         return ResolutionTrace(
             state=Resolution.INSUFFICIENT_EVIDENCE,
@@ -343,56 +422,100 @@ def resolve_hypotheses(
         )
 
     by_id = {hypothesis.hypothesis_id: hypothesis for hypothesis in hypotheses}
-    plausible = tuple(
+    assessments = {
+        hypothesis.hypothesis_id: assess_hypothesis(hypothesis, onset_grace=onset_grace)
+        for hypothesis in hypotheses
+    }
+    supported = tuple(
         sorted(
-            (hypothesis for hypothesis in hypotheses if not _plausibility_reasons(hypothesis)),
+            (
+                hypothesis
+                for hypothesis in hypotheses
+                if assessments[hypothesis.hypothesis_id].state is HypothesisEpistemicState.SUPPORTED
+            ),
             key=lambda item: item.hypothesis_id,
         )
     )
-    eliminated = tuple(
+    unresolved = tuple(
         sorted(
-            (hypothesis for hypothesis in hypotheses if hypothesis not in plausible),
+            (
+                hypothesis
+                for hypothesis in hypotheses
+                if assessments[hypothesis.hypothesis_id].state
+                is HypothesisEpistemicState.UNRESOLVED
+            ),
+            key=lambda item: item.hypothesis_id,
+        )
+    )
+    contradicted = tuple(
+        sorted(
+            (
+                hypothesis
+                for hypothesis in hypotheses
+                if assessments[hypothesis.hypothesis_id].state
+                is HypothesisEpistemicState.CONTRADICTED
+            ),
             key=lambda item: item.hypothesis_id,
         )
     )
     eliminations = tuple(
-        _elimination_for(hypothesis) for hypothesis in eliminated[:_MAX_TRACE_ITEMS]
+        _elimination_for(hypothesis, assessments[hypothesis.hypothesis_id])
+        for hypothesis in contradicted[:_MAX_TRACE_ITEMS]
     )
     legacy_reasons = tuple(_legacy_elimination_reason(item) for item in eliminations)
-    signatures = tuple(hypothesis_signature(hypothesis) for hypothesis in plausible)
+    signatures = tuple(hypothesis_signature(hypothesis) for hypothesis in supported)
     base = dict(
         considered_hypotheses=considered,
-        plausible_hypotheses=tuple(h.hypothesis_id for h in plausible),
-        eliminated_hypotheses=tuple(h.hypothesis_id for h in eliminated[:_MAX_TRACE_ITEMS]),
+        plausible_hypotheses=tuple(h.hypothesis_id for h in supported),
+        unresolved_hypotheses=tuple(h.hypothesis_id for h in unresolved),
+        eliminated_hypotheses=tuple(h.hypothesis_id for h in contradicted),
         elimination_reasons=legacy_reasons,
         eliminations=eliminations,
         signatures=signatures[:_MAX_TRACE_ITEMS],
         hypothesis_audits=audits,
     )
-    if not plausible:
+    if not supported and unresolved:
+        return _attach_audits(
+            _trace(
+                base,
+                state=Resolution.INSUFFICIENT_EVIDENCE,
+                decision_basis="NO_SUPPORTED_HYPOTHESIS_WITH_UNRESOLVED_ALTERNATIVES",
+                rationale=(
+                    "Causally possible hypotheses remain, but current evidence does not "
+                    "positively establish one."
+                ),
+            ),
+            hypotheses,
+            verification_traces,
+            onset_grace,
+        )
+    if not supported:
         return _attach_audits(
             _trace(
                 base,
                 state=Resolution.INSUFFICIENT_EVIDENCE,
                 decision_basis="NO_PLAUSIBLE_HYPOTHESIS",
-                rationale="No hypothesis contains sufficient initiating causal evidence.",
+                rationale="All generated hypotheses contain a hard causal contradiction.",
             ),
             hypotheses,
             verification_traces,
+            onset_grace,
         )
 
     dominance_relations = tuple(
         _dominance_relation(stronger, weaker)
-        for stronger in plausible
-        for weaker in plausible
-        if stronger.hypothesis_id != weaker.hypothesis_id and dominates(stronger, weaker)
+        for stronger in supported
+        for weaker in supported
+        if stronger.hypothesis_id != weaker.hypothesis_id
+        and dominates(stronger, weaker, onset_grace=onset_grace)
     )
     dominators = tuple(
         hypothesis
-        for hypothesis in plausible
+        for hypothesis in supported
         if all(
-            hypothesis.hypothesis_id == other.hypothesis_id or dominates(hypothesis, other)
-            for other in plausible
+            hypothesis.hypothesis_id == other.hypothesis_id
+            or dominates(hypothesis, other, onset_grace=onset_grace)
+            for other in supported
         )
     )
     contradictions = tuple(
@@ -401,8 +524,39 @@ def resolve_hypotheses(
         if item.code is ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION
     )
 
-    if len(plausible) == 1:
-        selected = plausible[0]
+    if unresolved:
+        leading_ids = tuple(
+            sorted(
+                (
+                    *[item.hypothesis_id for item in supported],
+                    *[item.hypothesis_id for item in unresolved],
+                )
+            )
+        )
+        return _attach_audits(
+            _trace(
+                base,
+                state=Resolution.AMBIGUOUS,
+                leading_hypothesis_ids=leading_ids,
+                unresolved_dimensions=(
+                    "causal_actor_identity",
+                    "initiating_evidence_source",
+                    "symptom_attribution",
+                ),
+                dominance_relations=dominance_relations[:_MAX_TRACE_ITEMS],
+                decision_basis="UNRESOLVED_CAUSAL_ALTERNATIVE",
+                rationale=(
+                    "At least one causally possible hypothesis remains unresolved; "
+                    "missing proof does not exclude it from deterministic resolution."
+                ),
+            ),
+            hypotheses,
+            verification_traces,
+            onset_grace,
+        )
+
+    if len(supported) == 1:
+        selected = supported[0]
         if contradictions:
             discriminator = _discriminator(
                 "VALID_CONTRADICTION",
@@ -430,6 +584,7 @@ def resolve_hypotheses(
             ),
             hypotheses,
             verification_traces,
+            onset_grace,
         )
 
     if len(dominators) == 1:
@@ -461,14 +616,15 @@ def resolve_hypotheses(
             ),
             hypotheses,
             verification_traces,
+            onset_grace,
         )
 
     leading = tuple(
         hypothesis
-        for hypothesis in plausible
+        for hypothesis in supported
         if not any(
-            dominates(other, hypothesis)
-            for other in plausible
+            dominates(other, hypothesis, onset_grace=onset_grace)
+            for other in supported
             if other.hypothesis_id != hypothesis.hypothesis_id
         )
     )
@@ -491,6 +647,7 @@ def resolve_hypotheses(
         ),
         hypotheses,
         verification_traces,
+        onset_grace,
     )
 
 
@@ -537,13 +694,22 @@ def resolution_audit_records(diagnosis: Diagnosis) -> list[dict[str, object]]:
             )
             if relation is not None:
                 classification = "VALID_DOMINANCE"
-            elif not left.plausible or not right.plausible:
-                classification = (
-                    "VALID_CONTRADICTION"
-                    if ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION
-                    in (*left.plausibility_reasons, *right.plausibility_reasons)
-                    else "ONLY_ONE_PLAUSIBLE"
-                )
+            elif (
+                left.epistemic_state is not HypothesisEpistemicState.SUPPORTED
+                or right.epistemic_state is not HypothesisEpistemicState.SUPPORTED
+            ):
+                if (
+                    left.epistemic_state is HypothesisEpistemicState.UNRESOLVED
+                    or right.epistemic_state is HypothesisEpistemicState.UNRESOLVED
+                ):
+                    classification = "UNRESOLVED_PEER"
+                else:
+                    classification = (
+                        "VALID_CONTRADICTION"
+                        if ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION
+                        in (*left.plausibility_reasons, *right.plausibility_reasons)
+                        else "ONLY_ONE_PLAUSIBLE"
+                    )
             elif diagnosis.resolution is Resolution.AMBIGUOUS:
                 classification = "AMBIGUOUS_PEER"
             else:
@@ -622,6 +788,8 @@ def summarize_resolutions(diagnoses: Iterable[Diagnosis]) -> dict[str, int | flo
 
 
 __all__ = [
+    "HypothesisAssessment",
+    "assess_hypothesis",
     "dominates",
     "hypothesis_signature",
     "resolve_hypotheses",

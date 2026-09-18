@@ -284,7 +284,9 @@ def diagnose_case(
     """Diagnose an already-built case without rereading its observation source."""
     config = config or EngineConfig()
     if not case.candidates:
-        resolution_trace = resolve_hypotheses(())
+        resolution_trace = resolve_hypotheses(
+            (), onset_grace=config.ranking.verification_onset_grace
+        )
         information_gaps = derive_information_gaps(
             (),
             resolution_trace,
@@ -321,7 +323,11 @@ def diagnose_case(
         )
         for hypothesis in case.hypotheses[: config.alternatives + 4]
     }
-    resolution_trace = resolve_hypotheses(case.hypotheses, verification_traces=verification_traces)
+    resolution_trace = resolve_hypotheses(
+        case.hypotheses,
+        verification_traces=verification_traces,
+        onset_grace=config.ranking.verification_onset_grace,
+    )
     information_gaps = derive_information_gaps(
         case.hypotheses,
         resolution_trace,

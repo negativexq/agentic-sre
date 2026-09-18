@@ -17,6 +17,7 @@ from packages.rca.model import (
     FrontierStatus,
     GapDimension,
     Hypothesis,
+    HypothesisEpistemicState,
     Resolution,
     ResolutionReasonCode,
     StructuralAlternative,
@@ -100,7 +101,7 @@ def test_equivalent_hpa_hypotheses_are_ambiguous() -> None:
     assert "causal_actor_identity" in trace.unresolved_dimensions
 
 
-def test_equal_score_different_evidence_structure_is_not_ambiguous() -> None:
+def test_supporting_only_peer_remains_unresolved() -> None:
     config_actor = _entity("ConfigMap", "settings")
     workload = _entity("Deployment", "checkout")
     config_finding = _finding(config_actor, FindingKind.CONFIG_CHANGE, "config-change")
@@ -146,8 +147,12 @@ def test_equal_score_different_evidence_structure_is_not_ambiguous() -> None:
 
     trace = resolve_hypotheses((upstream, downstream))
 
-    assert trace.state is Resolution.RESOLVED
-    assert trace.leading_hypothesis_ids == (upstream.hypothesis_id,)
+    assert trace.state is Resolution.AMBIGUOUS
+    assert set(trace.leading_hypothesis_ids) == {
+        upstream.hypothesis_id,
+        downstream.hypothesis_id,
+    }
+    assert trace.unresolved_hypotheses == (downstream.hypothesis_id,)
 
 
 def test_small_score_difference_does_not_resolve_equivalent_structure() -> None:
@@ -204,6 +209,13 @@ def test_contradiction_is_a_structured_resolution_reason() -> None:
         "late-change",
         role=EvidenceTemporalRole.CONSEQUENCE,
         seconds=7200,
+    ).model_copy(
+        update={
+            "details": {
+                "source_class": "object_observation",
+                "previous_observed_at": (_ONSET + timedelta(hours=1)).isoformat(),
+            }
+        }
     )
     late = Hypothesis(
         hypothesis_id="hypothesis:late-structured",
@@ -297,6 +309,13 @@ def test_contradicted_alternative_is_eliminated() -> None:
         "late-change",
         role=EvidenceTemporalRole.CONSEQUENCE,
         seconds=7200,
+    ).model_copy(
+        update={
+            "details": {
+                "source_class": "object_observation",
+                "previous_observed_at": (_ONSET + timedelta(hours=1)).isoformat(),
+            }
+        }
     )
     bad = Hypothesis(
         hypothesis_id="hypothesis:late",
@@ -314,6 +333,114 @@ def test_contradicted_alternative_is_eliminated() -> None:
     assert trace.state is Resolution.RESOLVED
     assert bad.hypothesis_id in trace.eliminated_hypotheses
     assert "contradictory evidence" in trace.elimination_reasons[0]
+
+
+def test_interval_uncertain_change_is_unresolved_not_eliminated() -> None:
+    finding = _finding(
+        _entity("Deployment", "interval"),
+        FindingKind.CONFIG_CHANGE,
+        "interval-change",
+        role=EvidenceTemporalRole.CONSEQUENCE,
+        seconds=30 * 60,
+    ).model_copy(
+        update={
+            "details": {
+                "source_class": "object_observation",
+                "previous_observed_at": (_ONSET + timedelta(minutes=10)).isoformat(),
+            }
+        }
+    )
+    hypothesis = Hypothesis(
+        hypothesis_id="hypothesis:interval",
+        causal_actor=finding.entity,
+        members=(finding.entity,),
+        findings=(finding,),
+        contradictory_findings=(finding,),
+        causal_explanation="PATH",
+    )
+
+    trace = resolve_hypotheses((hypothesis,))
+
+    assert trace.state is Resolution.INSUFFICIENT_EVIDENCE
+    assert trace.unresolved_hypotheses == (hypothesis.hypothesis_id,)
+    assert trace.eliminated_hypotheses == ()
+    audit = trace.hypothesis_audits[0]
+    assert audit.epistemic_state is HypothesisEpistemicState.UNRESOLVED
+    assert ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION in audit.plausibility_reasons
+
+
+def test_schedule_causal_time_prevents_late_observation_from_elimination() -> None:
+    finding = _finding(
+        _entity("NetworkChaos", "scheduled"),
+        FindingKind.FAULT_INJECTION,
+        "scheduled-fault",
+        role=EvidenceTemporalRole.CONSEQUENCE,
+        seconds=30 * 60,
+    ).model_copy(
+        update={
+            "details": {
+                "source_class": "object_observation",
+                "schedule_active_from": (_ONSET + timedelta(minutes=10)).isoformat(),
+            }
+        }
+    )
+    hypothesis = Hypothesis(
+        hypothesis_id="hypothesis:scheduled",
+        causal_actor=finding.entity,
+        members=(finding.entity,),
+        findings=(finding,),
+        contradictory_findings=(finding,),
+        causal_explanation="PATH",
+    )
+
+    trace = resolve_hypotheses((hypothesis,))
+
+    assert trace.hypothesis_audits[0].epistemic_state is HypothesisEpistemicState.UNRESOLVED
+    assert trace.eliminated_hypotheses == ()
+
+
+def test_resolution_trace_partitions_are_disjoint() -> None:
+    supported = _hpa("supported")
+    unresolved = _hpa("unresolved").model_copy(
+        update={
+            "findings": tuple(
+                finding
+                for finding in _hpa("unresolved").findings
+                if finding.temporal_role is EvidenceTemporalRole.SUPPORTING
+            ),
+            "initiating_findings": (),
+        }
+    )
+    contradicted_finding = _finding(
+        _entity("Deployment", "contradicted"),
+        FindingKind.IMAGE_CHANGE,
+        "contradicted-change",
+        role=EvidenceTemporalRole.CONSEQUENCE,
+        seconds=7200,
+    ).model_copy(
+        update={
+            "details": {
+                "source_class": "object_observation",
+                "previous_observed_at": (_ONSET + timedelta(hours=1)).isoformat(),
+            }
+        }
+    )
+    contradicted = Hypothesis(
+        hypothesis_id="hypothesis:contradicted",
+        causal_actor=contradicted_finding.entity,
+        members=(contradicted_finding.entity,),
+        findings=(contradicted_finding,),
+        contradictory_findings=(contradicted_finding,),
+        causal_explanation="PATH",
+    )
+    trace = resolve_hypotheses((supported, unresolved, contradicted))
+    supported_ids = set(trace.plausible_hypotheses)
+    unresolved_ids = set(trace.unresolved_hypotheses)
+    eliminated_ids = set(trace.eliminated_hypotheses)
+    assert not supported_ids & unresolved_ids
+    assert not supported_ids & eliminated_ids
+    assert not unresolved_ids & eliminated_ids
+    assert supported_ids | unresolved_ids | eliminated_ids == set(trace.considered_hypotheses)
 
 
 def test_no_signal_and_weak_candidate_are_insufficient() -> None:
@@ -391,6 +518,37 @@ def test_information_gap_describes_hpa_ambiguity_without_executing_tools() -> No
     assert not any(
         outcome.kind.value == "SUPPORTS" and not outcome.hypothesis_ids
         for outcome in target_gap.discriminating_outcomes
+    )
+
+
+def test_information_gaps_retain_all_unresolved_hypotheses() -> None:
+    left = _hpa("left").model_copy(
+        update={
+            "findings": tuple(
+                finding
+                for finding in _hpa("left").findings
+                if finding.temporal_role is EvidenceTemporalRole.SUPPORTING
+            ),
+            "initiating_findings": (),
+        }
+    )
+    right = _hpa("right").model_copy(
+        update={
+            "findings": tuple(
+                finding
+                for finding in _hpa("right").findings
+                if finding.temporal_role is EvidenceTemporalRole.SUPPORTING
+            ),
+            "initiating_findings": (),
+        }
+    )
+    trace = resolve_hypotheses((left, right))
+    gaps = derive_information_gaps((left, right), trace)
+    assert trace.state is Resolution.INSUFFICIENT_EVIDENCE
+    assert set(trace.unresolved_hypotheses) == {left.hypothesis_id, right.hypothesis_id}
+    assert gaps
+    assert all(
+        {left.hypothesis_id, right.hypothesis_id}.issubset(gap.hypothesis_ids) for gap in gaps
     )
 
 

@@ -1,22 +1,17 @@
-"""Deterministic bounded search over legal investigation queries.
-
-This module measures the information ceiling of the active investigation
-environment.  It uses the same backend, novelty helper, normalizers, case
-builder, and resolver as the production graph; it never calls a policy or
-reads benchmark labels.
-"""
+"""Deterministic bounded search over legal investigation queries."""
 
 from __future__ import annotations
 
 import json
 from collections import deque
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from hashlib import sha256
 from typing import Any
 
 from packages.rca.engine import Case, build_case, diagnose_case
+from packages.rca.frontier import apply_frontier_progress, covered_frontier_dimensions
 from packages.rca.investigation.actions import observation_identity
 from packages.rca.investigation.environment import (
     SeedPolicy,
@@ -34,6 +29,7 @@ from packages.rca.model import (
     Diagnosis,
     EntityRef,
     Finding,
+    GapDimension,
     GapResolvability,
     Hypothesis,
     InformationGap,
@@ -66,6 +62,22 @@ class SearchStep:
     resolution_before: str
     resolution_after: str
     query_template: str = "full-history"
+    observation_identity: str = ""
+    attempt_outcome: str = ""
+    frontier_changed: bool = False
+
+
+@dataclass(frozen=True)
+class LegalQueryChoice:
+    """One exact authorized telemetry read and its deterministic template."""
+
+    gap: InformationGap
+    capability: str
+    target: EntityRef
+    alternative_ids: tuple[str, ...]
+    query_template: str
+    query: InvestigationQuery
+    observation_identity: str
 
 
 @dataclass(frozen=True)
@@ -98,6 +110,10 @@ class MultiStepSearchResult:
     def minimum_solution(self) -> SearchPath | None:
         return min(self.solutions, key=lambda path: len(path.steps)) if self.solutions else None
 
+    def resolvable_within(self, depth: int) -> bool:
+        minimum = self.minimum_queries
+        return minimum is not None and minimum <= depth
+
 
 @dataclass(frozen=True)
 class _State:
@@ -106,6 +122,7 @@ class _State:
     findings: tuple[Finding, ...]
     steps: tuple[SearchStep, ...]
     query_keys: frozenset[str]
+    queried_dimensions: tuple[tuple[str, tuple[str, ...]], ...]
     depth: int
 
 
@@ -117,15 +134,7 @@ _ONSET_WINDOWS: tuple[tuple[str, timedelta], ...] = (
 
 
 def query_templates(source: ObservationSource) -> tuple[tuple[str, InvestigationQuery], ...]:
-    """Generic, incident-independent time windows a policy could also choose.
-
-    Backends truncate results to ``limit`` in record order, so a full-history
-    query on a busy object can drop exactly the records near onset; narrower
-    onset-relative windows are therefore distinct information, not duplicates.
-    Windows are derived only from the alert onset, the observation cutoff, and
-    the engine's own lookback.  ``reasons``/``contains`` filters are not
-    searched (any fixed vocabulary would be a scenario-flavoured choice).
-    """
+    """Return generic, incident-independent investigation query templates."""
     cutoff = source.observation_cutoff()
     templates: list[tuple[str, InvestigationQuery]] = [
         ("full-history", InvestigationQuery(end=cutoff, limit=_MAX_LIMIT))
@@ -172,10 +181,12 @@ def _finding_key(finding: Finding) -> str:
             "kind": finding.kind.value,
             "at": finding.at.isoformat() if finding.at else None,
             "summary": finding.summary,
+            "details": finding.details,
             "evidence": sorted(finding.evidence_ids),
         },
         sort_keys=True,
         separators=(",", ":"),
+        default=str,
     )
 
 
@@ -193,8 +204,25 @@ def _hypothesis_key(item: Hypothesis) -> str:
     )
 
 
-def state_fingerprint(case: Case, diagnosis: Diagnosis) -> str:
-    """Fingerprint only deterministic evidence and resolution state."""
+def _frontier_key(case: Case) -> tuple[tuple[str, tuple[str, ...], str], ...]:
+    return tuple(
+        sorted(
+            (
+                item.alternative_id,
+                tuple(dimension.value for dimension in item.queried_dimensions),
+                item.status.value,
+            )
+            for item in case.structural_alternatives
+        )
+    )
+
+
+def state_fingerprint(
+    case: Case,
+    diagnosis: Diagnosis,
+    queried_dimensions: tuple[tuple[str, tuple[str, ...]], ...] = (),
+) -> str:
+    """Fingerprint deterministic evidence, resolution, and frontier state."""
     material = {
         "evidence_refs": sorted(
             evidence_id for finding in case.findings for evidence_id in finding.evidence_ids
@@ -207,13 +235,10 @@ def state_fingerprint(case: Case, diagnosis: Diagnosis) -> str:
             if diagnosis.resolution_trace is not None
             else ()
         ),
+        "frontier": _frontier_key(case),
+        "queried_dimensions": tuple(sorted(queried_dimensions)),
     }
-    return sha256(json.dumps(material, sort_keys=True).encode()).hexdigest()
-
-
-def _query_key(capability: str, target: EntityRef, query: InvestigationQuery) -> str:
-    """Treat equivalent semantic queries as the same branch action."""
-    return observation_identity(capability, target, query)
+    return sha256(json.dumps(material, sort_keys=True, default=str).encode()).hexdigest()
 
 
 def _resolvable_gaps(diagnosis: Diagnosis) -> tuple[InformationGap, ...]:
@@ -224,53 +249,150 @@ def _resolvable_gaps(diagnosis: Diagnosis) -> tuple[InformationGap, ...]:
     )
 
 
-def _queries(
+def legal_query_choices(
     diagnosis: Diagnosis,
     tools: Mapping[str, InvestigationTool],
     templates: tuple[tuple[str, InvestigationQuery], ...],
-    used: frozenset[str],
-) -> tuple[tuple[InformationGap, str, EntityRef, str, str, InvestigationQuery], ...]:
-    choices: list[tuple[InformationGap, str, EntityRef, str, str, InvestigationQuery]] = []
-    for gap in _resolvable_gaps(diagnosis):
-        for authorized in gap.authorized_queries:
-            capability = authorized.capability
-            target = authorized.target
-            if capability not in tools:
+    attempted_observations: Collection[str] = (),
+) -> tuple[LegalQueryChoice, ...]:
+    """Enumerate each exact, authorized, unseen telemetry read once."""
+    attempted = set(attempted_observations)
+    grouped: dict[str, list[LegalQueryChoice]] = {}
+    for gap in sorted(
+        _resolvable_gaps(diagnosis), key=lambda item: (item.dimension.value, item.gap_id)
+    ):
+        for authorized in sorted(
+            gap.authorized_queries,
+            key=lambda item: (item.capability, item.target.canonical),
+        ):
+            if authorized.capability not in tools:
                 continue
             for label, query in templates:
-                key = _query_key(capability, target, query)
-                if key not in used:
-                    choices.append((gap, capability, target, key, label, query))
+                identity = observation_identity(authorized.capability, authorized.target, query)
+                if identity in attempted:
+                    continue
+                grouped.setdefault(identity, []).append(
+                    LegalQueryChoice(
+                        gap=gap,
+                        capability=authorized.capability,
+                        target=authorized.target,
+                        alternative_ids=authorized.alternative_ids,
+                        query_template=label,
+                        query=query,
+                        observation_identity=identity,
+                    )
+                )
+    choices: list[LegalQueryChoice] = []
+    for identity in sorted(grouped):
+        candidates = grouped[identity]
+        representative = min(
+            candidates,
+            key=lambda item: (
+                item.gap.dimension.value,
+                item.gap.gap_id,
+                item.capability,
+                item.target.canonical,
+                item.query_template,
+            ),
+        )
+        alternatives = tuple(
+            sorted(
+                {alternative_id for item in candidates for alternative_id in item.alternative_ids}
+            )
+        )
+        choices.append(replace(representative, alternative_ids=alternatives))
     return tuple(choices)
+
+
+def _merge_queried_dimensions(
+    current: tuple[tuple[str, tuple[str, ...]], ...],
+    additions: Mapping[str, Collection[GapDimension]],
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    merged: dict[str, set[str]] = {key: set(values) for key, values in current}
+    for alternative_id, dimensions in additions.items():
+        merged.setdefault(alternative_id, set()).update(dimension.value for dimension in dimensions)
+    return tuple(sorted((key, tuple(sorted(values))) for key, values in merged.items()))
+
+
+def _rebuild_search_case(
+    bounded: ObservationSource,
+    findings: tuple[Finding, ...],
+    queried_dimensions: tuple[tuple[str, tuple[str, ...]], ...],
+    diagnose: Callable[[Case], Diagnosis],
+) -> tuple[Case, Diagnosis]:
+    case = build_case(bounded, extra_findings=findings)
+    dimensions = {
+        alternative_id: tuple(GapDimension(value) for value in values)
+        for alternative_id, values in queried_dimensions
+    }
+    case.structural_alternatives = list(
+        apply_frontier_progress(
+            tuple(case.structural_alternatives),
+            hypotheses=case.hypotheses,
+            queried_dimensions_by_alternative=dimensions,
+        )
+    )
+    return case, diagnose(case)
 
 
 def _step(
     depth: int,
     case: Case,
     diagnosis: Diagnosis,
-    gap: InformationGap,
-    capability: str,
-    target: EntityRef,
+    choice: LegalQueryChoice,
     tool: InvestigationTool,
-    query: InvestigationQuery,
-) -> tuple[SearchStep, tuple[Finding, ...]]:
+) -> tuple[SearchStep, tuple[Finding, ...], Any]:
     execute_query = getattr(tool, "execute_query", None)
-    observation = (
-        execute_query(case, gap, target, query)
-        if callable(execute_query)
-        else tool.execute(case, gap, target)
-    )
-    normalized = normalize_observation(observation, case=case, gap=gap)
+    try:
+        observation = (
+            execute_query(case, choice.gap, choice.target, choice.query)
+            if callable(execute_query)
+            else tool.execute(case, choice.gap, choice.target)
+        )
+    except Exception as error:
+        step = SearchStep(
+            depth=depth,
+            gap_id=choice.gap.gap_id,
+            dimension=choice.gap.dimension.value,
+            capability=choice.capability,
+            target=choice.target.canonical,
+            raw_records=0,
+            payload_fields=(),
+            returned_refs=(),
+            new_refs=(),
+            normalized_findings=(),
+            new_findings=(),
+            hypotheses_before=len(case.hypotheses),
+            hypotheses_after=len(case.hypotheses),
+            hypotheses_changed=False,
+            resolution_before=diagnosis.resolution.value,
+            resolution_after=diagnosis.resolution.value,
+            query_template=choice.query_template,
+            observation_identity=choice.observation_identity,
+            attempt_outcome=f"TOOL_ERROR:{type(error).__name__}",
+        )
+        return step, (), None
+    normalized = normalize_observation(observation, case=case, gap=choice.gap)
     fresh = new_investigation_findings(case.findings, normalized.findings)
     returned_refs = tuple(dict.fromkeys(observation.evidence_refs))
     known_refs = {evidence_id for finding in case.findings for evidence_id in finding.evidence_ids}
     new_refs = tuple(ref for ref in returned_refs if ref not in known_refs)
+    if observation.error:
+        outcome = "TOOL_ERROR"
+    elif _raw_record_count(observation.payload) == 0:
+        outcome = "NO_RAW_RECORDS"
+    elif not new_refs:
+        outcome = "ALREADY_KNOWN_RAW"
+    elif fresh:
+        outcome = "FINDING_PRODUCED"
+    else:
+        outcome = "NOVEL_RAW_NO_FINDING"
     step = SearchStep(
         depth=depth,
-        gap_id=gap.gap_id,
-        dimension=gap.dimension.value,
-        capability=capability,
-        target=target.canonical,
+        gap_id=choice.gap.gap_id,
+        dimension=choice.gap.dimension.value,
+        capability=choice.capability,
+        target=choice.target.canonical,
         raw_records=_raw_record_count(observation.payload),
         payload_fields=tuple(sorted(observation.payload)),
         returned_refs=returned_refs,
@@ -284,8 +406,11 @@ def _step(
         hypotheses_changed=False,
         resolution_before=diagnosis.resolution.value,
         resolution_after=diagnosis.resolution.value,
+        query_template=choice.query_template,
+        observation_identity=choice.observation_identity,
+        attempt_outcome=outcome,
     )
-    return step, fresh
+    return step, fresh, observation
 
 
 def search_incident(
@@ -296,11 +421,7 @@ def search_incident(
     max_states: int = 256,
     diagnose: Callable[[Case], Diagnosis] = diagnose_case,
 ) -> MultiStepSearchResult:
-    """Enumerate legal evidence-acquisition sequences without a model.
-
-    ``diagnose`` exists so tests can pin a resolution predicate; measurements
-    always use the production resolver (``diagnose_case``).
-    """
+    """Enumerate legal evidence-acquisition sequences without a model."""
     if max_depth < 1:
         raise ValueError("max_depth must be positive")
     bounded = initial_view(source, policy=seed_policy)
@@ -309,10 +430,17 @@ def search_incident(
     backend = investigation_backend(source)
     tools = default_tools(backend)
     templates = query_templates(source)
-    queue: deque[_State] = deque([_State(initial_case, initial_diagnosis, (), (), frozenset(), 0)])
-    visited = {state_fingerprint(initial_case, initial_diagnosis)}
+    queue: deque[_State] = deque(
+        [_State(initial_case, initial_diagnosis, (), (), frozenset(), (), 0)]
+    )
+    visited = {state_fingerprint(initial_case, initial_diagnosis, ())}
+    rebuild_cache: dict[
+        tuple[tuple[str, ...], tuple[tuple[str, tuple[str, ...]], ...]], tuple[Case, Diagnosis]
+    ] = {((), ()): (initial_case, initial_diagnosis)}
     attempts: list[SearchStep] = []
     solutions: list[SearchPath] = []
+    if initial_diagnosis.resolution is Resolution.RESOLVED:
+        solutions.append(SearchPath((), initial_diagnosis))
     explored = 0
     truncated = False
     while queue:
@@ -323,29 +451,38 @@ def search_incident(
             truncated = True
             break
         explored += 1
-        for gap, capability, target, key, label, query in _queries(
-            state.diagnosis, tools, templates, state.query_keys
-        ):
-            step, fresh = _step(
+        choices = legal_query_choices(state.diagnosis, tools, templates, state.query_keys)
+        for choice in choices:
+            step, fresh, observation = _step(
                 state.depth + 1,
                 state.case,
                 state.diagnosis,
-                gap,
-                capability,
-                target,
-                tools[capability],
-                query,
+                choice,
+                tools[choice.capability],
             )
-            step = replace(step, query_template=label)
-            if not fresh:
-                attempts.append(step)
-                continue
-            # ``fresh`` is already novel against the current case (which holds the
-            # earlier investigation findings); the next state must carry all of
-            # them forward, not only this step's findings.
             combined = deduplicate_findings((*state.findings, *fresh))
-            next_case = build_case(bounded, extra_findings=combined)
-            next_diagnosis = diagnose(next_case)
+            coverage = (
+                covered_frontier_dimensions(
+                    state.diagnosis,
+                    capability=choice.capability,
+                    target=choice.target,
+                )
+                if observation is not None and observation.error is None
+                else {}
+            )
+            next_queried = _merge_queried_dimensions(state.queried_dimensions, coverage)
+            if fresh or coverage:
+                rebuild_key = (
+                    tuple(sorted(_finding_key(finding) for finding in combined)),
+                    next_queried,
+                )
+                cached = rebuild_cache.get(rebuild_key)
+                if cached is None:
+                    cached = _rebuild_search_case(bounded, combined, next_queried, diagnose)
+                    rebuild_cache[rebuild_key] = cached
+                next_case, next_diagnosis = cached
+            else:
+                next_case, next_diagnosis = state.case, state.diagnosis
             step = replace(
                 step,
                 hypotheses_after=len(next_case.hypotheses),
@@ -354,6 +491,7 @@ def search_incident(
                 )
                 != tuple(hypothesis.hypothesis_id for hypothesis in state.case.hypotheses),
                 resolution_after=next_diagnosis.resolution.value,
+                frontier_changed=next_queried != state.queried_dimensions,
             )
             attempts.append(step)
             next_steps = (*state.steps, step)
@@ -362,7 +500,7 @@ def search_incident(
                 continue
             if len(next_steps) >= max_depth:
                 continue
-            fingerprint = state_fingerprint(next_case, next_diagnosis)
+            fingerprint = state_fingerprint(next_case, next_diagnosis, next_queried)
             if fingerprint in visited:
                 continue
             visited.add(fingerprint)
@@ -372,7 +510,8 @@ def search_incident(
                     next_diagnosis,
                     combined,
                     next_steps,
-                    frozenset((*state.query_keys, key)),
+                    frozenset((*state.query_keys, choice.observation_identity)),
+                    next_queried,
                     state.depth + 1,
                 )
             )
@@ -390,8 +529,10 @@ def search_incident(
 
 
 __all__ = [
+    "LegalQueryChoice",
     "MultiStepSearchResult",
     "query_templates",
+    "legal_query_choices",
     "SearchPath",
     "SearchStep",
     "search_incident",

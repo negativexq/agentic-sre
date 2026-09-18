@@ -73,6 +73,11 @@ class PromotionAudit:
     attempt_outcome: str
     promotion_classification: str | None
     audit_defect: str | None = None
+    # Diagnostic-only epistemic snapshots.  These are captured around the
+    # existing rebuild; they do not participate in investigation execution.
+    episode_states_before: tuple[tuple[str, str], ...] = ()
+    episode_states_after: tuple[tuple[str, str], ...] = ()
+    observation_outcome: str = "UNKNOWN"
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -98,6 +103,9 @@ class PromotionAudit:
             "attempt_outcome": self.attempt_outcome,
             "promotion_classification": self.promotion_classification,
             "audit_defect": self.audit_defect,
+            "episode_states_before": self.episode_states_before,
+            "episode_states_after": self.episode_states_after,
+            "observation_outcome": self.observation_outcome,
         }
 
 
@@ -263,6 +271,30 @@ def _diagnosis_summary(case: Case, diagnosis: Diagnosis) -> dict[str, Any]:
             {target for item in case.structural_alternatives for target in item.observation_targets}
         ),
     }
+
+
+def _episode_states(case: Case, diagnosis: Diagnosis) -> tuple[tuple[str, str], ...]:
+    """Return actor/state pairs for diagnostics without changing runtime semantics."""
+    trace = diagnosis.resolution_trace
+    if trace is None:
+        return ()
+    by_id = {item.hypothesis_id: item for item in case.hypotheses}
+    states = {
+        **{item: "SUPPORTED" for item in trace.plausible_hypotheses},
+        **{item: "UNRESOLVED" for item in trace.unresolved_hypotheses},
+        **{item: "CONTRADICTED" for item in trace.eliminated_hypotheses},
+    }
+    values = tuple(
+        sorted(
+            (
+                by_id[hypothesis_id].causal_actor.canonical,
+                states.get(hypothesis_id, "UNKNOWN"),
+            )
+            for hypothesis_id in states
+            if hypothesis_id in by_id
+        )
+    )
+    return values
 
 
 def _diagnostic_value(value: Any) -> Any:
@@ -510,6 +542,7 @@ class _PendingAudit:
     outcome: str
     audit_defect: str | None
     resolution_before: str
+    episode_states_before: tuple[tuple[str, str], ...]
 
 
 def exhaustive_active_closure(
@@ -604,6 +637,7 @@ def exhaustive_active_closure(
                     outcome=outcome,
                     audit_defect=defect,
                     resolution_before=current_diagnosis.resolution.value,
+                    episode_states_before=_episode_states(current_case, current_diagnosis),
                 )
             )
         combined = tuple(
@@ -659,6 +693,9 @@ def exhaustive_active_closure(
                     attempt_outcome=item.outcome,
                     promotion_classification=classification,
                     audit_defect=item.audit_defect,
+                    episode_states_before=item.episode_states_before,
+                    episode_states_after=_episode_states(next_case, next_diagnosis),
+                    observation_outcome=item.observation.outcome.value,
                 )
             )
         current_case, current_diagnosis = next_case, next_diagnosis

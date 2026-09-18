@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -21,6 +22,46 @@ class LLMError(RuntimeError):
 
 class LLMOutputError(LLMError):
     """The call succeeded but the output was unusable; retrying may help."""
+
+
+@dataclass(frozen=True)
+class ProviderErrorDetails:
+    """Safe, bounded diagnostics for one provider request failure."""
+
+    category: str
+    exception_type: str
+    status_code: int | None = None
+    code: str | None = None
+    parameter: str | None = None
+    request_id: str | None = None
+    message: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "category": self.category,
+            "exception_type": self.exception_type,
+            "status_code": self.status_code,
+            "code": self.code,
+            "parameter": self.parameter,
+            "request_id": self.request_id,
+            "message": self.message,
+        }
+
+
+class ProviderRequestError(LLMError):
+    """The provider rejected the constructed request before model output."""
+
+    def __init__(self, details: ProviderErrorDetails) -> None:
+        self.details = details
+        super().__init__(json.dumps(details.as_dict(), sort_keys=True))
+
+
+class ProviderTransportError(LLMError):
+    """The provider request failed without a request-level response."""
+
+    def __init__(self, details: ProviderErrorDetails) -> None:
+        self.details = details
+        super().__init__(json.dumps(details.as_dict(), sort_keys=True))
 
 
 class LLMClient(Protocol):
@@ -107,6 +148,9 @@ class OpenAIClient:
             else os.environ.get(LIVE_ENABLED_ENV, "").casefold() == "true"
         )
         self.calls = 0
+        self.successful_responses = 0
+        self.last_response_status: str | None = None
+        self.last_request_id: str | None = None
         self._client = client
         # Shared across concurrent callers (e.g. the control plane diagnosing
         # more than one incident at once) so the budget is process-wide.
@@ -157,16 +201,65 @@ class OpenAIClient:
                 },
             )
         except Exception as error:  # the SDK raises many transport-specific types
-            raise LLMError(f"model call failed: {type(error).__name__}") from error
+            details = _provider_error_details(error)
+            if details.status_code is not None and 400 <= details.status_code < 500:
+                raise ProviderRequestError(details) from error
+            raise ProviderTransportError(details) from error
         status = getattr(response, "status", None)
+        self.last_response_status = str(status) if status is not None else None
+        self.last_request_id = _request_id(response)
         if status not in (None, "completed"):
-            details = getattr(response, "incomplete_details", None)
-            reason = getattr(details, "reason", None) or status
+            incomplete_details = getattr(response, "incomplete_details", None)
+            reason = getattr(incomplete_details, "reason", None) or status
             raise LLMOutputError(f"model response {status}: {reason}")
+        self.successful_responses += 1
         text = getattr(response, "output_text", None)
         if not isinstance(text, str) or not text:
             raise LLMOutputError("model returned no text (possibly a refusal)")
         return parse_first_object(text)
+
+
+_SECRET_PATTERNS = (
+    re.compile(r"\bsk-[A-Za-z0-9_-]+\b"),
+    re.compile(r"(?i)bearer\s+[^\s,;]+"),
+    re.compile(r"(?i)(?:api[_ -]?key|authorization)\s*[:=]\s*[^\s,;]+"),
+)
+
+
+def _sanitized_message(error: BaseException) -> str:
+    """Keep provider diagnostics useful without exposing credentials or payloads."""
+    raw = getattr(error, "message", None) or str(error)
+    message = " ".join(str(raw).split())[:1000]
+    for pattern in _SECRET_PATTERNS:
+        message = pattern.sub("[REDACTED]", message)
+    return message
+
+
+def _request_id(response: Any) -> str | None:
+    value = getattr(response, "request_id", None) or getattr(response, "_request_id", None)
+    return str(value)[:200] if value else None
+
+
+def _provider_error_details(error: BaseException) -> ProviderErrorDetails:
+    status_raw = getattr(error, "status_code", None)
+    status_code = status_raw if isinstance(status_raw, int) else None
+    code_raw = getattr(error, "code", None)
+    parameter_raw = getattr(error, "param", None) or getattr(error, "parameter", None)
+    request_raw = getattr(error, "request_id", None) or getattr(error, "_request_id", None)
+    category = (
+        "PROVIDER_REQUEST_ERROR"
+        if status_code is not None and 400 <= status_code < 500
+        else "PROVIDER_TRANSPORT_ERROR"
+    )
+    return ProviderErrorDetails(
+        category=category,
+        exception_type=type(error).__name__,
+        status_code=status_code,
+        code=str(code_raw)[:200] if code_raw is not None else None,
+        parameter=str(parameter_raw)[:200] if parameter_raw is not None else None,
+        request_id=str(request_raw)[:200] if request_raw is not None else None,
+        message=_sanitized_message(error),
+    )
 
 
 __all__ = [
@@ -176,6 +269,9 @@ __all__ = [
     "LLMError",
     "LLMOutputError",
     "OpenAIClient",
+    "ProviderErrorDetails",
+    "ProviderRequestError",
+    "ProviderTransportError",
     "parse_first_object",
     "ScriptedLLM",
 ]

@@ -4,15 +4,79 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from packages.rca.investigation.state import InvestigationPolicyContext
 from packages.rca.llm import LLMClient, LLMOutputError
-from packages.rca.model import InvestigationAction
+from packages.rca.model import EntityRef, InvestigationAction
 
-ACTION_SCHEMA = InvestigationAction.model_json_schema()
+
+class InvestigationTargetWire(BaseModel):
+    """OpenAI strict-schema DTO; domain EntityRef remains provider-neutral."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str
+    name: str
+    namespace: str
+
+
+class InvestigationActionWire(BaseModel):
+    """Wire contract with required nullable fields for strict Structured Outputs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["inspect", "stop"]
+    gap_id: str | None
+    capability: str | None
+    target: InvestigationTargetWire | None
+    rationale: str = Field(max_length=400)
+
+    def to_domain(self) -> InvestigationAction:
+        target = (
+            EntityRef(
+                kind=self.target.kind,
+                name=self.target.name,
+                namespace=self.target.namespace,
+            )
+            if self.target is not None
+            else None
+        )
+        return InvestigationAction(
+            action=self.action,
+            gap_id=self.gap_id,
+            capability=self.capability,
+            target=target,
+            rationale=self.rationale,
+        )
+
+
+def validate_strict_json_schema(schema: dict[str, Any]) -> None:
+    """Fail locally if a provider schema violates strict object requirements."""
+
+    def visit(node: Any) -> None:
+        if isinstance(node, dict):
+            if node.get("type") == "object" or "properties" in node:
+                properties = set(node.get("properties", {}))
+                required = set(node.get("required", ()))
+                if properties != required:
+                    raise ValueError(
+                        "strict schema requires every property to be required: "
+                        f"properties={sorted(properties)}, required={sorted(required)}"
+                    )
+                if node.get("additionalProperties") is not False:
+                    raise ValueError("strict schema requires additionalProperties=false")
+            for value in node.values():
+                visit(value)
+        elif isinstance(node, list):
+            for value in node:
+                visit(value)
+
+
+ACTION_SCHEMA = InvestigationActionWire.model_json_schema()
+validate_strict_json_schema(ACTION_SCHEMA)
 
 SYSTEM_PROMPT = """You are selecting one bounded read-only observation for a Kubernetes RCA.
 
@@ -110,7 +174,7 @@ class LLMInvestigationPolicy:
                 schema=ACTION_SCHEMA,
                 name="investigation_action",
             )
-            return InvestigationAction.model_validate(raw)
+            return InvestigationActionWire.model_validate(raw).to_domain()
         except (ValidationError, LLMOutputError) as error:
             # One bounded retry is reserved for malformed structured output.
             retry = (
@@ -124,7 +188,7 @@ class LLMInvestigationPolicy:
                     schema=ACTION_SCHEMA,
                     name="investigation_action",
                 )
-                return InvestigationAction.model_validate(raw)
+                return InvestigationActionWire.model_validate(raw).to_domain()
             except (ValidationError, LLMOutputError) as retry_error:
                 raise LLMOutputError(f"invalid investigation action: {retry_error}") from error
 
@@ -136,7 +200,10 @@ class LLMInvestigationPolicy:
 
 __all__ = [
     "ACTION_SCHEMA",
+    "InvestigationActionWire",
+    "InvestigationTargetWire",
     "LLMInvestigationPolicy",
     "SYSTEM_PROMPT",
     "ScriptedInvestigationPolicy",
+    "validate_strict_json_schema",
 ]

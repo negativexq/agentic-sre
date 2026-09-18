@@ -98,6 +98,17 @@ class SourceExposureSnapshot:
 
 
 @dataclass(frozen=True)
+class CatalogConsistency:
+    source_k8s_entity_count: int
+    observable_catalog_count: int
+    missing_from_catalog: tuple[str, ...]
+    consistent: bool
+
+    def as_dict(self) -> dict[str, object]:
+        return cast(dict[str, object], _json_value(asdict(self)))
+
+
+@dataclass(frozen=True)
 class FindingSnapshot:
     finding_key: str
     kind: str
@@ -157,6 +168,7 @@ class CausalCompletenessBlindAudit:
     incident_id: str
     snapshot_entities: tuple[SnapshotEntitySnapshot, ...]
     source_exposure: SourceExposureSnapshot
+    catalog_consistency: CatalogConsistency
     findings: tuple[FindingSnapshot, ...]
     candidates: tuple[CandidateSnapshot, ...]
     hypotheses: tuple[HypothesisSnapshot, ...]
@@ -186,6 +198,7 @@ class RootCauseJourney:
     extraction_diagnostic: str | None = None
     elimination_diagnostic: str | None = None
     manifestation_matches: tuple[str, ...] = ()
+    source_match_origins: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, object]:
         return cast(dict[str, object], _json_value(asdict(self)))
@@ -212,7 +225,6 @@ def _object_snapshot(
         except ValueError:
             body = {}
     body = body if isinstance(body, dict) else {}
-    metadata = body.get("metadata", {}) if isinstance(body.get("metadata"), dict) else {}
     previous_body = previous.get("Body", {}) if previous else None
     if isinstance(previous_body, str):
         try:
@@ -220,7 +232,9 @@ def _object_snapshot(
         except ValueError:
             previous_body = {}
     changed = None if previous is None else body != previous_body
-    lifecycle = metadata.get("lifecycle")
+    # Snapshot metadata is not the production-derived Lifecycle contract.
+    # Lifecycle is recorded from SourceExposureSnapshot instead.
+    lifecycle = None
     return ObjectObservationSnapshot(
         evidence_id=str(record.get("evidence_id", "")),
         observed_at=str(record.get("Timestamp")) if record.get("Timestamp") else None,
@@ -256,52 +270,20 @@ def snapshot_entity_inventory(
     """Capture the complete structured entity catalog and bounded contexts."""
     entities = backend.observable_entities()
     from packages.evals.itbench.contracts import ITBenchEvidenceCategory
-
-    def body_for(item: Mapping[str, Any]) -> dict[str, Any]:
-        record = item.get("record", {})
-        body: Any = record.get("Body", {}) if isinstance(record, dict) else {}
-        if isinstance(body, str):
-            try:
-                body = json.loads(body)
-            except ValueError:
-                body = {}
-        return body if isinstance(body, dict) else {}
-
-    def object_entity(item: Mapping[str, Any]) -> str | None:
-        body = body_for(item)
-        metadata = body.get("metadata")
-        if not isinstance(metadata, dict):
-            return None
-        kind, name = body.get("kind"), metadata.get("name")
-        if not isinstance(kind, str) or not isinstance(name, str):
-            return None
-        namespace = metadata.get("namespace")
-        return f"{namespace if isinstance(namespace, str) else '_cluster'}/{kind}/{name}"
-
-    def event_entity(item: Mapping[str, Any]) -> str | None:
-        body = body_for(item)
-        body = body.get("object", body) if isinstance(body, dict) else {}
-        involved = body.get("involvedObject") if isinstance(body, dict) else None
-        if not isinstance(involved, dict):
-            return None
-        kind, name = involved.get("kind"), involved.get("name")
-        if not isinstance(kind, str) or not isinstance(name, str):
-            return None
-        namespace = involved.get("namespace")
-        return f"{namespace if isinstance(namespace, str) else '_cluster'}/{kind}/{name}"
+    from packages.evals.itbench.snapshot_backend import _record_entity
 
     object_records = tuple(backend.complete_source_records(ITBenchEvidenceCategory.K8S_OBJECTS))
     event_records = tuple(backend.complete_source_records(ITBenchEvidenceCategory.K8S_EVENTS))
     objects_by_entity: dict[str, list[Mapping[str, Any]]] = {}
     events_by_entity: dict[str, list[Mapping[str, Any]]] = {}
     for record in object_records:
-        entity = object_entity(record)
+        entity = _record_entity(cast(dict[str, Any], record))
         if entity is not None:
-            objects_by_entity.setdefault(entity, []).append(record)
+            objects_by_entity.setdefault(entity.canonical, []).append(record)
     for record in event_records:
-        entity = event_entity(record)
+        entity = _record_entity(cast(dict[str, Any], record))
         if entity is not None:
-            events_by_entity.setdefault(entity, []).append(record)
+            events_by_entity.setdefault(entity.canonical, []).append(record)
     all_edges = tuple(backend.topology(limit=None))
     result: list[SnapshotEntitySnapshot] = []
     for item in entities:
@@ -321,9 +303,10 @@ def snapshot_entity_inventory(
             target = str(edge.get("target", ""))
             if source == canonical:
                 neighbors.add(target)
+                relations.add(f"{source}|{edge.get('relationship', '')}|{target}")
             elif target == canonical:
                 neighbors.add(source)
-            relations.add(f"{source}|{edge.get('relationship', '')}|{target}")
+                relations.add(f"{source}|{edge.get('relationship', '')}|{target}")
         result.append(
             SnapshotEntitySnapshot(
                 canonical=canonical,
@@ -494,6 +477,23 @@ def build_blind_audit(
     """Build all inventories before any ground-truth matching occurs."""
     case = build_case(source)
     diagnosis = diagnose_case(case)
+    source_exposure = source_exposure_inventory(source)
+    catalog_entities = {item.canonical for item in snapshot_entities}
+    source_k8s_entities = set(source_exposure.history_entities) | set(
+        source_exposure.event_entities
+    )
+    missing_from_catalog = tuple(sorted(source_k8s_entities - catalog_entities))
+    catalog_consistency = CatalogConsistency(
+        source_k8s_entity_count=len(source_k8s_entities),
+        observable_catalog_count=len(catalog_entities),
+        missing_from_catalog=missing_from_catalog,
+        consistent=not missing_from_catalog,
+    )
+    if not catalog_consistency.consistent:
+        raise ValueError(
+            "SnapshotSource Kubernetes entities missing from observable catalog: "
+            + ", ".join(missing_from_catalog)
+        )
     trace = diagnosis.resolution_trace
     audit_by_id = {item.hypothesis_id: item for item in (trace.hypothesis_audits if trace else ())}
     plausible_ids = set(trace.plausible_hypotheses if trace else ())
@@ -549,7 +549,8 @@ def build_blind_audit(
     return CausalCompletenessBlindAudit(
         incident_id=case.incident_id,
         snapshot_entities=tuple(sorted(snapshot_entities, key=lambda item: item.canonical)),
-        source_exposure=source_exposure_inventory(source),
+        source_exposure=source_exposure,
+        catalog_consistency=catalog_consistency,
         findings=findings,
         candidates=tuple(
             _candidate_snapshot(item)
@@ -634,23 +635,29 @@ def extraction_diagnostic(
         return "UNCLASSIFIED_EXTRACTION_GAP"
     lifecycle_by_entity = dict(source.history_lifecycles)
     lifecycles = set(lifecycle_by_entity.get(snapshot.canonical, ()))
-    if len(snapshot.object_versions) >= 2:
+    history_counts = dict(source.history_counts)
+    event_counts = dict(source.event_counts)
+    effective_version_count = history_counts.get(snapshot.canonical, 0)
+    effective_event_count = event_counts.get(snapshot.canonical, 0)
+    if effective_version_count >= 2:
         return "MULTIPLE_OBJECT_VERSIONS_NO_FINDING"
     if "CREATED" in lifecycles:
         return "CREATED_OBJECT_NO_FINDING"
     if "DELETED" in lifecycles:
         return "DELETED_OBJECT_NO_FINDING"
     if "Chaos" in snapshot.kind or snapshot.kind.endswith("Chaos"):
-        return (
-            "CHAOS_EVENT_NO_FINDING" if snapshot.event_record_count else "CHAOS_OBJECT_NO_FINDING"
-        )
-    if snapshot.event_record_count:
+        return "CHAOS_EVENT_NO_FINDING" if effective_event_count else "CHAOS_OBJECT_NO_FINDING"
+    if effective_event_count:
         if any(item.type.casefold() == "warning" for item in snapshot.event_summaries):
             return "WARNING_EVENTS_NO_FINDING"
         return "OBSERVABLE_ENTITY_WITHOUT_SUPPORTED_SIGNAL_FAMILY"
-    if snapshot.object_record_count == 1:
+    if (
+        effective_version_count == 1
+        and not effective_event_count
+        and "CREATED" not in lifecycles
+        and "DELETED" not in lifecycles
+    ):
         return "STATIC_OBJECT_ONLY_NO_FINDING"
-    _ = source
     return "UNCLASSIFIED_EXTRACTION_GAP"
 
 
@@ -683,6 +690,24 @@ def blind_audit_from_dict(value: Mapping[str, Any]) -> CausalCompletenessBlindAu
         event_counts=tuple(tuple(item) for item in source_value["event_counts"]),
         traffic_counts=tuple(tuple(item) for item in source_value["traffic_counts"]),
     )
+    consistency_value = value.get("catalog_consistency")
+    if not isinstance(consistency_value, Mapping):
+        catalog_entities = {item.canonical for item in snapshots}
+        source_k8s_entities = set(source.history_entities) | set(source.event_entities)
+        missing = tuple(sorted(source_k8s_entities - catalog_entities))
+        consistency = CatalogConsistency(
+            source_k8s_entity_count=len(source_k8s_entities),
+            observable_catalog_count=len(catalog_entities),
+            missing_from_catalog=missing,
+            consistent=not missing,
+        )
+    else:
+        consistency = CatalogConsistency(
+            source_k8s_entity_count=int(consistency_value["source_k8s_entity_count"]),
+            observable_catalog_count=int(consistency_value["observable_catalog_count"]),
+            missing_from_catalog=tuple(consistency_value["missing_from_catalog"]),
+            consistent=bool(consistency_value["consistent"]),
+        )
     hypotheses = tuple(
         HypothesisSnapshot(
             **{
@@ -705,6 +730,7 @@ def blind_audit_from_dict(value: Mapping[str, Any]) -> CausalCompletenessBlindAu
         incident_id=str(value["incident_id"]),
         snapshot_entities=snapshots,
         source_exposure=source,
+        catalog_consistency=consistency,
         findings=tuple(FindingSnapshot(**item) for item in value["findings"]),
         candidates=tuple(CandidateSnapshot(**item) for item in value["candidates"]),
         hypotheses=hypotheses,
@@ -719,6 +745,7 @@ def blind_audit_from_dict(value: Mapping[str, Any]) -> CausalCompletenessBlindAu
 
 __all__ = [
     "CandidateSnapshot",
+    "CatalogConsistency",
     "CausalCompletenessBlindAudit",
     "EliminationMechanics",
     "EventObservationSnapshot",

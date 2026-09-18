@@ -114,14 +114,6 @@ def _journeys_for_audit(
     ground_truth: Any,
 ) -> tuple[RootCauseJourney, ...]:
     snapshot_by_entity = {item.canonical: item for item in audit.snapshot_entities}
-    source_entities = set(audit.source_exposure.history_entities)
-    source_entities.update(audit.source_exposure.event_entities)
-    source_entities.update(audit.source_exposure.traffic_entities)
-    source_entities.update(
-        f"{namespace}/Service/{service}"
-        for namespace in {"_cluster"}
-        for service in audit.source_exposure.alert_services
-    )
     findings = audit.findings
     candidates = audit.candidates
     hypotheses = audit.hypotheses
@@ -131,9 +123,45 @@ def _journeys_for_audit(
         snapshot_matches = _matching_entities(
             tuple(snapshot_by_entity), ground_truth, root_group_id
         )
-        source_matches = _matching_entities(
-            tuple(sorted(source_entities)), ground_truth, root_group_id
+        history_matches = _matching_entities(
+            audit.source_exposure.history_entities, ground_truth, root_group_id
         )
+        event_matches = _matching_entities(
+            audit.source_exposure.event_entities, ground_truth, root_group_id
+        )
+        traffic_matches = _matching_entities(
+            audit.source_exposure.traffic_entities, ground_truth, root_group_id
+        )
+        alert_matches = _matching_entities(
+            tuple(
+                f"_cluster/Service/{service}" for service in audit.source_exposure.alert_services
+            ),
+            ground_truth,
+            root_group_id,
+        )
+        source_matches = tuple(
+            sorted(
+                set(history_matches)
+                | set(event_matches)
+                | set(traffic_matches)
+                | set(alert_matches)
+            )
+        )
+        source_origins = tuple(
+            origin
+            for origin, matches in (
+                ("HISTORY", history_matches),
+                ("EVENT", event_matches),
+                ("TRAFFIC", traffic_matches),
+                ("ALERT_SERVICE", alert_matches),
+            )
+            if matches
+        )
+        if set(source_origins).intersection({"HISTORY", "EVENT"}) and not snapshot_matches:
+            raise RuntimeError(
+                "AUDIT_INCONSISTENCY: structured SnapshotSource entity is absent "
+                f"from the observable catalog for {root_group_id}"
+            )
         direct = tuple(
             sorted(
                 item.entity
@@ -256,6 +284,7 @@ def _journeys_for_audit(
                     else None
                 ),
                 manifestation_matches=manifestation_matches,
+                source_match_origins=source_origins,
             )
         )
     return tuple(journeys)
@@ -266,6 +295,8 @@ def _overlay(dataset: ITBenchLiteDataset, audits: dict[str, Any]) -> dict[str, o
     for scenario_id in DEV_SCENARIOS:
         ground_truth = dataset.load_ground_truth(scenario_id)
         audit = blind_audit_from_dict(audits[scenario_id])
+        if not audit.catalog_consistency.consistent:
+            raise RuntimeError(f"catalog consistency failed for {scenario_id}")
         journeys = _journeys_for_audit(audit, ground_truth)
         primary = min(
             journeys, key=lambda item: _STAGE_ORDER[item.first_loss_stage]
@@ -281,6 +312,18 @@ def _overlay(dataset: ITBenchLiteDataset, audits: dict[str, Any]) -> dict[str, o
         "dataset_revision": ITBENCH_DATASET_REVISION,
         "scenario_ids": DEV_SCENARIOS,
         "ground_truth_loaded_after_seal": True,
+        "catalog_consistency": {
+            scenario_id: {
+                **blind_audit_from_dict(audits[scenario_id]).catalog_consistency.as_dict(),
+                "history_entity_count": len(
+                    blind_audit_from_dict(audits[scenario_id]).source_exposure.history_entities
+                ),
+                "event_entity_count": len(
+                    blind_audit_from_dict(audits[scenario_id]).source_exposure.event_entities
+                ),
+            }
+            for scenario_id in DEV_SCENARIOS
+        },
         "scenarios": overlays,
     }
 
@@ -298,10 +341,17 @@ def _blind_payload(dataset: ITBenchLiteDataset) -> dict[str, object]:
             raise RuntimeError(f"observable entity inventory unexpectedly empty: {scenario_id}")
         source = SnapshotSource(scenario)
         audits[scenario_id] = build_blind_audit(source, snapshot_entities).as_dict()
+    catalog_complete = all(
+        bool(cast(dict[str, Any], audit)["catalog_consistency"]["consistent"])
+        and not cast(dict[str, Any], audit)["catalog_consistency"]["missing_from_catalog"]
+        for audit in audits.values()
+    )
+    if not catalog_complete:
+        raise RuntimeError("one or more DEV catalog/source consistency checks failed")
     return {
         "dataset_revision": ITBENCH_DATASET_REVISION,
         "scenario_ids": DEV_SCENARIOS,
-        "observable_entity_catalog_complete": True,
+        "observable_entity_catalog_complete": catalog_complete,
         "audits": audits,
     }
 
@@ -318,6 +368,16 @@ def _print_blind(payload: dict[str, object]) -> None:
 
 
 def _print_overlay(payload: dict[str, object]) -> None:
+    print("Scenario | Catalog | History | Events | Missing K8s source entities")
+    print("---|---:|---:|---:|---:|")
+    consistency = cast(dict[str, dict[str, Any]], payload["catalog_consistency"])
+    for scenario_id in DEV_SCENARIOS:
+        item = consistency[scenario_id]
+        print(
+            f"{scenario_id} | {item['observable_catalog_count']} | "
+            f"{item['history_entity_count']} | {item['event_entity_count']} | "
+            f"{len(item['missing_from_catalog'])}"
+        )
     print(
         "Scenario | Root group | Snapshot | Source | Finding | Candidate | Hypothesis | Plausible | Leading | Final stage"
     )
@@ -394,6 +454,10 @@ def main() -> int:
         raise SystemExit("blind audit scenario set is not the DEV set")
     if blind.get("observable_entity_catalog_complete") is not True:
         raise SystemExit("blind observable entity catalog is incomplete")
+    for scenario_id, audit in cast(dict[str, Any], blind["audits"]).items():
+        consistency = audit.get("catalog_consistency", {})
+        if consistency.get("consistent") is not True or consistency.get("missing_from_catalog"):
+            raise SystemExit(f"blind catalog/source consistency failed: {scenario_id}")
     forbidden = forbidden_blind_keys(blind)
     if forbidden:
         raise SystemExit(f"blind artifact contains forbidden fields: {forbidden}")

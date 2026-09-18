@@ -754,32 +754,14 @@ class ITBenchSnapshotBackend:
         entities: dict[str, dict[str, str]] = {}
         for category in (ITBenchEvidenceCategory.K8S_OBJECTS, ITBenchEvidenceCategory.K8S_EVENTS):
             for item in self._iter_records(category):
-                record = item.get("record", {})
-                body = record.get("Body") if isinstance(record, dict) else None
-                parsed = _json_object(body)
-                if not parsed:
-                    parsed = record if isinstance(record, dict) else {}
-                candidates = [parsed]
-                obj = parsed.get("object") if isinstance(parsed, dict) else None
-                if isinstance(obj, dict):
-                    candidates.append(obj)
-                involved = parsed.get("involvedObject") if isinstance(parsed, dict) else None
-                if isinstance(involved, dict):
-                    candidates.append({"kind": involved.get("kind"), "metadata": involved})
-                for candidate in candidates:
-                    metadata = candidate.get("metadata")
-                    if not isinstance(metadata, dict):
-                        continue
-                    kind, name = candidate.get("kind"), metadata.get("name")
-                    if not isinstance(kind, str) or not isinstance(name, str):
-                        continue
-                    namespace = metadata.get("namespace")
-                    entity = {
-                        "namespace": namespace if isinstance(namespace, str) else "_cluster",
-                        "kind": kind,
-                        "name": name,
-                    }
-                    entities[f"{entity['namespace']}/{kind}/{name}"] = entity
+                entity = _record_entity(item)
+                if entity is None:
+                    continue
+                entities[entity.canonical] = {
+                    "namespace": entity.namespace or "_cluster",
+                    "kind": entity.kind,
+                    "name": entity.name,
+                }
         self._observable_entities_cache = tuple(entities[key] for key in sorted(entities))
         return self._observable_entities_cache
 
@@ -1169,10 +1151,20 @@ def _record_entity(item: dict[str, Any]) -> ITBenchEntity | None:
     body = _json_object(record.get("Body"))
     if body is None:
         body = record
-    candidate = body.get("object") if isinstance(body.get("object"), dict) else body
-    involved = body.get("involvedObject") if isinstance(body.get("involvedObject"), dict) else None
+    if not isinstance(body, dict):
+        return None
+    payload: dict[str, Any] = body
+    if isinstance(body.get("object"), dict):
+        payload = body["object"]
+    involved = (
+        payload.get("involvedObject")
+        if isinstance(payload, dict) and isinstance(payload.get("involvedObject"), dict)
+        else None
+    )
     if involved is not None:
         candidate = {"kind": involved.get("kind"), "metadata": involved}
+    else:
+        candidate = payload
     if not isinstance(candidate, dict):
         return None
     metadata = candidate.get("metadata")

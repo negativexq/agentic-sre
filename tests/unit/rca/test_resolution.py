@@ -343,6 +343,31 @@ def test_information_gap_describes_hpa_ambiguity_without_executing_tools() -> No
     )
 
 
+def test_information_gap_marks_observed_hpa_state_as_already_observed() -> None:
+    def observed_hpa(name: str) -> Hypothesis:
+        state = _finding(
+            _entity("HorizontalPodAutoscaler", name),
+            FindingKind.AUTOSCALING_FAILURE,
+            f"{name}-state",
+        ).model_copy(
+            update={
+                "details": {
+                    "conditions": ["ScalingActive=False"],
+                    "targets": [f"Deployment/{name}-workload"],
+                }
+            }
+        )
+        return _hpa(name, extra=state)
+
+    left = observed_hpa("ad")
+    right = observed_hpa("recommendation")
+    gaps = derive_information_gaps((left, right), resolve_hypotheses((left, right)))
+
+    target_gap = next(gap for gap in gaps if gap.dimension.value == "AUTOSCALING_TARGET_STATE")
+    assert target_gap.resolvability.value == "ALREADY_OBSERVED"
+    assert target_gap.candidate_tools == ()
+
+
 def test_information_gaps_are_order_and_name_invariant() -> None:
     left = _hpa("one")
     right = _hpa("two")

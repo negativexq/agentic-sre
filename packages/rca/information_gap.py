@@ -298,20 +298,22 @@ def _available_capabilities(
             for capability in capabilities
             if capability.name not in {"resource_pressure", "traffic"}
         )
-    if dimension in {GapDimension.RESOURCE_PRESSURE, GapDimension.METRIC_BASELINE}:
-        pods = tuple(
-            entity
-            for hypothesis in hypotheses
-            for entity in hypothesis.members
-            if entity.kind == "Pod"
-        )
-        cutoff = source.observation_cutoff()
-        since = cutoff - timedelta(hours=2) if cutoff is not None else None
-        if since is None or not source.resource_pressure(pods, since):
-            return ()
-    if dimension is GapDimension.METRIC_CHANGE and not source.traffic_observations():
-        return ()
-    return capabilities
+    available: list[ToolCapability] = []
+    pods = tuple(
+        entity for hypothesis in hypotheses for entity in hypothesis.members if entity.kind == "Pod"
+    )
+    cutoff = source.observation_cutoff()
+    since = cutoff - timedelta(hours=2) if cutoff is not None else None
+    for capability in capabilities:
+        if capability.name == "resource_pressure":
+            if since is not None and source.resource_pressure(pods, since):
+                available.append(capability)
+        elif capability.name == "traffic":
+            if source.traffic_observations():
+                available.append(capability)
+        else:
+            available.append(capability)
+    return tuple(available)
 
 
 def _gap_for(

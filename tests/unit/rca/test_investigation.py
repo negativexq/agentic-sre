@@ -188,6 +188,28 @@ def _rebuild_with_findings(base: Case, findings: tuple[Finding, ...]) -> Case:
     )
 
 
+def _rebuild_with_left_contradiction(base: Case, findings: tuple[Finding, ...]) -> Case:
+    if not findings:
+        return base
+    left = base.hypotheses[0].model_copy(
+        update={
+            "hypothesis_id": "hypothesis:left:contradicted",
+            "findings": (*base.hypotheses[0].findings, *findings),
+            "contradictory_findings": (
+                *base.hypotheses[0].contradictory_findings,
+                *findings,
+            ),
+        }
+    )
+    hypotheses = [base.hypotheses[1], left]
+    return replace(
+        base,
+        findings=[*base.findings, *findings],
+        hypotheses=hypotheses,
+        candidates=[hypothesis_candidate(item) for item in hypotheses],
+    )
+
+
 def _policy_action(
     gap_id: str, target: EntityRef, capability: str = "events"
 ) -> InvestigationAction:
@@ -229,6 +251,31 @@ def test_ambiguous_investigation_adds_evidence_and_resolves_deterministically() 
     assert tool.calls == 1
     assert result.observations[0].outcome is GapOutcomeKind.SUPPORTS
     assert result.observations[0].hypothesis_ids
+
+
+def test_investigation_observation_can_reveal_a_temporal_contradiction() -> None:
+    case, left, right = _case()
+    initial = diagnose_case(case)
+    gap = next(gap for gap in initial.information_gaps if "events" in gap.candidate_tools)
+    contradiction = _finding(left, FindingKind.CONFIG_CHANGE, "late:left").model_copy(
+        update={
+            "at": T0 + timedelta(hours=2),
+            "onset_delta_seconds": 7180,
+            "temporal_role": EvidenceTemporalRole.CONSEQUENCE,
+        }
+    )
+    result = investigate_diagnosis(
+        case.source,
+        diagnosis=initial,
+        initial_case=case,
+        policy=ScriptedInvestigationPolicy([_policy_action(gap.gap_id, left)]),
+        tools={"events": _DiscriminatingEventsTool(contradiction)},
+        rebuild_case=_rebuild_with_left_contradiction,
+    )
+    assert result.final_resolution is Resolution.RESOLVED
+    assert result.diagnosis.root_cause == right
+    assert result.diagnosis.resolution_trace is not None
+    assert result.diagnosis.resolution_trace.decision_basis == "VALID_CONTRADICTION"
 
 
 def test_no_data_is_neutral_and_does_not_resolve() -> None:

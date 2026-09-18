@@ -250,6 +250,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         model_calls_remaining=max(0, rt.config.max_model_calls - state["model_calls"]),
         tool_calls_remaining=max(0, rt.config.max_tool_calls - state["tool_calls"]),
         previous_investigations=tuple(state.get("ledger", ())[-8:]),
+        last_rejection=state.get("last_rejection"),
     )
     before = _policy_calls(rt.policy)
     try:
@@ -311,6 +312,11 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                 if stop is not None
                 else InvestigationActionStatus.INVALID_RETRY
             ),
+            "last_rejection": (
+                result.reason,
+                action.capability or "",
+                action.target.canonical if action.target is not None else "",
+            ),
             "trace_steps": _with_step(state, "rejected", result.reason),
         }
     if action.action == "stop":
@@ -327,6 +333,7 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         ),
         "stop_reason": None,
         "action_validation_status": InvestigationActionStatus.VALID_INSPECT,
+        "last_rejection": None,
         "trace_steps": _with_step(state, "validate_action", "allowed read-only action"),
     }
 
@@ -772,6 +779,7 @@ def build_investigation_state(
         "previous_gap_fingerprint": _gap_fingerprint(initial),
         "previous_evidence_fingerprint": _evidence_fingerprint(case),
         "previous_hypothesis_fingerprint": _hypothesis_fingerprint(initial),
+        "last_rejection": None,
         "action_validation_status": None,
         "turns": 0,
         "model_calls": 0,

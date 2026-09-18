@@ -193,6 +193,18 @@ class _CountingInvalidPolicy:
         return InvestigationAction(action="inspect", rationale="missing required fields")
 
 
+class _ContextCapturePolicy:
+    counts_as_model = False
+
+    def __init__(self, actions: list[InvestigationAction]) -> None:
+        self.actions = actions
+        self.contexts: list[InvestigationPolicyContext] = []
+
+    def choose_action(self, context: InvestigationPolicyContext) -> InvestigationAction:
+        self.contexts.append(context)
+        return self.actions.pop(0)
+
+
 class _ProgressThenNoDataTool:
     name = "events"
 
@@ -538,6 +550,31 @@ def test_out_of_scope_target_retries_before_valid_target_executes() -> None:
     assert result.rejected_actions == 1
     assert result.tool_calls == 1
     assert tool.calls == 1
+
+
+def test_invalid_retry_context_explains_rejection_without_tool_execution() -> None:
+    case, _left, right = _case()
+    initial = diagnose_case(case)
+    gap = next(gap for gap in initial.information_gaps if "events" in gap.candidate_tools)
+    tool = _NoDataTool()
+    policy = _ContextCapturePolicy(
+        [_policy_action(gap.gap_id, _entity("HPA", "unrelated")), _policy_action(gap.gap_id, right)]
+    )
+
+    result = investigate_diagnosis(
+        case.source,
+        diagnosis=initial,
+        initial_case=case,
+        config=InvestigationConfig(max_no_progress_rounds=1),
+        policy=policy,
+        tools={"events": tool},
+    )
+
+    assert result.rejected_actions == 1
+    assert tool.calls == 1
+    assert len(policy.contexts) == 2
+    assert policy.contexts[1].last_rejection is not None
+    assert "outside the gap entity scope" in policy.contexts[1].last_rejection[0]
 
 
 def test_resolved_case_skips_investigation() -> None:

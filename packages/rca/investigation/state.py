@@ -68,6 +68,7 @@ class InvestigationPolicyContext:
     model_calls_remaining: int
     tool_calls_remaining: int
     previous_investigations: tuple[InvestigationLedgerEntry, ...] = ()
+    last_rejection: tuple[str, str, str] | None = None
 
 
 class InvestigationPolicy(Protocol):
@@ -134,6 +135,7 @@ class InvestigationState(TypedDict, total=False):
     stop_reason: InvestigationStopReason | None
     trace_steps: tuple[InvestigationStep, ...]
     final_result: InvestigationResult | None
+    last_rejection: tuple[str, str, str] | None
 
 
 __all__ = [

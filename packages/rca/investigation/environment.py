@@ -168,7 +168,10 @@ class InitialObservationView:
 
     def _seed_entities(self) -> set[EntityRef]:
         latest = self._latest()
-        topology = Topology(derive_edges(latest, self.full_source.events()), latest)
+        # Event-derived chaos edges are investigation telemetry.  Including
+        # the full event journal here would let hidden Schedule/Chaos events
+        # alter the initial topology before a targeted query is requested.
+        topology = Topology(derive_edges(latest), latest)
         entities = symptom_entities(self.full_source.alerts(), topology)
         seeded = set(entities)
         for entity in entities:
@@ -237,8 +240,11 @@ class InitialObservationView:
         return tuple(records[:limit])
 
     def error_logs(self) -> tuple[LogRecord, ...]:
-        services = {alert.service for alert in self.full_source.alerts() if alert.service}
-        return tuple(item for item in self.full_source.error_logs() if item.service in services)
+        # Logs are an investigation capability, not part of the bounded seed.
+        # Returning the full alert-service history here would make
+        # ``build_case(initial_view(source))`` consume the same evidence that a
+        # later LogsTool query is supposed to acquire.
+        return ()
 
     def resource_pressure(
         self, pods: Sequence[EntityRef], since: datetime

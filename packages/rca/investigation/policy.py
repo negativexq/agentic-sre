@@ -165,6 +165,15 @@ def _brief(context: InvestigationPolicyContext) -> str:
         "hypotheses": hypotheses,
         "gaps": gaps,
         "previous_attempts": context.attempted_actions[-8:],
+        "last_rejection": (
+            {
+                "reason": context.last_rejection[0],
+                "capability": context.last_rejection[1],
+                "target": context.last_rejection[2],
+            }
+            if context.last_rejection is not None
+            else None
+        ),
         "turn": context.turns,
         "model_calls_remaining": context.model_calls_remaining,
         "tool_calls_remaining": context.tool_calls_remaining,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol, TypedDict
@@ -22,7 +22,6 @@ from packages.rca.model import (
     InvestigationStopReason,
     Resolution,
 )
-from packages.rca.source import ObservationSource
 
 
 @dataclass(frozen=True)
@@ -94,21 +93,16 @@ CaseRebuilder = Callable[[Case, tuple[Finding, ...]], Case]
 
 
 class InvestigationState(TypedDict, total=False):
-    """Checkpointable bounded graph state.
+    """Checkpointable bounded graph state: data only.
 
-    The values are typed domain objects rather than raw cluster dumps.  LangGraph
-    owns orchestration; the domain objects remain independent of it.
+    Every value must serialize without pickle. Live dependencies (the
+    observation source, the policy and its model client, tools, the case
+    rebuilder, configuration) are bound to the graph's nodes when it is built;
+    the current case is rebuilt from the source plus ``investigation_findings``.
     """
 
     incident_id: str
-    source: ObservationSource
-    config: InvestigationConfig
-    policy: InvestigationPolicy
-    tools: Mapping[str, InvestigationTool]
-    rebuild_case: CaseRebuilder
     started_at: datetime
-    base_case: Case
-    current_case: Case
     initial_diagnosis: Diagnosis
     current_diagnosis: Diagnosis
     observations: tuple[InvestigationObservation, ...]

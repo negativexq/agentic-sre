@@ -1,24 +1,33 @@
 from __future__ import annotations
 
-from dataclasses import replace
+import threading
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from rca_builders import alert, at, deployment, version
 
 from packages.rca.engine import Case, build_case, diagnose_case
 from packages.rca.hypotheses import hypothesis_candidate
 from packages.rca.investigation.graph import (
+    _frozen,
     build_investigation_graph,
     build_investigation_state,
     investigate_diagnosis,
     resume_investigation,
 )
 from packages.rca.investigation.policy import LLMInvestigationPolicy, ScriptedInvestigationPolicy
-from packages.rca.investigation.state import InvestigationConfig, InvestigationPolicyContext
+from packages.rca.investigation.state import (
+    InvestigationConfig,
+    InvestigationPolicyContext,
+    InvestigationState,
+)
 from packages.rca.investigation.tools import default_tools, make_observation
-from packages.rca.llm import ScriptedLLM
+from packages.rca.llm import OpenAIClient, ScriptedLLM
 from packages.rca.model import (
     Alert,
     ClusterEvent,
@@ -31,6 +40,7 @@ from packages.rca.model import (
     HypothesisDiagnostics,
     InvestigationAction,
     InvestigationObservation,
+    InvestigationStopReason,
     Resolution,
     Symptoms,
 )
@@ -809,24 +819,19 @@ def test_checkpoint_resume_preserves_state_and_does_not_repeat_action() -> None:
     tool = _DiscriminatingEventsTool(finding)
     policy = ScriptedInvestigationPolicy([_policy_action(gap.gap_id, right)])
     config = InvestigationConfig(max_no_progress_rounds=1)
-    from langgraph.checkpoint.memory import InMemorySaver
-    from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-
-    saver = InMemorySaver(serde=JsonPlusSerializer(pickle_fallback=True))
+    saver = InMemorySaver(serde=JsonPlusSerializer(pickle_fallback=False))
     graph = build_investigation_graph(
+        source=case.source,
         policy=policy,
         tools={"events": tool},
+        config=config,
+        initial_case=case,
+        rebuild_case=_rebuild_with_findings,
         checkpointer=saver,
         interrupt_after=("normalize_observation",),
     )
     state = build_investigation_state(
-        case.source,
-        diagnosis=initial,
-        initial_case=case,
-        policy=policy,
-        config=config,
-        tools={"events": tool},
-        rebuild_case=_rebuild_with_findings,
+        case.source, diagnosis=initial, initial_case=case, config=config
     )
     thread_id = "checkpoint-test"
     partial = graph.invoke(state, config={"configurable": {"thread_id": thread_id}})
@@ -836,3 +841,106 @@ def test_checkpoint_resume_preserves_state_and_does_not_repeat_action() -> None:
     assert result.tool_calls == 1
     assert result.observations
     assert tool.calls == 1
+
+
+_CHECKPOINT_DATA_KEYS = set(InvestigationState.__annotations__)
+_RUNTIME_KEYS = {"source", "policy", "tools", "config", "rebuild_case", "base_case", "current_case"}
+
+
+def test_real_llm_policy_with_a_locked_client_can_be_checkpointed() -> None:
+    """Regression for the v1.1.0 canonical run: the first checkpoint write failed
+    with "cannot pickle '_thread.lock'" because the state held the policy, whose
+    OpenAIClient carries a budget lock."""
+    case, _left, _right = _case()
+    client = OpenAIClient(enabled=False, max_calls=1)
+    result = investigate_diagnosis(
+        case.source,
+        initial_case=case,
+        policy=LLMInvestigationPolicy(client),
+        rebuild_case=_rebuild_with_findings,
+    )
+    # The disabled client refuses to call the API: the run must reach the
+    # policy and stop there, not crash while checkpointing.
+    assert result.stop_reason is InvestigationStopReason.MODEL_FAILURE
+    assert result.model_calls == 0
+
+
+@dataclass
+class _LockedSource(InMemorySource):
+    """A source that, like a live reader, cannot be pickled."""
+
+    lock: Any = field(default_factory=threading.Lock)
+
+
+def test_unpicklable_source_never_enters_a_checkpoint_and_resume_rebuilds_the_case() -> None:
+    case, _left, right = _case()
+    locked = _LockedSource(
+        name=case.source.incident_id(),
+        alert_items=list(case.source.alerts()),
+        cutoff=case.source.observation_cutoff(),
+    )
+    case = replace(case, source=locked)
+    initial = diagnose_case(case)
+    gap = next(gap for gap in initial.information_gaps if "events" in gap.candidate_tools)
+    tool = _DiscriminatingEventsTool(_finding(right, FindingKind.CONFIG_CHANGE, "config:locked"))
+    policy = ScriptedInvestigationPolicy([_policy_action(gap.gap_id, right)])
+    config = InvestigationConfig(max_no_progress_rounds=1)
+    saver = InMemorySaver(serde=JsonPlusSerializer(pickle_fallback=False))
+    graph = build_investigation_graph(
+        source=locked,
+        policy=policy,
+        tools={"events": tool},
+        config=config,
+        initial_case=case,
+        rebuild_case=_rebuild_with_findings,
+        checkpointer=saver,
+        interrupt_after=("normalize_observation",),
+    )
+    thread: RunnableConfig = {"configurable": {"thread_id": "locked-source"}}
+    state = build_investigation_state(locked, diagnosis=initial, initial_case=case, config=config)
+    graph.invoke(state, config=thread)
+    for checkpoint in saver.list(thread):
+        keys = set(checkpoint.checkpoint["channel_values"])
+        assert not keys & _RUNTIME_KEYS
+    result = resume_investigation(graph, thread_id="locked-source")
+    assert result.final_resolution is Resolution.RESOLVED
+    assert tool.calls == 1
+
+
+def test_initial_state_is_data_only_and_round_trips_without_pickle() -> None:
+    case, _left, _right = _case()
+    state = build_investigation_state(case.source, initial_case=case)
+    assert set(state) <= _CHECKPOINT_DATA_KEYS
+    assert not set(_CHECKPOINT_DATA_KEYS) & _RUNTIME_KEYS
+    serde = JsonPlusSerializer(pickle_fallback=False)
+    for key, value in state.items():
+        restored = serde.loads_typed(serde.dumps_typed(value))
+        # msgpack returns tuples as lists; graph code compares through _frozen.
+        assert _frozen(restored) == _frozen(value), key
+
+
+def test_no_progress_guard_still_fires_after_a_checkpoint_resume() -> None:
+    """Checkpointed tuples come back as lists; the progress fingerprints must
+    still compare equal, or a resumed run never stops for lack of progress."""
+    case, _left, right = _case()
+    initial = diagnose_case(case)
+    gap = next(gap for gap in initial.information_gaps if "events" in gap.candidate_tools)
+    config = InvestigationConfig(max_no_progress_rounds=1)
+    saver = InMemorySaver(serde=JsonPlusSerializer(pickle_fallback=False))
+    graph = build_investigation_graph(
+        source=case.source,
+        policy=ScriptedInvestigationPolicy([_policy_action(gap.gap_id, right)]),
+        tools={"events": _NoDataTool()},
+        config=config,
+        initial_case=case,
+        rebuild_case=_rebuild_with_findings,
+        checkpointer=saver,
+        interrupt_before=("check_progress",),
+    )
+    state = build_investigation_state(
+        case.source, diagnosis=initial, initial_case=case, config=config
+    )
+    graph.invoke(state, config={"configurable": {"thread_id": "resume-no-progress"}})
+    result = resume_investigation(graph, thread_id="resume-no-progress")
+    assert result.stop_reason is InvestigationStopReason.NO_PROGRESS
+    assert result.tool_calls == 1

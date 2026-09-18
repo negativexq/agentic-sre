@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -58,12 +58,59 @@ def _default_rebuilder(config: InvestigationConfig) -> CaseRebuilder:
     return _DefaultCaseRebuilder(_engine_config(config))
 
 
+class _Runtime:
+    """Live dependencies of one graph, bound to its nodes and never checkpointed.
+
+    The checkpoint holds only data (diagnoses, observations, findings, counters).
+    The case is derived from the source plus the accumulated investigation
+    findings, so a resumed thread rebuilds it instead of reading a pickled copy
+    of a data source, an LLM client, or a callable.
+    """
+
+    def __init__(
+        self,
+        *,
+        source: ObservationSource,
+        policy: InvestigationPolicy,
+        tools: Mapping[str, InvestigationTool] | None,
+        config: InvestigationConfig | None,
+        initial_case: Case | None,
+        rebuild_case: CaseRebuilder | None,
+    ) -> None:
+        self.source = source
+        self.policy = policy
+        self.tools: Mapping[str, InvestigationTool] = dict(tools or default_tools())
+        self.config = config or InvestigationConfig()
+        self.engine_config = _engine_config(self.config)
+        self.rebuild_case = rebuild_case or _default_rebuilder(self.config)
+        self.base_case = initial_case or build_case(source, self.engine_config)
+        self._cached: tuple[tuple[Finding, ...], Case] = ((), self.base_case)
+
+    def case_for(self, findings: tuple[Finding, ...] | list[Finding]) -> Case:
+        """The current case for these investigation findings, rebuilt on demand."""
+        key = tuple(findings)
+        if not key:
+            return self.base_case
+        if self._cached[0] == key:
+            return self._cached[1]
+        case = self.rebuild_case(self.base_case, key)
+        self._cached = (key, case)
+        return case
+
+
 def _resolvable_gaps(diagnosis: Diagnosis) -> tuple[InformationGap, ...]:
     return tuple(
         gap
         for gap in diagnosis.information_gaps
         if gap.resolvability is GapResolvability.RESOLVABLE and gap.candidate_tools
     )
+
+
+def _frozen(value: Any) -> Any:
+    """Restore tuples that a checkpoint round trip turned into lists."""
+    if isinstance(value, list | tuple):
+        return tuple(_frozen(item) for item in value)
+    return value
 
 
 def _gap_fingerprint(diagnosis: Diagnosis) -> tuple[tuple[str, ...], ...]:
@@ -112,7 +159,7 @@ def _with_step(
     )
 
 
-def _assess(state: InvestigationState) -> dict[str, Any]:
+def _assess(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     diagnosis = state["current_diagnosis"]
     if diagnosis.resolution is Resolution.RESOLVED:
         return {
@@ -126,25 +173,25 @@ def _assess(state: InvestigationState) -> dict[str, Any]:
             "stop_reason": InvestigationStopReason.NO_RESOLVABLE_GAP,
             "trace_steps": _with_step(state, "assess", "no resolvable information gap remains"),
         }
-    if state["turns"] >= state["config"].max_turns:
+    if state["turns"] >= rt.config.max_turns:
         return {
             "stop_reason": InvestigationStopReason.TURN_BUDGET_EXHAUSTED,
             "trace_steps": _with_step(state, "assess", "turn budget exhausted"),
         }
     elapsed = (datetime.now(UTC) - state["started_at"]).total_seconds()
-    if elapsed >= state["config"].max_wall_time_seconds:
+    if elapsed >= rt.config.max_wall_time_seconds:
         return {
             "stop_reason": InvestigationStopReason.WALL_TIME_EXHAUSTED,
             "trace_steps": _with_step(state, "assess", "wall-time budget exhausted"),
         }
-    if state["model_calls"] >= state["config"].max_model_calls and getattr(
-        state["policy"], "counts_as_model", False
+    if state["model_calls"] >= rt.config.max_model_calls and getattr(
+        rt.policy, "counts_as_model", False
     ):
         return {
             "stop_reason": InvestigationStopReason.MODEL_BUDGET_EXHAUSTED,
             "trace_steps": _with_step(state, "assess", "model-call budget exhausted"),
         }
-    if state["tool_calls"] >= state["config"].max_tool_calls:
+    if state["tool_calls"] >= rt.config.max_tool_calls:
         return {
             "stop_reason": InvestigationStopReason.TOOL_BUDGET_EXHAUSTED,
             "trace_steps": _with_step(state, "assess", "tool-call budget exhausted"),
@@ -156,7 +203,7 @@ def _route_after_assess(state: InvestigationState) -> str:
     return "finalize" if state.get("stop_reason") is not None else "select_action"
 
 
-def _select_action(state: InvestigationState) -> dict[str, Any]:
+def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     diagnosis = state["current_diagnosis"]
     gaps = _resolvable_gaps(diagnosis)
     context = InvestigationPolicyContext(
@@ -166,20 +213,20 @@ def _select_action(state: InvestigationState) -> dict[str, Any]:
         gaps=gaps,
         attempted_actions=state["attempted_actions"][-16:],
         turns=state["turns"],
-        model_calls_remaining=max(0, state["config"].max_model_calls - state["model_calls"]),
-        tool_calls_remaining=max(0, state["config"].max_tool_calls - state["tool_calls"]),
+        model_calls_remaining=max(0, rt.config.max_model_calls - state["model_calls"]),
+        tool_calls_remaining=max(0, rt.config.max_tool_calls - state["tool_calls"]),
     )
-    before = _policy_calls(state["policy"])
+    before = _policy_calls(rt.policy)
     try:
-        action = state["policy"].choose_action(context)
+        action = rt.policy.choose_action(context)
     except LLMError as error:
         return {
             "stop_reason": InvestigationStopReason.MODEL_FAILURE,
             "turns": state["turns"] + 1,
-            "model_calls": state["model_calls"] + max(0, _policy_calls(state["policy"]) - before),
+            "model_calls": state["model_calls"] + max(0, _policy_calls(rt.policy) - before),
             "trace_steps": _with_step(state, "model_error", str(error)),
         }
-    after = _policy_calls(state["policy"])
+    after = _policy_calls(rt.policy)
     return {
         "pending_action": action,
         "stop_reason": None,
@@ -197,7 +244,7 @@ def _route_after_select(state: InvestigationState) -> str:
     return "finalize" if state.get("stop_reason") is not None else "validate_action"
 
 
-def _validate(state: InvestigationState) -> dict[str, Any]:
+def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     action = state.get("pending_action")
     if action is None:
         return {
@@ -208,16 +255,16 @@ def _validate(state: InvestigationState) -> dict[str, Any]:
     result = validate_action(
         action,
         gaps=_resolvable_gaps(state["current_diagnosis"]),
-        tools=state["tools"],
+        tools=rt.tools,
         attempted_actions=state["attempted_actions"],
         tool_calls=state["tool_calls"],
-        config=state["config"],
+        config=rt.config,
     )
     if not result.valid:
         invalid = state["invalid_actions"] + 1
         stop = (
             InvestigationStopReason.POLICY_STOP
-            if invalid >= state["config"].max_invalid_actions
+            if invalid >= rt.config.max_invalid_actions
             else None
         )
         return {
@@ -267,16 +314,16 @@ def _route_after_validate(state: InvestigationState) -> str:
     return "finalize"
 
 
-def _execute_tool(state: InvestigationState) -> dict[str, Any]:
+def _execute_tool(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     action = state["pending_action"]
     assert action is not None and action.gap_id is not None and action.capability is not None
     gap = next(
         gap for gap in _resolvable_gaps(state["current_diagnosis"]) if gap.gap_id == action.gap_id
     )
     assert action.target is not None
-    tool = state["tools"][action.capability]
+    tool = rt.tools[action.capability]
     try:
-        observation = tool.execute(state["current_case"], gap, action.target)
+        observation = tool.execute(rt.case_for(state["investigation_findings"]), gap, action.target)
     except Exception as error:  # semantic tools must not crash the diagnosis
         observation = make_observation(
             gap=gap,
@@ -297,7 +344,7 @@ def _execute_tool(state: InvestigationState) -> dict[str, Any]:
     }
 
 
-def _normalize(state: InvestigationState) -> dict[str, Any]:
+def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     observation = state.get("pending_observation")
     if observation is None:
         return {"last_new_evidence_count": 0}
@@ -315,9 +362,11 @@ def _normalize(state: InvestigationState) -> dict[str, Any]:
             "last_new_evidence_count": 0,
             "trace_steps": _with_step(state, "normalize", "observation gap no longer exists"),
         }
-    normalized = normalize_observation(observation, case=state["current_case"], gap=gap)
+    normalized = normalize_observation(
+        observation, case=rt.case_for(state["investigation_findings"]), gap=gap
+    )
     fresh_findings = _new_investigation_findings(
-        (*state["current_case"].findings, *state["investigation_findings"]),
+        (*rt.case_for(state["investigation_findings"]).findings, *state["investigation_findings"]),
         normalized.findings,
     )
     existing_ids = {item.observation_id for item in state["observations"]}
@@ -360,13 +409,12 @@ def _new_investigation_findings(
     return tuple(fresh)
 
 
-def _rebuild(state: InvestigationState) -> dict[str, Any]:
+def _rebuild(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     pending = state.get("pending_findings", ())
     combined = deduplicate_findings((*state["investigation_findings"], *pending))
-    case = state["rebuild_case"](state["base_case"], combined)
-    diagnosis = diagnose_case(case, config=_engine_config(state["config"]))
+    case = rt.case_for(combined)
+    diagnosis = diagnose_case(case, config=rt.engine_config)
     return {
-        "current_case": case,
         "current_diagnosis": diagnosis,
         "investigation_findings": combined,
         "trace_steps": _with_step(state, "rebuild", f"resolution={diagnosis.resolution.value}"),
@@ -377,19 +425,21 @@ def _route_after_rebuild(state: InvestigationState) -> str:
     return "check_progress"
 
 
-def _check_progress(state: InvestigationState) -> dict[str, Any]:
+def _check_progress(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     current = state["current_diagnosis"]
     current_resolution = current.resolution
     current_gap_fingerprint = _gap_fingerprint(current)
-    current_evidence_fingerprint = _evidence_fingerprint(state["current_case"])
+    current_evidence_fingerprint = _evidence_fingerprint(
+        rt.case_for(state["investigation_findings"])
+    )
     current_hypothesis_fingerprint = _hypothesis_fingerprint(current)
     previous = state.get("previous_resolution", state["initial_diagnosis"].resolution)
     no_progress = state["no_progress_count"]
     unchanged = (
         current_resolution is previous
-        and current_gap_fingerprint == state["previous_gap_fingerprint"]
-        and current_evidence_fingerprint == state["previous_evidence_fingerprint"]
-        and current_hypothesis_fingerprint == state["previous_hypothesis_fingerprint"]
+        and current_gap_fingerprint == _frozen(state["previous_gap_fingerprint"])
+        and current_evidence_fingerprint == _frozen(state["previous_evidence_fingerprint"])
+        and current_hypothesis_fingerprint == _frozen(state["previous_hypothesis_fingerprint"])
     )
     if unchanged:
         no_progress += 1
@@ -401,18 +451,18 @@ def _check_progress(state: InvestigationState) -> dict[str, Any]:
         stop = InvestigationStopReason.RESOLVED
     elif not resolvable:
         stop = InvestigationStopReason.NO_RESOLVABLE_GAP
-    elif no_progress >= state["config"].max_no_progress_rounds:
+    elif no_progress >= rt.config.max_no_progress_rounds:
         stop = InvestigationStopReason.NO_PROGRESS
-    elif state["turns"] >= state["config"].max_turns:
+    elif state["turns"] >= rt.config.max_turns:
         stop = InvestigationStopReason.TURN_BUDGET_EXHAUSTED
-    elif (datetime.now(UTC) - state["started_at"]).total_seconds() >= state[
-        "config"
-    ].max_wall_time_seconds:
+    elif (
+        datetime.now(UTC) - state["started_at"]
+    ).total_seconds() >= rt.config.max_wall_time_seconds:
         stop = InvestigationStopReason.WALL_TIME_EXHAUSTED
-    elif state["tool_calls"] >= state["config"].max_tool_calls:
+    elif state["tool_calls"] >= rt.config.max_tool_calls:
         stop = InvestigationStopReason.TOOL_BUDGET_EXHAUSTED
-    elif state["model_calls"] >= state["config"].max_model_calls and getattr(
-        state["policy"], "counts_as_model", False
+    elif state["model_calls"] >= rt.config.max_model_calls and getattr(
+        rt.policy, "counts_as_model", False
     ):
         stop = InvestigationStopReason.MODEL_BUDGET_EXHAUSTED
     return {
@@ -476,22 +526,44 @@ def _finalize(state: InvestigationState) -> dict[str, Any]:
 
 def build_investigation_graph(
     *,
+    source: ObservationSource,
     policy: InvestigationPolicy,
     tools: Mapping[str, InvestigationTool] | None = None,
     config: InvestigationConfig | None = None,
+    initial_case: Case | None = None,
+    rebuild_case: CaseRebuilder | None = None,
     checkpointer: Any | None = None,
     interrupt_before: tuple[str, ...] = (),
     interrupt_after: tuple[str, ...] = (),
 ) -> Any:
-    """Build the explicit bounded graph with an injectable checkpointer."""
+    """Build the bounded graph; live dependencies are bound to nodes, not state.
+
+    The default checkpointer refuses pickle, so any runtime object that leaks
+    into state fails at the first checkpoint instead of being silently copied.
+    """
+    rt = _Runtime(
+        source=source,
+        policy=policy,
+        tools=tools,
+        config=config,
+        initial_case=initial_case,
+        rebuild_case=rebuild_case,
+    )
+
+    def bind(node: Callable[[InvestigationState, _Runtime], dict[str, Any]]) -> Any:
+        def run(state: InvestigationState) -> dict[str, Any]:
+            return node(state, rt)
+
+        return run
+
     graph = StateGraph(InvestigationState)
-    graph.add_node("assess", _assess)
-    graph.add_node("select_action", _select_action)
-    graph.add_node("validate_action", _validate)
-    graph.add_node("execute_tool", _execute_tool)
-    graph.add_node("normalize_observation", _normalize)
-    graph.add_node("rebuild_hypotheses", _rebuild)
-    graph.add_node("check_progress", _check_progress)
+    graph.add_node("assess", bind(_assess))
+    graph.add_node("select_action", bind(_select_action))
+    graph.add_node("validate_action", bind(_validate))
+    graph.add_node("execute_tool", bind(_execute_tool))
+    graph.add_node("normalize_observation", bind(_normalize))
+    graph.add_node("rebuild_hypotheses", bind(_rebuild))
+    graph.add_node("check_progress", bind(_check_progress))
     graph.add_node("finalize", _finalize)
     graph.add_edge(START, "assess")
     graph.add_conditional_edges(
@@ -520,7 +592,7 @@ def build_investigation_graph(
         {"select_action": "select_action", "finalize": "finalize"},
     )
     graph.add_edge("finalize", END)
-    saver = checkpointer or InMemorySaver(serde=JsonPlusSerializer(pickle_fallback=True))
+    saver = checkpointer or InMemorySaver(serde=JsonPlusSerializer(pickle_fallback=False))
     return graph.compile(
         checkpointer=saver,
         interrupt_before=list(interrupt_before),
@@ -541,21 +613,17 @@ def investigate_diagnosis(
     rebuild_case: CaseRebuilder | None = None,
 ) -> InvestigationResult:
     """Run one isolated bounded investigation and return deterministic output."""
-    state = build_investigation_state(
-        source,
-        diagnosis=diagnosis,
-        policy=policy,
-        config=config,
-        tools=tools,
-        initial_case=initial_case,
-        rebuild_case=rebuild_case,
-    )
+    case = initial_case or build_case(source, _engine_config(config or InvestigationConfig()))
     graph = build_investigation_graph(
+        source=source,
         policy=policy,
         tools=tools,
         config=config,
+        initial_case=case,
+        rebuild_case=rebuild_case,
         checkpointer=checkpointer,
     )
+    state = build_investigation_state(source, diagnosis=diagnosis, config=config, initial_case=case)
     thread = thread_id or f"{source.incident_id()}:investigation"
     result = graph.invoke(state, config={"configurable": {"thread_id": thread}})
     final = result.get("final_result")
@@ -568,27 +636,17 @@ def build_investigation_state(
     source: ObservationSource,
     *,
     diagnosis: Diagnosis | None = None,
-    policy: InvestigationPolicy,
     config: InvestigationConfig | None = None,
-    tools: Mapping[str, InvestigationTool] | None = None,
     initial_case: Case | None = None,
-    rebuild_case: CaseRebuilder | None = None,
 ) -> InvestigationState:
-    """Build a checkpointable initial state for direct graph or resume tests."""
+    """Build the initial checkpointable state: data only, no live dependencies."""
     effective = config or InvestigationConfig()
     engine_config = _engine_config(effective)
     case = initial_case or build_case(source, engine_config)
     initial = diagnosis or diagnose_case(case, config=engine_config)
     return {
         "incident_id": source.incident_id(),
-        "source": source,
-        "config": effective,
-        "policy": policy,
-        "tools": dict(tools or default_tools()),
-        "rebuild_case": rebuild_case or _default_rebuilder(effective),
         "started_at": datetime.now(UTC),
-        "base_case": case,
-        "current_case": case,
         "initial_diagnosis": initial,
         "current_diagnosis": initial,
         "observations": (),

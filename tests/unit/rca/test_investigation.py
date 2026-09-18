@@ -907,6 +907,74 @@ def test_unpicklable_source_never_enters_a_checkpoint_and_resume_rebuilds_the_ca
     assert tool.calls == 1
 
 
+def test_resume_uses_a_fresh_runtime_and_rebuilds_case_with_checkpointed_findings() -> None:
+    """A resumed graph must use runtime B while retaining logical state from A."""
+    case, _left, right = _case()
+    source_a = _LockedSource(
+        name="fresh-runtime",
+        alert_items=list(case.source.alerts()),
+        cutoff=case.source.observation_cutoff(),
+    )
+    source_b = _LockedSource(
+        name="fresh-runtime",
+        alert_items=list(case.source.alerts()),
+        cutoff=case.source.observation_cutoff(),
+    )
+    case_a = replace(case, source=source_a)
+    case_b = replace(case, source=source_b)
+    initial = diagnose_case(case_a)
+    gap = next(gap for gap in initial.information_gaps if "events" in gap.candidate_tools)
+    finding = _finding(right, FindingKind.CONFIG_CHANGE, "config:fresh-runtime")
+    tool_a = _DiscriminatingEventsTool(finding)
+    config = InvestigationConfig(max_no_progress_rounds=1)
+    saver = InMemorySaver(serde=JsonPlusSerializer(pickle_fallback=False))
+    thread = {"configurable": {"thread_id": "fresh-runtime"}}
+
+    graph_a = build_investigation_graph(
+        source=source_a,
+        policy=ScriptedInvestigationPolicy([_policy_action(gap.gap_id, right)]),
+        tools={"events": tool_a},
+        config=config,
+        initial_case=case_a,
+        rebuild_case=_rebuild_with_findings,
+        checkpointer=saver,
+        interrupt_after=("normalize_observation",),
+    )
+    state = build_investigation_state(
+        source_a, diagnosis=initial, initial_case=case_a, config=config
+    )
+    partial = graph_a.invoke(state, config=thread)
+    assert partial.get("final_result") is None
+    assert tool_a.calls == 1
+
+    rebuilt_sources: list[Any] = []
+    rebuilt_findings: list[tuple[Finding, ...]] = []
+
+    def fresh_rebuilder(base: Case, findings: tuple[Finding, ...]) -> Case:
+        rebuilt_sources.append(base.source)
+        rebuilt_findings.append(findings)
+        return _rebuild_with_findings(base, findings)
+
+    graph_b = build_investigation_graph(
+        source=source_b,
+        policy=ScriptedInvestigationPolicy([]),
+        tools={},
+        config=config,
+        initial_case=case_b,
+        rebuild_case=fresh_rebuilder,
+        checkpointer=saver,
+    )
+    result = resume_investigation(graph_b, thread_id="fresh-runtime")
+
+    assert result.final_resolution is Resolution.RESOLVED
+    assert result.observations
+    assert result.tool_calls == 1
+    assert rebuilt_sources == [source_b]
+    assert len(rebuilt_findings) == 1
+    assert len(rebuilt_findings[0]) == 1
+    assert rebuilt_findings[0][0].evidence_ids == finding.evidence_ids
+
+
 def test_initial_state_is_data_only_and_round_trips_without_pickle() -> None:
     case, _left, _right = _case()
     state = build_investigation_state(case.source, initial_case=case)

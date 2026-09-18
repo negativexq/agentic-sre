@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 from packages.rca.demo import demo_source
 from packages.rca.engine import diagnose
@@ -402,7 +403,7 @@ def test_unresolvable_metric_gap_is_not_presented_as_support() -> None:
     )
 
 
-def test_resolution_audit_ignores_structurally_similar_eliminated_pairs() -> None:
+def test_resolution_audit_explains_structurally_similar_eliminated_pairs() -> None:
     good = _hpa("good")
     weak_base = _hpa("weak-one").model_copy(
         update={
@@ -425,7 +426,14 @@ def test_resolution_audit_ignores_structurally_similar_eliminated_pairs() -> Non
     )
 
     assert trace.state is Resolution.RESOLVED
-    assert resolution_audit_records(diagnosis) == []
+    records = resolution_audit_records(diagnosis)
+
+    assert len(records) == 1
+    assert records[0]["classification"] == "ONLY_ONE_PLAUSIBLE"
+    selected = cast(dict[str, object], records[0]["selected"])
+    comparison_pair = cast(list[dict[str, object]], records[0]["comparison_pair"])
+    assert selected["hypothesis_id"] == good.hypothesis_id
+    assert all(not item["plausible"] for item in comparison_pair)
 
 
 def test_legacy_diagnosis_documents_backfill_resolution_without_losing_root_cause() -> None:

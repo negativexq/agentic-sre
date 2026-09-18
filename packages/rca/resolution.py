@@ -507,8 +507,15 @@ def resolution_audit_records(diagnosis: Diagnosis) -> list[dict[str, object]]:
             if left.signature != right.signature:
                 continue
             pair_ids = {left.hypothesis_id, right.hypothesis_id}
-            relevant_to_resolution = bool(pair_ids & plausible_ids) or bool(
-                final_selected is not None and final_selected.hypothesis_id in pair_ids
+            pair_has_plausible = bool(pair_ids & plausible_ids)
+            resolved_by_single_plausible = (
+                diagnosis.resolution is Resolution.RESOLVED
+                and final_selected is not None
+                and not pair_has_plausible
+            )
+            relevant_to_resolution = pair_has_plausible or bool(
+                final_selected is not None
+                and (final_selected.hypothesis_id in pair_ids or resolved_by_single_plausible)
             )
             if not relevant_to_resolution:
                 continue
@@ -537,10 +544,9 @@ def resolution_audit_records(diagnosis: Diagnosis) -> list[dict[str, object]]:
                 classification = "AMBIGUOUS_PEER"
             else:
                 classification = "SCORE_LEAKAGE"
-            if final_selected is not None and final_selected.hypothesis_id in {
-                left.hypothesis_id,
-                right.hypothesis_id,
-            }:
+            if final_selected is not None and (
+                final_selected.hypothesis_id in pair_ids or resolved_by_single_plausible
+            ):
                 selected, alternative = (
                     (final_selected, right)
                     if final_selected.hypothesis_id == left.hypothesis_id

@@ -45,8 +45,7 @@ def _with_provenance(
             "investigation_capability": observation.capability,
         }
     )
-    refs = tuple(dict.fromkeys((*finding.evidence_ids, *observation.evidence_refs)))
-    return finding.model_copy(update={"details": details, "evidence_ids": refs})
+    return finding.model_copy(update={"details": details})
 
 
 def _payload_findings(payload: dict[str, Any]) -> tuple[Finding, ...]:

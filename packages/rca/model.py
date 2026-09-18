@@ -457,9 +457,17 @@ class InvestigationQuery(BaseModel):
     end: datetime | None = None
     reasons: tuple[str, ...] = ()
     contains: tuple[str, ...] = ()
-    metric: str | None = None
-    include_baseline: bool = False
     limit: int = Field(default=32, ge=1, le=64)
+
+
+class AuthorizedQuery(BaseModel):
+    """One exact capability/target pair allowed for an information gap."""
+
+    model_config = ConfigDict(frozen=True)
+
+    capability: str
+    target: EntityRef
+    alternative_ids: tuple[str, ...] = ()
 
 
 class GapOutcome(BaseModel):
@@ -499,6 +507,7 @@ class InformationGap(BaseModel):
     missing_fact: str
     required_relation: str | None = None
     discriminating_outcomes: tuple[GapOutcome, ...] = ()
+    authorized_queries: tuple[AuthorizedQuery, ...] = ()
     candidate_tools: tuple[str, ...] = ()
     evidence_refs: tuple[str, ...] = ()
     priority: int = 1
@@ -551,6 +560,7 @@ class StructuralAlternative(BaseModel):
     linked_symptoms: tuple[str, ...] = ()
     queryable_dimensions: tuple[GapDimension, ...] = ()
     observation_targets: tuple[EntityRef, ...] = ()
+    queried_dimensions: tuple[GapDimension, ...] = ()
     status: FrontierStatus = FrontierStatus.UNEXPLORED
 
 
@@ -752,6 +762,7 @@ __all__ = [
     "InvestigationAction",
     "InvestigationLedgerEntry",
     "InvestigationQuery",
+    "AuthorizedQuery",
     "InvestigationActionStatus",
     "InvestigationStopReason",
     "InvestigationObservation",

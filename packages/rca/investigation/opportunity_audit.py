@@ -92,9 +92,10 @@ def _hypothesis_fingerprint(case: Case) -> tuple[str, ...]:
 def _gap_fingerprint(diagnosis: Diagnosis) -> tuple[str, ...]:
     return tuple(
         sorted(
-            f"{gap.gap_id}|{gap.resolvability.value}|{','.join(sorted(gap.candidate_tools))}"
+            f"{gap.gap_id}|{gap.resolvability.value}|"
+            f"{','.join(sorted(f'{item.capability}:{item.target.canonical}' for item in gap.authorized_queries))}"
             for gap in diagnosis.information_gaps
-            if gap.resolvability is GapResolvability.RESOLVABLE and gap.candidate_tools
+            if gap.resolvability is GapResolvability.RESOLVABLE and gap.authorized_queries
         )
     )
 
@@ -246,28 +247,29 @@ def audit_incident(
     gaps = tuple(
         gap
         for gap in diagnosis.information_gaps
-        if gap.resolvability is GapResolvability.RESOLVABLE and gap.candidate_tools
+        if gap.resolvability is GapResolvability.RESOLVABLE and gap.authorized_queries
     )
     backend = investigation_backend(source)
     tools = default_tools(backend)
     opportunities: list[QueryOpportunity] = []
     for gap in gaps:
-        for capability in sorted(gap.candidate_tools):
+        for authorized in gap.authorized_queries:
+            capability = authorized.capability
+            target = authorized.target
             if capability not in tools:
                 continue
-            for target in sorted(gap.entity_scope, key=lambda item: item.canonical):
-                opportunities.append(
-                    _execute_opportunity(
-                        source,
-                        bounded,
-                        initial_case,
-                        diagnosis,
-                        tools,
-                        gap,
-                        capability,
-                        target,
-                    )
+            opportunities.append(
+                _execute_opportunity(
+                    source,
+                    bounded,
+                    initial_case,
+                    diagnosis,
+                    tools,
+                    gap,
+                    capability,
+                    target,
                 )
+            )
     access: dict[str, tuple[str, ...]]
     if isinstance(bounded, InitialObservationView):
         access = bounded.access_ledger()

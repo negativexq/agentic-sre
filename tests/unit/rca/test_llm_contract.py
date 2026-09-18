@@ -25,8 +25,6 @@ def _inspect_payload() -> dict[str, Any]:
             "end": None,
             "reasons": [],
             "contains": [],
-            "metric": None,
-            "include_baseline": False,
             "limit": 32,
         },
         "rationale": "inspect the allowed event stream",
@@ -52,11 +50,11 @@ def test_investigation_wire_schema_is_openai_strict() -> None:
         "end",
         "reasons",
         "contains",
-        "metric",
-        "include_baseline",
         "limit",
     }
     assert query["additionalProperties"] is False
+    assert "metric" not in query["properties"]
+    assert "include_baseline" not in query["properties"]
 
 
 def test_wire_inspect_converts_to_domain_action() -> None:

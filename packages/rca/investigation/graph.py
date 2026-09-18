@@ -12,9 +12,15 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, START, StateGraph
 
 from packages.rca.engine import Case, EngineConfig, build_case, diagnose_case
-from packages.rca.frontier import investigation_status
-from packages.rca.information_gap import derive_information_gaps
-from packages.rca.investigation.actions import action_identity, validate_action
+from packages.rca.frontier import (
+    apply_frontier_progress,
+    covered_frontier_dimensions,
+)
+from packages.rca.investigation.actions import (
+    action_identity,
+    observation_identity,
+    validate_action,
+)
 from packages.rca.investigation.environment import (
     InvestigationBackend,
     initial_view,
@@ -38,7 +44,7 @@ from packages.rca.llm import LLMError
 from packages.rca.model import (
     Diagnosis,
     Finding,
-    FrontierStatus,
+    GapDimension,
     GapOutcomeKind,
     GapResolvability,
     InformationGap,
@@ -49,7 +55,6 @@ from packages.rca.model import (
     InvestigationStopReason,
     Resolution,
 )
-from packages.rca.resolution import resolve_hypotheses
 from packages.rca.source import ObservationSource
 
 
@@ -115,7 +120,7 @@ def _resolvable_gaps(diagnosis: Diagnosis) -> tuple[InformationGap, ...]:
     return tuple(
         gap
         for gap in diagnosis.information_gaps
-        if gap.resolvability is GapResolvability.RESOLVABLE and gap.candidate_tools
+        if gap.resolvability is GapResolvability.RESOLVABLE and gap.authorized_queries
     )
 
 
@@ -133,7 +138,10 @@ def _gap_fingerprint(diagnosis: Diagnosis) -> tuple[tuple[str, ...], ...]:
             (
                 gap.gap_id,
                 gap.resolvability.value,
-                *sorted(gap.candidate_tools),
+                *sorted(
+                    f"{query.capability}|{query.target.canonical}"
+                    for query in gap.authorized_queries
+                ),
                 *sorted(gap.hypothesis_ids),
                 *sorted(gap.alternative_ids),
             )
@@ -155,40 +163,6 @@ def _hypothesis_fingerprint(diagnosis: Diagnosis) -> tuple[str, ...]:
     if diagnosis.hypothesis is not None:
         hypotheses = (*hypotheses, diagnosis.hypothesis)
     return tuple(sorted({hypothesis.hypothesis_id for hypothesis in hypotheses}))
-
-
-def _with_frontier_status(
-    case: Case,
-    diagnosis: Diagnosis,
-    statuses: tuple[tuple[str, str], ...],
-) -> Diagnosis:
-    status_by_id = dict(statuses)
-    alternatives = tuple(
-        alternative.model_copy(
-            update={
-                "status": FrontierStatus(
-                    status_by_id.get(alternative.alternative_id, alternative.status.value)
-                )
-            }
-        )
-        for alternative in diagnosis.structural_alternatives
-    )
-    gaps = derive_information_gaps(
-        case.hypotheses,
-        diagnosis.resolution_trace or resolve_hypotheses(case.hypotheses),
-        case.source,
-        structural_alternatives=alternatives,
-    )
-    return diagnosis.model_copy(
-        update={
-            "structural_alternatives": alternatives,
-            "information_gaps": gaps,
-            "investigation_status": investigation_status(
-                alternatives,
-                bounded=bool(getattr(case.source, "initial_observation_bounded", False)),
-            ),
-        }
-    )
 
 
 def _policy_calls(policy: InvestigationPolicy) -> int:
@@ -337,6 +311,7 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         gaps=_resolvable_gaps(state["current_diagnosis"]),
         tools=rt.tools,
         attempted_actions=state["attempted_actions"],
+        attempted_observations=state.get("attempted_observations", ()),
         tool_calls=state["tool_calls"],
         config=rt.config,
     )
@@ -370,8 +345,14 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             "trace_steps": _with_step(state, "policy_stop", action.rationale),
         }
     identity = action_identity(action)
+    assert action.target is not None and action.capability is not None
+    read_identity = observation_identity(action.capability, action.target, action.query)
     return {
         "attempted_actions": (*state["attempted_actions"], identity),
+        "attempted_observations": (
+            *state.get("attempted_observations", ()),
+            read_identity,
+        ),
         "attempted_gap_ids": tuple(
             dict.fromkeys((*state["attempted_gap_ids"], action.gap_id or ""))
         ),
@@ -501,19 +482,18 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         for finding in fresh_findings
     )
     action = state.get("pending_action")
-    frontier = dict(state.get("frontier_status", ()))
-    affected_alternatives = {
-        alternative.alternative_id
-        for alternative in state["current_diagnosis"].structural_alternatives
-        if observation.target in alternative.observation_targets
-        or observation.target == alternative.actor
+    queried_dimensions = {
+        alternative_id: {GapDimension(value) for value in dimensions}
+        for alternative_id, dimensions in state.get("frontier_queried_dimensions", ())
     }
-    promoted_actors = {finding.entity for finding in fresh_findings}
-    for alternative in state["current_diagnosis"].structural_alternatives:
-        if alternative.actor in promoted_actors:
-            frontier[alternative.alternative_id] = FrontierStatus.PROMOTED.value
-        elif alternative.alternative_id in affected_alternatives:
-            frontier[alternative.alternative_id] = FrontierStatus.QUERIED_NO_CAUSAL_FINDING.value
+    if observation.error is None:
+        covered = covered_frontier_dimensions(
+            state["current_diagnosis"],
+            capability=observation.capability,
+            target=observation.target,
+        )
+        for alternative_id, dimensions in covered.items():
+            queried_dimensions.setdefault(alternative_id, set()).update(dimensions)
     ledger_entry = InvestigationLedgerEntry(
         query_id=observation.observation_id,
         gap_id=observation.gap_id,
@@ -537,7 +517,10 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         "observations": observations,
         "ledger": (*state.get("ledger", ()), ledger_entry),
         "pending_findings": fresh_findings,
-        "frontier_status": tuple(sorted(frontier.items())),
+        "frontier_queried_dimensions": tuple(
+            (alternative_id, tuple(sorted(dimensions, key=lambda item: item.value)))
+            for alternative_id, dimensions in sorted(queried_dimensions.items())
+        ),
         "last_new_evidence_count": len(fresh_findings),
         "trace_steps": _with_step(
             state,
@@ -551,8 +534,18 @@ def _rebuild(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     pending = state.get("pending_findings", ())
     combined = deduplicate_findings((*state["investigation_findings"], *pending))
     case = rt.case_for(combined)
+    queried_dimensions = {
+        alternative_id: tuple(GapDimension(value) for value in dimensions)
+        for alternative_id, dimensions in state.get("frontier_queried_dimensions", ())
+    }
+    case.structural_alternatives = list(
+        apply_frontier_progress(
+            case.structural_alternatives,
+            hypotheses=case.hypotheses,
+            queried_dimensions_by_alternative=queried_dimensions,
+        )
+    )
     diagnosis = diagnose_case(case, config=rt.engine_config)
-    diagnosis = _with_frontier_status(case, diagnosis, state.get("frontier_status", ()))
     return {
         "current_diagnosis": diagnosis,
         "investigation_findings": combined,
@@ -805,6 +798,7 @@ def build_investigation_state(
         "ledger": (),
         "investigation_findings": (),
         "attempted_actions": (),
+        "attempted_observations": (),
         "attempted_gap_ids": (),
         "pending_action": None,
         "pending_observation": None,
@@ -816,11 +810,7 @@ def build_investigation_state(
         "previous_gap_fingerprint": _gap_fingerprint(initial),
         "previous_evidence_fingerprint": _evidence_fingerprint(case),
         "previous_hypothesis_fingerprint": _hypothesis_fingerprint(initial),
-        "frontier_status": tuple(
-            sorted(
-                (item.alternative_id, item.status.value) for item in initial.structural_alternatives
-            )
-        ),
+        "frontier_queried_dimensions": (),
         "last_rejection": None,
         "action_validation_status": None,
         "turns": 0,

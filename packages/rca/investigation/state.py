@@ -114,6 +114,7 @@ class InvestigationState(TypedDict, total=False):
     ledger: tuple[InvestigationLedgerEntry, ...]
     investigation_findings: tuple[Finding, ...]
     attempted_actions: tuple[str, ...]
+    attempted_observations: tuple[str, ...]
     attempted_gap_ids: tuple[str, ...]
     pending_action: InvestigationAction | None
     pending_observation: InvestigationObservation | None
@@ -125,7 +126,7 @@ class InvestigationState(TypedDict, total=False):
     previous_gap_fingerprint: tuple[tuple[str, ...], ...]
     previous_evidence_fingerprint: tuple[str, ...]
     previous_hypothesis_fingerprint: tuple[str, ...]
-    frontier_status: tuple[tuple[str, str], ...]
+    frontier_queried_dimensions: tuple[tuple[str, tuple[str, ...]], ...]
     action_validation_status: InvestigationActionStatus | None
     turns: int
     model_calls: int

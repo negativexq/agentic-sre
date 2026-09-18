@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from packages.rca.engine import Case, build_case, diagnose_case
+from packages.rca.frontier import apply_frontier_progress, covered_frontier_dimensions
 from packages.rca.investigation.environment import SeedPolicy, initial_view, investigation_backend
 from packages.rca.investigation.multi_step_search import (
     MultiStepSearchResult,
@@ -29,8 +30,10 @@ from packages.rca.investigation.state import InvestigationTool
 from packages.rca.investigation.tools import default_tools
 from packages.rca.model import (
     Diagnosis,
+    EntityRef,
     Finding,
     FrontierStatus,
+    GapDimension,
     InformationGap,
     InvestigationQuery,
     StructuralAlternative,
@@ -302,39 +305,6 @@ def _frontier_materiality(alternatives: tuple[StructuralAlternative, ...]) -> Fr
     )
 
 
-def _frontier_after_audit(
-    alternatives: tuple[StructuralAlternative, ...],
-    audits: tuple[PromotionAudit, ...],
-) -> tuple[StructuralAlternative, ...]:
-    """Apply audit-only lifecycle bookkeeping without changing RCA semantics.
-
-    The control matrix must report whether an alternative was actually queried,
-    but it must not promote actors or manufacture evidence.  Promotion here is
-    only a view of the findings already produced by the production pipeline.
-    """
-    queried_targets = {audit.target for audit in audits if audit.raw_records or audit.returned_refs}
-    promoted_entities = {
-        label.split(":", 2)[1]
-        for audit in audits
-        for label in audit.normalized_findings
-        if label.count(":") >= 2
-    }
-    updated: list[StructuralAlternative] = []
-    for alternative in alternatives:
-        actor = alternative.actor.canonical
-        queried = actor in queried_targets or any(
-            target.canonical in queried_targets for target in alternative.observation_targets
-        )
-        if actor in promoted_entities:
-            status = FrontierStatus.PROMOTED
-        elif queried:
-            status = FrontierStatus.QUERIED_NO_CAUSAL_FINDING
-        else:
-            status = FrontierStatus.UNEXPLORED
-        updated.append(alternative.model_copy(update={"status": status}))
-    return tuple(updated)
-
-
 def _full_only_reason(
     finding: Finding,
     audits: tuple[PromotionAudit, ...],
@@ -434,8 +404,21 @@ def run_control_matrix(
         max_depth=max_depth,
         max_states=max_states,
     )
-    audited_alternatives = _frontier_after_audit(
-        tuple(seed_case.structural_alternatives), tuple(audits)
+    queried_dimensions: dict[str, set[GapDimension]] = defaultdict(set)
+    for audit in audits:
+        for alternative_id, dimensions in covered_frontier_dimensions(
+            seed_diagnosis,
+            capability=audit.capability,
+            target=EntityRef.parse(audit.target),
+        ).items():
+            queried_dimensions[alternative_id].update(dimensions)
+    audited_alternatives = apply_frontier_progress(
+        tuple(seed_case.structural_alternatives),
+        hypotheses=exhaustive_case.hypotheses,
+        queried_dimensions_by_alternative={
+            alternative_id: tuple(sorted(dimensions, key=lambda item: item.value))
+            for alternative_id, dimensions in queried_dimensions.items()
+        },
     )
     return ControlMatrixResult(
         incident_id=source.incident_id(),

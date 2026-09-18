@@ -11,6 +11,8 @@ from collections.abc import Iterable, Sequence
 from hashlib import sha256
 
 from packages.rca.model import (
+    AuthorizedQuery,
+    EntityRef,
     FindingKind,
     FrontierStatus,
     GapDimension,
@@ -25,7 +27,9 @@ from packages.rca.model import (
     ToolCapability,
 )
 from packages.rca.resolution import hypothesis_signature
+from packages.rca.signals import ACCESS_KINDS
 from packages.rca.source import ObservationSource
+from packages.rca.topology import WORKLOAD_KINDS
 
 CAPABILITIES: tuple[ToolCapability, ...] = (
     ToolCapability(
@@ -154,6 +158,23 @@ _BOUNDED_EXPANDABLE_DIMENSIONS = frozenset(
 def capabilities_for(dimension: GapDimension) -> tuple[ToolCapability, ...]:
     """Return actual bounded read-only capabilities that can inspect a dimension."""
     return tuple(capability for capability in CAPABILITIES if dimension in capability.dimensions)
+
+
+def _capability_allows_target(capability: str, target: EntityRef) -> bool:
+    """Return whether one semantic capability may inspect one target kind."""
+    if target.kind == "Secret" or target.kind in ACCESS_KINDS:
+        return False
+    if capability == "resource_pressure":
+        return target.kind == "Pod"
+    if capability == "logs":
+        return target.kind in {"Service", "Pod", *WORKLOAD_KINDS}
+    if capability in {"history", "events"}:
+        return bool(target.kind)
+    if capability == "traffic":
+        return bool(target.kind)
+    if capability in {"describe", "neighbors"}:
+        return bool(target.kind)
+    return False
 
 
 def _stable_gap_id(
@@ -404,19 +425,6 @@ def _gap_for(
     source: ObservationSource | None,
 ) -> InformationGap:
     ordered = tuple(sorted(hypotheses, key=lambda item: item.hypothesis_id))
-    entity_scope = tuple(
-        sorted(
-            {
-                entity
-                for hypothesis in ordered
-                for entity in (hypothesis.causal_actor, *hypothesis.members)
-            }
-            | {
-                entity for alternative in alternatives for entity in alternative.observation_targets
-            },
-            key=lambda entity: entity.canonical,
-        )
-    )
     facts_by_hypothesis = tuple(_dimension_facts(hypothesis, dimension) for hypothesis in ordered)
     complete = all(facts_by_hypothesis)
     same_facts = complete and len(set(facts_by_hypothesis)) == 1
@@ -429,17 +437,41 @@ def _gap_for(
         GapDimension.METRIC_BASELINE,
         GapDimension.METRIC_CHANGE,
     }
+    authorized: dict[tuple[str, EntityRef], set[str]] = {}
+    for capability in capabilities:
+        for hypothesis in ordered:
+            for target in (hypothesis.causal_actor, *hypothesis.members):
+                if _capability_allows_target(capability.name, target):
+                    authorized.setdefault((capability.name, target), set())
+        for alternative in alternatives:
+            if dimension not in alternative.queryable_dimensions:
+                continue
+            for target in alternative.observation_targets:
+                if _capability_allows_target(capability.name, target):
+                    authorized.setdefault((capability.name, target), set()).add(
+                        alternative.alternative_id
+                    )
+    authorized_queries = tuple(
+        AuthorizedQuery(
+            capability=capability,
+            target=target,
+            alternative_ids=tuple(sorted(alternative_ids)),
+        )
+        for (capability, target), alternative_ids in sorted(
+            authorized.items(), key=lambda item: (item[0][0], item[0][1].canonical)
+        )
+    )
+    entity_scope = tuple(
+        sorted({item.target for item in authorized_queries}, key=lambda entity: entity.canonical)
+    )
     if source_unavailable_for_metric:
         resolvability = GapResolvability.UNRESOLVABLE_WITH_CURRENT_TOOLS
-    elif alternatives and capabilities:
-        # A structural alternative has no evidence facts by definition.  Its
-        # query is therefore meaningful even when the evidence-backed
-        # hypothesis already has a complete fact set for this dimension.
-        resolvability = GapResolvability.RESOLVABLE
-    elif complete and not same_facts:
+    elif facts_by_hypothesis and complete and not same_facts:
         resolvability = GapResolvability.ALREADY_OBSERVED
     elif same_facts and not bounded_can_expand:
         resolvability = GapResolvability.ALREADY_OBSERVED
+    elif authorized_queries:
+        resolvability = GapResolvability.RESOLVABLE
     else:
         resolvability = (
             GapResolvability.RESOLVABLE
@@ -447,7 +479,7 @@ def _gap_for(
             else GapResolvability.UNRESOLVABLE_WITH_CURRENT_TOOLS
         )
     tools = (
-        tuple(sorted({capability.name for capability in capabilities}))
+        tuple(sorted({item.capability for item in authorized_queries}))
         if resolvability is GapResolvability.RESOLVABLE
         else ()
     )
@@ -467,6 +499,7 @@ def _gap_for(
         missing_fact=missing,
         required_relation=_RELATIONS.get(dimension),
         discriminating_outcomes=_outcomes(ordered, alternatives, missing, resolvability),
+        authorized_queries=authorized_queries,
         candidate_tools=tools,
         evidence_refs=_evidence_refs(ordered),
         priority=1,
@@ -510,7 +543,17 @@ def derive_information_gaps(
         return ()
     dimensions = _dimensions(selected, open_alternatives)
     gaps = tuple(
-        _gap_for(dimension, selected, open_alternatives, source) for dimension in dimensions
+        _gap_for(
+            dimension,
+            selected,
+            tuple(
+                alternative
+                for alternative in open_alternatives
+                if dimension in alternative.queryable_dimensions
+            ),
+            source,
+        )
+        for dimension in dimensions
     )
     return tuple(sorted(gaps, key=lambda gap: (gap.dimension.value, gap.gap_id)))
 

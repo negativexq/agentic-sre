@@ -7,7 +7,11 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Protocol
 
-from packages.rca.frontier import derive_structural_frontier, investigation_status
+from packages.rca.frontier import (
+    apply_frontier_progress,
+    derive_structural_frontier,
+    investigation_status,
+)
 from packages.rca.hypotheses import (
     GroupingResult,
     group_candidates,
@@ -166,9 +170,16 @@ def build_case(
     grouping: GroupingResult = group_candidates(candidates, topology, context, config.ranking)
     hypotheses = list(grouping.hypotheses)
     structural_alternatives = (
-        list(derive_structural_frontier(context, candidates))
+        list(derive_structural_frontier(context))
         if getattr(source, "initial_observation_bounded", False)
         else []
+    )
+    structural_alternatives = list(
+        apply_frontier_progress(
+            structural_alternatives,
+            hypotheses=hypotheses,
+            queried_dimensions_by_alternative={},
+        )
     )
     steps = [
         InvestigationStep(

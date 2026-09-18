@@ -17,6 +17,7 @@ from hashlib import sha256
 from typing import Any
 
 from packages.rca.engine import Case, build_case, diagnose_case
+from packages.rca.investigation.actions import observation_identity
 from packages.rca.investigation.environment import (
     SeedPolicy,
     initial_view,
@@ -123,8 +124,7 @@ def query_templates(source: ObservationSource) -> tuple[tuple[str, Investigation
     onset-relative windows are therefore distinct information, not duplicates.
     Windows are derived only from the alert onset, the observation cutoff, and
     the engine's own lookback.  ``reasons``/``contains`` filters are not
-    searched (any fixed vocabulary would be a scenario-flavoured choice), and
-    ``metric``/``include_baseline`` do not affect the current backend.
+    searched (any fixed vocabulary would be a scenario-flavoured choice).
     """
     cutoff = source.observation_cutoff()
     templates: list[tuple[str, InvestigationQuery]] = [
@@ -213,22 +213,14 @@ def state_fingerprint(case: Case, diagnosis: Diagnosis) -> str:
 
 def _query_key(capability: str, target: EntityRef, query: InvestigationQuery) -> str:
     """Treat equivalent semantic queries as the same branch action."""
-    return json.dumps(
-        {
-            "capability": capability,
-            "target": target.canonical,
-            "query": query.model_dump(mode="json"),
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    )
+    return observation_identity(capability, target, query)
 
 
 def _resolvable_gaps(diagnosis: Diagnosis) -> tuple[InformationGap, ...]:
     return tuple(
         gap
         for gap in diagnosis.information_gaps
-        if gap.resolvability is GapResolvability.RESOLVABLE and gap.candidate_tools
+        if gap.resolvability is GapResolvability.RESOLVABLE and gap.authorized_queries
     )
 
 
@@ -240,14 +232,15 @@ def _queries(
 ) -> tuple[tuple[InformationGap, str, EntityRef, str, str, InvestigationQuery], ...]:
     choices: list[tuple[InformationGap, str, EntityRef, str, str, InvestigationQuery]] = []
     for gap in _resolvable_gaps(diagnosis):
-        for capability in sorted(gap.candidate_tools):
+        for authorized in gap.authorized_queries:
+            capability = authorized.capability
+            target = authorized.target
             if capability not in tools:
                 continue
-            for target in sorted(gap.entity_scope, key=lambda item: item.canonical):
-                for label, query in templates:
-                    key = _query_key(capability, target, query)
-                    if key not in used:
-                        choices.append((gap, capability, target, key, label, query))
+            for label, query in templates:
+                key = _query_key(capability, target, query)
+                if key not in used:
+                    choices.append((gap, capability, target, key, label, query))
     return tuple(choices)
 
 

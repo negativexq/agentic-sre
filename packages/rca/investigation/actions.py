@@ -7,7 +7,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from packages.rca.investigation.state import InvestigationConfig, InvestigationTool
-from packages.rca.model import GapResolvability, InformationGap, InvestigationAction
+from packages.rca.model import (
+    EntityRef,
+    GapResolvability,
+    InformationGap,
+    InvestigationAction,
+    InvestigationQuery,
+)
 
 
 @dataclass(frozen=True)
@@ -31,6 +37,37 @@ def action_identity(action: InvestigationAction) -> str:
     return f"{action.gap_id or '-'}|{action.capability or '-'}|{target}|{query}"
 
 
+def observation_identity(
+    capability: str,
+    target: EntityRef,
+    query: InvestigationQuery | None,
+) -> str:
+    """Identity of the underlying backend read, independent of gap identity."""
+    if capability in {"describe", "neighbors"} or query is None:
+        effective: dict[str, object] = {}
+    elif capability == "history":
+        effective = {"start": query.start, "end": query.end, "limit": query.limit}
+    elif capability == "events":
+        effective = {
+            "start": query.start,
+            "end": query.end,
+            "reasons": tuple(sorted(set(query.reasons))),
+            "contains": tuple(sorted(set(query.contains))),
+            "limit": query.limit,
+        }
+    elif capability == "logs":
+        effective = {
+            "start": query.start,
+            "end": query.end,
+            "contains": tuple(sorted(set(query.contains))),
+            "limit": query.limit,
+        }
+    else:
+        effective = {"start": query.start, "end": query.end, "limit": query.limit}
+    encoded = json.dumps(effective, default=str, sort_keys=True, separators=(",", ":"))
+    return f"{capability}|{target.canonical}|{encoded}"
+
+
 def validate_action(
     action: InvestigationAction,
     *,
@@ -39,6 +76,7 @@ def validate_action(
     attempted_actions: Sequence[str],
     tool_calls: int,
     config: InvestigationConfig,
+    attempted_observations: Sequence[str] = (),
 ) -> ActionValidation:
     """Fail closed on every action property before a tool can execute."""
     if action.action == "stop":
@@ -64,24 +102,32 @@ def validate_action(
     tool = tools.get(action.capability)
     if tool is None:
         return ActionValidation(False, f"unsupported capability {action.capability!r}", gap=gap)
-    if action.capability not in gap.candidate_tools:
+    authorization = next(
+        (
+            item
+            for item in gap.authorized_queries
+            if item.capability == action.capability and item.target == action.target
+        ),
+        None,
+    )
+    if authorization is None:
         return ActionValidation(
             False,
-            f"capability {action.capability!r} is not allowed for gap {gap.gap_id}",
-            gap=gap,
-            tool=tool,
-        )
-    allowed = set(gap.entity_scope)
-    if action.target not in allowed:
-        return ActionValidation(
-            False,
-            f"target {action.target.canonical!r} is outside the gap entity scope",
+            "capability/target pair is not authorized for this gap",
             gap=gap,
             tool=tool,
         )
     identity = action_identity(action)
     if identity in attempted_actions:
         return ActionValidation(False, "the same action was already attempted", gap=gap, tool=tool)
+    read_identity = observation_identity(action.capability, action.target, action.query)
+    if read_identity in attempted_observations:
+        return ActionValidation(
+            False,
+            "the same telemetry observation was already attempted",
+            gap=gap,
+            tool=tool,
+        )
     if tool_calls >= config.max_tool_calls:
         return ActionValidation(False, "tool-call budget exhausted", gap=gap, tool=tool)
     gap_attempts = sum(item.startswith(f"{gap.gap_id}|") for item in attempted_actions)
@@ -90,4 +136,9 @@ def validate_action(
     return ActionValidation(True, gap=gap, tool=tool)
 
 
-__all__ = ["ActionValidation", "action_identity", "validate_action"]
+__all__ = [
+    "ActionValidation",
+    "action_identity",
+    "observation_identity",
+    "validate_action",
+]

@@ -41,6 +41,7 @@ from packages.rca.model import (
     HypothesisDiagnostics,
     InvestigationAction,
     InvestigationObservation,
+    InvestigationQuery,
     InvestigationStopReason,
     Resolution,
     Symptoms,
@@ -241,7 +242,10 @@ class _ChangingGapPolicy:
         if self.calls >= 2:
             target = self.first_target
         self.calls += 1
-        return _policy_action(gap.gap_id, target)
+        action = _policy_action(gap.gap_id, target)
+        if self.calls >= 3:
+            action = action.model_copy(update={"query": InvestigationQuery(contains=("retry",))})
+        return action
 
 
 def _rebuild_with_changed_gap_fingerprint(base: Case, findings: tuple[Finding, ...]) -> Case:
@@ -574,7 +578,7 @@ def test_invalid_retry_context_explains_rejection_without_tool_execution() -> No
     assert tool.calls == 1
     assert len(policy.contexts) == 2
     assert policy.contexts[1].last_rejection is not None
-    assert "outside the gap entity scope" in policy.contexts[1].last_rejection[0]
+    assert "capability/target pair is not authorized" in policy.contexts[1].last_rejection[0]
 
 
 def test_resolved_case_skips_investigation() -> None:
@@ -761,8 +765,6 @@ def test_llm_policy_only_returns_a_strict_observation_action() -> None:
                     "end": None,
                     "reasons": [],
                     "contains": [],
-                    "metric": None,
-                    "include_baseline": False,
                     "limit": 32,
                 },
                 "rationale": "inspect the authorized gap",
@@ -1021,6 +1023,8 @@ def test_resume_uses_a_fresh_runtime_and_rebuilds_case_with_checkpointed_finding
     partial = graph_a.invoke(state, config=thread)
     assert partial.get("final_result") is None
     assert tool_a.calls == 1
+    assert partial.get("attempted_observations")
+    assert "frontier_queried_dimensions" in partial
 
     rebuilt_sources: list[Any] = []
     rebuilt_findings: list[tuple[Finding, ...]] = []

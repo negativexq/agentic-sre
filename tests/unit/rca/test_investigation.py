@@ -15,6 +15,7 @@ from packages.rca.investigation.graph import (
     resume_investigation,
 )
 from packages.rca.investigation.policy import ScriptedInvestigationPolicy
+from packages.rca.investigation.state import InvestigationConfig
 from packages.rca.investigation.tools import make_observation
 from packages.rca.model import (
     Alert,
@@ -237,9 +238,7 @@ def test_no_data_is_neutral_and_does_not_resolve() -> None:
         case.source,
         diagnosis=initial,
         initial_case=case,
-        config=__import__(
-            "packages.rca.investigation", fromlist=["InvestigationConfig"]
-        ).InvestigationConfig(max_no_progress_rounds=1),
+        config=InvestigationConfig(max_no_progress_rounds=1),
         policy=ScriptedInvestigationPolicy([_policy_action(gap.gap_id, right)]),
         tools={"events": tool},
         rebuild_case=_rebuild_with_findings,
@@ -261,9 +260,7 @@ def test_invalid_and_out_of_scope_actions_are_rejected_without_tool_execution() 
         case.source,
         diagnosis=initial,
         initial_case=case,
-        config=__import__(
-            "packages.rca.investigation", fromlist=["InvestigationConfig"]
-        ).InvestigationConfig(max_invalid_actions=1),
+        config=InvestigationConfig(max_invalid_actions=1),
         policy=ScriptedInvestigationPolicy([invalid]),
         tools={"events": tool},
         rebuild_case=_rebuild_with_findings,
@@ -271,6 +268,19 @@ def test_invalid_and_out_of_scope_actions_are_rejected_without_tool_execution() 
     assert result.tool_calls == 0
     assert result.rejected_actions == 1
     assert result.stop_reason.value == "POLICY_STOP"
+
+    out_of_scope = _policy_action(gap.gap_id, _entity("HPA", "unrelated"))
+    out_of_scope_result = investigate_diagnosis(
+        case.source,
+        diagnosis=initial,
+        initial_case=case,
+        config=InvestigationConfig(max_invalid_actions=1),
+        policy=ScriptedInvestigationPolicy([out_of_scope]),
+        tools={"events": tool},
+        rebuild_case=_rebuild_with_findings,
+    )
+    assert out_of_scope_result.tool_calls == 0
+    assert out_of_scope_result.rejected_actions == 1
 
 
 def test_resolved_case_skips_investigation() -> None:
@@ -286,6 +296,82 @@ def test_resolved_case_skips_investigation() -> None:
     assert result.model_calls == 0
     assert result.tool_calls == 0
     assert result.stop_reason.value == "RESOLVED"
+
+
+def test_unresolvable_gap_skips_policy_and_model() -> None:
+    case, _left, _right = _case()
+    pressures = tuple(
+        _finding(
+            _entity("Pod", f"api-{side}"),
+            FindingKind.RESOURCE_PRESSURE,
+            f"pressure:api-{side}",
+            details={"peak": 0.99},
+        )
+        for side in ("left", "right")
+    )
+    case.findings.extend(pressures)
+    for index, pressure in enumerate(pressures):
+        enriched = case.hypotheses[index].model_copy(
+            update={"findings": (*case.hypotheses[index].findings, pressure)}
+        )
+        case.hypotheses[index] = enriched
+        case.candidates[index] = hypothesis_candidate(enriched)
+    diagnosis = diagnose_case(case)
+    resource_gap = next(
+        gap
+        for gap in diagnosis.information_gaps
+        if gap.dimension.value == "RESOURCE_PRESSURE" and not gap.candidate_tools
+    )
+    diagnosis = diagnosis.model_copy(update={"information_gaps": (resource_gap,)})
+    result = investigate_diagnosis(
+        case.source,
+        diagnosis=diagnosis,
+        initial_case=case,
+        policy=ScriptedInvestigationPolicy([]),
+        tools={},
+    )
+    assert result.stop_reason.value == "NO_RESOLVABLE_GAP"
+    assert result.model_calls == 0
+    assert result.tool_calls == 0
+
+
+def test_duplicate_action_is_blocked_and_loop_terminates() -> None:
+    case, _left, right = _case()
+    initial = diagnose_case(case)
+    gap = next(gap for gap in initial.information_gaps if "events" in gap.candidate_tools)
+    tool = _NoDataTool()
+    action = _policy_action(gap.gap_id, right)
+    result = investigate_diagnosis(
+        case.source,
+        diagnosis=initial,
+        initial_case=case,
+        config=InvestigationConfig(max_no_progress_rounds=99, max_invalid_actions=1),
+        policy=ScriptedInvestigationPolicy([action, action]),
+        tools={"events": tool},
+        rebuild_case=_rebuild_with_findings,
+    )
+    assert result.stop_reason.value == "POLICY_STOP"
+    assert result.tool_calls == 1
+    assert result.rejected_actions == 1
+
+
+def test_tool_budget_ends_a_persistently_ambiguous_run() -> None:
+    case, _left, right = _case()
+    initial = diagnose_case(case)
+    gap = next(gap for gap in initial.information_gaps if "events" in gap.candidate_tools)
+    tool = _NoDataTool()
+    action = _policy_action(gap.gap_id, right)
+    result = investigate_diagnosis(
+        case.source,
+        diagnosis=initial,
+        initial_case=case,
+        config=InvestigationConfig(max_tool_calls=1, max_no_progress_rounds=99),
+        policy=ScriptedInvestigationPolicy([action, action]),
+        tools={"events": tool},
+        rebuild_case=_rebuild_with_findings,
+    )
+    assert result.stop_reason.value == "TOOL_BUDGET_EXHAUSTED"
+    assert result.final_resolution is Resolution.AMBIGUOUS
 
 
 def test_action_schema_rejects_root_cause_and_mutation_requests() -> None:
@@ -309,9 +395,7 @@ def test_checkpoint_resume_preserves_state_and_does_not_repeat_action() -> None:
     finding = _finding(right, FindingKind.CONFIG_CHANGE, "config:resume")
     tool = _DiscriminatingEventsTool(finding)
     policy = ScriptedInvestigationPolicy([_policy_action(gap.gap_id, right)])
-    config = __import__(
-        "packages.rca.investigation", fromlist=["InvestigationConfig"]
-    ).InvestigationConfig(max_no_progress_rounds=1)
+    config = InvestigationConfig(max_no_progress_rounds=1)
     from langgraph.checkpoint.memory import InMemorySaver
     from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 

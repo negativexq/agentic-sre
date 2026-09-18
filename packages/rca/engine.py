@@ -32,6 +32,7 @@ from packages.rca.ranking import (
     annotate_temporal_roles,
     collapse_fault_instances,
     score_findings,
+    structural_candidates,
     symptom_tokens,
     verification_trace,
     verify,
@@ -158,9 +159,11 @@ def build_case(
     findings = annotate_temporal_roles(
         findings, symptoms.onset, config.ranking.verification_onset_grace
     )
-    candidates = collapse_fault_instances(
-        score_findings(findings, context, config.ranking), topology, symptoms.onset
-    )
+    candidates = score_findings(findings, context, config.ranking)
+    if getattr(source, "initial_observation_bounded", False):
+        candidates.extend(structural_candidates(context, candidates))
+        candidates.sort(key=lambda candidate: (-candidate.score, candidate.entity.canonical))
+    candidates = collapse_fault_instances(candidates, topology, symptoms.onset)
     grouping: GroupingResult = group_candidates(candidates, topology, context, config.ranking)
     hypotheses = list(grouping.hypotheses)
     steps = [
@@ -206,16 +209,18 @@ def build_case(
 
 
 def _summary(candidate: Candidate, confidence: Confidence, reason: str) -> str:
-    finding = candidate.findings[0]
+    finding = candidate.findings[0] if candidate.findings else None
     linked = (
         f" Linked to {', '.join(candidate.linked_symptoms[:3])}."
         if candidate.linked_symptoms
         else ""
     )
-    return (
-        f"{candidate.entity.canonical}: {finding.summary}. "
-        f"{confidence.value.capitalize()} ({reason}).{linked}"
+    evidence = (
+        finding.summary
+        if finding is not None
+        else "structurally plausible actor without observed causal evidence"
     )
+    return f"{candidate.entity.canonical}: {evidence}. {confidence.value.capitalize()} ({reason}).{linked}"
 
 
 def _selected_hypothesis(case: Case, entity: EntityRef) -> Hypothesis | None:

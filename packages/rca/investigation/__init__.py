@@ -1,8 +1,10 @@
 """Bounded, read-only investigation orchestration."""
 
 from packages.rca.investigation.environment import (
+    InitialAccessLedger,
     InitialObservationView,
     InvestigationBackend,
+    SeedPolicy,
     SourceInvestigationBackend,
     initial_view,
     investigation_backend,
@@ -21,11 +23,13 @@ from packages.rca.investigation.policy import (
 
 __all__ = [
     "InvestigationConfig",
+    "InitialAccessLedger",
     "InitialObservationView",
     "InvestigationBackend",
     "LLMInvestigationPolicy",
     "SourceInvestigationBackend",
     "ScriptedInvestigationPolicy",
+    "SeedPolicy",
     "build_investigation_graph",
     "build_investigation_state",
     "investigate_diagnosis",

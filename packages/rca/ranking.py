@@ -22,6 +22,26 @@ from packages.rca.model import (
 )
 from packages.rca.topology import Topology
 
+_STRUCTURAL_ACTOR_KINDS = frozenset(
+    {
+        "Deployment",
+        "StatefulSet",
+        "DaemonSet",
+        "Job",
+        "CronJob",
+        "Pod",
+        "Service",
+        "ConfigMap",
+        "Secret",
+        "HorizontalPodAutoscaler",
+        "NetworkPolicy",
+        "StressChaos",
+        "NetworkChaos",
+        "Schedule",
+        "Workflow",
+    }
+)
+
 KIND_WEIGHT: dict[FindingKind, float] = {
     FindingKind.CONFIG_CHANGE: 5.0,
     FindingKind.FAULT_INJECTION: 5.0,
@@ -218,6 +238,51 @@ def score_findings(
             )
         )
     candidates.sort(key=lambda c: (-c.score, c.entity.canonical))
+    return candidates
+
+
+def structural_candidates(context: Context, existing: Iterable[Candidate]) -> list[Candidate]:
+    """Expose structurally plausible actors without inventing evidence.
+
+    A bounded initial view must be able to name plausible actors before it has
+    consumed the historical observations that distinguish them.  These
+    candidates therefore have zero score and no findings; their only basis is
+    an observable causal path from the current object topology to a symptom.
+    They are never added to the full-data deterministic path.
+    """
+    existing_entities = {candidate.entity for candidate in existing}
+    candidates: list[Candidate] = []
+    for entity in sorted(context.topology.latest, key=lambda item: item.canonical):
+        if entity in existing_entities or entity.kind not in _STRUCTURAL_ACTOR_KINDS:
+            continue
+        path = context.topology.causal_path(entity, context.symptom_entities, max_depth=6)
+        linked = tuple(
+            sorted(
+                symptom.canonical
+                for symptom in context.symptom_entities
+                if symptom == entity
+                or symptom in context.topology.causal_reachable(entity, max_depth=6)
+            )
+        )
+        if path is None and not linked:
+            continue
+        basis = (
+            ("direct_symptom_entity",)
+            if not path
+            else tuple(f"{hop.source.kind}:{hop.relation}:{hop.target.kind}" for hop in path)
+        )
+        candidates.append(
+            Candidate(
+                entity=entity,
+                score=0.0,
+                findings=(),
+                linked_symptoms=linked[:5],
+                reasons=("structurally plausible actor; no causal evidence consumed",),
+                causal_path=path or (),
+                causal_explanation="DIRECT" if not path else "PATH",
+                structural_basis=basis,
+            )
+        )
     return candidates
 
 
@@ -560,6 +625,7 @@ __all__ = [
     "normalize",
     "score_findings",
     "score_finding",
+    "structural_candidates",
     "symptom_tokens",
     "verify",
     "verification_trace",

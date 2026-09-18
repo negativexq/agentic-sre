@@ -13,6 +13,10 @@ def _kubectl_ref(entity: EntityRef) -> str:
 
 def propose(candidate: Candidate, topology: Topology) -> tuple[Remediation, ...]:
     """Suggest the smallest reversible action for the strongest finding."""
+    if not candidate.findings:
+        # Structural candidates are investigation targets, not remediation
+        # recommendations.  No action is safe to propose without evidence.
+        return ()
     finding = candidate.findings[0]
     entity = candidate.entity
     ref = _kubectl_ref(entity)

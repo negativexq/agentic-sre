@@ -182,7 +182,7 @@ def diagnosis_html(
     if diagnosis.alternatives:
         rows = "".join(
             f"<tr><td><code>{escape(c.entity.canonical)}</code></td><td>{c.score:.1f}</td>"
-            f"<td>{escape(c.findings[0].summary)}</td></tr>"
+            f"<td>{escape(c.findings[0].summary) if c.findings else 'structurally plausible actor; evidence not yet observed'}</td></tr>"
             for c in diagnosis.alternatives
         )
         parts.append(

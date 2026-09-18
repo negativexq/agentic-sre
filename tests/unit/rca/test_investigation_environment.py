@@ -5,7 +5,7 @@ from typing import Any
 from rca_builders import at
 
 from packages.rca.engine import build_case, diagnose_case
-from packages.rca.investigation.environment import initial_view, investigation_backend
+from packages.rca.investigation.environment import SeedPolicy, initial_view, investigation_backend
 from packages.rca.investigation.graph import investigate_diagnosis
 from packages.rca.investigation.opportunity_audit import audit_incident
 from packages.rca.investigation.policy import ScriptedInvestigationPolicy
@@ -160,6 +160,36 @@ def test_bounded_initial_view_can_resolve_from_real_history_query() -> None:
     assert entry.capability == "history"
     assert hidden_ref in entry.new_evidence_refs
     assert any("SPEC_CHANGE" in finding_id for finding_id in entry.normalized_finding_ids)
+
+
+def test_latest_only_seed_keeps_structural_hpa_candidates_for_investigation() -> None:
+    source, left_hpa = _source_with_hidden_hpa_history()
+    view = initial_view(
+        source,
+        policy=SeedPolicy(
+            name="latest-only-no-events",
+            history_window=None,
+            event_before=None,
+            event_after=None,
+        ),
+    )
+    case = build_case(view)
+    diagnosis = diagnose_case(case)
+
+    hpa_hypotheses = {
+        hypothesis.causal_actor
+        for hypothesis in case.hypotheses
+        if hypothesis.causal_actor.kind == "HorizontalPodAutoscaler"
+    }
+    assert left_hpa in hpa_hypotheses
+    assert diagnosis.resolution.value == "AMBIGUOUS"
+    assert any(
+        gap.resolvability.value == "RESOLVABLE" and gap.candidate_tools
+        for gap in diagnosis.information_gaps
+    )
+    structural = [hypothesis for hypothesis in case.hypotheses if hypothesis.structural_basis]
+    assert structural
+    assert all(not hypothesis.findings and hypothesis.score == 0 for hypothesis in structural)
 
 
 def test_hidden_chaos_events_cannot_create_initial_topology_edges() -> None:

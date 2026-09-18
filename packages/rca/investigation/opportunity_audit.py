@@ -10,10 +10,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from packages.rca.engine import Case, build_case, diagnose_case
 from packages.rca.investigation.environment import (
+    InitialObservationView,
+    SeedPolicy,
     initial_view,
     investigation_backend,
 )
@@ -64,6 +67,9 @@ class IncidentOpportunityAudit:
     initial_resolvable_gaps: tuple[str, ...]
     classification: str
     opportunities: tuple[QueryOpportunity, ...]
+    seed_policy: str = "latest-only-plus-5m-events"
+    initial_access: dict[str, tuple[str, ...]] | None = None
+    hidden_access_counts: dict[str, int] | None = None
 
     def as_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -117,6 +123,32 @@ def _query_for(source: ObservationSource) -> InvestigationQuery:
     return InvestigationQuery(end=source.observation_cutoff(), limit=64)
 
 
+def _full_access(source: ObservationSource) -> dict[str, set[str]]:
+    history = source.object_history()
+    pods = tuple(entity for entity in history if entity.kind == "Pod")
+    return {
+        "initial_history_refs": {
+            version.evidence_id for versions in history.values() for version in versions
+        },
+        "initial_event_refs": {event.evidence_id for event in source.events()},
+        "initial_log_refs": {record.evidence_id for record in source.error_logs()},
+        "initial_metric_refs": {
+            item.evidence_id
+            for item in source.resource_pressure(pods, datetime.min.replace(tzinfo=UTC))
+        },
+        "initial_traffic_refs": {item.evidence_id for item in source.traffic_observations()},
+    }
+
+
+def _hidden_access_counts(
+    initial: Mapping[str, Sequence[str]], full: Mapping[str, set[str]]
+) -> dict[str, int]:
+    return {
+        key.replace("initial_", "hidden_"): len(full.get(key, set()) - set(initial.get(key, ())))
+        for key in full
+    }
+
+
 def _raw_record_count(payload: Mapping[str, Any]) -> int:
     for key in ("versions", "events", "logs", "resource_pressure", "traffic"):
         records = payload.get(key)
@@ -150,8 +182,12 @@ def _execute_opportunity(
     already_known = tuple(ref for ref in returned_refs if ref in known_refs)
     normalized = normalize_observation(observation, case=initial_case, gap=gap)
     fresh = _new_findings(initial_case.findings, normalized.findings)
-    rebuilt = build_case(initial_source, extra_findings=fresh)
-    after = diagnose_case(rebuilt)
+    if fresh:
+        rebuilt = build_case(initial_source, extra_findings=fresh)
+        after = diagnose_case(rebuilt)
+    else:
+        rebuilt = initial_case
+        after = initial_diagnosis
     before_hypotheses = _hypothesis_fingerprint(initial_case)
     after_hypotheses = _hypothesis_fingerprint(rebuilt)
     before_gaps = _gap_fingerprint(initial_diagnosis)
@@ -214,9 +250,14 @@ def _classify(
     return "NO_RESOLUTION_EFFECT"
 
 
-def audit_incident(source: ObservationSource) -> IncidentOpportunityAudit:
+def audit_incident(
+    source: ObservationSource,
+    *,
+    seed_policy: SeedPolicy | None = None,
+    include_full_access: bool = False,
+) -> IncidentOpportunityAudit:
     """Audit all legal one-step queries from a bounded initial diagnosis."""
-    bounded = initial_view(source)
+    bounded = initial_view(source, policy=seed_policy)
     initial_case = build_case(bounded)
     diagnosis = diagnose_case(initial_case)
     gaps = tuple(
@@ -244,6 +285,12 @@ def audit_incident(source: ObservationSource) -> IncidentOpportunityAudit:
                         target,
                     )
                 )
+    access: dict[str, tuple[str, ...]]
+    if isinstance(bounded, InitialObservationView):
+        access = bounded.access_ledger()
+    else:
+        access = {key: tuple() for key in _full_access(source)}
+    full = _full_access(source) if include_full_access else {}
     return IncidentOpportunityAudit(
         incident_id=source.incident_id(),
         initial_resolution=diagnosis.resolution.value,
@@ -253,6 +300,9 @@ def audit_incident(source: ObservationSource) -> IncidentOpportunityAudit:
         initial_resolvable_gaps=tuple(gap.gap_id for gap in gaps),
         classification=_classify(bool(initial_case.hypotheses), gaps, opportunities),
         opportunities=tuple(opportunities),
+        seed_policy=(seed_policy or SeedPolicy()).name,
+        initial_access=access,
+        hidden_access_counts=_hidden_access_counts(access, full) if include_full_access else None,
     )
 
 

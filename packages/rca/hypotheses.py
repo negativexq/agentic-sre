@@ -373,6 +373,9 @@ def _make_hypothesis(
         causal_explanation=explanation,
         score=score,
         reasons=tuple(dict.fromkeys(grouping_reasons)),
+        structural_basis=tuple(
+            sorted({basis for candidate in candidates for basis in candidate.structural_basis})
+        ),
     )
     ownership = any(hop.relation in {"owns", "managed_by"} for path in paths for hop in path)
     return hypothesis, duplicate_count, ownership
@@ -476,6 +479,7 @@ def hypothesis_candidate(hypothesis: Hypothesis) -> Candidate:
         reasons=hypothesis.reasons,
         causal_path=primary_path,
         causal_explanation=hypothesis.causal_explanation,
+        structural_basis=hypothesis.structural_basis,
     )
 
 

@@ -152,7 +152,13 @@ def _plausibility_reasons(hypothesis: Hypothesis) -> tuple[ResolutionReasonCode,
     reasons: list[ResolutionReasonCode] = []
     if hypothesis.causal_explanation not in {"PATH", "DIRECT"}:
         reasons.append(ResolutionReasonCode.NO_CAUSAL_SYMPTOM_LINK)
-    if not _has_aligned_initiating(hypothesis):
+    # A bounded seed may expose a structurally plausible actor before its
+    # historical discriminator.  Keep it in the plausible set so resolution
+    # can represent ambiguity and derive a useful InformationGap.  A sole
+    # structural-only hypothesis is handled as insufficient evidence below.
+    if not _has_aligned_initiating(hypothesis) and not (
+        hypothesis.structural_basis and not hypothesis.findings
+    ):
         reasons.append(ResolutionReasonCode.NO_ONSET_CAPABLE_INITIATING_EVIDENCE)
     if hypothesis.contradictory_findings:
         reasons.append(ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION)
@@ -399,6 +405,21 @@ def resolve_hypotheses(
 
     if len(plausible) == 1:
         selected = plausible[0]
+        if selected.structural_basis and not selected.findings:
+            return _attach_audits(
+                _trace(
+                    base,
+                    state=Resolution.INSUFFICIENT_EVIDENCE,
+                    leading_hypothesis_ids=(),
+                    decision_basis="STRUCTURAL_CANDIDATE_ONLY",
+                    rationale=(
+                        "A structurally plausible actor exists, but no causal evidence "
+                        "has been observed to establish it as the incident cause."
+                    ),
+                ),
+                hypotheses,
+                verification_traces,
+            )
         if contradictions:
             discriminator = _discriminator(
                 "VALID_CONTRADICTION",

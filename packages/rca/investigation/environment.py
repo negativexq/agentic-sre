@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
@@ -66,12 +66,25 @@ class InvestigationBackend(Protocol):
         self, target: EntityRef, query: InvestigationQuery
     ) -> tuple[TrafficObservation, ...]: ...
 
+    def supports(self, capability: str) -> bool: ...
+
 
 @dataclass(frozen=True)
 class SourceInvestigationBackend:
     """Adapter that exposes raw source records without exposing them to seed RCA."""
 
     source: ObservationSource
+
+    def supports(self, capability: str) -> bool:
+        methods = {
+            "history": "object_history",
+            "events": "events",
+            "logs": "error_logs",
+            "resource_pressure": "resource_pressure",
+            "traffic": "traffic_observations",
+        }
+        method = methods.get(capability)
+        return method is not None and callable(getattr(self.source, method, None))
 
     def query_history(
         self, target: EntityRef, query: InvestigationQuery
@@ -141,6 +154,36 @@ class SourceInvestigationBackend:
 
 
 @dataclass(frozen=True)
+class SeedPolicy:
+    """Generic initial-access contract, independent of incident labels."""
+
+    name: str = "latest-only-plus-5m-events"
+    history_window: timedelta | None = None
+    event_before: timedelta | None = timedelta(minutes=5)
+    event_after: timedelta | None = timedelta(minutes=5)
+
+
+@dataclass
+class InitialAccessLedger:
+    """Developer-visible raw references consumed by one bounded seed pass."""
+
+    history_refs: set[str] = field(default_factory=set)
+    event_refs: set[str] = field(default_factory=set)
+    log_refs: set[str] = field(default_factory=set)
+    metric_refs: set[str] = field(default_factory=set)
+    traffic_refs: set[str] = field(default_factory=set)
+
+    def as_dict(self) -> dict[str, tuple[str, ...]]:
+        return {
+            "initial_history_refs": tuple(sorted(self.history_refs)),
+            "initial_event_refs": tuple(sorted(self.event_refs)),
+            "initial_log_refs": tuple(sorted(self.log_refs)),
+            "initial_metric_refs": tuple(sorted(self.metric_refs)),
+            "initial_traffic_refs": tuple(sorted(self.traffic_refs)),
+        }
+
+
+@dataclass(frozen=True)
 class InitialObservationView:
     """Generic bounded seed view over a full incident source.
 
@@ -150,14 +193,13 @@ class InitialObservationView:
     """
 
     full_source: ObservationSource
-    history_window: timedelta = timedelta(minutes=10)
-    event_before: timedelta = timedelta(minutes=5)
-    event_after: timedelta = timedelta(minutes=5)
+    seed_policy: SeedPolicy = field(default_factory=SeedPolicy)
 
     # Information-gap derivation uses this marker to distinguish a bounded
     # initial view from a full deterministic source.  It is metadata about the
     # access contract, not evidence about the incident.
     initial_observation_bounded: bool = True
+    access: InitialAccessLedger = field(default_factory=InitialAccessLedger, compare=False)
 
     def _latest(self) -> dict[EntityRef, ObjectVersion]:
         return {
@@ -195,7 +237,11 @@ class InitialObservationView:
         full = self.full_source.object_history()
         seeded = self._seed_entities()
         onset = extract_symptoms(self.full_source.alerts()).onset
-        start = onset - self.history_window if onset is not None else None
+        start = (
+            onset - self.seed_policy.history_window
+            if onset is not None and self.seed_policy.history_window is not None
+            else None
+        )
         result: dict[EntityRef, tuple[ObjectVersion, ...]] = {}
         for entity, versions in full.items():
             if not versions:
@@ -205,27 +251,36 @@ class InitialObservationView:
                 continue
             visible = tuple(version for version in versions if version.observed_at >= start)
             result[entity] = visible or (versions[-1],)
+        self.access.history_refs.update(
+            version.evidence_id for versions in result.values() for version in versions
+        )
         return result
 
     def events(self) -> tuple[ClusterEvent, ...]:
         onset = extract_symptoms(self.full_source.alerts()).onset
-        if onset is None:
+        if (
+            onset is None
+            or self.seed_policy.event_before is None
+            or self.seed_policy.event_after is None
+        ):
             return ()
-        start = onset - self.event_before
-        end = onset + self.event_after
+        start = onset - self.seed_policy.event_before
+        end = onset + self.seed_policy.event_after
         seeded = self._seed_entities()
-        return tuple(
+        visible = tuple(
             event
             for event in self.full_source.events()
             if event.entity in seeded and start <= (event.last_at or event.first_at or onset) <= end
         )
+        self.access.event_refs.update(event.evidence_id for event in visible)
+        return visible
 
     def logs(self, service: str, *, limit: int = 20) -> tuple[dict[str, object], ...]:
         onset = extract_symptoms(self.full_source.alerts()).onset
         if onset is None:
             return ()
-        start = onset - self.event_before
-        end = onset + self.event_after
+        start = onset - (self.seed_policy.event_before or timedelta())
+        end = onset + (self.seed_policy.event_after or timedelta())
         records = []
         for item in self.full_source.logs(service, limit=limit):
             raw_at = item.get("timestamp")
@@ -238,6 +293,10 @@ class InitialObservationView:
             if start <= at <= end:
                 records.append(item)
         return tuple(records[:limit])
+
+    def access_ledger(self) -> dict[str, tuple[str, ...]]:
+        """Return the bounded raw-access inventory for developer diagnostics."""
+        return self.access.as_dict()
 
     def error_logs(self) -> tuple[LogRecord, ...]:
         # Logs are an investigation capability, not part of the bounded seed.
@@ -256,12 +315,14 @@ class InitialObservationView:
         return ()
 
 
-def initial_view(source: ObservationSource) -> ObservationSource:
+def initial_view(
+    source: ObservationSource, *, policy: SeedPolicy | None = None
+) -> ObservationSource:
     """Return the bounded initial view for active investigation runs."""
 
     if isinstance(source, InitialObservationView):
         return source
-    return InitialObservationView(source)
+    return InitialObservationView(source, seed_policy=policy or SeedPolicy())
 
 
 def investigation_backend(source: ObservationSource) -> InvestigationBackend:
@@ -273,8 +334,10 @@ def investigation_backend(source: ObservationSource) -> InvestigationBackend:
 
 
 __all__ = [
+    "InitialAccessLedger",
     "InitialObservationView",
     "InvestigationBackend",
+    "SeedPolicy",
     "SourceInvestigationBackend",
     "initial_view",
     "investigation_backend",

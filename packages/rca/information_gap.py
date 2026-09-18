@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable, Sequence
-from datetime import timedelta
 from hashlib import sha256
 
 from packages.rca.model import (
@@ -102,6 +101,27 @@ _FINDING_DIMENSIONS: dict[FindingKind, tuple[GapDimension, ...]] = {
     FindingKind.NETWORK_RESTRICTION: (GapDimension.TOPOLOGY_RELATION, GapDimension.ENTITY_STATE),
 }
 
+_STRUCTURAL_DIMENSIONS: dict[str, tuple[GapDimension, ...]] = {
+    "Deployment": (GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING),
+    "StatefulSet": (GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING),
+    "DaemonSet": (GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING),
+    "Job": (GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING),
+    "CronJob": (GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING),
+    "ConfigMap": (GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING),
+    "Secret": (GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING),
+    "HorizontalPodAutoscaler": (
+        GapDimension.AUTOSCALING_TARGET_STATE,
+        GapDimension.EVENT_SEQUENCE,
+    ),
+    "NetworkPolicy": (GapDimension.TOPOLOGY_RELATION, GapDimension.ENTITY_STATE),
+    "Pod": (GapDimension.FAILURE_ONSET, GapDimension.EVENT_SEQUENCE),
+    "Service": (GapDimension.DEPENDENCY_HEALTH, GapDimension.EVENT_SEQUENCE),
+    "StressChaos": (GapDimension.EVENT_SEQUENCE, GapDimension.FAILURE_ONSET),
+    "NetworkChaos": (GapDimension.EVENT_SEQUENCE, GapDimension.FAILURE_ONSET),
+    "Schedule": (GapDimension.EVENT_SEQUENCE, GapDimension.FAILURE_ONSET),
+    "Workflow": (GapDimension.EVENT_SEQUENCE, GapDimension.FAILURE_ONSET),
+}
+
 _RELATIONS: dict[GapDimension, str] = {
     GapDimension.AUTOSCALING_TARGET_STATE: "scales",
     GapDimension.CONFIG_DIFFERENCE: "configures",
@@ -166,6 +186,12 @@ def _dimensions(hypotheses: Sequence[Hypothesis]) -> tuple[GapDimension, ...]:
         for finding in hypothesis.findings
         for dimension in _FINDING_DIMENSIONS.get(finding.kind, ())
     }
+    dimensions.update(
+        dimension
+        for hypothesis in hypotheses
+        if hypothesis.structural_basis and not hypothesis.findings
+        for dimension in _STRUCTURAL_DIMENSIONS.get(hypothesis.causal_actor.kind, ())
+    )
     if not dimensions:
         dimensions.add(GapDimension.TOPOLOGY_RELATION)
     return tuple(sorted(dimensions, key=lambda item: item.value))
@@ -325,21 +351,28 @@ def _available_capabilities(
     # investigation may instead query raw history, events, logs, or metrics.
     blocked_in_bounded_view = {"describe", "neighbors"} if bounded else set()
     capability_source = getattr(source, "full_source", source)
-    pods = tuple(
-        entity for hypothesis in hypotheses for entity in hypothesis.members if entity.kind == "Pod"
-    )
-    cutoff = source.observation_cutoff()
-    since = cutoff - timedelta(hours=2) if cutoff is not None else None
+    source_methods = {
+        "history": "object_history",
+        "events": "events",
+        "logs": "error_logs",
+        "resource_pressure": "resource_pressure",
+        "traffic": "traffic_observations",
+    }
     for capability in capabilities:
         if capability.name in blocked_in_bounded_view:
             continue
-        if capability.name == "resource_pressure":
-            if since is not None and capability_source.resource_pressure(pods, since):
-                available.append(capability)
-        elif capability.name == "traffic":
-            if capability_source.traffic_observations():
-                available.append(capability)
+        supports = getattr(capability_source, "supports", None)
+        method_name = source_methods.get(capability.name)
+        # Availability is a capability contract, not a telemetry existence
+        # probe.  Reading metrics/traffic here would leak whether incident
+        # evidence exists before an investigation query is authorized.
+        if callable(supports):
+            available_capability = bool(supports(capability.name))
         else:
+            available_capability = method_name is not None and callable(
+                getattr(capability_source, method_name, None)
+            )
+        if available_capability:
             available.append(capability)
     return tuple(available)
 

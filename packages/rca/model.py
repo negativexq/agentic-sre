@@ -274,6 +274,10 @@ class Candidate(BaseModel):
     reasons: tuple[str, ...] = ()
     causal_path: tuple[CausalHop, ...] = ()
     causal_explanation: str = "UNLINKED"
+    # Structural plausibility is deliberately separate from observed evidence.
+    # It lets a bounded initial view expose actors for later investigation
+    # without assigning them artificial score or causal support.
+    structural_basis: tuple[str, ...] = ()
 
 
 class Confidence(StrEnum):
@@ -507,6 +511,7 @@ class Hypothesis(BaseModel):
     causal_explanation: str = "UNLINKED"
     score: float = 0.0
     reasons: tuple[str, ...] = ()
+    structural_basis: tuple[str, ...] = ()
     signature: HypothesisSignature | None = None
 
 

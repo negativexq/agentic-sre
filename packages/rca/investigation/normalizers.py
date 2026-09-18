@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import date, datetime
+from enum import Enum
 from typing import Any
+
+from pydantic import BaseModel
 
 from packages.rca.engine import Case
 from packages.rca.model import (
@@ -46,6 +51,54 @@ def _with_provenance(
         }
     )
     return finding.model_copy(update={"details": details})
+
+
+_ACQUISITION_DETAIL_KEYS = frozenset(
+    {"observation_id", "investigation_gap_id", "investigation_capability"}
+)
+
+
+def _semantic_value(value: Any) -> Any:
+    """Convert model/json-friendly details into a deterministic JSON value."""
+    if isinstance(value, BaseModel):
+        return _semantic_value(value.model_dump(mode="json"))
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {
+            str(key): _semantic_value(item)
+            for key, item in sorted(value.items(), key=lambda item: str(item[0]))
+        }
+    if isinstance(value, (set, frozenset)):
+        return sorted((_semantic_value(item) for item in value), key=lambda item: str(item))
+    if isinstance(value, (list, tuple)):
+        return [_semantic_value(item) for item in value]
+    return value
+
+
+def finding_identity(finding: Finding) -> tuple[Any, ...]:
+    """Return the semantic identity used for investigation Finding deduplication."""
+    semantic_details = {
+        key: value for key, value in finding.details.items() if key not in _ACQUISITION_DETAIL_KEYS
+    }
+    return (
+        finding.kind.value,
+        finding.entity.canonical,
+        finding.at.isoformat() if finding.at is not None else None,
+        finding.summary,
+        tuple(sorted(item.canonical for item in finding.related)),
+        json.dumps(
+            _semantic_value(semantic_details),
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+        tuple(sorted(set(finding.evidence_ids))),
+        finding.temporal_role.value,
+        finding.incident_onset.isoformat() if finding.incident_onset is not None else None,
+        finding.onset_delta_seconds,
+    )
 
 
 def _payload_findings(payload: dict[str, Any]) -> tuple[Finding, ...]:
@@ -175,19 +228,14 @@ def normalize_observation(
 
 
 def deduplicate_findings(findings: Iterable[Finding]) -> tuple[Finding, ...]:
-    """Keep one effective finding per stable evidence identity, preserving provenance."""
+    """Keep one effective Finding per semantic identity, preserving first occurrence."""
     result: list[Finding] = []
-    seen: set[str] = set()
-    fallbacks: set[tuple[str, str, str]] = set()
+    seen: set[tuple[Any, ...]] = set()
     for finding in findings:
-        ids = set(finding.evidence_ids)
-        fallback = (finding.entity.canonical, finding.kind.value, finding.summary)
-        if ids and ids <= seen:
+        identity = finding_identity(finding)
+        if identity in seen:
             continue
-        if not ids and fallback in fallbacks:
-            continue
-        seen.update(ids)
-        fallbacks.add(fallback)
+        seen.add(identity)
         result.append(finding)
     return tuple(result)
 
@@ -195,30 +243,22 @@ def deduplicate_findings(findings: Iterable[Finding]) -> tuple[Finding, ...]:
 def new_investigation_findings(
     existing: Iterable[Finding], incoming: Iterable[Finding]
 ) -> tuple[Finding, ...]:
-    """Return normalized findings whose evidence was not already effective."""
-    existing_items = tuple(existing)
-    known_ids = {evidence_id for finding in existing_items for evidence_id in finding.evidence_ids}
-    known_fallbacks = {
-        (finding.entity.canonical, finding.kind.value, finding.summary)
-        for finding in existing_items
-    }
+    """Return incoming Findings with semantic identities absent from existing Findings."""
+    known = {finding_identity(finding) for finding in existing}
     fresh: list[Finding] = []
     for finding in deduplicate_findings(incoming):
-        evidence_ids = set(finding.evidence_ids)
-        fallback = (finding.entity.canonical, finding.kind.value, finding.summary)
-        if evidence_ids and evidence_ids <= known_ids:
-            continue
-        if not evidence_ids and fallback in known_fallbacks:
+        identity = finding_identity(finding)
+        if identity in known:
             continue
         fresh.append(finding)
-        known_ids.update(evidence_ids)
-        known_fallbacks.add(fallback)
+        known.add(identity)
     return tuple(fresh)
 
 
 __all__ = [
     "NormalizedObservation",
     "deduplicate_findings",
+    "finding_identity",
     "new_investigation_findings",
     "normalize_observation",
 ]

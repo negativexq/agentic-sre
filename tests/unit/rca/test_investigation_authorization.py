@@ -16,7 +16,11 @@ from packages.rca.information_gap import (
 )
 from packages.rca.investigation.actions import observation_identity, validate_action
 from packages.rca.investigation.graph import _frozen, build_investigation_state
-from packages.rca.investigation.normalizers import normalize_observation
+from packages.rca.investigation.normalizers import (
+    deduplicate_findings,
+    new_investigation_findings,
+    normalize_observation,
+)
 from packages.rca.investigation.state import InvestigationConfig
 from packages.rca.model import (
     AuthorizedQuery,
@@ -158,6 +162,42 @@ def test_hypothesis_scope_authorizes_without_structural_alternative_id() -> None
         item.capability == "logs" and item.target == actor and item.alternative_ids == ()
         for item in gap.authorized_queries
     )
+    assert gap.resolvability is GapResolvability.RESOLVABLE
+
+
+def test_gap_with_capability_but_no_legal_target_is_unresolvable() -> None:
+    protected = _alternative(
+        "secret",
+        _ref("Secret", "checkout-secret"),
+        (GapDimension.CONFIG_DIFFERENCE,),
+    )
+    gap = _gap_for(
+        GapDimension.CONFIG_DIFFERENCE,
+        (),
+        (protected,),
+        InMemorySource(name="no-legal-target"),
+    )
+
+    assert gap.authorized_queries == ()
+    assert gap.candidate_tools == ()
+    assert gap.resolvability is GapResolvability.UNRESOLVABLE_WITH_CURRENT_TOOLS
+
+
+def test_structural_valid_target_makes_gap_resolvable() -> None:
+    alternative = _alternative(
+        "config",
+        _ref("ConfigMap", "checkout-config"),
+        (GapDimension.CONFIG_DIFFERENCE,),
+    )
+    gap = _gap_for(
+        GapDimension.CONFIG_DIFFERENCE,
+        (),
+        (alternative,),
+        InMemorySource(name="structural-valid-target"),
+    )
+
+    assert gap.authorized_queries
+    assert gap.resolvability is GapResolvability.RESOLVABLE
 
 
 def test_validation_requires_exact_authorized_capability_target_pair() -> None:
@@ -344,6 +384,83 @@ def test_normalized_findings_keep_signal_provenance_separate_from_observation_re
         ("raw:second",),
     ]
     assert set(observation.evidence_refs) == {"raw:first", "raw:second", "raw:unrelated"}
+
+
+def _identity_finding(
+    *,
+    kind: FindingKind = FindingKind.CONFIG_CHANGE,
+    entity: EntityRef | None = None,
+    summary: str = "semantic finding",
+    details: dict[str, Any] | None = None,
+    evidence_ids: tuple[str, ...] = ("raw:shared",),
+) -> Finding:
+    return Finding(
+        kind=kind,
+        entity=entity or _ref("Deployment", "checkout"),
+        at=datetime(2026, 1, 1, tzinfo=UTC),
+        summary=summary,
+        evidence_ids=evidence_ids,
+        details=details or {},
+    )
+
+
+def test_finding_deduplication_uses_semantic_identity_not_evidence_ids() -> None:
+    same_evidence_different_kind = deduplicate_findings(
+        (
+            _identity_finding(kind=FindingKind.CONFIG_CHANGE),
+            _identity_finding(kind=FindingKind.SPEC_CHANGE),
+        )
+    )
+    assert len(same_evidence_different_kind) == 2
+
+    same_evidence_different_entity = deduplicate_findings(
+        (
+            _identity_finding(),
+            _identity_finding(entity=_ref("Pod", "checkout-0")),
+        )
+    )
+    assert len(same_evidence_different_entity) == 2
+
+    different_details = deduplicate_findings(
+        (
+            _identity_finding(details={"changed_paths": ("spec.replicas",)}),
+            _identity_finding(details={"changed_paths": ("spec.template",)}),
+        )
+    )
+    assert len(different_details) == 2
+
+
+def test_finding_deduplication_ignores_acquisition_metadata_only() -> None:
+    first = _identity_finding(
+        details={"changed_paths": ("spec.replicas",), "observation_id": "obs-1"}
+    )
+    second = first.model_copy(
+        update={
+            "details": {
+                "changed_paths": ("spec.replicas",),
+                "observation_id": "obs-2",
+                "investigation_gap_id": "gap-2",
+                "investigation_capability": "history",
+            }
+        }
+    )
+
+    assert len(deduplicate_findings((first, second))) == 1
+    assert new_investigation_findings((first,), (second,)) == ()
+
+
+def test_new_investigation_findings_keeps_semantically_new_shared_evidence() -> None:
+    existing = _identity_finding(kind=FindingKind.CONFIG_CHANGE)
+    incoming = _identity_finding(kind=FindingKind.SPEC_CHANGE)
+
+    assert new_investigation_findings((existing,), (incoming,)) == (incoming,)
+
+
+def test_new_investigation_findings_deduplicates_exact_semantic_duplicate() -> None:
+    existing = _identity_finding()
+    duplicate = existing.model_copy(update={"details": {"observation_id": "new-observation"}})
+
+    assert new_investigation_findings((existing,), (duplicate,)) == ()
 
 
 def test_new_frontier_and_observation_state_round_trip_as_plain_data() -> None:

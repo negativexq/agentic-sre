@@ -473,11 +473,7 @@ def _gap_for(
     elif authorized_queries:
         resolvability = GapResolvability.RESOLVABLE
     else:
-        resolvability = (
-            GapResolvability.RESOLVABLE
-            if capabilities
-            else GapResolvability.UNRESOLVABLE_WITH_CURRENT_TOOLS
-        )
+        resolvability = GapResolvability.UNRESOLVABLE_WITH_CURRENT_TOOLS
     tools = (
         tuple(sorted({item.capability for item in authorized_queries}))
         if resolvability is GapResolvability.RESOLVABLE

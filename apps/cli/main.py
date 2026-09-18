@@ -11,7 +11,14 @@ from pathlib import Path
 from packages.evals.itbench.dataset import ITBenchLiteDataset
 from packages.rca.engine import Investigator
 from packages.rca.hypotheses import summarize_diagnoses
-from packages.rca.model import Diagnosis
+from packages.rca.investigation import (
+    InvestigationConfig,
+    LLMInvestigationPolicy,
+    ScriptedInvestigationPolicy,
+    investigate_diagnosis,
+)
+from packages.rca.investigation.state import InvestigationPolicy
+from packages.rca.model import Diagnosis, InvestigationAction, InvestigationResult
 from packages.rca.resolution import summarize_resolution_audit, summarize_resolutions
 
 DEFAULT_DATASET = Path(os.environ.get("ITBENCH_LITE_ROOT", ".local/itbench-lite"))
@@ -119,6 +126,45 @@ def cmd_diagnose(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_investigate(args: argparse.Namespace) -> int:
+    from packages.evals.itbench.source import SnapshotSource
+
+    dataset = _dataset(args.dataset)
+    source = SnapshotSource(dataset.scenario(args.scenario))
+    if args.llm and args.actions:
+        raise SystemExit("--llm and --actions cannot be used together")
+    if args.llm:
+        if not args.authorize_live_model:
+            raise SystemExit("--llm requires --authorize-live-model")
+        from packages.rca.llm import OpenAIClient
+
+        client = OpenAIClient(model=args.model)
+        problem = client.readiness_problem()
+        if problem:
+            raise SystemExit(f"--llm: {problem}")
+        policy: InvestigationPolicy = LLMInvestigationPolicy(client)
+    else:
+        actions: list[InvestigationAction | dict[str, object]] = []
+        if args.actions:
+            raw = json.loads(args.actions.read_text(encoding="utf-8"))
+            if not isinstance(raw, list):
+                raise SystemExit("--actions must contain a JSON array")
+            actions = [item for item in raw if isinstance(item, dict)]
+        policy = ScriptedInvestigationPolicy(actions)
+    result = investigate_diagnosis(
+        source,
+        policy=policy,
+        config=InvestigationConfig(
+            max_turns=args.max_turns,
+            max_model_calls=args.max_model_calls,
+            max_tool_calls=args.max_tool_calls,
+            max_no_progress_rounds=args.max_no_progress_rounds,
+        ),
+    )
+    _emit_investigation(result, args)
+    return 0
+
+
 def _emit(diagnosis: Diagnosis, args: argparse.Namespace) -> None:
     if args.html:
         from packages.rca.report import diagnosis_html
@@ -129,6 +175,31 @@ def _emit(diagnosis: Diagnosis, args: argparse.Namespace) -> None:
         print(json.dumps(diagnosis.model_dump(mode="json"), indent=2))
     else:
         _print_diagnosis(diagnosis)
+        if args.html:
+            print(f"\nHTML report: {args.html}")
+
+
+def _emit_investigation(result: InvestigationResult, args: argparse.Namespace) -> None:
+    if args.html:
+        from packages.rca.report import diagnosis_html
+
+        args.html.parent.mkdir(parents=True, exist_ok=True)
+        args.html.write_text(
+            diagnosis_html(result.diagnosis, investigation=result), encoding="utf-8"
+        )
+    if args.json:
+        print(json.dumps(result.model_dump(mode="json"), indent=2))
+    else:
+        _print_diagnosis(result.diagnosis)
+        print("Investigation")
+        print(f"  Initial resolution   {result.initial_resolution.value}")
+        print(f"  Final resolution     {result.final_resolution.value}")
+        print(f"  Turns                {result.turns}")
+        print(f"  Model calls          {result.model_calls}")
+        print(f"  Tool calls           {result.tool_calls}")
+        print(f"  Unique observations  {result.unique_observations}")
+        print(f"  New evidence         {result.unique_evidence_added}")
+        print(f"  Stop reason          {result.stop_reason.value}")
         if args.html:
             print(f"\nHTML report: {args.html}")
 
@@ -304,6 +375,17 @@ def _add_llm_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--model", default=None, help="override SRE_LLM_MODEL")
 
 
+def _add_investigation_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--actions", type=Path, help="JSON array of scripted read-only actions")
+    parser.add_argument("--llm", action="store_true", help="use the bounded LLM action policy")
+    parser.add_argument("--authorize-live-model", action="store_true")
+    parser.add_argument("--model", default=None, help="override SRE_LLM_MODEL")
+    parser.add_argument("--max-turns", type=int, default=6)
+    parser.add_argument("--max-model-calls", type=int, default=6)
+    parser.add_argument("--max-tool-calls", type=int, default=8)
+    parser.add_argument("--max-no-progress-rounds", type=int, default=2)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agentic-sre", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -324,6 +406,15 @@ def build_parser() -> argparse.ArgumentParser:
     serve_cmd.add_argument("--port", type=int, default=8000)
     serve_cmd.set_defaults(handler=cmd_serve)
     diagnose_cmd.set_defaults(handler=cmd_diagnose)
+
+    investigate_cmd = sub.add_parser(
+        "investigate", help="run the bounded read-only investigation graph"
+    )
+    investigate_cmd.add_argument("scenario", help="scenario id, e.g. Scenario-4")
+    investigate_cmd.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
+    _add_output_flags(investigate_cmd)
+    _add_investigation_flags(investigate_cmd)
+    investigate_cmd.set_defaults(handler=cmd_investigate)
 
     eval_cmd = sub.add_parser("eval", help="predict, seal, and grade a split")
     eval_cmd.add_argument("--split", choices=["dev", "test", "all"], default="dev")

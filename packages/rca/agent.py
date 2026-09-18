@@ -1,8 +1,9 @@
-"""LLM investigator: inspects ranked candidates with read-only tools and concludes.
+"""Legacy LLM candidate reviewer retained for compatibility.
 
-The model chooses what to inspect and which candidate to blame. It cannot
-create evidence, reach objects outside the case, or mark its own answer as
-verified; the engine re-checks the chosen candidate with deterministic rules.
+New integrations must use :mod:`packages.rca.investigation`, whose bounded
+LangGraph policy can request observations but cannot conclude a root cause.
+This class remains only for v1.0.x benchmark/API compatibility and is not used
+by the bounded control-plane path.
 """
 
 from __future__ import annotations

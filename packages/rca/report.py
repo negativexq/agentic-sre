@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from html import escape
 
-from packages.rca.model import Confidence, Diagnosis
+from packages.rca.model import Confidence, Diagnosis, InvestigationResult
 
 _STYLE = """
 :root { --bg:#fbfbfa; --fg:#1d1d1b; --muted:#6b6b66; --line:#e3e2dd; --card:#ffffff;
@@ -51,7 +51,12 @@ def _badge(confidence: Confidence | str) -> str:
     return f"<span class='badge {escape(value)}'>{escape(value)}</span>"
 
 
-def diagnosis_html(diagnosis: Diagnosis, *, back_link: str | None = None) -> str:
+def diagnosis_html(
+    diagnosis: Diagnosis,
+    *,
+    back_link: str | None = None,
+    investigation: InvestigationResult | None = None,
+) -> str:
     """Render one diagnosis as a standalone page."""
     symptoms = diagnosis.symptoms
     parts: list[str] = []
@@ -183,6 +188,27 @@ def diagnosis_html(diagnosis: Diagnosis, *, back_link: str | None = None) -> str
         parts.append(
             "<h2>Alternatives</h2><div class='table-wrap'><table><tr><th>Candidate</th>"
             f"<th>Score</th><th>Strongest signal</th></tr>{rows}</table></div>"
+        )
+    if investigation is not None:
+        observations = "".join(
+            f"<li><code>{escape(item.capability)}</code> "
+            f"<code>{escape(item.target.canonical)}</code> "
+            f"{escape(item.outcome.value)}</li>"
+            for item in investigation.observations[:12]
+        )
+        parts.append(
+            "<h2>Bounded investigation</h2><div class='card'>"
+            f"<p>Initial resolution: <code>{escape(investigation.initial_resolution.value)}</code><br>"
+            f"Final resolution: <code>{escape(investigation.final_resolution.value)}</code><br>"
+            f"Turns: {investigation.turns} · Tool calls: {investigation.tool_calls} · "
+            f"Model calls: {investigation.model_calls}<br>"
+            f"Stop reason: <code>{escape(investigation.stop_reason.value)}</code></p>"
+            + (
+                f"<div class='muted'>Read-only observations</div><ul>{observations}</ul>"
+                if observations
+                else ""
+            )
+            + "</div>"
         )
     steps = "".join(
         f"<tr><td>{escape(s.actor)}</td><td>{escape(s.action)}</td><td>{escape(s.detail)}</td></tr>"

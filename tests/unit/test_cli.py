@@ -7,9 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from apps.cli.main import main
+from apps.cli.main import build_parser, main
 from packages.rca.demo import demo_source
 from packages.rca.engine import diagnose
+from packages.rca.investigation import ScriptedInvestigationPolicy, investigate_diagnosis
 from packages.rca.model import CausalHop, EntityRef, Resolution, ResolutionTrace
 from packages.rca.report import diagnosis_html
 
@@ -35,6 +36,15 @@ def test_demo_text_output_names_the_cause(capsys: pytest.CaptureFixture[str]) ->
     assert "Causal hypothesis" in out
     assert "Actor          shop/Deployment/payment" in out
     assert "Initiating evidence" in out
+
+
+def test_investigation_result_is_visible_in_html_and_cli_parser() -> None:
+    result = investigate_diagnosis(demo_source(), policy=ScriptedInvestigationPolicy([]))
+    html = diagnosis_html(result.diagnosis, investigation=result)
+    assert "Bounded investigation" in html
+    assert "Initial resolution" in html
+    parsed = build_parser().parse_args(["investigate", "Scenario-1"])
+    assert parsed.command == "investigate"
 
 
 def test_html_causal_path_escapes_entities_and_omits_empty_path() -> None:

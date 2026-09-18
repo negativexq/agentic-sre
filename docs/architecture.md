@@ -2,7 +2,8 @@
 
 Agentic SRE turns an alert into a ranked, evidence-backed root cause with a
 proposed fix. The same engine runs against a live cluster, the offline demo,
-and ITBench-Lite snapshots.
+and ITBench-Lite snapshots. The model is optional; evidence, verification,
+resolution, and safety remain deterministic.
 
 ```mermaid
 flowchart LR
@@ -14,8 +15,10 @@ flowchart LR
   Loki[Loki] --> SRC
   SRC --> OBS[Normalized observations]
   OBS --> ENG[RCA engine]
-  ENG --> LLM[LLM investigator<br/>optional]
-  ENG --> OUT[Diagnosis<br/>API, web UI, CLI]
+  ENG --> RES[Verification + resolution]
+  RES -. AMBIGUOUS / missing gap .-> G[LangGraph bounded investigation]
+  G -->|one allowed read-only action| OBS
+  RES --> OUT[Diagnosis<br/>API, web UI, CLI]
 ```
 
 ## Components
@@ -30,13 +33,14 @@ flowchart LR
 | `packages/rca/hypotheses.py` | Evidence-coherent causal episode grouping and hypothesis diagnostics |
 | `packages/rca/resolution.py` | Structural hypothesis signatures, auditable resolution decisions, and evidence-based resolution state |
 | `packages/rca/information_gap.py` | Deterministic missing-fact descriptions and bounded capability metadata; no tool execution |
-| `packages/rca/engine.py` | Pipeline: observe → signals → group → rank → investigate → verify → resolve → propose |
-| `packages/rca/agent.py`, `llm.py` | Optional LLM investigator with read-only tools; opt-in OpenAI client |
+| `packages/rca/engine.py` | Pipeline: observe → signals → group → rank → verify → resolve → propose |
+| `packages/rca/investigation/` | LangGraph bounded investigation state, policy gate, read-only tools, observation normalizers, and deterministic re-resolution |
+| `packages/rca/agent.py`, `llm.py` | Legacy v1.0.x candidate reviewer and provider-neutral client; the bounded path uses `LLMInvestigationPolicy` |
 | `packages/rca/remediation.py` | Proposed commands; never executed |
 | `packages/rca/live.py` | Kubernetes reader, Loki reader, change watcher, live source |
 | `packages/rca/report.py` | HTML for the web UI and static reports |
 | `apps/control_plane` | FastAPI: Alertmanager webhook, incidents, diagnoses, web UI |
-| `apps/cli` | `agentic-sre demo`, `diagnose`, `eval`, `grade`, `benchmark-qualify`, `hypothesis-report`, `serve` |
+| `apps/cli` | `agentic-sre demo`, `diagnose`, `investigate`, `eval`, `grade`, `benchmark-qualify`, `hypothesis-report`, `serve` |
 | `packages/evals/itbench` | Snapshot source, sealed predict/grade runner, ITBench grader |
 
 ## Pipeline
@@ -75,25 +79,32 @@ flowchart LR
    components, namespace, whether the change names an alerting service, and
    timing relative to onset. Warnings on the alerting component itself count
    for less, because they restate the symptom.
-5. **Investigation.** With an investigator configured, the model sees the top
-   candidates and may inspect them (`describe`, `history`, `events`,
-   `neighbors`, `logs`) before choosing one. Invalid replies or budget
-   exhaustion fall back to the ranking.
-6. **Verification.** Rules decide the confidence label for the chosen
+5. **Verification and resolution.** Rules decide the confidence label for the
+   selected hypothesis, while a separate structural resolver decides whether
+   competing hypotheses are distinguishable. A resolved diagnosis ends here.
+6. **Bounded investigation.** Only an `AMBIGUOUS` diagnosis or an evidence-poor
+   diagnosis with a concrete resolvable gap may enter the LangGraph state
+   machine. The policy chooses one listed gap, capability, and in-scope target;
+   a deterministic gate validates it, a read-only semantic tool returns a typed
+   observation, and existing normalizers rebuild the case. The model never
+   selects a root cause, creates a finding, assigns confidence, or sets
+   resolution. Invalid actions, repeated no-op actions, tool failures, and
+   budgets terminate the run safely.
+7. **Verification.** Rules decide the confidence label for the chosen
    hypothesis. Findings expose an onset delta and a temporal role
    (`INITIATING`, `SUPPORTING`, `CONSEQUENCE`, or `AMBIGUOUS`). A late linked
    change can remain a candidate but cannot verify the original incident onset;
    downstream-only evidence may produce `UNVERIFIED`. The structured
    `VerificationTrace` records passed, failed, weak, and unknown predicates
    without using an LLM.
-7. **Resolution.** A separate structural comparison decides whether the leading
+8. **Resolution.** A separate structural comparison decides whether the leading
    hypothesis is distinguishable from plausible alternatives. It reports
    `RESOLVED`, `AMBIGUOUS`, or `INSUFFICIENT_EVIDENCE`; this axis is independent
    of `VERIFIED`, `LIKELY`, and `UNVERIFIED` confidence. Ranking chooses an
    order, verification tests one hypothesis, and resolution asks whether the
    evidence distinguishes it. Canonical entity order is used only for stable
    serialization, never as causal evidence.
-8. **Remediation.** The causal actor maps to a reversible proposal:
+9. **Remediation.** The causal actor maps to a reversible proposal:
    revert a ConfigMap, `rollout undo`, pause a chaos schedule, restore
    replicas, raise a quota or memory limit.
 
@@ -182,6 +193,31 @@ The selected `root_cause` remains the deterministic leading actor for backward
 compatibility, but `resolution_trace` and `ambiguous_hypotheses` make the
 distinction visible to API, CLI, and HTML consumers. Under ambiguity a proposed
 remediation is hypothesis-specific; the control plane never executes it.
+
+### Bounded investigation trust boundary
+
+The investigation graph is an orchestration layer, not a second RCA engine:
+
+```text
+deterministic diagnosis
+  → InformationGap
+  → LLM/scripted action policy
+  → deterministic policy gate
+  → read-only semantic tool
+  → typed observation
+  → existing signal normalizer
+  → hypothesis rebuild
+  → verification + resolution
+```
+
+The only model-selected value is an observation action. Actions must name an
+existing `RESOLVABLE` gap, an allowed capability, and an entity in the gap's
+scope. Tool output is not evidence until deterministic normalization produces
+the same Finding types used by the initial RCA. `NO_DATA`, `UNKNOWN`, and tool
+errors never support a hypothesis. The graph is bounded by turns, model calls,
+tool calls, per-gap calls, invalid actions, no-progress rounds, and wall time.
+`InMemorySaver` is the default checkpoint implementation; a stable incident
+thread ID allows a run to resume without losing observations or budgets.
 
 ## Safety
 

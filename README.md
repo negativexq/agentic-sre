@@ -24,7 +24,7 @@ behavior.
 - Separate deterministic resolution: `RESOLVED`, `AMBIGUOUS`, or `INSUFFICIENT_EVIDENCE`; confidence is not a proxy for distinguishability.
 - Causal paths visible in JSON/API output, the CLI, and the HTML report.
 - Real Kind lifecycle validation through Prometheus, Alertmanager, and the control plane.
-- Optional bounded LLM investigation around deterministic candidates.
+- Optional bounded LangGraph investigation that acquires read-only evidence when deterministic resolution is ambiguous.
 - Remediation proposals only; no cluster writes or autonomous repair.
 
 ## Measured results
@@ -203,6 +203,29 @@ identifies one occurrence. A firing alert after resolution creates a new
 incident episode; concurrent duplicate delivery of one occurrence is
 database-idempotent.
 
+## Bounded Investigation Agent
+
+When deterministic RCA returns `AMBIGUOUS` (or has a concrete resolvable gap),
+the optional investigator runs a bounded LangGraph state machine. The model may
+select one listed gap, capability, and in-scope target; a deterministic policy
+gate validates the request before a read-only semantic tool runs. Tool output is
+typed, normalized through the same deterministic signal code as the initial RCA,
+and then hypotheses are rebuilt and re-verified.
+
+The model cannot create findings, set confidence or resolution, choose a root
+cause, or mutate the cluster. `NO_DATA`, invalid actions, repeated observations,
+tool failures, and exhausted budgets terminate safely with the current
+`AMBIGUOUS` or `INSUFFICIENT_EVIDENCE` result. The default remains deterministic
+and makes no model calls. Try the offline path with a scripted action file:
+
+```bash
+agentic-sre investigate Scenario-1 --actions actions.json
+```
+
+The optional `--llm --authorize-live-model` path uses the existing provider-
+neutral client and strict JSON action schema; it is not required for CI or the
+Kind release gate.
+
 ## Optional LLM investigator
 
 The LLM investigator is off by default and bounded by a call budget. It reviews
@@ -210,9 +233,10 @@ deterministically generated candidates through read-only tools; it cannot
 invent candidates, create evidence, or assign final confidence. The
 deterministic engine remains the default and source of truth.
 
-The measured v0.5.0 bounded LLM run did not improve the deterministic engine on
-ITBench-Lite, so the LLM remains optional and replaceable. It is not used by
-the published deterministic benchmark or the Kind release gate.
+The measured v0.5.0 candidate-review LLM run did not improve the deterministic
+engine on ITBench-Lite. The current bounded investigator is therefore optional
+and replaceable, and is not used by the published deterministic benchmark or the
+Kind release gate.
 
 ## Safety and trust boundaries
 
@@ -223,7 +247,7 @@ the published deterministic benchmark or the Kind release gate.
 - There is no per-user identity, rate limiting, or built-in read authentication.
 - The supported writer model is one control-plane process / one replica; the journal lock is not multi-replica coordination.
 
-GitHub Actions runs `check`, `images`, and `kind-e2e` on pushes.
+GitHub Actions runs `check`, `images`, and `kind-e2e` on pushes and pull requests.
 
 ## Reproducibility and benchmark methodology
 

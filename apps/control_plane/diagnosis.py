@@ -14,6 +14,9 @@ from uuid import UUID
 from sqlalchemy.orm import Session, sessionmaker
 
 from packages.rca.engine import Investigator, diagnose
+from packages.rca.investigation.graph import investigate_diagnosis
+from packages.rca.investigation.policy import LLMInvestigationPolicy
+from packages.rca.investigation.state import InvestigationPolicy
 from packages.rca.live import (
     ChangeWatcher,
     ClusterReader,
@@ -65,6 +68,7 @@ class DiagnosisService:
     reader: ClusterReader | None = None
     log_reader: LogReader | None = None
     investigator_factory: Callable[[], Investigator | None] = lambda: None
+    bounded_policy_factory: Callable[[], InvestigationPolicy | None] = lambda: None
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
     # Serializes ChangeWatcher.snapshot() runs: the periodic watch() loop and a
     # run()-triggered snapshot can otherwise race on the same read-then-write
@@ -251,7 +255,11 @@ class DiagnosisService:
             observed_at=window_end,
             current_is_live=not resolved,
         )
-        diagnosis = diagnose(source, investigator=self.investigator_factory())
+        bounded_policy = self.bounded_policy_factory()
+        if bounded_policy is not None:
+            diagnosis = investigate_diagnosis(source, policy=bounded_policy).diagnosis
+        else:
+            diagnosis = diagnose(source, investigator=self.investigator_factory())
         with self.session_factory() as session:
             DiagnosisRepository(session).save(
                 incident_id, diagnosis.model_dump(mode="json"), self.clock()
@@ -295,6 +303,16 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
 
         return LLMInvestigator(llm_client)
 
+    def bounded_policy() -> InvestigationPolicy | None:
+        nonlocal llm_client
+        if os.getenv("SRE_LLM_ENABLED", "").casefold() != "true":
+            return None
+        if llm_client is None:
+            from packages.rca.llm import OpenAIClient
+
+            llm_client = OpenAIClient()
+        return LLMInvestigationPolicy(llm_client)
+
     return DiagnosisService(
         session_factory=session_factory,
         namespaces=namespaces,
@@ -302,6 +320,7 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
         reader=reader,
         log_reader=log_reader,
         investigator_factory=investigator,
+        bounded_policy_factory=bounded_policy,
     )
 
 

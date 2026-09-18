@@ -48,7 +48,7 @@ official root-cause score is unchanged from v1.0.1. Scenario-38 selected the
 new normalized HPA candidate instead of a Pod candidate; the published
 ground-truth cause is not observable, so this did not change the score.
 
-The latest hardening validation passed 185 tests and the real Kind release
+The latest hardening validation passed 234 tests and the real Kind release
 gate. The stored [v1.0.2 result](evals/results/v1.0.2/README.md) records the
 tagged release SHA.
 

@@ -10,9 +10,13 @@ The model is optional. Evidence collection, temporal boundaries, ranking,
 verification, replay, and safety constraints remain deterministic system
 behavior.
 
-Current code release: **v1.1.0 — Bounded Investigation Agent**. The
+Current code release: **v1.1.1 — Checkpoint-Safe Bounded Investigation Agent**. The
 deterministic RCA path remains the default; investigation is entered only when
 the available evidence leaves a concrete ambiguity or evidence gap.
+
+The v1.1.1 patch keeps runtime services out of LangGraph checkpoints and makes
+resumed no-progress detection representation-safe. See the
+[release notes](docs/releases/v1.1.1.md).
 
 [![CI](https://github.com/negativexq/agentic-sre/actions/workflows/checks.yml/badge.svg)](https://github.com/negativexq/agentic-sre/actions/workflows/checks.yml)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)

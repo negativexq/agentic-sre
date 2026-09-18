@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import json
 from collections import deque
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
+from datetime import datetime, timedelta
 from hashlib import sha256
 from typing import Any
 
@@ -22,6 +23,7 @@ from packages.rca.investigation.environment import (
     investigation_backend,
 )
 from packages.rca.investigation.normalizers import (
+    deduplicate_findings,
     new_investigation_findings,
     normalize_observation,
 )
@@ -37,6 +39,8 @@ from packages.rca.model import (
     InvestigationQuery,
     Resolution,
 )
+from packages.rca.ranking import RankingConfig
+from packages.rca.signals import extract_symptoms
 from packages.rca.source import ObservationSource
 
 
@@ -60,6 +64,7 @@ class SearchStep:
     hypotheses_changed: bool
     resolution_before: str
     resolution_after: str
+    query_template: str = "full-history"
 
 
 @dataclass(frozen=True)
@@ -103,8 +108,53 @@ class _State:
     depth: int
 
 
-def _query_for(source: ObservationSource) -> InvestigationQuery:
-    return InvestigationQuery(end=source.observation_cutoff(), limit=64)
+_MAX_LIMIT = 64
+_ONSET_WINDOWS: tuple[tuple[str, timedelta], ...] = (
+    ("onset+-5m", timedelta(minutes=5)),
+    ("onset+-15m", timedelta(minutes=15)),
+)
+
+
+def query_templates(source: ObservationSource) -> tuple[tuple[str, InvestigationQuery], ...]:
+    """Generic, incident-independent time windows a policy could also choose.
+
+    Backends truncate results to ``limit`` in record order, so a full-history
+    query on a busy object can drop exactly the records near onset; narrower
+    onset-relative windows are therefore distinct information, not duplicates.
+    Windows are derived only from the alert onset, the observation cutoff, and
+    the engine's own lookback.  ``reasons``/``contains`` filters are not
+    searched (any fixed vocabulary would be a scenario-flavoured choice), and
+    ``metric``/``include_baseline`` do not affect the current backend.
+    """
+    cutoff = source.observation_cutoff()
+    templates: list[tuple[str, InvestigationQuery]] = [
+        ("full-history", InvestigationQuery(end=cutoff, limit=_MAX_LIMIT))
+    ]
+    onset = extract_symptoms(source.alerts()).onset
+    if onset is None:
+        return tuple(templates)
+
+    def bounded(end: datetime) -> datetime:
+        return min(end, cutoff) if cutoff is not None else end
+
+    for label, delta in _ONSET_WINDOWS:
+        templates.append(
+            (
+                label,
+                InvestigationQuery(
+                    start=onset - delta, end=bounded(onset + delta), limit=_MAX_LIMIT
+                ),
+            )
+        )
+    templates.append(
+        (
+            "incident-window",
+            InvestigationQuery(
+                start=onset - RankingConfig().lookback, end=cutoff, limit=_MAX_LIMIT
+            ),
+        )
+    )
+    return tuple(templates)
 
 
 def _raw_record_count(payload: Mapping[str, Any]) -> int:
@@ -185,18 +235,19 @@ def _resolvable_gaps(diagnosis: Diagnosis) -> tuple[InformationGap, ...]:
 def _queries(
     diagnosis: Diagnosis,
     tools: Mapping[str, InvestigationTool],
-    query: InvestigationQuery,
+    templates: tuple[tuple[str, InvestigationQuery], ...],
     used: frozenset[str],
-) -> tuple[tuple[InformationGap, str, EntityRef, str], ...]:
-    choices: list[tuple[InformationGap, str, EntityRef, str]] = []
+) -> tuple[tuple[InformationGap, str, EntityRef, str, str, InvestigationQuery], ...]:
+    choices: list[tuple[InformationGap, str, EntityRef, str, str, InvestigationQuery]] = []
     for gap in _resolvable_gaps(diagnosis):
         for capability in sorted(gap.candidate_tools):
             if capability not in tools:
                 continue
             for target in sorted(gap.entity_scope, key=lambda item: item.canonical):
-                key = _query_key(capability, target, query)
-                if key not in used:
-                    choices.append((gap, capability, target, key))
+                for label, query in templates:
+                    key = _query_key(capability, target, query)
+                    if key not in used:
+                        choices.append((gap, capability, target, key, label, query))
     return tuple(choices)
 
 
@@ -250,16 +301,21 @@ def search_incident(
     seed_policy: SeedPolicy | None = None,
     max_depth: int = 2,
     max_states: int = 256,
+    diagnose: Callable[[Case], Diagnosis] = diagnose_case,
 ) -> MultiStepSearchResult:
-    """Enumerate legal evidence-acquisition sequences without a model."""
+    """Enumerate legal evidence-acquisition sequences without a model.
+
+    ``diagnose`` exists so tests can pin a resolution predicate; measurements
+    always use the production resolver (``diagnose_case``).
+    """
     if max_depth < 1:
         raise ValueError("max_depth must be positive")
     bounded = initial_view(source, policy=seed_policy)
     initial_case = build_case(bounded)
-    initial_diagnosis = diagnose_case(initial_case)
+    initial_diagnosis = diagnose(initial_case)
     backend = investigation_backend(source)
     tools = default_tools(backend)
-    query = _query_for(source)
+    templates = query_templates(source)
     queue: deque[_State] = deque([_State(initial_case, initial_diagnosis, (), (), frozenset(), 0)])
     visited = {state_fingerprint(initial_case, initial_diagnosis)}
     attempts: list[SearchStep] = []
@@ -274,8 +330,8 @@ def search_incident(
             truncated = True
             break
         explored += 1
-        for gap, capability, target, key in _queries(
-            state.diagnosis, tools, query, state.query_keys
+        for gap, capability, target, key, label, query in _queries(
+            state.diagnosis, tools, templates, state.query_keys
         ):
             step, fresh = _step(
                 state.depth + 1,
@@ -287,12 +343,16 @@ def search_incident(
                 tools[capability],
                 query,
             )
+            step = replace(step, query_template=label)
             if not fresh:
                 attempts.append(step)
                 continue
-            combined = tuple(new_investigation_findings(state.findings, fresh))
+            # ``fresh`` is already novel against the current case (which holds the
+            # earlier investigation findings); the next state must carry all of
+            # them forward, not only this step's findings.
+            combined = deduplicate_findings((*state.findings, *fresh))
             next_case = build_case(bounded, extra_findings=combined)
-            next_diagnosis = diagnose_case(next_case)
+            next_diagnosis = diagnose(next_case)
             step = replace(
                 step,
                 hypotheses_after=len(next_case.hypotheses),
@@ -338,6 +398,7 @@ def search_incident(
 
 __all__ = [
     "MultiStepSearchResult",
+    "query_templates",
     "SearchPath",
     "SearchStep",
     "search_incident",

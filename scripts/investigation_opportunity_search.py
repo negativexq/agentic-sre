@@ -56,7 +56,7 @@ def _print_cardinality(result: MultiStepSearchResult) -> None:
 
 def _step_summary(step: SearchStep) -> str:
     return (
-        f"{step.capability}/{step.target} raw={step.raw_records} "
+        f"{step.capability}[{step.query_template}]/{step.target} raw={step.raw_records} "
         f"new_refs={len(step.new_refs)} findings={','.join(step.new_findings) or '-'} "
         f"hyp={step.hypotheses_before}->{step.hypotheses_after} "
         f"resolution={step.resolution_before}->{step.resolution_after}"

@@ -1,23 +1,26 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from rca_builders import at
 
-from packages.rca.engine import build_case, diagnose_case
+from packages.rca.engine import Case, build_case, diagnose_case
 from packages.rca.investigation.environment import SeedPolicy, initial_view, investigation_backend
 from packages.rca.investigation.graph import investigate_diagnosis
-from packages.rca.investigation.multi_step_search import search_incident
+from packages.rca.investigation.multi_step_search import query_templates, search_incident
 from packages.rca.investigation.opportunity_audit import audit_incident
 from packages.rca.investigation.policy import ScriptedInvestigationPolicy
 from packages.rca.model import (
     Alert,
     ClusterEvent,
+    Diagnosis,
     EntityRef,
     InvestigationAction,
     InvestigationQuery,
     LogRecord,
     ObjectVersion,
+    Resolution,
 )
 from packages.rca.source import InMemorySource
 
@@ -53,7 +56,9 @@ def _event(entity: EntityRef, reason: str, minute: float) -> ClusterEvent:
     )
 
 
-def _source_with_hidden_hpa_history() -> tuple[InMemorySource, EntityRef]:
+def _source_with_hidden_hpa_history(
+    hidden: tuple[str, ...] = ("right",),
+) -> tuple[InMemorySource, EntityRef]:
     versions: list[ObjectVersion] = []
     for name in ("left", "right"):
         labels = {"app": "api"}
@@ -90,7 +95,7 @@ def _source_with_hidden_hpa_history() -> tuple[InMemorySource, EntityRef]:
         hpa_body: dict[str, Any] = {
             "spec": {"scaleTargetRef": {"kind": "Deployment", "name": name}, "maxReplicas": 3}
         }
-        if name == "right":
+        if name in hidden:
             versions.append(
                 _version(
                     hpa,
@@ -104,7 +109,7 @@ def _source_with_hidden_hpa_history() -> tuple[InMemorySource, EntityRef]:
                     0,
                 )
             )
-        versions.append(_version(hpa, 0, hpa_body, 1 if name == "right" else 0))
+        versions.append(_version(hpa, 0, hpa_body, 1 if name in hidden else 0))
 
     versions.append(_version(_ref("Service", "api"), 0, {"spec": {"selector": {"app": "api"}}}, 0))
     left_hpa = _ref("HorizontalPodAutoscaler", "left-hpa")
@@ -278,3 +283,55 @@ def test_multi_step_opportunity_search_uses_cumulative_production_state() -> Non
     assert solution.diagnosis.resolution.value == "RESOLVED"
     assert solution.steps[0].new_findings
     assert any(step.new_refs for step in result.attempts)
+
+
+def test_multi_step_search_carries_earlier_findings_into_later_steps() -> None:
+    """Regression: search kept only the latest step's findings, so a state that
+    needs F1 + F2 together could never be reached."""
+    source, _right = _source_with_hidden_hpa_history(hidden=("left", "right"))
+    left_ref = "object:shop/HorizontalPodAutoscaler/left-hpa:-20:0"
+    right_ref = "object:shop/HorizontalPodAutoscaler/right-hpa:-20:0"
+    initial = diagnose_case(build_case(initial_view(source)))
+    assert initial.resolution is Resolution.AMBIGUOUS
+    resolved_cases: list[Case] = []
+
+    def needs_both(case: Case) -> Diagnosis:
+        # The production resolver resolves this fixture after either single
+        # history query (dominance over the unqueried structural competitor),
+        # so the predicate is pinned: RESOLVED only when both hidden changes are
+        # in the case; otherwise keep the initial ambiguity and its gaps.
+        present = {ref for finding in case.findings for ref in finding.evidence_ids}
+        if {left_ref, right_ref} <= present:
+            resolved_cases.append(case)
+            return diagnose_case(case).model_copy(update={"resolution": Resolution.RESOLVED})
+        return initial
+
+    result = search_incident(source, max_depth=2, max_states=64, diagnose=needs_both)
+
+    single = [step for step in result.attempts if step.depth == 1 and step.new_findings]
+    assert {step.target for step in single} >= {
+        "shop/HorizontalPodAutoscaler/left-hpa",
+        "shop/HorizontalPodAutoscaler/right-hpa",
+    }
+    assert all(step.resolution_after == "AMBIGUOUS" for step in single)
+    assert result.minimum_queries == 2
+    solution = result.minimum_solution
+    assert solution is not None
+    assert {step.target for step in solution.steps} == {
+        "shop/HorizontalPodAutoscaler/left-hpa",
+        "shop/HorizontalPodAutoscaler/right-hpa",
+    }
+    final_refs = {ref for finding in resolved_cases[0].findings for ref in finding.evidence_ids}
+    assert {left_ref, right_ref} <= final_refs
+
+
+def test_query_templates_are_onset_relative_and_bounded_by_the_cutoff() -> None:
+    source, _right = _source_with_hidden_hpa_history()
+    templates = dict(query_templates(source))
+    assert set(templates) == {"full-history", "onset+-5m", "onset+-15m", "incident-window"}
+    onset = at(2)
+    assert templates["onset+-5m"].start == onset - timedelta(minutes=5)
+    assert templates["onset+-5m"].end == onset + timedelta(minutes=5)
+    # onset + 15m would pass the observation cutoff (minute 10)
+    assert templates["onset+-15m"].end == at(10)
+    assert all(query.limit == 64 for query in templates.values())

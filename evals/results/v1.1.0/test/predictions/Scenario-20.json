@@ -1,0 +1,1708 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "LIKELY: otel-demo/Deployment/product-catalog: image changed to quay.io/it-bench/hello-bench-invalid:1.0.0. Likely (strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+        "entity": {
+          "kind": "Deployment",
+          "name": "product-catalog",
+          "namespace": "otel-demo"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-20",
+    "native_terminal": "LIKELY",
+    "reasoning": "otel-demo/Deployment/product-catalog: image changed to quay.io/it-bench/hello-bench-invalid:1.0.0. Likely (strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+    "scenario_id": "Scenario-20"
+  },
+  "diagnosis": {
+    "alternative_hypotheses": [
+      {
+        "causal_actor": {
+          "kind": "Pod",
+          "name": "product-catalog-56fbb5f966-h9xjk",
+          "namespace": "otel-demo"
+        },
+        "causal_explanation": "DIRECT",
+        "causal_paths": [],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T17:50:21Z",
+            "details": {
+              "problems": [
+                {
+                  "at": "2025-12-15T17:50:21Z",
+                  "container": "product-catalog",
+                  "message": "Back-off pulling image \"quay.io/it-bench/hello-bench-invalid:1.0.0\": ErrImagePull: failed to pull and unpack image \"quay.io/it-bench/hello-bench-invalid:1.0.0\":",
+                  "reason": "ImagePullBackOff",
+                  "restarts": 0
+                }
+              ],
+              "reason": "ImagePullBackOff"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "product-catalog-56fbb5f966-h9xjk",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:2856"
+            ],
+            "incident_onset": "2025-12-15T15:21:40.075980Z",
+            "kind": "CONTAINER_FAILURE",
+            "onset_delta_seconds": 8920.92402,
+            "related": [],
+            "summary": "container product-catalog ImagePullBackOff (0 restart(s)) Back-off pulling image \"quay.io/it-bench/hello-bench-invalid:1.0.0\": ErrImagePull: failed to pull and unpack image \"quay.io/it-bench/hello-bench-invalid:1.0.0\":",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:55:36Z",
+            "details": {
+              "count": 171,
+              "reason": "Failed"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "product-catalog-56fbb5f966-h9xjk",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:807",
+              "k8s_events_raw.tsv:808",
+              "k8s_events_raw.tsv:813",
+              "k8s_events_raw.tsv:816"
+            ],
+            "incident_onset": "2025-12-15T15:21:40.075980Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 9235.92402,
+            "related": [],
+            "summary": "Failed x171: Error: ImagePullBackOff",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "hypothesis_id": "hypothesis:37f7a31527aa093e",
+        "initiating_findings": [],
+        "linked_symptoms": [
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/product-catalog",
+          "otel-demo/Deployment/recommendation"
+        ],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "Pod",
+            "name": "product-catalog-56fbb5f966-h9xjk",
+            "namespace": "otel-demo"
+          }
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 10.45,
+        "signature": {
+          "causal_path_shape": [],
+          "contradiction_kinds": [],
+          "initiating_kinds": [],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "derived_observation",
+            "kubernetes_event"
+          ],
+          "supporting_kinds": [
+            "CONTAINER_FAILURE",
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "DIRECT",
+          "temporal_profile": [
+            "supporting_after_onset"
+          ]
+        },
+        "supporting_findings": [
+          {
+            "at": "2025-12-15T17:50:21Z",
+            "details": {
+              "problems": [
+                {
+                  "at": "2025-12-15T17:50:21Z",
+                  "container": "product-catalog",
+                  "message": "Back-off pulling image \"quay.io/it-bench/hello-bench-invalid:1.0.0\": ErrImagePull: failed to pull and unpack image \"quay.io/it-bench/hello-bench-invalid:1.0.0\":",
+                  "reason": "ImagePullBackOff",
+                  "restarts": 0
+                }
+              ],
+              "reason": "ImagePullBackOff"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "product-catalog-56fbb5f966-h9xjk",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:2856"
+            ],
+            "incident_onset": "2025-12-15T15:21:40.075980Z",
+            "kind": "CONTAINER_FAILURE",
+            "onset_delta_seconds": 8920.92402,
+            "related": [],
+            "summary": "container product-catalog ImagePullBackOff (0 restart(s)) Back-off pulling image \"quay.io/it-bench/hello-bench-invalid:1.0.0\": ErrImagePull: failed to pull and unpack image \"quay.io/it-bench/hello-bench-invalid:1.0.0\":",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:55:36Z",
+            "details": {
+              "count": 171,
+              "reason": "Failed"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "product-catalog-56fbb5f966-h9xjk",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:807",
+              "k8s_events_raw.tsv:808",
+              "k8s_events_raw.tsv:813",
+              "k8s_events_raw.tsv:816"
+            ],
+            "incident_onset": "2025-12-15T15:21:40.075980Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 9235.92402,
+            "related": [],
+            "summary": "Failed x171: Error: ImagePullBackOff",
+            "temporal_role": "SUPPORTING"
+          }
+        ]
+      },
+      {
+        "causal_actor": {
+          "kind": "Pod",
+          "name": "product-catalog-56fbb5f966-8rw7j",
+          "namespace": "otel-demo"
+        },
+        "causal_explanation": "DIRECT",
+        "causal_paths": [],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T17:50:10Z",
+            "details": {
+              "count": 3,
+              "reason": "Failed"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "product-catalog-56fbb5f966-8rw7j",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:781",
+              "k8s_events_raw.tsv:782",
+              "k8s_events_raw.tsv:786"
+            ],
+            "incident_onset": "2025-12-15T15:21:40.075980Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 8909.92402,
+            "related": [],
+            "summary": "Failed x3: Error: ImagePullBackOff",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "hypothesis_id": "hypothesis:617365c1dbc18e3a",
+        "initiating_findings": [],
+        "linked_symptoms": [
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/product-catalog",
+          "otel-demo/Deployment/recommendation"
+        ],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "Pod",
+            "name": "product-catalog-56fbb5f966-8rw7j",
+            "namespace": "otel-demo"
+          }
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.433,
+        "signature": {
+          "causal_path_shape": [],
+          "contradiction_kinds": [],
+          "initiating_kinds": [],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "kubernetes_event"
+          ],
+          "supporting_kinds": [
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "DIRECT",
+          "temporal_profile": [
+            "supporting_after_onset"
+          ]
+        },
+        "supporting_findings": [
+          {
+            "at": "2025-12-15T17:50:10Z",
+            "details": {
+              "count": 3,
+              "reason": "Failed"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "product-catalog-56fbb5f966-8rw7j",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:781",
+              "k8s_events_raw.tsv:782",
+              "k8s_events_raw.tsv:786"
+            ],
+            "incident_onset": "2025-12-15T15:21:40.075980Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 8909.92402,
+            "related": [],
+            "summary": "Failed x3: Error: ImagePullBackOff",
+            "temporal_role": "SUPPORTING"
+          }
+        ]
+      },
+      {
+        "causal_actor": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-cwrtt",
+          "namespace": "otel-demo"
+        },
+        "causal_explanation": "PATH",
+        "causal_paths": [
+          [
+            {
+              "direction": "reverse",
+              "relation": "backs",
+              "source": {
+                "kind": "Pod",
+                "name": "otel-collector-564d9c7987-cwrtt",
+                "namespace": "otel-demo"
+              },
+              "target": {
+                "kind": "Service",
+                "name": "otel-collector",
+                "namespace": "otel-demo"
+              }
+            },
+            {
+              "direction": "reverse",
+              "relation": "dependency_of",
+              "source": {
+                "kind": "Service",
+                "name": "otel-collector",
+                "namespace": "otel-demo"
+              },
+              "target": {
+                "kind": "Deployment",
+                "name": "accounting",
+                "namespace": "otel-demo"
+              }
+            }
+          ]
+        ],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T17:16:38Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-cwrtt",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:588",
+              "k8s_events_raw.tsv:591"
+            ],
+            "incident_onset": "2025-12-15T15:21:40.075980Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 6897.92402,
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: HTTP probe failed with statuscode: 503",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "hypothesis_id": "hypothesis:e7598490d58cad93",
+        "initiating_findings": [],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/currency",
+          "otel-demo/Deployment/email"
+        ],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "Pod",
+            "name": "otel-collector-564d9c7987-cwrtt",
+            "namespace": "otel-demo"
+          }
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854,
+        "signature": {
+          "causal_path_shape": [
+            [
+              [
+                "Pod",
+                "backs",
+                "Service"
+              ],
+              [
+                "Service",
+                "dependency_of",
+                "Deployment"
+              ]
+            ]
+          ],
+          "contradiction_kinds": [],
+          "initiating_kinds": [],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "kubernetes_event"
+          ],
+          "supporting_kinds": [
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "PATH",
+          "temporal_profile": [
+            "supporting_after_onset"
+          ]
+        },
+        "supporting_findings": [
+          {
+            "at": "2025-12-15T17:16:38Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-cwrtt",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:588",
+              "k8s_events_raw.tsv:591"
+            ],
+            "incident_onset": "2025-12-15T15:21:40.075980Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 6897.92402,
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: HTTP probe failed with statuscode: 503",
+            "temporal_role": "SUPPORTING"
+          }
+        ]
+      },
+      {
+        "causal_actor": {
+          "kind": "Namespace",
+          "name": "agent",
+          "namespace": "_cluster"
+        },
+        "causal_explanation": "UNLINKED",
+        "causal_paths": [],
+        "contradictory_findings": [
+          {
+            "at": "2025-12-15T17:48:31Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "agent",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:2967"
+            ],
+            "incident_onset": "2025-12-15T15:21:40.075980Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 8810.92402,
+            "related": [],
+            "summary": "Namespace created",
+            "temporal_role": "CONSEQUENCE"
+          }
+        ],
+        "findings": [
+          {
+            "at": "2025-12-15T17:48:31Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "agent",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:2967"
+            ],
+            "incident_onset": "2025-12-15T15:21:40.075980Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 8810.92402,
+            "related": [],
+            "summary": "Namespace created",
+            "temporal_role": "CONSEQUENCE"
+          }
+        ],
+        "hypothesis_id": "hypothesis:08d5dc06b2f3d0cc",
+        "initiating_findings": [],
+        "linked_symptoms": [],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "Namespace",
+            "name": "agent",
+            "namespace": "_cluster"
+          }
+        ],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 2.0,
+        "signature": {
+          "causal_path_shape": [],
+          "contradiction_kinds": [
+            "OBJECT_CREATED"
+          ],
+          "initiating_kinds": [],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "object_observation"
+          ],
+          "supporting_kinds": [],
+          "symptom_relation": "UNLINKED",
+          "temporal_profile": [
+            "late_consequence"
+          ]
+        },
+        "supporting_findings": []
+      }
+    ],
+    "alternatives": [
+      {
+        "causal_explanation": "DIRECT",
+        "causal_path": [],
+        "entity": {
+          "kind": "Pod",
+          "name": "product-catalog-56fbb5f966-h9xjk",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:50:21Z",
+            "details": {
+              "problems": [
+                {
+                  "at": "2025-12-15T17:50:21Z",
+                  "container": "product-catalog",
+                  "message": "Back-off pulling image \"quay.io/it-bench/hello-bench-invalid:1.0.0\": ErrImagePull: failed to pull and unpack image \"quay.io/it-bench/hello-bench-invalid:1.0.0\":",
+                  "reason": "ImagePullBackOff",
+                  "restarts": 0
+                }
+              ],
+              "reason": "ImagePullBackOff"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "product-catalog-56fbb5f966-h9xjk",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:2856"
+            ],
+            "incident_onset": "2025-12-15T15:21:40.075980Z",
+            "kind": "CONTAINER_FAILURE",
+            "onset_delta_seconds": 8920.92402,
+            "related": [],
+            "summary": "container product-catalog ImagePullBackOff (0 restart(s)) Back-off pulling image \"quay.io/it-bench/hello-bench-invalid:1.0.0\": ErrImagePull: failed to pull and unpack image \"quay.io/it-bench/hello-bench-invalid:1.0.0\":",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:55:36Z",
+            "details": {
+              "count": 171,
+              "reason": "Failed"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "product-catalog-56fbb5f966-h9xjk",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:807",
+              "k8s_events_raw.tsv:808",
+              "k8s_events_raw.tsv:813",
+              "k8s_events_raw.tsv:816"
+            ],
+            "incident_onset": "2025-12-15T15:21:40.075980Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 9235.92402,
+            "related": [],
+            "summary": "Failed x171: Error: ImagePullBackOff",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/product-catalog",
+          "otel-demo/Deployment/recommendation"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 10.45
+      },
+      {
+        "causal_explanation": "DIRECT",
+        "causal_path": [],
+        "entity": {
+          "kind": "Pod",
+          "name": "product-catalog-56fbb5f966-8rw7j",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:50:10Z",
+            "details": {
+              "count": 3,
+              "reason": "Failed"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "product-catalog-56fbb5f966-8rw7j",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:781",
+              "k8s_events_raw.tsv:782",
+              "k8s_events_raw.tsv:786"
+            ],
+            "incident_onset": "2025-12-15T15:21:40.075980Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 8909.92402,
+            "related": [],
+            "summary": "Failed x3: Error: ImagePullBackOff",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Deployment/product-catalog",
+          "otel-demo/Deployment/recommendation"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.433
+      },
+      {
+        "causal_explanation": "PATH",
+        "causal_path": [
+          {
+            "direction": "reverse",
+            "relation": "serves",
+            "source": {
+              "kind": "Deployment",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "direction": "reverse",
+            "relation": "dependency_of",
+            "source": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "accounting",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-cwrtt",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:16:38Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-cwrtt",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:588",
+              "k8s_events_raw.tsv:591"
+            ],
+            "incident_onset": "2025-12-15T15:21:40.075980Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 6897.92402,
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: HTTP probe failed with statuscode: 503",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/currency",
+          "otel-demo/Deployment/email"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      },
+      {
+        "causal_explanation": "UNLINKED",
+        "causal_path": [],
+        "entity": {
+          "kind": "Namespace",
+          "name": "agent",
+          "namespace": "_cluster"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:48:31Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "agent",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:2967"
+            ],
+            "incident_onset": "2025-12-15T15:21:40.075980Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 8810.92402,
+            "related": [],
+            "summary": "Namespace created",
+            "temporal_role": "CONSEQUENCE"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 2.0
+      }
+    ],
+    "ambiguous_hypotheses": [],
+    "causal_explanation": "DIRECT",
+    "causal_path": [],
+    "confidence": "LIKELY",
+    "evidence": [
+      {
+        "at": "2025-12-15T17:50:44.444240Z",
+        "details": {
+          "after": [
+            "quay.io/it-bench/hello-bench-invalid:1.0.0"
+          ],
+          "before": [
+            "ghcr.io/open-telemetry/demo:2.1.3-product-catalog"
+          ],
+          "changed_paths": [
+            ".spec.template.spec.containers[product-catalog].image"
+          ],
+          "previous_observed_at": "2025-12-15T17:30:44.447153+00:00"
+        },
+        "entity": {
+          "kind": "Deployment",
+          "name": "product-catalog",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_objects_raw.tsv:374",
+          "k8s_objects_raw.tsv:3083"
+        ],
+        "incident_onset": "2025-12-15T15:21:40.075980Z",
+        "kind": "IMAGE_CHANGE",
+        "onset_delta_seconds": 8944.36826,
+        "related": [],
+        "summary": "image changed to quay.io/it-bench/hello-bench-invalid:1.0.0",
+        "temporal_role": "CONSEQUENCE"
+      }
+    ],
+    "hypothesis": {
+      "causal_actor": {
+        "kind": "Deployment",
+        "name": "product-catalog",
+        "namespace": "otel-demo"
+      },
+      "causal_explanation": "DIRECT",
+      "causal_paths": [],
+      "contradictory_findings": [
+        {
+          "at": "2025-12-15T17:50:44.444240Z",
+          "details": {
+            "after": [
+              "quay.io/it-bench/hello-bench-invalid:1.0.0"
+            ],
+            "before": [
+              "ghcr.io/open-telemetry/demo:2.1.3-product-catalog"
+            ],
+            "changed_paths": [
+              ".spec.template.spec.containers[product-catalog].image"
+            ],
+            "previous_observed_at": "2025-12-15T17:30:44.447153+00:00"
+          },
+          "entity": {
+            "kind": "Deployment",
+            "name": "product-catalog",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:374",
+            "k8s_objects_raw.tsv:3083"
+          ],
+          "incident_onset": "2025-12-15T15:21:40.075980Z",
+          "kind": "IMAGE_CHANGE",
+          "onset_delta_seconds": 8944.36826,
+          "related": [],
+          "summary": "image changed to quay.io/it-bench/hello-bench-invalid:1.0.0",
+          "temporal_role": "CONSEQUENCE"
+        }
+      ],
+      "findings": [
+        {
+          "at": "2025-12-15T17:50:44.444240Z",
+          "details": {
+            "after": [
+              "quay.io/it-bench/hello-bench-invalid:1.0.0"
+            ],
+            "before": [
+              "ghcr.io/open-telemetry/demo:2.1.3-product-catalog"
+            ],
+            "changed_paths": [
+              ".spec.template.spec.containers[product-catalog].image"
+            ],
+            "previous_observed_at": "2025-12-15T17:30:44.447153+00:00"
+          },
+          "entity": {
+            "kind": "Deployment",
+            "name": "product-catalog",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:374",
+            "k8s_objects_raw.tsv:3083"
+          ],
+          "incident_onset": "2025-12-15T15:21:40.075980Z",
+          "kind": "IMAGE_CHANGE",
+          "onset_delta_seconds": 8944.36826,
+          "related": [],
+          "summary": "image changed to quay.io/it-bench/hello-bench-invalid:1.0.0",
+          "temporal_role": "CONSEQUENCE"
+        }
+      ],
+      "hypothesis_id": "hypothesis:7cb1f9e934669632",
+      "initiating_findings": [],
+      "linked_symptoms": [
+        "otel-demo/Deployment/checkout",
+        "otel-demo/Deployment/frontend",
+        "otel-demo/Deployment/frontend-proxy",
+        "otel-demo/Deployment/product-catalog",
+        "otel-demo/Deployment/recommendation"
+      ],
+      "manifestations": [],
+      "members": [
+        {
+          "kind": "Deployment",
+          "name": "product-catalog",
+          "namespace": "otel-demo"
+        }
+      ],
+      "reasons": [
+        "0 hop(s) from an alerting component",
+        "acts in an alerting namespace",
+        "change mentions productcatalog",
+        "happened in the incident window"
+      ],
+      "score": 12.0,
+      "signature": {
+        "causal_path_shape": [],
+        "contradiction_kinds": [
+          "IMAGE_CHANGE"
+        ],
+        "initiating_kinds": [],
+        "manifestation_shape": [],
+        "provenance_classes": [
+          "object_observation"
+        ],
+        "supporting_kinds": [],
+        "symptom_relation": "DIRECT",
+        "temporal_profile": [
+          "late_consequence"
+        ]
+      },
+      "supporting_findings": []
+    },
+    "hypothesis_diagnostics": {
+      "duplicate_evidence_ids_removed": 0,
+      "exact_score_ties": 7,
+      "hypothesis_count": 11,
+      "multi_entity_hypotheses": 0,
+      "ownership_chains_collapsed": 0,
+      "raw_candidate_count": 11,
+      "structurally_similar_top_hypotheses": 0
+    },
+    "incident_id": "Scenario-20",
+    "information_gaps": [],
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Roll back Deployment product-catalog to the previous revision",
+        "command": "kubectl rollout undo deployment/product-catalog -n otel-demo",
+        "requires_approval": true,
+        "risk": "medium: reverts every change in the last rollout"
+      }
+    ],
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "resolution_trace": {
+      "considered_hypotheses": [
+        "hypothesis:08d5dc06b2f3d0cc",
+        "hypothesis:175b06600bd736c9",
+        "hypothesis:37f7a31527aa093e",
+        "hypothesis:44407fdba42af731",
+        "hypothesis:617365c1dbc18e3a",
+        "hypothesis:7cb1f9e934669632",
+        "hypothesis:8232a1bab3a122ad",
+        "hypothesis:85157b349ef7fc46",
+        "hypothesis:a72594eb76eba023",
+        "hypothesis:e7598490d58cad93",
+        "hypothesis:f4b696e0d9a0eaf7"
+      ],
+      "decision_basis": "NO_PLAUSIBLE_HYPOTHESIS",
+      "discriminators": [],
+      "distinguishing_facts": [],
+      "dominance_relations": [],
+      "eliminated_hypotheses": [
+        "hypothesis:08d5dc06b2f3d0cc",
+        "hypothesis:175b06600bd736c9",
+        "hypothesis:37f7a31527aa093e",
+        "hypothesis:44407fdba42af731",
+        "hypothesis:617365c1dbc18e3a",
+        "hypothesis:7cb1f9e934669632",
+        "hypothesis:8232a1bab3a122ad",
+        "hypothesis:85157b349ef7fc46"
+      ],
+      "elimination_reasons": [
+        "hypothesis:08d5dc06b2f3d0cc: contradictory evidence",
+        "hypothesis:175b06600bd736c9: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:37f7a31527aa093e: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:44407fdba42af731: contradictory evidence",
+        "hypothesis:617365c1dbc18e3a: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:7cb1f9e934669632: contradictory evidence",
+        "hypothesis:8232a1bab3a122ad: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:85157b349ef7fc46: contradictory evidence"
+      ],
+      "eliminations": [
+        {
+          "code": "EXPLICIT_TEMPORAL_CONTRADICTION",
+          "detail": "contains explicit temporal contradiction",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:2967"
+          ],
+          "hypothesis_id": "hypothesis:08d5dc06b2f3d0cc"
+        },
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:205"
+          ],
+          "hypothesis_id": "hypothesis:175b06600bd736c9"
+        },
+        {
+          "code": "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+          "detail": "has no onset-capable initiating evidence",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:807",
+            "k8s_events_raw.tsv:808",
+            "k8s_events_raw.tsv:813",
+            "k8s_events_raw.tsv:816",
+            "k8s_objects_raw.tsv:2856"
+          ],
+          "hypothesis_id": "hypothesis:37f7a31527aa093e"
+        },
+        {
+          "code": "EXPLICIT_TEMPORAL_CONTRADICTION",
+          "detail": "contains explicit temporal contradiction",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:2930"
+          ],
+          "hypothesis_id": "hypothesis:44407fdba42af731"
+        },
+        {
+          "code": "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+          "detail": "has no onset-capable initiating evidence",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:781",
+            "k8s_events_raw.tsv:782",
+            "k8s_events_raw.tsv:786"
+          ],
+          "hypothesis_id": "hypothesis:617365c1dbc18e3a"
+        },
+        {
+          "code": "EXPLICIT_TEMPORAL_CONTRADICTION",
+          "detail": "contains explicit temporal contradiction",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:3083",
+            "k8s_objects_raw.tsv:374"
+          ],
+          "hypothesis_id": "hypothesis:7cb1f9e934669632"
+        },
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:204"
+          ],
+          "hypothesis_id": "hypothesis:8232a1bab3a122ad"
+        },
+        {
+          "code": "EXPLICIT_TEMPORAL_CONTRADICTION",
+          "detail": "contains explicit temporal contradiction",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:661"
+          ],
+          "hypothesis_id": "hypothesis:85157b349ef7fc46"
+        }
+      ],
+      "hypothesis_audits": [
+        {
+          "causal_linkage": "DIRECT",
+          "contradictory_evidence_ids": [
+            "k8s_objects_raw.tsv:3083",
+            "k8s_objects_raw.tsv:374"
+          ],
+          "hypothesis_id": "hypothesis:7cb1f9e934669632",
+          "onset_relation": [
+            "late_consequence"
+          ],
+          "plausibility_reasons": [
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+            "EXPLICIT_TEMPORAL_CONTRADICTION"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [
+              "IMAGE_CHANGE"
+            ],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "object_observation"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "DIRECT",
+            "temporal_profile": [
+              "late_consequence"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Deployment",
+              "name": "product-catalog",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [
+              "k8s_objects_raw.tsv:374",
+              "k8s_objects_raw.tsv:3083"
+            ],
+            "decision": "LIKELY",
+            "onset_delta_seconds": 8944.36826,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:374",
+                  "k8s_objects_raw.tsv:3083"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              },
+              {
+                "detail": "linked change was observed after the onset grace and cannot explain the original incident onset",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:374",
+                  "k8s_objects_raw.tsv:3083"
+                ],
+                "name": "late_change_contradiction",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_objects_raw.tsv:374",
+              "k8s_objects_raw.tsv:3083"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "DIRECT",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:37f7a31527aa093e",
+          "onset_relation": [
+            "supporting_after_onset"
+          ],
+          "plausibility_reasons": [
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "derived_observation",
+              "kubernetes_event"
+            ],
+            "supporting_kinds": [
+              "CONTAINER_FAILURE",
+              "FAILURE_EVENT"
+            ],
+            "symptom_relation": "DIRECT",
+            "temporal_profile": [
+              "supporting_after_onset"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Pod",
+              "name": "product-catalog-56fbb5f966-h9xjk",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 8920.92402,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:2856",
+                  "k8s_events_raw.tsv:807",
+                  "k8s_events_raw.tsv:808",
+                  "k8s_events_raw.tsv:813",
+                  "k8s_events_raw.tsv:816"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              },
+              {
+                "detail": "downstream failure observations do not establish an initiating cause",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:2856",
+                  "k8s_events_raw.tsv:807",
+                  "k8s_events_raw.tsv:808",
+                  "k8s_events_raw.tsv:813",
+                  "k8s_events_raw.tsv:816"
+                ],
+                "name": "initiating_signal_required",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "only downstream failure observations were found; the initiating cause is unknown",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_objects_raw.tsv:2856",
+              "k8s_events_raw.tsv:807",
+              "k8s_events_raw.tsv:808",
+              "k8s_events_raw.tsv:813",
+              "k8s_events_raw.tsv:816"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "DIRECT",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:617365c1dbc18e3a",
+          "onset_relation": [
+            "supporting_after_onset"
+          ],
+          "plausibility_reasons": [
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "kubernetes_event"
+            ],
+            "supporting_kinds": [
+              "FAILURE_EVENT"
+            ],
+            "symptom_relation": "DIRECT",
+            "temporal_profile": [
+              "supporting_after_onset"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Pod",
+              "name": "product-catalog-56fbb5f966-8rw7j",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 8909.92402,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:781",
+                  "k8s_events_raw.tsv:782",
+                  "k8s_events_raw.tsv:786"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              },
+              {
+                "detail": "downstream failure observations do not establish an initiating cause",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:781",
+                  "k8s_events_raw.tsv:782",
+                  "k8s_events_raw.tsv:786"
+                ],
+                "name": "initiating_signal_required",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "only downstream failure observations were found; the initiating cause is unknown",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_events_raw.tsv:781",
+              "k8s_events_raw.tsv:782",
+              "k8s_events_raw.tsv:786"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "PATH",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:e7598490d58cad93",
+          "onset_relation": [
+            "supporting_after_onset"
+          ],
+          "plausibility_reasons": [
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [
+              [
+                [
+                  "Pod",
+                  "backs",
+                  "Service"
+                ],
+                [
+                  "Service",
+                  "dependency_of",
+                  "Deployment"
+                ]
+              ]
+            ],
+            "contradiction_kinds": [],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "kubernetes_event"
+            ],
+            "supporting_kinds": [
+              "FAILURE_EVENT"
+            ],
+            "symptom_relation": "PATH",
+            "temporal_profile": [
+              "supporting_after_onset"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-cwrtt",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 6897.92402,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:588",
+                  "k8s_events_raw.tsv:591"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              },
+              {
+                "detail": "downstream failure observations do not establish an initiating cause",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:588",
+                  "k8s_events_raw.tsv:591"
+                ],
+                "name": "initiating_signal_required",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "only downstream failure observations were found; the initiating cause is unknown",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_events_raw.tsv:588",
+              "k8s_events_raw.tsv:591"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "UNLINKED",
+          "contradictory_evidence_ids": [
+            "k8s_objects_raw.tsv:2967"
+          ],
+          "hypothesis_id": "hypothesis:08d5dc06b2f3d0cc",
+          "onset_relation": [
+            "late_consequence"
+          ],
+          "plausibility_reasons": [
+            "NO_CAUSAL_SYMPTOM_LINK",
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+            "EXPLICIT_TEMPORAL_CONTRADICTION"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [
+              "OBJECT_CREATED"
+            ],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "object_observation"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "UNLINKED",
+            "temporal_profile": [
+              "late_consequence"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Namespace",
+              "name": "agent",
+              "namespace": "_cluster"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 8810.92402,
+            "predicates": [
+              {
+                "detail": "no bounded causal path reaches an alerting entity",
+                "evidence_ids": [],
+                "name": "candidate_linked_to_symptom",
+                "status": "FAIL"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "best available candidate without sufficient deterministic verification evidence",
+            "score_margin": null,
+            "supporting_evidence": []
+          }
+        },
+        {
+          "causal_linkage": "UNLINKED",
+          "contradictory_evidence_ids": [
+            "k8s_objects_raw.tsv:2930"
+          ],
+          "hypothesis_id": "hypothesis:44407fdba42af731",
+          "onset_relation": [
+            "late_consequence"
+          ],
+          "plausibility_reasons": [
+            "NO_CAUSAL_SYMPTOM_LINK",
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+            "EXPLICIT_TEMPORAL_CONTRADICTION"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [
+              "OBJECT_CREATED"
+            ],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "object_observation"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "UNLINKED",
+            "temporal_profile": [
+              "late_consequence"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "ConfigMap",
+              "name": "kube-root-ca.crt",
+              "namespace": "agent"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 8810.92402,
+            "predicates": [
+              {
+                "detail": "no bounded causal path reaches an alerting entity",
+                "evidence_ids": [],
+                "name": "candidate_linked_to_symptom",
+                "status": "FAIL"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "best available candidate without sufficient deterministic verification evidence",
+            "score_margin": null,
+            "supporting_evidence": []
+          }
+        },
+        {
+          "causal_linkage": "UNLINKED",
+          "contradictory_evidence_ids": [
+            "k8s_objects_raw.tsv:764"
+          ],
+          "hypothesis_id": "hypothesis:a72594eb76eba023",
+          "onset_relation": [
+            "late_consequence"
+          ],
+          "plausibility_reasons": [
+            "NO_CAUSAL_SYMPTOM_LINK",
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+            "EXPLICIT_TEMPORAL_CONTRADICTION"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [
+              "OBJECT_CREATED"
+            ],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "object_observation"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "UNLINKED",
+            "temporal_profile": [
+              "late_consequence"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "ConfigMap",
+              "name": "clickhouse-unified-recorder-scripts",
+              "namespace": "data-recorders"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 7975.92402,
+            "predicates": [
+              {
+                "detail": "no bounded causal path reaches an alerting entity",
+                "evidence_ids": [],
+                "name": "candidate_linked_to_symptom",
+                "status": "FAIL"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "best available candidate without sufficient deterministic verification evidence",
+            "score_margin": null,
+            "supporting_evidence": []
+          }
+        },
+        {
+          "causal_linkage": "UNLINKED",
+          "contradictory_evidence_ids": [
+            "k8s_objects_raw.tsv:661"
+          ],
+          "hypothesis_id": "hypothesis:85157b349ef7fc46",
+          "onset_relation": [
+            "late_consequence"
+          ],
+          "plausibility_reasons": [
+            "NO_CAUSAL_SYMPTOM_LINK",
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+            "EXPLICIT_TEMPORAL_CONTRADICTION"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [
+              "OBJECT_CREATED"
+            ],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "object_observation"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "UNLINKED",
+            "temporal_profile": [
+              "late_consequence"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Job",
+              "name": "clickhouse-unified-recorder",
+              "namespace": "data-recorders"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 7987.92402,
+            "predicates": [
+              {
+                "detail": "no bounded causal path reaches an alerting entity",
+                "evidence_ids": [],
+                "name": "candidate_linked_to_symptom",
+                "status": "FAIL"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "best available candidate without sufficient deterministic verification evidence",
+            "score_margin": null,
+            "supporting_evidence": []
+          }
+        }
+      ],
+      "leading_hypothesis_ids": [],
+      "plausible_hypotheses": [],
+      "rationale": "No hypothesis contains sufficient initiating causal evidence.",
+      "signatures": [],
+      "state": "INSUFFICIENT_EVIDENCE",
+      "unresolved_dimensions": []
+    },
+    "root_cause": {
+      "kind": "Deployment",
+      "name": "product-catalog",
+      "namespace": "otel-demo"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "6 diagnostic alert type(s) on accounting, ad, checkout, currency, email, fraud-detection; 807 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "12 finding(s) over 671 object(s) and 413 event(s); 537 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "otel-demo/Deployment/product-catalog 12.0 (1 member(s)); otel-demo/Pod/product-catalog-56fbb5f966-h9xjk 10.4 (1 member(s)); otel-demo/Pod/product-catalog-56fbb5f966-8rw7j 5.4 (1 member(s)); otel-demo/Pod/otel-collector-564d9c7987-cwrtt 4.9 (1 member(s)); _cluster/Namespace/agent 2.0 (1 member(s))"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "LIKELY: strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous"
+      },
+      {
+        "action": "resolution",
+        "actor": "engine",
+        "detail": "INSUFFICIENT_EVIDENCE: No hypothesis contains sufficient initiating causal evidence."
+      }
+    ],
+    "summary": "otel-demo/Deployment/product-catalog: image changed to quay.io/it-bench/hello-bench-invalid:1.0.0. Likely (strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "KubeDeploymentReplicasMismatch",
+        "KubePodNotReady",
+        "NoRequestsDetected",
+        "PendingPodsDetected",
+        "RequestErrorRate"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 105,
+        "KubeClientCertificateExpiration": 78,
+        "KubeControllerManagerDown": 148,
+        "KubeSchedulerDown": 148,
+        "PrometheusNotConnectedToAlertmanagers": 157,
+        "Watchdog": 171
+      },
+      "last_seen": "2025-12-15T18:02:53.564379Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T15:21:40.075980Z",
+      "services": [
+        "accounting",
+        "ad",
+        "checkout",
+        "currency",
+        "email",
+        "fraud-detection",
+        "frontend",
+        "frontend-proxy",
+        "payment",
+        "product-catalog",
+        "prometheus-kube-prometheus-kubelet",
+        "prometheus-kube-state-metrics",
+        "quote",
+        "recommendation",
+        "shipping"
+      ]
+    },
+    "verification": {
+      "candidate": {
+        "kind": "Deployment",
+        "name": "product-catalog",
+        "namespace": "otel-demo"
+      },
+      "contradictory_evidence": [
+        "k8s_objects_raw.tsv:374",
+        "k8s_objects_raw.tsv:3083"
+      ],
+      "decision": "LIKELY",
+      "onset_delta_seconds": 8944.36826,
+      "predicates": [
+        {
+          "detail": "candidate reaches an alerting entity through the causal graph",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:374",
+            "k8s_objects_raw.tsv:3083"
+          ],
+          "name": "candidate_linked_to_symptom",
+          "status": "PASS"
+        },
+        {
+          "detail": "no linked initiating observation is temporally consistent with onset",
+          "evidence_ids": [],
+          "name": "initiating_evidence_near_onset",
+          "status": "FAIL"
+        },
+        {
+          "detail": "linked change was observed after the onset grace and cannot explain the original incident onset",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:374",
+            "k8s_objects_raw.tsv:3083"
+          ],
+          "name": "late_change_contradiction",
+          "status": "FAIL"
+        },
+        {
+          "detail": "score margin over runner-up is 1.550",
+          "evidence_ids": [],
+          "name": "candidate_dominance",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous",
+      "score_margin": 1.5500000000000007,
+      "supporting_evidence": [
+        "k8s_objects_raw.tsv:374",
+        "k8s_objects_raw.tsv:3083"
+      ]
+    }
+  }
+}

@@ -1,0 +1,4478 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "VERIFIED: otel-demo/HorizontalPodAutoscaler/kafka: autoscaling failed for kafka: FailedComputeMetricsReplicas, FailedGetResourceMetric, TooManyReplicas. Verified (linked initiating evidence is temporally consistent with symptom onset). Linked to otel-demo/Deployment/fraud-detection, otel-demo/Pod/fraud-detection-9fb7d885b-2m24l, otel-demo/Pod/fraud-detection-9fb7d885b-486vl.",
+        "entity": {
+          "kind": "HorizontalPodAutoscaler",
+          "name": "kafka",
+          "namespace": "otel-demo"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-38",
+    "native_terminal": "VERIFIED",
+    "reasoning": "otel-demo/HorizontalPodAutoscaler/kafka: autoscaling failed for kafka: FailedComputeMetricsReplicas, FailedGetResourceMetric, TooManyReplicas. Verified (linked initiating evidence is temporally consistent with symptom onset). Linked to otel-demo/Deployment/fraud-detection, otel-demo/Pod/fraud-detection-9fb7d885b-2m24l, otel-demo/Pod/fraud-detection-9fb7d885b-486vl.",
+    "scenario_id": "Scenario-38"
+  },
+  "diagnosis": {
+    "alternative_hypotheses": [
+      {
+        "causal_actor": {
+          "kind": "HorizontalPodAutoscaler",
+          "name": "ad",
+          "namespace": "otel-demo"
+        },
+        "causal_explanation": "PATH",
+        "causal_paths": [
+          [
+            {
+              "direction": "forward",
+              "relation": "scales",
+              "source": {
+                "kind": "HorizontalPodAutoscaler",
+                "name": "ad",
+                "namespace": "otel-demo"
+              },
+              "target": {
+                "kind": "Deployment",
+                "name": "ad",
+                "namespace": "otel-demo"
+              }
+            }
+          ]
+        ],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T17:25:40Z",
+            "details": {
+              "conditions": [
+                {
+                  "message": "the desired replica count is more than the maximum replica count",
+                  "reason": "TooManyReplicas",
+                  "status": "True",
+                  "type": "ScalingLimited"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                }
+              ],
+              "failure_reasons": [
+                "FailedComputeMetricsReplicas",
+                "FailedGetResourceMetric",
+                "TooManyReplicas"
+              ],
+              "initiating_at": "2025-12-15T17:25:40+00:00",
+              "targets": [
+                "otel-demo/Deployment/ad"
+              ]
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:85",
+              "k8s_events_raw.tsv:208",
+              "k8s_events_raw.tsv:211",
+              "k8s_events_raw.tsv:213",
+              "k8s_events_raw.tsv:311"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "AUTOSCALING_FAILURE",
+            "onset_delta_seconds": -515.108341,
+            "related": [
+              {
+                "kind": "Deployment",
+                "name": "ad",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "autoscaling failed for ad: FailedComputeMetricsReplicas, FailedGetResourceMetric, TooManyReplicas",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:38:11Z",
+            "details": {
+              "count": 6,
+              "reason": "FailedGetResourceMetric"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:208",
+              "k8s_events_raw.tsv:211",
+              "k8s_events_raw.tsv:311",
+              "k8s_events_raw.tsv:313"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 235.891659,
+            "related": [],
+            "summary": "FailedGetResourceMetric x6: failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable t",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:38:11Z",
+            "details": {
+              "count": 3,
+              "reason": "FailedComputeMetricsReplicas"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:213",
+              "k8s_events_raw.tsv:314"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 235.891659,
+            "related": [],
+            "summary": "FailedComputeMetricsReplicas x3: invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "hypothesis_id": "hypothesis:af836e7f847acd7a",
+        "initiating_findings": [
+          {
+            "at": "2025-12-15T17:25:40Z",
+            "details": {
+              "conditions": [
+                {
+                  "message": "the desired replica count is more than the maximum replica count",
+                  "reason": "TooManyReplicas",
+                  "status": "True",
+                  "type": "ScalingLimited"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                }
+              ],
+              "failure_reasons": [
+                "FailedComputeMetricsReplicas",
+                "FailedGetResourceMetric",
+                "TooManyReplicas"
+              ],
+              "initiating_at": "2025-12-15T17:25:40+00:00",
+              "targets": [
+                "otel-demo/Deployment/ad"
+              ]
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:85",
+              "k8s_events_raw.tsv:208",
+              "k8s_events_raw.tsv:211",
+              "k8s_events_raw.tsv:213",
+              "k8s_events_raw.tsv:311"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "AUTOSCALING_FAILURE",
+            "onset_delta_seconds": -515.108341,
+            "related": [
+              {
+                "kind": "Deployment",
+                "name": "ad",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "autoscaling failed for ad: FailedComputeMetricsReplicas, FailedGetResourceMetric, TooManyReplicas",
+            "temporal_role": "INITIATING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Pod/ad-554b849958-82fgc",
+          "otel-demo/Pod/ad-554b849958-9vshm",
+          "otel-demo/Pod/ad-554b849958-bkx7j",
+          "otel-demo/Pod/ad-554b849958-clfnl"
+        ],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "HorizontalPodAutoscaler",
+            "name": "ad",
+            "namespace": "otel-demo"
+          }
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 10.609,
+        "signature": {
+          "causal_path_shape": [
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ]
+            ]
+          ],
+          "contradiction_kinds": [],
+          "initiating_kinds": [
+            "AUTOSCALING_FAILURE"
+          ],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "kubernetes_event",
+            "object_observation"
+          ],
+          "supporting_kinds": [
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "PATH",
+          "temporal_profile": [
+            "initiating_before_onset",
+            "supporting_after_onset"
+          ]
+        },
+        "supporting_findings": [
+          {
+            "at": "2025-12-15T17:38:11Z",
+            "details": {
+              "count": 6,
+              "reason": "FailedGetResourceMetric"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:208",
+              "k8s_events_raw.tsv:211",
+              "k8s_events_raw.tsv:311",
+              "k8s_events_raw.tsv:313"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 235.891659,
+            "related": [],
+            "summary": "FailedGetResourceMetric x6: failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable t",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:38:11Z",
+            "details": {
+              "count": 3,
+              "reason": "FailedComputeMetricsReplicas"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:213",
+              "k8s_events_raw.tsv:314"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 235.891659,
+            "related": [],
+            "summary": "FailedComputeMetricsReplicas x3: invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource",
+            "temporal_role": "SUPPORTING"
+          }
+        ]
+      },
+      {
+        "causal_actor": {
+          "kind": "HorizontalPodAutoscaler",
+          "name": "fraud-detection",
+          "namespace": "otel-demo"
+        },
+        "causal_explanation": "PATH",
+        "causal_paths": [
+          [
+            {
+              "direction": "forward",
+              "relation": "scales",
+              "source": {
+                "kind": "HorizontalPodAutoscaler",
+                "name": "fraud-detection",
+                "namespace": "otel-demo"
+              },
+              "target": {
+                "kind": "Deployment",
+                "name": "fraud-detection",
+                "namespace": "otel-demo"
+              }
+            }
+          ]
+        ],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T17:26:04Z",
+            "details": {
+              "conditions": [
+                {
+                  "message": "the desired replica count is more than the maximum replica count",
+                  "reason": "TooManyReplicas",
+                  "status": "True",
+                  "type": "ScalingLimited"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                }
+              ],
+              "failure_reasons": [
+                "FailedComputeMetricsReplicas",
+                "FailedGetResourceMetric",
+                "TooManyReplicas"
+              ],
+              "initiating_at": "2025-12-15T17:26:04+00:00",
+              "targets": [
+                "otel-demo/Deployment/fraud-detection"
+              ]
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "fraud-detection",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:90",
+              "k8s_events_raw.tsv:161",
+              "k8s_events_raw.tsv:163",
+              "k8s_events_raw.tsv:164",
+              "k8s_events_raw.tsv:274"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "AUTOSCALING_FAILURE",
+            "onset_delta_seconds": -491.108341,
+            "related": [
+              {
+                "kind": "Deployment",
+                "name": "fraud-detection",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "autoscaling failed for fraud-detection: FailedComputeMetricsReplicas, FailedGetResourceMetric, TooManyReplicas",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:38:05Z",
+            "details": {
+              "count": 6,
+              "reason": "FailedGetResourceMetric"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "fraud-detection",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:161",
+              "k8s_events_raw.tsv:163",
+              "k8s_events_raw.tsv:274",
+              "k8s_events_raw.tsv:277"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 229.891659,
+            "related": [],
+            "summary": "FailedGetResourceMetric x6: failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable t",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:38:05Z",
+            "details": {
+              "count": 3,
+              "reason": "FailedComputeMetricsReplicas"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "fraud-detection",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:164",
+              "k8s_events_raw.tsv:279"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 229.891659,
+            "related": [],
+            "summary": "FailedComputeMetricsReplicas x3: invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "hypothesis_id": "hypothesis:ab24cd5c7232830c",
+        "initiating_findings": [
+          {
+            "at": "2025-12-15T17:26:04Z",
+            "details": {
+              "conditions": [
+                {
+                  "message": "the desired replica count is more than the maximum replica count",
+                  "reason": "TooManyReplicas",
+                  "status": "True",
+                  "type": "ScalingLimited"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                }
+              ],
+              "failure_reasons": [
+                "FailedComputeMetricsReplicas",
+                "FailedGetResourceMetric",
+                "TooManyReplicas"
+              ],
+              "initiating_at": "2025-12-15T17:26:04+00:00",
+              "targets": [
+                "otel-demo/Deployment/fraud-detection"
+              ]
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "fraud-detection",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:90",
+              "k8s_events_raw.tsv:161",
+              "k8s_events_raw.tsv:163",
+              "k8s_events_raw.tsv:164",
+              "k8s_events_raw.tsv:274"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "AUTOSCALING_FAILURE",
+            "onset_delta_seconds": -491.108341,
+            "related": [
+              {
+                "kind": "Deployment",
+                "name": "fraud-detection",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "autoscaling failed for fraud-detection: FailedComputeMetricsReplicas, FailedGetResourceMetric, TooManyReplicas",
+            "temporal_role": "INITIATING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Pod/fraud-detection-9fb7d885b-2m24l",
+          "otel-demo/Pod/fraud-detection-9fb7d885b-486vl",
+          "otel-demo/Pod/fraud-detection-9fb7d885b-5fwd9",
+          "otel-demo/Pod/fraud-detection-9fb7d885b-5pnp2"
+        ],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "HorizontalPodAutoscaler",
+            "name": "fraud-detection",
+            "namespace": "otel-demo"
+          }
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 10.609,
+        "signature": {
+          "causal_path_shape": [
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ]
+            ]
+          ],
+          "contradiction_kinds": [],
+          "initiating_kinds": [
+            "AUTOSCALING_FAILURE"
+          ],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "kubernetes_event",
+            "object_observation"
+          ],
+          "supporting_kinds": [
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "PATH",
+          "temporal_profile": [
+            "initiating_before_onset",
+            "supporting_after_onset"
+          ]
+        },
+        "supporting_findings": [
+          {
+            "at": "2025-12-15T17:38:05Z",
+            "details": {
+              "count": 6,
+              "reason": "FailedGetResourceMetric"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "fraud-detection",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:161",
+              "k8s_events_raw.tsv:163",
+              "k8s_events_raw.tsv:274",
+              "k8s_events_raw.tsv:277"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 229.891659,
+            "related": [],
+            "summary": "FailedGetResourceMetric x6: failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable t",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:38:05Z",
+            "details": {
+              "count": 3,
+              "reason": "FailedComputeMetricsReplicas"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "fraud-detection",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:164",
+              "k8s_events_raw.tsv:279"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 229.891659,
+            "related": [],
+            "summary": "FailedComputeMetricsReplicas x3: invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource",
+            "temporal_role": "SUPPORTING"
+          }
+        ]
+      },
+      {
+        "causal_actor": {
+          "kind": "HorizontalPodAutoscaler",
+          "name": "recommendation",
+          "namespace": "otel-demo"
+        },
+        "causal_explanation": "PATH",
+        "causal_paths": [
+          [
+            {
+              "direction": "forward",
+              "relation": "scales",
+              "source": {
+                "kind": "HorizontalPodAutoscaler",
+                "name": "recommendation",
+                "namespace": "otel-demo"
+              },
+              "target": {
+                "kind": "Deployment",
+                "name": "recommendation",
+                "namespace": "otel-demo"
+              }
+            }
+          ]
+        ],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T17:37:53Z",
+            "details": {
+              "conditions": [
+                {
+                  "message": "the desired replica count is decreasing faster than the maximum scale rate",
+                  "reason": "ScaleDownLimit",
+                  "status": "True",
+                  "type": "ScalingLimited"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                }
+              ],
+              "failure_reasons": [
+                "FailedComputeMetricsReplicas",
+                "FailedGetResourceMetric",
+                "ScaleDownLimit"
+              ],
+              "initiating_at": "2025-12-15T17:37:53+00:00",
+              "targets": [
+                "otel-demo/Deployment/recommendation"
+              ]
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "recommendation",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:99",
+              "k8s_events_raw.tsv:179",
+              "k8s_events_raw.tsv:180",
+              "k8s_events_raw.tsv:182",
+              "k8s_events_raw.tsv:292"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "AUTOSCALING_FAILURE",
+            "onset_delta_seconds": 217.891659,
+            "related": [
+              {
+                "kind": "Deployment",
+                "name": "recommendation",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "autoscaling failed for recommendation: FailedComputeMetricsReplicas, FailedGetResourceMetric, ScaleDownLimit",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:38:08Z",
+            "details": {
+              "count": 6,
+              "reason": "FailedGetResourceMetric"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "recommendation",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:179",
+              "k8s_events_raw.tsv:180",
+              "k8s_events_raw.tsv:292",
+              "k8s_events_raw.tsv:294"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 232.891659,
+            "related": [],
+            "summary": "FailedGetResourceMetric x6: failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable t",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:38:08Z",
+            "details": {
+              "count": 3,
+              "reason": "FailedComputeMetricsReplicas"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "recommendation",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:182",
+              "k8s_events_raw.tsv:296"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 232.891659,
+            "related": [],
+            "summary": "FailedComputeMetricsReplicas x3: invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "hypothesis_id": "hypothesis:88a8412878ef55a9",
+        "initiating_findings": [
+          {
+            "at": "2025-12-15T17:37:53Z",
+            "details": {
+              "conditions": [
+                {
+                  "message": "the desired replica count is decreasing faster than the maximum scale rate",
+                  "reason": "ScaleDownLimit",
+                  "status": "True",
+                  "type": "ScalingLimited"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                }
+              ],
+              "failure_reasons": [
+                "FailedComputeMetricsReplicas",
+                "FailedGetResourceMetric",
+                "ScaleDownLimit"
+              ],
+              "initiating_at": "2025-12-15T17:37:53+00:00",
+              "targets": [
+                "otel-demo/Deployment/recommendation"
+              ]
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "recommendation",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:99",
+              "k8s_events_raw.tsv:179",
+              "k8s_events_raw.tsv:180",
+              "k8s_events_raw.tsv:182",
+              "k8s_events_raw.tsv:292"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "AUTOSCALING_FAILURE",
+            "onset_delta_seconds": 217.891659,
+            "related": [
+              {
+                "kind": "Deployment",
+                "name": "recommendation",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "autoscaling failed for recommendation: FailedComputeMetricsReplicas, FailedGetResourceMetric, ScaleDownLimit",
+            "temporal_role": "INITIATING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/recommendation",
+          "otel-demo/Pod/recommendation-5f45f75855-2x2lc",
+          "otel-demo/Pod/recommendation-5f45f75855-dbgqr",
+          "otel-demo/Pod/recommendation-5f45f75855-dgnjq",
+          "otel-demo/Pod/recommendation-5f45f75855-f4kq5"
+        ],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "HorizontalPodAutoscaler",
+            "name": "recommendation",
+            "namespace": "otel-demo"
+          }
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 10.609,
+        "signature": {
+          "causal_path_shape": [
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ]
+            ]
+          ],
+          "contradiction_kinds": [],
+          "initiating_kinds": [
+            "AUTOSCALING_FAILURE"
+          ],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "kubernetes_event",
+            "object_observation"
+          ],
+          "supporting_kinds": [
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "PATH",
+          "temporal_profile": [
+            "initiating_near_onset",
+            "supporting_after_onset"
+          ]
+        },
+        "supporting_findings": [
+          {
+            "at": "2025-12-15T17:38:08Z",
+            "details": {
+              "count": 6,
+              "reason": "FailedGetResourceMetric"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "recommendation",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:179",
+              "k8s_events_raw.tsv:180",
+              "k8s_events_raw.tsv:292",
+              "k8s_events_raw.tsv:294"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 232.891659,
+            "related": [],
+            "summary": "FailedGetResourceMetric x6: failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable t",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:38:08Z",
+            "details": {
+              "count": 3,
+              "reason": "FailedComputeMetricsReplicas"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "recommendation",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:182",
+              "k8s_events_raw.tsv:296"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 232.891659,
+            "related": [],
+            "summary": "FailedComputeMetricsReplicas x3: invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource",
+            "temporal_role": "SUPPORTING"
+          }
+        ]
+      },
+      {
+        "causal_actor": {
+          "kind": "HorizontalPodAutoscaler",
+          "name": "product-catalog",
+          "namespace": "otel-demo"
+        },
+        "causal_explanation": "PATH",
+        "causal_paths": [
+          [
+            {
+              "direction": "forward",
+              "relation": "scales",
+              "source": {
+                "kind": "HorizontalPodAutoscaler",
+                "name": "product-catalog",
+                "namespace": "otel-demo"
+              },
+              "target": {
+                "kind": "Deployment",
+                "name": "product-catalog",
+                "namespace": "otel-demo"
+              }
+            },
+            {
+              "direction": "reverse",
+              "relation": "serves",
+              "source": {
+                "kind": "Deployment",
+                "name": "product-catalog",
+                "namespace": "otel-demo"
+              },
+              "target": {
+                "kind": "Service",
+                "name": "product-catalog",
+                "namespace": "otel-demo"
+              }
+            },
+            {
+              "direction": "reverse",
+              "relation": "dependency_of",
+              "source": {
+                "kind": "Service",
+                "name": "product-catalog",
+                "namespace": "otel-demo"
+              },
+              "target": {
+                "kind": "Deployment",
+                "name": "recommendation",
+                "namespace": "otel-demo"
+              }
+            }
+          ]
+        ],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T17:37:58Z",
+            "details": {
+              "conditions": [
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                }
+              ],
+              "failure_reasons": [
+                "FailedComputeMetricsReplicas",
+                "FailedGetResourceMetric"
+              ],
+              "initiating_at": "2025-12-15T17:37:58+00:00",
+              "targets": [
+                "otel-demo/Deployment/product-catalog"
+              ]
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "product-catalog",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:97",
+              "k8s_events_raw.tsv:221",
+              "k8s_events_raw.tsv:222",
+              "k8s_events_raw.tsv:225",
+              "k8s_events_raw.tsv:323"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "AUTOSCALING_FAILURE",
+            "onset_delta_seconds": 222.891659,
+            "related": [
+              {
+                "kind": "Deployment",
+                "name": "product-catalog",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "autoscaling failed for product-catalog: FailedComputeMetricsReplicas, FailedGetResourceMetric",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:38:13Z",
+            "details": {
+              "count": 6,
+              "reason": "FailedGetResourceMetric"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "product-catalog",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:221",
+              "k8s_events_raw.tsv:222",
+              "k8s_events_raw.tsv:323",
+              "k8s_events_raw.tsv:324"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 237.891659,
+            "related": [],
+            "summary": "FailedGetResourceMetric x6: failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable t",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:38:13Z",
+            "details": {
+              "count": 3,
+              "reason": "FailedComputeMetricsReplicas"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "product-catalog",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:225",
+              "k8s_events_raw.tsv:326"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 237.891659,
+            "related": [],
+            "summary": "FailedComputeMetricsReplicas x3: invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "hypothesis_id": "hypothesis:4d54787226067991",
+        "initiating_findings": [
+          {
+            "at": "2025-12-15T17:37:58Z",
+            "details": {
+              "conditions": [
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                }
+              ],
+              "failure_reasons": [
+                "FailedComputeMetricsReplicas",
+                "FailedGetResourceMetric"
+              ],
+              "initiating_at": "2025-12-15T17:37:58+00:00",
+              "targets": [
+                "otel-demo/Deployment/product-catalog"
+              ]
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "product-catalog",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:97",
+              "k8s_events_raw.tsv:221",
+              "k8s_events_raw.tsv:222",
+              "k8s_events_raw.tsv:225",
+              "k8s_events_raw.tsv:323"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "AUTOSCALING_FAILURE",
+            "onset_delta_seconds": 222.891659,
+            "related": [
+              {
+                "kind": "Deployment",
+                "name": "product-catalog",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "autoscaling failed for product-catalog: FailedComputeMetricsReplicas, FailedGetResourceMetric",
+            "temporal_role": "INITIATING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/recommendation",
+          "otel-demo/Pod/recommendation-5f45f75855-2x2lc",
+          "otel-demo/Pod/recommendation-5f45f75855-dbgqr",
+          "otel-demo/Pod/recommendation-5f45f75855-dgnjq",
+          "otel-demo/Pod/recommendation-5f45f75855-f4kq5"
+        ],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "HorizontalPodAutoscaler",
+            "name": "product-catalog",
+            "namespace": "otel-demo"
+          }
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 9.384,
+        "signature": {
+          "causal_path_shape": [
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ],
+              [
+                "Deployment",
+                "serves",
+                "Service"
+              ],
+              [
+                "Service",
+                "dependency_of",
+                "Deployment"
+              ]
+            ]
+          ],
+          "contradiction_kinds": [],
+          "initiating_kinds": [
+            "AUTOSCALING_FAILURE"
+          ],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "kubernetes_event",
+            "object_observation"
+          ],
+          "supporting_kinds": [
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "PATH",
+          "temporal_profile": [
+            "initiating_near_onset",
+            "supporting_after_onset"
+          ]
+        },
+        "supporting_findings": [
+          {
+            "at": "2025-12-15T17:38:13Z",
+            "details": {
+              "count": 6,
+              "reason": "FailedGetResourceMetric"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "product-catalog",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:221",
+              "k8s_events_raw.tsv:222",
+              "k8s_events_raw.tsv:323",
+              "k8s_events_raw.tsv:324"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 237.891659,
+            "related": [],
+            "summary": "FailedGetResourceMetric x6: failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable t",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:38:13Z",
+            "details": {
+              "count": 3,
+              "reason": "FailedComputeMetricsReplicas"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "product-catalog",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:225",
+              "k8s_events_raw.tsv:326"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 237.891659,
+            "related": [],
+            "summary": "FailedComputeMetricsReplicas x3: invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource",
+            "temporal_role": "SUPPORTING"
+          }
+        ]
+      }
+    ],
+    "alternatives": [
+      {
+        "causal_explanation": "PATH",
+        "causal_path": [
+          {
+            "direction": "forward",
+            "relation": "scales",
+            "source": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "HorizontalPodAutoscaler",
+          "name": "ad",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:25:40Z",
+            "details": {
+              "conditions": [
+                {
+                  "message": "the desired replica count is more than the maximum replica count",
+                  "reason": "TooManyReplicas",
+                  "status": "True",
+                  "type": "ScalingLimited"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                }
+              ],
+              "failure_reasons": [
+                "FailedComputeMetricsReplicas",
+                "FailedGetResourceMetric",
+                "TooManyReplicas"
+              ],
+              "initiating_at": "2025-12-15T17:25:40+00:00",
+              "targets": [
+                "otel-demo/Deployment/ad"
+              ]
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:85",
+              "k8s_events_raw.tsv:208",
+              "k8s_events_raw.tsv:211",
+              "k8s_events_raw.tsv:213",
+              "k8s_events_raw.tsv:311"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "AUTOSCALING_FAILURE",
+            "onset_delta_seconds": -515.108341,
+            "related": [
+              {
+                "kind": "Deployment",
+                "name": "ad",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "autoscaling failed for ad: FailedComputeMetricsReplicas, FailedGetResourceMetric, TooManyReplicas",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:38:11Z",
+            "details": {
+              "count": 6,
+              "reason": "FailedGetResourceMetric"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:208",
+              "k8s_events_raw.tsv:211",
+              "k8s_events_raw.tsv:311",
+              "k8s_events_raw.tsv:313"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 235.891659,
+            "related": [],
+            "summary": "FailedGetResourceMetric x6: failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable t",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:38:11Z",
+            "details": {
+              "count": 3,
+              "reason": "FailedComputeMetricsReplicas"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:213",
+              "k8s_events_raw.tsv:314"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 235.891659,
+            "related": [],
+            "summary": "FailedComputeMetricsReplicas x3: invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Pod/ad-554b849958-82fgc",
+          "otel-demo/Pod/ad-554b849958-9vshm",
+          "otel-demo/Pod/ad-554b849958-bkx7j",
+          "otel-demo/Pod/ad-554b849958-clfnl"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 10.609
+      },
+      {
+        "causal_explanation": "PATH",
+        "causal_path": [
+          {
+            "direction": "forward",
+            "relation": "scales",
+            "source": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "fraud-detection",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "fraud-detection",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "HorizontalPodAutoscaler",
+          "name": "fraud-detection",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:26:04Z",
+            "details": {
+              "conditions": [
+                {
+                  "message": "the desired replica count is more than the maximum replica count",
+                  "reason": "TooManyReplicas",
+                  "status": "True",
+                  "type": "ScalingLimited"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                }
+              ],
+              "failure_reasons": [
+                "FailedComputeMetricsReplicas",
+                "FailedGetResourceMetric",
+                "TooManyReplicas"
+              ],
+              "initiating_at": "2025-12-15T17:26:04+00:00",
+              "targets": [
+                "otel-demo/Deployment/fraud-detection"
+              ]
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "fraud-detection",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:90",
+              "k8s_events_raw.tsv:161",
+              "k8s_events_raw.tsv:163",
+              "k8s_events_raw.tsv:164",
+              "k8s_events_raw.tsv:274"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "AUTOSCALING_FAILURE",
+            "onset_delta_seconds": -491.108341,
+            "related": [
+              {
+                "kind": "Deployment",
+                "name": "fraud-detection",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "autoscaling failed for fraud-detection: FailedComputeMetricsReplicas, FailedGetResourceMetric, TooManyReplicas",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:38:05Z",
+            "details": {
+              "count": 6,
+              "reason": "FailedGetResourceMetric"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "fraud-detection",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:161",
+              "k8s_events_raw.tsv:163",
+              "k8s_events_raw.tsv:274",
+              "k8s_events_raw.tsv:277"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 229.891659,
+            "related": [],
+            "summary": "FailedGetResourceMetric x6: failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable t",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:38:05Z",
+            "details": {
+              "count": 3,
+              "reason": "FailedComputeMetricsReplicas"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "fraud-detection",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:164",
+              "k8s_events_raw.tsv:279"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 229.891659,
+            "related": [],
+            "summary": "FailedComputeMetricsReplicas x3: invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Pod/fraud-detection-9fb7d885b-2m24l",
+          "otel-demo/Pod/fraud-detection-9fb7d885b-486vl",
+          "otel-demo/Pod/fraud-detection-9fb7d885b-5fwd9",
+          "otel-demo/Pod/fraud-detection-9fb7d885b-5pnp2"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 10.609
+      },
+      {
+        "causal_explanation": "DIRECT",
+        "causal_path": [],
+        "entity": {
+          "kind": "HorizontalPodAutoscaler",
+          "name": "recommendation",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:37:53Z",
+            "details": {
+              "conditions": [
+                {
+                  "message": "the desired replica count is decreasing faster than the maximum scale rate",
+                  "reason": "ScaleDownLimit",
+                  "status": "True",
+                  "type": "ScalingLimited"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                }
+              ],
+              "failure_reasons": [
+                "FailedComputeMetricsReplicas",
+                "FailedGetResourceMetric",
+                "ScaleDownLimit"
+              ],
+              "initiating_at": "2025-12-15T17:37:53+00:00",
+              "targets": [
+                "otel-demo/Deployment/recommendation"
+              ]
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "recommendation",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:99",
+              "k8s_events_raw.tsv:179",
+              "k8s_events_raw.tsv:180",
+              "k8s_events_raw.tsv:182",
+              "k8s_events_raw.tsv:292"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "AUTOSCALING_FAILURE",
+            "onset_delta_seconds": 217.891659,
+            "related": [
+              {
+                "kind": "Deployment",
+                "name": "recommendation",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "autoscaling failed for recommendation: FailedComputeMetricsReplicas, FailedGetResourceMetric, ScaleDownLimit",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:38:08Z",
+            "details": {
+              "count": 6,
+              "reason": "FailedGetResourceMetric"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "recommendation",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:179",
+              "k8s_events_raw.tsv:180",
+              "k8s_events_raw.tsv:292",
+              "k8s_events_raw.tsv:294"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 232.891659,
+            "related": [],
+            "summary": "FailedGetResourceMetric x6: failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable t",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:38:08Z",
+            "details": {
+              "count": 3,
+              "reason": "FailedComputeMetricsReplicas"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "recommendation",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:182",
+              "k8s_events_raw.tsv:296"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 232.891659,
+            "related": [],
+            "summary": "FailedComputeMetricsReplicas x3: invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/recommendation",
+          "otel-demo/Pod/recommendation-5f45f75855-2x2lc",
+          "otel-demo/Pod/recommendation-5f45f75855-dbgqr",
+          "otel-demo/Pod/recommendation-5f45f75855-dgnjq",
+          "otel-demo/Pod/recommendation-5f45f75855-f4kq5"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 10.609
+      },
+      {
+        "causal_explanation": "PATH",
+        "causal_path": [
+          {
+            "direction": "reverse",
+            "relation": "serves",
+            "source": {
+              "kind": "Deployment",
+              "name": "product-catalog",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Service",
+              "name": "product-catalog",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "direction": "reverse",
+            "relation": "dependency_of",
+            "source": {
+              "kind": "Service",
+              "name": "product-catalog",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "recommendation",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "HorizontalPodAutoscaler",
+          "name": "product-catalog",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:37:58Z",
+            "details": {
+              "conditions": [
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                  "reason": "FailedGetResourceMetric",
+                  "status": "Warning",
+                  "type": "Event"
+                },
+                {
+                  "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                  "reason": "FailedComputeMetricsReplicas",
+                  "status": "Warning",
+                  "type": "Event"
+                }
+              ],
+              "failure_reasons": [
+                "FailedComputeMetricsReplicas",
+                "FailedGetResourceMetric"
+              ],
+              "initiating_at": "2025-12-15T17:37:58+00:00",
+              "targets": [
+                "otel-demo/Deployment/product-catalog"
+              ]
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "product-catalog",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:97",
+              "k8s_events_raw.tsv:221",
+              "k8s_events_raw.tsv:222",
+              "k8s_events_raw.tsv:225",
+              "k8s_events_raw.tsv:323"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "AUTOSCALING_FAILURE",
+            "onset_delta_seconds": 222.891659,
+            "related": [
+              {
+                "kind": "Deployment",
+                "name": "product-catalog",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "autoscaling failed for product-catalog: FailedComputeMetricsReplicas, FailedGetResourceMetric",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:38:13Z",
+            "details": {
+              "count": 6,
+              "reason": "FailedGetResourceMetric"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "product-catalog",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:221",
+              "k8s_events_raw.tsv:222",
+              "k8s_events_raw.tsv:323",
+              "k8s_events_raw.tsv:324"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 237.891659,
+            "related": [],
+            "summary": "FailedGetResourceMetric x6: failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable t",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:38:13Z",
+            "details": {
+              "count": 3,
+              "reason": "FailedComputeMetricsReplicas"
+            },
+            "entity": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "product-catalog",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:225",
+              "k8s_events_raw.tsv:326"
+            ],
+            "incident_onset": "2025-12-15T17:34:15.108341Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 237.891659,
+            "related": [],
+            "summary": "FailedComputeMetricsReplicas x3: invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/recommendation",
+          "otel-demo/Pod/recommendation-5f45f75855-2x2lc",
+          "otel-demo/Pod/recommendation-5f45f75855-dbgqr",
+          "otel-demo/Pod/recommendation-5f45f75855-dgnjq",
+          "otel-demo/Pod/recommendation-5f45f75855-f4kq5"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 9.384
+      }
+    ],
+    "ambiguous_hypotheses": [],
+    "causal_explanation": "PATH",
+    "causal_path": [
+      {
+        "direction": "forward",
+        "relation": "scales",
+        "source": {
+          "kind": "HorizontalPodAutoscaler",
+          "name": "kafka",
+          "namespace": "otel-demo"
+        },
+        "target": {
+          "kind": "Deployment",
+          "name": "kafka",
+          "namespace": "otel-demo"
+        }
+      },
+      {
+        "direction": "reverse",
+        "relation": "serves",
+        "source": {
+          "kind": "Deployment",
+          "name": "kafka",
+          "namespace": "otel-demo"
+        },
+        "target": {
+          "kind": "Service",
+          "name": "kafka",
+          "namespace": "otel-demo"
+        }
+      },
+      {
+        "direction": "reverse",
+        "relation": "dependency_of",
+        "source": {
+          "kind": "Service",
+          "name": "kafka",
+          "namespace": "otel-demo"
+        },
+        "target": {
+          "kind": "Deployment",
+          "name": "fraud-detection",
+          "namespace": "otel-demo"
+        }
+      }
+    ],
+    "confidence": "VERIFIED",
+    "evidence": [
+      {
+        "at": "2025-12-15T17:26:25Z",
+        "details": {
+          "conditions": [
+            {
+              "message": "the desired replica count is more than the maximum replica count",
+              "reason": "TooManyReplicas",
+              "status": "True",
+              "type": "ScalingLimited"
+            },
+            {
+              "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+              "reason": "FailedGetResourceMetric",
+              "status": "Warning",
+              "type": "Event"
+            },
+            {
+              "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+              "reason": "FailedGetResourceMetric",
+              "status": "Warning",
+              "type": "Event"
+            },
+            {
+              "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+              "reason": "FailedComputeMetricsReplicas",
+              "status": "Warning",
+              "type": "Event"
+            },
+            {
+              "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+              "reason": "FailedGetResourceMetric",
+              "status": "Warning",
+              "type": "Event"
+            },
+            {
+              "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+              "reason": "FailedGetResourceMetric",
+              "status": "Warning",
+              "type": "Event"
+            },
+            {
+              "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+              "reason": "FailedComputeMetricsReplicas",
+              "status": "Warning",
+              "type": "Event"
+            }
+          ],
+          "failure_reasons": [
+            "FailedComputeMetricsReplicas",
+            "FailedGetResourceMetric",
+            "TooManyReplicas"
+          ],
+          "initiating_at": "2025-12-15T17:26:25+00:00",
+          "targets": [
+            "otel-demo/Deployment/kafka"
+          ]
+        },
+        "entity": {
+          "kind": "HorizontalPodAutoscaler",
+          "name": "kafka",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_objects_raw.tsv:94",
+          "k8s_events_raw.tsv:214",
+          "k8s_events_raw.tsv:217",
+          "k8s_events_raw.tsv:218",
+          "k8s_events_raw.tsv:317"
+        ],
+        "incident_onset": "2025-12-15T17:34:15.108341Z",
+        "kind": "AUTOSCALING_FAILURE",
+        "onset_delta_seconds": -470.108341,
+        "related": [
+          {
+            "kind": "Deployment",
+            "name": "kafka",
+            "namespace": "otel-demo"
+          }
+        ],
+        "summary": "autoscaling failed for kafka: FailedComputeMetricsReplicas, FailedGetResourceMetric, TooManyReplicas",
+        "temporal_role": "INITIATING"
+      },
+      {
+        "at": "2025-12-15T17:38:11Z",
+        "details": {
+          "count": 6,
+          "reason": "FailedGetResourceMetric"
+        },
+        "entity": {
+          "kind": "HorizontalPodAutoscaler",
+          "name": "kafka",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_events_raw.tsv:214",
+          "k8s_events_raw.tsv:217",
+          "k8s_events_raw.tsv:317",
+          "k8s_events_raw.tsv:318"
+        ],
+        "incident_onset": "2025-12-15T17:34:15.108341Z",
+        "kind": "FAILURE_EVENT",
+        "onset_delta_seconds": 235.891659,
+        "related": [],
+        "summary": "FailedGetResourceMetric x6: failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable t",
+        "temporal_role": "SUPPORTING"
+      },
+      {
+        "at": "2025-12-15T17:38:11Z",
+        "details": {
+          "count": 3,
+          "reason": "FailedComputeMetricsReplicas"
+        },
+        "entity": {
+          "kind": "HorizontalPodAutoscaler",
+          "name": "kafka",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_events_raw.tsv:218",
+          "k8s_events_raw.tsv:320"
+        ],
+        "incident_onset": "2025-12-15T17:34:15.108341Z",
+        "kind": "FAILURE_EVENT",
+        "onset_delta_seconds": 235.891659,
+        "related": [],
+        "summary": "FailedComputeMetricsReplicas x3: invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource",
+        "temporal_role": "SUPPORTING"
+      },
+      {
+        "at": "2025-12-15T17:29:10Z",
+        "details": {
+          "problems": [
+            {
+              "at": "2025-12-15T17:29:10Z",
+              "container": "kafka",
+              "message": "exit code 1",
+              "reason": "Error",
+              "restarts": 1
+            }
+          ],
+          "reason": "Error"
+        },
+        "entity": {
+          "kind": "Pod",
+          "name": "kafka-ff7884766-vg9vr",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_objects_raw.tsv:304"
+        ],
+        "incident_onset": "2025-12-15T17:34:15.108341Z",
+        "kind": "CONTAINER_FAILURE",
+        "onset_delta_seconds": -305.108341,
+        "related": [],
+        "summary": "container kafka Error (1 restart(s)) exit code 1",
+        "temporal_role": "AMBIGUOUS"
+      },
+      {
+        "at": "2025-12-15T17:34:07Z",
+        "details": {
+          "problems": [
+            {
+              "at": "2025-12-15T17:34:07Z",
+              "container": "kafka",
+              "message": "exit code 1",
+              "reason": "Error",
+              "restarts": 3
+            }
+          ],
+          "reason": "Error"
+        },
+        "entity": {
+          "kind": "Pod",
+          "name": "kafka-ff7884766-lbw2w",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_objects_raw.tsv:301"
+        ],
+        "incident_onset": "2025-12-15T17:34:15.108341Z",
+        "kind": "CONTAINER_FAILURE",
+        "onset_delta_seconds": -8.108341,
+        "related": [],
+        "summary": "container kafka Error (3 restart(s)) exit code 1",
+        "temporal_role": "AMBIGUOUS"
+      }
+    ],
+    "hypothesis": {
+      "causal_actor": {
+        "kind": "HorizontalPodAutoscaler",
+        "name": "kafka",
+        "namespace": "otel-demo"
+      },
+      "causal_explanation": "PATH",
+      "causal_paths": [
+        [
+          {
+            "direction": "forward",
+            "relation": "scales",
+            "source": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "direction": "reverse",
+            "relation": "serves",
+            "source": {
+              "kind": "Deployment",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Service",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "direction": "reverse",
+            "relation": "dependency_of",
+            "source": {
+              "kind": "Service",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "fraud-detection",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        [
+          {
+            "direction": "forward",
+            "relation": "scales",
+            "source": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "direction": "reverse",
+            "relation": "owns",
+            "source": {
+              "kind": "Deployment",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "ReplicaSet",
+              "name": "kafka-ff7884766",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "direction": "reverse",
+            "relation": "owns",
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "kafka-ff7884766",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Pod",
+              "name": "kafka-ff7884766-lbw2w",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        [
+          {
+            "direction": "forward",
+            "relation": "scales",
+            "source": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "direction": "reverse",
+            "relation": "owns",
+            "source": {
+              "kind": "Deployment",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "ReplicaSet",
+              "name": "kafka-ff7884766",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "direction": "reverse",
+            "relation": "owns",
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "kafka-ff7884766",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Pod",
+              "name": "kafka-ff7884766-vg9vr",
+              "namespace": "otel-demo"
+            }
+          }
+        ]
+      ],
+      "contradictory_findings": [],
+      "findings": [
+        {
+          "at": "2025-12-15T17:26:25Z",
+          "details": {
+            "conditions": [
+              {
+                "message": "the desired replica count is more than the maximum replica count",
+                "reason": "TooManyReplicas",
+                "status": "True",
+                "type": "ScalingLimited"
+              },
+              {
+                "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                "reason": "FailedGetResourceMetric",
+                "status": "Warning",
+                "type": "Event"
+              },
+              {
+                "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                "reason": "FailedGetResourceMetric",
+                "status": "Warning",
+                "type": "Event"
+              },
+              {
+                "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                "reason": "FailedComputeMetricsReplicas",
+                "status": "Warning",
+                "type": "Event"
+              },
+              {
+                "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                "reason": "FailedGetResourceMetric",
+                "status": "Warning",
+                "type": "Event"
+              },
+              {
+                "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                "reason": "FailedGetResourceMetric",
+                "status": "Warning",
+                "type": "Event"
+              },
+              {
+                "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                "reason": "FailedComputeMetricsReplicas",
+                "status": "Warning",
+                "type": "Event"
+              }
+            ],
+            "failure_reasons": [
+              "FailedComputeMetricsReplicas",
+              "FailedGetResourceMetric",
+              "TooManyReplicas"
+            ],
+            "initiating_at": "2025-12-15T17:26:25+00:00",
+            "targets": [
+              "otel-demo/Deployment/kafka"
+            ]
+          },
+          "entity": {
+            "kind": "HorizontalPodAutoscaler",
+            "name": "kafka",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:94",
+            "k8s_events_raw.tsv:214",
+            "k8s_events_raw.tsv:217",
+            "k8s_events_raw.tsv:218",
+            "k8s_events_raw.tsv:317"
+          ],
+          "incident_onset": "2025-12-15T17:34:15.108341Z",
+          "kind": "AUTOSCALING_FAILURE",
+          "onset_delta_seconds": -470.108341,
+          "related": [
+            {
+              "kind": "Deployment",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            }
+          ],
+          "summary": "autoscaling failed for kafka: FailedComputeMetricsReplicas, FailedGetResourceMetric, TooManyReplicas",
+          "temporal_role": "INITIATING"
+        },
+        {
+          "at": "2025-12-15T17:38:11Z",
+          "details": {
+            "count": 6,
+            "reason": "FailedGetResourceMetric"
+          },
+          "entity": {
+            "kind": "HorizontalPodAutoscaler",
+            "name": "kafka",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_events_raw.tsv:214",
+            "k8s_events_raw.tsv:217",
+            "k8s_events_raw.tsv:317",
+            "k8s_events_raw.tsv:318"
+          ],
+          "incident_onset": "2025-12-15T17:34:15.108341Z",
+          "kind": "FAILURE_EVENT",
+          "onset_delta_seconds": 235.891659,
+          "related": [],
+          "summary": "FailedGetResourceMetric x6: failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable t",
+          "temporal_role": "SUPPORTING"
+        },
+        {
+          "at": "2025-12-15T17:38:11Z",
+          "details": {
+            "count": 3,
+            "reason": "FailedComputeMetricsReplicas"
+          },
+          "entity": {
+            "kind": "HorizontalPodAutoscaler",
+            "name": "kafka",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_events_raw.tsv:218",
+            "k8s_events_raw.tsv:320"
+          ],
+          "incident_onset": "2025-12-15T17:34:15.108341Z",
+          "kind": "FAILURE_EVENT",
+          "onset_delta_seconds": 235.891659,
+          "related": [],
+          "summary": "FailedComputeMetricsReplicas x3: invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource",
+          "temporal_role": "SUPPORTING"
+        },
+        {
+          "at": "2025-12-15T17:29:10Z",
+          "details": {
+            "problems": [
+              {
+                "at": "2025-12-15T17:29:10Z",
+                "container": "kafka",
+                "message": "exit code 1",
+                "reason": "Error",
+                "restarts": 1
+              }
+            ],
+            "reason": "Error"
+          },
+          "entity": {
+            "kind": "Pod",
+            "name": "kafka-ff7884766-vg9vr",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:304"
+          ],
+          "incident_onset": "2025-12-15T17:34:15.108341Z",
+          "kind": "CONTAINER_FAILURE",
+          "onset_delta_seconds": -305.108341,
+          "related": [],
+          "summary": "container kafka Error (1 restart(s)) exit code 1",
+          "temporal_role": "AMBIGUOUS"
+        },
+        {
+          "at": "2025-12-15T17:34:07Z",
+          "details": {
+            "problems": [
+              {
+                "at": "2025-12-15T17:34:07Z",
+                "container": "kafka",
+                "message": "exit code 1",
+                "reason": "Error",
+                "restarts": 3
+              }
+            ],
+            "reason": "Error"
+          },
+          "entity": {
+            "kind": "Pod",
+            "name": "kafka-ff7884766-lbw2w",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:301"
+          ],
+          "incident_onset": "2025-12-15T17:34:15.108341Z",
+          "kind": "CONTAINER_FAILURE",
+          "onset_delta_seconds": -8.108341,
+          "related": [],
+          "summary": "container kafka Error (3 restart(s)) exit code 1",
+          "temporal_role": "AMBIGUOUS"
+        }
+      ],
+      "hypothesis_id": "hypothesis:bc56ddf7a1916e0e",
+      "initiating_findings": [
+        {
+          "at": "2025-12-15T17:26:25Z",
+          "details": {
+            "conditions": [
+              {
+                "message": "the desired replica count is more than the maximum replica count",
+                "reason": "TooManyReplicas",
+                "status": "True",
+                "type": "ScalingLimited"
+              },
+              {
+                "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                "reason": "FailedGetResourceMetric",
+                "status": "Warning",
+                "type": "Event"
+              },
+              {
+                "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                "reason": "FailedGetResourceMetric",
+                "status": "Warning",
+                "type": "Event"
+              },
+              {
+                "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                "reason": "FailedComputeMetricsReplicas",
+                "status": "Warning",
+                "type": "Event"
+              },
+              {
+                "message": "failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get ",
+                "reason": "FailedGetResourceMetric",
+                "status": "Warning",
+                "type": "Event"
+              },
+              {
+                "message": "failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request",
+                "reason": "FailedGetResourceMetric",
+                "status": "Warning",
+                "type": "Event"
+              },
+              {
+                "message": "invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetc",
+                "reason": "FailedComputeMetricsReplicas",
+                "status": "Warning",
+                "type": "Event"
+              }
+            ],
+            "failure_reasons": [
+              "FailedComputeMetricsReplicas",
+              "FailedGetResourceMetric",
+              "TooManyReplicas"
+            ],
+            "initiating_at": "2025-12-15T17:26:25+00:00",
+            "targets": [
+              "otel-demo/Deployment/kafka"
+            ]
+          },
+          "entity": {
+            "kind": "HorizontalPodAutoscaler",
+            "name": "kafka",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:94",
+            "k8s_events_raw.tsv:214",
+            "k8s_events_raw.tsv:217",
+            "k8s_events_raw.tsv:218",
+            "k8s_events_raw.tsv:317"
+          ],
+          "incident_onset": "2025-12-15T17:34:15.108341Z",
+          "kind": "AUTOSCALING_FAILURE",
+          "onset_delta_seconds": -470.108341,
+          "related": [
+            {
+              "kind": "Deployment",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            }
+          ],
+          "summary": "autoscaling failed for kafka: FailedComputeMetricsReplicas, FailedGetResourceMetric, TooManyReplicas",
+          "temporal_role": "INITIATING"
+        }
+      ],
+      "linked_symptoms": [
+        "otel-demo/Deployment/fraud-detection",
+        "otel-demo/Pod/fraud-detection-9fb7d885b-2m24l",
+        "otel-demo/Pod/fraud-detection-9fb7d885b-486vl",
+        "otel-demo/Pod/fraud-detection-9fb7d885b-5fwd9",
+        "otel-demo/Pod/fraud-detection-9fb7d885b-5pnp2"
+      ],
+      "manifestations": [
+        {
+          "kind": "Pod",
+          "name": "kafka-ff7884766-lbw2w",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "kafka-ff7884766-vg9vr",
+          "namespace": "otel-demo"
+        }
+      ],
+      "members": [
+        {
+          "kind": "HorizontalPodAutoscaler",
+          "name": "kafka",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "kafka-ff7884766-lbw2w",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "kafka-ff7884766-vg9vr",
+          "namespace": "otel-demo"
+        }
+      ],
+      "reasons": [
+        "2 hop(s) from an alerting component",
+        "acts in an alerting namespace",
+        "happened in the incident window",
+        "grouped 3 entities into one causal episode via dependency_of, owns, scales, serves"
+      ],
+      "score": 11.634,
+      "signature": {
+        "causal_path_shape": [
+          [
+            [
+              "HorizontalPodAutoscaler",
+              "scales",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "owns",
+              "ReplicaSet"
+            ],
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ]
+          ],
+          [
+            [
+              "HorizontalPodAutoscaler",
+              "scales",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ]
+          ]
+        ],
+        "contradiction_kinds": [],
+        "initiating_kinds": [
+          "AUTOSCALING_FAILURE"
+        ],
+        "manifestation_shape": [
+          "Pod:CONTAINER_FAILURE"
+        ],
+        "provenance_classes": [
+          "derived_observation",
+          "kubernetes_event",
+          "object_observation"
+        ],
+        "supporting_kinds": [
+          "CONTAINER_FAILURE",
+          "FAILURE_EVENT"
+        ],
+        "symptom_relation": "PATH",
+        "temporal_profile": [
+          "ambiguous_timing",
+          "initiating_before_onset",
+          "supporting_after_onset"
+        ]
+      },
+      "supporting_findings": [
+        {
+          "at": "2025-12-15T17:38:11Z",
+          "details": {
+            "count": 6,
+            "reason": "FailedGetResourceMetric"
+          },
+          "entity": {
+            "kind": "HorizontalPodAutoscaler",
+            "name": "kafka",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_events_raw.tsv:214",
+            "k8s_events_raw.tsv:217",
+            "k8s_events_raw.tsv:317",
+            "k8s_events_raw.tsv:318"
+          ],
+          "incident_onset": "2025-12-15T17:34:15.108341Z",
+          "kind": "FAILURE_EVENT",
+          "onset_delta_seconds": 235.891659,
+          "related": [],
+          "summary": "FailedGetResourceMetric x6: failed to get memory utilization: unable to get metrics for resource memory: unable to fetch metrics from resource metrics API: the server is currently unable t",
+          "temporal_role": "SUPPORTING"
+        },
+        {
+          "at": "2025-12-15T17:38:11Z",
+          "details": {
+            "count": 3,
+            "reason": "FailedComputeMetricsReplicas"
+          },
+          "entity": {
+            "kind": "HorizontalPodAutoscaler",
+            "name": "kafka",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_events_raw.tsv:218",
+            "k8s_events_raw.tsv:320"
+          ],
+          "incident_onset": "2025-12-15T17:34:15.108341Z",
+          "kind": "FAILURE_EVENT",
+          "onset_delta_seconds": 235.891659,
+          "related": [],
+          "summary": "FailedComputeMetricsReplicas x3: invalid metrics (2 invalid out of 2), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource",
+          "temporal_role": "SUPPORTING"
+        },
+        {
+          "at": "2025-12-15T17:29:10Z",
+          "details": {
+            "problems": [
+              {
+                "at": "2025-12-15T17:29:10Z",
+                "container": "kafka",
+                "message": "exit code 1",
+                "reason": "Error",
+                "restarts": 1
+              }
+            ],
+            "reason": "Error"
+          },
+          "entity": {
+            "kind": "Pod",
+            "name": "kafka-ff7884766-vg9vr",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:304"
+          ],
+          "incident_onset": "2025-12-15T17:34:15.108341Z",
+          "kind": "CONTAINER_FAILURE",
+          "onset_delta_seconds": -305.108341,
+          "related": [],
+          "summary": "container kafka Error (1 restart(s)) exit code 1",
+          "temporal_role": "AMBIGUOUS"
+        },
+        {
+          "at": "2025-12-15T17:34:07Z",
+          "details": {
+            "problems": [
+              {
+                "at": "2025-12-15T17:34:07Z",
+                "container": "kafka",
+                "message": "exit code 1",
+                "reason": "Error",
+                "restarts": 3
+              }
+            ],
+            "reason": "Error"
+          },
+          "entity": {
+            "kind": "Pod",
+            "name": "kafka-ff7884766-lbw2w",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:301"
+          ],
+          "incident_onset": "2025-12-15T17:34:15.108341Z",
+          "kind": "CONTAINER_FAILURE",
+          "onset_delta_seconds": -8.108341,
+          "related": [],
+          "summary": "container kafka Error (3 restart(s)) exit code 1",
+          "temporal_role": "AMBIGUOUS"
+        }
+      ]
+    },
+    "hypothesis_diagnostics": {
+      "duplicate_evidence_ids_removed": 1,
+      "exact_score_ties": 51,
+      "hypothesis_count": 25,
+      "multi_entity_hypotheses": 1,
+      "ownership_chains_collapsed": 1,
+      "raw_candidate_count": 27,
+      "structurally_similar_top_hypotheses": 3
+    },
+    "incident_id": "Scenario-38",
+    "information_gaps": [],
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Inspect HorizontalPodAutoscaler kafka",
+        "command": "kubectl describe horizontalpodautoscaler/kafka -n otel-demo",
+        "requires_approval": false,
+        "risk": "none"
+      }
+    ],
+    "resolution": "RESOLVED",
+    "resolution_trace": {
+      "considered_hypotheses": [
+        "hypothesis:185a980297186f8e",
+        "hypothesis:1e9541f8d62b6ddd",
+        "hypothesis:2c06f23e2e7f8f21",
+        "hypothesis:2d17a2cf6169f687",
+        "hypothesis:387b157080f26c9c",
+        "hypothesis:3f9df8eb0bb93ab3",
+        "hypothesis:4271ee19bc729b24",
+        "hypothesis:4acfaabad3a231ca",
+        "hypothesis:4d54787226067991",
+        "hypothesis:5576501b2d273b24",
+        "hypothesis:59ce9422752a8bad",
+        "hypothesis:5feb84f45e66564a",
+        "hypothesis:630a1652e937e227",
+        "hypothesis:6ed97e7c60c8c753",
+        "hypothesis:7669beb53343bfe1",
+        "hypothesis:88a8412878ef55a9",
+        "hypothesis:8aabc13fd78cddb1",
+        "hypothesis:8c1732ffa19f9038",
+        "hypothesis:ab24cd5c7232830c",
+        "hypothesis:af836e7f847acd7a",
+        "hypothesis:bc56ddf7a1916e0e",
+        "hypothesis:c2361740786c9ee2",
+        "hypothesis:c9739ae60462481d",
+        "hypothesis:de433fd186281e29",
+        "hypothesis:f2a9fb0cb17455d5"
+      ],
+      "decision_basis": "VALID_DOMINANCE",
+      "discriminators": [
+        {
+          "causal_path_shapes": [
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ],
+              [
+                "Deployment",
+                "owns",
+                "ReplicaSet"
+              ],
+              [
+                "ReplicaSet",
+                "owns",
+                "Pod"
+              ]
+            ],
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ],
+              [
+                "Deployment",
+                "serves",
+                "Service"
+              ],
+              [
+                "Service",
+                "dependency_of",
+                "Deployment"
+              ]
+            ],
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ],
+              [
+                "Deployment",
+                "serves",
+                "Service"
+              ],
+              [
+                "Service",
+                "dependency_of",
+                "Deployment"
+              ]
+            ]
+          ],
+          "detail": "additional onset-capable evidence explains the weaker hypothesis's manifestation; score and identity ordering were not used",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:214",
+            "k8s_events_raw.tsv:217",
+            "k8s_events_raw.tsv:218",
+            "k8s_events_raw.tsv:221",
+            "k8s_events_raw.tsv:222",
+            "k8s_events_raw.tsv:225",
+            "k8s_events_raw.tsv:317",
+            "k8s_events_raw.tsv:318",
+            "k8s_events_raw.tsv:320",
+            "k8s_events_raw.tsv:323",
+            "k8s_events_raw.tsv:324",
+            "k8s_events_raw.tsv:326"
+          ],
+          "finding_kinds": [
+            "AUTOSCALING_FAILURE",
+            "CONTAINER_FAILURE",
+            "FAILURE_EVENT"
+          ],
+          "hypothesis_ids": [
+            "hypothesis:bc56ddf7a1916e0e",
+            "hypothesis:4d54787226067991"
+          ],
+          "kind": "VALID_DOMINANCE",
+          "temporal_relations": [
+            "ambiguous_timing",
+            "initiating_before_onset",
+            "initiating_near_onset",
+            "supporting_after_onset"
+          ]
+        },
+        {
+          "causal_path_shapes": [
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ],
+              [
+                "Deployment",
+                "owns",
+                "ReplicaSet"
+              ],
+              [
+                "ReplicaSet",
+                "owns",
+                "Pod"
+              ]
+            ],
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ],
+              [
+                "Deployment",
+                "serves",
+                "Service"
+              ],
+              [
+                "Service",
+                "dependency_of",
+                "Deployment"
+              ]
+            ],
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ]
+            ]
+          ],
+          "detail": "additional onset-capable evidence explains the weaker hypothesis's manifestation; score and identity ordering were not used",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:179",
+            "k8s_events_raw.tsv:180",
+            "k8s_events_raw.tsv:182",
+            "k8s_events_raw.tsv:214",
+            "k8s_events_raw.tsv:217",
+            "k8s_events_raw.tsv:218",
+            "k8s_events_raw.tsv:292",
+            "k8s_events_raw.tsv:294",
+            "k8s_events_raw.tsv:296",
+            "k8s_events_raw.tsv:317",
+            "k8s_events_raw.tsv:318",
+            "k8s_events_raw.tsv:320"
+          ],
+          "finding_kinds": [
+            "AUTOSCALING_FAILURE",
+            "CONTAINER_FAILURE",
+            "FAILURE_EVENT"
+          ],
+          "hypothesis_ids": [
+            "hypothesis:bc56ddf7a1916e0e",
+            "hypothesis:88a8412878ef55a9"
+          ],
+          "kind": "VALID_DOMINANCE",
+          "temporal_relations": [
+            "ambiguous_timing",
+            "initiating_before_onset",
+            "initiating_near_onset",
+            "supporting_after_onset"
+          ]
+        },
+        {
+          "causal_path_shapes": [
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ],
+              [
+                "Deployment",
+                "owns",
+                "ReplicaSet"
+              ],
+              [
+                "ReplicaSet",
+                "owns",
+                "Pod"
+              ]
+            ],
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ],
+              [
+                "Deployment",
+                "serves",
+                "Service"
+              ],
+              [
+                "Service",
+                "dependency_of",
+                "Deployment"
+              ]
+            ],
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ]
+            ]
+          ],
+          "detail": "additional onset-capable evidence explains the weaker hypothesis's manifestation; score and identity ordering were not used",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:161",
+            "k8s_events_raw.tsv:163",
+            "k8s_events_raw.tsv:164",
+            "k8s_events_raw.tsv:214",
+            "k8s_events_raw.tsv:217",
+            "k8s_events_raw.tsv:218",
+            "k8s_events_raw.tsv:274",
+            "k8s_events_raw.tsv:277",
+            "k8s_events_raw.tsv:279",
+            "k8s_events_raw.tsv:317",
+            "k8s_events_raw.tsv:318",
+            "k8s_events_raw.tsv:320"
+          ],
+          "finding_kinds": [
+            "AUTOSCALING_FAILURE",
+            "CONTAINER_FAILURE",
+            "FAILURE_EVENT"
+          ],
+          "hypothesis_ids": [
+            "hypothesis:bc56ddf7a1916e0e",
+            "hypothesis:ab24cd5c7232830c"
+          ],
+          "kind": "VALID_DOMINANCE",
+          "temporal_relations": [
+            "ambiguous_timing",
+            "initiating_before_onset",
+            "supporting_after_onset"
+          ]
+        },
+        {
+          "causal_path_shapes": [
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ],
+              [
+                "Deployment",
+                "owns",
+                "ReplicaSet"
+              ],
+              [
+                "ReplicaSet",
+                "owns",
+                "Pod"
+              ]
+            ],
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ],
+              [
+                "Deployment",
+                "serves",
+                "Service"
+              ],
+              [
+                "Service",
+                "dependency_of",
+                "Deployment"
+              ]
+            ],
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ]
+            ]
+          ],
+          "detail": "additional onset-capable evidence explains the weaker hypothesis's manifestation; score and identity ordering were not used",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:208",
+            "k8s_events_raw.tsv:211",
+            "k8s_events_raw.tsv:213",
+            "k8s_events_raw.tsv:214",
+            "k8s_events_raw.tsv:217",
+            "k8s_events_raw.tsv:218",
+            "k8s_events_raw.tsv:311",
+            "k8s_events_raw.tsv:313",
+            "k8s_events_raw.tsv:314",
+            "k8s_events_raw.tsv:317",
+            "k8s_events_raw.tsv:318",
+            "k8s_events_raw.tsv:320"
+          ],
+          "finding_kinds": [
+            "AUTOSCALING_FAILURE",
+            "CONTAINER_FAILURE",
+            "FAILURE_EVENT"
+          ],
+          "hypothesis_ids": [
+            "hypothesis:bc56ddf7a1916e0e",
+            "hypothesis:af836e7f847acd7a"
+          ],
+          "kind": "VALID_DOMINANCE",
+          "temporal_relations": [
+            "ambiguous_timing",
+            "initiating_before_onset",
+            "supporting_after_onset"
+          ]
+        }
+      ],
+      "distinguishing_facts": [
+        "additional onset-capable evidence explains the weaker hypothesis's manifestation; score and identity ordering were not used",
+        "additional onset-capable evidence explains the weaker hypothesis's manifestation; score and identity ordering were not used",
+        "additional onset-capable evidence explains the weaker hypothesis's manifestation; score and identity ordering were not used",
+        "additional onset-capable evidence explains the weaker hypothesis's manifestation; score and identity ordering were not used"
+      ],
+      "dominance_relations": [
+        {
+          "detail": "additional onset-capable evidence explains the weaker hypothesis's manifestation; score and identity ordering were not used",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:214",
+            "k8s_events_raw.tsv:217",
+            "k8s_events_raw.tsv:218",
+            "k8s_events_raw.tsv:317",
+            "k8s_events_raw.tsv:318",
+            "k8s_events_raw.tsv:320",
+            "k8s_objects_raw.tsv:301",
+            "k8s_objects_raw.tsv:304",
+            "k8s_objects_raw.tsv:94"
+          ],
+          "stronger_hypothesis_id": "hypothesis:bc56ddf7a1916e0e",
+          "weaker_hypothesis_id": "hypothesis:4d54787226067991"
+        },
+        {
+          "detail": "additional onset-capable evidence explains the weaker hypothesis's manifestation; score and identity ordering were not used",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:214",
+            "k8s_events_raw.tsv:217",
+            "k8s_events_raw.tsv:218",
+            "k8s_events_raw.tsv:317",
+            "k8s_events_raw.tsv:318",
+            "k8s_events_raw.tsv:320",
+            "k8s_objects_raw.tsv:301",
+            "k8s_objects_raw.tsv:304",
+            "k8s_objects_raw.tsv:94"
+          ],
+          "stronger_hypothesis_id": "hypothesis:bc56ddf7a1916e0e",
+          "weaker_hypothesis_id": "hypothesis:88a8412878ef55a9"
+        },
+        {
+          "detail": "additional onset-capable evidence explains the weaker hypothesis's manifestation; score and identity ordering were not used",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:214",
+            "k8s_events_raw.tsv:217",
+            "k8s_events_raw.tsv:218",
+            "k8s_events_raw.tsv:317",
+            "k8s_events_raw.tsv:318",
+            "k8s_events_raw.tsv:320",
+            "k8s_objects_raw.tsv:301",
+            "k8s_objects_raw.tsv:304",
+            "k8s_objects_raw.tsv:94"
+          ],
+          "stronger_hypothesis_id": "hypothesis:bc56ddf7a1916e0e",
+          "weaker_hypothesis_id": "hypothesis:ab24cd5c7232830c"
+        },
+        {
+          "detail": "additional onset-capable evidence explains the weaker hypothesis's manifestation; score and identity ordering were not used",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:214",
+            "k8s_events_raw.tsv:217",
+            "k8s_events_raw.tsv:218",
+            "k8s_events_raw.tsv:317",
+            "k8s_events_raw.tsv:318",
+            "k8s_events_raw.tsv:320",
+            "k8s_objects_raw.tsv:301",
+            "k8s_objects_raw.tsv:304",
+            "k8s_objects_raw.tsv:94"
+          ],
+          "stronger_hypothesis_id": "hypothesis:bc56ddf7a1916e0e",
+          "weaker_hypothesis_id": "hypothesis:af836e7f847acd7a"
+        }
+      ],
+      "eliminated_hypotheses": [
+        "hypothesis:185a980297186f8e",
+        "hypothesis:1e9541f8d62b6ddd",
+        "hypothesis:2c06f23e2e7f8f21",
+        "hypothesis:2d17a2cf6169f687",
+        "hypothesis:387b157080f26c9c",
+        "hypothesis:3f9df8eb0bb93ab3",
+        "hypothesis:4271ee19bc729b24",
+        "hypothesis:4acfaabad3a231ca"
+      ],
+      "elimination_reasons": [
+        "hypothesis:185a980297186f8e: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:1e9541f8d62b6ddd: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:2c06f23e2e7f8f21: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:2d17a2cf6169f687: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:387b157080f26c9c: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:3f9df8eb0bb93ab3: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:4271ee19bc729b24: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:4acfaabad3a231ca: lacks onset-capable initiating evidence or causal symptom linkage"
+      ],
+      "eliminations": [
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:239",
+            "k8s_events_raw.tsv:241",
+            "k8s_events_raw.tsv:243",
+            "k8s_events_raw.tsv:340",
+            "k8s_events_raw.tsv:343",
+            "k8s_events_raw.tsv:345",
+            "k8s_objects_raw.tsv:86"
+          ],
+          "hypothesis_id": "hypothesis:185a980297186f8e"
+        },
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:15",
+            "k8s_events_raw.tsv:2112",
+            "k8s_objects_raw.tsv:96"
+          ],
+          "hypothesis_id": "hypothesis:1e9541f8d62b6ddd"
+        },
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:29"
+          ],
+          "hypothesis_id": "hypothesis:2c06f23e2e7f8f21"
+        },
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:185",
+            "k8s_events_raw.tsv:187",
+            "k8s_events_raw.tsv:188",
+            "k8s_events_raw.tsv:298",
+            "k8s_events_raw.tsv:300",
+            "k8s_events_raw.tsv:302",
+            "k8s_objects_raw.tsv:88"
+          ],
+          "hypothesis_id": "hypothesis:2d17a2cf6169f687"
+        },
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:172",
+            "k8s_events_raw.tsv:175",
+            "k8s_events_raw.tsv:177",
+            "k8s_events_raw.tsv:286",
+            "k8s_events_raw.tsv:288",
+            "k8s_events_raw.tsv:290",
+            "k8s_objects_raw.tsv:84"
+          ],
+          "hypothesis_id": "hypothesis:387b157080f26c9c"
+        },
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:244",
+            "k8s_events_raw.tsv:247",
+            "k8s_events_raw.tsv:248",
+            "k8s_events_raw.tsv:346",
+            "k8s_events_raw.tsv:349",
+            "k8s_events_raw.tsv:351",
+            "k8s_objects_raw.tsv:92"
+          ],
+          "hypothesis_id": "hypothesis:3f9df8eb0bb93ab3"
+        },
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:191",
+            "k8s_events_raw.tsv:193",
+            "k8s_events_raw.tsv:195",
+            "k8s_events_raw.tsv:305",
+            "k8s_events_raw.tsv:307",
+            "k8s_events_raw.tsv:308",
+            "k8s_objects_raw.tsv:91"
+          ],
+          "hypothesis_id": "hypothesis:4271ee19bc729b24"
+        },
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:136",
+            "k8s_events_raw.tsv:138",
+            "k8s_events_raw.tsv:140",
+            "k8s_events_raw.tsv:250",
+            "k8s_events_raw.tsv:253",
+            "k8s_events_raw.tsv:254",
+            "k8s_events_raw.tsv:357",
+            "k8s_objects_raw.tsv:101"
+          ],
+          "hypothesis_id": "hypothesis:4acfaabad3a231ca"
+        }
+      ],
+      "hypothesis_audits": [
+        {
+          "causal_linkage": "PATH",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:bc56ddf7a1916e0e",
+          "onset_relation": [
+            "ambiguous_timing",
+            "initiating_before_onset",
+            "supporting_after_onset"
+          ],
+          "plausibility_reasons": [],
+          "plausible": true,
+          "signature": {
+            "causal_path_shape": [
+              [
+                [
+                  "HorizontalPodAutoscaler",
+                  "scales",
+                  "Deployment"
+                ],
+                [
+                  "Deployment",
+                  "owns",
+                  "ReplicaSet"
+                ],
+                [
+                  "ReplicaSet",
+                  "owns",
+                  "Pod"
+                ]
+              ],
+              [
+                [
+                  "HorizontalPodAutoscaler",
+                  "scales",
+                  "Deployment"
+                ],
+                [
+                  "Deployment",
+                  "serves",
+                  "Service"
+                ],
+                [
+                  "Service",
+                  "dependency_of",
+                  "Deployment"
+                ]
+              ]
+            ],
+            "contradiction_kinds": [],
+            "initiating_kinds": [
+              "AUTOSCALING_FAILURE"
+            ],
+            "manifestation_shape": [
+              "Pod:CONTAINER_FAILURE"
+            ],
+            "provenance_classes": [
+              "derived_observation",
+              "kubernetes_event",
+              "object_observation"
+            ],
+            "supporting_kinds": [
+              "CONTAINER_FAILURE",
+              "FAILURE_EVENT"
+            ],
+            "symptom_relation": "PATH",
+            "temporal_profile": [
+              "ambiguous_timing",
+              "initiating_before_onset",
+              "supporting_after_onset"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "VERIFIED",
+            "onset_delta_seconds": -8.108341,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:94",
+                  "k8s_events_raw.tsv:214",
+                  "k8s_events_raw.tsv:217",
+                  "k8s_events_raw.tsv:218",
+                  "k8s_events_raw.tsv:317",
+                  "k8s_objects_raw.tsv:304",
+                  "k8s_objects_raw.tsv:301"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "an initiating observation is at or shortly after symptom onset",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:94",
+                  "k8s_events_raw.tsv:214",
+                  "k8s_events_raw.tsv:217",
+                  "k8s_events_raw.tsv:218",
+                  "k8s_events_raw.tsv:317"
+                ],
+                "name": "initiating_evidence_near_onset",
+                "status": "PASS"
+              }
+            ],
+            "rationale": "linked initiating evidence is temporally consistent with symptom onset",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_objects_raw.tsv:94",
+              "k8s_events_raw.tsv:214",
+              "k8s_events_raw.tsv:217",
+              "k8s_events_raw.tsv:218",
+              "k8s_events_raw.tsv:317",
+              "k8s_objects_raw.tsv:304",
+              "k8s_objects_raw.tsv:301"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "PATH",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:af836e7f847acd7a",
+          "onset_relation": [
+            "initiating_before_onset",
+            "supporting_after_onset"
+          ],
+          "plausibility_reasons": [],
+          "plausible": true,
+          "signature": {
+            "causal_path_shape": [
+              [
+                [
+                  "HorizontalPodAutoscaler",
+                  "scales",
+                  "Deployment"
+                ]
+              ]
+            ],
+            "contradiction_kinds": [],
+            "initiating_kinds": [
+              "AUTOSCALING_FAILURE"
+            ],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "kubernetes_event",
+              "object_observation"
+            ],
+            "supporting_kinds": [
+              "FAILURE_EVENT"
+            ],
+            "symptom_relation": "PATH",
+            "temporal_profile": [
+              "initiating_before_onset",
+              "supporting_after_onset"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "VERIFIED",
+            "onset_delta_seconds": 235.891659,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:85",
+                  "k8s_events_raw.tsv:208",
+                  "k8s_events_raw.tsv:211",
+                  "k8s_events_raw.tsv:213",
+                  "k8s_events_raw.tsv:311",
+                  "k8s_events_raw.tsv:208",
+                  "k8s_events_raw.tsv:211",
+                  "k8s_events_raw.tsv:311"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "an initiating observation is at or shortly after symptom onset",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:85",
+                  "k8s_events_raw.tsv:208",
+                  "k8s_events_raw.tsv:211",
+                  "k8s_events_raw.tsv:213",
+                  "k8s_events_raw.tsv:311"
+                ],
+                "name": "initiating_evidence_near_onset",
+                "status": "PASS"
+              }
+            ],
+            "rationale": "linked initiating evidence is temporally consistent with symptom onset",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_objects_raw.tsv:85",
+              "k8s_events_raw.tsv:208",
+              "k8s_events_raw.tsv:211",
+              "k8s_events_raw.tsv:213",
+              "k8s_events_raw.tsv:311",
+              "k8s_events_raw.tsv:208",
+              "k8s_events_raw.tsv:211",
+              "k8s_events_raw.tsv:311",
+              "k8s_events_raw.tsv:313",
+              "k8s_events_raw.tsv:213",
+              "k8s_events_raw.tsv:314"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "PATH",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:ab24cd5c7232830c",
+          "onset_relation": [
+            "initiating_before_onset",
+            "supporting_after_onset"
+          ],
+          "plausibility_reasons": [],
+          "plausible": true,
+          "signature": {
+            "causal_path_shape": [
+              [
+                [
+                  "HorizontalPodAutoscaler",
+                  "scales",
+                  "Deployment"
+                ]
+              ]
+            ],
+            "contradiction_kinds": [],
+            "initiating_kinds": [
+              "AUTOSCALING_FAILURE"
+            ],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "kubernetes_event",
+              "object_observation"
+            ],
+            "supporting_kinds": [
+              "FAILURE_EVENT"
+            ],
+            "symptom_relation": "PATH",
+            "temporal_profile": [
+              "initiating_before_onset",
+              "supporting_after_onset"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "fraud-detection",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "VERIFIED",
+            "onset_delta_seconds": 229.891659,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:90",
+                  "k8s_events_raw.tsv:161",
+                  "k8s_events_raw.tsv:163",
+                  "k8s_events_raw.tsv:164",
+                  "k8s_events_raw.tsv:274",
+                  "k8s_events_raw.tsv:161",
+                  "k8s_events_raw.tsv:163",
+                  "k8s_events_raw.tsv:274"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "an initiating observation is at or shortly after symptom onset",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:90",
+                  "k8s_events_raw.tsv:161",
+                  "k8s_events_raw.tsv:163",
+                  "k8s_events_raw.tsv:164",
+                  "k8s_events_raw.tsv:274"
+                ],
+                "name": "initiating_evidence_near_onset",
+                "status": "PASS"
+              }
+            ],
+            "rationale": "linked initiating evidence is temporally consistent with symptom onset",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_objects_raw.tsv:90",
+              "k8s_events_raw.tsv:161",
+              "k8s_events_raw.tsv:163",
+              "k8s_events_raw.tsv:164",
+              "k8s_events_raw.tsv:274",
+              "k8s_events_raw.tsv:161",
+              "k8s_events_raw.tsv:163",
+              "k8s_events_raw.tsv:274",
+              "k8s_events_raw.tsv:277",
+              "k8s_events_raw.tsv:164",
+              "k8s_events_raw.tsv:279"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "PATH",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:88a8412878ef55a9",
+          "onset_relation": [
+            "initiating_near_onset",
+            "supporting_after_onset"
+          ],
+          "plausibility_reasons": [],
+          "plausible": true,
+          "signature": {
+            "causal_path_shape": [
+              [
+                [
+                  "HorizontalPodAutoscaler",
+                  "scales",
+                  "Deployment"
+                ]
+              ]
+            ],
+            "contradiction_kinds": [],
+            "initiating_kinds": [
+              "AUTOSCALING_FAILURE"
+            ],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "kubernetes_event",
+              "object_observation"
+            ],
+            "supporting_kinds": [
+              "FAILURE_EVENT"
+            ],
+            "symptom_relation": "PATH",
+            "temporal_profile": [
+              "initiating_near_onset",
+              "supporting_after_onset"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "recommendation",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "VERIFIED",
+            "onset_delta_seconds": 217.891659,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:99",
+                  "k8s_events_raw.tsv:179",
+                  "k8s_events_raw.tsv:180",
+                  "k8s_events_raw.tsv:182",
+                  "k8s_events_raw.tsv:292",
+                  "k8s_events_raw.tsv:179",
+                  "k8s_events_raw.tsv:180",
+                  "k8s_events_raw.tsv:292"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "an initiating observation is at or shortly after symptom onset",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:99",
+                  "k8s_events_raw.tsv:179",
+                  "k8s_events_raw.tsv:180",
+                  "k8s_events_raw.tsv:182",
+                  "k8s_events_raw.tsv:292"
+                ],
+                "name": "initiating_evidence_near_onset",
+                "status": "PASS"
+              }
+            ],
+            "rationale": "linked initiating evidence is temporally consistent with symptom onset",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_objects_raw.tsv:99",
+              "k8s_events_raw.tsv:179",
+              "k8s_events_raw.tsv:180",
+              "k8s_events_raw.tsv:182",
+              "k8s_events_raw.tsv:292",
+              "k8s_events_raw.tsv:179",
+              "k8s_events_raw.tsv:180",
+              "k8s_events_raw.tsv:292",
+              "k8s_events_raw.tsv:294",
+              "k8s_events_raw.tsv:182",
+              "k8s_events_raw.tsv:296"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "PATH",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:4d54787226067991",
+          "onset_relation": [
+            "initiating_near_onset",
+            "supporting_after_onset"
+          ],
+          "plausibility_reasons": [],
+          "plausible": true,
+          "signature": {
+            "causal_path_shape": [
+              [
+                [
+                  "HorizontalPodAutoscaler",
+                  "scales",
+                  "Deployment"
+                ],
+                [
+                  "Deployment",
+                  "serves",
+                  "Service"
+                ],
+                [
+                  "Service",
+                  "dependency_of",
+                  "Deployment"
+                ]
+              ]
+            ],
+            "contradiction_kinds": [],
+            "initiating_kinds": [
+              "AUTOSCALING_FAILURE"
+            ],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "kubernetes_event",
+              "object_observation"
+            ],
+            "supporting_kinds": [
+              "FAILURE_EVENT"
+            ],
+            "symptom_relation": "PATH",
+            "temporal_profile": [
+              "initiating_near_onset",
+              "supporting_after_onset"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "product-catalog",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "VERIFIED",
+            "onset_delta_seconds": 222.891659,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:97",
+                  "k8s_events_raw.tsv:221",
+                  "k8s_events_raw.tsv:222",
+                  "k8s_events_raw.tsv:225",
+                  "k8s_events_raw.tsv:323"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "an initiating observation is at or shortly after symptom onset",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:97",
+                  "k8s_events_raw.tsv:221",
+                  "k8s_events_raw.tsv:222",
+                  "k8s_events_raw.tsv:225",
+                  "k8s_events_raw.tsv:323"
+                ],
+                "name": "initiating_evidence_near_onset",
+                "status": "PASS"
+              }
+            ],
+            "rationale": "linked initiating evidence is temporally consistent with symptom onset",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_objects_raw.tsv:97",
+              "k8s_events_raw.tsv:221",
+              "k8s_events_raw.tsv:222",
+              "k8s_events_raw.tsv:225",
+              "k8s_events_raw.tsv:323"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "UNLINKED",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:6ed97e7c60c8c753",
+          "onset_relation": [
+            "initiating_before_onset",
+            "supporting_after_onset"
+          ],
+          "plausibility_reasons": [
+            "NO_CAUSAL_SYMPTOM_LINK"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [],
+            "initiating_kinds": [
+              "AUTOSCALING_FAILURE"
+            ],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "kubernetes_event",
+              "object_observation"
+            ],
+            "supporting_kinds": [
+              "FAILURE_EVENT"
+            ],
+            "symptom_relation": "UNLINKED",
+            "temporal_profile": [
+              "initiating_before_onset",
+              "supporting_after_onset"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "payment",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 241.891659,
+            "predicates": [
+              {
+                "detail": "no bounded causal path reaches an alerting entity",
+                "evidence_ids": [],
+                "name": "candidate_linked_to_symptom",
+                "status": "FAIL"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "best available candidate without sufficient deterministic verification evidence",
+            "score_margin": null,
+            "supporting_evidence": []
+          }
+        },
+        {
+          "causal_linkage": "UNLINKED",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:4acfaabad3a231ca",
+          "onset_relation": [
+            "initiating_before_onset",
+            "supporting_after_onset"
+          ],
+          "plausibility_reasons": [
+            "NO_CAUSAL_SYMPTOM_LINK"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [],
+            "initiating_kinds": [
+              "AUTOSCALING_FAILURE"
+            ],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "kubernetes_event",
+              "object_observation"
+            ],
+            "supporting_kinds": [
+              "FAILURE_EVENT"
+            ],
+            "symptom_relation": "UNLINKED",
+            "temporal_profile": [
+              "initiating_before_onset",
+              "supporting_after_onset"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "valkey-cart",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 241.891659,
+            "predicates": [
+              {
+                "detail": "no bounded causal path reaches an alerting entity",
+                "evidence_ids": [],
+                "name": "candidate_linked_to_symptom",
+                "status": "FAIL"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "best available candidate without sufficient deterministic verification evidence",
+            "score_margin": null,
+            "supporting_evidence": []
+          }
+        },
+        {
+          "causal_linkage": "UNLINKED",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:387b157080f26c9c",
+          "onset_relation": [
+            "initiating_near_onset",
+            "supporting_after_onset"
+          ],
+          "plausibility_reasons": [
+            "NO_CAUSAL_SYMPTOM_LINK"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [],
+            "initiating_kinds": [
+              "AUTOSCALING_FAILURE"
+            ],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "kubernetes_event",
+              "object_observation"
+            ],
+            "supporting_kinds": [
+              "FAILURE_EVENT"
+            ],
+            "symptom_relation": "UNLINKED",
+            "temporal_profile": [
+              "initiating_near_onset",
+              "supporting_after_onset"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "HorizontalPodAutoscaler",
+              "name": "accounting",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 216.891659,
+            "predicates": [
+              {
+                "detail": "no bounded causal path reaches an alerting entity",
+                "evidence_ids": [],
+                "name": "candidate_linked_to_symptom",
+                "status": "FAIL"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "best available candidate without sufficient deterministic verification evidence",
+            "score_margin": null,
+            "supporting_evidence": []
+          }
+        }
+      ],
+      "leading_hypothesis_ids": [
+        "hypothesis:bc56ddf7a1916e0e"
+      ],
+      "plausible_hypotheses": [
+        "hypothesis:4d54787226067991",
+        "hypothesis:88a8412878ef55a9",
+        "hypothesis:ab24cd5c7232830c",
+        "hypothesis:af836e7f847acd7a",
+        "hypothesis:bc56ddf7a1916e0e"
+      ],
+      "rationale": "The selected hypothesis contains additional onset-capable evidence that explains the competing manifestation.",
+      "signatures": [
+        {
+          "causal_path_shape": [
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ],
+              [
+                "Deployment",
+                "serves",
+                "Service"
+              ],
+              [
+                "Service",
+                "dependency_of",
+                "Deployment"
+              ]
+            ]
+          ],
+          "contradiction_kinds": [],
+          "initiating_kinds": [
+            "AUTOSCALING_FAILURE"
+          ],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "kubernetes_event",
+            "object_observation"
+          ],
+          "supporting_kinds": [
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "PATH",
+          "temporal_profile": [
+            "initiating_near_onset",
+            "supporting_after_onset"
+          ]
+        },
+        {
+          "causal_path_shape": [
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ]
+            ]
+          ],
+          "contradiction_kinds": [],
+          "initiating_kinds": [
+            "AUTOSCALING_FAILURE"
+          ],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "kubernetes_event",
+            "object_observation"
+          ],
+          "supporting_kinds": [
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "PATH",
+          "temporal_profile": [
+            "initiating_near_onset",
+            "supporting_after_onset"
+          ]
+        },
+        {
+          "causal_path_shape": [
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ]
+            ]
+          ],
+          "contradiction_kinds": [],
+          "initiating_kinds": [
+            "AUTOSCALING_FAILURE"
+          ],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "kubernetes_event",
+            "object_observation"
+          ],
+          "supporting_kinds": [
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "PATH",
+          "temporal_profile": [
+            "initiating_before_onset",
+            "supporting_after_onset"
+          ]
+        },
+        {
+          "causal_path_shape": [
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ]
+            ]
+          ],
+          "contradiction_kinds": [],
+          "initiating_kinds": [
+            "AUTOSCALING_FAILURE"
+          ],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "kubernetes_event",
+            "object_observation"
+          ],
+          "supporting_kinds": [
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "PATH",
+          "temporal_profile": [
+            "initiating_before_onset",
+            "supporting_after_onset"
+          ]
+        },
+        {
+          "causal_path_shape": [
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ],
+              [
+                "Deployment",
+                "owns",
+                "ReplicaSet"
+              ],
+              [
+                "ReplicaSet",
+                "owns",
+                "Pod"
+              ]
+            ],
+            [
+              [
+                "HorizontalPodAutoscaler",
+                "scales",
+                "Deployment"
+              ],
+              [
+                "Deployment",
+                "serves",
+                "Service"
+              ],
+              [
+                "Service",
+                "dependency_of",
+                "Deployment"
+              ]
+            ]
+          ],
+          "contradiction_kinds": [],
+          "initiating_kinds": [
+            "AUTOSCALING_FAILURE"
+          ],
+          "manifestation_shape": [
+            "Pod:CONTAINER_FAILURE"
+          ],
+          "provenance_classes": [
+            "derived_observation",
+            "kubernetes_event",
+            "object_observation"
+          ],
+          "supporting_kinds": [
+            "CONTAINER_FAILURE",
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "PATH",
+          "temporal_profile": [
+            "ambiguous_timing",
+            "initiating_before_onset",
+            "supporting_after_onset"
+          ]
+        }
+      ],
+      "state": "RESOLVED",
+      "unresolved_dimensions": []
+    },
+    "root_cause": {
+      "kind": "HorizontalPodAutoscaler",
+      "name": "kafka",
+      "namespace": "otel-demo"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "5 diagnostic alert type(s) on ad, fraud-detection, prometheus-kube-prometheus-kubelet, prometheus-kube-state-metrics, recommendation; 256 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "62 finding(s) over 784 object(s) and 988 event(s); 871 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "otel-demo/HorizontalPodAutoscaler/kafka 11.6 (3 member(s)); otel-demo/HorizontalPodAutoscaler/ad 10.6 (1 member(s)); otel-demo/HorizontalPodAutoscaler/fraud-detection 10.6 (1 member(s)); otel-demo/HorizontalPodAutoscaler/recommendation 10.6 (1 member(s)); otel-demo/HorizontalPodAutoscaler/product-catalog 9.4 (1 member(s))"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "VERIFIED: linked initiating evidence is temporally consistent with symptom onset"
+      },
+      {
+        "action": "resolution",
+        "actor": "engine",
+        "detail": "RESOLVED: The selected hypothesis contains additional onset-capable evidence that explains the competing manifestation."
+      }
+    ],
+    "summary": "otel-demo/HorizontalPodAutoscaler/kafka: autoscaling failed for kafka: FailedComputeMetricsReplicas, FailedGetResourceMetric, TooManyReplicas. Verified (linked initiating evidence is temporally consistent with symptom onset). Linked to otel-demo/Deployment/fraud-detection, otel-demo/Pod/fraud-detection-9fb7d885b-2m24l, otel-demo/Pod/fraud-detection-9fb7d885b-486vl.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "KafkaConnectionClosureRate",
+        "KubeHpaMaxedOut",
+        "NoRequestsDetected",
+        "RequestErrorRate"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 35,
+        "KubeClientCertificateExpiration": 34,
+        "KubeControllerManagerDown": 43,
+        "KubeSchedulerDown": 44,
+        "PrometheusNotConnectedToAlertmanagers": 48,
+        "Watchdog": 52
+      },
+      "last_seen": "2025-12-15T18:29:44.847729Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T17:34:15.108341Z",
+      "services": [
+        "ad",
+        "fraud-detection",
+        "prometheus-kube-prometheus-kubelet",
+        "prometheus-kube-state-metrics",
+        "recommendation"
+      ]
+    },
+    "verification": {
+      "candidate": {
+        "kind": "HorizontalPodAutoscaler",
+        "name": "kafka",
+        "namespace": "otel-demo"
+      },
+      "contradictory_evidence": [],
+      "decision": "VERIFIED",
+      "onset_delta_seconds": -8.108341,
+      "predicates": [
+        {
+          "detail": "candidate reaches an alerting entity through the causal graph",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:94",
+            "k8s_events_raw.tsv:214",
+            "k8s_events_raw.tsv:217",
+            "k8s_events_raw.tsv:218",
+            "k8s_events_raw.tsv:317",
+            "k8s_objects_raw.tsv:304",
+            "k8s_objects_raw.tsv:301"
+          ],
+          "name": "candidate_linked_to_symptom",
+          "status": "PASS"
+        },
+        {
+          "detail": "an initiating observation is at or shortly after symptom onset",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:94",
+            "k8s_events_raw.tsv:214",
+            "k8s_events_raw.tsv:217",
+            "k8s_events_raw.tsv:218",
+            "k8s_events_raw.tsv:317"
+          ],
+          "name": "initiating_evidence_near_onset",
+          "status": "PASS"
+        },
+        {
+          "detail": "score margin over runner-up is 1.025",
+          "evidence_ids": [],
+          "name": "candidate_dominance",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "linked initiating evidence is temporally consistent with symptom onset",
+      "score_margin": 1.0250000000000004,
+      "supporting_evidence": [
+        "k8s_objects_raw.tsv:94",
+        "k8s_events_raw.tsv:214",
+        "k8s_events_raw.tsv:217",
+        "k8s_events_raw.tsv:218",
+        "k8s_events_raw.tsv:317",
+        "k8s_objects_raw.tsv:304",
+        "k8s_objects_raw.tsv:301"
+      ]
+    }
+  }
+}

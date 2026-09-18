@@ -1,0 +1,1649 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "LIKELY: otel-demo/Deployment/checkout: spec changed: [checkout].env[KAFKA_ADDR].value: kafka:9092 -> kafka:9999. Likely (strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+        "entity": {
+          "kind": "Deployment",
+          "name": "checkout",
+          "namespace": "otel-demo"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-24",
+    "native_terminal": "LIKELY",
+    "reasoning": "otel-demo/Deployment/checkout: spec changed: [checkout].env[KAFKA_ADDR].value: kafka:9092 -> kafka:9999. Likely (strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+    "scenario_id": "Scenario-24"
+  },
+  "diagnosis": {
+    "alternative_hypotheses": [
+      {
+        "causal_actor": {
+          "kind": "Pod",
+          "name": "kafka-ff7884766-ntckh",
+          "namespace": "otel-demo"
+        },
+        "causal_explanation": "PATH",
+        "causal_paths": [
+          [
+            {
+              "direction": "reverse",
+              "relation": "backs",
+              "source": {
+                "kind": "Pod",
+                "name": "kafka-ff7884766-ntckh",
+                "namespace": "otel-demo"
+              },
+              "target": {
+                "kind": "Service",
+                "name": "kafka",
+                "namespace": "otel-demo"
+              }
+            },
+            {
+              "direction": "reverse",
+              "relation": "dependency_of",
+              "source": {
+                "kind": "Service",
+                "name": "kafka",
+                "namespace": "otel-demo"
+              },
+              "target": {
+                "kind": "Deployment",
+                "name": "accounting",
+                "namespace": "otel-demo"
+              }
+            }
+          ]
+        ],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T17:55:37.248930Z",
+            "details": {
+              "caller": "otel-demo/Deployment/checkout",
+              "dependencies_of_caller": 9,
+              "errors": 2,
+              "service": "otel-demo/Service/kafka"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "kafka-ff7884766-ntckh",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "otel_logs_raw.tsv:73235",
+              "otel_logs_raw.tsv:80924"
+            ],
+            "incident_onset": "2025-12-15T15:21:30.030908Z",
+            "kind": "DEPENDENCY_ERRORS",
+            "onset_delta_seconds": 9247.218022,
+            "related": [
+              {
+                "kind": "Service",
+                "name": "kafka",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "checkout logged 2 connection error(s) and depends on kafka: kafka: client has run out of available brokers to talk to: dial tcp 100.66.162.182:9999: i/o timeout",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "hypothesis_id": "hypothesis:70e3db908c649f80",
+        "initiating_findings": [],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Pod/accounting-58d4b6c958-rmc4p"
+        ],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "Pod",
+            "name": "kafka-ff7884766-ntckh",
+            "namespace": "otel-demo"
+          }
+        ],
+        "reasons": [
+          "1 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 8.0,
+        "signature": {
+          "causal_path_shape": [
+            [
+              [
+                "Pod",
+                "backs",
+                "Service"
+              ],
+              [
+                "Service",
+                "dependency_of",
+                "Deployment"
+              ]
+            ]
+          ],
+          "contradiction_kinds": [],
+          "initiating_kinds": [],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "log"
+          ],
+          "supporting_kinds": [
+            "DEPENDENCY_ERRORS"
+          ],
+          "symptom_relation": "PATH",
+          "temporal_profile": [
+            "supporting_after_onset"
+          ]
+        },
+        "supporting_findings": [
+          {
+            "at": "2025-12-15T17:55:37.248930Z",
+            "details": {
+              "caller": "otel-demo/Deployment/checkout",
+              "dependencies_of_caller": 9,
+              "errors": 2,
+              "service": "otel-demo/Service/kafka"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "kafka-ff7884766-ntckh",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "otel_logs_raw.tsv:73235",
+              "otel_logs_raw.tsv:80924"
+            ],
+            "incident_onset": "2025-12-15T15:21:30.030908Z",
+            "kind": "DEPENDENCY_ERRORS",
+            "onset_delta_seconds": 9247.218022,
+            "related": [
+              {
+                "kind": "Service",
+                "name": "kafka",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "checkout logged 2 connection error(s) and depends on kafka: kafka: client has run out of available brokers to talk to: dial tcp 100.66.162.182:9999: i/o timeout",
+            "temporal_role": "SUPPORTING"
+          }
+        ]
+      },
+      {
+        "causal_actor": {
+          "kind": "Pod",
+          "name": "checkout-849d65649b-qqtsz",
+          "namespace": "otel-demo"
+        },
+        "causal_explanation": "DIRECT",
+        "causal_paths": [],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T17:57:03Z",
+            "details": {
+              "count": 1,
+              "reason": "BackOff"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "checkout-849d65649b-qqtsz",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:808"
+            ],
+            "incident_onset": "2025-12-15T15:21:30.030908Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 9332.969092,
+            "related": [],
+            "summary": "BackOff x1: Back-off restarting failed container checkout in pod checkout-849d65649b-qqtsz_otel-demo(a2cf8bf6-5298-4831-9c35-e56e345b7901)",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "hypothesis_id": "hypothesis:863b3c5412a9a3ac",
+        "initiating_findings": [],
+        "linked_symptoms": [
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/checkout-5dccddf8bb-9d9c8",
+          "otel-demo/Pod/checkout-849d65649b-qqtsz"
+        ],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "Pod",
+            "name": "checkout-849d65649b-qqtsz",
+            "namespace": "otel-demo"
+          }
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.25,
+        "signature": {
+          "causal_path_shape": [],
+          "contradiction_kinds": [],
+          "initiating_kinds": [],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "kubernetes_event"
+          ],
+          "supporting_kinds": [
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "DIRECT",
+          "temporal_profile": [
+            "supporting_after_onset"
+          ]
+        },
+        "supporting_findings": [
+          {
+            "at": "2025-12-15T17:57:03Z",
+            "details": {
+              "count": 1,
+              "reason": "BackOff"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "checkout-849d65649b-qqtsz",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:808"
+            ],
+            "incident_onset": "2025-12-15T15:21:30.030908Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 9332.969092,
+            "related": [],
+            "summary": "BackOff x1: Back-off restarting failed container checkout in pod checkout-849d65649b-qqtsz_otel-demo(a2cf8bf6-5298-4831-9c35-e56e345b7901)",
+            "temporal_role": "SUPPORTING"
+          }
+        ]
+      },
+      {
+        "causal_actor": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-pgrj2",
+          "namespace": "otel-demo"
+        },
+        "causal_explanation": "PATH",
+        "causal_paths": [
+          [
+            {
+              "direction": "reverse",
+              "relation": "backs",
+              "source": {
+                "kind": "Pod",
+                "name": "otel-collector-564d9c7987-pgrj2",
+                "namespace": "otel-demo"
+              },
+              "target": {
+                "kind": "Service",
+                "name": "otel-collector",
+                "namespace": "otel-demo"
+              }
+            },
+            {
+              "direction": "reverse",
+              "relation": "dependency_of",
+              "source": {
+                "kind": "Service",
+                "name": "otel-collector",
+                "namespace": "otel-demo"
+              },
+              "target": {
+                "kind": "Deployment",
+                "name": "accounting",
+                "namespace": "otel-demo"
+              }
+            }
+          ]
+        ],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T17:16:42Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-pgrj2",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:582"
+            ],
+            "incident_onset": "2025-12-15T15:21:30.030908Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 6911.969092,
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: Get \"http://100.96.4.161:13133/\": dial tcp 100.96.4.161:13133: connect: connection refused",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "hypothesis_id": "hypothesis:1a1062e97893e6ad",
+        "initiating_findings": [],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/currency",
+          "otel-demo/Deployment/email"
+        ],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "Pod",
+            "name": "otel-collector-564d9c7987-pgrj2",
+            "namespace": "otel-demo"
+          }
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854,
+        "signature": {
+          "causal_path_shape": [
+            [
+              [
+                "Pod",
+                "backs",
+                "Service"
+              ],
+              [
+                "Service",
+                "dependency_of",
+                "Deployment"
+              ]
+            ]
+          ],
+          "contradiction_kinds": [],
+          "initiating_kinds": [],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "kubernetes_event"
+          ],
+          "supporting_kinds": [
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "PATH",
+          "temporal_profile": [
+            "supporting_after_onset"
+          ]
+        },
+        "supporting_findings": [
+          {
+            "at": "2025-12-15T17:16:42Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-pgrj2",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:582"
+            ],
+            "incident_onset": "2025-12-15T15:21:30.030908Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 6911.969092,
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: Get \"http://100.96.4.161:13133/\": dial tcp 100.96.4.161:13133: connect: connection refused",
+            "temporal_role": "SUPPORTING"
+          }
+        ]
+      },
+      {
+        "causal_actor": {
+          "kind": "Namespace",
+          "name": "agent",
+          "namespace": "_cluster"
+        },
+        "causal_explanation": "UNLINKED",
+        "causal_paths": [],
+        "contradictory_findings": [
+          {
+            "at": "2025-12-15T17:48:05Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "agent",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:2638"
+            ],
+            "incident_onset": "2025-12-15T15:21:30.030908Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 8794.969092,
+            "related": [],
+            "summary": "Namespace created",
+            "temporal_role": "CONSEQUENCE"
+          }
+        ],
+        "findings": [
+          {
+            "at": "2025-12-15T17:48:05Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "agent",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:2638"
+            ],
+            "incident_onset": "2025-12-15T15:21:30.030908Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 8794.969092,
+            "related": [],
+            "summary": "Namespace created",
+            "temporal_role": "CONSEQUENCE"
+          }
+        ],
+        "hypothesis_id": "hypothesis:ef4111a4a1d5c176",
+        "initiating_findings": [],
+        "linked_symptoms": [],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "Namespace",
+            "name": "agent",
+            "namespace": "_cluster"
+          }
+        ],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 2.0,
+        "signature": {
+          "causal_path_shape": [],
+          "contradiction_kinds": [
+            "OBJECT_CREATED"
+          ],
+          "initiating_kinds": [],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "object_observation"
+          ],
+          "supporting_kinds": [],
+          "symptom_relation": "UNLINKED",
+          "temporal_profile": [
+            "late_consequence"
+          ]
+        },
+        "supporting_findings": []
+      }
+    ],
+    "alternatives": [
+      {
+        "causal_explanation": "PATH",
+        "causal_path": [
+          {
+            "direction": "reverse",
+            "relation": "dependency_of",
+            "source": {
+              "kind": "Service",
+              "name": "kafka",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "accounting",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "Pod",
+          "name": "kafka-ff7884766-ntckh",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:55:37.248930Z",
+            "details": {
+              "caller": "otel-demo/Deployment/checkout",
+              "dependencies_of_caller": 9,
+              "errors": 2,
+              "service": "otel-demo/Service/kafka"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "kafka-ff7884766-ntckh",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "otel_logs_raw.tsv:73235",
+              "otel_logs_raw.tsv:80924"
+            ],
+            "incident_onset": "2025-12-15T15:21:30.030908Z",
+            "kind": "DEPENDENCY_ERRORS",
+            "onset_delta_seconds": 9247.218022,
+            "related": [
+              {
+                "kind": "Service",
+                "name": "kafka",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "checkout logged 2 connection error(s) and depends on kafka: kafka: client has run out of available brokers to talk to: dial tcp 100.66.162.182:9999: i/o timeout",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Pod/accounting-58d4b6c958-rmc4p"
+        ],
+        "reasons": [
+          "1 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 8.0
+      },
+      {
+        "causal_explanation": "DIRECT",
+        "causal_path": [],
+        "entity": {
+          "kind": "Pod",
+          "name": "checkout-849d65649b-qqtsz",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:57:03Z",
+            "details": {
+              "count": 1,
+              "reason": "BackOff"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "checkout-849d65649b-qqtsz",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:808"
+            ],
+            "incident_onset": "2025-12-15T15:21:30.030908Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 9332.969092,
+            "related": [],
+            "summary": "BackOff x1: Back-off restarting failed container checkout in pod checkout-849d65649b-qqtsz_otel-demo(a2cf8bf6-5298-4831-9c35-e56e345b7901)",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/checkout-5dccddf8bb-9d9c8",
+          "otel-demo/Pod/checkout-849d65649b-qqtsz"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.25
+      },
+      {
+        "causal_explanation": "PATH",
+        "causal_path": [
+          {
+            "direction": "reverse",
+            "relation": "backs",
+            "source": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-pgrj2",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "direction": "reverse",
+            "relation": "dependency_of",
+            "source": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "accounting",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-pgrj2",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:16:42Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-pgrj2",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:582"
+            ],
+            "incident_onset": "2025-12-15T15:21:30.030908Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 6911.969092,
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: Get \"http://100.96.4.161:13133/\": dial tcp 100.96.4.161:13133: connect: connection refused",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/currency",
+          "otel-demo/Deployment/email"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      },
+      {
+        "causal_explanation": "UNLINKED",
+        "causal_path": [],
+        "entity": {
+          "kind": "Namespace",
+          "name": "agent",
+          "namespace": "_cluster"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:48:05Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "agent",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:2638"
+            ],
+            "incident_onset": "2025-12-15T15:21:30.030908Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 8794.969092,
+            "related": [],
+            "summary": "Namespace created",
+            "temporal_role": "CONSEQUENCE"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 2.0
+      }
+    ],
+    "ambiguous_hypotheses": [],
+    "causal_explanation": "DIRECT",
+    "causal_path": [],
+    "confidence": "LIKELY",
+    "evidence": [
+      {
+        "at": "2025-12-15T17:52:10.968484Z",
+        "details": {
+          "changed_paths": [
+            ".spec.template.spec.containers[checkout].env[KAFKA_ADDR].value"
+          ],
+          "previous_observed_at": "2025-12-15T17:32:10.174894+00:00"
+        },
+        "entity": {
+          "kind": "Deployment",
+          "name": "checkout",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_objects_raw.tsv:444",
+          "k8s_objects_raw.tsv:3273"
+        ],
+        "incident_onset": "2025-12-15T15:21:30.030908Z",
+        "kind": "SPEC_CHANGE",
+        "onset_delta_seconds": 9040.937576,
+        "related": [],
+        "summary": "spec changed: [checkout].env[KAFKA_ADDR].value: kafka:9092 -> kafka:9999",
+        "temporal_role": "CONSEQUENCE"
+      }
+    ],
+    "hypothesis": {
+      "causal_actor": {
+        "kind": "Deployment",
+        "name": "checkout",
+        "namespace": "otel-demo"
+      },
+      "causal_explanation": "DIRECT",
+      "causal_paths": [],
+      "contradictory_findings": [
+        {
+          "at": "2025-12-15T17:52:10.968484Z",
+          "details": {
+            "changed_paths": [
+              ".spec.template.spec.containers[checkout].env[KAFKA_ADDR].value"
+            ],
+            "previous_observed_at": "2025-12-15T17:32:10.174894+00:00"
+          },
+          "entity": {
+            "kind": "Deployment",
+            "name": "checkout",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:444",
+            "k8s_objects_raw.tsv:3273"
+          ],
+          "incident_onset": "2025-12-15T15:21:30.030908Z",
+          "kind": "SPEC_CHANGE",
+          "onset_delta_seconds": 9040.937576,
+          "related": [],
+          "summary": "spec changed: [checkout].env[KAFKA_ADDR].value: kafka:9092 -> kafka:9999",
+          "temporal_role": "CONSEQUENCE"
+        }
+      ],
+      "findings": [
+        {
+          "at": "2025-12-15T17:52:10.968484Z",
+          "details": {
+            "changed_paths": [
+              ".spec.template.spec.containers[checkout].env[KAFKA_ADDR].value"
+            ],
+            "previous_observed_at": "2025-12-15T17:32:10.174894+00:00"
+          },
+          "entity": {
+            "kind": "Deployment",
+            "name": "checkout",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:444",
+            "k8s_objects_raw.tsv:3273"
+          ],
+          "incident_onset": "2025-12-15T15:21:30.030908Z",
+          "kind": "SPEC_CHANGE",
+          "onset_delta_seconds": 9040.937576,
+          "related": [],
+          "summary": "spec changed: [checkout].env[KAFKA_ADDR].value: kafka:9092 -> kafka:9999",
+          "temporal_role": "CONSEQUENCE"
+        }
+      ],
+      "hypothesis_id": "hypothesis:cde201e8d7bf6fe6",
+      "initiating_findings": [],
+      "linked_symptoms": [
+        "otel-demo/Deployment/checkout",
+        "otel-demo/Deployment/frontend",
+        "otel-demo/Deployment/frontend-proxy",
+        "otel-demo/Pod/checkout-5dccddf8bb-9d9c8",
+        "otel-demo/Pod/checkout-849d65649b-qqtsz"
+      ],
+      "manifestations": [],
+      "members": [
+        {
+          "kind": "Deployment",
+          "name": "checkout",
+          "namespace": "otel-demo"
+        }
+      ],
+      "reasons": [
+        "0 hop(s) from an alerting component",
+        "acts in an alerting namespace",
+        "change mentions checkout",
+        "happened in the incident window"
+      ],
+      "score": 11.5,
+      "signature": {
+        "causal_path_shape": [],
+        "contradiction_kinds": [
+          "SPEC_CHANGE"
+        ],
+        "initiating_kinds": [],
+        "manifestation_shape": [],
+        "provenance_classes": [
+          "object_observation"
+        ],
+        "supporting_kinds": [],
+        "symptom_relation": "DIRECT",
+        "temporal_profile": [
+          "late_consequence"
+        ]
+      },
+      "supporting_findings": []
+    },
+    "hypothesis_diagnostics": {
+      "duplicate_evidence_ids_removed": 0,
+      "exact_score_ties": 7,
+      "hypothesis_count": 11,
+      "multi_entity_hypotheses": 0,
+      "ownership_chains_collapsed": 0,
+      "raw_candidate_count": 11,
+      "structurally_similar_top_hypotheses": 0
+    },
+    "incident_id": "Scenario-24",
+    "information_gaps": [],
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Roll back Deployment checkout to the previous revision",
+        "command": "kubectl rollout undo deployment/checkout -n otel-demo",
+        "requires_approval": true,
+        "risk": "medium: reverts every change in the last rollout"
+      }
+    ],
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "resolution_trace": {
+      "considered_hypotheses": [
+        "hypothesis:0170245b24cde8ca",
+        "hypothesis:12e9648fb9d277c8",
+        "hypothesis:1a1062e97893e6ad",
+        "hypothesis:37fad1044204f3d5",
+        "hypothesis:456e8a12f073045e",
+        "hypothesis:5bd33f637f320eef",
+        "hypothesis:5cf285c2560a96c6",
+        "hypothesis:70e3db908c649f80",
+        "hypothesis:863b3c5412a9a3ac",
+        "hypothesis:cde201e8d7bf6fe6",
+        "hypothesis:ef4111a4a1d5c176"
+      ],
+      "decision_basis": "NO_PLAUSIBLE_HYPOTHESIS",
+      "discriminators": [],
+      "distinguishing_facts": [],
+      "dominance_relations": [],
+      "eliminated_hypotheses": [
+        "hypothesis:0170245b24cde8ca",
+        "hypothesis:12e9648fb9d277c8",
+        "hypothesis:1a1062e97893e6ad",
+        "hypothesis:37fad1044204f3d5",
+        "hypothesis:456e8a12f073045e",
+        "hypothesis:5bd33f637f320eef",
+        "hypothesis:5cf285c2560a96c6",
+        "hypothesis:70e3db908c649f80"
+      ],
+      "elimination_reasons": [
+        "hypothesis:0170245b24cde8ca: contradictory evidence",
+        "hypothesis:12e9648fb9d277c8: contradictory evidence",
+        "hypothesis:1a1062e97893e6ad: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:37fad1044204f3d5: contradictory evidence",
+        "hypothesis:456e8a12f073045e: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:5bd33f637f320eef: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:5cf285c2560a96c6: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:70e3db908c649f80: lacks onset-capable initiating evidence or causal symptom linkage"
+      ],
+      "eliminations": [
+        {
+          "code": "EXPLICIT_TEMPORAL_CONTRADICTION",
+          "detail": "contains explicit temporal contradiction",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:657"
+          ],
+          "hypothesis_id": "hypothesis:0170245b24cde8ca"
+        },
+        {
+          "code": "EXPLICIT_TEMPORAL_CONTRADICTION",
+          "detail": "contains explicit temporal contradiction",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:817"
+          ],
+          "hypothesis_id": "hypothesis:12e9648fb9d277c8"
+        },
+        {
+          "code": "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+          "detail": "has no onset-capable initiating evidence",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:582"
+          ],
+          "hypothesis_id": "hypothesis:1a1062e97893e6ad"
+        },
+        {
+          "code": "EXPLICIT_TEMPORAL_CONTRADICTION",
+          "detail": "contains explicit temporal contradiction",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:2794"
+          ],
+          "hypothesis_id": "hypothesis:37fad1044204f3d5"
+        },
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:231"
+          ],
+          "hypothesis_id": "hypothesis:456e8a12f073045e"
+        },
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:11",
+            "k8s_events_raw.tsv:8",
+            "k8s_events_raw.tsv:93",
+            "k8s_events_raw.tsv:94"
+          ],
+          "hypothesis_id": "hypothesis:5bd33f637f320eef"
+        },
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:232"
+          ],
+          "hypothesis_id": "hypothesis:5cf285c2560a96c6"
+        },
+        {
+          "code": "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+          "detail": "has no onset-capable initiating evidence",
+          "evidence_ids": [
+            "otel_logs_raw.tsv:73235",
+            "otel_logs_raw.tsv:80924"
+          ],
+          "hypothesis_id": "hypothesis:70e3db908c649f80"
+        }
+      ],
+      "hypothesis_audits": [
+        {
+          "causal_linkage": "DIRECT",
+          "contradictory_evidence_ids": [
+            "k8s_objects_raw.tsv:3273",
+            "k8s_objects_raw.tsv:444"
+          ],
+          "hypothesis_id": "hypothesis:cde201e8d7bf6fe6",
+          "onset_relation": [
+            "late_consequence"
+          ],
+          "plausibility_reasons": [
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+            "EXPLICIT_TEMPORAL_CONTRADICTION"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [
+              "SPEC_CHANGE"
+            ],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "object_observation"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "DIRECT",
+            "temporal_profile": [
+              "late_consequence"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Deployment",
+              "name": "checkout",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [
+              "k8s_objects_raw.tsv:444",
+              "k8s_objects_raw.tsv:3273"
+            ],
+            "decision": "LIKELY",
+            "onset_delta_seconds": 9040.937576,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:444",
+                  "k8s_objects_raw.tsv:3273"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              },
+              {
+                "detail": "linked change was observed after the onset grace and cannot explain the original incident onset",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:444",
+                  "k8s_objects_raw.tsv:3273"
+                ],
+                "name": "late_change_contradiction",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_objects_raw.tsv:444",
+              "k8s_objects_raw.tsv:3273"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "PATH",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:70e3db908c649f80",
+          "onset_relation": [
+            "supporting_after_onset"
+          ],
+          "plausibility_reasons": [
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [
+              [
+                [
+                  "Pod",
+                  "backs",
+                  "Service"
+                ],
+                [
+                  "Service",
+                  "dependency_of",
+                  "Deployment"
+                ]
+              ]
+            ],
+            "contradiction_kinds": [],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "log"
+            ],
+            "supporting_kinds": [
+              "DEPENDENCY_ERRORS"
+            ],
+            "symptom_relation": "PATH",
+            "temporal_profile": [
+              "supporting_after_onset"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Pod",
+              "name": "kafka-ff7884766-ntckh",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "LIKELY",
+            "onset_delta_seconds": 9247.218022,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "otel_logs_raw.tsv:73235",
+                  "otel_logs_raw.tsv:80924"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous",
+            "score_margin": null,
+            "supporting_evidence": [
+              "otel_logs_raw.tsv:73235",
+              "otel_logs_raw.tsv:80924"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "DIRECT",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:863b3c5412a9a3ac",
+          "onset_relation": [
+            "supporting_after_onset"
+          ],
+          "plausibility_reasons": [
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "kubernetes_event"
+            ],
+            "supporting_kinds": [
+              "FAILURE_EVENT"
+            ],
+            "symptom_relation": "DIRECT",
+            "temporal_profile": [
+              "supporting_after_onset"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Pod",
+              "name": "checkout-849d65649b-qqtsz",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 9332.969092,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:808"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              },
+              {
+                "detail": "downstream failure observations do not establish an initiating cause",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:808"
+                ],
+                "name": "initiating_signal_required",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "only downstream failure observations were found; the initiating cause is unknown",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_events_raw.tsv:808"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "PATH",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:1a1062e97893e6ad",
+          "onset_relation": [
+            "supporting_after_onset"
+          ],
+          "plausibility_reasons": [
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [
+              [
+                [
+                  "Pod",
+                  "backs",
+                  "Service"
+                ],
+                [
+                  "Service",
+                  "dependency_of",
+                  "Deployment"
+                ]
+              ]
+            ],
+            "contradiction_kinds": [],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "kubernetes_event"
+            ],
+            "supporting_kinds": [
+              "FAILURE_EVENT"
+            ],
+            "symptom_relation": "PATH",
+            "temporal_profile": [
+              "supporting_after_onset"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-pgrj2",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 6911.969092,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:582"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              },
+              {
+                "detail": "downstream failure observations do not establish an initiating cause",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:582"
+                ],
+                "name": "initiating_signal_required",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "only downstream failure observations were found; the initiating cause is unknown",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_events_raw.tsv:582"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "UNLINKED",
+          "contradictory_evidence_ids": [
+            "k8s_objects_raw.tsv:2638"
+          ],
+          "hypothesis_id": "hypothesis:ef4111a4a1d5c176",
+          "onset_relation": [
+            "late_consequence"
+          ],
+          "plausibility_reasons": [
+            "NO_CAUSAL_SYMPTOM_LINK",
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+            "EXPLICIT_TEMPORAL_CONTRADICTION"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [
+              "OBJECT_CREATED"
+            ],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "object_observation"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "UNLINKED",
+            "temporal_profile": [
+              "late_consequence"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Namespace",
+              "name": "agent",
+              "namespace": "_cluster"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 8794.969092,
+            "predicates": [
+              {
+                "detail": "no bounded causal path reaches an alerting entity",
+                "evidence_ids": [],
+                "name": "candidate_linked_to_symptom",
+                "status": "FAIL"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "best available candidate without sufficient deterministic verification evidence",
+            "score_margin": null,
+            "supporting_evidence": []
+          }
+        },
+        {
+          "causal_linkage": "UNLINKED",
+          "contradictory_evidence_ids": [
+            "k8s_objects_raw.tsv:2794"
+          ],
+          "hypothesis_id": "hypothesis:37fad1044204f3d5",
+          "onset_relation": [
+            "late_consequence"
+          ],
+          "plausibility_reasons": [
+            "NO_CAUSAL_SYMPTOM_LINK",
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+            "EXPLICIT_TEMPORAL_CONTRADICTION"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [
+              "OBJECT_CREATED"
+            ],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "object_observation"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "UNLINKED",
+            "temporal_profile": [
+              "late_consequence"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "ConfigMap",
+              "name": "kube-root-ca.crt",
+              "namespace": "agent"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 8794.969092,
+            "predicates": [
+              {
+                "detail": "no bounded causal path reaches an alerting entity",
+                "evidence_ids": [],
+                "name": "candidate_linked_to_symptom",
+                "status": "FAIL"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "best available candidate without sufficient deterministic verification evidence",
+            "score_margin": null,
+            "supporting_evidence": []
+          }
+        },
+        {
+          "causal_linkage": "UNLINKED",
+          "contradictory_evidence_ids": [
+            "k8s_objects_raw.tsv:817"
+          ],
+          "hypothesis_id": "hypothesis:12e9648fb9d277c8",
+          "onset_relation": [
+            "late_consequence"
+          ],
+          "plausibility_reasons": [
+            "NO_CAUSAL_SYMPTOM_LINK",
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+            "EXPLICIT_TEMPORAL_CONTRADICTION"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [
+              "OBJECT_CREATED"
+            ],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "object_observation"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "UNLINKED",
+            "temporal_profile": [
+              "late_consequence"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "ConfigMap",
+              "name": "clickhouse-unified-recorder-scripts",
+              "namespace": "data-recorders"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 8049.969092,
+            "predicates": [
+              {
+                "detail": "no bounded causal path reaches an alerting entity",
+                "evidence_ids": [],
+                "name": "candidate_linked_to_symptom",
+                "status": "FAIL"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "best available candidate without sufficient deterministic verification evidence",
+            "score_margin": null,
+            "supporting_evidence": []
+          }
+        },
+        {
+          "causal_linkage": "UNLINKED",
+          "contradictory_evidence_ids": [
+            "k8s_objects_raw.tsv:657"
+          ],
+          "hypothesis_id": "hypothesis:0170245b24cde8ca",
+          "onset_relation": [
+            "late_consequence"
+          ],
+          "plausibility_reasons": [
+            "NO_CAUSAL_SYMPTOM_LINK",
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+            "EXPLICIT_TEMPORAL_CONTRADICTION"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [
+              "OBJECT_CREATED"
+            ],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "object_observation"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "UNLINKED",
+            "temporal_profile": [
+              "late_consequence"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Job",
+              "name": "clickhouse-unified-recorder",
+              "namespace": "data-recorders"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 8055.969092,
+            "predicates": [
+              {
+                "detail": "no bounded causal path reaches an alerting entity",
+                "evidence_ids": [],
+                "name": "candidate_linked_to_symptom",
+                "status": "FAIL"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "best available candidate without sufficient deterministic verification evidence",
+            "score_margin": null,
+            "supporting_evidence": []
+          }
+        }
+      ],
+      "leading_hypothesis_ids": [],
+      "plausible_hypotheses": [],
+      "rationale": "No hypothesis contains sufficient initiating causal evidence.",
+      "signatures": [],
+      "state": "INSUFFICIENT_EVIDENCE",
+      "unresolved_dimensions": []
+    },
+    "root_cause": {
+      "kind": "Deployment",
+      "name": "checkout",
+      "namespace": "otel-demo"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "6 diagnostic alert type(s) on accounting, ad, checkout, currency, email, fraud-detection; 786 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "11 finding(s) over 671 object(s) and 361 event(s); 542 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "otel-demo/Deployment/checkout 11.5 (1 member(s)); otel-demo/Pod/kafka-ff7884766-ntckh 8.0 (1 member(s)); otel-demo/Pod/checkout-849d65649b-qqtsz 5.2 (1 member(s)); otel-demo/Pod/otel-collector-564d9c7987-pgrj2 4.9 (1 member(s)); _cluster/Namespace/agent 2.0 (1 member(s))"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "LIKELY: strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous"
+      },
+      {
+        "action": "resolution",
+        "actor": "engine",
+        "detail": "INSUFFICIENT_EVIDENCE: No hypothesis contains sufficient initiating causal evidence."
+      }
+    ],
+    "summary": "otel-demo/Deployment/checkout: spec changed: [checkout].env[KAFKA_ADDR].value: kafka:9092 -> kafka:9999. Likely (strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "CrashLoopBackOffPodsDetected",
+        "KubePodCrashLooping",
+        "NoRequestsDetected",
+        "PendingPodsDetected",
+        "RequestErrorRate"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 109,
+        "KubeClientCertificateExpiration": 78,
+        "KubeControllerManagerDown": 142,
+        "KubeSchedulerDown": 142,
+        "PrometheusNotConnectedToAlertmanagers": 151,
+        "Watchdog": 164
+      },
+      "last_seen": "2025-12-15T18:03:19.038370Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T15:21:30.030908Z",
+      "services": [
+        "accounting",
+        "ad",
+        "checkout",
+        "currency",
+        "email",
+        "fraud-detection",
+        "frontend",
+        "frontend-proxy",
+        "payment",
+        "prometheus-kube-prometheus-kubelet",
+        "prometheus-kube-state-metrics",
+        "quote",
+        "recommendation",
+        "shipping"
+      ]
+    },
+    "verification": {
+      "candidate": {
+        "kind": "Deployment",
+        "name": "checkout",
+        "namespace": "otel-demo"
+      },
+      "contradictory_evidence": [
+        "k8s_objects_raw.tsv:444",
+        "k8s_objects_raw.tsv:3273"
+      ],
+      "decision": "LIKELY",
+      "onset_delta_seconds": 9040.937576,
+      "predicates": [
+        {
+          "detail": "candidate reaches an alerting entity through the causal graph",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:444",
+            "k8s_objects_raw.tsv:3273"
+          ],
+          "name": "candidate_linked_to_symptom",
+          "status": "PASS"
+        },
+        {
+          "detail": "no linked initiating observation is temporally consistent with onset",
+          "evidence_ids": [],
+          "name": "initiating_evidence_near_onset",
+          "status": "FAIL"
+        },
+        {
+          "detail": "linked change was observed after the onset grace and cannot explain the original incident onset",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:444",
+            "k8s_objects_raw.tsv:3273"
+          ],
+          "name": "late_change_contradiction",
+          "status": "FAIL"
+        },
+        {
+          "detail": "score margin over runner-up is 3.500",
+          "evidence_ids": [],
+          "name": "candidate_dominance",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous",
+      "score_margin": 3.5,
+      "supporting_evidence": [
+        "k8s_objects_raw.tsv:444",
+        "k8s_objects_raw.tsv:3273"
+      ]
+    }
+  }
+}

@@ -1,0 +1,3388 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "VERIFIED: chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-g5vwr: PodChaos applied fault at 16:44 (1 application(s)); schedule otel-demo-product-catalog-network-delay has injected this fault repeatedly from 16:28 to 18:02. Verified (linked initiating evidence is temporally consistent with symptom onset). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+        "entity": {
+          "kind": "PodChaos",
+          "name": "otel-demo-product-catalog-network-delay-g5vwr",
+          "namespace": "chaos-mesh"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-18",
+    "native_terminal": "VERIFIED",
+    "reasoning": "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-g5vwr: PodChaos applied fault at 16:44 (1 application(s)); schedule otel-demo-product-catalog-network-delay has injected this fault repeatedly from 16:28 to 18:02. Verified (linked initiating evidence is temporally consistent with symptom onset). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+    "scenario_id": "Scenario-18"
+  },
+  "diagnosis": {
+    "alternative_hypotheses": [
+      {
+        "causal_actor": {
+          "kind": "Service",
+          "name": "prometheus-kube-state-metrics",
+          "namespace": "otel-demo"
+        },
+        "causal_explanation": "UNLINKED",
+        "causal_paths": [],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T17:35:11.241000Z",
+            "details": {
+              "baseline": 0.002,
+              "baseline_at": "2025-12-15T17:34:41.241000+00:00",
+              "incident_at": "2025-12-15T17:35:11.241000+00:00",
+              "incident_peak": 0.1,
+              "metric": "cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests",
+              "ratio": 50.0,
+              "threshold_factor": 1.5
+            },
+            "entity": {
+              "kind": "Service",
+              "name": "prometheus-kube-state-metrics",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "metrics/pod_valkey-cart-58df56c79c-f42n8_raw.tsv:11834",
+              "metrics/pod_accounting-58d4b6c958-hcmkn_raw.tsv:17538",
+              "metrics/pod_ad-554b849958-tp42z_raw.tsv:9303",
+              "metrics/pod_cart-755465879b-7khmf_raw.tsv:11419"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "TRAFFIC_INCREASE",
+            "onset_delta_seconds": 3.27001,
+            "related": [],
+            "summary": "cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests increased from 0.002 to 0.1 (50.00x baseline)",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:35:11.241000Z",
+            "details": {
+              "baseline": 4194304.0,
+              "baseline_at": "2025-12-15T17:34:41.241000+00:00",
+              "incident_at": "2025-12-15T17:35:11.241000+00:00",
+              "incident_peak": 314572800.0,
+              "metric": "cluster:namespace:pod_memory:active:kube_pod_container_resource_requests",
+              "ratio": 75.0,
+              "threshold_factor": 1.5
+            },
+            "entity": {
+              "kind": "Service",
+              "name": "prometheus-kube-state-metrics",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "metrics/pod_valkey-cart-58df56c79c-f42n8_raw.tsv:12020",
+              "metrics/pod_accounting-58d4b6c958-hcmkn_raw.tsv:17722",
+              "metrics/pod_ad-554b849958-tp42z_raw.tsv:9489",
+              "metrics/pod_cart-755465879b-7khmf_raw.tsv:11603"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "TRAFFIC_INCREASE",
+            "onset_delta_seconds": 3.27001,
+            "related": [],
+            "summary": "cluster:namespace:pod_memory:active:kube_pod_container_resource_requests increased from 4.19e+06 to 3.15e+08 (75.00x baseline)",
+            "temporal_role": "INITIATING"
+          }
+        ],
+        "hypothesis_id": "hypothesis:a96d106840a2d5cf",
+        "initiating_findings": [
+          {
+            "at": "2025-12-15T17:35:11.241000Z",
+            "details": {
+              "baseline": 0.002,
+              "baseline_at": "2025-12-15T17:34:41.241000+00:00",
+              "incident_at": "2025-12-15T17:35:11.241000+00:00",
+              "incident_peak": 0.1,
+              "metric": "cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests",
+              "ratio": 50.0,
+              "threshold_factor": 1.5
+            },
+            "entity": {
+              "kind": "Service",
+              "name": "prometheus-kube-state-metrics",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "metrics/pod_valkey-cart-58df56c79c-f42n8_raw.tsv:11834",
+              "metrics/pod_accounting-58d4b6c958-hcmkn_raw.tsv:17538",
+              "metrics/pod_ad-554b849958-tp42z_raw.tsv:9303",
+              "metrics/pod_cart-755465879b-7khmf_raw.tsv:11419"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "TRAFFIC_INCREASE",
+            "onset_delta_seconds": 3.27001,
+            "related": [],
+            "summary": "cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests increased from 0.002 to 0.1 (50.00x baseline)",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:35:11.241000Z",
+            "details": {
+              "baseline": 4194304.0,
+              "baseline_at": "2025-12-15T17:34:41.241000+00:00",
+              "incident_at": "2025-12-15T17:35:11.241000+00:00",
+              "incident_peak": 314572800.0,
+              "metric": "cluster:namespace:pod_memory:active:kube_pod_container_resource_requests",
+              "ratio": 75.0,
+              "threshold_factor": 1.5
+            },
+            "entity": {
+              "kind": "Service",
+              "name": "prometheus-kube-state-metrics",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "metrics/pod_valkey-cart-58df56c79c-f42n8_raw.tsv:12020",
+              "metrics/pod_accounting-58d4b6c958-hcmkn_raw.tsv:17722",
+              "metrics/pod_ad-554b849958-tp42z_raw.tsv:9489",
+              "metrics/pod_cart-755465879b-7khmf_raw.tsv:11603"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "TRAFFIC_INCREASE",
+            "onset_delta_seconds": 3.27001,
+            "related": [],
+            "summary": "cluster:namespace:pod_memory:active:kube_pod_container_resource_requests increased from 4.19e+06 to 3.15e+08 (75.00x baseline)",
+            "temporal_role": "INITIATING"
+          }
+        ],
+        "linked_symptoms": [],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "Service",
+            "name": "prometheus-kube-state-metrics",
+            "namespace": "otel-demo"
+          }
+        ],
+        "reasons": [
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 6.5,
+        "signature": {
+          "causal_path_shape": [],
+          "contradiction_kinds": [],
+          "initiating_kinds": [
+            "TRAFFIC_INCREASE"
+          ],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "metric"
+          ],
+          "supporting_kinds": [],
+          "symptom_relation": "UNLINKED",
+          "temporal_profile": [
+            "initiating_near_onset"
+          ]
+        },
+        "supporting_findings": []
+      },
+      {
+        "causal_actor": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-sxzfd",
+          "namespace": "otel-demo"
+        },
+        "causal_explanation": "PATH",
+        "causal_paths": [
+          [
+            {
+              "direction": "reverse",
+              "relation": "backs",
+              "source": {
+                "kind": "Pod",
+                "name": "otel-collector-564d9c7987-sxzfd",
+                "namespace": "otel-demo"
+              },
+              "target": {
+                "kind": "Service",
+                "name": "otel-collector",
+                "namespace": "otel-demo"
+              }
+            },
+            {
+              "direction": "reverse",
+              "relation": "dependency_of",
+              "source": {
+                "kind": "Service",
+                "name": "otel-collector",
+                "namespace": "otel-demo"
+              },
+              "target": {
+                "kind": "Deployment",
+                "name": "accounting",
+                "namespace": "otel-demo"
+              }
+            }
+          ]
+        ],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T17:16:22Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-sxzfd",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1042"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": -1125.97099,
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: Get \"http://100.96.4.235:13133/\": dial tcp 100.96.4.235:13133: connect: connection refused",
+            "temporal_role": "AMBIGUOUS"
+          }
+        ],
+        "hypothesis_id": "hypothesis:1ef3331c96872243",
+        "initiating_findings": [],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/currency",
+          "otel-demo/Deployment/email"
+        ],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "Pod",
+            "name": "otel-collector-564d9c7987-sxzfd",
+            "namespace": "otel-demo"
+          }
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854,
+        "signature": {
+          "causal_path_shape": [
+            [
+              [
+                "Pod",
+                "backs",
+                "Service"
+              ],
+              [
+                "Service",
+                "dependency_of",
+                "Deployment"
+              ]
+            ]
+          ],
+          "contradiction_kinds": [],
+          "initiating_kinds": [],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "kubernetes_event"
+          ],
+          "supporting_kinds": [],
+          "symptom_relation": "PATH",
+          "temporal_profile": [
+            "ambiguous_timing"
+          ]
+        },
+        "supporting_findings": []
+      },
+      {
+        "causal_actor": {
+          "kind": "ConfigMap",
+          "name": "kube-root-ca.crt",
+          "namespace": "data-recorders"
+        },
+        "causal_explanation": "PATH",
+        "causal_paths": [
+          [
+            {
+              "direction": "reverse",
+              "relation": "configures",
+              "source": {
+                "kind": "ConfigMap",
+                "name": "kube-root-ca.crt",
+                "namespace": "data-recorders"
+              },
+              "target": {
+                "kind": "Pod",
+                "name": "jaeger-traces-recorder-0",
+                "namespace": "data-recorders"
+              }
+            }
+          ],
+          [
+            {
+              "direction": "reverse",
+              "relation": "configures",
+              "source": {
+                "kind": "ConfigMap",
+                "name": "kube-root-ca.crt",
+                "namespace": "data-recorders"
+              },
+              "target": {
+                "kind": "Pod",
+                "name": "prometheus-alert-recorder-0",
+                "namespace": "data-recorders"
+              }
+            }
+          ]
+        ],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T17:36:05Z",
+            "details": {},
+            "entity": {
+              "kind": "ConfigMap",
+              "name": "kube-root-ca.crt",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:877"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 57.02901,
+            "related": [],
+            "summary": "ConfigMap created",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:36:16Z",
+            "details": {},
+            "entity": {
+              "kind": "ConfigMap",
+              "name": "alerts-recorder-prometheus-scripts",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:876"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 68.02901,
+            "related": [],
+            "summary": "ConfigMap created",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:36:20Z",
+            "details": {},
+            "entity": {
+              "kind": "StatefulSet",
+              "name": "prometheus-alert-recorder",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:801"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 72.02901,
+            "related": [],
+            "summary": "StatefulSet created",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:36:21Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedScheduling"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "prometheus-alert-recorder-0",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1166"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 73.02901,
+            "related": [],
+            "summary": "FailedScheduling x1: running PreBind plugin \"VolumeBinding\": Operation cannot be fulfilled on persistentvolumeclaims \"prometheus-alert-records-prometheus-alert-recorder-0\": the obje",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:37:28Z",
+            "details": {},
+            "entity": {
+              "kind": "ConfigMap",
+              "name": "traces-recorder-jaeger-scripts",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:879"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 140.02901,
+            "related": [],
+            "summary": "ConfigMap created",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:37:34Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedScheduling"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "jaeger-traces-recorder-0",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1220"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 146.02901,
+            "related": [],
+            "summary": "FailedScheduling x1: running PreBind plugin \"VolumeBinding\": Operation cannot be fulfilled on persistentvolumeclaims \"jaeger-trace-records-jaeger-traces-recorder-0\": the object has ",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:37:34Z",
+            "details": {},
+            "entity": {
+              "kind": "StatefulSet",
+              "name": "jaeger-traces-recorder",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:800"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 146.02901,
+            "related": [],
+            "summary": "StatefulSet created",
+            "temporal_role": "INITIATING"
+          }
+        ],
+        "hypothesis_id": "hypothesis:26b637c4fc40204e",
+        "initiating_findings": [
+          {
+            "at": "2025-12-15T17:36:05Z",
+            "details": {},
+            "entity": {
+              "kind": "ConfigMap",
+              "name": "kube-root-ca.crt",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:877"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 57.02901,
+            "related": [],
+            "summary": "ConfigMap created",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:36:16Z",
+            "details": {},
+            "entity": {
+              "kind": "ConfigMap",
+              "name": "alerts-recorder-prometheus-scripts",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:876"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 68.02901,
+            "related": [],
+            "summary": "ConfigMap created",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:36:20Z",
+            "details": {},
+            "entity": {
+              "kind": "StatefulSet",
+              "name": "prometheus-alert-recorder",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:801"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 72.02901,
+            "related": [],
+            "summary": "StatefulSet created",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:37:28Z",
+            "details": {},
+            "entity": {
+              "kind": "ConfigMap",
+              "name": "traces-recorder-jaeger-scripts",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:879"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 140.02901,
+            "related": [],
+            "summary": "ConfigMap created",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:37:34Z",
+            "details": {},
+            "entity": {
+              "kind": "StatefulSet",
+              "name": "jaeger-traces-recorder",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:800"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 146.02901,
+            "related": [],
+            "summary": "StatefulSet created",
+            "temporal_role": "INITIATING"
+          }
+        ],
+        "linked_symptoms": [],
+        "manifestations": [
+          {
+            "kind": "Pod",
+            "name": "jaeger-traces-recorder-0",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "Pod",
+            "name": "prometheus-alert-recorder-0",
+            "namespace": "data-recorders"
+          }
+        ],
+        "members": [
+          {
+            "kind": "ConfigMap",
+            "name": "alerts-recorder-prometheus-scripts",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "ConfigMap",
+            "name": "kube-root-ca.crt",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "ConfigMap",
+            "name": "traces-recorder-jaeger-scripts",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "Pod",
+            "name": "jaeger-traces-recorder-0",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "Pod",
+            "name": "prometheus-alert-recorder-0",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "StatefulSet",
+            "name": "jaeger-traces-recorder",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "StatefulSet",
+            "name": "prometheus-alert-recorder",
+            "namespace": "data-recorders"
+          }
+        ],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window",
+          "grouped 7 entities into one causal episode via configures"
+        ],
+        "score": 2.075,
+        "signature": {
+          "causal_path_shape": [
+            [
+              [
+                "ConfigMap",
+                "configures",
+                "Pod"
+              ]
+            ]
+          ],
+          "contradiction_kinds": [],
+          "initiating_kinds": [
+            "OBJECT_CREATED"
+          ],
+          "manifestation_shape": [
+            "Pod:FAILURE_EVENT"
+          ],
+          "provenance_classes": [
+            "kubernetes_event",
+            "object_observation"
+          ],
+          "supporting_kinds": [
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "PATH",
+          "temporal_profile": [
+            "initiating_near_onset",
+            "supporting_after_onset"
+          ]
+        },
+        "supporting_findings": [
+          {
+            "at": "2025-12-15T17:36:21Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedScheduling"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "prometheus-alert-recorder-0",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1166"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 73.02901,
+            "related": [],
+            "summary": "FailedScheduling x1: running PreBind plugin \"VolumeBinding\": Operation cannot be fulfilled on persistentvolumeclaims \"prometheus-alert-records-prometheus-alert-recorder-0\": the obje",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:37:34Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedScheduling"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "jaeger-traces-recorder-0",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1220"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 146.02901,
+            "related": [],
+            "summary": "FailedScheduling x1: running PreBind plugin \"VolumeBinding\": Operation cannot be fulfilled on persistentvolumeclaims \"jaeger-trace-records-jaeger-traces-recorder-0\": the object has ",
+            "temporal_role": "SUPPORTING"
+          }
+        ]
+      },
+      {
+        "causal_actor": {
+          "kind": "Namespace",
+          "name": "agent",
+          "namespace": "_cluster"
+        },
+        "causal_explanation": "UNLINKED",
+        "causal_paths": [],
+        "contradictory_findings": [
+          {
+            "at": "2025-12-15T17:51:06Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "agent",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:3445"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 958.02901,
+            "related": [],
+            "summary": "Namespace created",
+            "temporal_role": "CONSEQUENCE"
+          }
+        ],
+        "findings": [
+          {
+            "at": "2025-12-15T17:51:06Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "agent",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:3445"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 958.02901,
+            "related": [],
+            "summary": "Namespace created",
+            "temporal_role": "CONSEQUENCE"
+          }
+        ],
+        "hypothesis_id": "hypothesis:ec5a8b4a55e0a342",
+        "initiating_findings": [],
+        "linked_symptoms": [],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "Namespace",
+            "name": "agent",
+            "namespace": "_cluster"
+          }
+        ],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 2.0,
+        "signature": {
+          "causal_path_shape": [],
+          "contradiction_kinds": [
+            "OBJECT_CREATED"
+          ],
+          "initiating_kinds": [],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "object_observation"
+          ],
+          "supporting_kinds": [],
+          "symptom_relation": "UNLINKED",
+          "temporal_profile": [
+            "late_consequence"
+          ]
+        },
+        "supporting_findings": []
+      }
+    ],
+    "alternatives": [
+      {
+        "causal_explanation": "UNLINKED",
+        "causal_path": [],
+        "entity": {
+          "kind": "Service",
+          "name": "prometheus-kube-state-metrics",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:35:11.241000Z",
+            "details": {
+              "baseline": 0.002,
+              "baseline_at": "2025-12-15T17:34:41.241000+00:00",
+              "incident_at": "2025-12-15T17:35:11.241000+00:00",
+              "incident_peak": 0.1,
+              "metric": "cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests",
+              "ratio": 50.0,
+              "threshold_factor": 1.5
+            },
+            "entity": {
+              "kind": "Service",
+              "name": "prometheus-kube-state-metrics",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "metrics/pod_valkey-cart-58df56c79c-f42n8_raw.tsv:11834",
+              "metrics/pod_accounting-58d4b6c958-hcmkn_raw.tsv:17538",
+              "metrics/pod_ad-554b849958-tp42z_raw.tsv:9303",
+              "metrics/pod_cart-755465879b-7khmf_raw.tsv:11419"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "TRAFFIC_INCREASE",
+            "onset_delta_seconds": 3.27001,
+            "related": [],
+            "summary": "cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests increased from 0.002 to 0.1 (50.00x baseline)",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:35:11.241000Z",
+            "details": {
+              "baseline": 4194304.0,
+              "baseline_at": "2025-12-15T17:34:41.241000+00:00",
+              "incident_at": "2025-12-15T17:35:11.241000+00:00",
+              "incident_peak": 314572800.0,
+              "metric": "cluster:namespace:pod_memory:active:kube_pod_container_resource_requests",
+              "ratio": 75.0,
+              "threshold_factor": 1.5
+            },
+            "entity": {
+              "kind": "Service",
+              "name": "prometheus-kube-state-metrics",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "metrics/pod_valkey-cart-58df56c79c-f42n8_raw.tsv:12020",
+              "metrics/pod_accounting-58d4b6c958-hcmkn_raw.tsv:17722",
+              "metrics/pod_ad-554b849958-tp42z_raw.tsv:9489",
+              "metrics/pod_cart-755465879b-7khmf_raw.tsv:11603"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "TRAFFIC_INCREASE",
+            "onset_delta_seconds": 3.27001,
+            "related": [],
+            "summary": "cluster:namespace:pod_memory:active:kube_pod_container_resource_requests increased from 4.19e+06 to 3.15e+08 (75.00x baseline)",
+            "temporal_role": "INITIATING"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 6.5
+      },
+      {
+        "causal_explanation": "PATH",
+        "causal_path": [
+          {
+            "direction": "reverse",
+            "relation": "serves",
+            "source": {
+              "kind": "Deployment",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "direction": "reverse",
+            "relation": "dependency_of",
+            "source": {
+              "kind": "Service",
+              "name": "otel-collector",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "accounting",
+              "namespace": "otel-demo"
+            }
+          }
+        ],
+        "entity": {
+          "kind": "Pod",
+          "name": "otel-collector-564d9c7987-sxzfd",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:16:22Z",
+            "details": {
+              "count": 2,
+              "reason": "Unhealthy"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-sxzfd",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1042"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": -1125.97099,
+            "related": [],
+            "summary": "Unhealthy x2: Readiness probe failed: Get \"http://100.96.4.235:13133/\": dial tcp 100.96.4.235:13133: connect: connection refused",
+            "temporal_role": "AMBIGUOUS"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/accounting",
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/currency",
+          "otel-demo/Deployment/email"
+        ],
+        "reasons": [
+          "2 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 4.854
+      },
+      {
+        "causal_explanation": "UNLINKED",
+        "causal_path": [],
+        "entity": {
+          "kind": "Namespace",
+          "name": "agent",
+          "namespace": "_cluster"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:51:06Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "agent",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:3445"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 958.02901,
+            "related": [],
+            "summary": "Namespace created",
+            "temporal_role": "CONSEQUENCE"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 2.0
+      },
+      {
+        "causal_explanation": "UNLINKED",
+        "causal_path": [],
+        "entity": {
+          "kind": "Namespace",
+          "name": "data-recorders",
+          "namespace": "_cluster"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:36:05Z",
+            "details": {},
+            "entity": {
+              "kind": "Namespace",
+              "name": "data-recorders",
+              "namespace": "_cluster"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:706"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 57.02901,
+            "related": [],
+            "summary": "Namespace created",
+            "temporal_role": "INITIATING"
+          }
+        ],
+        "linked_symptoms": [],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window"
+        ],
+        "score": 2.0
+      }
+    ],
+    "ambiguous_hypotheses": [
+      {
+        "causal_actor": {
+          "kind": "PodChaos",
+          "name": "otel-demo-product-catalog-network-delay-g5vwr",
+          "namespace": "chaos-mesh"
+        },
+        "causal_explanation": "DIRECT",
+        "causal_paths": [],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T16:44:00Z",
+            "details": {
+              "failed_applications": 0,
+              "first_at": "2025-12-15T16:44:00+00:00",
+              "last_at": "2025-12-15T16:44:51+00:00",
+              "reasons": {
+                "Applied": 1,
+                "FinalizerInited": 2,
+                "Paused": 1,
+                "Recovered": 1,
+                "Started": 1,
+                "Updated": 6
+              },
+              "schedule": "chaos-mesh/Schedule/otel-demo-product-catalog-network-delay",
+              "schedule_active_from": "2025-12-15T16:28:00+00:00",
+              "schedule_active_to": "2025-12-15T18:02:00+00:00",
+              "targets": [
+                "otel-demo/Pod/checkout-5dccddf8bb-4vs6w"
+              ]
+            },
+            "entity": {
+              "kind": "PodChaos",
+              "name": "otel-demo-product-catalog-network-delay-g5vwr",
+              "namespace": "chaos-mesh"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:420",
+              "k8s_events_raw.tsv:422",
+              "k8s_events_raw.tsv:424",
+              "k8s_events_raw.tsv:427",
+              "k8s_events_raw.tsv:429",
+              "k8s_events_raw.tsv:431"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "FAULT_INJECTION",
+            "onset_delta_seconds": -3067.97099,
+            "related": [
+              {
+                "kind": "Pod",
+                "name": "checkout-5dccddf8bb-4vs6w",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "PodChaos applied fault at 16:44 (1 application(s)); schedule otel-demo-product-catalog-network-delay has injected this fault repeatedly from 16:28 to 18:02",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T16:28:00Z",
+            "details": {
+              "failed_applications": 0,
+              "first_at": "2025-12-15T16:28:00+00:00",
+              "last_at": "2025-12-15T18:02:00+00:00",
+              "reasons": {
+                "Spawned": 26,
+                "Updated": 27
+              },
+              "targets": [
+                "otel-demo/Pod/checkout-5dccddf8bb-4vs6w",
+                "otel-demo/Pod/checkout-5dccddf8bb-9dn2q"
+              ]
+            },
+            "entity": {
+              "kind": "Schedule",
+              "name": "otel-demo-product-catalog-network-delay",
+              "namespace": "chaos-mesh"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:26",
+              "k8s_events_raw.tsv:27",
+              "k8s_events_raw.tsv:65",
+              "k8s_events_raw.tsv:66",
+              "k8s_events_raw.tsv:180",
+              "k8s_events_raw.tsv:182"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "FAULT_SCHEDULE",
+            "onset_delta_seconds": -4027.97099,
+            "related": [
+              {
+                "kind": "Pod",
+                "name": "checkout-5dccddf8bb-4vs6w",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "checkout-5dccddf8bb-9dn2q",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "chaos schedule injecting faults since 16:28, last run 18:02 (26 experiment(s))",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:57:00Z",
+            "details": {
+              "problems": [
+                {
+                  "at": "2025-12-15T17:57:00Z",
+                  "container": "checkout",
+                  "message": "back-off 40s restarting failed container=checkout pod=checkout-5dccddf8bb-9dn2q_otel-demo(6b803e7a-86b0-47d4-b95d-e4c9bee17da2)",
+                  "reason": "CrashLoopBackOff",
+                  "restarts": 8
+                }
+              ],
+              "reason": "CrashLoopBackOff"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "checkout-5dccddf8bb-9dn2q",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:3853"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "CONTAINER_FAILURE",
+            "onset_delta_seconds": 1312.02901,
+            "related": [],
+            "summary": "container checkout CrashLoopBackOff (8 restart(s)) back-off 40s restarting failed container=checkout pod=checkout-5dccddf8bb-9dn2q_otel-demo(6b803e7a-86b0-47d4-b95d-e4c9bee17da2)",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T18:00:48Z",
+            "details": {
+              "count": 351,
+              "reason": "BackOff"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "checkout-5dccddf8bb-9dn2q",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1395",
+              "k8s_events_raw.tsv:1397",
+              "k8s_events_raw.tsv:1456",
+              "k8s_events_raw.tsv:1458"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 1540.02901,
+            "related": [],
+            "summary": "BackOff x351: Back-off restarting failed container checkout in pod checkout-5dccddf8bb-9dn2q_otel-demo(6b803e7a-86b0-47d4-b95d-e4c9bee17da2)",
+            "temporal_role": "SUPPORTING"
+          }
+        ],
+        "hypothesis_id": "hypothesis:1905efbce504a832",
+        "initiating_findings": [
+          {
+            "at": "2025-12-15T16:44:00Z",
+            "details": {
+              "failed_applications": 0,
+              "first_at": "2025-12-15T16:44:00+00:00",
+              "last_at": "2025-12-15T16:44:51+00:00",
+              "reasons": {
+                "Applied": 1,
+                "FinalizerInited": 2,
+                "Paused": 1,
+                "Recovered": 1,
+                "Started": 1,
+                "Updated": 6
+              },
+              "schedule": "chaos-mesh/Schedule/otel-demo-product-catalog-network-delay",
+              "schedule_active_from": "2025-12-15T16:28:00+00:00",
+              "schedule_active_to": "2025-12-15T18:02:00+00:00",
+              "targets": [
+                "otel-demo/Pod/checkout-5dccddf8bb-4vs6w"
+              ]
+            },
+            "entity": {
+              "kind": "PodChaos",
+              "name": "otel-demo-product-catalog-network-delay-g5vwr",
+              "namespace": "chaos-mesh"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:420",
+              "k8s_events_raw.tsv:422",
+              "k8s_events_raw.tsv:424",
+              "k8s_events_raw.tsv:427",
+              "k8s_events_raw.tsv:429",
+              "k8s_events_raw.tsv:431"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "FAULT_INJECTION",
+            "onset_delta_seconds": -3067.97099,
+            "related": [
+              {
+                "kind": "Pod",
+                "name": "checkout-5dccddf8bb-4vs6w",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "PodChaos applied fault at 16:44 (1 application(s)); schedule otel-demo-product-catalog-network-delay has injected this fault repeatedly from 16:28 to 18:02",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T16:28:00Z",
+            "details": {
+              "failed_applications": 0,
+              "first_at": "2025-12-15T16:28:00+00:00",
+              "last_at": "2025-12-15T18:02:00+00:00",
+              "reasons": {
+                "Spawned": 26,
+                "Updated": 27
+              },
+              "targets": [
+                "otel-demo/Pod/checkout-5dccddf8bb-4vs6w",
+                "otel-demo/Pod/checkout-5dccddf8bb-9dn2q"
+              ]
+            },
+            "entity": {
+              "kind": "Schedule",
+              "name": "otel-demo-product-catalog-network-delay",
+              "namespace": "chaos-mesh"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:26",
+              "k8s_events_raw.tsv:27",
+              "k8s_events_raw.tsv:65",
+              "k8s_events_raw.tsv:66",
+              "k8s_events_raw.tsv:180",
+              "k8s_events_raw.tsv:182"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "FAULT_SCHEDULE",
+            "onset_delta_seconds": -4027.97099,
+            "related": [
+              {
+                "kind": "Pod",
+                "name": "checkout-5dccddf8bb-4vs6w",
+                "namespace": "otel-demo"
+              },
+              {
+                "kind": "Pod",
+                "name": "checkout-5dccddf8bb-9dn2q",
+                "namespace": "otel-demo"
+              }
+            ],
+            "summary": "chaos schedule injecting faults since 16:28, last run 18:02 (26 experiment(s))",
+            "temporal_role": "INITIATING"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/checkout",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/checkout-5dccddf8bb-9dn2q",
+          "otel-demo/Pod/frontend-675fd7b5c5-gc9hg"
+        ],
+        "manifestations": [
+          {
+            "kind": "Pod",
+            "name": "checkout-5dccddf8bb-9dn2q",
+            "namespace": "otel-demo"
+          }
+        ],
+        "members": [
+          {
+            "kind": "PodChaos",
+            "name": "otel-demo-product-catalog-network-delay-g5vwr",
+            "namespace": "chaos-mesh"
+          },
+          {
+            "kind": "Schedule",
+            "name": "otel-demo-product-catalog-network-delay",
+            "namespace": "chaos-mesh"
+          },
+          {
+            "kind": "Pod",
+            "name": "checkout-5dccddf8bb-9dn2q",
+            "namespace": "otel-demo"
+          }
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "change mentions checkout",
+          "happened in the incident window",
+          "grouped 3 entities into one causal episode"
+        ],
+        "score": 17.75,
+        "signature": {
+          "causal_path_shape": [],
+          "contradiction_kinds": [],
+          "initiating_kinds": [
+            "FAULT_INJECTION",
+            "FAULT_SCHEDULE"
+          ],
+          "manifestation_shape": [
+            "Pod:CONTAINER_FAILURE",
+            "Pod:FAILURE_EVENT"
+          ],
+          "provenance_classes": [
+            "derived_observation",
+            "kubernetes_event",
+            "object_observation"
+          ],
+          "supporting_kinds": [
+            "CONTAINER_FAILURE",
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "DIRECT",
+          "temporal_profile": [
+            "initiating_before_onset",
+            "supporting_after_onset"
+          ]
+        },
+        "supporting_findings": [
+          {
+            "at": "2025-12-15T17:57:00Z",
+            "details": {
+              "problems": [
+                {
+                  "at": "2025-12-15T17:57:00Z",
+                  "container": "checkout",
+                  "message": "back-off 40s restarting failed container=checkout pod=checkout-5dccddf8bb-9dn2q_otel-demo(6b803e7a-86b0-47d4-b95d-e4c9bee17da2)",
+                  "reason": "CrashLoopBackOff",
+                  "restarts": 8
+                }
+              ],
+              "reason": "CrashLoopBackOff"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "checkout-5dccddf8bb-9dn2q",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:3853"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "CONTAINER_FAILURE",
+            "onset_delta_seconds": 1312.02901,
+            "related": [],
+            "summary": "container checkout CrashLoopBackOff (8 restart(s)) back-off 40s restarting failed container=checkout pod=checkout-5dccddf8bb-9dn2q_otel-demo(6b803e7a-86b0-47d4-b95d-e4c9bee17da2)",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T18:00:48Z",
+            "details": {
+              "count": 351,
+              "reason": "BackOff"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "checkout-5dccddf8bb-9dn2q",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1395",
+              "k8s_events_raw.tsv:1397",
+              "k8s_events_raw.tsv:1456",
+              "k8s_events_raw.tsv:1458"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 1540.02901,
+            "related": [],
+            "summary": "BackOff x351: Back-off restarting failed container checkout in pod checkout-5dccddf8bb-9dn2q_otel-demo(6b803e7a-86b0-47d4-b95d-e4c9bee17da2)",
+            "temporal_role": "SUPPORTING"
+          }
+        ]
+      },
+      {
+        "causal_actor": {
+          "kind": "ConfigMap",
+          "name": "kube-root-ca.crt",
+          "namespace": "data-recorders"
+        },
+        "causal_explanation": "PATH",
+        "causal_paths": [
+          [
+            {
+              "direction": "reverse",
+              "relation": "configures",
+              "source": {
+                "kind": "ConfigMap",
+                "name": "kube-root-ca.crt",
+                "namespace": "data-recorders"
+              },
+              "target": {
+                "kind": "Pod",
+                "name": "jaeger-traces-recorder-0",
+                "namespace": "data-recorders"
+              }
+            }
+          ],
+          [
+            {
+              "direction": "reverse",
+              "relation": "configures",
+              "source": {
+                "kind": "ConfigMap",
+                "name": "kube-root-ca.crt",
+                "namespace": "data-recorders"
+              },
+              "target": {
+                "kind": "Pod",
+                "name": "prometheus-alert-recorder-0",
+                "namespace": "data-recorders"
+              }
+            }
+          ]
+        ],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T17:36:05Z",
+            "details": {},
+            "entity": {
+              "kind": "ConfigMap",
+              "name": "kube-root-ca.crt",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:877"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 57.02901,
+            "related": [],
+            "summary": "ConfigMap created",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:36:16Z",
+            "details": {},
+            "entity": {
+              "kind": "ConfigMap",
+              "name": "alerts-recorder-prometheus-scripts",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:876"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 68.02901,
+            "related": [],
+            "summary": "ConfigMap created",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:36:20Z",
+            "details": {},
+            "entity": {
+              "kind": "StatefulSet",
+              "name": "prometheus-alert-recorder",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:801"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 72.02901,
+            "related": [],
+            "summary": "StatefulSet created",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:36:21Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedScheduling"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "prometheus-alert-recorder-0",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1166"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 73.02901,
+            "related": [],
+            "summary": "FailedScheduling x1: running PreBind plugin \"VolumeBinding\": Operation cannot be fulfilled on persistentvolumeclaims \"prometheus-alert-records-prometheus-alert-recorder-0\": the obje",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:37:28Z",
+            "details": {},
+            "entity": {
+              "kind": "ConfigMap",
+              "name": "traces-recorder-jaeger-scripts",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:879"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 140.02901,
+            "related": [],
+            "summary": "ConfigMap created",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:37:34Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedScheduling"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "jaeger-traces-recorder-0",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1220"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 146.02901,
+            "related": [],
+            "summary": "FailedScheduling x1: running PreBind plugin \"VolumeBinding\": Operation cannot be fulfilled on persistentvolumeclaims \"jaeger-trace-records-jaeger-traces-recorder-0\": the object has ",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:37:34Z",
+            "details": {},
+            "entity": {
+              "kind": "StatefulSet",
+              "name": "jaeger-traces-recorder",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:800"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 146.02901,
+            "related": [],
+            "summary": "StatefulSet created",
+            "temporal_role": "INITIATING"
+          }
+        ],
+        "hypothesis_id": "hypothesis:26b637c4fc40204e",
+        "initiating_findings": [
+          {
+            "at": "2025-12-15T17:36:05Z",
+            "details": {},
+            "entity": {
+              "kind": "ConfigMap",
+              "name": "kube-root-ca.crt",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:877"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 57.02901,
+            "related": [],
+            "summary": "ConfigMap created",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:36:16Z",
+            "details": {},
+            "entity": {
+              "kind": "ConfigMap",
+              "name": "alerts-recorder-prometheus-scripts",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:876"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 68.02901,
+            "related": [],
+            "summary": "ConfigMap created",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:36:20Z",
+            "details": {},
+            "entity": {
+              "kind": "StatefulSet",
+              "name": "prometheus-alert-recorder",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:801"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 72.02901,
+            "related": [],
+            "summary": "StatefulSet created",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:37:28Z",
+            "details": {},
+            "entity": {
+              "kind": "ConfigMap",
+              "name": "traces-recorder-jaeger-scripts",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:879"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 140.02901,
+            "related": [],
+            "summary": "ConfigMap created",
+            "temporal_role": "INITIATING"
+          },
+          {
+            "at": "2025-12-15T17:37:34Z",
+            "details": {},
+            "entity": {
+              "kind": "StatefulSet",
+              "name": "jaeger-traces-recorder",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:800"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "OBJECT_CREATED",
+            "onset_delta_seconds": 146.02901,
+            "related": [],
+            "summary": "StatefulSet created",
+            "temporal_role": "INITIATING"
+          }
+        ],
+        "linked_symptoms": [],
+        "manifestations": [
+          {
+            "kind": "Pod",
+            "name": "jaeger-traces-recorder-0",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "Pod",
+            "name": "prometheus-alert-recorder-0",
+            "namespace": "data-recorders"
+          }
+        ],
+        "members": [
+          {
+            "kind": "ConfigMap",
+            "name": "alerts-recorder-prometheus-scripts",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "ConfigMap",
+            "name": "kube-root-ca.crt",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "ConfigMap",
+            "name": "traces-recorder-jaeger-scripts",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "Pod",
+            "name": "jaeger-traces-recorder-0",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "Pod",
+            "name": "prometheus-alert-recorder-0",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "StatefulSet",
+            "name": "jaeger-traces-recorder",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "StatefulSet",
+            "name": "prometheus-alert-recorder",
+            "namespace": "data-recorders"
+          }
+        ],
+        "reasons": [
+          "no link to the alerting components",
+          "happened in the incident window",
+          "grouped 7 entities into one causal episode via configures"
+        ],
+        "score": 2.075,
+        "signature": {
+          "causal_path_shape": [
+            [
+              [
+                "ConfigMap",
+                "configures",
+                "Pod"
+              ]
+            ]
+          ],
+          "contradiction_kinds": [],
+          "initiating_kinds": [
+            "OBJECT_CREATED"
+          ],
+          "manifestation_shape": [
+            "Pod:FAILURE_EVENT"
+          ],
+          "provenance_classes": [
+            "kubernetes_event",
+            "object_observation"
+          ],
+          "supporting_kinds": [
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "PATH",
+          "temporal_profile": [
+            "initiating_near_onset",
+            "supporting_after_onset"
+          ]
+        },
+        "supporting_findings": [
+          {
+            "at": "2025-12-15T17:36:21Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedScheduling"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "prometheus-alert-recorder-0",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1166"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 73.02901,
+            "related": [],
+            "summary": "FailedScheduling x1: running PreBind plugin \"VolumeBinding\": Operation cannot be fulfilled on persistentvolumeclaims \"prometheus-alert-records-prometheus-alert-recorder-0\": the obje",
+            "temporal_role": "SUPPORTING"
+          },
+          {
+            "at": "2025-12-15T17:37:34Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedScheduling"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "jaeger-traces-recorder-0",
+              "namespace": "data-recorders"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:1220"
+            ],
+            "incident_onset": "2025-12-15T17:35:07.970990Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": 146.02901,
+            "related": [],
+            "summary": "FailedScheduling x1: running PreBind plugin \"VolumeBinding\": Operation cannot be fulfilled on persistentvolumeclaims \"jaeger-trace-records-jaeger-traces-recorder-0\": the object has ",
+            "temporal_role": "SUPPORTING"
+          }
+        ]
+      }
+    ],
+    "causal_explanation": "DIRECT",
+    "causal_path": [],
+    "confidence": "VERIFIED",
+    "evidence": [
+      {
+        "at": "2025-12-15T16:44:00Z",
+        "details": {
+          "failed_applications": 0,
+          "first_at": "2025-12-15T16:44:00+00:00",
+          "last_at": "2025-12-15T16:44:51+00:00",
+          "reasons": {
+            "Applied": 1,
+            "FinalizerInited": 2,
+            "Paused": 1,
+            "Recovered": 1,
+            "Started": 1,
+            "Updated": 6
+          },
+          "schedule": "chaos-mesh/Schedule/otel-demo-product-catalog-network-delay",
+          "schedule_active_from": "2025-12-15T16:28:00+00:00",
+          "schedule_active_to": "2025-12-15T18:02:00+00:00",
+          "targets": [
+            "otel-demo/Pod/checkout-5dccddf8bb-4vs6w"
+          ]
+        },
+        "entity": {
+          "kind": "PodChaos",
+          "name": "otel-demo-product-catalog-network-delay-g5vwr",
+          "namespace": "chaos-mesh"
+        },
+        "evidence_ids": [
+          "k8s_events_raw.tsv:420",
+          "k8s_events_raw.tsv:422",
+          "k8s_events_raw.tsv:424",
+          "k8s_events_raw.tsv:427",
+          "k8s_events_raw.tsv:429",
+          "k8s_events_raw.tsv:431"
+        ],
+        "incident_onset": "2025-12-15T17:35:07.970990Z",
+        "kind": "FAULT_INJECTION",
+        "onset_delta_seconds": -3067.97099,
+        "related": [
+          {
+            "kind": "Pod",
+            "name": "checkout-5dccddf8bb-4vs6w",
+            "namespace": "otel-demo"
+          }
+        ],
+        "summary": "PodChaos applied fault at 16:44 (1 application(s)); schedule otel-demo-product-catalog-network-delay has injected this fault repeatedly from 16:28 to 18:02",
+        "temporal_role": "INITIATING"
+      },
+      {
+        "at": "2025-12-15T16:28:00Z",
+        "details": {
+          "failed_applications": 0,
+          "first_at": "2025-12-15T16:28:00+00:00",
+          "last_at": "2025-12-15T18:02:00+00:00",
+          "reasons": {
+            "Spawned": 26,
+            "Updated": 27
+          },
+          "targets": [
+            "otel-demo/Pod/checkout-5dccddf8bb-4vs6w",
+            "otel-demo/Pod/checkout-5dccddf8bb-9dn2q"
+          ]
+        },
+        "entity": {
+          "kind": "Schedule",
+          "name": "otel-demo-product-catalog-network-delay",
+          "namespace": "chaos-mesh"
+        },
+        "evidence_ids": [
+          "k8s_events_raw.tsv:26",
+          "k8s_events_raw.tsv:27",
+          "k8s_events_raw.tsv:65",
+          "k8s_events_raw.tsv:66",
+          "k8s_events_raw.tsv:180",
+          "k8s_events_raw.tsv:182"
+        ],
+        "incident_onset": "2025-12-15T17:35:07.970990Z",
+        "kind": "FAULT_SCHEDULE",
+        "onset_delta_seconds": -4027.97099,
+        "related": [
+          {
+            "kind": "Pod",
+            "name": "checkout-5dccddf8bb-4vs6w",
+            "namespace": "otel-demo"
+          },
+          {
+            "kind": "Pod",
+            "name": "checkout-5dccddf8bb-9dn2q",
+            "namespace": "otel-demo"
+          }
+        ],
+        "summary": "chaos schedule injecting faults since 16:28, last run 18:02 (26 experiment(s))",
+        "temporal_role": "INITIATING"
+      },
+      {
+        "at": "2025-12-15T17:57:00Z",
+        "details": {
+          "problems": [
+            {
+              "at": "2025-12-15T17:57:00Z",
+              "container": "checkout",
+              "message": "back-off 40s restarting failed container=checkout pod=checkout-5dccddf8bb-9dn2q_otel-demo(6b803e7a-86b0-47d4-b95d-e4c9bee17da2)",
+              "reason": "CrashLoopBackOff",
+              "restarts": 8
+            }
+          ],
+          "reason": "CrashLoopBackOff"
+        },
+        "entity": {
+          "kind": "Pod",
+          "name": "checkout-5dccddf8bb-9dn2q",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_objects_raw.tsv:3853"
+        ],
+        "incident_onset": "2025-12-15T17:35:07.970990Z",
+        "kind": "CONTAINER_FAILURE",
+        "onset_delta_seconds": 1312.02901,
+        "related": [],
+        "summary": "container checkout CrashLoopBackOff (8 restart(s)) back-off 40s restarting failed container=checkout pod=checkout-5dccddf8bb-9dn2q_otel-demo(6b803e7a-86b0-47d4-b95d-e4c9bee17da2)",
+        "temporal_role": "SUPPORTING"
+      },
+      {
+        "at": "2025-12-15T18:00:48Z",
+        "details": {
+          "count": 351,
+          "reason": "BackOff"
+        },
+        "entity": {
+          "kind": "Pod",
+          "name": "checkout-5dccddf8bb-9dn2q",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_events_raw.tsv:1395",
+          "k8s_events_raw.tsv:1397",
+          "k8s_events_raw.tsv:1456",
+          "k8s_events_raw.tsv:1458"
+        ],
+        "incident_onset": "2025-12-15T17:35:07.970990Z",
+        "kind": "FAILURE_EVENT",
+        "onset_delta_seconds": 1540.02901,
+        "related": [],
+        "summary": "BackOff x351: Back-off restarting failed container checkout in pod checkout-5dccddf8bb-9dn2q_otel-demo(6b803e7a-86b0-47d4-b95d-e4c9bee17da2)",
+        "temporal_role": "SUPPORTING"
+      }
+    ],
+    "hypothesis": {
+      "causal_actor": {
+        "kind": "PodChaos",
+        "name": "otel-demo-product-catalog-network-delay-g5vwr",
+        "namespace": "chaos-mesh"
+      },
+      "causal_explanation": "DIRECT",
+      "causal_paths": [],
+      "contradictory_findings": [],
+      "findings": [
+        {
+          "at": "2025-12-15T16:44:00Z",
+          "details": {
+            "failed_applications": 0,
+            "first_at": "2025-12-15T16:44:00+00:00",
+            "last_at": "2025-12-15T16:44:51+00:00",
+            "reasons": {
+              "Applied": 1,
+              "FinalizerInited": 2,
+              "Paused": 1,
+              "Recovered": 1,
+              "Started": 1,
+              "Updated": 6
+            },
+            "schedule": "chaos-mesh/Schedule/otel-demo-product-catalog-network-delay",
+            "schedule_active_from": "2025-12-15T16:28:00+00:00",
+            "schedule_active_to": "2025-12-15T18:02:00+00:00",
+            "targets": [
+              "otel-demo/Pod/checkout-5dccddf8bb-4vs6w"
+            ]
+          },
+          "entity": {
+            "kind": "PodChaos",
+            "name": "otel-demo-product-catalog-network-delay-g5vwr",
+            "namespace": "chaos-mesh"
+          },
+          "evidence_ids": [
+            "k8s_events_raw.tsv:420",
+            "k8s_events_raw.tsv:422",
+            "k8s_events_raw.tsv:424",
+            "k8s_events_raw.tsv:427",
+            "k8s_events_raw.tsv:429",
+            "k8s_events_raw.tsv:431"
+          ],
+          "incident_onset": "2025-12-15T17:35:07.970990Z",
+          "kind": "FAULT_INJECTION",
+          "onset_delta_seconds": -3067.97099,
+          "related": [
+            {
+              "kind": "Pod",
+              "name": "checkout-5dccddf8bb-4vs6w",
+              "namespace": "otel-demo"
+            }
+          ],
+          "summary": "PodChaos applied fault at 16:44 (1 application(s)); schedule otel-demo-product-catalog-network-delay has injected this fault repeatedly from 16:28 to 18:02",
+          "temporal_role": "INITIATING"
+        },
+        {
+          "at": "2025-12-15T16:28:00Z",
+          "details": {
+            "failed_applications": 0,
+            "first_at": "2025-12-15T16:28:00+00:00",
+            "last_at": "2025-12-15T18:02:00+00:00",
+            "reasons": {
+              "Spawned": 26,
+              "Updated": 27
+            },
+            "targets": [
+              "otel-demo/Pod/checkout-5dccddf8bb-4vs6w",
+              "otel-demo/Pod/checkout-5dccddf8bb-9dn2q"
+            ]
+          },
+          "entity": {
+            "kind": "Schedule",
+            "name": "otel-demo-product-catalog-network-delay",
+            "namespace": "chaos-mesh"
+          },
+          "evidence_ids": [
+            "k8s_events_raw.tsv:26",
+            "k8s_events_raw.tsv:27",
+            "k8s_events_raw.tsv:65",
+            "k8s_events_raw.tsv:66",
+            "k8s_events_raw.tsv:180",
+            "k8s_events_raw.tsv:182"
+          ],
+          "incident_onset": "2025-12-15T17:35:07.970990Z",
+          "kind": "FAULT_SCHEDULE",
+          "onset_delta_seconds": -4027.97099,
+          "related": [
+            {
+              "kind": "Pod",
+              "name": "checkout-5dccddf8bb-4vs6w",
+              "namespace": "otel-demo"
+            },
+            {
+              "kind": "Pod",
+              "name": "checkout-5dccddf8bb-9dn2q",
+              "namespace": "otel-demo"
+            }
+          ],
+          "summary": "chaos schedule injecting faults since 16:28, last run 18:02 (26 experiment(s))",
+          "temporal_role": "INITIATING"
+        },
+        {
+          "at": "2025-12-15T17:57:00Z",
+          "details": {
+            "problems": [
+              {
+                "at": "2025-12-15T17:57:00Z",
+                "container": "checkout",
+                "message": "back-off 40s restarting failed container=checkout pod=checkout-5dccddf8bb-9dn2q_otel-demo(6b803e7a-86b0-47d4-b95d-e4c9bee17da2)",
+                "reason": "CrashLoopBackOff",
+                "restarts": 8
+              }
+            ],
+            "reason": "CrashLoopBackOff"
+          },
+          "entity": {
+            "kind": "Pod",
+            "name": "checkout-5dccddf8bb-9dn2q",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:3853"
+          ],
+          "incident_onset": "2025-12-15T17:35:07.970990Z",
+          "kind": "CONTAINER_FAILURE",
+          "onset_delta_seconds": 1312.02901,
+          "related": [],
+          "summary": "container checkout CrashLoopBackOff (8 restart(s)) back-off 40s restarting failed container=checkout pod=checkout-5dccddf8bb-9dn2q_otel-demo(6b803e7a-86b0-47d4-b95d-e4c9bee17da2)",
+          "temporal_role": "SUPPORTING"
+        },
+        {
+          "at": "2025-12-15T18:00:48Z",
+          "details": {
+            "count": 351,
+            "reason": "BackOff"
+          },
+          "entity": {
+            "kind": "Pod",
+            "name": "checkout-5dccddf8bb-9dn2q",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_events_raw.tsv:1395",
+            "k8s_events_raw.tsv:1397",
+            "k8s_events_raw.tsv:1456",
+            "k8s_events_raw.tsv:1458"
+          ],
+          "incident_onset": "2025-12-15T17:35:07.970990Z",
+          "kind": "FAILURE_EVENT",
+          "onset_delta_seconds": 1540.02901,
+          "related": [],
+          "summary": "BackOff x351: Back-off restarting failed container checkout in pod checkout-5dccddf8bb-9dn2q_otel-demo(6b803e7a-86b0-47d4-b95d-e4c9bee17da2)",
+          "temporal_role": "SUPPORTING"
+        }
+      ],
+      "hypothesis_id": "hypothesis:1905efbce504a832",
+      "initiating_findings": [
+        {
+          "at": "2025-12-15T16:44:00Z",
+          "details": {
+            "failed_applications": 0,
+            "first_at": "2025-12-15T16:44:00+00:00",
+            "last_at": "2025-12-15T16:44:51+00:00",
+            "reasons": {
+              "Applied": 1,
+              "FinalizerInited": 2,
+              "Paused": 1,
+              "Recovered": 1,
+              "Started": 1,
+              "Updated": 6
+            },
+            "schedule": "chaos-mesh/Schedule/otel-demo-product-catalog-network-delay",
+            "schedule_active_from": "2025-12-15T16:28:00+00:00",
+            "schedule_active_to": "2025-12-15T18:02:00+00:00",
+            "targets": [
+              "otel-demo/Pod/checkout-5dccddf8bb-4vs6w"
+            ]
+          },
+          "entity": {
+            "kind": "PodChaos",
+            "name": "otel-demo-product-catalog-network-delay-g5vwr",
+            "namespace": "chaos-mesh"
+          },
+          "evidence_ids": [
+            "k8s_events_raw.tsv:420",
+            "k8s_events_raw.tsv:422",
+            "k8s_events_raw.tsv:424",
+            "k8s_events_raw.tsv:427",
+            "k8s_events_raw.tsv:429",
+            "k8s_events_raw.tsv:431"
+          ],
+          "incident_onset": "2025-12-15T17:35:07.970990Z",
+          "kind": "FAULT_INJECTION",
+          "onset_delta_seconds": -3067.97099,
+          "related": [
+            {
+              "kind": "Pod",
+              "name": "checkout-5dccddf8bb-4vs6w",
+              "namespace": "otel-demo"
+            }
+          ],
+          "summary": "PodChaos applied fault at 16:44 (1 application(s)); schedule otel-demo-product-catalog-network-delay has injected this fault repeatedly from 16:28 to 18:02",
+          "temporal_role": "INITIATING"
+        },
+        {
+          "at": "2025-12-15T16:28:00Z",
+          "details": {
+            "failed_applications": 0,
+            "first_at": "2025-12-15T16:28:00+00:00",
+            "last_at": "2025-12-15T18:02:00+00:00",
+            "reasons": {
+              "Spawned": 26,
+              "Updated": 27
+            },
+            "targets": [
+              "otel-demo/Pod/checkout-5dccddf8bb-4vs6w",
+              "otel-demo/Pod/checkout-5dccddf8bb-9dn2q"
+            ]
+          },
+          "entity": {
+            "kind": "Schedule",
+            "name": "otel-demo-product-catalog-network-delay",
+            "namespace": "chaos-mesh"
+          },
+          "evidence_ids": [
+            "k8s_events_raw.tsv:26",
+            "k8s_events_raw.tsv:27",
+            "k8s_events_raw.tsv:65",
+            "k8s_events_raw.tsv:66",
+            "k8s_events_raw.tsv:180",
+            "k8s_events_raw.tsv:182"
+          ],
+          "incident_onset": "2025-12-15T17:35:07.970990Z",
+          "kind": "FAULT_SCHEDULE",
+          "onset_delta_seconds": -4027.97099,
+          "related": [
+            {
+              "kind": "Pod",
+              "name": "checkout-5dccddf8bb-4vs6w",
+              "namespace": "otel-demo"
+            },
+            {
+              "kind": "Pod",
+              "name": "checkout-5dccddf8bb-9dn2q",
+              "namespace": "otel-demo"
+            }
+          ],
+          "summary": "chaos schedule injecting faults since 16:28, last run 18:02 (26 experiment(s))",
+          "temporal_role": "INITIATING"
+        }
+      ],
+      "linked_symptoms": [
+        "otel-demo/Deployment/checkout",
+        "otel-demo/Deployment/frontend",
+        "otel-demo/Deployment/frontend-proxy",
+        "otel-demo/Pod/checkout-5dccddf8bb-9dn2q",
+        "otel-demo/Pod/frontend-675fd7b5c5-gc9hg"
+      ],
+      "manifestations": [
+        {
+          "kind": "Pod",
+          "name": "checkout-5dccddf8bb-9dn2q",
+          "namespace": "otel-demo"
+        }
+      ],
+      "members": [
+        {
+          "kind": "PodChaos",
+          "name": "otel-demo-product-catalog-network-delay-g5vwr",
+          "namespace": "chaos-mesh"
+        },
+        {
+          "kind": "Schedule",
+          "name": "otel-demo-product-catalog-network-delay",
+          "namespace": "chaos-mesh"
+        },
+        {
+          "kind": "Pod",
+          "name": "checkout-5dccddf8bb-9dn2q",
+          "namespace": "otel-demo"
+        }
+      ],
+      "reasons": [
+        "0 hop(s) from an alerting component",
+        "acts in an alerting namespace",
+        "change mentions checkout",
+        "happened in the incident window",
+        "grouped 3 entities into one causal episode"
+      ],
+      "score": 17.75,
+      "signature": {
+        "causal_path_shape": [],
+        "contradiction_kinds": [],
+        "initiating_kinds": [
+          "FAULT_INJECTION",
+          "FAULT_SCHEDULE"
+        ],
+        "manifestation_shape": [
+          "Pod:CONTAINER_FAILURE",
+          "Pod:FAILURE_EVENT"
+        ],
+        "provenance_classes": [
+          "derived_observation",
+          "kubernetes_event",
+          "object_observation"
+        ],
+        "supporting_kinds": [
+          "CONTAINER_FAILURE",
+          "FAILURE_EVENT"
+        ],
+        "symptom_relation": "DIRECT",
+        "temporal_profile": [
+          "initiating_before_onset",
+          "supporting_after_onset"
+        ]
+      },
+      "supporting_findings": [
+        {
+          "at": "2025-12-15T17:57:00Z",
+          "details": {
+            "problems": [
+              {
+                "at": "2025-12-15T17:57:00Z",
+                "container": "checkout",
+                "message": "back-off 40s restarting failed container=checkout pod=checkout-5dccddf8bb-9dn2q_otel-demo(6b803e7a-86b0-47d4-b95d-e4c9bee17da2)",
+                "reason": "CrashLoopBackOff",
+                "restarts": 8
+              }
+            ],
+            "reason": "CrashLoopBackOff"
+          },
+          "entity": {
+            "kind": "Pod",
+            "name": "checkout-5dccddf8bb-9dn2q",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:3853"
+          ],
+          "incident_onset": "2025-12-15T17:35:07.970990Z",
+          "kind": "CONTAINER_FAILURE",
+          "onset_delta_seconds": 1312.02901,
+          "related": [],
+          "summary": "container checkout CrashLoopBackOff (8 restart(s)) back-off 40s restarting failed container=checkout pod=checkout-5dccddf8bb-9dn2q_otel-demo(6b803e7a-86b0-47d4-b95d-e4c9bee17da2)",
+          "temporal_role": "SUPPORTING"
+        },
+        {
+          "at": "2025-12-15T18:00:48Z",
+          "details": {
+            "count": 351,
+            "reason": "BackOff"
+          },
+          "entity": {
+            "kind": "Pod",
+            "name": "checkout-5dccddf8bb-9dn2q",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_events_raw.tsv:1395",
+            "k8s_events_raw.tsv:1397",
+            "k8s_events_raw.tsv:1456",
+            "k8s_events_raw.tsv:1458"
+          ],
+          "incident_onset": "2025-12-15T17:35:07.970990Z",
+          "kind": "FAILURE_EVENT",
+          "onset_delta_seconds": 1540.02901,
+          "related": [],
+          "summary": "BackOff x351: Back-off restarting failed container checkout in pod checkout-5dccddf8bb-9dn2q_otel-demo(6b803e7a-86b0-47d4-b95d-e4c9bee17da2)",
+          "temporal_role": "SUPPORTING"
+        }
+      ]
+    },
+    "hypothesis_diagnostics": {
+      "duplicate_evidence_ids_removed": 0,
+      "exact_score_ties": 16,
+      "hypothesis_count": 13,
+      "multi_entity_hypotheses": 2,
+      "ownership_chains_collapsed": 0,
+      "raw_candidate_count": 21,
+      "structurally_similar_top_hypotheses": 0
+    },
+    "incident_id": "Scenario-18",
+    "information_gaps": [
+      {
+        "candidate_tools": [],
+        "dimension": "EVENT_SEQUENCE",
+        "discriminating_outcomes": [
+          {
+            "condition": "the dimension is already observed without a differentiator",
+            "hypothesis_ids": [
+              "hypothesis:1905efbce504a832",
+              "hypothesis:26b637c4fc40204e"
+            ],
+            "implication": "no additional bounded observation is useful for this gap",
+            "kind": "UNKNOWN"
+          }
+        ],
+        "entity_scope": [
+          {
+            "kind": "PodChaos",
+            "name": "otel-demo-product-catalog-network-delay-g5vwr",
+            "namespace": "chaos-mesh"
+          },
+          {
+            "kind": "Schedule",
+            "name": "otel-demo-product-catalog-network-delay",
+            "namespace": "chaos-mesh"
+          },
+          {
+            "kind": "ConfigMap",
+            "name": "alerts-recorder-prometheus-scripts",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "ConfigMap",
+            "name": "kube-root-ca.crt",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "ConfigMap",
+            "name": "traces-recorder-jaeger-scripts",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "Pod",
+            "name": "jaeger-traces-recorder-0",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "Pod",
+            "name": "prometheus-alert-recorder-0",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "StatefulSet",
+            "name": "jaeger-traces-recorder",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "StatefulSet",
+            "name": "prometheus-alert-recorder",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "Pod",
+            "name": "checkout-5dccddf8bb-9dn2q",
+            "namespace": "otel-demo"
+          }
+        ],
+        "evidence_refs": [
+          "k8s_events_raw.tsv:1166",
+          "k8s_events_raw.tsv:1220",
+          "k8s_events_raw.tsv:1395",
+          "k8s_events_raw.tsv:1397",
+          "k8s_events_raw.tsv:1456",
+          "k8s_events_raw.tsv:1458",
+          "k8s_events_raw.tsv:180",
+          "k8s_events_raw.tsv:182",
+          "k8s_events_raw.tsv:26",
+          "k8s_events_raw.tsv:27",
+          "k8s_events_raw.tsv:420",
+          "k8s_events_raw.tsv:422",
+          "k8s_events_raw.tsv:424",
+          "k8s_events_raw.tsv:427",
+          "k8s_events_raw.tsv:429",
+          "k8s_events_raw.tsv:431"
+        ],
+        "gap_id": "gap:event_sequence:e21237b8a6592dae1892",
+        "hypothesis_ids": [
+          "hypothesis:1905efbce504a832",
+          "hypothesis:26b637c4fc40204e"
+        ],
+        "known_facts": [
+          "hypothesis:1905efbce504a832: BackOff:2025-12-15T18:00:48+00:00:351",
+          "hypothesis:26b637c4fc40204e: FailedScheduling:2025-12-15T17:36:21+00:00:1",
+          "hypothesis:26b637c4fc40204e: FailedScheduling:2025-12-15T17:37:34+00:00:1"
+        ],
+        "missing_fact": "which failure event occurred first in the causal episode",
+        "priority": 1,
+        "rationale": "The relevant dimension is already observed or cannot be acquired by an available capability.",
+        "required_relation": null,
+        "resolvability": "ALREADY_OBSERVED"
+      },
+      {
+        "candidate_tools": [],
+        "dimension": "FAILURE_ONSET",
+        "discriminating_outcomes": [
+          {
+            "condition": "the dimension is already observed without a differentiator",
+            "hypothesis_ids": [
+              "hypothesis:1905efbce504a832",
+              "hypothesis:26b637c4fc40204e"
+            ],
+            "implication": "no additional bounded observation is useful for this gap",
+            "kind": "UNKNOWN"
+          }
+        ],
+        "entity_scope": [
+          {
+            "kind": "PodChaos",
+            "name": "otel-demo-product-catalog-network-delay-g5vwr",
+            "namespace": "chaos-mesh"
+          },
+          {
+            "kind": "Schedule",
+            "name": "otel-demo-product-catalog-network-delay",
+            "namespace": "chaos-mesh"
+          },
+          {
+            "kind": "ConfigMap",
+            "name": "alerts-recorder-prometheus-scripts",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "ConfigMap",
+            "name": "kube-root-ca.crt",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "ConfigMap",
+            "name": "traces-recorder-jaeger-scripts",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "Pod",
+            "name": "jaeger-traces-recorder-0",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "Pod",
+            "name": "prometheus-alert-recorder-0",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "StatefulSet",
+            "name": "jaeger-traces-recorder",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "StatefulSet",
+            "name": "prometheus-alert-recorder",
+            "namespace": "data-recorders"
+          },
+          {
+            "kind": "Pod",
+            "name": "checkout-5dccddf8bb-9dn2q",
+            "namespace": "otel-demo"
+          }
+        ],
+        "evidence_refs": [
+          "k8s_events_raw.tsv:1166",
+          "k8s_events_raw.tsv:1220",
+          "k8s_events_raw.tsv:1395",
+          "k8s_events_raw.tsv:1397",
+          "k8s_events_raw.tsv:1456",
+          "k8s_events_raw.tsv:1458",
+          "k8s_events_raw.tsv:180",
+          "k8s_events_raw.tsv:182",
+          "k8s_events_raw.tsv:26",
+          "k8s_events_raw.tsv:27",
+          "k8s_events_raw.tsv:420",
+          "k8s_events_raw.tsv:422",
+          "k8s_events_raw.tsv:424",
+          "k8s_events_raw.tsv:427",
+          "k8s_events_raw.tsv:429",
+          "k8s_events_raw.tsv:431"
+        ],
+        "gap_id": "gap:failure_onset:0df865faa4ae1b38ef87",
+        "hypothesis_ids": [
+          "hypothesis:1905efbce504a832",
+          "hypothesis:26b637c4fc40204e"
+        ],
+        "known_facts": [
+          "hypothesis:1905efbce504a832: CONTAINER_FAILURE:2025-12-15T17:57:00+00:00",
+          "hypothesis:1905efbce504a832: FAILURE_EVENT:2025-12-15T18:00:48+00:00",
+          "hypothesis:26b637c4fc40204e: FAILURE_EVENT:2025-12-15T17:36:21+00:00",
+          "hypothesis:26b637c4fc40204e: FAILURE_EVENT:2025-12-15T17:37:34+00:00"
+        ],
+        "missing_fact": "which entity entered failure before the symptom propagated",
+        "priority": 1,
+        "rationale": "The relevant dimension is already observed or cannot be acquired by an available capability.",
+        "required_relation": null,
+        "resolvability": "ALREADY_OBSERVED"
+      }
+    ],
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Pause the fault experiment Schedule otel-demo-product-catalog-network-delay",
+        "command": "kubectl annotate schedule/otel-demo-product-catalog-network-delay -n chaos-mesh experiment.chaos-mesh.org/pause=true --overwrite",
+        "requires_approval": true,
+        "risk": "low: stops further fault injection"
+      },
+      {
+        "action": "Delete the running experiment PodChaos otel-demo-product-catalog-network-delay-g5vwr",
+        "command": "kubectl delete podchaos/otel-demo-product-catalog-network-delay-g5vwr -n chaos-mesh",
+        "requires_approval": true,
+        "risk": "low: removes the active fault"
+      }
+    ],
+    "resolution": "AMBIGUOUS",
+    "resolution_trace": {
+      "considered_hypotheses": [
+        "hypothesis:13889ae7609d9e10",
+        "hypothesis:18df16c6b719cc2f",
+        "hypothesis:1905efbce504a832",
+        "hypothesis:1ef3331c96872243",
+        "hypothesis:26b637c4fc40204e",
+        "hypothesis:37d7bf50c7297a14",
+        "hypothesis:a96d106840a2d5cf",
+        "hypothesis:bcd8cf3b80ea8a09",
+        "hypothesis:c91bd38c349129e5",
+        "hypothesis:e43f96312ae85195",
+        "hypothesis:e7fad38bc3fbcab0",
+        "hypothesis:ec5a8b4a55e0a342",
+        "hypothesis:f933c17adc00f292"
+      ],
+      "decision_basis": "EQUIVALENT_OR_INCOMPARABLE_PLAUSIBLE_HYPOTHESES",
+      "discriminators": [],
+      "distinguishing_facts": [],
+      "dominance_relations": [],
+      "eliminated_hypotheses": [
+        "hypothesis:13889ae7609d9e10",
+        "hypothesis:18df16c6b719cc2f",
+        "hypothesis:1ef3331c96872243",
+        "hypothesis:37d7bf50c7297a14",
+        "hypothesis:a96d106840a2d5cf",
+        "hypothesis:bcd8cf3b80ea8a09",
+        "hypothesis:c91bd38c349129e5",
+        "hypothesis:e43f96312ae85195"
+      ],
+      "elimination_reasons": [
+        "hypothesis:13889ae7609d9e10: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:18df16c6b719cc2f: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:1ef3331c96872243: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:37d7bf50c7297a14: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:a96d106840a2d5cf: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:bcd8cf3b80ea8a09: contradictory evidence",
+        "hypothesis:c91bd38c349129e5: contradictory evidence",
+        "hypothesis:e43f96312ae85195: lacks onset-capable initiating evidence or causal symptom linkage"
+      ],
+      "eliminations": [
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:878"
+          ],
+          "hypothesis_id": "hypothesis:13889ae7609d9e10"
+        },
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:149",
+            "k8s_events_raw.tsv:150",
+            "k8s_events_raw.tsv:37"
+          ],
+          "hypothesis_id": "hypothesis:18df16c6b719cc2f"
+        },
+        {
+          "code": "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+          "detail": "has no onset-capable initiating evidence",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:1042"
+          ],
+          "hypothesis_id": "hypothesis:1ef3331c96872243"
+        },
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:276"
+          ],
+          "hypothesis_id": "hypothesis:37d7bf50c7297a14"
+        },
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "metrics/pod_accounting-58d4b6c958-hcmkn_raw.tsv:17538",
+            "metrics/pod_accounting-58d4b6c958-hcmkn_raw.tsv:17722",
+            "metrics/pod_ad-554b849958-tp42z_raw.tsv:9303",
+            "metrics/pod_ad-554b849958-tp42z_raw.tsv:9489",
+            "metrics/pod_cart-755465879b-7khmf_raw.tsv:11419",
+            "metrics/pod_cart-755465879b-7khmf_raw.tsv:11603",
+            "metrics/pod_valkey-cart-58df56c79c-f42n8_raw.tsv:11834",
+            "metrics/pod_valkey-cart-58df56c79c-f42n8_raw.tsv:12020"
+          ],
+          "hypothesis_id": "hypothesis:a96d106840a2d5cf"
+        },
+        {
+          "code": "EXPLICIT_TEMPORAL_CONTRADICTION",
+          "detail": "contains explicit temporal contradiction",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:4476"
+          ],
+          "hypothesis_id": "hypothesis:bcd8cf3b80ea8a09"
+        },
+        {
+          "code": "EXPLICIT_TEMPORAL_CONTRADICTION",
+          "detail": "contains explicit temporal contradiction",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:4266"
+          ],
+          "hypothesis_id": "hypothesis:c91bd38c349129e5"
+        },
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:706"
+          ],
+          "hypothesis_id": "hypothesis:e43f96312ae85195"
+        }
+      ],
+      "hypothesis_audits": [
+        {
+          "causal_linkage": "DIRECT",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:1905efbce504a832",
+          "onset_relation": [
+            "initiating_before_onset",
+            "supporting_after_onset"
+          ],
+          "plausibility_reasons": [],
+          "plausible": true,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [],
+            "initiating_kinds": [
+              "FAULT_INJECTION",
+              "FAULT_SCHEDULE"
+            ],
+            "manifestation_shape": [
+              "Pod:CONTAINER_FAILURE",
+              "Pod:FAILURE_EVENT"
+            ],
+            "provenance_classes": [
+              "derived_observation",
+              "kubernetes_event",
+              "object_observation"
+            ],
+            "supporting_kinds": [
+              "CONTAINER_FAILURE",
+              "FAILURE_EVENT"
+            ],
+            "symptom_relation": "DIRECT",
+            "temporal_profile": [
+              "initiating_before_onset",
+              "supporting_after_onset"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "PodChaos",
+              "name": "otel-demo-product-catalog-network-delay-g5vwr",
+              "namespace": "chaos-mesh"
+            },
+            "contradictory_evidence": [],
+            "decision": "VERIFIED",
+            "onset_delta_seconds": 1312.02901,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:420",
+                  "k8s_events_raw.tsv:422",
+                  "k8s_events_raw.tsv:424",
+                  "k8s_events_raw.tsv:427",
+                  "k8s_events_raw.tsv:429",
+                  "k8s_events_raw.tsv:431",
+                  "k8s_events_raw.tsv:26",
+                  "k8s_events_raw.tsv:27"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "an initiating observation is at or shortly after symptom onset",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:420",
+                  "k8s_events_raw.tsv:422",
+                  "k8s_events_raw.tsv:424",
+                  "k8s_events_raw.tsv:427",
+                  "k8s_events_raw.tsv:429",
+                  "k8s_events_raw.tsv:431",
+                  "k8s_events_raw.tsv:26",
+                  "k8s_events_raw.tsv:27"
+                ],
+                "name": "initiating_evidence_near_onset",
+                "status": "PASS"
+              }
+            ],
+            "rationale": "linked initiating evidence is temporally consistent with symptom onset",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_events_raw.tsv:420",
+              "k8s_events_raw.tsv:422",
+              "k8s_events_raw.tsv:424",
+              "k8s_events_raw.tsv:427",
+              "k8s_events_raw.tsv:429",
+              "k8s_events_raw.tsv:431",
+              "k8s_events_raw.tsv:26",
+              "k8s_events_raw.tsv:27",
+              "k8s_events_raw.tsv:65",
+              "k8s_events_raw.tsv:66",
+              "k8s_events_raw.tsv:180",
+              "k8s_events_raw.tsv:182"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "UNLINKED",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:a96d106840a2d5cf",
+          "onset_relation": [
+            "initiating_near_onset"
+          ],
+          "plausibility_reasons": [
+            "NO_CAUSAL_SYMPTOM_LINK"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [],
+            "initiating_kinds": [
+              "TRAFFIC_INCREASE"
+            ],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "metric"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "UNLINKED",
+            "temporal_profile": [
+              "initiating_near_onset"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Service",
+              "name": "prometheus-kube-state-metrics",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 3.27001,
+            "predicates": [
+              {
+                "detail": "no bounded causal path reaches an alerting entity",
+                "evidence_ids": [],
+                "name": "candidate_linked_to_symptom",
+                "status": "FAIL"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "best available candidate without sufficient deterministic verification evidence",
+            "score_margin": null,
+            "supporting_evidence": []
+          }
+        },
+        {
+          "causal_linkage": "PATH",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:1ef3331c96872243",
+          "onset_relation": [
+            "ambiguous_timing"
+          ],
+          "plausibility_reasons": [
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [
+              [
+                [
+                  "Pod",
+                  "backs",
+                  "Service"
+                ],
+                [
+                  "Service",
+                  "dependency_of",
+                  "Deployment"
+                ]
+              ]
+            ],
+            "contradiction_kinds": [],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "kubernetes_event"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "PATH",
+            "temporal_profile": [
+              "ambiguous_timing"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-sxzfd",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": -1125.97099,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:1042"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              },
+              {
+                "detail": "downstream failure observations do not establish an initiating cause",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:1042"
+                ],
+                "name": "initiating_signal_required",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "only downstream failure observations were found; the initiating cause is unknown",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_events_raw.tsv:1042"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "PATH",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:26b637c4fc40204e",
+          "onset_relation": [
+            "initiating_near_onset",
+            "supporting_after_onset"
+          ],
+          "plausibility_reasons": [],
+          "plausible": true,
+          "signature": {
+            "causal_path_shape": [
+              [
+                [
+                  "ConfigMap",
+                  "configures",
+                  "Pod"
+                ]
+              ]
+            ],
+            "contradiction_kinds": [],
+            "initiating_kinds": [
+              "OBJECT_CREATED"
+            ],
+            "manifestation_shape": [
+              "Pod:FAILURE_EVENT"
+            ],
+            "provenance_classes": [
+              "kubernetes_event",
+              "object_observation"
+            ],
+            "supporting_kinds": [
+              "FAILURE_EVENT"
+            ],
+            "symptom_relation": "PATH",
+            "temporal_profile": [
+              "initiating_near_onset",
+              "supporting_after_onset"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "ConfigMap",
+              "name": "kube-root-ca.crt",
+              "namespace": "data-recorders"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 57.02901,
+            "predicates": [
+              {
+                "detail": "no bounded causal path reaches an alerting entity",
+                "evidence_ids": [],
+                "name": "candidate_linked_to_symptom",
+                "status": "FAIL"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "best available candidate without sufficient deterministic verification evidence",
+            "score_margin": null,
+            "supporting_evidence": []
+          }
+        },
+        {
+          "causal_linkage": "UNLINKED",
+          "contradictory_evidence_ids": [
+            "k8s_objects_raw.tsv:3445"
+          ],
+          "hypothesis_id": "hypothesis:ec5a8b4a55e0a342",
+          "onset_relation": [
+            "late_consequence"
+          ],
+          "plausibility_reasons": [
+            "NO_CAUSAL_SYMPTOM_LINK",
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+            "EXPLICIT_TEMPORAL_CONTRADICTION"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [
+              "OBJECT_CREATED"
+            ],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "object_observation"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "UNLINKED",
+            "temporal_profile": [
+              "late_consequence"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Namespace",
+              "name": "agent",
+              "namespace": "_cluster"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 958.02901,
+            "predicates": [
+              {
+                "detail": "no bounded causal path reaches an alerting entity",
+                "evidence_ids": [],
+                "name": "candidate_linked_to_symptom",
+                "status": "FAIL"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "best available candidate without sufficient deterministic verification evidence",
+            "score_margin": null,
+            "supporting_evidence": []
+          }
+        },
+        {
+          "causal_linkage": "UNLINKED",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:e43f96312ae85195",
+          "onset_relation": [
+            "initiating_near_onset"
+          ],
+          "plausibility_reasons": [
+            "NO_CAUSAL_SYMPTOM_LINK"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [],
+            "initiating_kinds": [
+              "OBJECT_CREATED"
+            ],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "object_observation"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "UNLINKED",
+            "temporal_profile": [
+              "initiating_near_onset"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Namespace",
+              "name": "data-recorders",
+              "namespace": "_cluster"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 57.02901,
+            "predicates": [
+              {
+                "detail": "no bounded causal path reaches an alerting entity",
+                "evidence_ids": [],
+                "name": "candidate_linked_to_symptom",
+                "status": "FAIL"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "best available candidate without sufficient deterministic verification evidence",
+            "score_margin": null,
+            "supporting_evidence": []
+          }
+        },
+        {
+          "causal_linkage": "UNLINKED",
+          "contradictory_evidence_ids": [
+            "k8s_objects_raw.tsv:3060"
+          ],
+          "hypothesis_id": "hypothesis:f933c17adc00f292",
+          "onset_relation": [
+            "late_consequence"
+          ],
+          "plausibility_reasons": [
+            "NO_CAUSAL_SYMPTOM_LINK",
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+            "EXPLICIT_TEMPORAL_CONTRADICTION"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [
+              "OBJECT_CREATED"
+            ],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "object_observation"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "UNLINKED",
+            "temporal_profile": [
+              "late_consequence"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "ConfigMap",
+              "name": "kube-root-ca.crt",
+              "namespace": "agent"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 958.02901,
+            "predicates": [
+              {
+                "detail": "no bounded causal path reaches an alerting entity",
+                "evidence_ids": [],
+                "name": "candidate_linked_to_symptom",
+                "status": "FAIL"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "best available candidate without sufficient deterministic verification evidence",
+            "score_margin": null,
+            "supporting_evidence": []
+          }
+        },
+        {
+          "causal_linkage": "UNLINKED",
+          "contradictory_evidence_ids": [
+            "k8s_objects_raw.tsv:4476"
+          ],
+          "hypothesis_id": "hypothesis:bcd8cf3b80ea8a09",
+          "onset_relation": [
+            "late_consequence"
+          ],
+          "plausibility_reasons": [
+            "NO_CAUSAL_SYMPTOM_LINK",
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+            "EXPLICIT_TEMPORAL_CONTRADICTION"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [
+              "OBJECT_CREATED"
+            ],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "object_observation"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "UNLINKED",
+            "temporal_profile": [
+              "late_consequence"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "ConfigMap",
+              "name": "clickhouse-unified-recorder-scripts",
+              "namespace": "data-recorders"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": 1617.02901,
+            "predicates": [
+              {
+                "detail": "no bounded causal path reaches an alerting entity",
+                "evidence_ids": [],
+                "name": "candidate_linked_to_symptom",
+                "status": "FAIL"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "best available candidate without sufficient deterministic verification evidence",
+            "score_margin": null,
+            "supporting_evidence": []
+          }
+        }
+      ],
+      "leading_hypothesis_ids": [
+        "hypothesis:1905efbce504a832",
+        "hypothesis:26b637c4fc40204e"
+      ],
+      "plausible_hypotheses": [
+        "hypothesis:1905efbce504a832",
+        "hypothesis:26b637c4fc40204e"
+      ],
+      "rationale": "Multiple plausible hypotheses remain and no evidence-backed dominance or contradiction distinguishes one causal actor from the others.",
+      "signatures": [
+        {
+          "causal_path_shape": [],
+          "contradiction_kinds": [],
+          "initiating_kinds": [
+            "FAULT_INJECTION",
+            "FAULT_SCHEDULE"
+          ],
+          "manifestation_shape": [
+            "Pod:CONTAINER_FAILURE",
+            "Pod:FAILURE_EVENT"
+          ],
+          "provenance_classes": [
+            "derived_observation",
+            "kubernetes_event",
+            "object_observation"
+          ],
+          "supporting_kinds": [
+            "CONTAINER_FAILURE",
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "DIRECT",
+          "temporal_profile": [
+            "initiating_before_onset",
+            "supporting_after_onset"
+          ]
+        },
+        {
+          "causal_path_shape": [
+            [
+              [
+                "ConfigMap",
+                "configures",
+                "Pod"
+              ]
+            ]
+          ],
+          "contradiction_kinds": [],
+          "initiating_kinds": [
+            "OBJECT_CREATED"
+          ],
+          "manifestation_shape": [
+            "Pod:FAILURE_EVENT"
+          ],
+          "provenance_classes": [
+            "kubernetes_event",
+            "object_observation"
+          ],
+          "supporting_kinds": [
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "PATH",
+          "temporal_profile": [
+            "initiating_near_onset",
+            "supporting_after_onset"
+          ]
+        }
+      ],
+      "state": "AMBIGUOUS",
+      "unresolved_dimensions": [
+        "causal_actor_identity",
+        "initiating_evidence_source",
+        "symptom_attribution"
+      ]
+    },
+    "root_cause": {
+      "kind": "PodChaos",
+      "name": "otel-demo-product-catalog-network-delay-g5vwr",
+      "namespace": "chaos-mesh"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "5 diagnostic alert type(s) on accounting, ad, checkout, currency, email, fraud-detection; 189 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "49 finding(s) over 724 object(s) and 791 event(s); 628 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-g5vwr 17.8 (3 member(s)); otel-demo/Service/prometheus-kube-state-metrics 6.5 (1 member(s)); otel-demo/Pod/otel-collector-564d9c7987-sxzfd 4.9 (1 member(s)); data-recorders/ConfigMap/kube-root-ca.crt 2.1 (7 member(s)); _cluster/Namespace/agent 2.0 (1 member(s))"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "VERIFIED: linked initiating evidence is temporally consistent with symptom onset"
+      },
+      {
+        "action": "resolution",
+        "actor": "engine",
+        "detail": "AMBIGUOUS: Multiple plausible hypotheses remain and no evidence-backed dominance or contradiction distinguishes one causal actor from the others."
+      }
+    ],
+    "summary": "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-g5vwr: PodChaos applied fault at 16:44 (1 application(s)); schedule otel-demo-product-catalog-network-delay has injected this fault repeatedly from 16:28 to 18:02. Verified (linked initiating evidence is temporally consistent with symptom onset). Linked to otel-demo/Deployment/checkout, otel-demo/Deployment/frontend, otel-demo/Deployment/frontend-proxy.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "CrashLoopBackOffPodsDetected",
+        "KubePodCrashLooping",
+        "NoRequestsDetected",
+        "RequestErrorRate"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 23,
+        "KubeClientCertificateExpiration": 38,
+        "KubeControllerManagerDown": 29,
+        "KubeSchedulerDown": 29,
+        "PrometheusNotConnectedToAlertmanagers": 34,
+        "Watchdog": 36
+      },
+      "last_seen": "2025-12-15T18:10:09.861805Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T17:35:07.970990Z",
+      "services": [
+        "accounting",
+        "ad",
+        "checkout",
+        "currency",
+        "email",
+        "fraud-detection",
+        "frontend",
+        "frontend-proxy",
+        "payment",
+        "prometheus-kube-prometheus-kubelet",
+        "prometheus-kube-state-metrics",
+        "quote",
+        "recommendation",
+        "shipping"
+      ]
+    },
+    "verification": {
+      "candidate": {
+        "kind": "PodChaos",
+        "name": "otel-demo-product-catalog-network-delay-g5vwr",
+        "namespace": "chaos-mesh"
+      },
+      "contradictory_evidence": [],
+      "decision": "VERIFIED",
+      "onset_delta_seconds": 1312.02901,
+      "predicates": [
+        {
+          "detail": "candidate reaches an alerting entity through the causal graph",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:420",
+            "k8s_events_raw.tsv:422",
+            "k8s_events_raw.tsv:424",
+            "k8s_events_raw.tsv:427",
+            "k8s_events_raw.tsv:429",
+            "k8s_events_raw.tsv:431",
+            "k8s_events_raw.tsv:26",
+            "k8s_events_raw.tsv:27"
+          ],
+          "name": "candidate_linked_to_symptom",
+          "status": "PASS"
+        },
+        {
+          "detail": "an initiating observation is at or shortly after symptom onset",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:420",
+            "k8s_events_raw.tsv:422",
+            "k8s_events_raw.tsv:424",
+            "k8s_events_raw.tsv:427",
+            "k8s_events_raw.tsv:429",
+            "k8s_events_raw.tsv:431",
+            "k8s_events_raw.tsv:26",
+            "k8s_events_raw.tsv:27"
+          ],
+          "name": "initiating_evidence_near_onset",
+          "status": "PASS"
+        },
+        {
+          "detail": "score margin over runner-up is 11.250",
+          "evidence_ids": [],
+          "name": "candidate_dominance",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "linked initiating evidence is temporally consistent with symptom onset",
+      "score_margin": 11.25,
+      "supporting_evidence": [
+        "k8s_events_raw.tsv:420",
+        "k8s_events_raw.tsv:422",
+        "k8s_events_raw.tsv:424",
+        "k8s_events_raw.tsv:427",
+        "k8s_events_raw.tsv:429",
+        "k8s_events_raw.tsv:431",
+        "k8s_events_raw.tsv:26",
+        "k8s_events_raw.tsv:27",
+        "k8s_events_raw.tsv:65",
+        "k8s_events_raw.tsv:66",
+        "k8s_events_raw.tsv:180",
+        "k8s_events_raw.tsv:182"
+      ]
+    }
+  }
+}

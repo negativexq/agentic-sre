@@ -1,0 +1,1681 @@
+{
+  "agent_output": {
+    "contributing_factor": [
+      {
+        "condition": "LIKELY: otel-demo/ConfigMap/flagd-config: ConfigMap data changed: demo.flagd.json. Likely (strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/fraud-detection, otel-demo/Deployment/frontend.",
+        "entity": {
+          "kind": "ConfigMap",
+          "name": "flagd-config",
+          "namespace": "otel-demo"
+        },
+        "rank": 1
+      }
+    ],
+    "incident_id": "Scenario-5",
+    "native_terminal": "LIKELY",
+    "reasoning": "otel-demo/ConfigMap/flagd-config: ConfigMap data changed: demo.flagd.json. Likely (strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/fraud-detection, otel-demo/Deployment/frontend.",
+    "scenario_id": "Scenario-5"
+  },
+  "diagnosis": {
+    "alternative_hypotheses": [
+      {
+        "causal_actor": {
+          "kind": "Pod",
+          "name": "fraud-detection-9fb7d885b-zzt65",
+          "namespace": "otel-demo"
+        },
+        "causal_explanation": "DIRECT",
+        "causal_paths": [],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T17:22:11Z",
+            "details": {
+              "problems": [
+                {
+                  "at": "2025-12-15T17:22:11Z",
+                  "container": "fraud-detection",
+                  "message": "exit code 137",
+                  "reason": "OOMKilled",
+                  "restarts": 1
+                }
+              ],
+              "reason": "OOMKilled"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "fraud-detection-9fb7d885b-zzt65",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:243"
+            ],
+            "incident_onset": "2025-12-15T17:24:20.347555Z",
+            "kind": "CONTAINER_FAILURE",
+            "onset_delta_seconds": -129.347555,
+            "related": [],
+            "summary": "container fraud-detection OOMKilled (1 restart(s)) exit code 137",
+            "temporal_role": "AMBIGUOUS"
+          }
+        ],
+        "hypothesis_id": "hypothesis:09fca7b9ca125cf4",
+        "initiating_findings": [],
+        "linked_symptoms": [
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Pod/fraud-detection-9fb7d885b-zzt65"
+        ],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "Pod",
+            "name": "fraud-detection-9fb7d885b-zzt65",
+            "namespace": "otel-demo"
+          }
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 8.5,
+        "signature": {
+          "causal_path_shape": [],
+          "contradiction_kinds": [],
+          "initiating_kinds": [],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "derived_observation"
+          ],
+          "supporting_kinds": [],
+          "symptom_relation": "DIRECT",
+          "temporal_profile": [
+            "ambiguous_timing"
+          ]
+        },
+        "supporting_findings": []
+      },
+      {
+        "causal_actor": {
+          "kind": "Deployment",
+          "name": "ad",
+          "namespace": "otel-demo"
+        },
+        "causal_explanation": "DIRECT",
+        "causal_paths": [],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T17:49:02.498484Z",
+            "details": {
+              "changed_paths": [
+                ".spec.template.metadata.annotations.kubectl.kubernetes.io/restartedAt"
+              ],
+              "previous_observed_at": "2025-12-15T17:28:59.894236+00:00"
+            },
+            "entity": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:284",
+              "k8s_objects_raw.tsv:3235"
+            ],
+            "incident_onset": "2025-12-15T17:24:20.347555Z",
+            "kind": "ROLLOUT_RESTART",
+            "onset_delta_seconds": 1482.150929,
+            "related": [],
+            "summary": "rollout restart",
+            "temporal_role": "AMBIGUOUS"
+          }
+        ],
+        "hypothesis_id": "hypothesis:2d8e629255528187",
+        "initiating_findings": [],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/ad-554b849958-w5fhc",
+          "otel-demo/Pod/ad-785b4464f5-9bshh"
+        ],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "Deployment",
+            "name": "ad",
+            "namespace": "otel-demo"
+          }
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 7.0,
+        "signature": {
+          "causal_path_shape": [],
+          "contradiction_kinds": [],
+          "initiating_kinds": [],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "object_observation"
+          ],
+          "supporting_kinds": [],
+          "symptom_relation": "DIRECT",
+          "temporal_profile": [
+            "ambiguous_timing"
+          ]
+        },
+        "supporting_findings": []
+      },
+      {
+        "causal_actor": {
+          "kind": "Pod",
+          "name": "ad-554b849958-w5fhc",
+          "namespace": "otel-demo"
+        },
+        "causal_explanation": "DIRECT",
+        "causal_paths": [],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T17:15:28Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedMount"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "ad-554b849958-w5fhc",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:350"
+            ],
+            "incident_onset": "2025-12-15T17:24:20.347555Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": -532.347555,
+            "related": [],
+            "summary": "FailedMount x1: MountVolume.SetUp failed for volume \"kube-api-access-llncg\" : failed to sync configmap cache: timed out waiting for the condition",
+            "temporal_role": "AMBIGUOUS"
+          }
+        ],
+        "hypothesis_id": "hypothesis:41f9e9a19bedd28a",
+        "initiating_findings": [],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/ad-554b849958-w5fhc",
+          "otel-demo/Pod/ad-785b4464f5-9bshh"
+        ],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "Pod",
+            "name": "ad-554b849958-w5fhc",
+            "namespace": "otel-demo"
+          }
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.25,
+        "signature": {
+          "causal_path_shape": [],
+          "contradiction_kinds": [],
+          "initiating_kinds": [],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "kubernetes_event"
+          ],
+          "supporting_kinds": [],
+          "symptom_relation": "DIRECT",
+          "temporal_profile": [
+            "ambiguous_timing"
+          ]
+        },
+        "supporting_findings": []
+      },
+      {
+        "causal_actor": {
+          "kind": "Pod",
+          "name": "frontend-proxy-6b4d584985-kxdcl",
+          "namespace": "otel-demo"
+        },
+        "causal_explanation": "DIRECT",
+        "causal_paths": [],
+        "contradictory_findings": [],
+        "findings": [
+          {
+            "at": "2025-12-15T17:15:28Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedMount"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "frontend-proxy-6b4d584985-kxdcl",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:527"
+            ],
+            "incident_onset": "2025-12-15T17:24:20.347555Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": -532.347555,
+            "related": [],
+            "summary": "FailedMount x1: MountVolume.SetUp failed for volume \"kube-api-access-4xb4m\" : failed to sync configmap cache: timed out waiting for the condition",
+            "temporal_role": "AMBIGUOUS"
+          }
+        ],
+        "hypothesis_id": "hypothesis:cbe6c9f12653f7d3",
+        "initiating_findings": [],
+        "linked_symptoms": [
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/frontend-proxy-6b4d584985-kxdcl",
+          "otel-demo/Service/frontend-proxy"
+        ],
+        "manifestations": [],
+        "members": [
+          {
+            "kind": "Pod",
+            "name": "frontend-proxy-6b4d584985-kxdcl",
+            "namespace": "otel-demo"
+          }
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.25,
+        "signature": {
+          "causal_path_shape": [],
+          "contradiction_kinds": [],
+          "initiating_kinds": [],
+          "manifestation_shape": [],
+          "provenance_classes": [
+            "kubernetes_event"
+          ],
+          "supporting_kinds": [],
+          "symptom_relation": "DIRECT",
+          "temporal_profile": [
+            "ambiguous_timing"
+          ]
+        },
+        "supporting_findings": []
+      }
+    ],
+    "alternatives": [
+      {
+        "causal_explanation": "DIRECT",
+        "causal_path": [],
+        "entity": {
+          "kind": "Pod",
+          "name": "fraud-detection-9fb7d885b-zzt65",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:22:11Z",
+            "details": {
+              "problems": [
+                {
+                  "at": "2025-12-15T17:22:11Z",
+                  "container": "fraud-detection",
+                  "message": "exit code 137",
+                  "reason": "OOMKilled",
+                  "restarts": 1
+                }
+              ],
+              "reason": "OOMKilled"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "fraud-detection-9fb7d885b-zzt65",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:243"
+            ],
+            "incident_onset": "2025-12-15T17:24:20.347555Z",
+            "kind": "CONTAINER_FAILURE",
+            "onset_delta_seconds": -129.347555,
+            "related": [],
+            "summary": "container fraud-detection OOMKilled (1 restart(s)) exit code 137",
+            "temporal_role": "AMBIGUOUS"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/fraud-detection",
+          "otel-demo/Pod/fraud-detection-9fb7d885b-zzt65"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 8.5
+      },
+      {
+        "causal_explanation": "DIRECT",
+        "causal_path": [],
+        "entity": {
+          "kind": "Deployment",
+          "name": "ad",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:49:02.498484Z",
+            "details": {
+              "changed_paths": [
+                ".spec.template.metadata.annotations.kubectl.kubernetes.io/restartedAt"
+              ],
+              "previous_observed_at": "2025-12-15T17:28:59.894236+00:00"
+            },
+            "entity": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_objects_raw.tsv:284",
+              "k8s_objects_raw.tsv:3235"
+            ],
+            "incident_onset": "2025-12-15T17:24:20.347555Z",
+            "kind": "ROLLOUT_RESTART",
+            "onset_delta_seconds": 1482.150929,
+            "related": [],
+            "summary": "rollout restart",
+            "temporal_role": "AMBIGUOUS"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/ad-554b849958-w5fhc",
+          "otel-demo/Pod/ad-785b4464f5-9bshh"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 7.0
+      },
+      {
+        "causal_explanation": "DIRECT",
+        "causal_path": [],
+        "entity": {
+          "kind": "Pod",
+          "name": "ad-554b849958-w5fhc",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:15:28Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedMount"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "ad-554b849958-w5fhc",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:350"
+            ],
+            "incident_onset": "2025-12-15T17:24:20.347555Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": -532.347555,
+            "related": [],
+            "summary": "FailedMount x1: MountVolume.SetUp failed for volume \"kube-api-access-llncg\" : failed to sync configmap cache: timed out waiting for the condition",
+            "temporal_role": "AMBIGUOUS"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/ad",
+          "otel-demo/Deployment/frontend",
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/ad-554b849958-w5fhc",
+          "otel-demo/Pod/ad-785b4464f5-9bshh"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.25
+      },
+      {
+        "causal_explanation": "DIRECT",
+        "causal_path": [],
+        "entity": {
+          "kind": "Pod",
+          "name": "frontend-proxy-6b4d584985-kxdcl",
+          "namespace": "otel-demo"
+        },
+        "findings": [
+          {
+            "at": "2025-12-15T17:15:28Z",
+            "details": {
+              "count": 1,
+              "reason": "FailedMount"
+            },
+            "entity": {
+              "kind": "Pod",
+              "name": "frontend-proxy-6b4d584985-kxdcl",
+              "namespace": "otel-demo"
+            },
+            "evidence_ids": [
+              "k8s_events_raw.tsv:527"
+            ],
+            "incident_onset": "2025-12-15T17:24:20.347555Z",
+            "kind": "FAILURE_EVENT",
+            "onset_delta_seconds": -532.347555,
+            "related": [],
+            "summary": "FailedMount x1: MountVolume.SetUp failed for volume \"kube-api-access-4xb4m\" : failed to sync configmap cache: timed out waiting for the condition",
+            "temporal_role": "AMBIGUOUS"
+          }
+        ],
+        "linked_symptoms": [
+          "otel-demo/Deployment/frontend-proxy",
+          "otel-demo/Pod/frontend-proxy-6b4d584985-kxdcl",
+          "otel-demo/Service/frontend-proxy"
+        ],
+        "reasons": [
+          "0 hop(s) from an alerting component",
+          "acts in an alerting namespace",
+          "happened in the incident window"
+        ],
+        "score": 5.25
+      }
+    ],
+    "ambiguous_hypotheses": [],
+    "causal_explanation": "PATH",
+    "causal_path": [
+      {
+        "direction": "reverse",
+        "relation": "configures",
+        "source": {
+          "kind": "ConfigMap",
+          "name": "flagd-config",
+          "namespace": "otel-demo"
+        },
+        "target": {
+          "kind": "Deployment",
+          "name": "flagd",
+          "namespace": "otel-demo"
+        }
+      },
+      {
+        "direction": "reverse",
+        "relation": "serves",
+        "source": {
+          "kind": "Deployment",
+          "name": "flagd",
+          "namespace": "otel-demo"
+        },
+        "target": {
+          "kind": "Service",
+          "name": "flagd",
+          "namespace": "otel-demo"
+        }
+      },
+      {
+        "direction": "reverse",
+        "relation": "dependency_of",
+        "source": {
+          "kind": "Service",
+          "name": "flagd",
+          "namespace": "otel-demo"
+        },
+        "target": {
+          "kind": "Deployment",
+          "name": "ad",
+          "namespace": "otel-demo"
+        }
+      }
+    ],
+    "confidence": "LIKELY",
+    "evidence": [
+      {
+        "at": "2025-12-15T17:48:59.342089Z",
+        "details": {
+          "changed_keys": [
+            "demo.flagd.json"
+          ],
+          "changed_paths": [
+            ".data.demo.flagd.json"
+          ],
+          "excerpts": {
+            "demo.flagd.json": {
+              "changed_paths": ".flags.adFailure.defaultVariant"
+            }
+          },
+          "previous_observed_at": "2025-12-15T17:28:59.327655+00:00"
+        },
+        "entity": {
+          "kind": "ConfigMap",
+          "name": "flagd-config",
+          "namespace": "otel-demo"
+        },
+        "evidence_ids": [
+          "k8s_objects_raw.tsv:196",
+          "k8s_objects_raw.tsv:2890"
+        ],
+        "incident_onset": "2025-12-15T17:24:20.347555Z",
+        "kind": "CONFIG_CHANGE",
+        "onset_delta_seconds": 1478.994534,
+        "related": [],
+        "summary": "ConfigMap data changed: demo.flagd.json",
+        "temporal_role": "CONSEQUENCE"
+      }
+    ],
+    "hypothesis": {
+      "causal_actor": {
+        "kind": "ConfigMap",
+        "name": "flagd-config",
+        "namespace": "otel-demo"
+      },
+      "causal_explanation": "PATH",
+      "causal_paths": [
+        [
+          {
+            "direction": "reverse",
+            "relation": "configures",
+            "source": {
+              "kind": "ConfigMap",
+              "name": "flagd-config",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "flagd",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "direction": "reverse",
+            "relation": "serves",
+            "source": {
+              "kind": "Deployment",
+              "name": "flagd",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Service",
+              "name": "flagd",
+              "namespace": "otel-demo"
+            }
+          },
+          {
+            "direction": "reverse",
+            "relation": "dependency_of",
+            "source": {
+              "kind": "Service",
+              "name": "flagd",
+              "namespace": "otel-demo"
+            },
+            "target": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            }
+          }
+        ]
+      ],
+      "contradictory_findings": [
+        {
+          "at": "2025-12-15T17:48:59.342089Z",
+          "details": {
+            "changed_keys": [
+              "demo.flagd.json"
+            ],
+            "changed_paths": [
+              ".data.demo.flagd.json"
+            ],
+            "excerpts": {
+              "demo.flagd.json": {
+                "changed_paths": ".flags.adFailure.defaultVariant"
+              }
+            },
+            "previous_observed_at": "2025-12-15T17:28:59.327655+00:00"
+          },
+          "entity": {
+            "kind": "ConfigMap",
+            "name": "flagd-config",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:196",
+            "k8s_objects_raw.tsv:2890"
+          ],
+          "incident_onset": "2025-12-15T17:24:20.347555Z",
+          "kind": "CONFIG_CHANGE",
+          "onset_delta_seconds": 1478.994534,
+          "related": [],
+          "summary": "ConfigMap data changed: demo.flagd.json",
+          "temporal_role": "CONSEQUENCE"
+        }
+      ],
+      "findings": [
+        {
+          "at": "2025-12-15T17:48:59.342089Z",
+          "details": {
+            "changed_keys": [
+              "demo.flagd.json"
+            ],
+            "changed_paths": [
+              ".data.demo.flagd.json"
+            ],
+            "excerpts": {
+              "demo.flagd.json": {
+                "changed_paths": ".flags.adFailure.defaultVariant"
+              }
+            },
+            "previous_observed_at": "2025-12-15T17:28:59.327655+00:00"
+          },
+          "entity": {
+            "kind": "ConfigMap",
+            "name": "flagd-config",
+            "namespace": "otel-demo"
+          },
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:196",
+            "k8s_objects_raw.tsv:2890"
+          ],
+          "incident_onset": "2025-12-15T17:24:20.347555Z",
+          "kind": "CONFIG_CHANGE",
+          "onset_delta_seconds": 1478.994534,
+          "related": [],
+          "summary": "ConfigMap data changed: demo.flagd.json",
+          "temporal_role": "CONSEQUENCE"
+        }
+      ],
+      "hypothesis_id": "hypothesis:3543fe10d30499b3",
+      "initiating_findings": [],
+      "linked_symptoms": [
+        "otel-demo/Deployment/ad",
+        "otel-demo/Deployment/fraud-detection",
+        "otel-demo/Deployment/frontend",
+        "otel-demo/Deployment/frontend-proxy",
+        "otel-demo/Deployment/recommendation"
+      ],
+      "manifestations": [],
+      "members": [
+        {
+          "kind": "ConfigMap",
+          "name": "flagd-config",
+          "namespace": "otel-demo"
+        }
+      ],
+      "reasons": [
+        "3 hop(s) from an alerting component",
+        "acts in an alerting namespace",
+        "happened in the incident window"
+      ],
+      "score": 8.5,
+      "signature": {
+        "causal_path_shape": [
+          [
+            [
+              "ConfigMap",
+              "configures",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ]
+          ]
+        ],
+        "contradiction_kinds": [
+          "CONFIG_CHANGE"
+        ],
+        "initiating_kinds": [],
+        "manifestation_shape": [],
+        "provenance_classes": [
+          "object_observation"
+        ],
+        "supporting_kinds": [],
+        "symptom_relation": "PATH",
+        "temporal_profile": [
+          "late_consequence"
+        ]
+      },
+      "supporting_findings": []
+    },
+    "hypothesis_diagnostics": {
+      "duplicate_evidence_ids_removed": 0,
+      "exact_score_ties": 22,
+      "hypothesis_count": 22,
+      "multi_entity_hypotheses": 1,
+      "ownership_chains_collapsed": 0,
+      "raw_candidate_count": 28,
+      "structurally_similar_top_hypotheses": 6
+    },
+    "incident_id": "Scenario-5",
+    "information_gaps": [],
+    "mode": "deterministic",
+    "model_calls": 0,
+    "remediation": [
+      {
+        "action": "Revert ConfigMap flagd-config (demo.flagd.json) to its previous version; then restart flagd if they do not reload config",
+        "command": "kubectl get configmap/flagd-config -n otel-demo -o yaml  # compare with the previous version, then kubectl apply",
+        "requires_approval": true,
+        "risk": "low: restores the last known configuration"
+      }
+    ],
+    "resolution": "RESOLVED",
+    "resolution_trace": {
+      "considered_hypotheses": [
+        "hypothesis:02ccebc05cb314f1",
+        "hypothesis:08ad9ef81c53fce4",
+        "hypothesis:09fca7b9ca125cf4",
+        "hypothesis:1fe0d43274a3d634",
+        "hypothesis:2d8e629255528187",
+        "hypothesis:3534d04241a426fa",
+        "hypothesis:3543fe10d30499b3",
+        "hypothesis:373f5a783803e50e",
+        "hypothesis:3a95d8691825a8b7",
+        "hypothesis:3ac374d7a76468d5",
+        "hypothesis:41f9e9a19bedd28a",
+        "hypothesis:678d41ae1d0de986",
+        "hypothesis:81daf7820209cb73",
+        "hypothesis:89d37e6712e1c8d8",
+        "hypothesis:971ceca2878ce207",
+        "hypothesis:a42da4a2e2c6b93d",
+        "hypothesis:b21af5fdf2bee00b",
+        "hypothesis:bbbbf9c471465f38",
+        "hypothesis:c589c6a7e7af493c",
+        "hypothesis:c7ec5d28d2be9d67",
+        "hypothesis:cbe6c9f12653f7d3",
+        "hypothesis:d8098d474a1e14b1"
+      ],
+      "decision_basis": "VALID_CONTRADICTION",
+      "discriminators": [
+        {
+          "causal_path_shapes": [
+            [
+              [
+                "ConfigMap",
+                "configures",
+                "Pod"
+              ]
+            ]
+          ],
+          "detail": "all competing hypotheses were excluded by explicit temporal contradiction",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:717",
+            "k8s_events_raw.tsv:767",
+            "k8s_objects_raw.tsv:817",
+            "k8s_objects_raw.tsv:819",
+            "k8s_objects_raw.tsv:821",
+            "k8s_objects_raw.tsv:963",
+            "k8s_objects_raw.tsv:964"
+          ],
+          "finding_kinds": [
+            "FAILURE_EVENT",
+            "OBJECT_CREATED"
+          ],
+          "hypothesis_ids": [
+            "hypothesis:81daf7820209cb73"
+          ],
+          "kind": "VALID_CONTRADICTION",
+          "temporal_relations": [
+            "initiating_near_onset",
+            "supporting_after_onset"
+          ]
+        }
+      ],
+      "distinguishing_facts": [
+        "all competing hypotheses were excluded by explicit temporal contradiction"
+      ],
+      "dominance_relations": [],
+      "eliminated_hypotheses": [
+        "hypothesis:02ccebc05cb314f1",
+        "hypothesis:08ad9ef81c53fce4",
+        "hypothesis:09fca7b9ca125cf4",
+        "hypothesis:1fe0d43274a3d634",
+        "hypothesis:2d8e629255528187",
+        "hypothesis:3534d04241a426fa",
+        "hypothesis:3543fe10d30499b3",
+        "hypothesis:373f5a783803e50e"
+      ],
+      "elimination_reasons": [
+        "hypothesis:02ccebc05cb314f1: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:08ad9ef81c53fce4: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:09fca7b9ca125cf4: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:1fe0d43274a3d634: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:2d8e629255528187: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:3534d04241a426fa: lacks onset-capable initiating evidence or causal symptom linkage",
+        "hypothesis:3543fe10d30499b3: contradictory evidence",
+        "hypothesis:373f5a783803e50e: lacks onset-capable initiating evidence or causal symptom linkage"
+      ],
+      "eliminations": [
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:818"
+          ],
+          "hypothesis_id": "hypothesis:02ccebc05cb314f1"
+        },
+        {
+          "code": "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+          "detail": "has no onset-capable initiating evidence",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:670"
+          ],
+          "hypothesis_id": "hypothesis:08ad9ef81c53fce4"
+        },
+        {
+          "code": "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+          "detail": "has no onset-capable initiating evidence",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:243"
+          ],
+          "hypothesis_id": "hypothesis:09fca7b9ca125cf4"
+        },
+        {
+          "code": "NO_CAUSAL_SYMPTOM_LINK",
+          "detail": "does not causally reach an alerting symptom",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:226"
+          ],
+          "hypothesis_id": "hypothesis:1fe0d43274a3d634"
+        },
+        {
+          "code": "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+          "detail": "has no onset-capable initiating evidence",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:284",
+            "k8s_objects_raw.tsv:3235"
+          ],
+          "hypothesis_id": "hypothesis:2d8e629255528187"
+        },
+        {
+          "code": "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+          "detail": "has no onset-capable initiating evidence",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:580",
+            "k8s_events_raw.tsv:588"
+          ],
+          "hypothesis_id": "hypothesis:3534d04241a426fa"
+        },
+        {
+          "code": "EXPLICIT_TEMPORAL_CONTRADICTION",
+          "detail": "contains explicit temporal contradiction",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:196",
+            "k8s_objects_raw.tsv:2890"
+          ],
+          "hypothesis_id": "hypothesis:3543fe10d30499b3"
+        },
+        {
+          "code": "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+          "detail": "has no onset-capable initiating evidence",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:365"
+          ],
+          "hypothesis_id": "hypothesis:373f5a783803e50e"
+        }
+      ],
+      "hypothesis_audits": [
+        {
+          "causal_linkage": "PATH",
+          "contradictory_evidence_ids": [
+            "k8s_objects_raw.tsv:196",
+            "k8s_objects_raw.tsv:2890"
+          ],
+          "hypothesis_id": "hypothesis:3543fe10d30499b3",
+          "onset_relation": [
+            "late_consequence"
+          ],
+          "plausibility_reasons": [
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE",
+            "EXPLICIT_TEMPORAL_CONTRADICTION"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [
+              [
+                [
+                  "ConfigMap",
+                  "configures",
+                  "Deployment"
+                ],
+                [
+                  "Deployment",
+                  "serves",
+                  "Service"
+                ],
+                [
+                  "Service",
+                  "dependency_of",
+                  "Deployment"
+                ]
+              ]
+            ],
+            "contradiction_kinds": [
+              "CONFIG_CHANGE"
+            ],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "object_observation"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "PATH",
+            "temporal_profile": [
+              "late_consequence"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "ConfigMap",
+              "name": "flagd-config",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [
+              "k8s_objects_raw.tsv:196",
+              "k8s_objects_raw.tsv:2890"
+            ],
+            "decision": "LIKELY",
+            "onset_delta_seconds": 1478.994534,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:196",
+                  "k8s_objects_raw.tsv:2890"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              },
+              {
+                "detail": "linked change was observed after the onset grace and cannot explain the original incident onset",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:196",
+                  "k8s_objects_raw.tsv:2890"
+                ],
+                "name": "late_change_contradiction",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_objects_raw.tsv:196",
+              "k8s_objects_raw.tsv:2890"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "DIRECT",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:09fca7b9ca125cf4",
+          "onset_relation": [
+            "ambiguous_timing"
+          ],
+          "plausibility_reasons": [
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "derived_observation"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "DIRECT",
+            "temporal_profile": [
+              "ambiguous_timing"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Pod",
+              "name": "fraud-detection-9fb7d885b-zzt65",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": -129.347555,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:243"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              },
+              {
+                "detail": "downstream failure observations do not establish an initiating cause",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:243"
+                ],
+                "name": "initiating_signal_required",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "only downstream failure observations were found; the initiating cause is unknown",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_objects_raw.tsv:243"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "DIRECT",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:2d8e629255528187",
+          "onset_relation": [
+            "ambiguous_timing"
+          ],
+          "plausibility_reasons": [
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "object_observation"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "DIRECT",
+            "temporal_profile": [
+              "ambiguous_timing"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "LIKELY",
+            "onset_delta_seconds": 1482.150929,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_objects_raw.tsv:284",
+                  "k8s_objects_raw.tsv:3235"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_objects_raw.tsv:284",
+              "k8s_objects_raw.tsv:3235"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "DIRECT",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:41f9e9a19bedd28a",
+          "onset_relation": [
+            "ambiguous_timing"
+          ],
+          "plausibility_reasons": [
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "kubernetes_event"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "DIRECT",
+            "temporal_profile": [
+              "ambiguous_timing"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Pod",
+              "name": "ad-554b849958-w5fhc",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": -532.347555,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:350"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              },
+              {
+                "detail": "downstream failure observations do not establish an initiating cause",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:350"
+                ],
+                "name": "initiating_signal_required",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "only downstream failure observations were found; the initiating cause is unknown",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_events_raw.tsv:350"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "DIRECT",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:cbe6c9f12653f7d3",
+          "onset_relation": [
+            "ambiguous_timing"
+          ],
+          "plausibility_reasons": [
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [],
+            "contradiction_kinds": [],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "kubernetes_event"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "DIRECT",
+            "temporal_profile": [
+              "ambiguous_timing"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Pod",
+              "name": "frontend-proxy-6b4d584985-kxdcl",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": -532.347555,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:527"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              },
+              {
+                "detail": "downstream failure observations do not establish an initiating cause",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:527"
+                ],
+                "name": "initiating_signal_required",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "only downstream failure observations were found; the initiating cause is unknown",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_events_raw.tsv:527"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "PATH",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:3534d04241a426fa",
+          "onset_relation": [
+            "ambiguous_timing"
+          ],
+          "plausibility_reasons": [
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [
+              [
+                [
+                  "Pod",
+                  "backs",
+                  "Service"
+                ],
+                [
+                  "Service",
+                  "dependency_of",
+                  "Deployment"
+                ]
+              ]
+            ],
+            "contradiction_kinds": [],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "kubernetes_event"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "PATH",
+            "temporal_profile": [
+              "ambiguous_timing"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Pod",
+              "name": "otel-collector-564d9c7987-chphh",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": -528.347555,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:588",
+                  "k8s_events_raw.tsv:580"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              },
+              {
+                "detail": "downstream failure observations do not establish an initiating cause",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:588",
+                  "k8s_events_raw.tsv:580"
+                ],
+                "name": "initiating_signal_required",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "only downstream failure observations were found; the initiating cause is unknown",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_events_raw.tsv:588",
+              "k8s_events_raw.tsv:580"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "PATH",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:373f5a783803e50e",
+          "onset_relation": [
+            "ambiguous_timing"
+          ],
+          "plausibility_reasons": [
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [
+              [
+                [
+                  "Pod",
+                  "backs",
+                  "Service"
+                ],
+                [
+                  "Service",
+                  "dependency_of",
+                  "Deployment"
+                ]
+              ]
+            ],
+            "contradiction_kinds": [],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "kubernetes_event"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "PATH",
+            "temporal_profile": [
+              "ambiguous_timing"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Pod",
+              "name": "cart-755465879b-htjh5",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": -532.347555,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:365"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              },
+              {
+                "detail": "downstream failure observations do not establish an initiating cause",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:365"
+                ],
+                "name": "initiating_signal_required",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "only downstream failure observations were found; the initiating cause is unknown",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_events_raw.tsv:365"
+            ]
+          }
+        },
+        {
+          "causal_linkage": "PATH",
+          "contradictory_evidence_ids": [],
+          "hypothesis_id": "hypothesis:a42da4a2e2c6b93d",
+          "onset_relation": [
+            "ambiguous_timing"
+          ],
+          "plausibility_reasons": [
+            "NO_ONSET_CAPABLE_INITIATING_EVIDENCE"
+          ],
+          "plausible": false,
+          "signature": {
+            "causal_path_shape": [
+              [
+                [
+                  "Pod",
+                  "backs",
+                  "Service"
+                ],
+                [
+                  "Service",
+                  "dependency_of",
+                  "Deployment"
+                ]
+              ]
+            ],
+            "contradiction_kinds": [],
+            "initiating_kinds": [],
+            "manifestation_shape": [],
+            "provenance_classes": [
+              "kubernetes_event"
+            ],
+            "supporting_kinds": [],
+            "symptom_relation": "PATH",
+            "temporal_profile": [
+              "ambiguous_timing"
+            ]
+          },
+          "verification": {
+            "candidate": {
+              "kind": "Pod",
+              "name": "currency-5d455cf6f7-lv69t",
+              "namespace": "otel-demo"
+            },
+            "contradictory_evidence": [],
+            "decision": "UNVERIFIED",
+            "onset_delta_seconds": -532.347555,
+            "predicates": [
+              {
+                "detail": "candidate reaches an alerting entity through the causal graph",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:406"
+                ],
+                "name": "candidate_linked_to_symptom",
+                "status": "PASS"
+              },
+              {
+                "detail": "no linked initiating observation is temporally consistent with onset",
+                "evidence_ids": [],
+                "name": "initiating_evidence_near_onset",
+                "status": "FAIL"
+              },
+              {
+                "detail": "downstream failure observations do not establish an initiating cause",
+                "evidence_ids": [
+                  "k8s_events_raw.tsv:406"
+                ],
+                "name": "initiating_signal_required",
+                "status": "FAIL"
+              }
+            ],
+            "rationale": "only downstream failure observations were found; the initiating cause is unknown",
+            "score_margin": null,
+            "supporting_evidence": [
+              "k8s_events_raw.tsv:406"
+            ]
+          }
+        }
+      ],
+      "leading_hypothesis_ids": [
+        "hypothesis:81daf7820209cb73"
+      ],
+      "plausible_hypotheses": [
+        "hypothesis:81daf7820209cb73"
+      ],
+      "rationale": "The leading hypothesis is deterministically distinguished by its causal evidence.",
+      "signatures": [
+        {
+          "causal_path_shape": [
+            [
+              [
+                "ConfigMap",
+                "configures",
+                "Pod"
+              ]
+            ]
+          ],
+          "contradiction_kinds": [],
+          "initiating_kinds": [
+            "OBJECT_CREATED"
+          ],
+          "manifestation_shape": [
+            "Pod:FAILURE_EVENT"
+          ],
+          "provenance_classes": [
+            "kubernetes_event",
+            "object_observation"
+          ],
+          "supporting_kinds": [
+            "FAILURE_EVENT"
+          ],
+          "symptom_relation": "PATH",
+          "temporal_profile": [
+            "initiating_near_onset",
+            "supporting_after_onset"
+          ]
+        }
+      ],
+      "state": "RESOLVED",
+      "unresolved_dimensions": []
+    },
+    "root_cause": {
+      "kind": "ConfigMap",
+      "name": "flagd-config",
+      "namespace": "otel-demo"
+    },
+    "steps": [
+      {
+        "action": "symptoms",
+        "actor": "engine",
+        "detail": "4 diagnostic alert type(s) on ad, fraud-detection, frontend, frontend-proxy, prometheus-kube-prometheus-kubelet, recommendation; 210 background alert(s) ignored"
+      },
+      {
+        "action": "signals",
+        "actor": "engine",
+        "detail": "29 finding(s) over 668 object(s) and 389 event(s); 530 structural edge(s)"
+      },
+      {
+        "action": "ranking",
+        "actor": "engine",
+        "detail": "otel-demo/ConfigMap/flagd-config 8.5 (1 member(s)); otel-demo/Pod/fraud-detection-9fb7d885b-zzt65 8.5 (1 member(s)); otel-demo/Deployment/ad 7.0 (1 member(s)); otel-demo/Pod/ad-554b849958-w5fhc 5.2 (1 member(s)); otel-demo/Pod/frontend-proxy-6b4d584985-kxdcl 5.2 (1 member(s))"
+      },
+      {
+        "action": "verify",
+        "actor": "engine",
+        "detail": "LIKELY: strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous"
+      },
+      {
+        "action": "resolution",
+        "actor": "engine",
+        "detail": "RESOLVED: The leading hypothesis is deterministically distinguished by its causal evidence."
+      }
+    ],
+    "summary": "otel-demo/ConfigMap/flagd-config: ConfigMap data changed: demo.flagd.json. Likely (strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous). Linked to otel-demo/Deployment/ad, otel-demo/Deployment/fraud-detection, otel-demo/Deployment/frontend.",
+    "symptoms": {
+      "alert_names": [
+        "CPUThrottlingHigh",
+        "NoRequestsDetected",
+        "PendingPodsDetected",
+        "RequestErrorRate"
+      ],
+      "background_alert_counts": {
+        "InfoInhibitor": 36,
+        "KubeClientCertificateExpiration": 34,
+        "KubeControllerManagerDown": 32,
+        "KubeSchedulerDown": 32,
+        "PrometheusNotConnectedToAlertmanagers": 36,
+        "Watchdog": 40
+      },
+      "last_seen": "2025-12-15T18:08:13.894961Z",
+      "namespaces": [
+        "otel-demo"
+      ],
+      "onset": "2025-12-15T17:24:20.347555Z",
+      "services": [
+        "ad",
+        "fraud-detection",
+        "frontend",
+        "frontend-proxy",
+        "prometheus-kube-prometheus-kubelet",
+        "recommendation"
+      ]
+    },
+    "verification": {
+      "candidate": {
+        "kind": "ConfigMap",
+        "name": "flagd-config",
+        "namespace": "otel-demo"
+      },
+      "contradictory_evidence": [
+        "k8s_objects_raw.tsv:196",
+        "k8s_objects_raw.tsv:2890"
+      ],
+      "decision": "LIKELY",
+      "onset_delta_seconds": 1478.994534,
+      "predicates": [
+        {
+          "detail": "candidate reaches an alerting entity through the causal graph",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:196",
+            "k8s_objects_raw.tsv:2890"
+          ],
+          "name": "candidate_linked_to_symptom",
+          "status": "PASS"
+        },
+        {
+          "detail": "no linked initiating observation is temporally consistent with onset",
+          "evidence_ids": [],
+          "name": "initiating_evidence_near_onset",
+          "status": "FAIL"
+        },
+        {
+          "detail": "linked change was observed after the onset grace and cannot explain the original incident onset",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:196",
+            "k8s_objects_raw.tsv:2890"
+          ],
+          "name": "late_change_contradiction",
+          "status": "FAIL"
+        },
+        {
+          "detail": "score margin over runner-up is only 0.000",
+          "evidence_ids": [],
+          "name": "candidate_dominance",
+          "status": "WEAK"
+        }
+      ],
+      "rationale": "strong linked signal, but onset evidence is missing, late, contradictory, or ambiguous",
+      "score_margin": 0.0,
+      "supporting_evidence": [
+        "k8s_objects_raw.tsv:196",
+        "k8s_objects_raw.tsv:2890"
+      ]
+    }
+  }
+}

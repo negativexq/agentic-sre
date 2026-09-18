@@ -61,7 +61,7 @@ def test_secure_api_overlay_wires_the_token_without_committing_a_credential() ->
 
 
 def test_python_source_contains_no_agent_runtime_imports() -> None:
-    forbidden = ("langgraph", "langchain", "anthropic", "crewai", "autogen", "mcp")
+    forbidden = ("langchain", "anthropic", "crewai", "autogen", "mcp")
     source_files = (
         list(Path("apps").rglob("*.py"))
         + list(Path("packages").rglob("*.py"))

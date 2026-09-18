@@ -102,6 +102,24 @@ class PromotionAudit:
 
 
 @dataclass(frozen=True)
+class PromotionGroupingGap:
+    finding_key: str
+    full_candidate_entities: tuple[str, ...]
+    active_candidate_entities: tuple[str, ...]
+    full_hypothesis_episodes: tuple[str, ...]
+    active_hypothesis_episodes: tuple[str, ...]
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "finding_key": self.finding_key,
+            "full_candidate_entities": self.full_candidate_entities,
+            "active_candidate_entities": self.active_candidate_entities,
+            "full_hypothesis_episodes": self.full_hypothesis_episodes,
+            "active_hypothesis_episodes": self.active_hypothesis_episodes,
+        }
+
+
+@dataclass(frozen=True)
 class FrontierStateSummary:
     raw_alternatives: int
     structural_shape_groups: tuple[tuple[str, tuple[str, ...]], ...]
@@ -169,7 +187,8 @@ class ControlMatrixResult:
     active_fidelity: str
     full_control_resolvability: str
     planning_opportunity: str
-    promotion_grouping_gaps: tuple[str, ...] = ()
+    planning_reason: str
+    promotion_grouping_gaps: tuple[PromotionGroupingGap, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -179,10 +198,11 @@ class ControlMatrixResult:
             "exhaustive_active": _diagnosis_summary(
                 self.exhaustive_case, self.exhaustive_diagnosis
             ),
-            "d1": self.search.resolvable_within(1),
-            "d2": self.search.resolvable_within(2),
-            "d3": self.search.resolvable_within(3),
+            "d1": self.search.depth_status(1),
+            "d2": self.search.depth_status(2),
+            "d3": self.search.depth_status(3),
             "search_truncated": self.search.truncated,
+            "truncation_depth": self.search.truncation_depth,
             "investigation_status": self.exhaustive_diagnosis.investigation_status.value,
             "semantic_finding_coverage": {
                 "full": self.full_semantic_findings,
@@ -201,8 +221,9 @@ class ControlMatrixResult:
             "active_fidelity": self.active_fidelity,
             "full_control_resolvability": self.full_control_resolvability,
             "planning_opportunity": self.planning_opportunity,
+            "planning_reason": self.planning_reason,
             "full_only_reasons": self.full_only_reasons,
-            "promotion_grouping_gaps": self.promotion_grouping_gaps,
+            "promotion_grouping_gaps": [item.as_dict() for item in self.promotion_grouping_gaps],
             "promotion_audits": [item.as_dict() for item in self.promotion_audits],
             "frontier": {
                 "raw_alternatives": self.frontier_state.raw_alternatives,
@@ -298,10 +319,6 @@ def _record_count(payload: Mapping[str, Any]) -> int:
         if isinstance(records, list):
             return len(records)
     return 0
-
-
-def _hypothesis_ids(case: Case) -> tuple[str, ...]:
-    return tuple(sorted(item.hypothesis_id for item in case.hypotheses))
 
 
 def _plausible_ids(diagnosis: Diagnosis) -> tuple[str, ...]:
@@ -419,11 +436,23 @@ def _outcome(
         return "TOOL_ERROR"
     if raw_records == 0:
         return "NO_RAW_RECORDS"
-    if not new_refs:
-        return "ALREADY_KNOWN_RAW"
     if fresh:
         return "FINDING_PRODUCED"
+    if not new_refs:
+        return "ALREADY_KNOWN_RAW"
     return "NOVEL_RAW_NO_FINDING"
+
+
+def _audit_outcome(
+    observation: InvestigationObservation,
+    raw_records: int,
+    returned_refs: tuple[str, ...],
+    new_refs: tuple[str, ...],
+    fresh: tuple[Finding, ...],
+) -> tuple[str, str | None]:
+    if raw_records and not returned_refs:
+        return "AUDIT_DEFECT", "UNREFERENCED_RAW_RECORDS"
+    return _outcome(observation, raw_records, new_refs, fresh), None
 
 
 def _post_rebuild_matches(findings: tuple[Finding, ...], case: Case) -> tuple[Finding, ...]:
@@ -560,8 +589,7 @@ def exhaustive_active_closure(
                     )
                 )
             raw_records = _record_count(observation.payload)
-            outcome = _outcome(observation, raw_records, novel, fresh)
-            defect = "UNREFERENCED_RAW_RECORDS" if raw_records and not refs else None
+            outcome, defect = _audit_outcome(observation, raw_records, refs, novel, fresh)
             pending.append(
                 _PendingAudit(
                     choice=choice,
@@ -657,17 +685,33 @@ def exhaustive_active_closure(
     )
 
 
-_ACTIVE_CAPABILITIES_BY_KIND: dict[FindingKind, tuple[str, ...]] = {
-    FindingKind.CONFIG_CHANGE: ("history",),
-    FindingKind.SPEC_CHANGE: ("history",),
-    FindingKind.IMAGE_CHANGE: ("history",),
-    FindingKind.ROLLOUT_RESTART: ("history",),
-    FindingKind.FAILURE_EVENT: ("events",),
-    FindingKind.AUTOSCALING_FAILURE: ("events",),
-    FindingKind.DEPENDENCY_ERRORS: ("logs",),
-    FindingKind.RESOURCE_PRESSURE: ("resource_pressure",),
-    FindingKind.TRAFFIC_INCREASE: ("traffic",),
+_NORMALIZER_FINDING_KINDS_BY_CAPABILITY: dict[str, frozenset[FindingKind]] = {
+    "history": frozenset(
+        {
+            FindingKind.OBJECT_CREATED,
+            FindingKind.OBJECT_DELETED,
+            FindingKind.CONFIG_CHANGE,
+            FindingKind.SPEC_CHANGE,
+            FindingKind.IMAGE_CHANGE,
+            FindingKind.SCALE_CHANGE,
+            FindingKind.ROLLOUT_RESTART,
+        }
+    ),
+    "events": frozenset({FindingKind.FAILURE_EVENT, FindingKind.AUTOSCALING_FAILURE}),
+    "logs": frozenset({FindingKind.DEPENDENCY_ERRORS}),
+    "resource_pressure": frozenset({FindingKind.RESOURCE_PRESSURE}),
+    "traffic": frozenset({FindingKind.TRAFFIC_INCREASE}),
 }
+
+
+def _capabilities_for_finding_kind(kind: FindingKind) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            capability
+            for capability, kinds in _NORMALIZER_FINDING_KINDS_BY_CAPABILITY.items()
+            if kind in kinds
+        )
+    )
 
 
 def _full_only_reason(
@@ -677,9 +721,12 @@ def _full_only_reason(
     audits: tuple[PromotionAudit, ...],
     tools: Mapping[str, InvestigationTool],
 ) -> str:
-    if set(finding.evidence_ids).intersection(active_refs):
+    required_refs = set(finding.evidence_ids)
+    if not required_refs:
+        return "UNCLASSIFIED_MECHANICALLY"
+    if required_refs <= active_refs:
         return "RAW_RETURNED_NORMALIZATION_GAP"
-    capabilities = _ACTIVE_CAPABILITIES_BY_KIND.get(finding.kind)
+    capabilities = _capabilities_for_finding_kind(finding.kind)
     if not capabilities or not any(capability in tools for capability in capabilities):
         return "CAPABILITY_NOT_EXPOSED"
     targets = {finding.entity, *finding.related}
@@ -690,7 +737,7 @@ def _full_only_reason(
     ]
     if not authorized:
         return "TARGET_NOT_AUTHORIZED"
-    return "RAW_RECORD_NOT_RETURNED"
+    return "RAW_RECORD_NOT_RETURNED" if required_refs - active_refs else "UNCLASSIFIED_MECHANICALLY"
 
 
 def _full_control_state(resolution: Resolution) -> str:
@@ -701,16 +748,60 @@ def _full_control_state(resolution: Resolution) -> str:
     }[resolution]
 
 
-def _planning_state(full: Resolution, active: Resolution, search: MultiStepSearchResult) -> str:
+def _planning_state(
+    full: Resolution, active: Resolution, search: MultiStepSearchResult
+) -> tuple[str, str]:
     if full is Resolution.RESOLVED and active is not Resolution.RESOLVED:
-        return "NO_PLANNING_CONCLUSION"
+        return "NO_PLANNING_CONCLUSION", "ACTIVE_FIDELITY_PREVENTS_COMPARISON"
     if full is Resolution.AMBIGUOUS or full is Resolution.INSUFFICIENT_EVIDENCE:
         if active is Resolution.RESOLVED:
-            return "ACTIVE_SEMANTIC_DIVERGENCE"
-        return "NO_PLANNING_CONCLUSION"
-    if search.resolvable_within(3):
-        return "DETERMINISTIC_PLAN_EXISTS"
-    return "PLANNING_OPPORTUNITY"
+            return "ACTIVE_SEMANTIC_DIVERGENCE", "ACTIVE_SEMANTIC_DIVERGENCE"
+        return (
+            "NO_PLANNING_CONCLUSION",
+            "FULL_CONTROL_AMBIGUOUS"
+            if full is Resolution.AMBIGUOUS
+            else "FULL_CONTROL_INSUFFICIENT",
+        )
+    status = search.depth_status(3)
+    if status == "RESOLVED":
+        return "DETERMINISTIC_PLAN_EXISTS", "DETERMINISTIC_PLAN_FOUND"
+    if status == "NOT_RESOLVED":
+        return "PLANNING_OPPORTUNITY", "NO_PLAN_WITHIN_COMPLETE_D3"
+    return "NO_PLANNING_CONCLUSION", "BOUNDED_SEARCH_TRUNCATED"
+
+
+def _finding_promotion_effect(
+    case: Case, finding_core_key: str
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    candidate_entities = tuple(
+        sorted(
+            {
+                candidate.entity.canonical
+                for candidate in case.candidates
+                if any(
+                    semantic_finding_core_key(finding) == finding_core_key
+                    for finding in candidate.findings
+                )
+            }
+        )
+    )
+    episodes = {
+        json.dumps(
+            {
+                "causal_actor": hypothesis.causal_actor.canonical,
+                "members": sorted(entity.canonical for entity in hypothesis.members),
+                "manifestations": sorted(entity.canonical for entity in hypothesis.manifestations),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        for hypothesis in case.hypotheses
+        if any(
+            semantic_finding_core_key(finding) == finding_core_key
+            for finding in hypothesis.findings
+        )
+    }
+    return candidate_entities, tuple(sorted(episodes))
 
 
 def run_control_matrix(
@@ -763,17 +854,24 @@ def run_control_matrix(
         hypotheses=exhaustive_case.hypotheses,
         queried_dimensions_by_alternative=queried,
     )
-    # A shared semantic Finding can still have a promotion/grouping discrepancy.
     grouping_gaps = tuple(
-        sorted(
-            key
-            for key in shared
-            if any(
-                semantic_finding_core_key(finding) == json.loads(key)["core"]
-                for finding in full_case.findings
-            )
-            and _hypothesis_ids(full_case) != _hypothesis_ids(exhaustive_case)
+        PromotionGroupingGap(
+            finding_key=key,
+            full_candidate_entities=full_effect[0],
+            active_candidate_entities=active_effect[0],
+            full_hypothesis_episodes=full_effect[1],
+            active_hypothesis_episodes=active_effect[1],
         )
+        for key in shared
+        for full_finding in (full_map[key],)
+        for core_key in (semantic_finding_core_key(full_finding),)
+        for full_effect, active_effect in (
+            (
+                _finding_promotion_effect(full_case, core_key),
+                _finding_promotion_effect(exhaustive_case, core_key),
+            ),
+        )
+        if full_effect != active_effect
     )
     active_fidelity = (
         "ACTIVE_PARITY"
@@ -785,6 +883,9 @@ def run_control_matrix(
         seed_policy=seed_policy,
         max_depth=max_depth,
         max_states=max_states,
+    )
+    planning_opportunity, planning_reason = _planning_state(
+        full_diagnosis.resolution, exhaustive_diagnosis.resolution, search
     )
     return ControlMatrixResult(
         incident_id=source.incident_id(),
@@ -815,9 +916,8 @@ def run_control_matrix(
         missing_full_refs=tuple(sorted(missing_refs)),
         active_fidelity=active_fidelity,
         full_control_resolvability=_full_control_state(full_diagnosis.resolution),
-        planning_opportunity=_planning_state(
-            full_diagnosis.resolution, exhaustive_diagnosis.resolution, search
-        ),
+        planning_opportunity=planning_opportunity,
+        planning_reason=planning_reason,
         promotion_grouping_gaps=grouping_gaps,
     )
 
@@ -840,9 +940,14 @@ __all__ = [
     "ExhaustiveActiveResult",
     "FrontierStateSummary",
     "PromotionAudit",
+    "PromotionGroupingGap",
     "aggregate_classifications",
     "exhaustive_active_closure",
     "run_control_matrix",
     "semantic_finding_core_key",
     "semantic_finding_key",
+    "_capabilities_for_finding_kind",
+    "_finding_promotion_effect",
+    "_full_only_reason",
+    "_planning_state",
 ]

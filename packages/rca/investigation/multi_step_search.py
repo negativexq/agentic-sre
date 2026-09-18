@@ -101,6 +101,7 @@ class MultiStepSearchResult:
     max_depth: int
     explored_states: int
     truncated: bool
+    truncation_depth: int | None = None
 
     @property
     def minimum_queries(self) -> int | None:
@@ -113,6 +114,15 @@ class MultiStepSearchResult:
     def resolvable_within(self, depth: int) -> bool:
         minimum = self.minimum_queries
         return minimum is not None and minimum <= depth
+
+    def depth_status(self, depth: int) -> str:
+        if self.resolvable_within(depth):
+            return "RESOLVED"
+        if not self.truncated:
+            return "NOT_RESOLVED"
+        if self.truncation_depth is not None and self.truncation_depth >= depth:
+            return "NOT_RESOLVED"
+        return "UNKNOWN_TRUNCATED"
 
 
 @dataclass(frozen=True)
@@ -443,12 +453,14 @@ def search_incident(
         solutions.append(SearchPath((), initial_diagnosis))
     explored = 0
     truncated = False
+    truncation_depth: int | None = None
     while queue:
         state = queue.popleft()
         if state.depth >= max_depth:
             continue
         if explored >= max_states:
             truncated = True
+            truncation_depth = state.depth
             break
         explored += 1
         choices = legal_query_choices(state.diagnosis, tools, templates, state.query_keys)
@@ -525,6 +537,7 @@ def search_incident(
         max_depth=max_depth,
         explored_states=explored,
         truncated=truncated,
+        truncation_depth=truncation_depth,
     )
 
 

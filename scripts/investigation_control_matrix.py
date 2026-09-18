@@ -64,8 +64,8 @@ def main() -> int:
             f"{result.incident_id} | {result.full_diagnosis.resolution.value} | "
             f"{result.seed_diagnosis.resolution.value} | "
             f"{result.exhaustive_diagnosis.resolution.value} | "
-            f"{search.resolvable_within(1)} | {search.resolvable_within(2)} | "
-            f"{search.resolvable_within(3)} | {result.exhaustive_diagnosis.investigation_status.value}"
+            f"{search.depth_status(1)} | {search.depth_status(2)} | "
+            f"{search.depth_status(3)} | {result.exhaustive_diagnosis.investigation_status.value}"
         )
         print(
             "  semantic full/shared/active/full-only/active-only="
@@ -98,11 +98,15 @@ def main() -> int:
             f"{result.exhaustive.rounds}/{len(result.exhaustive.attempted_observations)}/"
             f"{result.exhaustive.truncated}/{result.exhaustive.termination_reason}"
         )
-        print(f"  bounded-search-truncated={result.search.truncated}")
+        print(
+            f"  bounded-search-truncated={result.search.truncated}; "
+            f"depth={result.search.truncation_depth}"
+        )
         print(
             f"  conclusions fidelity={result.active_fidelity}; "
             f"full={result.full_control_resolvability}; "
-            f"planning={result.planning_opportunity}"
+            f"planning={result.planning_opportunity}; "
+            f"reason={result.planning_reason}"
         )
         print(
             f"  full-only reasons={dict(sorted(Counter(result.full_only_reasons.values()).items()))}"
@@ -110,9 +114,9 @@ def main() -> int:
     print(f"Promotion classifications: {aggregate_classifications(results)}")
     print(
         "Ceilings: "
-        f"D1={sum(item.search.resolvable_within(1) for item in results)}/{len(results)} "
-        f"D2={sum(item.search.resolvable_within(2) for item in results)}/{len(results)} "
-        f"D3={sum(item.search.resolvable_within(3) for item in results)}/{len(results)}"
+        f"D1 resolved={sum(item.search.depth_status(1) == 'RESOLVED' for item in results)}/{len(results)} "
+        f"D2 resolved={sum(item.search.depth_status(2) == 'RESOLVED' for item in results)}/{len(results)} "
+        f"D3 resolved={sum(item.search.depth_status(3) == 'RESOLVED' for item in results)}/{len(results)}"
     )
     return 0
 

@@ -12,6 +12,11 @@ import packages.rca.investigation.control_matrix as control_matrix
 from packages.rca.demo import demo_source
 from packages.rca.frontier import apply_frontier_progress
 from packages.rca.investigation.control_matrix import (
+    PromotionAudit,
+    _audit_outcome,
+    _capabilities_for_finding_kind,
+    _finding_promotion_effect,
+    _full_only_reason,
     _outcome,
     exhaustive_active_closure,
     run_control_matrix,
@@ -136,6 +141,34 @@ def test_bounded_depth_results_are_monotonic_within_depth() -> None:
     assert result.resolvable_within(1)
     assert result.resolvable_within(2)
     assert result.resolvable_within(3)
+    truncated_after_solution = replace(result, truncated=True, truncation_depth=1)
+    assert truncated_after_solution.depth_status(1) == "RESOLVED"
+    assert truncated_after_solution.depth_status(2) == "RESOLVED"
+    assert truncated_after_solution.depth_status(3) == "RESOLVED"
+
+
+def test_bounded_depth_status_reports_truncation_honestly() -> None:
+    source = demo_source()
+    matrix = run_control_matrix(source, max_depth=3, max_states=1)
+    truncated_at_one = replace(
+        matrix.search,
+        solutions=(),
+        truncated=True,
+        truncation_depth=1,
+    )
+    assert truncated_at_one.depth_status(1) == "NOT_RESOLVED"
+    assert truncated_at_one.depth_status(2) == "UNKNOWN_TRUNCATED"
+    assert truncated_at_one.depth_status(3) == "UNKNOWN_TRUNCATED"
+
+    truncated_at_two = replace(truncated_at_one, truncation_depth=2)
+    assert truncated_at_two.depth_status(1) == "NOT_RESOLVED"
+    assert truncated_at_two.depth_status(2) == "NOT_RESOLVED"
+    assert truncated_at_two.depth_status(3) == "UNKNOWN_TRUNCATED"
+
+    complete = replace(truncated_at_one, truncated=False, truncation_depth=None)
+    assert complete.depth_status(1) == "NOT_RESOLVED"
+    assert complete.depth_status(2) == "NOT_RESOLVED"
+    assert complete.depth_status(3) == "NOT_RESOLVED"
 
 
 def test_diagnostic_finding_key_ignores_provenance_and_onset_annotations() -> None:
@@ -185,8 +218,180 @@ def test_raw_query_outcomes_are_distinct() -> None:
     assert _outcome(error, 0, (), ()) == "TOOL_ERROR"
     assert _outcome(observation, 0, (), ()) == "NO_RAW_RECORDS"
     assert _outcome(raw, 1, (), ()) == "ALREADY_KNOWN_RAW"
+    assert _outcome(raw, 1, (), (finding,)) == "FINDING_PRODUCED"
     assert _outcome(raw, 1, ("raw:new",), ()) == "NOVEL_RAW_NO_FINDING"
     assert _outcome(raw, 1, ("raw:new",), (finding,)) == "FINDING_PRODUCED"
+
+
+def test_builtin_normalizer_capability_map_is_exact() -> None:
+    history = (
+        FindingKind.OBJECT_CREATED,
+        FindingKind.OBJECT_DELETED,
+        FindingKind.CONFIG_CHANGE,
+        FindingKind.SPEC_CHANGE,
+        FindingKind.IMAGE_CHANGE,
+        FindingKind.SCALE_CHANGE,
+        FindingKind.ROLLOUT_RESTART,
+    )
+    for kind in history:
+        assert _capabilities_for_finding_kind(kind) == ("history",)
+    for kind in (FindingKind.FAILURE_EVENT, FindingKind.AUTOSCALING_FAILURE):
+        assert _capabilities_for_finding_kind(kind) == ("events",)
+    assert _capabilities_for_finding_kind(FindingKind.DEPENDENCY_ERRORS) == ("logs",)
+    assert _capabilities_for_finding_kind(FindingKind.RESOURCE_PRESSURE) == ("resource_pressure",)
+    assert _capabilities_for_finding_kind(FindingKind.TRAFFIC_INCREASE) == ("traffic",)
+    for kind in (
+        FindingKind.POLICY_CREATED,
+        FindingKind.FAULT_INJECTION,
+        FindingKind.CONTAINER_FAILURE,
+        FindingKind.NETWORK_RESTRICTION,
+    ):
+        assert _capabilities_for_finding_kind(kind) == ()
+
+
+def _promotion_audit(
+    *, capability: str = "history", target: str = "shop/ConfigMap/a"
+) -> PromotionAudit:
+    return PromotionAudit(
+        gap_id="gap:test",
+        dimension="CONFIG_DIFFERENCE",
+        capability=capability,
+        target=target,
+        alternative_ids=(),
+        query_template="full-history",
+        observation_identity="observation:test",
+        raw_records=1,
+        returned_refs=("raw:after",),
+        new_refs=("raw:after",),
+        already_seen_refs=(),
+        normalized_finding_core_keys=(),
+        new_finding_core_keys=(),
+        post_rebuild_finding_keys=(),
+        post_rebuild_roles=(),
+        candidate_created=False,
+        hypothesis_linked=False,
+        resolution_before="AMBIGUOUS",
+        resolution_after="AMBIGUOUS",
+        attempt_outcome="NOVEL_RAW_NO_FINDING",
+        promotion_classification=None,
+    )
+
+
+def test_partial_full_finding_evidence_is_not_normalization_gap() -> None:
+    finding = Finding(
+        kind=FindingKind.CONFIG_CHANGE,
+        entity=EntityRef.parse("shop/ConfigMap/a"),
+        at=None,
+        summary="changed",
+        evidence_ids=("raw:before", "raw:after"),
+    )
+    audit = _promotion_audit()
+    tools: Any = {"history": object()}
+    assert (
+        _full_only_reason(
+            finding,
+            active_refs={"raw:after"},
+            audits=(audit,),
+            tools=tools,
+        )
+        == "RAW_RECORD_NOT_RETURNED"
+    )
+    assert (
+        _full_only_reason(
+            finding,
+            active_refs={"raw:before", "raw:after"},
+            audits=(audit,),
+            tools=tools,
+        )
+        == "RAW_RETURNED_NORMALIZATION_GAP"
+    )
+
+
+def test_finding_from_known_raw_takes_precedence_in_outcome() -> None:
+    observation = InvestigationObservation(
+        observation_id="obs-known",
+        gap_id=_gap_outcome_fixture(),
+        capability="history",
+        target=EntityRef.parse("shop/Deployment/checkout"),
+        outcome=GapOutcomeKind.UNKNOWN,
+        payload={"versions": [{"id": "known"}]},
+        evidence_refs=("raw:known",),
+    )
+    finding = Finding(
+        kind=FindingKind.CONFIG_CHANGE,
+        entity=observation.target,
+        at=None,
+        summary="new semantic signal",
+    )
+    assert _outcome(observation, 1, (), (finding,)) == "FINDING_PRODUCED"
+
+
+def test_raw_records_without_refs_are_an_audit_defect() -> None:
+    observation = InvestigationObservation(
+        observation_id="obs-unreferenced",
+        gap_id=_gap_outcome_fixture(),
+        capability="history",
+        target=EntityRef.parse("shop/Deployment/checkout"),
+        outcome=GapOutcomeKind.UNKNOWN,
+        payload={"versions": [{"id": "missing-ref"}]},
+    )
+    assert _audit_outcome(observation, 1, (), (), ()) == (
+        "AUDIT_DEFECT",
+        "UNREFERENCED_RAW_RECORDS",
+    )
+
+
+def test_finding_promotion_effect_is_per_finding_not_global() -> None:
+    case = run_control_matrix(demo_source(), max_depth=1, max_states=1).full_case
+    finding = case.findings[0]
+    core = control_matrix.semantic_finding_core_key(finding)
+    base = _finding_promotion_effect(case, core)
+    unrelated = Hypothesis(
+        hypothesis_id="unrelated",
+        causal_actor=EntityRef.parse("shop/Deployment/unrelated"),
+    )
+    changed = replace(case, hypotheses=[*case.hypotheses, unrelated])
+    assert _finding_promotion_effect(changed, core) == base
+
+
+def test_shared_finding_losing_hypothesis_linkage_is_a_promotion_gap() -> None:
+    case = run_control_matrix(demo_source(), max_depth=1, max_states=1).full_case
+    finding = case.findings[0]
+    core = control_matrix.semantic_finding_core_key(finding)
+    candidate = case.candidates[0].model_copy(update={"findings": (finding,)})
+    linked = Hypothesis(
+        hypothesis_id="linked",
+        causal_actor=candidate.entity,
+        findings=(finding,),
+    )
+    full = replace(case, candidates=[candidate], hypotheses=[linked])
+    active = replace(case, candidates=[candidate], hypotheses=[])
+    assert _finding_promotion_effect(full, core) != _finding_promotion_effect(active, core)
+
+
+def test_shared_finding_with_different_causal_actor_is_a_promotion_gap() -> None:
+    case = run_control_matrix(demo_source(), max_depth=1, max_states=1).full_case
+    finding = case.findings[0]
+    core = control_matrix.semantic_finding_core_key(finding)
+    first = Hypothesis(
+        hypothesis_id="first",
+        causal_actor=EntityRef.parse("shop/Deployment/a"),
+        findings=(finding,),
+    )
+    second = first.model_copy(
+        update={"hypothesis_id": "second", "causal_actor": EntityRef.parse("shop/Deployment/b")}
+    )
+    assert _finding_promotion_effect(
+        replace(case, hypotheses=[first]), core
+    ) != _finding_promotion_effect(replace(case, hypotheses=[second]), core)
+
+
+def test_real_production_path_closure_reaches_a_safe_fixed_point() -> None:
+    result = exhaustive_active_closure(demo_source(), max_rounds=16, max_observations=4096)
+    assert result.rounds >= 1
+    assert result.truncated is False
+    assert result.termination_reason == "FIXED_POINT"
+    assert result.audits
 
 
 def test_legal_query_choices_deduplicate_underlying_observations() -> None:

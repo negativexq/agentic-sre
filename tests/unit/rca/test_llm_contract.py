@@ -20,6 +20,15 @@ def _inspect_payload() -> dict[str, Any]:
         "gap_id": "gap:test",
         "capability": "events",
         "target": {"kind": "Pod", "name": "demo", "namespace": "default"},
+        "query": {
+            "start": None,
+            "end": None,
+            "reasons": [],
+            "contains": [],
+            "metric": None,
+            "include_baseline": False,
+            "limit": 32,
+        },
         "rationale": "inspect the allowed event stream",
     }
 
@@ -31,11 +40,23 @@ def test_investigation_wire_schema_is_openai_strict() -> None:
         "gap_id",
         "capability",
         "target",
+        "query",
         "rationale",
     }
     target = ACTION_SCHEMA["$defs"]["InvestigationTargetWire"]
     assert set(target["required"]) == {"kind", "name", "namespace"}
     assert target["additionalProperties"] is False
+    query = ACTION_SCHEMA["$defs"]["InvestigationQueryWire"]
+    assert set(query["required"]) == {
+        "start",
+        "end",
+        "reasons",
+        "contains",
+        "metric",
+        "include_baseline",
+        "limit",
+    }
+    assert query["additionalProperties"] is False
 
 
 def test_wire_inspect_converts_to_domain_action() -> None:
@@ -54,6 +75,7 @@ def test_wire_stop_requires_explicit_nulls() -> None:
             "gap_id": None,
             "capability": None,
             "target": None,
+            "query": None,
             "rationale": "no useful observation remains",
         }
     ).to_domain()

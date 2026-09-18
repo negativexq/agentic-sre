@@ -10,12 +10,17 @@ from typing import Any
 
 from packages.rca.engine import Case
 from packages.rca.information_gap import CAPABILITIES
+from packages.rca.investigation.environment import (
+    InvestigationBackend,
+    _default_query,
+)
 from packages.rca.investigation.state import InvestigationTool
 from packages.rca.model import (
     EntityRef,
     GapOutcomeKind,
     InformationGap,
     InvestigationObservation,
+    InvestigationQuery,
 )
 
 
@@ -76,10 +81,24 @@ def make_observation(
 class _BaseTool:
     name: str
 
+    def __init__(self, backend: InvestigationBackend | None = None) -> None:
+        self.backend = backend
+
     def execute(
         self, case: Case, gap: InformationGap, target: EntityRef
     ) -> InvestigationObservation:
         raise NotImplementedError
+
+    def execute_query(
+        self,
+        case: Case,
+        gap: InformationGap,
+        target: EntityRef,
+        query: InvestigationQuery | None,
+    ) -> InvestigationObservation:
+        """Execute a semantic query; legacy direct calls remain compatible."""
+        del query
+        return self.execute(case, gap, target)
 
     def _observation(
         self,
@@ -121,6 +140,33 @@ class DescribeTool(_BaseTool):
         }
         return self._observation(gap, target, payload, refs=(version.evidence_id,))
 
+    def execute_query(
+        self, case: Case, gap: InformationGap, target: EntityRef, query: InvestigationQuery | None
+    ) -> InvestigationObservation:
+        if self.backend is None:
+            return self.execute(case, gap, target)
+        requested = _default_query(query, onset=case.symptoms.onset)
+        versions = self.backend.query_history(target, requested)
+        version = versions[-1] if versions else None
+        if version is None:
+            return self._observation(gap, target, {})
+        body = version.body
+        metadata_raw = body.get("metadata")
+        metadata: dict[str, Any] = metadata_raw if isinstance(metadata_raw, dict) else {}
+        return self._observation(
+            gap,
+            target,
+            {
+                "kind": body.get("kind", target.kind),
+                "spec": body.get("spec", {}),
+                "status": body.get("status", {}),
+                "data": body.get("data", {}),
+                "labels": metadata.get("labels", {}),
+            },
+            refs=(version.evidence_id,),
+            observed_at=version.observed_at,
+        )
+
 
 class HistoryTool(_BaseTool):
     name = "history"
@@ -133,6 +179,21 @@ class HistoryTool(_BaseTool):
         refs = tuple(ref for finding in findings for ref in finding.evidence_ids)[:32]
         observed = max((finding.at for finding in findings if finding.at), default=None)
         return self._observation(gap, target, payload, refs=refs, observed_at=observed)
+
+    def execute_query(
+        self, case: Case, gap: InformationGap, target: EntityRef, query: InvestigationQuery | None
+    ) -> InvestigationObservation:
+        if self.backend is None:
+            return self.execute(case, gap, target)
+        requested = _default_query(query, onset=case.symptoms.onset)
+        versions = self.backend.query_history(target, requested)
+        return self._observation(
+            gap,
+            target,
+            {"versions": [version.model_dump(mode="json") for version in versions]},
+            refs=tuple(version.evidence_id for version in versions),
+            observed_at=max((version.observed_at for version in versions), default=None),
+        )
 
 
 class EventsTool(_BaseTool):
@@ -159,6 +220,24 @@ class EventsTool(_BaseTool):
             {"events": [event.model_dump(mode="json") for event in events]},
             refs=refs,
             observed_at=observed,
+        )
+
+    def execute_query(
+        self, case: Case, gap: InformationGap, target: EntityRef, query: InvestigationQuery | None
+    ) -> InvestigationObservation:
+        if self.backend is None:
+            return self.execute(case, gap, target)
+        requested = _default_query(query, onset=case.symptoms.onset)
+        events = self.backend.query_events(target, requested)
+        return self._observation(
+            gap,
+            target,
+            {"events": [event.model_dump(mode="json") for event in events]},
+            refs=tuple(event.evidence_id for event in events),
+            observed_at=max(
+                (time for event in events for time in (event.last_at, event.first_at) if time),
+                default=None,
+            ),
         )
 
 
@@ -198,6 +277,21 @@ class LogsTool(_BaseTool):
         )
         return self._observation(gap, target, {"logs": records}, refs=refs)
 
+    def execute_query(
+        self, case: Case, gap: InformationGap, target: EntityRef, query: InvestigationQuery | None
+    ) -> InvestigationObservation:
+        if self.backend is None:
+            return self.execute(case, gap, target)
+        requested = _default_query(query, onset=case.symptoms.onset)
+        records = self.backend.query_logs(target, requested)
+        return self._observation(
+            gap,
+            target,
+            {"logs": [record.model_dump(mode="json") for record in records]},
+            refs=tuple(record.evidence_id for record in records),
+            observed_at=max((record.at for record in records if record.at), default=None),
+        )
+
 
 class ResourcePressureTool(_BaseTool):
     name = "resource_pressure"
@@ -208,6 +302,21 @@ class ResourcePressureTool(_BaseTool):
         onset = case.symptoms.onset or case.context.window_end
         since = onset - timedelta(hours=2) if onset else datetime.min.astimezone()
         records = list(case.source.resource_pressure((target,), since))[:32]
+        return self._observation(
+            gap,
+            target,
+            {"resource_pressure": [item.model_dump(mode="json") for item in records]},
+            refs=tuple(item.evidence_id for item in records),
+            observed_at=max((item.at for item in records if item.at), default=None),
+        )
+
+    def execute_query(
+        self, case: Case, gap: InformationGap, target: EntityRef, query: InvestigationQuery | None
+    ) -> InvestigationObservation:
+        if self.backend is None:
+            return self.execute(case, gap, target)
+        requested = _default_query(query, onset=case.symptoms.onset)
+        records = self.backend.query_resource_pressure(target, requested)
         return self._observation(
             gap,
             target,
@@ -234,17 +343,32 @@ class TrafficTool(_BaseTool):
             observed_at=max((item.at for item in records), default=None),
         )
 
+    def execute_query(
+        self, case: Case, gap: InformationGap, target: EntityRef, query: InvestigationQuery | None
+    ) -> InvestigationObservation:
+        if self.backend is None:
+            return self.execute(case, gap, target)
+        requested = _default_query(query, onset=case.symptoms.onset)
+        records = self.backend.query_traffic(target, requested)
+        return self._observation(
+            gap,
+            target,
+            {"traffic": [item.model_dump(mode="json") for item in records]},
+            refs=tuple(item.evidence_id for item in records),
+            observed_at=max((item.at for item in records), default=None),
+        )
 
-def default_tools() -> dict[str, InvestigationTool]:
+
+def default_tools(backend: InvestigationBackend | None = None) -> dict[str, InvestigationTool]:
     """Build a fresh registry; tools contain no mutable cross-run state."""
     tools: tuple[InvestigationTool, ...] = (
-        DescribeTool(),
-        HistoryTool(),
-        EventsTool(),
-        NeighborsTool(),
-        LogsTool(),
-        ResourcePressureTool(),
-        TrafficTool(),
+        DescribeTool(backend),
+        HistoryTool(backend),
+        EventsTool(backend),
+        NeighborsTool(backend),
+        LogsTool(backend),
+        ResourcePressureTool(backend),
+        TrafficTool(backend),
     )
     return {capability.name: tool for capability, tool in zip(CAPABILITIES, tools, strict=True)}
 

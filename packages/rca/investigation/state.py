@@ -16,6 +16,7 @@ from packages.rca.model import (
     InformationGap,
     InvestigationAction,
     InvestigationActionStatus,
+    InvestigationLedgerEntry,
     InvestigationObservation,
     InvestigationResult,
     InvestigationStep,
@@ -66,6 +67,7 @@ class InvestigationPolicyContext:
     turns: int
     model_calls_remaining: int
     tool_calls_remaining: int
+    previous_investigations: tuple[InvestigationLedgerEntry, ...] = ()
 
 
 class InvestigationPolicy(Protocol):
@@ -106,12 +108,16 @@ class InvestigationState(TypedDict, total=False):
     initial_diagnosis: Diagnosis
     current_diagnosis: Diagnosis
     observations: tuple[InvestigationObservation, ...]
+    ledger: tuple[InvestigationLedgerEntry, ...]
     investigation_findings: tuple[Finding, ...]
     attempted_actions: tuple[str, ...]
     attempted_gap_ids: tuple[str, ...]
     pending_action: InvestigationAction | None
     pending_observation: InvestigationObservation | None
     pending_findings: tuple[Finding, ...]
+    pending_returned_evidence_refs: tuple[str, ...]
+    pending_new_evidence_refs: tuple[str, ...]
+    pending_already_known_refs: tuple[str, ...]
     previous_resolution: Resolution
     previous_gap_fingerprint: tuple[tuple[str, ...], ...]
     previous_evidence_fingerprint: tuple[str, ...]
@@ -124,6 +130,7 @@ class InvestigationState(TypedDict, total=False):
     rejected_actions: int
     no_progress_count: int
     last_new_evidence_count: int
+    last_new_raw_evidence_count: int
     stop_reason: InvestigationStopReason | None
     trace_steps: tuple[InvestigationStep, ...]
     final_result: InvestigationResult | None

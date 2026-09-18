@@ -428,6 +428,20 @@ class GapOutcomeKind(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
+class InvestigationQuery(BaseModel):
+    """Provider-neutral, bounded semantic query parameters."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    start: datetime | None = None
+    end: datetime | None = None
+    reasons: tuple[str, ...] = ()
+    contains: tuple[str, ...] = ()
+    metric: str | None = None
+    include_baseline: bool = False
+    limit: int = Field(default=32, ge=1, le=64)
+
+
 class GapOutcome(BaseModel):
     """A typed outcome and its implication for a hypothesis set."""
 
@@ -544,6 +558,7 @@ class InvestigationAction(BaseModel):
     gap_id: str | None = None
     capability: str | None = None
     target: EntityRef | None = None
+    query: InvestigationQuery | None = None
     rationale: str = Field(default="", max_length=400)
 
 
@@ -587,6 +602,24 @@ class InvestigationObservation(BaseModel):
     evidence_refs: tuple[str, ...] = ()
     source_class: str = "investigation"
     error: str | None = None
+
+
+class InvestigationLedgerEntry(BaseModel):
+    """Append-only accounting for one semantic investigation query."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    query_id: str
+    gap_id: str
+    capability: str
+    target: EntityRef
+    query: InvestigationQuery | None = None
+    returned_evidence_refs: tuple[str, ...] = ()
+    new_evidence_refs: tuple[str, ...] = ()
+    already_known_refs: tuple[str, ...] = ()
+    normalized_finding_ids: tuple[str, ...] = ()
+    affected_hypothesis_ids: tuple[str, ...] = ()
+    outcome: GapOutcomeKind = GapOutcomeKind.UNKNOWN
 
 
 class Diagnosis(BaseModel):
@@ -648,6 +681,7 @@ class InvestigationResult(BaseModel):
     no_data_observations: int = 0
     stop_reason: InvestigationStopReason
     observations: tuple[InvestigationObservation, ...] = ()
+    ledger: tuple[InvestigationLedgerEntry, ...] = ()
     new_evidence_refs: tuple[str, ...] = ()
     resolved_during_investigation: bool = False
 
@@ -668,6 +702,8 @@ __all__ = [
     "FindingKind",
     "InvestigationStep",
     "InvestigationAction",
+    "InvestigationLedgerEntry",
+    "InvestigationQuery",
     "InvestigationActionStatus",
     "InvestigationStopReason",
     "InvestigationObservation",

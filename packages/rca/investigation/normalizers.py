@@ -14,11 +14,13 @@ from packages.rca.model import (
     InformationGap,
     InvestigationObservation,
     LogRecord,
+    ObjectVersion,
     ResourcePressure,
     TrafficObservation,
 )
 from packages.rca.signals import (
     autoscaling_findings,
+    change_findings,
     dependency_findings,
     failure_findings,
     resource_findings,
@@ -79,6 +81,22 @@ def _event_findings(case: Case, payload: dict[str, Any]) -> tuple[Finding, ...]:
     return tuple([*failure_findings(events), *autoscaling_findings(history, events, case.topology)])
 
 
+def _history_findings(payload: dict[str, Any]) -> tuple[Finding, ...]:
+    raw = payload.get("versions")
+    if not isinstance(raw, list):
+        return ()
+    history: dict[Any, list[ObjectVersion]] = {}
+    for item in raw[:64]:
+        if not isinstance(item, dict):
+            continue
+        try:
+            version = ObjectVersion.model_validate(item)
+        except ValueError:
+            continue
+        history.setdefault(version.entity, []).append(version)
+    return tuple(change_findings(history))
+
+
 def _metric_findings(case: Case, payload: dict[str, Any]) -> tuple[Finding, ...]:
     raw_pressure = payload.get("resource_pressure")
     if isinstance(raw_pressure, list):
@@ -129,7 +147,9 @@ def normalize_observation(
         return NormalizedObservation(observation=observation, findings=())
     payload = observation.payload
     findings = list(_payload_findings(payload))
-    if observation.capability == "events":
+    if observation.capability == "history":
+        findings.extend(_history_findings(payload))
+    elif observation.capability == "events":
         findings.extend(_event_findings(case, payload))
     elif observation.capability in {"resource_pressure", "traffic"}:
         findings.extend(_metric_findings(case, payload))

@@ -93,6 +93,7 @@ _FINDING_DIMENSIONS: dict[FindingKind, tuple[GapDimension, ...]] = {
     FindingKind.CONFIG_CHANGE: (GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING),
     FindingKind.SPEC_CHANGE: (GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING),
     FindingKind.IMAGE_CHANGE: (GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING),
+    FindingKind.ROLLOUT_RESTART: (GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING),
     FindingKind.DEPENDENCY_ERRORS: (GapDimension.DEPENDENCY_HEALTH,),
     FindingKind.FAILURE_EVENT: (GapDimension.EVENT_SEQUENCE, GapDimension.FAILURE_ONSET),
     FindingKind.CONTAINER_FAILURE: (GapDimension.FAILURE_ONSET, GapDimension.EVENT_SEQUENCE),
@@ -107,6 +108,25 @@ _RELATIONS: dict[GapDimension, str] = {
     GapDimension.DEPENDENCY_HEALTH: "dependency_of",
     GapDimension.TOPOLOGY_RELATION: "causal_path",
 }
+
+# These dimensions can be extended by a targeted investigation query when the
+# deterministic pass was built from ``InitialObservationView``.  Topology and
+# latest object state are intentionally absent: the initial view already
+# exposes those facts and re-reading them is not an information gap.
+_BOUNDED_EXPANDABLE_DIMENSIONS = frozenset(
+    {
+        GapDimension.AUTOSCALING_TARGET_STATE,
+        GapDimension.CHANGE_TIMING,
+        GapDimension.CONFIG_DIFFERENCE,
+        GapDimension.DEPENDENCY_HEALTH,
+        GapDimension.EVENT_SEQUENCE,
+        GapDimension.FAILURE_ONSET,
+        GapDimension.LOG_ERROR_PATTERN,
+        GapDimension.METRIC_BASELINE,
+        GapDimension.METRIC_CHANGE,
+        GapDimension.RESOURCE_PRESSURE,
+    }
+)
 
 
 def capabilities_for(dimension: GapDimension) -> tuple[ToolCapability, ...]:
@@ -299,17 +319,25 @@ def _available_capabilities(
             if capability.name not in {"resource_pressure", "traffic"}
         )
     available: list[ToolCapability] = []
+    bounded = bool(getattr(source, "initial_observation_bounded", False))
+    # The seed view already contains latest state and topology.  Re-exposing
+    # those capabilities would create queries that can only repeat the seed;
+    # investigation may instead query raw history, events, logs, or metrics.
+    blocked_in_bounded_view = {"describe", "neighbors"} if bounded else set()
+    capability_source = getattr(source, "full_source", source)
     pods = tuple(
         entity for hypothesis in hypotheses for entity in hypothesis.members if entity.kind == "Pod"
     )
     cutoff = source.observation_cutoff()
     since = cutoff - timedelta(hours=2) if cutoff is not None else None
     for capability in capabilities:
+        if capability.name in blocked_in_bounded_view:
+            continue
         if capability.name == "resource_pressure":
-            if since is not None and source.resource_pressure(pods, since):
+            if since is not None and capability_source.resource_pressure(pods, since):
                 available.append(capability)
         elif capability.name == "traffic":
-            if source.traffic_observations():
+            if capability_source.traffic_observations():
                 available.append(capability)
         else:
             available.append(capability)
@@ -336,6 +364,9 @@ def _gap_for(
     complete = all(facts_by_hypothesis)
     same_facts = complete and len(set(facts_by_hypothesis)) == 1
     capabilities = _available_capabilities(dimension, ordered, source)
+    bounded_can_expand = bool(getattr(source, "initial_observation_bounded", False)) and (
+        dimension in _BOUNDED_EXPANDABLE_DIMENSIONS
+    )
     source_unavailable_for_metric = source is None and dimension in {
         GapDimension.RESOURCE_PRESSURE,
         GapDimension.METRIC_BASELINE,
@@ -345,7 +376,7 @@ def _gap_for(
         resolvability = GapResolvability.UNRESOLVABLE_WITH_CURRENT_TOOLS
     elif complete and not same_facts:
         resolvability = GapResolvability.ALREADY_OBSERVED
-    elif same_facts:
+    elif same_facts and not bounded_can_expand:
         resolvability = GapResolvability.ALREADY_OBSERVED
     else:
         resolvability = (
@@ -393,7 +424,14 @@ def derive_information_gaps(
     selected_ids = tuple(
         resolution.leading_hypothesis_ids
         if resolution.state is Resolution.AMBIGUOUS
-        else resolution.plausible_hypotheses
+        else (
+            resolution.plausible_hypotheses
+            or tuple(
+                hypothesis.hypothesis_id
+                for hypothesis in hypotheses
+                if hypothesis.causal_explanation != "UNLINKED"
+            )[:2]
+        )
     )
     selected = tuple(by_id[item] for item in selected_ids if item in by_id)
     if not selected:

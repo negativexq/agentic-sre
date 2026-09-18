@@ -13,6 +13,11 @@ from langgraph.graph import END, START, StateGraph
 
 from packages.rca.engine import Case, EngineConfig, build_case, diagnose_case
 from packages.rca.investigation.actions import action_identity, validate_action
+from packages.rca.investigation.environment import (
+    InvestigationBackend,
+    initial_view,
+    investigation_backend,
+)
 from packages.rca.investigation.normalizers import (
     deduplicate_findings,
     normalize_observation,
@@ -34,6 +39,7 @@ from packages.rca.model import (
     GapResolvability,
     InformationGap,
     InvestigationActionStatus,
+    InvestigationLedgerEntry,
     InvestigationResult,
     InvestigationStep,
     InvestigationStopReason,
@@ -76,10 +82,12 @@ class _Runtime:
         config: InvestigationConfig | None,
         initial_case: Case | None,
         rebuild_case: CaseRebuilder | None,
+        backend: InvestigationBackend | None,
     ) -> None:
         self.source = source
         self.policy = policy
-        self.tools: Mapping[str, InvestigationTool] = dict(tools or default_tools())
+        self.backend = backend or investigation_backend(source)
+        self.tools: Mapping[str, InvestigationTool] = dict(tools or default_tools(self.backend))
         self.config = config or InvestigationConfig()
         self.engine_config = _engine_config(self.config)
         self.rebuild_case = rebuild_case or _default_rebuilder(self.config)
@@ -215,6 +223,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         turns=state["turns"],
         model_calls_remaining=max(0, rt.config.max_model_calls - state["model_calls"]),
         tool_calls_remaining=max(0, rt.config.max_tool_calls - state["tool_calls"]),
+        previous_investigations=tuple(state.get("ledger", ())[-8:]),
     )
     before = _policy_calls(rt.policy)
     try:
@@ -323,7 +332,12 @@ def _execute_tool(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     assert action.target is not None
     tool = rt.tools[action.capability]
     try:
-        observation = tool.execute(rt.case_for(state["investigation_findings"]), gap, action.target)
+        case = rt.case_for(state["investigation_findings"])
+        execute_query = getattr(tool, "execute_query", None)
+        if callable(execute_query):
+            observation = execute_query(case, gap, action.target, action.query)
+        else:
+            observation = tool.execute(case, gap, action.target)
     except Exception as error:  # semantic tools must not crash the diagnosis
         observation = make_observation(
             gap=gap,
@@ -340,6 +354,39 @@ def _execute_tool(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             state,
             "execute_tool",
             f"{action.capability}({action.target.canonical}) → {observation.outcome.value}",
+        ),
+    }
+
+
+def _check_novelty(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
+    """Compare raw query references with effective case evidence before normalization."""
+    observation = state.get("pending_observation")
+    if observation is None:
+        return {
+            "pending_returned_evidence_refs": (),
+            "pending_new_evidence_refs": (),
+            "pending_already_known_refs": (),
+            "last_new_raw_evidence_count": 0,
+            "trace_steps": _with_step(state, "check_novelty", "no observation returned"),
+        }
+    current_case = rt.case_for(state["investigation_findings"])
+    known_refs = {
+        evidence_id
+        for finding in (*current_case.findings, *state["investigation_findings"])
+        for evidence_id in finding.evidence_ids
+    }
+    returned_refs = tuple(dict.fromkeys(observation.evidence_refs))
+    new_refs = tuple(ref for ref in returned_refs if ref not in known_refs)
+    known = tuple(ref for ref in returned_refs if ref in known_refs)
+    return {
+        "pending_returned_evidence_refs": returned_refs,
+        "pending_new_evidence_refs": new_refs,
+        "pending_already_known_refs": known,
+        "last_new_raw_evidence_count": len(new_refs),
+        "trace_steps": _with_step(
+            state,
+            "check_novelty",
+            f"returned={len(returned_refs)}; new={len(new_refs)}; already-known={len(known)}",
         ),
     }
 
@@ -369,6 +416,27 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         (*rt.case_for(state["investigation_findings"]).findings, *state["investigation_findings"]),
         normalized.findings,
     )
+    returned_refs = state.get("pending_returned_evidence_refs", ())
+    new_refs = state.get("pending_new_evidence_refs", ())
+    known_refs = set(state.get("pending_already_known_refs", ()))
+    finding_ids = tuple(
+        f"{finding.kind.value}:{finding.entity.canonical}:{','.join(finding.evidence_ids)}"
+        for finding in fresh_findings
+    )
+    action = state.get("pending_action")
+    ledger_entry = InvestigationLedgerEntry(
+        query_id=observation.observation_id,
+        gap_id=observation.gap_id,
+        capability=observation.capability,
+        target=observation.target,
+        query=action.query if action is not None else None,
+        returned_evidence_refs=returned_refs,
+        new_evidence_refs=new_refs,
+        already_known_refs=tuple(ref for ref in returned_refs if ref in known_refs),
+        normalized_finding_ids=finding_ids,
+        affected_hypothesis_ids=normalized.observation.hypothesis_ids,
+        outcome=normalized.observation.outcome,
+    )
     existing_ids = {item.observation_id for item in state["observations"]}
     observations = (
         state["observations"]
@@ -377,6 +445,7 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     )
     return {
         "observations": observations,
+        "ledger": (*state.get("ledger", ()), ledger_entry),
         "pending_findings": fresh_findings,
         "last_new_evidence_count": len(fresh_findings),
         "trace_steps": _with_step(
@@ -494,10 +563,10 @@ def _finalize(state: InvestigationState) -> dict[str, Any]:
             "steps": (*state["current_diagnosis"].steps, *state.get("trace_steps", ())),
         }
     )
+    # Count only references that crossed the initial/effective-case boundary;
+    # a normalized finding may retain already-known provenance for explanation.
     evidence_refs = tuple(
-        dict.fromkeys(
-            ref for finding in state["investigation_findings"] for ref in finding.evidence_ids
-        )
+        dict.fromkeys(ref for entry in state.get("ledger", ()) for ref in entry.new_evidence_refs)
     )
     result = InvestigationResult(
         diagnosis=diagnosis,
@@ -515,6 +584,7 @@ def _finalize(state: InvestigationState) -> dict[str, Any]:
         ),
         stop_reason=reason,
         observations=state["observations"],
+        ledger=state.get("ledger", ()),
         new_evidence_refs=evidence_refs,
         resolved_during_investigation=(
             state["initial_diagnosis"].resolution is not Resolution.RESOLVED
@@ -532,6 +602,7 @@ def build_investigation_graph(
     config: InvestigationConfig | None = None,
     initial_case: Case | None = None,
     rebuild_case: CaseRebuilder | None = None,
+    backend: InvestigationBackend | None = None,
     checkpointer: Any | None = None,
     interrupt_before: tuple[str, ...] = (),
     interrupt_after: tuple[str, ...] = (),
@@ -548,6 +619,7 @@ def build_investigation_graph(
         config=config,
         initial_case=initial_case,
         rebuild_case=rebuild_case,
+        backend=backend,
     )
 
     def bind(node: Callable[[InvestigationState, _Runtime], dict[str, Any]]) -> Any:
@@ -561,6 +633,7 @@ def build_investigation_graph(
     graph.add_node("select_action", bind(_select_action))
     graph.add_node("validate_action", bind(_validate))
     graph.add_node("execute_tool", bind(_execute_tool))
+    graph.add_node("check_novelty", bind(_check_novelty))
     graph.add_node("normalize_observation", bind(_normalize))
     graph.add_node("rebuild_hypotheses", bind(_rebuild))
     graph.add_node("check_progress", bind(_check_progress))
@@ -583,7 +656,8 @@ def build_investigation_graph(
             "finalize": "finalize",
         },
     )
-    graph.add_edge("execute_tool", "normalize_observation")
+    graph.add_edge("execute_tool", "check_novelty")
+    graph.add_edge("check_novelty", "normalize_observation")
     graph.add_edge("normalize_observation", "rebuild_hypotheses")
     graph.add_edge("rebuild_hypotheses", "check_progress")
     graph.add_conditional_edges(
@@ -613,17 +687,25 @@ def investigate_diagnosis(
     rebuild_case: CaseRebuilder | None = None,
 ) -> InvestigationResult:
     """Run one isolated bounded investigation and return deterministic output."""
-    case = initial_case or build_case(source, _engine_config(config or InvestigationConfig()))
+    initial_source = (
+        source if initial_case is not None or diagnosis is not None else initial_view(source)
+    )
+    case = initial_case or build_case(
+        initial_source, _engine_config(config or InvestigationConfig())
+    )
     graph = build_investigation_graph(
-        source=source,
+        source=initial_source,
         policy=policy,
         tools=tools,
         config=config,
         initial_case=case,
         rebuild_case=rebuild_case,
+        backend=investigation_backend(source),
         checkpointer=checkpointer,
     )
-    state = build_investigation_state(source, diagnosis=diagnosis, config=config, initial_case=case)
+    state = build_investigation_state(
+        initial_source, diagnosis=diagnosis, config=config, initial_case=case
+    )
     thread = thread_id or f"{source.incident_id()}:investigation"
     result = graph.invoke(state, config={"configurable": {"thread_id": thread}})
     final = result.get("final_result")
@@ -650,12 +732,16 @@ def build_investigation_state(
         "initial_diagnosis": initial,
         "current_diagnosis": initial,
         "observations": (),
+        "ledger": (),
         "investigation_findings": (),
         "attempted_actions": (),
         "attempted_gap_ids": (),
         "pending_action": None,
         "pending_observation": None,
         "pending_findings": (),
+        "pending_returned_evidence_refs": (),
+        "pending_new_evidence_refs": (),
+        "pending_already_known_refs": (),
         "previous_resolution": initial.resolution,
         "previous_gap_fingerprint": _gap_fingerprint(initial),
         "previous_evidence_fingerprint": _evidence_fingerprint(case),
@@ -668,6 +754,7 @@ def build_investigation_state(
         "rejected_actions": 0,
         "no_progress_count": 0,
         "last_new_evidence_count": 0,
+        "last_new_raw_evidence_count": 0,
         "stop_reason": None,
         "trace_steps": (),
         "final_result": None,

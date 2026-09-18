@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
@@ -22,7 +23,12 @@ class ActionValidation:
 def action_identity(action: InvestigationAction) -> str:
     """Stable identity used to prevent repeated no-op observations."""
     target = action.target.canonical if action.target is not None else "-"
-    return f"{action.gap_id or '-'}|{action.capability or '-'}|{target}"
+    query = (
+        json.dumps(action.query.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+        if action.query is not None
+        else "-"
+    )
+    return f"{action.gap_id or '-'}|{action.capability or '-'}|{target}|{query}"
 
 
 def validate_action(
@@ -36,12 +42,20 @@ def validate_action(
 ) -> ActionValidation:
     """Fail closed on every action property before a tool can execute."""
     if action.action == "stop":
-        if action.gap_id is not None or action.capability is not None or action.target is not None:
+        if (
+            action.gap_id is not None
+            or action.capability is not None
+            or action.target is not None
+            or action.query is not None
+        ):
             return ActionValidation(False, "stop actions cannot contain an inspection target")
         return ActionValidation(True)
 
     if action.gap_id is None or action.capability is None or action.target is None:
         return ActionValidation(False, "inspect requires gap_id, capability, and target")
+    if action.query is not None and action.query.start and action.query.end:
+        if action.query.start > action.query.end:
+            return ActionValidation(False, "query start must not be after query end")
     gap = next((item for item in gaps if item.gap_id == action.gap_id), None)
     if gap is None:
         return ActionValidation(False, f"unknown information gap {action.gap_id!r}")

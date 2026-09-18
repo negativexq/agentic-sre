@@ -690,6 +690,15 @@ def test_llm_policy_only_returns_a_strict_observation_action() -> None:
                 "gap_id": gap.gap_id,
                 "capability": "events",
                 "target": right.model_dump(mode="json"),
+                "query": {
+                    "start": None,
+                    "end": None,
+                    "reasons": [],
+                    "contains": [],
+                    "metric": None,
+                    "include_baseline": False,
+                    "limit": 32,
+                },
                 "rationale": "inspect the authorized gap",
             }
         ]

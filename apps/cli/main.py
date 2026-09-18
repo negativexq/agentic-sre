@@ -200,6 +200,15 @@ def _emit_investigation(result: InvestigationResult, args: argparse.Namespace) -
         print(f"  Unique observations  {result.unique_observations}")
         print(f"  New evidence         {result.unique_evidence_added}")
         print(f"  Stop reason          {result.stop_reason.value}")
+        for entry in result.ledger:
+            print(
+                "  Query                "
+                f"{entry.capability}({entry.target.canonical}) "
+                f"returned={len(entry.returned_evidence_refs)} "
+                f"new={len(entry.new_evidence_refs)} "
+                f"known={len(entry.already_known_refs)} "
+                f"findings={len(entry.normalized_finding_ids)}"
+            )
         if args.html:
             print(f"\nHTML report: {args.html}")
 

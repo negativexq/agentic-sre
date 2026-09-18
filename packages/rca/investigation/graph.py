@@ -212,6 +212,32 @@ def _route_after_assess(state: InvestigationState) -> str:
 
 
 def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
+    # Invalid-action retries bypass ``assess`` by design.  Re-check budgets at
+    # this boundary so a malformed provider response (including its bounded
+    # schema retry) cannot consume another model turn.
+    if state["turns"] >= rt.config.max_turns:
+        return {
+            "stop_reason": InvestigationStopReason.TURN_BUDGET_EXHAUSTED,
+            "trace_steps": _with_step(
+                state, "assess", "turn budget exhausted before action selection"
+            ),
+        }
+    if state["tool_calls"] >= rt.config.max_tool_calls:
+        return {
+            "stop_reason": InvestigationStopReason.TOOL_BUDGET_EXHAUSTED,
+            "trace_steps": _with_step(
+                state, "assess", "tool-call budget exhausted before action selection"
+            ),
+        }
+    if state["model_calls"] >= rt.config.max_model_calls and getattr(
+        rt.policy, "counts_as_model", False
+    ):
+        return {
+            "stop_reason": InvestigationStopReason.MODEL_BUDGET_EXHAUSTED,
+            "trace_steps": _with_step(
+                state, "assess", "model-call budget exhausted before action selection"
+            ),
+        }
     diagnosis = state["current_diagnosis"]
     gaps = _resolvable_gaps(diagnosis)
     context = InvestigationPolicyContext(

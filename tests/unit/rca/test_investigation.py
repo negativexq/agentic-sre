@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -178,6 +179,18 @@ class _NoDataTool:
     def execute(self, case: Case, gap: Any, target: EntityRef) -> InvestigationObservation:
         self.calls += 1
         return make_observation(gap=gap, capability=self.name, target=target, payload={})
+
+
+class _CountingInvalidPolicy:
+    counts_as_model = True
+
+    def __init__(self) -> None:
+        self.client = SimpleNamespace(calls=0)
+
+    def choose_action(self, context: InvestigationPolicyContext) -> InvestigationAction:
+        del context
+        self.client.calls += 1
+        return InvestigationAction(action="inspect", rationale="missing required fields")
 
 
 class _ProgressThenNoDataTool:
@@ -677,6 +690,22 @@ def test_action_schema_rejects_root_cause_and_mutation_requests() -> None:
                 "target": "shop/HPA/right",
             }
         )
+
+
+def test_invalid_retry_cannot_bypass_model_budget() -> None:
+    case, _left, _right = _case()
+    initial = diagnose_case(case)
+    result = investigate_diagnosis(
+        case.source,
+        diagnosis=initial,
+        initial_case=case,
+        policy=_CountingInvalidPolicy(),
+        config=InvestigationConfig(max_model_calls=1, max_invalid_actions=2),
+    )
+    assert result.rejected_actions == 1
+    assert result.tool_calls == 0
+    assert result.model_calls == 1
+    assert result.stop_reason is InvestigationStopReason.MODEL_BUDGET_EXHAUSTED
 
 
 def test_llm_policy_only_returns_a_strict_observation_action() -> None:

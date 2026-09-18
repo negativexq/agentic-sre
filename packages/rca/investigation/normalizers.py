@@ -136,7 +136,23 @@ def normalize_observation(
     elif observation.capability == "logs":
         findings.extend(_log_findings(case, payload))
     normalized = tuple(_with_provenance(item, observation, gap) for item in findings)
-    return NormalizedObservation(observation=observation, findings=normalized)
+    hypothesis_ids = tuple(
+        sorted(
+            hypothesis.hypothesis_id
+            for hypothesis in case.hypotheses
+            if observation.target == hypothesis.causal_actor
+            or observation.target in hypothesis.members
+        )
+    )
+    interpreted = observation.model_copy(
+        update={
+            "hypothesis_ids": hypothesis_ids,
+            "outcome": (
+                GapOutcomeKind.SUPPORTS if normalized and hypothesis_ids else GapOutcomeKind.UNKNOWN
+            ),
+        }
+    )
+    return NormalizedObservation(observation=interpreted, findings=normalized)
 
 
 def deduplicate_findings(findings: Iterable[Finding]) -> tuple[Finding, ...]:

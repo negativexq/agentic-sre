@@ -265,6 +265,10 @@ def _normalize(state: InvestigationState) -> dict[str, Any]:
             "trace_steps": _with_step(state, "normalize", "observation gap no longer exists"),
         }
     normalized = normalize_observation(observation, case=state["current_case"], gap=gap)
+    fresh_findings = _new_investigation_findings(
+        (*state["current_case"].findings, *state["investigation_findings"]),
+        normalized.findings,
+    )
     existing_ids = {item.observation_id for item in state["observations"]}
     observations = (
         state["observations"]
@@ -273,14 +277,36 @@ def _normalize(state: InvestigationState) -> dict[str, Any]:
     )
     return {
         "observations": observations,
-        "pending_findings": normalized.findings,
-        "last_new_evidence_count": len(normalized.findings),
+        "pending_findings": fresh_findings,
+        "last_new_evidence_count": len(fresh_findings),
         "trace_steps": _with_step(
             state,
             "normalize",
             f"{len(normalized.findings)} deterministic finding(s) from {observation.observation_id}",
         ),
     }
+
+
+def _new_investigation_findings(
+    existing: tuple[Finding, ...], incoming: tuple[Finding, ...]
+) -> tuple[Finding, ...]:
+    """Avoid treating repeated normalized evidence as progress."""
+    known_ids = {evidence_id for finding in existing for evidence_id in finding.evidence_ids}
+    known_fallbacks = {
+        (finding.entity.canonical, finding.kind.value, finding.summary) for finding in existing
+    }
+    fresh: list[Finding] = []
+    for finding in deduplicate_findings(incoming):
+        evidence_ids = set(finding.evidence_ids)
+        fallback = (finding.entity.canonical, finding.kind.value, finding.summary)
+        if evidence_ids and evidence_ids <= known_ids:
+            continue
+        if not evidence_ids and fallback in known_fallbacks:
+            continue
+        fresh.append(finding)
+        known_ids.update(evidence_ids)
+        known_fallbacks.add(fallback)
+    return tuple(fresh)
 
 
 def _rebuild(state: InvestigationState) -> dict[str, Any]:
@@ -360,7 +386,7 @@ def _finalize(state: InvestigationState) -> dict[str, Any]:
     )
     evidence_refs = tuple(
         dict.fromkeys(
-            ref for observation in state["observations"] for ref in observation.evidence_refs
+            ref for finding in state["investigation_findings"] for ref in finding.evidence_ids
         )
     )
     result = InvestigationResult(

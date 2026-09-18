@@ -227,6 +227,8 @@ def test_ambiguous_investigation_adds_evidence_and_resolves_deterministically() 
     assert result.model_calls == 0
     assert result.resolved_during_investigation
     assert tool.calls == 1
+    assert result.observations[0].outcome is GapOutcomeKind.SUPPORTS
+    assert result.observations[0].hypothesis_ids
 
 
 def test_no_data_is_neutral_and_does_not_resolve() -> None:
@@ -353,6 +355,28 @@ def test_duplicate_action_is_blocked_and_loop_terminates() -> None:
     assert result.stop_reason.value == "POLICY_STOP"
     assert result.tool_calls == 1
     assert result.rejected_actions == 1
+
+
+def test_duplicate_evidence_from_a_different_action_is_no_progress() -> None:
+    case, left, right = _case()
+    initial = diagnose_case(case)
+    gap = next(gap for gap in initial.information_gaps if "events" in gap.candidate_tools)
+    finding = _finding(right, FindingKind.AUTOSCALING_FAILURE, "hpa:right")
+    tool = _DiscriminatingEventsTool(finding)
+    result = investigate_diagnosis(
+        case.source,
+        diagnosis=initial,
+        initial_case=case,
+        config=InvestigationConfig(max_no_progress_rounds=2),
+        policy=ScriptedInvestigationPolicy(
+            [_policy_action(gap.gap_id, right), _policy_action(gap.gap_id, left)]
+        ),
+        tools={"events": tool},
+        rebuild_case=_rebuild_with_findings,
+    )
+    assert result.final_resolution is Resolution.AMBIGUOUS
+    assert result.stop_reason.value == "NO_PROGRESS"
+    assert result.tool_calls == 2
 
 
 def test_tool_budget_ends_a_persistently_ambiguous_run() -> None:

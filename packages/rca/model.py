@@ -573,6 +573,7 @@ class InvestigationObservation(BaseModel):
     target: EntityRef
     observed_at: datetime | None = None
     outcome: GapOutcomeKind = GapOutcomeKind.UNKNOWN
+    hypothesis_ids: tuple[str, ...] = ()
     payload: dict[str, Any] = Field(default_factory=dict)
     evidence_refs: tuple[str, ...] = ()
     source_class: str = "investigation"

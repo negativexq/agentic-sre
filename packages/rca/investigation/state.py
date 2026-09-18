@@ -22,6 +22,7 @@ from packages.rca.model import (
     InvestigationStep,
     InvestigationStopReason,
     Resolution,
+    StructuralAlternative,
 )
 
 
@@ -69,6 +70,7 @@ class InvestigationPolicyContext:
     tool_calls_remaining: int
     previous_investigations: tuple[InvestigationLedgerEntry, ...] = ()
     last_rejection: tuple[str, str, str] | None = None
+    structural_alternatives: tuple[StructuralAlternative, ...] = ()
 
 
 class InvestigationPolicy(Protocol):
@@ -123,6 +125,7 @@ class InvestigationState(TypedDict, total=False):
     previous_gap_fingerprint: tuple[tuple[str, ...], ...]
     previous_evidence_fingerprint: tuple[str, ...]
     previous_hypothesis_fingerprint: tuple[str, ...]
+    frontier_status: tuple[tuple[str, str], ...]
     action_validation_status: InvestigationActionStatus | None
     turns: int
     model_calls: int

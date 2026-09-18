@@ -12,6 +12,7 @@ from hashlib import sha256
 
 from packages.rca.model import (
     FindingKind,
+    FrontierStatus,
     GapDimension,
     GapOutcome,
     GapOutcomeKind,
@@ -20,6 +21,7 @@ from packages.rca.model import (
     InformationGap,
     Resolution,
     ResolutionTrace,
+    StructuralAlternative,
     ToolCapability,
 )
 from packages.rca.resolution import hypothesis_signature
@@ -155,11 +157,15 @@ def capabilities_for(dimension: GapDimension) -> tuple[ToolCapability, ...]:
 
 
 def _stable_gap_id(
-    dimension: GapDimension, hypotheses: Sequence[Hypothesis], entity_scope: Sequence[str]
+    dimension: GapDimension,
+    hypotheses: Sequence[Hypothesis],
+    alternatives: Sequence[StructuralAlternative],
+    entity_scope: Sequence[str],
 ) -> str:
     payload = {
         "dimension": dimension.value,
         "hypotheses": sorted(hypothesis.hypothesis_id for hypothesis in hypotheses),
+        "alternatives": sorted(item.alternative_id for item in alternatives),
         "entities": sorted(entity_scope),
     }
     digest = sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:20]
@@ -179,7 +185,9 @@ def _evidence_refs(hypotheses: Iterable[Hypothesis]) -> tuple[str, ...]:
     )[:16]
 
 
-def _dimensions(hypotheses: Sequence[Hypothesis]) -> tuple[GapDimension, ...]:
+def _dimensions(
+    hypotheses: Sequence[Hypothesis], alternatives: Sequence[StructuralAlternative] = ()
+) -> tuple[GapDimension, ...]:
     dimensions = {
         dimension
         for hypothesis in hypotheses
@@ -187,10 +195,7 @@ def _dimensions(hypotheses: Sequence[Hypothesis]) -> tuple[GapDimension, ...]:
         for dimension in _FINDING_DIMENSIONS.get(finding.kind, ())
     }
     dimensions.update(
-        dimension
-        for hypothesis in hypotheses
-        if hypothesis.structural_basis and not hypothesis.findings
-        for dimension in _STRUCTURAL_DIMENSIONS.get(hypothesis.causal_actor.kind, ())
+        dimension for alternative in alternatives for dimension in alternative.queryable_dimensions
     )
     if not dimensions:
         dimensions.add(GapDimension.TOPOLOGY_RELATION)
@@ -290,15 +295,18 @@ def _missing_fact(dimension: GapDimension) -> str:
 
 def _outcomes(
     hypotheses: Sequence[Hypothesis],
+    alternatives: Sequence[StructuralAlternative],
     missing: str,
     resolvability: GapResolvability,
 ) -> tuple[GapOutcome, ...]:
     ids = tuple(sorted(hypothesis.hypothesis_id for hypothesis in hypotheses))
+    alternative_ids = tuple(sorted(item.alternative_id for item in alternatives))
     if resolvability is GapResolvability.ALREADY_OBSERVED:
         return (
             GapOutcome(
                 kind=GapOutcomeKind.UNKNOWN,
                 hypothesis_ids=ids,
+                alternative_ids=alternative_ids,
                 condition="the dimension is already observed without a differentiator",
                 implication="no additional bounded observation is useful for this gap",
             ),
@@ -313,17 +321,29 @@ def _outcomes(
                 implication=f"supports {hypothesis.hypothesis_id} over the other plausible hypotheses",
             )
         )
+    for alternative in sorted(alternatives, key=lambda item: item.alternative_id):
+        outcomes.append(
+            GapOutcome(
+                hypothesis_ids=(),
+                alternative_ids=(alternative.alternative_id,),
+                kind=GapOutcomeKind.SUPPORTS,
+                condition=f"the missing fact promotes {alternative.alternative_id} into a causal explanation",
+                implication=f"promotes {alternative.actor.canonical} for deterministic RCA evaluation",
+            )
+        )
     outcomes.extend(
         (
             GapOutcome(
                 kind=GapOutcomeKind.NO_DATA,
                 hypothesis_ids=ids,
+                alternative_ids=alternative_ids,
                 condition="the evidence source returns no observation",
                 implication="does not support or contradict any hypothesis; ambiguity remains",
             ),
             GapOutcome(
                 kind=GapOutcomeKind.UNKNOWN,
                 hypothesis_ids=ids,
+                alternative_ids=alternative_ids,
                 condition="the observation is inconclusive or contradictory",
                 implication="no deterministic resolution follows",
             ),
@@ -380,6 +400,7 @@ def _available_capabilities(
 def _gap_for(
     dimension: GapDimension,
     hypotheses: Sequence[Hypothesis],
+    alternatives: Sequence[StructuralAlternative],
     source: ObservationSource | None,
 ) -> InformationGap:
     ordered = tuple(sorted(hypotheses, key=lambda item: item.hypothesis_id))
@@ -389,6 +410,9 @@ def _gap_for(
                 entity
                 for hypothesis in ordered
                 for entity in (hypothesis.causal_actor, *hypothesis.members)
+            }
+            | {
+                entity for alternative in alternatives for entity in alternative.observation_targets
             },
             key=lambda entity: entity.canonical,
         )
@@ -407,6 +431,11 @@ def _gap_for(
     }
     if source_unavailable_for_metric:
         resolvability = GapResolvability.UNRESOLVABLE_WITH_CURRENT_TOOLS
+    elif alternatives and capabilities:
+        # A structural alternative has no evidence facts by definition.  Its
+        # query is therefore meaningful even when the evidence-backed
+        # hypothesis already has a complete fact set for this dimension.
+        resolvability = GapResolvability.RESOLVABLE
     elif complete and not same_facts:
         resolvability = GapResolvability.ALREADY_OBSERVED
     elif same_facts and not bounded_can_expand:
@@ -424,14 +453,20 @@ def _gap_for(
     )
     missing = _missing_fact(dimension)
     return InformationGap(
-        gap_id=_stable_gap_id(dimension, ordered, [entity.canonical for entity in entity_scope]),
+        gap_id=_stable_gap_id(
+            dimension,
+            ordered,
+            alternatives,
+            [entity.canonical for entity in entity_scope],
+        ),
         dimension=dimension,
         hypothesis_ids=tuple(hypothesis.hypothesis_id for hypothesis in ordered),
+        alternative_ids=tuple(item.alternative_id for item in alternatives),
         entity_scope=entity_scope,
         known_facts=_known_facts(ordered, dimension),
         missing_fact=missing,
         required_relation=_RELATIONS.get(dimension),
-        discriminating_outcomes=_outcomes(ordered, missing, resolvability),
+        discriminating_outcomes=_outcomes(ordered, alternatives, missing, resolvability),
         candidate_tools=tools,
         evidence_refs=_evidence_refs(ordered),
         priority=1,
@@ -449,9 +484,13 @@ def derive_information_gaps(
     hypotheses: Sequence[Hypothesis],
     resolution: ResolutionTrace,
     source: ObservationSource | None = None,
+    structural_alternatives: Sequence[StructuralAlternative] = (),
 ) -> tuple[InformationGap, ...]:
-    """Derive stable gaps for ambiguous or evidence-poor diagnoses only."""
-    if resolution.state not in {Resolution.AMBIGUOUS, Resolution.INSUFFICIENT_EVIDENCE}:
+    """Derive gaps for unresolved evidence or open structural alternatives."""
+    open_alternatives = tuple(
+        item for item in structural_alternatives if item.status is FrontierStatus.UNEXPLORED
+    )
+    if resolution.state is Resolution.RESOLVED and not open_alternatives:
         return ()
     by_id = {hypothesis.hypothesis_id: hypothesis for hypothesis in hypotheses}
     selected_ids = tuple(
@@ -467,10 +506,12 @@ def derive_information_gaps(
         )
     )
     selected = tuple(by_id[item] for item in selected_ids if item in by_id)
-    if not selected:
+    if not selected and not open_alternatives:
         return ()
-    dimensions = _dimensions(selected)
-    gaps = tuple(_gap_for(dimension, selected, source) for dimension in dimensions)
+    dimensions = _dimensions(selected, open_alternatives)
+    gaps = tuple(
+        _gap_for(dimension, selected, open_alternatives, source) for dimension in dimensions
+    )
     return tuple(sorted(gaps, key=lambda gap: (gap.dimension.value, gap.gap_id)))
 
 

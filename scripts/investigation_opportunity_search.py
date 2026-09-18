@@ -40,17 +40,26 @@ def _print_cardinality(result: MultiStepSearchResult) -> None:
     diagnosis = result.initial_diagnosis
     trace = diagnosis.resolution_trace
     gaps = _gaps(result)
-    structural = sum(
-        bool(hypothesis.structural_basis and not hypothesis.findings)
-        for hypothesis in result.initial_case.hypotheses
-    )
-    targets = {target.canonical for gap in gaps for target in gap.entity_scope}
+    alternatives = result.initial_case.structural_alternatives
+    targets = {
+        target.canonical
+        for alternative in alternatives
+        for target in alternative.observation_targets
+    }
+    open_alternatives = sum(item.status.value == "UNEXPLORED" for item in alternatives)
+    promoted = sum(item.status.value == "PROMOTED" for item in alternatives)
     print(
         "  space: "
-        f"total={len(result.initial_case.hypotheses)} "
+        f"evidence-backed-hypotheses={len(result.initial_case.hypotheses)} "
         f"plausible={len(trace.plausible_hypotheses) if trace else 0} "
         f"leading={len(trace.leading_hypothesis_ids) if trace else 0} "
-        f"structural-only={structural} gaps={len(gaps)} targets={len(targets)}"
+        f"structural-alternatives={len(alternatives)} "
+        f"open={open_alternatives} promoted={promoted} "
+        f"gaps={len(gaps)} targets={len(targets)}"
+    )
+    print(
+        f"  completeness: resolver={diagnosis.resolution.value} "
+        f"investigation={diagnosis.investigation_status.value}"
     )
 
 
@@ -114,7 +123,9 @@ def _print_result(name: str, result: MultiStepSearchResult) -> None:
         print("  minimum queries: -")
     else:
         print(
-            f"  minimum queries: {len(solution.steps)} final={solution.diagnosis.resolution.value}"
+            f"  minimum queries: {len(solution.steps)} "
+            f"final={solution.diagnosis.resolution.value} "
+            f"investigation={solution.diagnosis.investigation_status.value}"
         )
         for step in solution.steps:
             print(f"    Q{step.depth}: {_step_summary(step)}")
@@ -146,11 +157,20 @@ def main() -> int:
     one_step = sum(any(len(path.steps) == 1 for path in item.solutions) for item in results)
     two_step = sum(any(len(path.steps) == 2 for path in item.solutions) for item in results)
     three_step = sum(any(len(path.steps) == 3 for path in item.solutions) for item in results)
+    completed = sum(
+        any(
+            path.diagnosis.resolution.value == "RESOLVED"
+            and path.diagnosis.investigation_status.value != "OPEN"
+            for path in item.solutions
+        )
+        for item in results
+    )
     print(
         "SUMMARY\n"
         f"  1-step resolution ceiling: {one_step}/{len(results)}\n"
         f"  2-step resolution ceiling: {two_step}/{len(results)}\n"
-        f"  3-step resolution ceiling: {three_step}/{len(results)}"
+        f"  3-step resolution ceiling: {three_step}/{len(results)}\n"
+        f"  resolver-resolved and frontier-exhausted: {completed}/{len(results)}"
     )
     return 0
 

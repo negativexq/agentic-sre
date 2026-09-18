@@ -155,6 +155,18 @@ def _brief(context: InvestigationPolicyContext) -> str:
                 ],
             }
         )
+    alternatives = [
+        {
+            "id": item.alternative_id,
+            "actor": item.actor.canonical,
+            "role": item.role,
+            "basis": item.structural_basis[:4],
+            "targets": [target.canonical for target in item.observation_targets[:8]],
+            "dimensions": [dimension.value for dimension in item.queryable_dimensions],
+            "status": item.status.value,
+        }
+        for item in context.structural_alternatives[:8]
+    ]
     payload = {
         "incident_id": context.incident_id,
         "resolution": context.diagnosis.resolution.value,
@@ -163,6 +175,7 @@ def _brief(context: InvestigationPolicyContext) -> str:
         if context.diagnosis.symptoms.onset
         else None,
         "hypotheses": hypotheses,
+        "structural_alternatives": alternatives,
         "gaps": gaps,
         "previous_attempts": context.attempted_actions[-8:],
         "last_rejection": (

@@ -161,6 +161,10 @@ def test_bounded_initial_view_can_resolve_from_real_history_query() -> None:
     assert result.final_resolution.value == "RESOLVED"
     assert result.diagnosis.root_cause == right_hpa
     assert result.tool_calls == 1
+    assert any(
+        alternative.actor == right_hpa and alternative.status.value == "PROMOTED"
+        for alternative in result.diagnosis.structural_alternatives
+    )
     assert len(result.ledger) == 1
     entry = result.ledger[0]
     assert entry.capability == "history"
@@ -168,7 +172,7 @@ def test_bounded_initial_view_can_resolve_from_real_history_query() -> None:
     assert any("SPEC_CHANGE" in finding_id for finding_id in entry.normalized_finding_ids)
 
 
-def test_latest_only_seed_keeps_structural_hpa_candidates_for_investigation() -> None:
+def test_latest_only_seed_keeps_structural_hpa_alternatives_for_investigation() -> None:
     source, left_hpa = _source_with_hidden_hpa_history()
     view = initial_view(
         source,
@@ -182,20 +186,18 @@ def test_latest_only_seed_keeps_structural_hpa_candidates_for_investigation() ->
     case = build_case(view)
     diagnosis = diagnose_case(case)
 
-    hpa_hypotheses = {
-        hypothesis.causal_actor
-        for hypothesis in case.hypotheses
-        if hypothesis.causal_actor.kind == "HorizontalPodAutoscaler"
-    }
-    assert left_hpa in hpa_hypotheses
-    assert diagnosis.resolution.value == "AMBIGUOUS"
+    assert left_hpa not in {hypothesis.causal_actor for hypothesis in case.hypotheses}
+    assert any(alternative.actor == left_hpa for alternative in case.structural_alternatives)
+    assert diagnosis.resolution.value in {"AMBIGUOUS", "INSUFFICIENT_EVIDENCE"}
+    assert diagnosis.investigation_status.value == "OPEN"
     assert any(
         gap.resolvability.value == "RESOLVABLE" and gap.candidate_tools
         for gap in diagnosis.information_gaps
     )
-    structural = [hypothesis for hypothesis in case.hypotheses if hypothesis.structural_basis]
-    assert structural
-    assert all(not hypothesis.findings and hypothesis.score == 0 for hypothesis in structural)
+    assert case.structural_alternatives
+    assert all(
+        alternative.status.value == "UNEXPLORED" for alternative in case.structural_alternatives
+    )
 
 
 def test_hidden_chaos_events_cannot_create_initial_topology_edges() -> None:

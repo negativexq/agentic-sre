@@ -301,6 +301,22 @@ class Resolution(StrEnum):
     INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
 
 
+class InvestigationStatus(StrEnum):
+    """Whether bounded investigation has material work beyond RCA resolution."""
+
+    OPEN = "OPEN"
+    EXHAUSTED = "EXHAUSTED"
+    NOT_REQUIRED = "NOT_REQUIRED"
+
+
+class FrontierStatus(StrEnum):
+    """Lifecycle of a structurally plausible, not-yet-causal actor."""
+
+    UNEXPLORED = "UNEXPLORED"
+    QUERIED_NO_CAUSAL_FINDING = "QUERIED_NO_CAUSAL_FINDING"
+    PROMOTED = "PROMOTED"
+
+
 class HypothesisSignature(BaseModel):
     """Name-independent structure used to compare causal hypotheses."""
 
@@ -453,6 +469,7 @@ class GapOutcome(BaseModel):
 
     kind: GapOutcomeKind
     hypothesis_ids: tuple[str, ...] = ()
+    alternative_ids: tuple[str, ...] = ()
     condition: str = ""
     implication: str = ""
 
@@ -476,6 +493,7 @@ class InformationGap(BaseModel):
     gap_id: str
     dimension: GapDimension
     hypothesis_ids: tuple[str, ...] = ()
+    alternative_ids: tuple[str, ...] = ()
     entity_scope: tuple[EntityRef, ...] = ()
     known_facts: tuple[str, ...] = ()
     missing_fact: str
@@ -513,6 +531,27 @@ class Hypothesis(BaseModel):
     reasons: tuple[str, ...] = ()
     structural_basis: tuple[str, ...] = ()
     signature: HypothesisSignature | None = None
+
+
+class StructuralAlternative(BaseModel):
+    """A causally plausible actor available for targeted observation.
+
+    This is deliberately not a ``Hypothesis``: it has no causal evidence or
+    score.  It becomes a hypothesis only when a deterministic normalizer
+    promotes an observed Finding through the ordinary RCA pipeline.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    alternative_id: str
+    actor: EntityRef
+    role: str
+    structural_basis: tuple[str, ...] = ()
+    causal_path: tuple[CausalHop, ...] = ()
+    linked_symptoms: tuple[str, ...] = ()
+    queryable_dimensions: tuple[GapDimension, ...] = ()
+    observation_targets: tuple[EntityRef, ...] = ()
+    status: FrontierStatus = FrontierStatus.UNEXPLORED
 
 
 class HypothesisDiagnostics(BaseModel):
@@ -653,6 +692,8 @@ class Diagnosis(BaseModel):
     resolution_trace: ResolutionTrace | None = None
     ambiguous_hypotheses: tuple[Hypothesis, ...] = ()
     information_gaps: tuple[InformationGap, ...] = ()
+    structural_alternatives: tuple[StructuralAlternative, ...] = ()
+    investigation_status: InvestigationStatus = InvestigationStatus.NOT_REQUIRED
 
     @model_validator(mode="before")
     @classmethod
@@ -700,6 +741,8 @@ __all__ = [
     "ClusterEvent",
     "Confidence",
     "Resolution",
+    "InvestigationStatus",
+    "FrontierStatus",
     "Diagnosis",
     "Edge",
     "EntityRef",
@@ -714,6 +757,7 @@ __all__ = [
     "InvestigationObservation",
     "InvestigationResult",
     "Hypothesis",
+    "StructuralAlternative",
     "HypothesisDiagnostics",
     "HypothesisSignature",
     "ResolutionReasonCode",

@@ -14,9 +14,12 @@ from packages.rca.model import (
     EvidenceTemporalRole,
     Finding,
     FindingKind,
+    FrontierStatus,
+    GapDimension,
     Hypothesis,
     Resolution,
     ResolutionReasonCode,
+    StructuralAlternative,
 )
 from packages.rca.resolution import (
     dominates,
@@ -238,6 +241,54 @@ def test_unique_initiating_evidence_dominates_shared_support() -> None:
     assert trace.distinguishing_facts
 
 
+def test_late_consequence_does_not_establish_dominance() -> None:
+    stronger = _hpa(
+        "stronger",
+        extra=_finding(
+            _entity("Pod", "late-pod"),
+            FindingKind.FAILURE_EVENT,
+            "late-consequence",
+            role=EvidenceTemporalRole.CONSEQUENCE,
+            seconds=43 * 60,
+            source_class="kubernetes_event",
+        ),
+    )
+    weaker = _hpa("weaker")
+
+    assert not dominates(stronger, weaker)
+
+
+def test_extra_supporting_evidence_does_not_establish_dominance() -> None:
+    stronger = _hpa(
+        "stronger",
+        extra=_finding(
+            _entity("Pod", "supporting-pod"),
+            FindingKind.CONTAINER_FAILURE,
+            "extra-support",
+            role=EvidenceTemporalRole.SUPPORTING,
+            seconds=90,
+            source_class="kubernetes_event",
+        ),
+    )
+    weaker = _hpa("weaker")
+
+    assert not dominates(stronger, weaker)
+
+
+def test_additional_aligned_initiating_evidence_can_establish_dominance() -> None:
+    stronger = _hpa(
+        "stronger",
+        extra=_finding(
+            _entity("ConfigMap", "incident-config"),
+            FindingKind.CONFIG_CHANGE,
+            "aligned-config-change",
+        ),
+    )
+    weaker = _hpa("weaker")
+
+    assert dominates(stronger, weaker)
+
+
 def test_contradicted_alternative_is_eliminated() -> None:
     good = _hpa("good")
     late = _finding(
@@ -341,6 +392,31 @@ def test_information_gap_describes_hpa_ambiguity_without_executing_tools() -> No
         outcome.kind.value == "SUPPORTS" and not outcome.hypothesis_ids
         for outcome in target_gap.discriminating_outcomes
     )
+
+
+def test_structural_alternative_is_queryable_but_not_a_resolver_hypothesis() -> None:
+    actor = _entity("ConfigMap", "checkout-config")
+    alternative = StructuralAlternative(
+        alternative_id="alternative:checkout-config",
+        actor=actor,
+        role="configuration_source",
+        structural_basis=("uses_config:ConfigMap:Deployment",),
+        queryable_dimensions=(GapDimension.CONFIG_DIFFERENCE,),
+        observation_targets=(actor,),
+    )
+    hypothesis = _hpa("selected")
+    trace = resolve_hypotheses((hypothesis,))
+    gaps = derive_information_gaps((hypothesis,), trace, structural_alternatives=(alternative,))
+
+    assert trace.state is Resolution.RESOLVED
+    assert hypothesis.causal_actor != actor
+    gap = next(item for item in gaps if item.dimension is GapDimension.CONFIG_DIFFERENCE)
+    assert gap.hypothesis_ids == (hypothesis.hypothesis_id,)
+    assert gap.alternative_ids == (alternative.alternative_id,)
+    assert alternative.status is FrontierStatus.UNEXPLORED
+
+    exhausted = alternative.model_copy(update={"status": FrontierStatus.QUERIED_NO_CAUSAL_FINDING})
+    assert derive_information_gaps((hypothesis,), trace, structural_alternatives=(exhausted,)) == ()
 
 
 def test_information_gap_marks_observed_hpa_state_as_already_observed() -> None:

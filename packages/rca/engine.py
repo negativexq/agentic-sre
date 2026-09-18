@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Protocol
 
+from packages.rca.frontier import derive_structural_frontier, investigation_status
 from packages.rca.hypotheses import (
     GroupingResult,
     group_candidates,
@@ -24,6 +25,7 @@ from packages.rca.model import (
     InvestigationStep,
     ObjectVersion,
     Resolution,
+    StructuralAlternative,
     Symptoms,
 )
 from packages.rca.ranking import (
@@ -32,7 +34,6 @@ from packages.rca.ranking import (
     annotate_temporal_roles,
     collapse_fault_instances,
     score_findings,
-    structural_candidates,
     symptom_tokens,
     verification_trace,
     verify,
@@ -69,6 +70,7 @@ class Case:
     candidates: list[Candidate]
     hypotheses: list[Hypothesis]
     hypothesis_diagnostics: HypothesisDiagnostics
+    structural_alternatives: list[StructuralAlternative] = field(default_factory=list)
     steps: list[InvestigationStep] = field(default_factory=list)
 
 
@@ -160,12 +162,14 @@ def build_case(
         findings, symptoms.onset, config.ranking.verification_onset_grace
     )
     candidates = score_findings(findings, context, config.ranking)
-    if getattr(source, "initial_observation_bounded", False):
-        candidates.extend(structural_candidates(context, candidates))
-        candidates.sort(key=lambda candidate: (-candidate.score, candidate.entity.canonical))
     candidates = collapse_fault_instances(candidates, topology, symptoms.onset)
     grouping: GroupingResult = group_candidates(candidates, topology, context, config.ranking)
     hypotheses = list(grouping.hypotheses)
+    structural_alternatives = (
+        list(derive_structural_frontier(context, candidates))
+        if getattr(source, "initial_observation_bounded", False)
+        else []
+    )
     steps = [
         InvestigationStep(
             actor="engine",
@@ -203,6 +207,7 @@ def build_case(
         findings=findings,
         candidates=candidates,
         hypotheses=hypotheses,
+        structural_alternatives=structural_alternatives,
         hypothesis_diagnostics=grouping.diagnostics,
         steps=steps,
     )
@@ -268,6 +273,13 @@ def diagnose_case(
     """Diagnose an already-built case without rereading its observation source."""
     config = config or EngineConfig()
     if not case.candidates:
+        resolution_trace = resolve_hypotheses(())
+        information_gaps = derive_information_gaps(
+            (),
+            resolution_trace,
+            case.source,
+            structural_alternatives=case.structural_alternatives,
+        )
         return Diagnosis(
             incident_id=case.incident_id,
             root_cause=None,
@@ -277,8 +289,13 @@ def diagnose_case(
             symptoms=case.symptoms,
             steps=tuple(case.steps),
             hypothesis_diagnostics=case.hypothesis_diagnostics,
-            resolution_trace=resolve_hypotheses(()),
-            information_gaps=(),
+            resolution_trace=resolution_trace,
+            information_gaps=information_gaps,
+            structural_alternatives=tuple(case.structural_alternatives),
+            investigation_status=investigation_status(
+                case.structural_alternatives,
+                bounded=bool(getattr(case.source, "initial_observation_bounded", False)),
+            ),
         )
     # Resolution compares immutable evidence structures.  Attach the same
     # signatures to the serialized hypotheses so API consumers can inspect the
@@ -294,7 +311,12 @@ def diagnose_case(
         for hypothesis in case.hypotheses[: config.alternatives + 4]
     }
     resolution_trace = resolve_hypotheses(case.hypotheses, verification_traces=verification_traces)
-    information_gaps = derive_information_gaps(case.hypotheses, resolution_trace, case.source)
+    information_gaps = derive_information_gaps(
+        case.hypotheses,
+        resolution_trace,
+        case.source,
+        structural_alternatives=case.structural_alternatives,
+    )
     selected = case.hypotheses[0]
     mode = "deterministic"
     model_calls = 0
@@ -381,6 +403,11 @@ def diagnose_case(
         resolution_trace=resolution_trace,
         ambiguous_hypotheses=ambiguous_hypotheses,
         information_gaps=information_gaps,
+        structural_alternatives=tuple(case.structural_alternatives),
+        investigation_status=investigation_status(
+            case.structural_alternatives,
+            bounded=bool(getattr(case.source, "initial_observation_bounded", False)),
+        ),
     )
 
 

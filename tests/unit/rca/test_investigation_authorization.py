@@ -18,6 +18,7 @@ from packages.rca.investigation.actions import observation_identity, validate_ac
 from packages.rca.investigation.graph import _frozen, build_investigation_state
 from packages.rca.investigation.normalizers import (
     deduplicate_findings,
+    finding_identity,
     new_investigation_findings,
     normalize_observation,
 )
@@ -447,6 +448,39 @@ def test_finding_deduplication_ignores_acquisition_metadata_only() -> None:
 
     assert len(deduplicate_findings((first, second))) == 1
     assert new_investigation_findings((first,), (second,)) == ()
+
+
+def test_finding_identity_ignores_derived_temporal_annotations() -> None:
+    raw = _identity_finding()
+    annotated = raw.model_copy(
+        update={
+            "temporal_role": EvidenceTemporalRole.INITIATING,
+            "incident_onset": datetime(2026, 1, 1, 0, 0, 30, tzinfo=UTC),
+            "onset_delta_seconds": -30.0,
+        }
+    )
+
+    assert finding_identity(raw) == finding_identity(annotated)
+
+
+def test_temporal_annotation_does_not_make_existing_finding_new() -> None:
+    raw = _identity_finding()
+    annotated = raw.model_copy(
+        update={
+            "temporal_role": EvidenceTemporalRole.INITIATING,
+            "incident_onset": datetime(2026, 1, 1, 0, 0, 30, tzinfo=UTC),
+            "onset_delta_seconds": -30.0,
+        }
+    )
+
+    assert new_investigation_findings((annotated,), (raw,)) == ()
+
+
+def test_finding_identity_keeps_observation_timestamp_semantic() -> None:
+    first = _identity_finding()
+    second = first.model_copy(update={"at": datetime(2026, 1, 1, 0, 1, tzinfo=UTC)})
+
+    assert finding_identity(first) != finding_identity(second)
 
 
 def test_new_investigation_findings_keeps_semantically_new_shared_evidence() -> None:

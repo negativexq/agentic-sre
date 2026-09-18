@@ -95,9 +95,6 @@ def finding_identity(finding: Finding) -> tuple[Any, ...]:
             separators=(",", ":"),
         ),
         tuple(sorted(set(finding.evidence_ids))),
-        finding.temporal_role.value,
-        finding.incident_onset.isoformat() if finding.incident_onset is not None else None,
-        finding.onset_delta_seconds,
     )
 
 

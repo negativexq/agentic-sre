@@ -14,9 +14,10 @@ from packages.rca.investigation.graph import (
     investigate_diagnosis,
     resume_investigation,
 )
-from packages.rca.investigation.policy import ScriptedInvestigationPolicy
-from packages.rca.investigation.state import InvestigationConfig
+from packages.rca.investigation.policy import LLMInvestigationPolicy, ScriptedInvestigationPolicy
+from packages.rca.investigation.state import InvestigationConfig, InvestigationPolicyContext
 from packages.rca.investigation.tools import make_observation
+from packages.rca.llm import ScriptedLLM
 from packages.rca.model import (
     Alert,
     EntityRef,
@@ -457,6 +458,40 @@ def test_action_schema_rejects_root_cause_and_mutation_requests() -> None:
                 "target": "shop/HPA/right",
             }
         )
+
+
+def test_llm_policy_only_returns_a_strict_observation_action() -> None:
+    case, _left, right = _case()
+    diagnosis = diagnose_case(case)
+    gap = next(gap for gap in diagnosis.information_gaps if "events" in gap.candidate_tools)
+    llm = ScriptedLLM(
+        replies=[
+            {
+                "action": "inspect",
+                "gap_id": gap.gap_id,
+                "capability": "events",
+                "target": right.model_dump(mode="json"),
+                "rationale": "inspect the authorized gap",
+            }
+        ]
+    )
+    policy = LLMInvestigationPolicy(llm)
+    action = policy.choose_action(
+        InvestigationPolicyContext(
+            incident_id=case.incident_id,
+            diagnosis=diagnosis,
+            hypotheses=tuple(diagnosis.ambiguous_hypotheses),
+            gaps=(gap,),
+            attempted_actions=(),
+            turns=0,
+            model_calls_remaining=1,
+            tool_calls_remaining=1,
+        )
+    )
+    assert action.action == "inspect"
+    assert action.target == right
+    assert not hasattr(action, "root_cause")
+    assert llm.calls == 1
 
 
 def test_checkpoint_resume_preserves_state_and_does_not_repeat_action() -> None:

@@ -10,6 +10,10 @@ The model is optional. Evidence collection, temporal boundaries, ranking,
 verification, replay, and safety constraints remain deterministic system
 behavior.
 
+Current code release: **v1.1.0 — Bounded Investigation Agent**. The
+deterministic RCA path remains the default; investigation is entered only when
+the available evidence leaves a concrete ambiguity or evidence gap.
+
 [![CI](https://github.com/negativexq/agentic-sre/actions/workflows/checks.yml/badge.svg)](https://github.com/negativexq/agentic-sre/actions/workflows/checks.yml)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
@@ -24,7 +28,7 @@ behavior.
 - Separate deterministic resolution: `RESOLVED`, `AMBIGUOUS`, or `INSUFFICIENT_EVIDENCE`; confidence is not a proxy for distinguishability.
 - Causal paths visible in JSON/API output, the CLI, and the HTML report.
 - Real Kind lifecycle validation through Prometheus, Alertmanager, and the control plane.
-- Optional bounded LangGraph investigation that acquires read-only evidence when deterministic resolution is ambiguous.
+- Bounded LangGraph investigation that acquires allowlisted read-only evidence when deterministic resolution is ambiguous.
 - Remediation proposals only; no cluster writes or autonomous repair.
 
 ## Measured results
@@ -48,7 +52,7 @@ official root-cause score is unchanged from v1.0.1. Scenario-38 selected the
 new normalized HPA candidate instead of a Pod candidate; the published
 ground-truth cause is not observable, so this did not change the score.
 
-The latest hardening validation passed 234 tests and the real Kind release
+The latest hardening validation passed 240 tests and the real Kind release
 gate. The stored [v1.0.2 result](evals/results/v1.0.2/README.md) records the
 tagged release SHA.
 
@@ -91,9 +95,9 @@ flowchart LR
   E --> T[Directional causal topology]
   T --> R[Ranking + verification]
   R --> X[Resolution<br/>distinguish hypotheses]
-  X -. optional review .-> L[Bounded LLM investigator]
   X --> D[Diagnosis<br/>evidence + causal path + proposal]
-  L --> D
+  X -. AMBIGUOUS / gap .-> L[Bounded LangGraph investigator]
+  L -->|read-only observation| O
 ```
 
 1. The control plane creates and freezes incident episodes from Alertmanager events.
@@ -226,6 +230,17 @@ The optional `--llm --authorize-live-model` path uses the existing provider-
 neutral client and strict JSON action schema; it is not required for CI or the
 Kind release gate.
 
+Information gaps are classified as `RESOLVABLE`, `ALREADY_OBSERVED`, or
+`UNRESOLVABLE_WITH_CURRENT_TOOLS`; already-known dimensions are not sent to the
+policy as investigation work. The current DEV diagnostic contains 19 gaps:
+13 resolvable, 6 already observed, and 0 unresolvable. These are operational
+diagnostics, not benchmark claims.
+
+The release-hardening path also rejects invalid actions before tool lookup,
+rejects out-of-scope targets, compares progress with the previous investigation
+iteration, and includes a production-path test from a real observation source
+through normalization, default case rebuilding, and deterministic resolution.
+
 ## Optional LLM investigator
 
 The LLM investigator is off by default and bounded by a call budget. It reviews
@@ -297,3 +312,4 @@ tests                 unit, integration, and release regression coverage
 - There is no autonomous remediation, arbitrary write tool, or formal causal-inference guarantee.
 - The deterministic benchmark is frozen regression evidence with prior-exposure caveats; generalization to unseen incidents is not established.
 - The value of the optional LLM investigator on harder, messier live incidents remains unproven.
+- The bounded investigator is a read-only evidence-acquisition policy, not an autonomous SRE loop; the model never determines the final root cause.

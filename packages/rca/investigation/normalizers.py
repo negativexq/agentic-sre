@@ -193,4 +193,33 @@ def deduplicate_findings(findings: Iterable[Finding]) -> tuple[Finding, ...]:
     return tuple(result)
 
 
-__all__ = ["NormalizedObservation", "deduplicate_findings", "normalize_observation"]
+def new_investigation_findings(
+    existing: Iterable[Finding], incoming: Iterable[Finding]
+) -> tuple[Finding, ...]:
+    """Return normalized findings whose evidence was not already effective."""
+    existing_items = tuple(existing)
+    known_ids = {evidence_id for finding in existing_items for evidence_id in finding.evidence_ids}
+    known_fallbacks = {
+        (finding.entity.canonical, finding.kind.value, finding.summary)
+        for finding in existing_items
+    }
+    fresh: list[Finding] = []
+    for finding in deduplicate_findings(incoming):
+        evidence_ids = set(finding.evidence_ids)
+        fallback = (finding.entity.canonical, finding.kind.value, finding.summary)
+        if evidence_ids and evidence_ids <= known_ids:
+            continue
+        if not evidence_ids and fallback in known_fallbacks:
+            continue
+        fresh.append(finding)
+        known_ids.update(evidence_ids)
+        known_fallbacks.add(fallback)
+    return tuple(fresh)
+
+
+__all__ = [
+    "NormalizedObservation",
+    "deduplicate_findings",
+    "new_investigation_findings",
+    "normalize_observation",
+]

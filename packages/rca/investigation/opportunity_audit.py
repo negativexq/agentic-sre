@@ -20,13 +20,15 @@ from packages.rca.investigation.environment import (
     initial_view,
     investigation_backend,
 )
-from packages.rca.investigation.normalizers import deduplicate_findings, normalize_observation
+from packages.rca.investigation.normalizers import (
+    new_investigation_findings,
+    normalize_observation,
+)
 from packages.rca.investigation.state import InvestigationTool
 from packages.rca.investigation.tools import default_tools
 from packages.rca.model import (
     Diagnosis,
     EntityRef,
-    Finding,
     GapResolvability,
     InformationGap,
     InvestigationQuery,
@@ -97,25 +99,6 @@ def _gap_fingerprint(diagnosis: Diagnosis) -> tuple[str, ...]:
     )
 
 
-def _new_findings(existing: Sequence[Finding], incoming: Sequence[Finding]) -> tuple[Finding, ...]:
-    known_ids = {evidence_id for finding in existing for evidence_id in finding.evidence_ids}
-    known_fallbacks = {
-        (finding.entity.canonical, finding.kind.value, finding.summary) for finding in existing
-    }
-    fresh: list[Finding] = []
-    for finding in deduplicate_findings(incoming):
-        ids = set(finding.evidence_ids)
-        fallback = (finding.entity.canonical, finding.kind.value, finding.summary)
-        if ids and ids <= known_ids:
-            continue
-        if not ids and fallback in known_fallbacks:
-            continue
-        fresh.append(finding)
-        known_ids.update(ids)
-        known_fallbacks.add(fallback)
-    return tuple(fresh)
-
-
 def _query_for(source: ObservationSource) -> InvestigationQuery:
     # The audit measures the available environment ceiling.  It uses a generic
     # bounded query ending at the source cutoff, never a scenario-specific
@@ -181,7 +164,7 @@ def _execute_opportunity(
     new_refs = tuple(ref for ref in returned_refs if ref not in known_refs)
     already_known = tuple(ref for ref in returned_refs if ref in known_refs)
     normalized = normalize_observation(observation, case=initial_case, gap=gap)
-    fresh = _new_findings(initial_case.findings, normalized.findings)
+    fresh = new_investigation_findings(initial_case.findings, normalized.findings)
     if fresh:
         rebuilt = build_case(initial_source, extra_findings=fresh)
         after = diagnose_case(rebuilt)

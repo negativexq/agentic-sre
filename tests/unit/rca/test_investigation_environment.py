@@ -7,6 +7,7 @@ from rca_builders import at
 from packages.rca.engine import build_case, diagnose_case
 from packages.rca.investigation.environment import SeedPolicy, initial_view, investigation_backend
 from packages.rca.investigation.graph import investigate_diagnosis
+from packages.rca.investigation.multi_step_search import search_incident
 from packages.rca.investigation.opportunity_audit import audit_incident
 from packages.rca.investigation.policy import ScriptedInvestigationPolicy
 from packages.rca.model import (
@@ -264,3 +265,16 @@ def test_opportunity_audit_uses_production_query_normalizer_and_resolver() -> No
         item.capability == "history" and item.new_findings and item.effect == "RESOLUTION_CHANGED"
         for item in audit.opportunities
     )
+
+
+def test_multi_step_opportunity_search_uses_cumulative_production_state() -> None:
+    source, _right_hpa = _source_with_hidden_hpa_history()
+
+    result = search_incident(source, max_depth=2, max_states=16)
+
+    assert result.minimum_queries == 1
+    solution = result.minimum_solution
+    assert solution is not None
+    assert solution.diagnosis.resolution.value == "RESOLVED"
+    assert solution.steps[0].new_findings
+    assert any(step.new_refs for step in result.attempts)

@@ -20,6 +20,7 @@ from packages.rca.investigation.environment import (
 )
 from packages.rca.investigation.normalizers import (
     deduplicate_findings,
+    new_investigation_findings,
     normalize_observation,
 )
 from packages.rca.investigation.state import (
@@ -445,7 +446,7 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     normalized = normalize_observation(
         observation, case=rt.case_for(state["investigation_findings"]), gap=gap
     )
-    fresh_findings = _new_investigation_findings(
+    fresh_findings = new_investigation_findings(
         (*rt.case_for(state["investigation_findings"]).findings, *state["investigation_findings"]),
         normalized.findings,
     )
@@ -487,28 +488,6 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             f"{len(normalized.findings)} deterministic finding(s) from {observation.observation_id}",
         ),
     }
-
-
-def _new_investigation_findings(
-    existing: tuple[Finding, ...], incoming: tuple[Finding, ...]
-) -> tuple[Finding, ...]:
-    """Avoid treating repeated normalized evidence as progress."""
-    known_ids = {evidence_id for finding in existing for evidence_id in finding.evidence_ids}
-    known_fallbacks = {
-        (finding.entity.canonical, finding.kind.value, finding.summary) for finding in existing
-    }
-    fresh: list[Finding] = []
-    for finding in deduplicate_findings(incoming):
-        evidence_ids = set(finding.evidence_ids)
-        fallback = (finding.entity.canonical, finding.kind.value, finding.summary)
-        if evidence_ids and evidence_ids <= known_ids:
-            continue
-        if not evidence_ids and fallback in known_fallbacks:
-            continue
-        fresh.append(finding)
-        known_ids.update(evidence_ids)
-        known_fallbacks.add(fallback)
-    return tuple(fresh)
 
 
 def _rebuild(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:

@@ -15,6 +15,7 @@ from packages.rca.model import (
     Hypothesis,
     InformationGap,
     InvestigationAction,
+    InvestigationActionStatus,
     InvestigationObservation,
     InvestigationResult,
     InvestigationStep,
@@ -118,6 +119,10 @@ class InvestigationState(TypedDict, total=False):
     pending_observation: InvestigationObservation | None
     pending_findings: tuple[Finding, ...]
     previous_resolution: Resolution
+    previous_gap_fingerprint: tuple[tuple[str, ...], ...]
+    previous_evidence_fingerprint: tuple[str, ...]
+    previous_hypothesis_fingerprint: tuple[str, ...]
+    action_validation_status: InvestigationActionStatus | None
     turns: int
     model_calls: int
     tool_calls: int

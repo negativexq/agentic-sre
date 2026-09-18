@@ -33,6 +33,7 @@ from packages.rca.model import (
     GapOutcomeKind,
     GapResolvability,
     InformationGap,
+    InvestigationActionStatus,
     InvestigationResult,
     InvestigationStep,
     InvestigationStopReason,
@@ -63,6 +64,36 @@ def _resolvable_gaps(diagnosis: Diagnosis) -> tuple[InformationGap, ...]:
         for gap in diagnosis.information_gaps
         if gap.resolvability is GapResolvability.RESOLVABLE and gap.candidate_tools
     )
+
+
+def _gap_fingerprint(diagnosis: Diagnosis) -> tuple[tuple[str, ...], ...]:
+    """Stable fingerprint for the currently investigable gap set."""
+    return tuple(
+        sorted(
+            (
+                gap.gap_id,
+                gap.resolvability.value,
+                *sorted(gap.candidate_tools),
+                *sorted(gap.hypothesis_ids),
+            )
+            for gap in _resolvable_gaps(diagnosis)
+        )
+    )
+
+
+def _evidence_fingerprint(case: Case) -> tuple[str, ...]:
+    """Stable identity of all effective findings in the current case."""
+    return tuple(
+        sorted({evidence_id for finding in case.findings for evidence_id in finding.evidence_ids})
+    )
+
+
+def _hypothesis_fingerprint(diagnosis: Diagnosis) -> tuple[str, ...]:
+    """Track plausible/leading hypotheses independently of score ordering."""
+    hypotheses = diagnosis.ambiguous_hypotheses or diagnosis.alternative_hypotheses
+    if diagnosis.hypothesis is not None:
+        hypotheses = (*hypotheses, diagnosis.hypothesis)
+    return tuple(sorted({hypothesis.hypothesis_id for hypothesis in hypotheses}))
 
 
 def _policy_calls(policy: InvestigationPolicy) -> int:
@@ -171,6 +202,7 @@ def _validate(state: InvestigationState) -> dict[str, Any]:
     if action is None:
         return {
             "stop_reason": InvestigationStopReason.POLICY_STOP,
+            "action_validation_status": InvestigationActionStatus.INVALID_EXHAUSTED,
             "trace_steps": _with_step(state, "rejected", "policy returned no action"),
         }
     result = validate_action(
@@ -192,11 +224,17 @@ def _validate(state: InvestigationState) -> dict[str, Any]:
             "invalid_actions": invalid,
             "rejected_actions": state["rejected_actions"] + 1,
             "stop_reason": stop,
+            "action_validation_status": (
+                InvestigationActionStatus.INVALID_EXHAUSTED
+                if stop is not None
+                else InvestigationActionStatus.INVALID_RETRY
+            ),
             "trace_steps": _with_step(state, "rejected", result.reason),
         }
     if action.action == "stop":
         return {
             "stop_reason": InvestigationStopReason.POLICY_STOP,
+            "action_validation_status": InvestigationActionStatus.VALID_STOP,
             "trace_steps": _with_step(state, "policy_stop", action.rationale),
         }
     identity = action_identity(action)
@@ -206,14 +244,27 @@ def _validate(state: InvestigationState) -> dict[str, Any]:
             dict.fromkeys((*state["attempted_gap_ids"], action.gap_id or ""))
         ),
         "stop_reason": None,
+        "action_validation_status": InvestigationActionStatus.VALID_INSPECT,
         "trace_steps": _with_step(state, "validate_action", "allowed read-only action"),
     }
 
 
 def _route_after_validate(state: InvestigationState) -> str:
-    if state.get("stop_reason") is not None:
+    status = state.get("action_validation_status")
+    if status is InvestigationActionStatus.INVALID_RETRY:
+        return "select_action"
+    if (
+        status
+        in {
+            InvestigationActionStatus.INVALID_EXHAUSTED,
+            InvestigationActionStatus.VALID_STOP,
+        }
+        or state.get("stop_reason") is not None
+    ):
         return "finalize"
-    return "execute_tool"
+    if status is InvestigationActionStatus.VALID_INSPECT:
+        return "execute_tool"
+    return "finalize"
 
 
 def _execute_tool(state: InvestigationState) -> dict[str, Any]:
@@ -328,18 +379,23 @@ def _route_after_rebuild(state: InvestigationState) -> str:
 
 def _check_progress(state: InvestigationState) -> dict[str, Any]:
     current = state["current_diagnosis"]
+    current_resolution = current.resolution
+    current_gap_fingerprint = _gap_fingerprint(current)
+    current_evidence_fingerprint = _evidence_fingerprint(state["current_case"])
+    current_hypothesis_fingerprint = _hypothesis_fingerprint(current)
     previous = state.get("previous_resolution", state["initial_diagnosis"].resolution)
-    resolvable = _resolvable_gaps(current)
     no_progress = state["no_progress_count"]
-    if (
-        state["last_new_evidence_count"] == 0
-        and current.resolution is previous
-        and tuple(gap.gap_id for gap in resolvable)
-        == tuple(gap.gap_id for gap in _resolvable_gaps(state["initial_diagnosis"]))
-    ):
+    unchanged = (
+        current_resolution is previous
+        and current_gap_fingerprint == state["previous_gap_fingerprint"]
+        and current_evidence_fingerprint == state["previous_evidence_fingerprint"]
+        and current_hypothesis_fingerprint == state["previous_hypothesis_fingerprint"]
+    )
+    if unchanged:
         no_progress += 1
     else:
         no_progress = 0
+    resolvable = _resolvable_gaps(current)
     stop: InvestigationStopReason | None = None
     if current.resolution is Resolution.RESOLVED:
         stop = InvestigationStopReason.RESOLVED
@@ -361,12 +417,16 @@ def _check_progress(state: InvestigationState) -> dict[str, Any]:
         stop = InvestigationStopReason.MODEL_BUDGET_EXHAUSTED
     return {
         "previous_resolution": current.resolution,
+        "previous_gap_fingerprint": current_gap_fingerprint,
+        "previous_evidence_fingerprint": current_evidence_fingerprint,
+        "previous_hypothesis_fingerprint": current_hypothesis_fingerprint,
         "no_progress_count": no_progress,
         "stop_reason": stop,
         "trace_steps": _with_step(
             state,
             "check_progress",
-            f"new evidence={state['last_new_evidence_count']}; no-progress={no_progress}",
+            f"new evidence={state['last_new_evidence_count']}; unchanged={unchanged}; "
+            f"no-progress={no_progress}",
         ),
     }
 
@@ -445,7 +505,11 @@ def build_investigation_graph(
     graph.add_conditional_edges(
         "validate_action",
         _route_after_validate,
-        {"execute_tool": "execute_tool", "finalize": "finalize"},
+        {
+            "select_action": "select_action",
+            "execute_tool": "execute_tool",
+            "finalize": "finalize",
+        },
     )
     graph.add_edge("execute_tool", "normalize_observation")
     graph.add_edge("normalize_observation", "rebuild_hypotheses")
@@ -535,6 +599,10 @@ def build_investigation_state(
         "pending_observation": None,
         "pending_findings": (),
         "previous_resolution": initial.resolution,
+        "previous_gap_fingerprint": _gap_fingerprint(initial),
+        "previous_evidence_fingerprint": _evidence_fingerprint(case),
+        "previous_hypothesis_fingerprint": _hypothesis_fingerprint(initial),
+        "action_validation_status": None,
         "turns": 0,
         "model_calls": 0,
         "tool_calls": 0,

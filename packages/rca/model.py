@@ -562,6 +562,15 @@ class InvestigationStopReason(StrEnum):
     TOOL_ERROR = "TOOL_ERROR"
 
 
+class InvestigationActionStatus(StrEnum):
+    """Graph routing result after deterministic action validation."""
+
+    VALID_INSPECT = "VALID_INSPECT"
+    VALID_STOP = "VALID_STOP"
+    INVALID_RETRY = "INVALID_RETRY"
+    INVALID_EXHAUSTED = "INVALID_EXHAUSTED"
+
+
 class InvestigationObservation(BaseModel):
     """Bounded typed output from one read-only semantic investigation tool."""
 
@@ -659,6 +668,7 @@ __all__ = [
     "FindingKind",
     "InvestigationStep",
     "InvestigationAction",
+    "InvestigationActionStatus",
     "InvestigationStopReason",
     "InvestigationObservation",
     "InvestigationResult",

@@ -5,8 +5,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
+from rca_builders import alert, at, deployment, version
 
-from packages.rca.engine import Case, diagnose_case
+from packages.rca.engine import Case, build_case, diagnose_case
 from packages.rca.hypotheses import hypothesis_candidate
 from packages.rca.investigation.graph import (
     build_investigation_graph,
@@ -16,10 +17,11 @@ from packages.rca.investigation.graph import (
 )
 from packages.rca.investigation.policy import LLMInvestigationPolicy, ScriptedInvestigationPolicy
 from packages.rca.investigation.state import InvestigationConfig, InvestigationPolicyContext
-from packages.rca.investigation.tools import make_observation
+from packages.rca.investigation.tools import default_tools, make_observation
 from packages.rca.llm import ScriptedLLM
 from packages.rca.model import (
     Alert,
+    ClusterEvent,
     EntityRef,
     EvidenceTemporalRole,
     Finding,
@@ -168,6 +170,66 @@ class _NoDataTool:
         return make_observation(gap=gap, capability=self.name, target=target, payload={})
 
 
+class _ProgressThenNoDataTool:
+    name = "events"
+
+    def __init__(self, finding: Finding) -> None:
+        self.finding = finding
+        self.calls = 0
+
+    def execute(self, case: Case, gap: Any, target: EntityRef) -> InvestigationObservation:
+        del case
+        self.calls += 1
+        if self.calls == 1:
+            return make_observation(
+                gap=gap,
+                capability=self.name,
+                target=target,
+                payload={"findings": [self.finding.model_dump(mode="json")]},
+                evidence_refs=self.finding.evidence_ids,
+                observed_at=self.finding.at,
+            )
+        return make_observation(gap=gap, capability=self.name, target=target, payload={})
+
+
+class _ChangingGapPolicy:
+    counts_as_model = False
+
+    def __init__(self, first_target: EntityRef, second_target: EntityRef) -> None:
+        self.first_target = first_target
+        self.second_target = second_target
+        self.calls = 0
+
+    def choose_action(self, context: InvestigationPolicyContext) -> InvestigationAction:
+        gap = next(gap for gap in context.gaps if "events" in gap.candidate_tools)
+        target = self.first_target if self.calls == 0 else self.second_target
+        if self.calls >= 2:
+            target = self.first_target
+        self.calls += 1
+        return _policy_action(gap.gap_id, target)
+
+
+def _rebuild_with_changed_gap_fingerprint(base: Case, findings: tuple[Finding, ...]) -> Case:
+    if not findings:
+        return base
+    hypotheses = [
+        hypothesis.model_copy(
+            update={
+                "hypothesis_id": f"{hypothesis.hypothesis_id}:observed",
+                "findings": (*hypothesis.findings, *findings),
+                "initiating_findings": (*hypothesis.initiating_findings, *findings),
+            }
+        )
+        for hypothesis in base.hypotheses
+    ]
+    return replace(
+        base,
+        findings=[*base.findings, *findings],
+        hypotheses=hypotheses,
+        candidates=[hypothesis_candidate(item) for item in hypotheses],
+    )
+
+
 def _rebuild_with_findings(base: Case, findings: tuple[Finding, ...]) -> Case:
     if not findings:
         return base
@@ -209,6 +271,56 @@ def _rebuild_with_left_contradiction(base: Case, findings: tuple[Finding, ...]) 
         hypotheses=hypotheses,
         candidates=[hypothesis_candidate(item) for item in hypotheses],
     )
+
+
+class _DeferredEventSource(InMemorySource):
+    """Expose a later event only when the real events tool reads the source."""
+
+    event_reads: int = 0
+
+    def events(self) -> list[Any]:
+        reads = int(getattr(self, "event_reads", 0)) + 1
+        self.event_reads = reads
+        if reads == 1:
+            return [event for event in super().events() if event.last_at is None]
+        return list(super().events())
+
+
+def _production_deployment(name: str) -> dict[str, Any]:
+    body = deployment(name, image="app:1")
+    body["metadata"]["labels"] = {"app": "checkout"}
+    body["spec"]["template"]["metadata"]["labels"] = {"app": "checkout"}
+    return body
+
+
+def _production_replicaset(name: str, deployment_name: str) -> dict[str, Any]:
+    return {
+        "metadata": {"ownerReferences": [{"kind": "Deployment", "name": deployment_name}]},
+        "spec": {"replicas": 1},
+    }
+
+
+def _production_pod(name: str, replicaset_name: str) -> dict[str, Any]:
+    return {
+        "metadata": {
+            "labels": {"app": "checkout"},
+            "ownerReferences": [{"kind": "ReplicaSet", "name": replicaset_name}],
+        },
+        "spec": {"containers": [{"name": "checkout", "image": "app:1"}]},
+    }
+
+
+def _production_hpa(name: str, max_replicas: int) -> dict[str, Any]:
+    return {
+        "spec": {
+            "scaleTargetRef": {
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "name": name,
+            },
+            "maxReplicas": max_replicas,
+        }
+    }
 
 
 def _policy_action(
@@ -333,6 +445,78 @@ def test_invalid_and_out_of_scope_actions_are_rejected_without_tool_execution() 
     assert out_of_scope_result.rejected_actions == 1
 
 
+def test_invalid_action_retries_then_executes_only_the_valid_second_action() -> None:
+    case, _left, right = _case()
+    initial = diagnose_case(case)
+    gap = next(gap for gap in initial.information_gaps if "events" in gap.candidate_tools)
+    finding = _finding(
+        right,
+        FindingKind.CONFIG_CHANGE,
+        "config:retry",
+        details={"changed_paths": ["spec.maxReplicas"]},
+    )
+    tool = _DiscriminatingEventsTool(finding)
+    invalid = _policy_action(gap.gap_id, right, capability="logs")
+    valid = _policy_action(gap.gap_id, right)
+
+    result = investigate_diagnosis(
+        case.source,
+        diagnosis=initial,
+        initial_case=case,
+        policy=ScriptedInvestigationPolicy([invalid, valid]),
+        tools={"events": tool},
+        rebuild_case=_rebuild_with_findings,
+    )
+
+    assert result.rejected_actions == 1
+    assert result.tool_calls == 1
+    assert tool.calls == 1
+    assert result.final_resolution is Resolution.RESOLVED
+
+
+def test_unsupported_capability_retries_without_dictionary_lookup_or_execution() -> None:
+    case, _left, right = _case()
+    initial = diagnose_case(case)
+    gap = next(gap for gap in initial.information_gaps if "events" in gap.candidate_tools)
+    tool = _NoDataTool()
+    invalid = _policy_action(gap.gap_id, right, capability="delete")
+    result = investigate_diagnosis(
+        case.source,
+        diagnosis=initial,
+        initial_case=case,
+        policy=ScriptedInvestigationPolicy(
+            [invalid, InvestigationAction(action="stop", rationale="stop after rejection")]
+        ),
+        tools={"events": tool},
+    )
+
+    assert result.rejected_actions == 1
+    assert result.tool_calls == 0
+    assert tool.calls == 0
+    assert result.stop_reason.value == "POLICY_STOP"
+
+
+def test_out_of_scope_target_retries_before_valid_target_executes() -> None:
+    case, _left, right = _case()
+    initial = diagnose_case(case)
+    gap = next(gap for gap in initial.information_gaps if "events" in gap.candidate_tools)
+    tool = _NoDataTool()
+    invalid = _policy_action(gap.gap_id, _entity("HPA", "unrelated"))
+    valid = _policy_action(gap.gap_id, right)
+    result = investigate_diagnosis(
+        case.source,
+        diagnosis=initial,
+        initial_case=case,
+        config=InvestigationConfig(max_no_progress_rounds=1),
+        policy=ScriptedInvestigationPolicy([invalid, valid]),
+        tools={"events": tool},
+    )
+
+    assert result.rejected_actions == 1
+    assert result.tool_calls == 1
+    assert tool.calls == 1
+
+
 def test_resolved_case_skips_investigation() -> None:
     case, _left, _right = _case()
     resolved = diagnose_case(case).model_copy(update={"resolution": Resolution.RESOLVED})
@@ -427,6 +611,31 @@ def test_duplicate_evidence_from_a_different_action_is_no_progress() -> None:
     assert result.tool_calls == 2
 
 
+def test_no_progress_compares_against_the_previous_changed_gap_set() -> None:
+    case, left, right = _case()
+    initial = diagnose_case(case)
+    progress = _finding(right, FindingKind.CONFIG_CHANGE, "config:progress")
+    tool = _ProgressThenNoDataTool(progress)
+    policy = _ChangingGapPolicy(right, left)
+
+    result = investigate_diagnosis(
+        case.source,
+        diagnosis=initial,
+        initial_case=case,
+        config=InvestigationConfig(max_no_progress_rounds=2),
+        policy=policy,
+        tools={"events": tool},
+        rebuild_case=_rebuild_with_changed_gap_fingerprint,
+    )
+
+    assert result.initial_resolution is Resolution.AMBIGUOUS
+    assert result.final_resolution is Resolution.AMBIGUOUS
+    assert result.stop_reason.value == "NO_PROGRESS"
+    assert policy.calls == 3
+    assert tool.calls == 3
+    assert any("no-progress=2" in step.detail for step in result.diagnosis.steps)
+
+
 def test_tool_budget_ends_a_persistently_ambiguous_run() -> None:
     case, _left, right = _case()
     initial = diagnose_case(case)
@@ -492,6 +701,104 @@ def test_llm_policy_only_returns_a_strict_observation_action() -> None:
     assert action.target == right
     assert not hasattr(action, "root_cause")
     assert llm.calls == 1
+
+
+def test_production_investigation_pipeline_resolves_from_real_event_observation() -> None:
+    versions: list[Any] = []
+    for name in ("left", "right"):
+        replicaset_name = f"{name}-rs"
+        versions.extend(
+            (
+                version(f"shop/Deployment/{name}", 0, _production_deployment(name)),
+                version(f"shop/Deployment/{name}", 1, _production_deployment(name), 1),
+                version(
+                    f"shop/ReplicaSet/{replicaset_name}",
+                    0,
+                    _production_replicaset(replicaset_name, name),
+                ),
+                version(
+                    f"shop/Pod/{name}-pod",
+                    0,
+                    _production_pod(f"{name}-pod", replicaset_name),
+                ),
+                version(
+                    f"shop/HorizontalPodAutoscaler/{name}-hpa",
+                    0,
+                    _production_hpa(name, 2),
+                ),
+                version(
+                    f"shop/HorizontalPodAutoscaler/{name}-hpa",
+                    1,
+                    _production_hpa(name, 5),
+                    1,
+                ),
+            )
+        )
+    versions.append(
+        version("shop/Service/checkout", 0, {"spec": {"selector": {"app": "checkout"}}})
+    )
+
+    left_hpa = _entity("HorizontalPodAutoscaler", "left-hpa")
+    left_pod = _entity("Pod", "left-pod")
+    right_pod = _entity("Pod", "right-pod")
+    seed_events = [
+        ClusterEvent(
+            entity=left_pod,
+            reason="BackOff",
+            type="Warning",
+            message="pending failure",
+            evidence_id="seed:left",
+        ),
+        ClusterEvent(
+            entity=right_pod,
+            reason="BackOff",
+            type="Warning",
+            message="pending failure",
+            evidence_id="seed:right",
+        ),
+    ]
+    newly_observed = ClusterEvent(
+        entity=left_hpa,
+        reason="FailedGetResourceMetric",
+        type="Warning",
+        message="unable to fetch metrics",
+        first_at=at(1),
+        last_at=at(1),
+        evidence_id="reveal:left-hpa",
+    )
+    source = _DeferredEventSource(
+        name="production-investigation",
+        alert_items=[alert("CheckoutLatency", "checkout", 5)],
+        versions=versions,
+        event_items=[*seed_events, newly_observed],
+        cutoff=at(10),
+    )
+
+    initial_case = build_case(source)
+    initial = diagnose_case(initial_case)
+    assert initial.resolution is Resolution.AMBIGUOUS
+    gap = next(gap for gap in initial.information_gaps if "events" in gap.candidate_tools)
+    action = _policy_action(gap.gap_id, left_hpa)
+
+    result = investigate_diagnosis(
+        source,
+        diagnosis=initial,
+        initial_case=initial_case,
+        policy=ScriptedInvestigationPolicy([action]),
+        tools=default_tools(),
+    )
+
+    assert result.tool_calls == 1
+    assert result.observations[0].payload["events"]
+    assert result.observations[0].outcome is GapOutcomeKind.SUPPORTS
+    assert result.new_evidence_refs == ("reveal:left-hpa",)
+    assert result.final_resolution is Resolution.RESOLVED
+    assert result.diagnosis.root_cause == left_hpa
+    assert result.diagnosis.resolution_trace is not None
+    assert result.diagnosis.resolution_trace.decision_basis == "VALID_DOMINANCE"
+    hypothesis = result.diagnosis.hypothesis
+    assert hypothesis is not None
+    assert any(finding.kind is FindingKind.AUTOSCALING_FAILURE for finding in hypothesis.findings)
 
 
 def test_checkpoint_resume_preserves_state_and_does_not_repeat_action() -> None:

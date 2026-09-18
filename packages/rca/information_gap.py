@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable, Sequence
+from datetime import timedelta
 from hashlib import sha256
 
 from packages.rca.model import (
@@ -23,6 +24,7 @@ from packages.rca.model import (
     ToolCapability,
 )
 from packages.rca.resolution import hypothesis_signature
+from packages.rca.source import ObservationSource
 
 CAPABILITIES: tuple[ToolCapability, ...] = (
     ToolCapability(
@@ -70,6 +72,18 @@ CAPABILITIES: tuple[ToolCapability, ...] = (
         dimensions=(GapDimension.LOG_ERROR_PATTERN, GapDimension.DEPENDENCY_HEALTH),
         required_inputs=("service", "incident_window"),
         evidence_sources=("captured_log_observations",),
+    ),
+    ToolCapability(
+        name="resource_pressure",
+        dimensions=(GapDimension.RESOURCE_PRESSURE, GapDimension.METRIC_BASELINE),
+        required_inputs=("pod", "incident_window"),
+        evidence_sources=("resource_pressure_observations",),
+    ),
+    ToolCapability(
+        name="traffic",
+        dimensions=(GapDimension.METRIC_CHANGE, GapDimension.METRIC_BASELINE),
+        required_inputs=("entity", "incident_window"),
+        evidence_sources=("traffic_observations",),
     ),
 )
 
@@ -137,19 +151,76 @@ def _dimensions(hypotheses: Sequence[Hypothesis]) -> tuple[GapDimension, ...]:
     return tuple(sorted(dimensions, key=lambda item: item.value))
 
 
+def _json_value(value: object) -> str:
+    return json.dumps(value, default=str, sort_keys=True, separators=(",", ":"))
+
+
+def _dimension_facts(hypothesis: Hypothesis, dimension: GapDimension) -> tuple[str, ...]:
+    """Return only facts that can answer this particular gap dimension."""
+    facts: list[str] = []
+    for finding in hypothesis.findings:
+        details = finding.details
+        if dimension is GapDimension.CHANGE_TIMING:
+            if finding.at is not None:
+                facts.append(
+                    f"{finding.kind.value}:{finding.at.isoformat()}:{finding.temporal_role.value}"
+                )
+        elif dimension is GapDimension.FAILURE_ONSET:
+            if finding.at is not None and finding.kind in {
+                FindingKind.CONTAINER_FAILURE,
+                FindingKind.FAILURE_EVENT,
+                FindingKind.DEPENDENCY_ERRORS,
+            }:
+                facts.append(f"{finding.kind.value}:{finding.at.isoformat()}")
+        elif dimension is GapDimension.EVENT_SEQUENCE:
+            if finding.kind is FindingKind.FAILURE_EVENT and finding.at is not None:
+                facts.append(
+                    f"{details.get('reason', '')}:{finding.at.isoformat()}:{details.get('count', '')}"
+                )
+        elif dimension is GapDimension.CONFIG_DIFFERENCE:
+            changed = details.get("changed_paths") or details.get("changed_keys")
+            before = details.get("before")
+            after = details.get("after")
+            if changed or before is not None or after is not None:
+                facts.append(f"{finding.kind.value}:{_json_value((changed, before, after))}")
+        elif dimension is GapDimension.AUTOSCALING_TARGET_STATE:
+            conditions = details.get("conditions") or details.get("failure_reasons")
+            targets = details.get("targets")
+            if conditions or targets:
+                facts.append(f"conditions={_json_value(conditions)}:targets={_json_value(targets)}")
+        elif dimension is GapDimension.DEPENDENCY_HEALTH:
+            service = details.get("service")
+            errors = details.get("errors")
+            if service or errors is not None:
+                facts.append(f"service={service}:errors={errors}")
+        elif dimension is GapDimension.LOG_ERROR_PATTERN:
+            if finding.kind is FindingKind.DEPENDENCY_ERRORS:
+                facts.append(finding.summary)
+        elif dimension is GapDimension.RESOURCE_PRESSURE:
+            if finding.kind is FindingKind.RESOURCE_PRESSURE:
+                facts.append(_json_value(details))
+        elif dimension is GapDimension.METRIC_BASELINE:
+            baseline = details.get("baseline")
+            if baseline is not None:
+                facts.append(f"baseline={baseline}")
+        elif dimension is GapDimension.METRIC_CHANGE:
+            ratio = details.get("ratio")
+            if ratio is not None:
+                facts.append(f"ratio={ratio}")
+        elif dimension is GapDimension.TOPOLOGY_RELATION:
+            signature = hypothesis_signature(hypothesis)
+            facts.extend(f"path={_json_value(path)}" for path in signature.causal_path_shape)
+        elif dimension is GapDimension.ENTITY_STATE:
+            if finding.details:
+                facts.append(f"{finding.kind.value}:{_json_value(details)}")
+    return tuple(sorted(set(facts)))
+
+
 def _known_facts(hypotheses: Sequence[Hypothesis], dimension: GapDimension) -> tuple[str, ...]:
     facts: list[str] = []
     for hypothesis in hypotheses:
-        signature = hypothesis_signature(hypothesis)
-        if signature.initiating_kinds:
-            facts.append(
-                f"{hypothesis.hypothesis_id}: initiating={','.join(signature.initiating_kinds)}"
-            )
-        if signature.temporal_profile:
-            facts.append(
-                f"{hypothesis.hypothesis_id}: temporal={','.join(signature.temporal_profile)}"
-            )
-        facts.append(f"{hypothesis.hypothesis_id}: relation={signature.symptom_relation}")
+        dimension_facts = _dimension_facts(hypothesis, dimension)
+        facts.extend(f"{hypothesis.hypothesis_id}: {fact}" for fact in dimension_facts)
     return tuple(sorted(set(facts)))[:12]
 
 
@@ -171,8 +242,21 @@ def _missing_fact(dimension: GapDimension) -> str:
     return facts[dimension]
 
 
-def _outcomes(hypotheses: Sequence[Hypothesis], missing: str) -> tuple[GapOutcome, ...]:
+def _outcomes(
+    hypotheses: Sequence[Hypothesis],
+    missing: str,
+    resolvability: GapResolvability,
+) -> tuple[GapOutcome, ...]:
     ids = tuple(sorted(hypothesis.hypothesis_id for hypothesis in hypotheses))
+    if resolvability is GapResolvability.ALREADY_OBSERVED:
+        return (
+            GapOutcome(
+                kind=GapOutcomeKind.UNKNOWN,
+                hypothesis_ids=ids,
+                condition="the dimension is already observed without a differentiator",
+                implication="no additional bounded observation is useful for this gap",
+            ),
+        )
     outcomes: list[GapOutcome] = []
     for hypothesis in sorted(hypotheses, key=lambda item: item.hypothesis_id):
         outcomes.append(
@@ -202,25 +286,76 @@ def _outcomes(hypotheses: Sequence[Hypothesis], missing: str) -> tuple[GapOutcom
     return tuple(outcomes)
 
 
-def _gap_for(dimension: GapDimension, hypotheses: Sequence[Hypothesis]) -> InformationGap:
+def _available_capabilities(
+    dimension: GapDimension,
+    hypotheses: Sequence[Hypothesis],
+    source: ObservationSource | None,
+) -> tuple[ToolCapability, ...]:
+    capabilities = capabilities_for(dimension)
+    if source is None:
+        return tuple(
+            capability
+            for capability in capabilities
+            if capability.name not in {"resource_pressure", "traffic"}
+        )
+    if dimension in {GapDimension.RESOURCE_PRESSURE, GapDimension.METRIC_BASELINE}:
+        pods = tuple(
+            entity
+            for hypothesis in hypotheses
+            for entity in hypothesis.members
+            if entity.kind == "Pod"
+        )
+        cutoff = source.observation_cutoff()
+        since = cutoff - timedelta(hours=2) if cutoff is not None else None
+        if since is None or not source.resource_pressure(pods, since):
+            return ()
+    if dimension is GapDimension.METRIC_CHANGE and not source.traffic_observations():
+        return ()
+    return capabilities
+
+
+def _gap_for(
+    dimension: GapDimension,
+    hypotheses: Sequence[Hypothesis],
+    source: ObservationSource | None,
+) -> InformationGap:
     ordered = tuple(sorted(hypotheses, key=lambda item: item.hypothesis_id))
     entity_scope = tuple(
         sorted(
             {
                 entity
                 for hypothesis in ordered
-                for entity in (hypothesis.causal_actor, *hypothesis.manifestations)
+                for entity in (hypothesis.causal_actor, *hypothesis.members)
             },
             key=lambda entity: entity.canonical,
         )
     )
-    capabilities = capabilities_for(dimension)
-    resolvability = (
-        GapResolvability.RESOLVABLE
-        if capabilities
-        else GapResolvability.UNRESOLVABLE_WITH_CURRENT_TOOLS
+    facts_by_hypothesis = tuple(_dimension_facts(hypothesis, dimension) for hypothesis in ordered)
+    complete = all(facts_by_hypothesis)
+    same_facts = complete and len(set(facts_by_hypothesis)) == 1
+    capabilities = _available_capabilities(dimension, ordered, source)
+    source_unavailable_for_metric = source is None and dimension in {
+        GapDimension.RESOURCE_PRESSURE,
+        GapDimension.METRIC_BASELINE,
+        GapDimension.METRIC_CHANGE,
+    }
+    if source_unavailable_for_metric:
+        resolvability = GapResolvability.UNRESOLVABLE_WITH_CURRENT_TOOLS
+    elif complete and not same_facts:
+        resolvability = GapResolvability.ALREADY_OBSERVED
+    elif same_facts:
+        resolvability = GapResolvability.ALREADY_OBSERVED
+    else:
+        resolvability = (
+            GapResolvability.RESOLVABLE
+            if capabilities
+            else GapResolvability.UNRESOLVABLE_WITH_CURRENT_TOOLS
+        )
+    tools = (
+        tuple(sorted({capability.name for capability in capabilities}))
+        if resolvability is GapResolvability.RESOLVABLE
+        else ()
     )
-    tools = tuple(sorted({capability.name for capability in capabilities}))
     missing = _missing_fact(dimension)
     return InformationGap(
         gap_id=_stable_gap_id(dimension, ordered, [entity.canonical for entity in entity_scope]),
@@ -230,7 +365,7 @@ def _gap_for(dimension: GapDimension, hypotheses: Sequence[Hypothesis]) -> Infor
         known_facts=_known_facts(ordered, dimension),
         missing_fact=missing,
         required_relation=_RELATIONS.get(dimension),
-        discriminating_outcomes=_outcomes(ordered, missing),
+        discriminating_outcomes=_outcomes(ordered, missing, resolvability),
         candidate_tools=tools,
         evidence_refs=_evidence_refs(ordered),
         priority=1,
@@ -238,12 +373,16 @@ def _gap_for(dimension: GapDimension, hypotheses: Sequence[Hypothesis]) -> Infor
         rationale=(
             "The hypotheses share the currently observed causal support; this bounded "
             "fact could distinguish them."
+            if resolvability is GapResolvability.RESOLVABLE
+            else "The relevant dimension is already observed or cannot be acquired by an available capability."
         ),
     )
 
 
 def derive_information_gaps(
-    hypotheses: Sequence[Hypothesis], resolution: ResolutionTrace
+    hypotheses: Sequence[Hypothesis],
+    resolution: ResolutionTrace,
+    source: ObservationSource | None = None,
 ) -> tuple[InformationGap, ...]:
     """Derive stable gaps for ambiguous or evidence-poor diagnoses only."""
     if resolution.state not in {Resolution.AMBIGUOUS, Resolution.INSUFFICIENT_EVIDENCE}:
@@ -258,7 +397,7 @@ def derive_information_gaps(
     if not selected:
         return ()
     dimensions = _dimensions(selected)
-    gaps = tuple(_gap_for(dimension, selected) for dimension in dimensions)
+    gaps = tuple(_gap_for(dimension, selected, source) for dimension in dimensions)
     return tuple(sorted(gaps, key=lambda gap: (gap.dimension.value, gap.gap_id)))
 
 

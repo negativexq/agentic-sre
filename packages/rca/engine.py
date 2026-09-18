@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Protocol
@@ -109,7 +109,11 @@ def _pods(entities: Iterable[EntityRef], topology: Topology) -> set[EntityRef]:
     return pods
 
 
-def build_case(source: ObservationSource, config: EngineConfig | None = None) -> Case:
+def build_case(
+    source: ObservationSource,
+    config: EngineConfig | None = None,
+    extra_findings: Sequence[Finding] = (),
+) -> Case:
     """Run every deterministic stage and return the ranked case."""
     config = config or EngineConfig()
     alerts = list(source.alerts())
@@ -150,6 +154,7 @@ def build_case(source: ObservationSource, config: EngineConfig | None = None) ->
             list(source.traffic_observations()), symptoms.onset, source.observation_cutoff()
         ),
     ]
+    findings.extend(extra_findings)
     findings = annotate_temporal_roles(
         findings, symptoms.onset, config.ranking.verification_onset_grace
     )
@@ -249,15 +254,14 @@ def _accept_override(
     return top
 
 
-def diagnose(
-    source: ObservationSource,
+def diagnose_case(
+    case: Case,
     *,
     investigator: Investigator | None = None,
     config: EngineConfig | None = None,
 ) -> Diagnosis:
-    """Produce a diagnosis for every incident; never returns an empty answer when signals exist."""
+    """Diagnose an already-built case without rereading its observation source."""
     config = config or EngineConfig()
-    case = build_case(source, config)
     if not case.candidates:
         return Diagnosis(
             incident_id=case.incident_id,
@@ -285,7 +289,7 @@ def diagnose(
         for hypothesis in case.hypotheses[: config.alternatives + 4]
     }
     resolution_trace = resolve_hypotheses(case.hypotheses, verification_traces=verification_traces)
-    information_gaps = derive_information_gaps(case.hypotheses, resolution_trace)
+    information_gaps = derive_information_gaps(case.hypotheses, resolution_trace, case.source)
     selected = case.hypotheses[0]
     mode = "deterministic"
     model_calls = 0
@@ -375,4 +379,25 @@ def diagnose(
     )
 
 
-__all__ = ["Case", "Choice", "EngineConfig", "Investigator", "build_case", "diagnose"]
+def diagnose(
+    source: ObservationSource,
+    *,
+    investigator: Investigator | None = None,
+    config: EngineConfig | None = None,
+) -> Diagnosis:
+    """Produce a diagnosis for every incident; deterministic by default."""
+    effective_config = config or EngineConfig()
+    return diagnose_case(
+        build_case(source, effective_config), investigator=investigator, config=effective_config
+    )
+
+
+__all__ = [
+    "Case",
+    "Choice",
+    "EngineConfig",
+    "Investigator",
+    "build_case",
+    "diagnose",
+    "diagnose_case",
+]

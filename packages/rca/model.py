@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -531,6 +531,54 @@ class InvestigationStep(BaseModel):
     detail: str
 
 
+class InvestigationAction(BaseModel):
+    """Strict model-selected evidence-acquisition action.
+
+    The action deliberately has no root-cause or confidence field.  It is a
+    request to inspect one already-authorized information gap only.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    action: Literal["inspect", "stop"]
+    gap_id: str | None = None
+    capability: str | None = None
+    target: EntityRef | None = None
+    rationale: str = Field(default="", max_length=400)
+
+
+class InvestigationStopReason(StrEnum):
+    """Why the bounded investigation graph terminated."""
+
+    RESOLVED = "RESOLVED"
+    NO_RESOLVABLE_GAP = "NO_RESOLVABLE_GAP"
+    NO_PROGRESS = "NO_PROGRESS"
+    MODEL_BUDGET_EXHAUSTED = "MODEL_BUDGET_EXHAUSTED"
+    TOOL_BUDGET_EXHAUSTED = "TOOL_BUDGET_EXHAUSTED"
+    TURN_BUDGET_EXHAUSTED = "TURN_BUDGET_EXHAUSTED"
+    WALL_TIME_EXHAUSTED = "WALL_TIME_EXHAUSTED"
+    POLICY_STOP = "POLICY_STOP"
+    MODEL_FAILURE = "MODEL_FAILURE"
+    TOOL_ERROR = "TOOL_ERROR"
+
+
+class InvestigationObservation(BaseModel):
+    """Bounded typed output from one read-only semantic investigation tool."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    observation_id: str
+    gap_id: str
+    capability: str
+    target: EntityRef
+    observed_at: datetime | None = None
+    outcome: GapOutcomeKind = GapOutcomeKind.UNKNOWN
+    payload: dict[str, Any] = Field(default_factory=dict)
+    evidence_refs: tuple[str, ...] = ()
+    source_class: str = "investigation"
+    error: str | None = None
+
+
 class Diagnosis(BaseModel):
     """The product's answer for one incident."""
 
@@ -572,6 +620,28 @@ class Diagnosis(BaseModel):
         return value
 
 
+class InvestigationResult(BaseModel):
+    """Serializable result of one bounded evidence-acquisition run."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    diagnosis: Diagnosis
+    initial_resolution: Resolution
+    final_resolution: Resolution
+    turns: int = 0
+    model_calls: int = 0
+    tool_calls: int = 0
+    unique_observations: int = 0
+    unique_evidence_added: int = 0
+    attempted_gap_ids: tuple[str, ...] = ()
+    rejected_actions: int = 0
+    no_data_observations: int = 0
+    stop_reason: InvestigationStopReason
+    observations: tuple[InvestigationObservation, ...] = ()
+    new_evidence_refs: tuple[str, ...] = ()
+    resolved_during_investigation: bool = False
+
+
 __all__ = [
     "CLUSTER_SCOPE",
     "Alert",
@@ -587,6 +657,10 @@ __all__ = [
     "Finding",
     "FindingKind",
     "InvestigationStep",
+    "InvestigationAction",
+    "InvestigationStopReason",
+    "InvestigationObservation",
+    "InvestigationResult",
     "Hypothesis",
     "HypothesisDiagnostics",
     "HypothesisSignature",

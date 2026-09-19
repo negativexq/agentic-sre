@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from datetime import UTC, datetime
+from enum import Enum
 from typing import Any
 
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, START, StateGraph
+from pydantic import BaseModel
 
 from packages.rca.engine import Case, EngineConfig, build_case, diagnose_case
 from packages.rca.frontier import (
@@ -26,8 +30,15 @@ from packages.rca.investigation.environment import (
     initial_view,
     investigation_backend,
 )
+from packages.rca.investigation.evidence import (
+    InMemoryEvidenceStore,
+    OverlayObservationSource,
+    records_from_observation,
+    visible_evidence_refs,
+)
 from packages.rca.investigation.normalizers import (
     deduplicate_findings,
+    finding_identity,
     new_investigation_findings,
     normalize_observation,
 )
@@ -62,12 +73,69 @@ def _engine_config(config: InvestigationConfig) -> EngineConfig:
     return config.engine or EngineConfig()
 
 
+def _canonical_value(value: Any) -> Any:
+    if isinstance(value, BaseModel):
+        return _canonical_value(value.model_dump(mode="json"))
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if is_dataclass(value) and not isinstance(value, type):
+        return {item.name: _canonical_value(getattr(value, item.name)) for item in fields(value)}
+    if isinstance(value, Mapping):
+        return {
+            str(key): _canonical_value(item)
+            for key, item in sorted(value.items(), key=lambda item: str(item[0]))
+        }
+    if isinstance(value, (set, frozenset)):
+        items = [_canonical_value(item) for item in value]
+        return sorted(
+            items, key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":"))
+        )
+    if isinstance(value, (tuple, list)):
+        return [_canonical_value(item) for item in value]
+    if hasattr(value, "__slots__"):
+        return {
+            name: _canonical_value(getattr(value, name))
+            for name in value.__slots__
+            if hasattr(value, name)
+        }
+    if hasattr(value, "__dict__"):
+        return {
+            key: _canonical_value(item)
+            for key, item in sorted(value.__dict__.items())
+            if key != "source"
+        }
+    return value
+
+
+def world_model_fingerprint(case: Case) -> str:
+    """Hash only deterministic evidence-derived products of a Case."""
+    payload = {
+        "topology": {
+            "edges": case.topology.edges,
+            "latest": case.topology.latest,
+        },
+        "findings": case.findings,
+        "candidates": case.candidates,
+        "hypotheses": case.hypotheses,
+        "runtime_graph": case.runtime_graph,
+        "runtime_evidence": case.runtime_evidence,
+        "runtime_propagation": case.runtime_propagation,
+        "hypothesis_causal_roles": case.hypothesis_causal_roles,
+        "root_cause_eligibilities": case.root_cause_eligibilities,
+        "runtime_mechanism_bridges": case.runtime_mechanism_bridges,
+    }
+    encoded = json.dumps(_canonical_value(payload), sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
 @dataclass(frozen=True)
 class _DefaultCaseRebuilder:
     engine_config: EngineConfig
 
-    def __call__(self, case: Case, findings: tuple[Finding, ...]) -> Case:
-        return build_case(case.source, self.engine_config, extra_findings=findings)
+    def __call__(self, source: ObservationSource, findings: tuple[Finding, ...]) -> Case:
+        return build_case(source, self.engine_config, extra_findings=findings)
 
 
 def _default_rebuilder(config: InvestigationConfig) -> CaseRebuilder:
@@ -91,27 +159,63 @@ class _Runtime:
         tools: Mapping[str, InvestigationTool] | None,
         config: InvestigationConfig | None,
         initial_case: Case | None,
-        rebuild_case: CaseRebuilder | None,
+        rebuild_case: Callable[..., Case] | None,
         backend: InvestigationBackend | None,
+        evidence_store: InMemoryEvidenceStore | None,
     ) -> None:
-        self.source = source
+        self.base_source = source
         self.policy = policy
         self.backend = backend or investigation_backend(source)
         self.tools: Mapping[str, InvestigationTool] = dict(tools or default_tools(self.backend))
+        source_capabilities = {"history", "events", "logs", "resource_pressure", "traffic"}
+        self.supported_capabilities = frozenset(
+            capability
+            for capability in self.tools
+            if capability not in source_capabilities or self.backend.supports(capability)
+        )
+        self.evidence_store = evidence_store or InMemoryEvidenceStore()
+        access_ledger = getattr(source, "access_ledger", None)
+        if callable(access_ledger):
+            ledger = access_ledger()
+            self.base_visible_refs = frozenset(ref for refs in ledger.values() for ref in refs)
+        else:
+            self.base_visible_refs = visible_evidence_refs(source)
         self.config = config or InvestigationConfig()
         self.engine_config = _engine_config(self.config)
-        self.rebuild_case = rebuild_case or _default_rebuilder(self.config)
+        self.rebuild_case: Callable[..., Case] = rebuild_case or _default_rebuilder(self.config)
         self.base_case = initial_case or build_case(source, self.engine_config)
-        self._cached: tuple[tuple[Finding, ...], Case] = ((), self.base_case)
+        self._cached: tuple[tuple[tuple[str, ...], tuple[Finding, ...]], Case] = (
+            ((), ()),
+            self.base_case,
+        )
 
-    def case_for(self, findings: tuple[Finding, ...] | list[Finding]) -> Case:
-        """The current case for these investigation findings, rebuilt on demand."""
-        key = tuple(findings)
-        if not key:
+    def case_for(
+        self,
+        acquired_evidence_refs: tuple[str, ...],
+        findings: tuple[Finding, ...] | list[Finding],
+    ) -> Case:
+        """The current case for acquired evidence and legacy findings."""
+        refs = tuple(acquired_evidence_refs)
+        for evidence_id in refs:
+            if not self.evidence_store.contains(evidence_id):
+                raise ValueError(f"missing acquired evidence ref {evidence_id}")
+        key = (refs, tuple(findings))
+        if not refs and not key[1]:
             return self.base_case
         if self._cached[0] == key:
             return self._cached[1]
-        case = self.rebuild_case(self.base_case, key)
+        overlay = OverlayObservationSource(
+            base=self.base_source,
+            store=self.evidence_store,
+            acquired_evidence_refs=refs,
+            supported_capabilities=self.supported_capabilities,
+        )
+        try:
+            case = self.rebuild_case(overlay, key[1])
+        except AttributeError:
+            # Preserve the pre-A1 test/custom callback contract while the
+            # production default rebuilds from the overlay source.
+            case = self.rebuild_case(self.base_case, key[1])
         self._cached = (key, case)
         return case
 
@@ -390,7 +494,7 @@ def _execute_tool(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     assert action.target is not None
     tool = rt.tools[action.capability]
     try:
-        case = rt.case_for(state["investigation_findings"])
+        case = rt.case_for(state.get("acquired_evidence_refs", ()), state["investigation_findings"])
         execute_query = getattr(tool, "execute_query", None)
         if callable(execute_query):
             observation = execute_query(case, gap, action.target, action.query)
@@ -417,7 +521,7 @@ def _execute_tool(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
 
 
 def _check_novelty(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
-    """Compare raw query references with effective case evidence before normalization."""
+    """Materialize native records and compare raw query references."""
     observation = state.get("pending_observation")
     if observation is None:
         return {
@@ -427,19 +531,76 @@ def _check_novelty(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             "last_new_raw_evidence_count": 0,
             "trace_steps": _with_step(state, "check_novelty", "no observation returned"),
         }
-    current_case = rt.case_for(state["investigation_findings"])
-    known_refs = {
+    current_case = rt.case_for(
+        state.get("acquired_evidence_refs", ()), state["investigation_findings"]
+    )
+    known_refs = set(rt.base_visible_refs)
+    known_refs.update(state.get("acquired_evidence_refs", ()))
+    known_refs.update(
         evidence_id
         for finding in (*current_case.findings, *state["investigation_findings"])
         for evidence_id in finding.evidence_ids
-    }
-    returned_refs = tuple(dict.fromkeys(observation.evidence_refs))
-    new_refs = tuple(ref for ref in returned_refs if ref not in known_refs)
-    known = tuple(ref for ref in returned_refs if ref in known_refs)
+    )
+    try:
+        records = records_from_observation(observation)
+    except ValueError as error:
+        failed_observation = observation.model_copy(
+            update={
+                "payload": {},
+                "evidence_refs": (),
+                "error": f"{type(error).__name__}: {error}",
+            }
+        )
+        return {
+            "pending_observation": failed_observation,
+            "pending_returned_evidence_refs": (),
+            "pending_new_evidence_refs": (),
+            "pending_already_known_refs": (),
+            "last_new_raw_evidence_count": 0,
+            "trace_steps": _with_step(state, "check_novelty", str(error)),
+        }
+    record_by_ref: dict[str, Any] = {}
+    for record in records:
+        prior = record_by_ref.get(record.evidence_id)
+        if prior is not None:
+            prior_payload = {
+                "type": type(prior).__qualname__,
+                "record": prior.model_dump(mode="json"),
+            }
+            record_payload = {
+                "type": type(record).__qualname__,
+                "record": record.model_dump(mode="json"),
+            }
+            if json.dumps(prior_payload, sort_keys=True, separators=(",", ":")) != json.dumps(
+                record_payload, sort_keys=True, separators=(",", ":")
+            ):
+                raise ValueError(f"evidence ID collision for {record.evidence_id}")
+            continue
+        record_by_ref[record.evidence_id] = record
+    returned_refs = tuple(dict.fromkeys((*observation.evidence_refs, *record_by_ref)))
+    acquired = list(state.get("acquired_evidence_refs", ()))
+    new_refs: list[str] = []
+    known: list[str] = []
+    for ref in returned_refs:
+        candidate_record = record_by_ref.get(ref)
+        if candidate_record is not None:
+            base_known = ref in rt.base_visible_refs
+            if base_known or ref in acquired:
+                known.append(ref)
+                continue
+            rt.evidence_store.put(candidate_record)
+            acquired.append(ref)
+            new_refs.append(ref)
+            continue
+        if ref in known_refs:
+            known.append(ref)
+        else:
+            new_refs.append(ref)
     return {
         "pending_returned_evidence_refs": returned_refs,
-        "pending_new_evidence_refs": new_refs,
-        "pending_already_known_refs": known,
+        "pending_new_evidence_refs": tuple(new_refs),
+        "pending_already_known_refs": tuple(known),
+        "acquired_evidence_refs": tuple(dict.fromkeys(acquired)),
         "last_new_raw_evidence_count": len(new_refs),
         "trace_steps": _with_step(
             state,
@@ -467,12 +628,42 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             "last_new_evidence_count": 0,
             "trace_steps": _with_step(state, "normalize", "observation gap no longer exists"),
         }
-    normalized = normalize_observation(
-        observation, case=rt.case_for(state["investigation_findings"]), gap=gap
-    )
+    native_records = records_from_observation(observation)
+    normalized_findings: tuple[Finding, ...]
+    if native_records:
+        normalized_observation = observation
+        if not state.get("pending_new_evidence_refs", ()):
+            legacy_result = normalize_observation(
+                observation,
+                case=rt.case_for(
+                    state.get("acquired_evidence_refs", ()), state["investigation_findings"]
+                ),
+                gap=gap,
+            )
+            normalized_observation = legacy_result.observation
+            if legacy_result.findings and normalized_observation.hypothesis_ids:
+                normalized_observation = normalized_observation.model_copy(
+                    update={"outcome": GapOutcomeKind.SUPPORTS}
+                )
+        normalized_findings = ()
+    else:
+        normalized_result = normalize_observation(
+            observation,
+            case=rt.case_for(
+                state.get("acquired_evidence_refs", ()), state["investigation_findings"]
+            ),
+            gap=gap,
+        )
+        normalized_observation = normalized_result.observation
+        normalized_findings = normalized_result.findings
     fresh_findings = new_investigation_findings(
-        (*rt.case_for(state["investigation_findings"]).findings, *state["investigation_findings"]),
-        normalized.findings,
+        (
+            *rt.case_for(
+                state.get("acquired_evidence_refs", ()), state["investigation_findings"]
+            ).findings,
+            *state["investigation_findings"],
+        ),
+        normalized_findings,
     )
     returned_refs = state.get("pending_returned_evidence_refs", ())
     new_refs = state.get("pending_new_evidence_refs", ())
@@ -504,14 +695,14 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         new_evidence_refs=new_refs,
         already_known_refs=tuple(ref for ref in returned_refs if ref in known_refs),
         normalized_finding_ids=finding_ids,
-        affected_hypothesis_ids=normalized.observation.hypothesis_ids,
-        outcome=normalized.observation.outcome,
+        affected_hypothesis_ids=normalized_observation.hypothesis_ids,
+        outcome=normalized_observation.outcome,
     )
     existing_ids = {item.observation_id for item in state["observations"]}
     observations = (
         state["observations"]
         if observation.observation_id in existing_ids
-        else (*state["observations"], normalized.observation)
+        else (*state["observations"], normalized_observation)
     )
     return {
         "observations": observations,
@@ -525,7 +716,7 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         "trace_steps": _with_step(
             state,
             "normalize",
-            f"{len(normalized.findings)} deterministic finding(s) from {observation.observation_id}",
+            f"{len(normalized_findings)} deterministic finding(s) from {observation.observation_id}",
         ),
     }
 
@@ -533,7 +724,12 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
 def _rebuild(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     pending = state.get("pending_findings", ())
     combined = deduplicate_findings((*state["investigation_findings"], *pending))
-    case = rt.case_for(combined)
+    newly_acquired = set(state.get("pending_new_evidence_refs", ()))
+    previous_refs = tuple(
+        ref for ref in state.get("acquired_evidence_refs", ()) if ref not in newly_acquired
+    )
+    before_case = rt.case_for(previous_refs, state["investigation_findings"])
+    case = rt.case_for(state.get("acquired_evidence_refs", ()), combined)
     queried_dimensions = {
         alternative_id: tuple(GapDimension(value) for value in dimensions)
         for alternative_id, dimensions in state.get("frontier_queried_dimensions", ())
@@ -546,9 +742,69 @@ def _rebuild(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         )
     )
     diagnosis = diagnose_case(case, config=rt.engine_config)
+    before_ids = {finding_identity(finding) for finding in before_case.findings}
+    derived_ids = tuple(
+        f"{finding.kind.value}:{finding.entity.canonical}:{','.join(finding.evidence_ids)}"
+        for finding in case.findings
+        if finding_identity(finding) not in before_ids
+    )
+    ledger = state.get("ledger", ())
+    native_observation = state.get("pending_observation")
+    native_records = (
+        records_from_observation(native_observation)
+        if native_observation is not None and native_observation.error is None
+        else ()
+    )
+    updated_observations = state["observations"]
+    if ledger and (derived_ids or native_records):
+        latest = ledger[-1]
+        hypothesis_ids = tuple(
+            sorted(
+                hypothesis.hypothesis_id
+                for hypothesis in case.hypotheses
+                if latest.target == hypothesis.causal_actor or latest.target in hypothesis.members
+            )
+        )
+        returned_refs = set(latest.returned_evidence_refs)
+        aligned_existing_finding = any(
+            returned_refs.intersection(finding.evidence_ids)
+            and (finding.entity == latest.target or latest.target in finding.related)
+            for finding in case.findings
+        )
+        outcome = (
+            GapOutcomeKind.SUPPORTS
+            if (derived_ids or aligned_existing_finding) and hypothesis_ids
+            else latest.outcome
+        )
+        ledger = (
+            *ledger[:-1],
+            latest.model_copy(
+                update={
+                    "normalized_finding_ids": tuple(
+                        dict.fromkeys((*latest.normalized_finding_ids, *derived_ids))
+                    ),
+                    "affected_hypothesis_ids": hypothesis_ids or latest.affected_hypothesis_ids,
+                    "outcome": outcome if native_records else latest.outcome,
+                }
+            ),
+        )
+        if native_records:
+            updated_observations = tuple(
+                item.model_copy(
+                    update={
+                        "hypothesis_ids": hypothesis_ids,
+                        "outcome": outcome,
+                    }
+                )
+                if item.observation_id == latest.query_id
+                else item
+                for item in updated_observations
+            )
     return {
         "current_diagnosis": diagnosis,
         "investigation_findings": combined,
+        "ledger": ledger,
+        "observations": updated_observations,
         "trace_steps": _with_step(state, "rebuild", f"resolution={diagnosis.resolution.value}"),
     }
 
@@ -561,9 +817,11 @@ def _check_progress(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     current = state["current_diagnosis"]
     current_resolution = current.resolution
     current_gap_fingerprint = _gap_fingerprint(current)
-    current_evidence_fingerprint = _evidence_fingerprint(
-        rt.case_for(state["investigation_findings"])
+    current_case = rt.case_for(
+        state.get("acquired_evidence_refs", ()), state["investigation_findings"]
     )
+    current_evidence_fingerprint = _evidence_fingerprint(current_case)
+    current_world_model_fingerprint = world_model_fingerprint(current_case)
     current_hypothesis_fingerprint = _hypothesis_fingerprint(current)
     previous = state.get("previous_resolution", state["initial_diagnosis"].resolution)
     no_progress = state["no_progress_count"]
@@ -572,6 +830,8 @@ def _check_progress(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         and current_gap_fingerprint == _frozen(state["previous_gap_fingerprint"])
         and current_evidence_fingerprint == _frozen(state["previous_evidence_fingerprint"])
         and current_hypothesis_fingerprint == _frozen(state["previous_hypothesis_fingerprint"])
+        and current_world_model_fingerprint == state["previous_world_model_fingerprint"]
+        and state.get("last_new_raw_evidence_count", 0) == 0
     )
     if unchanged:
         no_progress += 1
@@ -602,6 +862,7 @@ def _check_progress(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         "previous_gap_fingerprint": current_gap_fingerprint,
         "previous_evidence_fingerprint": current_evidence_fingerprint,
         "previous_hypothesis_fingerprint": current_hypothesis_fingerprint,
+        "previous_world_model_fingerprint": current_world_model_fingerprint,
         "no_progress_count": no_progress,
         "stop_reason": stop,
         "trace_steps": _with_step(
@@ -664,8 +925,9 @@ def build_investigation_graph(
     tools: Mapping[str, InvestigationTool] | None = None,
     config: InvestigationConfig | None = None,
     initial_case: Case | None = None,
-    rebuild_case: CaseRebuilder | None = None,
+    rebuild_case: Callable[..., Case] | None = None,
     backend: InvestigationBackend | None = None,
+    evidence_store: InMemoryEvidenceStore | None = None,
     checkpointer: Any | None = None,
     interrupt_before: tuple[str, ...] = (),
     interrupt_after: tuple[str, ...] = (),
@@ -683,6 +945,7 @@ def build_investigation_graph(
         initial_case=initial_case,
         rebuild_case=rebuild_case,
         backend=backend,
+        evidence_store=evidence_store,
     )
 
     def bind(node: Callable[[InvestigationState, _Runtime], dict[str, Any]]) -> Any:
@@ -747,12 +1010,11 @@ def investigate_diagnosis(
     checkpointer: Any | None = None,
     thread_id: str | None = None,
     initial_case: Case | None = None,
-    rebuild_case: CaseRebuilder | None = None,
+    rebuild_case: Callable[..., Case] | None = None,
+    evidence_store: InMemoryEvidenceStore | None = None,
 ) -> InvestigationResult:
     """Run one isolated bounded investigation and return deterministic output."""
-    initial_source = (
-        source if initial_case is not None or diagnosis is not None else initial_view(source)
-    )
+    initial_source = initial_view(source)
     case = initial_case or build_case(
         initial_source, _engine_config(config or InvestigationConfig())
     )
@@ -764,6 +1026,7 @@ def investigate_diagnosis(
         initial_case=case,
         rebuild_case=rebuild_case,
         backend=investigation_backend(source),
+        evidence_store=evidence_store,
         checkpointer=checkpointer,
     )
     state = build_investigation_state(
@@ -797,6 +1060,7 @@ def build_investigation_state(
         "observations": (),
         "ledger": (),
         "investigation_findings": (),
+        "acquired_evidence_refs": (),
         "attempted_actions": (),
         "attempted_observations": (),
         "attempted_gap_ids": (),
@@ -810,6 +1074,7 @@ def build_investigation_state(
         "previous_gap_fingerprint": _gap_fingerprint(initial),
         "previous_evidence_fingerprint": _evidence_fingerprint(case),
         "previous_hypothesis_fingerprint": _hypothesis_fingerprint(initial),
+        "previous_world_model_fingerprint": world_model_fingerprint(case),
         "frontier_queried_dimensions": (),
         "last_rejection": None,
         "action_validation_status": None,
@@ -842,4 +1107,5 @@ __all__ = [
     "build_investigation_state",
     "investigate_diagnosis",
     "resume_investigation",
+    "world_model_fingerprint",
 ]

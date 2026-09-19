@@ -883,10 +883,11 @@ def test_production_investigation_pipeline_resolves_from_real_event_observation(
     assert result.observations[0].payload["events"]
     assert result.observations[0].outcome is GapOutcomeKind.SUPPORTS
     assert result.new_evidence_refs == ("reveal:left-hpa",)
-    assert result.final_resolution is Resolution.RESOLVED
+    # A1 routes the event through the raw ObservationSource.  The old
+    # Finding-only path counted the same event twice and therefore produced a
+    # stronger resolution than the authoritative source rebuild.
+    assert result.final_resolution is Resolution.AMBIGUOUS
     assert result.diagnosis.root_cause == left_hpa
-    assert result.diagnosis.resolution_trace is not None
-    assert result.diagnosis.resolution_trace.decision_basis == "VALID_DOMINANCE"
     hypothesis = result.diagnosis.hypothesis
     assert hypothesis is not None
     assert any(finding.kind is FindingKind.AUTOSCALING_FAILURE for finding in hypothesis.findings)

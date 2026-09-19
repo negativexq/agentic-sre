@@ -24,6 +24,7 @@ from packages.rca.model import (
     Resolution,
     StructuralAlternative,
 )
+from packages.rca.source import ObservationSource
 
 
 @dataclass(frozen=True)
@@ -94,7 +95,7 @@ class InvestigationTool(Protocol):
     ) -> InvestigationObservation: ...
 
 
-CaseRebuilder = Callable[[Case, tuple[Finding, ...]], Case]
+CaseRebuilder = Callable[[ObservationSource, tuple[Finding, ...]], Case]
 
 
 class InvestigationState(TypedDict, total=False):
@@ -103,7 +104,8 @@ class InvestigationState(TypedDict, total=False):
     Every value must serialize without pickle. Live dependencies (the
     observation source, the policy and its model client, tools, the case
     rebuilder, configuration) are bound to the graph's nodes when it is built;
-    the current case is rebuilt from the source plus ``investigation_findings``.
+    the current case is rebuilt from the bounded source plus acquired evidence
+    references and legacy ``investigation_findings``.
     """
 
     incident_id: str
@@ -113,6 +115,7 @@ class InvestigationState(TypedDict, total=False):
     observations: tuple[InvestigationObservation, ...]
     ledger: tuple[InvestigationLedgerEntry, ...]
     investigation_findings: tuple[Finding, ...]
+    acquired_evidence_refs: tuple[str, ...]
     attempted_actions: tuple[str, ...]
     attempted_observations: tuple[str, ...]
     attempted_gap_ids: tuple[str, ...]
@@ -126,6 +129,7 @@ class InvestigationState(TypedDict, total=False):
     previous_gap_fingerprint: tuple[tuple[str, ...], ...]
     previous_evidence_fingerprint: tuple[str, ...]
     previous_hypothesis_fingerprint: tuple[str, ...]
+    previous_world_model_fingerprint: str
     frontier_queried_dimensions: tuple[tuple[str, tuple[str, ...]], ...]
     action_validation_status: InvestigationActionStatus | None
     turns: int

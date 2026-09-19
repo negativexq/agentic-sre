@@ -45,6 +45,10 @@ from packages.rca.ranking import (
 )
 from packages.rca.remediation import propose
 from packages.rca.resolution import hypothesis_signature, resolve_hypotheses
+from packages.rca.root_cause_eligibility import (
+    RootCauseEligibilities,
+    derive_root_cause_eligibilities,
+)
 from packages.rca.runtime_evidence import RuntimeEvidence, derive_runtime_evidence
 from packages.rca.runtime_graph import (
     RuntimeGraph,
@@ -87,6 +91,9 @@ class Case:
     runtime_propagation: RuntimePropagation = field(default_factory=RuntimePropagation.empty)
     hypothesis_causal_roles: HypothesisCausalRoles = field(
         default_factory=HypothesisCausalRoles.empty
+    )
+    root_cause_eligibilities: RootCauseEligibilities = field(
+        default_factory=RootCauseEligibilities.empty
     )
     structural_alternatives: list[StructuralAlternative] = field(default_factory=list)
     steps: list[InvestigationStep] = field(default_factory=list)
@@ -193,6 +200,7 @@ def build_case(
     grouping: GroupingResult = group_candidates(candidates, topology, context, config.ranking)
     hypotheses = list(grouping.hypotheses)
     hypothesis_causal_roles = derive_hypothesis_causal_roles(hypotheses, runtime_propagation)
+    root_cause_eligibilities = derive_root_cause_eligibilities(hypotheses, hypothesis_causal_roles)
     structural_alternatives = (
         list(derive_structural_frontier(context))
         if getattr(source, "initial_observation_bounded", False)
@@ -246,6 +254,7 @@ def build_case(
         runtime_evidence=runtime_evidence,
         runtime_propagation=runtime_propagation,
         hypothesis_causal_roles=hypothesis_causal_roles,
+        root_cause_eligibilities=root_cause_eligibilities,
         structural_alternatives=structural_alternatives,
         hypothesis_diagnostics=grouping.diagnostics,
         steps=steps,
@@ -276,6 +285,15 @@ def _selected_hypothesis(case: Case, entity: EntityRef) -> Hypothesis | None:
             if entity == hypothesis.causal_actor or entity in hypothesis.members
         ),
         None,
+    )
+
+
+def _root_cause_selectable_hypotheses(case: Case) -> tuple[Hypothesis, ...]:
+    """Preserve ranking order while excluding only explicit propagated effects."""
+    return tuple(
+        hypothesis
+        for hypothesis in case.hypotheses
+        if case.root_cause_eligibilities.is_root_cause_selectable(hypothesis.hypothesis_id)
     )
 
 
@@ -313,7 +331,9 @@ def diagnose_case(
     config = config or EngineConfig()
     if not case.candidates:
         resolution_trace = resolve_hypotheses(
-            (), onset_grace=config.ranking.verification_onset_grace
+            (),
+            onset_grace=config.ranking.verification_onset_grace,
+            root_cause_eligibilities=case.root_cause_eligibilities,
         )
         information_gaps = derive_information_gaps(
             (),
@@ -355,6 +375,7 @@ def diagnose_case(
         case.hypotheses,
         verification_traces=verification_traces,
         onset_grace=config.ranking.verification_onset_grace,
+        root_cause_eligibilities=case.root_cause_eligibilities,
     )
     information_gaps = derive_information_gaps(
         case.hypotheses,
@@ -362,7 +383,52 @@ def diagnose_case(
         case.source,
         structural_alternatives=case.structural_alternatives,
     )
-    selected = case.hypotheses[0]
+    selectable_hypotheses = _root_cause_selectable_hypotheses(case)
+    if not selectable_hypotheses:
+        case.steps.append(
+            InvestigationStep(
+                actor="engine",
+                action="resolution",
+                detail=f"{resolution_trace.state.value}: {resolution_trace.rationale}",
+            )
+        )
+        return Diagnosis(
+            incident_id=case.incident_id,
+            root_cause=None,
+            confidence=Confidence.UNVERIFIED,
+            resolution=Resolution.INSUFFICIENT_EVIDENCE,
+            summary=(
+                "Observed hypotheses are either contradicted or supported only as propagated "
+                "effects; no root-cause-eligible actor is established."
+            ),
+            symptoms=case.symptoms,
+            steps=tuple(case.steps),
+            hypothesis_diagnostics=case.hypothesis_diagnostics,
+            resolution_trace=resolution_trace,
+            information_gaps=information_gaps,
+            structural_alternatives=tuple(case.structural_alternatives),
+            investigation_status=investigation_status(
+                case.structural_alternatives,
+                bounded=bool(getattr(case.source, "initial_observation_bounded", False)),
+            ),
+        )
+    ranked_top_ineligible = not case.root_cause_eligibilities.is_root_cause_selectable(
+        case.hypotheses[0].hypothesis_id
+    )
+    if (
+        resolution_trace.state is Resolution.RESOLVED
+        and resolution_trace.decision_basis == "ROOT_CAUSE_ELIGIBILITY"
+    ):
+        leader_ids = resolution_trace.leading_hypothesis_ids
+        if len(leader_ids) != 1:
+            raise ValueError("ROOT_CAUSE_ELIGIBILITY resolution requires one leader")
+        selected = next(
+            hypothesis
+            for hypothesis in selectable_hypotheses
+            if hypothesis.hypothesis_id == leader_ids[0]
+        )
+    else:
+        selected = selectable_hypotheses[0] if ranked_top_ineligible else case.hypotheses[0]
     mode = "deterministic"
     model_calls = 0
     if investigator is not None:
@@ -383,15 +449,31 @@ def diagnose_case(
             )
             proposed = _selected_hypothesis(case, choice.entity)
             if proposed is not None and proposed.hypothesis_id != selected.hypothesis_id:
-                current_candidate = hypothesis_candidate(selected)
-                proposed_candidate = hypothesis_candidate(proposed)
-                accepted = _accept_override(case, current_candidate, proposed_candidate, config)
-                if accepted.entity == proposed.causal_actor:
-                    selected = proposed
+                if not case.root_cause_eligibilities.is_root_cause_selectable(
+                    proposed.hypothesis_id
+                ):
+                    case.steps.append(
+                        InvestigationStep(
+                            actor="engine",
+                            action="kept",
+                            detail=(
+                                "rejected root-cause-ineligible propagated-effect hypothesis "
+                                f"{proposed.hypothesis_id}"
+                            ),
+                        )
+                    )
+                else:
+                    current_candidate = hypothesis_candidate(selected)
+                    proposed_candidate = hypothesis_candidate(proposed)
+                    accepted = _accept_override(case, current_candidate, proposed_candidate, config)
+                    if accepted.entity == proposed.causal_actor:
+                        selected = proposed
     selected_candidate = hypothesis_candidate(selected)
+    selectable_index = selectable_hypotheses.index(selected)
     runner_up = (
-        hypothesis_candidate(case.hypotheses[1])
-        if selected.hypothesis_id == case.hypotheses[0].hypothesis_id and len(case.hypotheses) > 1
+        hypothesis_candidate(selectable_hypotheses[selectable_index + 1])
+        if (ranked_top_ineligible or selected.hypothesis_id == case.hypotheses[0].hypothesis_id)
+        and selectable_index + 1 < len(selectable_hypotheses)
         else None
     )
     trace = verification_trace(

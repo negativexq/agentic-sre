@@ -30,6 +30,11 @@ from packages.rca.model import (
     VerificationTrace,
 )
 from packages.rca.ranking import RankingConfig
+from packages.rca.root_cause_eligibility import (
+    HypothesisRootCauseEligibility,
+    RootCauseEligibilities,
+    RootCauseEligibilityState,
+)
 from packages.rca.temporal import (
     TemporalContradictionCertainty,
     temporal_contradiction_certainty,
@@ -288,8 +293,49 @@ def _elimination_for(
 def _legacy_elimination_reason(item: ResolutionElimination) -> str:
     if item.code is ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION:
         return f"{item.hypothesis_id}: contradictory evidence"
+    if item.code is ResolutionReasonCode.ROOT_CAUSE_INELIGIBLE_PROPAGATED_EFFECT:
+        return f"{item.hypothesis_id}: root-cause ineligible propagated effect"
     return (
         f"{item.hypothesis_id}: lacks onset-capable initiating evidence or causal symptom linkage"
+    )
+
+
+def _root_cause_eligibility_elimination(
+    hypothesis: Hypothesis,
+    eligibility: HypothesisRootCauseEligibility,
+) -> ResolutionElimination:
+    evidence_ids = tuple(
+        dict.fromkeys((*eligibility.propagation_evidence_ids, *eligibility.initiating_evidence_ids))
+    )
+    return ResolutionElimination(
+        hypothesis_id=hypothesis.hypothesis_id,
+        code=ResolutionReasonCode.ROOT_CAUSE_INELIGIBLE_PROPAGATED_EFFECT,
+        evidence_ids=evidence_ids[:12],
+        detail=(
+            "verified incoming runtime non-success propagation establishes this actor as a "
+            "propagated effect, and the hypothesis episode has no source-capable initiating evidence"
+        ),
+    )
+
+
+def _eligibility_discriminator(
+    selected: Hypothesis,
+    excluded: Sequence[Hypothesis],
+    eliminations: Sequence[ResolutionElimination],
+) -> ResolutionDiscriminator:
+    return ResolutionDiscriminator(
+        kind="ROOT_CAUSE_ELIGIBILITY",
+        hypothesis_ids=tuple([selected.hypothesis_id, *(item.hypothesis_id for item in excluded)])[
+            :_MAX_TRACE_ITEMS
+        ],
+        evidence_ids=tuple(
+            dict.fromkeys(evidence_id for item in eliminations for evidence_id in item.evidence_ids)
+        )[:12],
+        finding_kinds=tuple(sorted({finding.kind.value for finding in selected.findings})),
+        detail=(
+            "competing hypotheses were excluded from root-cause competition by verified "
+            "propagated-effect evidence without episode-level initiating support"
+        ),
     )
 
 
@@ -408,6 +454,7 @@ def resolve_hypotheses(
     *,
     verification_traces: Mapping[str, VerificationTrace] | None = None,
     onset_grace: timedelta | None = None,
+    root_cause_eligibilities: RootCauseEligibilities | None = None,
 ) -> ResolutionTrace:
     """Resolve distinguishability without treating missing proof as contradiction."""
     considered = tuple(sorted(h.hypothesis_id for h in hypotheses))
@@ -426,7 +473,7 @@ def resolve_hypotheses(
         hypothesis.hypothesis_id: assess_hypothesis(hypothesis, onset_grace=onset_grace)
         for hypothesis in hypotheses
     }
-    supported = tuple(
+    supported_all = tuple(
         sorted(
             (
                 hypothesis
@@ -436,7 +483,7 @@ def resolve_hypotheses(
             key=lambda item: item.hypothesis_id,
         )
     )
-    unresolved = tuple(
+    unresolved_all = tuple(
         sorted(
             (
                 hypothesis
@@ -458,17 +505,43 @@ def resolve_hypotheses(
             key=lambda item: item.hypothesis_id,
         )
     )
-    eliminations = tuple(
+    eligibility_excluded = tuple(
+        hypothesis
+        for hypothesis in (*supported_all, *unresolved_all)
+        if root_cause_eligibilities is not None
+        and (eligibility := root_cause_eligibilities.for_hypothesis(hypothesis.hypothesis_id))
+        is not None
+        and eligibility.state is RootCauseEligibilityState.INELIGIBLE_PROPAGATED_EFFECT
+    )
+    supported = tuple(
+        hypothesis for hypothesis in supported_all if hypothesis not in eligibility_excluded
+    )
+    unresolved = tuple(
+        hypothesis for hypothesis in unresolved_all if hypothesis not in eligibility_excluded
+    )
+    contradiction_eliminations = tuple(
         _elimination_for(hypothesis, assessments[hypothesis.hypothesis_id])
         for hypothesis in contradicted[:_MAX_TRACE_ITEMS]
     )
+    eligibility_elimination_items: list[ResolutionElimination] = []
+    if root_cause_eligibilities is not None:
+        for hypothesis in eligibility_excluded:
+            eligibility = root_cause_eligibilities.for_hypothesis(hypothesis.hypothesis_id)
+            if eligibility is not None:
+                eligibility_elimination_items.append(
+                    _root_cause_eligibility_elimination(hypothesis, eligibility)
+                )
+    eligibility_eliminations = tuple(eligibility_elimination_items)
+    eliminations = contradiction_eliminations + eligibility_eliminations
     legacy_reasons = tuple(_legacy_elimination_reason(item) for item in eliminations)
     signatures = tuple(hypothesis_signature(hypothesis) for hypothesis in supported)
+    eliminated_ids = {hypothesis.hypothesis_id for hypothesis in contradicted}
+    eliminated_ids.update(item.hypothesis_id for item in eligibility_excluded)
     base = dict(
         considered_hypotheses=considered,
         plausible_hypotheses=tuple(h.hypothesis_id for h in supported),
         unresolved_hypotheses=tuple(h.hypothesis_id for h in unresolved),
-        eliminated_hypotheses=tuple(h.hypothesis_id for h in contradicted),
+        eliminated_hypotheses=tuple(sorted(eliminated_ids)),
         elimination_reasons=legacy_reasons,
         eliminations=eliminations,
         signatures=signatures[:_MAX_TRACE_ITEMS],
@@ -490,6 +563,21 @@ def resolve_hypotheses(
             onset_grace,
         )
     if not supported:
+        if eligibility_excluded and not unresolved:
+            return _attach_audits(
+                _trace(
+                    base,
+                    state=Resolution.INSUFFICIENT_EVIDENCE,
+                    decision_basis="NO_ROOT_CAUSE_ELIGIBLE_HYPOTHESIS",
+                    rationale=(
+                        "Available hypotheses are either contradicted or positively identified "
+                        "as propagated effects without source-capable initiating evidence."
+                    ),
+                ),
+                hypotheses,
+                verification_traces,
+                onset_grace,
+            )
         return _attach_audits(
             _trace(
                 base,
@@ -557,7 +645,14 @@ def resolve_hypotheses(
 
     if len(supported) == 1:
         selected = supported[0]
-        if contradictions:
+        if eligibility_excluded:
+            discriminator = _eligibility_discriminator(
+                selected,
+                eligibility_excluded,
+                eligibility_eliminations,
+            )
+            basis = "ROOT_CAUSE_ELIGIBILITY"
+        elif contradictions:
             discriminator = _discriminator(
                 "VALID_CONTRADICTION",
                 selected,

@@ -14,9 +14,11 @@ from urllib.request import Request, urlopen
 
 from packages.rca.investigation.environment import (
     InvestigationBackend,
+    PrometheusInvestigationBackend,
     SourceInvestigationBackend,
     TempoInvestigationBackend,
 )
+from packages.rca.investigation.prometheus import PrometheusMetricsReader
 from packages.rca.investigation.tempo import TempoTraceReader
 from packages.rca.json_access import child, object_content_hash
 from packages.rca.model import (
@@ -379,6 +381,7 @@ class LiveSource:
     # "the cluster has none of these objects any more".
     current_is_live: bool = True
     tempo_reader: TempoTraceReader | None = None
+    prometheus_reader: PrometheusMetricsReader | None = None
 
     def incident_id(self) -> str:
         return self.incident
@@ -459,17 +462,25 @@ class LiveSource:
     def supports(self, capability: str) -> bool:
         if capability == "runtime_traces":
             return self.tempo_reader is not None
-        return capability in {"history", "events", "logs", "resource_pressure", "traffic"}
+        if capability in {"resource_pressure", "traffic"}:
+            return self.prometheus_reader is not None
+        return capability in {"history", "events", "logs"}
 
     def investigation_backend(self) -> InvestigationBackend:
-        base = SourceInvestigationBackend(self)
-        if self.tempo_reader is None:
-            return base
-        return TempoInvestigationBackend(
-            base=base,
-            tempo=self.tempo_reader,
-            observation_cutoff=self.observation_cutoff(),
-        )
+        base: InvestigationBackend = SourceInvestigationBackend(self)
+        if self.prometheus_reader is not None:
+            base = PrometheusInvestigationBackend(
+                base=base,
+                prometheus=self.prometheus_reader,
+                observation_cutoff=self.observation_cutoff(),
+            )
+        if self.tempo_reader is not None:
+            base = TempoInvestigationBackend(
+                base=base,
+                tempo=self.tempo_reader,
+                observation_cutoff=self.observation_cutoff(),
+            )
+        return base
 
     def logs(self, service: str, *, limit: int = 20) -> Sequence[dict[str, Any]]:
         return [

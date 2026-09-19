@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from packages.rca.engine import Investigator, diagnose
 from packages.rca.investigation.graph import investigate_diagnosis
 from packages.rca.investigation.policy import LLMInvestigationPolicy
+from packages.rca.investigation.prometheus import PrometheusConfig, PrometheusMetricsReader
 from packages.rca.investigation.state import InvestigationPolicy
 from packages.rca.investigation.tempo import TempoConfig, TempoTraceReader
 from packages.rca.live import (
@@ -84,6 +85,7 @@ class DiagnosisService:
     _snapshot_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     _last_snapshot_result: SnapshotResult | None = field(default=None, init=False, repr=False)
     tempo_reader: TempoTraceReader | None = None
+    prometheus_reader: PrometheusMetricsReader | None = None
 
     @property
     def last_snapshot_result(self) -> SnapshotResult | None:
@@ -257,6 +259,7 @@ class DiagnosisService:
             observed_at=window_end,
             current_is_live=not resolved,
             tempo_reader=self.tempo_reader,
+            prometheus_reader=self.prometheus_reader,
         )
         bounded_policy = self.bounded_policy_factory()
         if bounded_policy is not None:
@@ -291,6 +294,10 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
     log_reader = LokiLogReader(loki) if loki else None
     tempo_config = TempoConfig.from_environment()
     tempo_reader = TempoTraceReader(tempo_config) if tempo_config is not None else None
+    prometheus_config = PrometheusConfig.from_environment()
+    prometheus_reader = (
+        PrometheusMetricsReader(prometheus_config) if prometheus_config is not None else None
+    )
 
     # Built once and reused: OpenAIClient owns the call-budget counter, so a
     # fresh client per incident would reset SRE_LLM_MAX_CALLS every time.
@@ -325,6 +332,7 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
         reader=reader,
         log_reader=log_reader,
         tempo_reader=tempo_reader,
+        prometheus_reader=prometheus_reader,
         investigator_factory=investigator,
         bounded_policy_factory=bounded_policy,
     )

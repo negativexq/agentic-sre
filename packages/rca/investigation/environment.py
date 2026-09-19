@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Protocol, cast
 
+from packages.rca.investigation.prometheus import PrometheusMetricsReader
 from packages.rca.investigation.tempo import TempoTraceReader
 from packages.rca.model import (
     Alert,
@@ -83,7 +84,7 @@ class SourceInvestigationBackend:
 
     def supports(self, capability: str) -> bool:
         source_supports = getattr(self.source, "supports", None)
-        if capability == "runtime_traces" and callable(source_supports):
+        if callable(source_supports):
             return bool(source_supports(capability))
         methods = {
             "history": "object_history",
@@ -283,6 +284,63 @@ class TempoInvestigationBackend:
 
     def supports(self, capability: str) -> bool:
         if capability == "runtime_traces":
+            return True
+        return self.base.supports(capability)
+
+
+@dataclass(frozen=True)
+class PrometheusInvestigationBackend:
+    """Existing investigation reads plus active Prometheus metric reads."""
+
+    base: InvestigationBackend
+    prometheus: PrometheusMetricsReader
+    observation_cutoff: datetime | None
+
+    def _effective_query(self, query: InvestigationQuery) -> InvestigationQuery | None:
+        if self.observation_cutoff is None:
+            return query
+        if query.start is not None and query.start > self.observation_cutoff:
+            return None
+        if query.end is None or query.end > self.observation_cutoff:
+            return query.model_copy(update={"end": self.observation_cutoff})
+        return query
+
+    def query_history(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[ObjectVersion, ...]:
+        return self.base.query_history(target, query)
+
+    def query_events(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[ClusterEvent, ...]:
+        return self.base.query_events(target, query)
+
+    def query_logs(self, target: EntityRef, query: InvestigationQuery) -> tuple[LogRecord, ...]:
+        return self.base.query_logs(target, query)
+
+    def query_traces(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[TraceSpanObservation, ...]:
+        return self.base.query_traces(target, query)
+
+    def query_resource_pressure(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[ResourcePressure, ...]:
+        effective = self._effective_query(query)
+        if effective is None:
+            return ()
+        return self.prometheus.query_resource_pressure(target, effective)
+
+    def query_traffic(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[TrafficObservation, ...]:
+        effective = self._effective_query(query)
+        if effective is None:
+            return ()
+        return self.prometheus.query_traffic(target, effective)
+
+    def supports(self, capability: str) -> bool:
+        if capability in {"resource_pressure", "traffic"}:
             return True
         return self.base.supports(capability)
 
@@ -488,6 +546,7 @@ __all__ = [
     "InitialAccessLedger",
     "InitialObservationView",
     "InvestigationBackend",
+    "PrometheusInvestigationBackend",
     "SeedPolicy",
     "SourceInvestigationBackend",
     "TempoInvestigationBackend",

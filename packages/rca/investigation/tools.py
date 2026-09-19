@@ -13,6 +13,7 @@ from packages.rca.information_gap import CAPABILITIES
 from packages.rca.investigation.environment import (
     InvestigationBackend,
     _default_query,
+    _query_trace_observations,
 )
 from packages.rca.investigation.state import InvestigationTool
 from packages.rca.model import (
@@ -359,6 +360,36 @@ class TrafficTool(_BaseTool):
         )
 
 
+class RuntimeTracesTool(_BaseTool):
+    name = "runtime_traces"
+
+    def execute(
+        self, case: Case, gap: InformationGap, target: EntityRef
+    ) -> InvestigationObservation:
+        return self.execute_query(case, gap, target, None)
+
+    def execute_query(
+        self, case: Case, gap: InformationGap, target: EntityRef, query: InvestigationQuery | None
+    ) -> InvestigationObservation:
+        requested = _default_query(query, onset=case.symptoms.onset)
+        if self.backend is None:
+            spans = _query_trace_observations(
+                case.source.trace_observations(),
+                target,
+                requested,
+                case.source.observation_cutoff(),
+            )
+        else:
+            spans = self.backend.query_traces(target, requested)
+        return self._observation(
+            gap,
+            target,
+            {"traces": [span.model_dump(mode="json") for span in spans]},
+            refs=tuple(span.evidence_id for span in spans),
+            observed_at=max((span.start_at for span in spans), default=None),
+        )
+
+
 def default_tools(backend: InvestigationBackend | None = None) -> dict[str, InvestigationTool]:
     """Build a fresh registry; tools contain no mutable cross-run state."""
     tools: tuple[InvestigationTool, ...] = (
@@ -369,12 +400,14 @@ def default_tools(backend: InvestigationBackend | None = None) -> dict[str, Inve
         LogsTool(backend),
         ResourcePressureTool(backend),
         TrafficTool(backend),
+        RuntimeTracesTool(backend),
     )
     return {capability.name: tool for capability, tool in zip(CAPABILITIES, tools, strict=True)}
 
 
 __all__ = [
     "InvestigationTool",
+    "RuntimeTracesTool",
     "default_tools",
     "make_observation",
 ]

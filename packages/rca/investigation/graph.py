@@ -167,7 +167,14 @@ class _Runtime:
         self.policy = policy
         self.backend = backend or investigation_backend(source)
         self.tools: Mapping[str, InvestigationTool] = dict(tools or default_tools(self.backend))
-        source_capabilities = {"history", "events", "logs", "resource_pressure", "traffic"}
+        source_capabilities = {
+            "history",
+            "events",
+            "logs",
+            "resource_pressure",
+            "traffic",
+            "runtime_traces",
+        }
         self.supported_capabilities = frozenset(
             capability
             for capability in self.tools
@@ -677,7 +684,7 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         alternative_id: {GapDimension(value) for value in dimensions}
         for alternative_id, dimensions in state.get("frontier_queried_dimensions", ())
     }
-    if observation.error is None:
+    if observation.error is None and observation.capability != "runtime_traces":
         covered = covered_frontier_dimensions(
             state["current_diagnosis"],
             capability=observation.capability,

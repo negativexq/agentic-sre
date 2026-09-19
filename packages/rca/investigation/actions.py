@@ -29,11 +29,23 @@ class ActionValidation:
 def action_identity(action: InvestigationAction) -> str:
     """Stable identity used to prevent repeated no-op observations."""
     target = action.target.canonical if action.target is not None else "-"
-    query = (
-        json.dumps(action.query.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
-        if action.query is not None
-        else "-"
-    )
+    if action.query is None:
+        query = "-"
+    elif action.capability == "runtime_traces":
+        query_json = action.query.model_dump(mode="json")
+        query = json.dumps(
+            {
+                "start": query_json["start"],
+                "end": query_json["end"],
+                "limit": query_json["limit"],
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    else:
+        query = json.dumps(
+            action.query.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
+        )
     return f"{action.gap_id or '-'}|{action.capability or '-'}|{target}|{query}"
 
 
@@ -62,6 +74,8 @@ def observation_identity(
             "contains": tuple(sorted(set(query.contains))),
             "limit": query.limit,
         }
+    elif capability == "runtime_traces":
+        effective = {"start": query.start, "end": query.end, "limit": query.limit}
     else:
         effective = {"start": query.start, "end": query.end, "limit": query.limit}
     encoded = json.dumps(effective, default=str, sort_keys=True, separators=(",", ":"))
@@ -94,6 +108,14 @@ def validate_action(
     if action.query is not None and action.query.start and action.query.end:
         if action.query.start > action.query.end:
             return ActionValidation(False, "query start must not be after query end")
+    if action.capability == "runtime_traces" and action.query is not None:
+        if action.query.reasons or action.query.contains:
+            return ActionValidation(
+                False,
+                "runtime_traces does not accept reasons/contains filters",
+            )
+        if action.query.limit > 32:
+            return ActionValidation(False, "runtime_traces limit must be at most 32")
     gap = next((item for item in gaps if item.gap_id == action.gap_id), None)
     if gap is None:
         return ActionValidation(False, f"unknown information gap {action.gap_id!r}")

@@ -67,6 +67,10 @@ class InvestigationBackend(Protocol):
         self, target: EntityRef, query: InvestigationQuery
     ) -> tuple[TrafficObservation, ...]: ...
 
+    def query_traces(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[TraceSpanObservation, ...]: ...
+
     def supports(self, capability: str) -> bool: ...
 
 
@@ -83,6 +87,7 @@ class SourceInvestigationBackend:
             "logs": "error_logs",
             "resource_pressure": "resource_pressure",
             "traffic": "traffic_observations",
+            "runtime_traces": "trace_observations",
         }
         method = methods.get(capability)
         return method is not None and callable(getattr(self.source, method, None))
@@ -152,6 +157,77 @@ class SourceInvestigationBackend:
             and _in_window(item.at, query, self.source.observation_cutoff())
         ]
         return tuple(records[: query.limit])
+
+    def query_traces(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[TraceSpanObservation, ...]:
+        return _query_trace_observations(
+            self.source.trace_observations(),
+            target,
+            query,
+            self.source.observation_cutoff(),
+        )
+
+
+def _trace_matches_target(span: TraceSpanObservation, target: EntityRef) -> bool:
+    """Match only exact Kubernetes semantic attributes for a trace target."""
+    namespace = span.semantic_attributes.get("k8s.namespace.name")
+    if namespace != target.namespace:
+        return False
+    attribute_by_kind = {
+        "Pod": "k8s.pod.name",
+        "Deployment": "k8s.deployment.name",
+        "StatefulSet": "k8s.statefulset.name",
+        "DaemonSet": "k8s.daemonset.name",
+    }
+    attribute = attribute_by_kind.get(target.kind)
+    return attribute is not None and span.semantic_attributes.get(attribute) == target.name
+
+
+def _trace_in_window(
+    span: TraceSpanObservation, query: InvestigationQuery, cutoff: datetime | None
+) -> bool:
+    if query.start is not None and span.start_at < query.start:
+        return False
+    if query.end is not None and span.start_at > query.end:
+        return False
+    return cutoff is None or span.start_at <= cutoff
+
+
+def _query_trace_observations(
+    spans: Sequence[TraceSpanObservation],
+    target: EntityRef,
+    query: InvestigationQuery,
+    cutoff: datetime | None,
+) -> tuple[TraceSpanObservation, ...]:
+    if query.reasons or query.contains:
+        raise ValueError("runtime_traces does not accept reasons/contains filters")
+    if query.limit > 32:
+        raise ValueError("runtime_traces limit must be at most 32")
+    eligible = [span for span in spans if _trace_in_window(span, query, cutoff)]
+    seeds = sorted(
+        (span for span in eligible if _trace_matches_target(span, target)),
+        key=lambda span: (span.start_at, span.trace_id, span.span_id, span.evidence_id),
+    )
+    by_span = {(span.trace_id, span.span_id): span for span in eligible}
+    children_by_parent: dict[tuple[str, str], list[TraceSpanObservation]] = {}
+    for span in eligible:
+        if span.parent_span_id is not None:
+            children_by_parent.setdefault((span.trace_id, span.parent_span_id), []).append(span)
+    selected: dict[str, TraceSpanObservation] = {}
+    for seed in seeds:
+        selected[seed.evidence_id] = seed
+        if seed.parent_span_id is not None:
+            parent = by_span.get((seed.trace_id, seed.parent_span_id))
+            if parent is not None:
+                selected[parent.evidence_id] = parent
+        for child in children_by_parent.get((seed.trace_id, seed.span_id), ()):
+            selected[child.evidence_id] = child
+    ordered = sorted(
+        selected.values(),
+        key=lambda span: (span.start_at, span.trace_id, span.span_id, span.evidence_id),
+    )
+    return tuple(ordered[: query.limit])
 
 
 @dataclass(frozen=True)

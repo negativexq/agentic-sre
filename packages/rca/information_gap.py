@@ -90,6 +90,12 @@ CAPABILITIES: tuple[ToolCapability, ...] = (
         required_inputs=("entity", "incident_window"),
         evidence_sources=("traffic_observations",),
     ),
+    ToolCapability(
+        name="runtime_traces",
+        dimensions=(GapDimension.FAILURE_ONSET, GapDimension.DEPENDENCY_HEALTH),
+        required_inputs=("entity", "incident_window"),
+        evidence_sources=("distributed_trace_spans",),
+    ),
 )
 
 
@@ -172,6 +178,8 @@ def _capability_allows_target(capability: str, target: EntityRef) -> bool:
         return bool(target.kind)
     if capability == "traffic":
         return bool(target.kind)
+    if capability == "runtime_traces":
+        return target.kind in {"Pod", "Deployment", "StatefulSet", "DaemonSet"}
     if capability in {"describe", "neighbors"}:
         return bool(target.kind)
     return False
@@ -398,6 +406,7 @@ def _available_capabilities(
         "logs": "error_logs",
         "resource_pressure": "resource_pressure",
         "traffic": "traffic_observations",
+        "runtime_traces": "trace_observations",
     }
     for capability in capabilities:
         if capability.name in blocked_in_bounded_view:

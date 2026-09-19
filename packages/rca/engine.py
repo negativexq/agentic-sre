@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Protocol
 
+from packages.rca.causal_roles import HypothesisCausalRoles, derive_hypothesis_causal_roles
 from packages.rca.frontier import (
     apply_frontier_progress,
     derive_structural_frontier,
@@ -84,6 +85,9 @@ class Case:
     runtime_graph: RuntimeGraph = field(default_factory=RuntimeGraph.empty)
     runtime_evidence: RuntimeEvidence = field(default_factory=RuntimeEvidence.empty)
     runtime_propagation: RuntimePropagation = field(default_factory=RuntimePropagation.empty)
+    hypothesis_causal_roles: HypothesisCausalRoles = field(
+        default_factory=HypothesisCausalRoles.empty
+    )
     structural_alternatives: list[StructuralAlternative] = field(default_factory=list)
     steps: list[InvestigationStep] = field(default_factory=list)
 
@@ -188,6 +192,7 @@ def build_case(
     candidates = collapse_fault_instances(candidates, topology, symptoms.onset)
     grouping: GroupingResult = group_candidates(candidates, topology, context, config.ranking)
     hypotheses = list(grouping.hypotheses)
+    hypothesis_causal_roles = derive_hypothesis_causal_roles(hypotheses, runtime_propagation)
     structural_alternatives = (
         list(derive_structural_frontier(context))
         if getattr(source, "initial_observation_bounded", False)
@@ -240,6 +245,7 @@ def build_case(
         runtime_graph=runtime_graph,
         runtime_evidence=runtime_evidence,
         runtime_propagation=runtime_propagation,
+        hypothesis_causal_roles=hypothesis_causal_roles,
         structural_alternatives=structural_alternatives,
         hypothesis_diagnostics=grouping.diagnostics,
         steps=steps,

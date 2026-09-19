@@ -50,6 +50,7 @@ from packages.rca.runtime_graph import (
     canonicalize_trace_spans,
     derive_runtime_graph_from_index,
 )
+from packages.rca.runtime_propagation import RuntimePropagation, derive_runtime_propagation
 from packages.rca.signals import (
     autoscaling_findings,
     change_findings,
@@ -82,6 +83,7 @@ class Case:
     hypothesis_diagnostics: HypothesisDiagnostics
     runtime_graph: RuntimeGraph = field(default_factory=RuntimeGraph.empty)
     runtime_evidence: RuntimeEvidence = field(default_factory=RuntimeEvidence.empty)
+    runtime_propagation: RuntimePropagation = field(default_factory=RuntimePropagation.empty)
     structural_alternatives: list[StructuralAlternative] = field(default_factory=list)
     steps: list[InvestigationStep] = field(default_factory=list)
 
@@ -143,6 +145,11 @@ def build_case(
     runtime_graph = derive_runtime_graph_from_index(trace_index)
     runtime_evidence = derive_runtime_evidence(trace_index)
     symptoms = extract_symptoms(alerts)
+    runtime_propagation = derive_runtime_propagation(
+        trace_index,
+        history=history,
+        incident_onset=symptoms.onset,
+    )
     entities = symptom_entities(alerts, topology)
     context = Context(
         symptoms=symptoms,
@@ -232,6 +239,7 @@ def build_case(
         hypotheses=hypotheses,
         runtime_graph=runtime_graph,
         runtime_evidence=runtime_evidence,
+        runtime_propagation=runtime_propagation,
         structural_alternatives=structural_alternatives,
         hypothesis_diagnostics=grouping.diagnostics,
         steps=steps,

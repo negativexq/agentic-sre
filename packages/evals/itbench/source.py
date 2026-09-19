@@ -538,7 +538,10 @@ class SnapshotSource:
     @cached_property
     def _trace_observations(self) -> list[TraceSpanObservation]:
         result: list[TraceSpanObservation] = []
-        for index, row in enumerate(iter_tsv(self.root / _TRACES)):
+        path = self.root / _TRACES
+        if not path.is_file():
+            return result
+        for index, row in enumerate(iter_tsv(path)):
             observation = parse_trace_span(row, evidence_id=f"{_TRACES}:{index}")
             if observation is not None:
                 result.append(observation)

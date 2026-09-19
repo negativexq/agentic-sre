@@ -19,6 +19,10 @@ from packages.rca.hypotheses import (
     hypothesis_candidate,
 )
 from packages.rca.information_gap import derive_information_gaps
+from packages.rca.mechanism_bridge import (
+    RuntimeMechanismBridges,
+    derive_runtime_mechanism_bridges,
+)
 from packages.rca.model import (
     Candidate,
     Confidence,
@@ -94,6 +98,9 @@ class Case:
     )
     root_cause_eligibilities: RootCauseEligibilities = field(
         default_factory=RootCauseEligibilities.empty
+    )
+    runtime_mechanism_bridges: RuntimeMechanismBridges = field(
+        default_factory=RuntimeMechanismBridges.empty
     )
     structural_alternatives: list[StructuralAlternative] = field(default_factory=list)
     steps: list[InvestigationStep] = field(default_factory=list)
@@ -195,6 +202,11 @@ def build_case(
     findings = annotate_temporal_roles(
         findings, symptoms.onset, config.ranking.verification_onset_grace
     )
+    runtime_mechanism_bridges = derive_runtime_mechanism_bridges(
+        findings,
+        runtime_evidence,
+        history=history,
+    )
     candidates = score_findings(findings, context, config.ranking)
     candidates = collapse_fault_instances(candidates, topology, symptoms.onset)
     grouping: GroupingResult = group_candidates(candidates, topology, context, config.ranking)
@@ -255,6 +267,7 @@ def build_case(
         runtime_propagation=runtime_propagation,
         hypothesis_causal_roles=hypothesis_causal_roles,
         root_cause_eligibilities=root_cause_eligibilities,
+        runtime_mechanism_bridges=runtime_mechanism_bridges,
         structural_alternatives=structural_alternatives,
         hypothesis_diagnostics=grouping.diagnostics,
         steps=steps,

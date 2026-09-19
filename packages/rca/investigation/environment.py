@@ -15,6 +15,7 @@ from packages.rca.model import (
     LogRecord,
     ObjectVersion,
     ResourcePressure,
+    TraceSpanObservation,
     TrafficObservation,
 )
 from packages.rca.signals import extract_symptoms, symptom_entities
@@ -172,6 +173,7 @@ class InitialAccessLedger:
     log_refs: set[str] = field(default_factory=set)
     metric_refs: set[str] = field(default_factory=set)
     traffic_refs: set[str] = field(default_factory=set)
+    trace_refs: set[str] = field(default_factory=set)
 
     def as_dict(self) -> dict[str, tuple[str, ...]]:
         return {
@@ -180,6 +182,7 @@ class InitialAccessLedger:
             "initial_log_refs": tuple(sorted(self.log_refs)),
             "initial_metric_refs": tuple(sorted(self.metric_refs)),
             "initial_traffic_refs": tuple(sorted(self.traffic_refs)),
+            "initial_trace_refs": tuple(sorted(self.trace_refs)),
         }
 
 
@@ -312,6 +315,9 @@ class InitialObservationView:
         return ()
 
     def traffic_observations(self) -> tuple[TrafficObservation, ...]:
+        return ()
+
+    def trace_observations(self) -> tuple[TraceSpanObservation, ...]:
         return ()
 
 

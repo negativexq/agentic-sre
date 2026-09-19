@@ -28,33 +28,11 @@ _SEMANTIC_METRIC_SCAN_LIMIT = 5_000
 
 
 def normalize_trace_status(record: dict[str, Any]) -> tuple[str, str]:
-    """Normalize observed trace status without treating unknown values as errors."""
-    raw: Any = None
-    for key in ("status.code", "StatusCode", "status_code", "Status", "status"):
-        if key in record:
-            raw = record[key]
-            break
-    if isinstance(raw, dict):
-        raw = raw.get("code", raw.get("value"))
-    if raw is None:
-        raw = _mapping_value(record.get("ResourceAttributes")).get("status.code")
-    value = str(raw).strip().casefold()
-    if value in {"", "unset", "unknown", "none"}:
-        return "UNSET", "trace status is unset"
-    if value in {"ok", "success", "successful", "1"}:
-        return "OK", "trace status explicitly indicates success"
-    if value in {"error", "failed", "failure", "2"}:
-        return "ERROR", "trace status explicitly indicates an error"
-    if value == "0":
-        return "UNSET", "OTel status code 0 is unset"
-    # Explicit exception/error attributes are stronger than an unknown status.
-    for key in ("error.type", "exception.type", "exception.message"):
-        if record.get(key):
-            return "ERROR", f"explicit {key} attribute"
-    attrs = _mapping_value(record.get("SpanAttributes"))
-    if attrs.get("error.type") or attrs.get("exception.type"):
-        return "ERROR", "explicit span error attribute"
-    return "UNKNOWN", "unrecognized trace status representation"
+    """Compatibility wrapper around the shared production status parser."""
+    from packages.rca.traces import normalize_trace_status as _normalize_trace_status
+
+    status, reason = _normalize_trace_status(record)
+    return status.value, reason
 
 
 def classify_structured_log(record: dict[str, Any]) -> tuple[str, str]:

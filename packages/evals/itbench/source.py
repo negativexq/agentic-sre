@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+import math
 import re
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
@@ -23,12 +24,15 @@ from packages.rca.model import (
     LogRecord,
     ObjectVersion,
     ResourcePressure,
+    TraceSpanObservation,
     TrafficObservation,
 )
+from packages.rca.traces import normalize_trace_status, parse_trace_mapping, semantic_attributes
 
 _OBJECTS = "k8s_objects_raw.tsv"
 _EVENTS = "k8s_events_raw.tsv"
 _LOGS = "otel_logs_raw.tsv"
+_TRACES = "otel_traces_raw.tsv"
 _ERROR_SEVERITIES = frozenset({"ERROR", "FATAL", "CRITICAL", "WARN", "WARNING"})
 _MAX_ERRORS_PER_SERVICE = 200
 _MEMORY_USAGE = "node_namespace_pod_container:container_memory_working_set_bytes"
@@ -57,6 +61,118 @@ def parse_time(value: Any) -> datetime | None:
     except ValueError:
         return None
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def _parse_unix_nano(value: Any) -> datetime | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        integer = value
+    elif isinstance(value, str):
+        try:
+            integer = int(value.strip())
+        except ValueError:
+            return None
+    else:
+        return None
+    try:
+        return datetime.fromtimestamp(integer / 1_000_000_000, tz=UTC)
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def _first_time(row: Mapping[str, Any], keys: Sequence[str]) -> datetime | None:
+    for key in keys:
+        if key not in row:
+            continue
+        value = (
+            _parse_unix_nano(row[key])
+            if key.endswith("UnixNano") or key.endswith("_unix_nano")
+            else parse_time(row[key])
+        )
+        if value is not None:
+            return value
+    return None
+
+
+def _first_text(row: Mapping[str, Any], keys: Sequence[str]) -> str | None:
+    for key in keys:
+        value = row.get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return None
+
+
+def _duration_raw(value: Any) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def parse_trace_span(
+    row: Mapping[str, Any],
+    *,
+    evidence_id: str,
+) -> TraceSpanObservation | None:
+    """Parse one raw trace row without inferring relationships or semantics."""
+    trace_id = _first_text(row, ("TraceId", "trace_id"))
+    span_id = _first_text(row, ("SpanId", "span_id"))
+    service = _first_text(row, ("ServiceName", "service_name", "service.name"))
+    if service is None:
+        resource = {}
+        for key in ("ResourceAttributes", "resource_attributes", "resource", "Resource"):
+            if key in row:
+                resource = parse_trace_mapping(row[key])
+                if resource:
+                    break
+        service = _first_text(resource, ("service.name",))
+    start_at = _first_time(
+        row,
+        (
+            "Timestamp",
+            "StartTime",
+            "StartTimestamp",
+            "start_time",
+            "startTime",
+            "StartTimeUnixNano",
+            "start_time_unix_nano",
+        ),
+    )
+    if (
+        trace_id is None
+        or span_id is None
+        or service is None
+        or start_at is None
+        or not evidence_id
+    ):
+        return None
+    parent = _first_text(row, ("ParentSpanId", "parent_span_id", "ParentId", "parent_id"))
+    if parent is not None and not set(parent) - {"0"}:
+        parent = None
+    span_name = _first_text(row, ("SpanName", "span_name", "Name", "name"))
+    span_kind = _first_text(row, ("SpanKind", "span_kind", "Kind", "kind"))
+    span_kind = span_kind.upper() if span_kind is not None else None
+    status, _reason = normalize_trace_status(row)
+    end_at = _first_time(
+        row,
+        ("EndTime", "EndTimestamp", "end_time", "endTime", "EndTimeUnixNano", "end_time_unix_nano"),
+    )
+    return TraceSpanObservation(
+        trace_id=trace_id.lower(),
+        span_id=span_id.lower(),
+        parent_span_id=parent.lower() if parent is not None else None,
+        service=service,
+        span_name=span_name,
+        span_kind=span_kind,
+        start_at=start_at,
+        end_at=end_at,
+        duration_raw=_duration_raw(row.get("Duration", row.get("duration"))),
+        status=status,
+        semantic_attributes=semantic_attributes(row),
+        evidence_id=evidence_id,
+    )
 
 
 def _entity(kind: Any, name: Any, namespace: Any) -> EntityRef | None:
@@ -419,6 +535,21 @@ class SnapshotSource:
             return self._traffic_observations
         return [item for item in self._traffic_observations if item.at <= cutoff]
 
+    @cached_property
+    def _trace_observations(self) -> list[TraceSpanObservation]:
+        result: list[TraceSpanObservation] = []
+        for index, row in enumerate(iter_tsv(self.root / _TRACES)):
+            observation = parse_trace_span(row, evidence_id=f"{_TRACES}:{index}")
+            if observation is not None:
+                result.append(observation)
+        return result
+
+    def trace_observations(self) -> Sequence[TraceSpanObservation]:
+        cutoff = self.observation_cutoff()
+        if cutoff is None:
+            return self._trace_observations
+        return [item for item in self._trace_observations if item.start_at <= cutoff]
+
     def logs(self, service: str, *, limit: int = 20) -> Sequence[dict[str, Any]]:
         """Error-level log lines for one service, bounded."""
         result: list[dict[str, Any]] = []
@@ -440,4 +571,4 @@ class SnapshotSource:
         return result
 
 
-__all__ = ["SnapshotSource", "parse_time", "pod_pressure"]
+__all__ = ["SnapshotSource", "parse_time", "parse_trace_span", "pod_pressure"]

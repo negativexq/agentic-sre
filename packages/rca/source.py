@@ -14,6 +14,7 @@ from packages.rca.model import (
     LogRecord,
     ObjectVersion,
     ResourcePressure,
+    TraceSpanObservation,
     TrafficObservation,
 )
 
@@ -49,6 +50,10 @@ class ObservationSource(Protocol):
         """Bounded request-rate observations, empty when no metric source exists."""
         ...
 
+    def trace_observations(self) -> Sequence[TraceSpanObservation]:
+        """Typed distributed-trace spans up to the source observation cutoff."""
+        ...
+
 
 @dataclass
 class InMemorySource:
@@ -62,6 +67,7 @@ class InMemorySource:
     error_items: list[LogRecord] = field(default_factory=list)
     pressure_items: list[ResourcePressure] = field(default_factory=list)
     traffic_items: list[TrafficObservation] = field(default_factory=list)
+    trace_items: list[TraceSpanObservation] = field(default_factory=list)
     cutoff: datetime | None = None
 
     def incident_id(self) -> str:
@@ -111,6 +117,11 @@ class InMemorySource:
         if self.cutoff is None:
             return self.traffic_items
         return [item for item in self.traffic_items if item.at <= self.cutoff]
+
+    def trace_observations(self) -> Sequence[TraceSpanObservation]:
+        if self.cutoff is None:
+            return self.trace_items
+        return [item for item in self.trace_items if item.start_at <= self.cutoff]
 
 
 __all__ = ["InMemorySource", "ObservationSource"]

@@ -23,6 +23,7 @@ from packages.rca.model import (
     LogRecord,
     ObjectVersion,
     ResourcePressure,
+    TraceSpanObservation,
     TrafficObservation,
 )
 
@@ -442,6 +443,10 @@ class LiveSource:
 
     def traffic_observations(self) -> Sequence[TrafficObservation]:
         # The live stack does not yet expose a bounded request-rate reader.
+        return []
+
+    def trace_observations(self) -> Sequence[TraceSpanObservation]:
+        # Live trace ingestion is not part of this source contract yet.
         return []
 
     def logs(self, service: str, *, limit: int = 20) -> Sequence[dict[str, Any]]:

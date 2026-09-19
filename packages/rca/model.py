@@ -128,6 +128,34 @@ class TrafficObservation(BaseModel):
     evidence_id: str
 
 
+class TraceSpanStatus(StrEnum):
+    """Provider-neutral status of one observed trace span."""
+
+    UNSET = "UNSET"
+    OK = "OK"
+    ERROR = "ERROR"
+    UNKNOWN = "UNKNOWN"
+
+
+class TraceSpanObservation(BaseModel):
+    """One typed distributed-trace span observed from a read-only telemetry source."""
+
+    model_config = ConfigDict(frozen=True)
+
+    trace_id: str = Field(min_length=1)
+    span_id: str = Field(min_length=1)
+    parent_span_id: str | None = None
+    service: str = Field(min_length=1)
+    span_name: str | None = None
+    span_kind: str | None = None
+    start_at: datetime
+    end_at: datetime | None = None
+    duration_raw: float | None = None
+    status: TraceSpanStatus = TraceSpanStatus.UNKNOWN
+    semantic_attributes: dict[str, str] = Field(default_factory=dict)
+    evidence_id: str = Field(min_length=1)
+
+
 class ClusterEvent(BaseModel):
     """One Kubernetes event about an involved object."""
 

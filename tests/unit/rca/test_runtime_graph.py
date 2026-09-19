@@ -8,7 +8,9 @@ from packages.rca.model import TraceSpanObservation, TraceSpanStatus
 from packages.rca.runtime_graph import (
     RuntimeGraph,
     RuntimeSpanKind,
+    canonicalize_trace_spans,
     derive_runtime_graph,
+    derive_runtime_graph_from_index,
     normalize_runtime_span_kind,
 )
 from packages.rca.source import InMemorySource
@@ -97,6 +99,25 @@ def test_client_server_edge_is_strict() -> None:
     assert edge.fallback_only is False
     assert graph.strict_outgoing("A") == (edge,)
     assert graph.strict_incoming("B") == (edge,)
+
+
+def test_shared_canonical_index_matches_compatibility_wrapper() -> None:
+    spans = (
+        _span(trace="t", span="p", service="A", kind="CLIENT", at=T0),
+        _span(
+            trace="t",
+            span="c",
+            service="B",
+            kind="SERVER",
+            parent="p",
+            at=T0 + timedelta(seconds=1),
+        ),
+    )
+    direct = derive_runtime_graph(spans)
+    indexed = derive_runtime_graph_from_index(canonicalize_trace_spans(spans))
+    assert direct.services == indexed.services
+    assert direct.edges == indexed.edges
+    assert direct.stats == indexed.stats
 
 
 def test_producer_consumer_edge_is_strict() -> None:
@@ -384,9 +405,11 @@ def test_empty_graph_and_case_integration_do_not_change_diagnosis() -> None:
     without_case = build_case(without)
     with_case = build_case(with_traces)
     assert with_case.runtime_graph.edges
+    assert with_case.runtime_evidence.stats.canonical_spans == 2
     seed_case = build_case(initial_view(with_traces))
     assert seed_case.runtime_graph.services == ()
     assert seed_case.runtime_graph.edges == ()
+    assert seed_case.runtime_evidence.stats.canonical_spans == 0
     assert diagnose_case(without_case).model_dump(mode="json") == diagnose_case(
         with_case
     ).model_dump(mode="json")

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -32,6 +32,17 @@ class RuntimeEdgeEvidence(StrEnum):
     CROSS_SERVICE_PARENT = "CROSS_SERVICE_PARENT"
 
 
+@dataclass(frozen=True)
+class CanonicalTraceIndex:
+    """The one canonical span view shared by runtime evidence consumers."""
+
+    spans: Mapping[tuple[str, str], TraceSpanObservation]
+    conflicting_keys: frozenset[tuple[str, str]]
+    input_spans: int
+    duplicate_equivalent_rows: int
+    conflicting_span_keys: int
+
+
 def normalize_runtime_span_kind(value: str | None) -> RuntimeSpanKind:
     """Normalize only the provider's explicit span-kind representation."""
     text = value.strip().upper() if value is not None else ""
@@ -57,6 +68,65 @@ def normalize_runtime_span_kind(value: str | None) -> RuntimeSpanKind:
         "SPAN_KIND_CONSUMER": RuntimeSpanKind.CONSUMER,
     }
     return mappings.get(text, RuntimeSpanKind.UNKNOWN)
+
+
+def classify_runtime_pair(
+    parent: TraceSpanObservation,
+    child: TraceSpanObservation,
+) -> RuntimeEdgeEvidence | None:
+    """Classify one resolved parent/child relationship without causal meaning."""
+    parent_service = parent.service.strip()
+    child_service = child.service.strip()
+    if parent_service == child_service:
+        return None
+    parent_kind = normalize_runtime_span_kind(parent.span_kind)
+    child_kind = normalize_runtime_span_kind(child.span_kind)
+    if parent_kind is RuntimeSpanKind.CLIENT and child_kind is RuntimeSpanKind.SERVER:
+        return RuntimeEdgeEvidence.PAIRED_CLIENT_SERVER
+    if parent_kind is RuntimeSpanKind.PRODUCER and child_kind is RuntimeSpanKind.CONSUMER:
+        return RuntimeEdgeEvidence.PAIRED_PRODUCER_CONSUMER
+    return RuntimeEdgeEvidence.CROSS_SERVICE_PARENT
+
+
+def canonicalize_trace_spans(
+    spans: Sequence[TraceSpanObservation],
+) -> CanonicalTraceIndex:
+    """Apply the P2G-2 duplicate/conflict semantics exactly once."""
+    canonical: dict[tuple[str, str], TraceSpanObservation] = {}
+    fingerprints: dict[tuple[str, str], set[tuple[str | None, str, RuntimeSpanKind]]] = {}
+    conflicting: set[tuple[str, str]] = set()
+    duplicate_equivalent_rows = 0
+    conflicting_span_keys = 0
+
+    for span in spans:
+        key = (span.trace_id, span.span_id)
+        fingerprint = (
+            span.parent_span_id,
+            span.service.strip(),
+            normalize_runtime_span_kind(span.span_kind),
+        )
+        known = fingerprints.setdefault(key, set())
+        if fingerprint in known:
+            duplicate_equivalent_rows += 1
+        else:
+            known.add(fingerprint)
+            if len(known) >= 2 and key not in conflicting:
+                conflicting.add(key)
+                conflicting_span_keys += 1
+                canonical.pop(key, None)
+        if key in conflicting:
+            continue
+        previous = canonical.get(key)
+        if previous is None or span.evidence_id < previous.evidence_id:
+            canonical[key] = span
+
+    return CanonicalTraceIndex(
+        spans=canonical,
+        conflicting_keys=frozenset(conflicting),
+        input_spans=len(spans),
+        duplicate_equivalent_rows=duplicate_equivalent_rows,
+        conflicting_span_keys=conflicting_span_keys,
+    )
 
 
 class RuntimeServiceEdge(BaseModel):
@@ -233,40 +303,15 @@ def _in_window(at: datetime, start: datetime | None, end: datetime | None) -> bo
     return (start is None or at >= start) and (end is None or at <= end)
 
 
-def derive_runtime_graph(
-    spans: Sequence[TraceSpanObservation],
+def derive_runtime_graph_from_index(
+    index: CanonicalTraceIndex,
     *,
     start: datetime | None = None,
     end: datetime | None = None,
 ) -> RuntimeGraph:
     """Build a runtime service graph from direct parent/span relationships."""
-    canonical: dict[tuple[str, str], TraceSpanObservation] = {}
-    fingerprints: dict[tuple[str, str], set[tuple[str | None, str, RuntimeSpanKind]]] = {}
-    conflicting: set[tuple[str, str]] = set()
-    duplicate_equivalent_rows = 0
-    conflicting_span_keys = 0
-
-    for span in spans:
-        key = (span.trace_id, span.span_id)
-        fingerprint = (
-            span.parent_span_id,
-            span.service.strip(),
-            normalize_runtime_span_kind(span.span_kind),
-        )
-        known = fingerprints.setdefault(key, set())
-        if fingerprint in known:
-            duplicate_equivalent_rows += 1
-        else:
-            known.add(fingerprint)
-            if len(known) >= 2 and key not in conflicting:
-                conflicting.add(key)
-                conflicting_span_keys += 1
-                canonical.pop(key, None)
-        if key in conflicting:
-            continue
-        previous = canonical.get(key)
-        if previous is None or span.evidence_id < previous.evidence_id:
-            canonical[key] = span
+    canonical = index.spans
+    conflicting = index.conflicting_keys
 
     edge_accumulators: dict[tuple[str, str], _EdgeAccumulator] = {}
     services: set[str] = set()
@@ -305,16 +350,13 @@ def derive_runtime_graph(
             same_service_parent_links += 1
             continue
         cross_service_parent_links += 1
-        parent_kind = normalize_runtime_span_kind(parent.span_kind)
-        child_kind = normalize_runtime_span_kind(child.span_kind)
-        if parent_kind is RuntimeSpanKind.CLIENT and child_kind is RuntimeSpanKind.SERVER:
-            evidence = RuntimeEdgeEvidence.PAIRED_CLIENT_SERVER
+        evidence = classify_runtime_pair(parent, child)
+        assert evidence is not None
+        if evidence is RuntimeEdgeEvidence.PAIRED_CLIENT_SERVER:
             client_server_pairs += 1
-        elif parent_kind is RuntimeSpanKind.PRODUCER and child_kind is RuntimeSpanKind.CONSUMER:
-            evidence = RuntimeEdgeEvidence.PAIRED_PRODUCER_CONSUMER
+        elif evidence is RuntimeEdgeEvidence.PAIRED_PRODUCER_CONSUMER:
             producer_consumer_pairs += 1
         else:
-            evidence = RuntimeEdgeEvidence.CROSS_SERVICE_PARENT
             fallback_parent_pairs += 1
         edge_key = (parent_service, child_service)
         accumulator = edge_accumulators.setdefault(edge_key, _EdgeAccumulator())
@@ -346,10 +388,10 @@ def derive_runtime_graph(
     strict_edge_count = sum(edge.has_strict_evidence for edge in edges)
     fallback_only_edge_count = sum(edge.fallback_only for edge in edges)
     stats = RuntimeGraphStats(
-        input_spans=len(spans),
+        input_spans=index.input_spans,
         canonical_spans=len(canonical),
-        duplicate_equivalent_rows=duplicate_equivalent_rows,
-        conflicting_span_keys=conflicting_span_keys,
+        duplicate_equivalent_rows=index.duplicate_equivalent_rows,
+        conflicting_span_keys=index.conflicting_span_keys,
         root_spans=root_spans,
         child_spans=child_spans,
         resolved_parent_links=resolved_parent_links,
@@ -368,12 +410,26 @@ def derive_runtime_graph(
     return RuntimeGraph(tuple(services), edges, stats)
 
 
+def derive_runtime_graph(
+    spans: Sequence[TraceSpanObservation],
+    *,
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> RuntimeGraph:
+    """Build a runtime graph after applying shared trace canonicalization."""
+    return derive_runtime_graph_from_index(canonicalize_trace_spans(spans), start=start, end=end)
+
+
 __all__ = [
+    "CanonicalTraceIndex",
     "RuntimeEdgeEvidence",
     "RuntimeGraph",
     "RuntimeGraphStats",
     "RuntimeServiceEdge",
     "RuntimeSpanKind",
+    "canonicalize_trace_spans",
+    "classify_runtime_pair",
     "derive_runtime_graph",
+    "derive_runtime_graph_from_index",
     "normalize_runtime_span_kind",
 ]

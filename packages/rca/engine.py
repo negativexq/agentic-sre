@@ -44,7 +44,12 @@ from packages.rca.ranking import (
 )
 from packages.rca.remediation import propose
 from packages.rca.resolution import hypothesis_signature, resolve_hypotheses
-from packages.rca.runtime_graph import RuntimeGraph, derive_runtime_graph
+from packages.rca.runtime_evidence import RuntimeEvidence, derive_runtime_evidence
+from packages.rca.runtime_graph import (
+    RuntimeGraph,
+    canonicalize_trace_spans,
+    derive_runtime_graph_from_index,
+)
 from packages.rca.signals import (
     autoscaling_findings,
     change_findings,
@@ -76,6 +81,7 @@ class Case:
     hypotheses: list[Hypothesis]
     hypothesis_diagnostics: HypothesisDiagnostics
     runtime_graph: RuntimeGraph = field(default_factory=RuntimeGraph.empty)
+    runtime_evidence: RuntimeEvidence = field(default_factory=RuntimeEvidence.empty)
     structural_alternatives: list[StructuralAlternative] = field(default_factory=list)
     steps: list[InvestigationStep] = field(default_factory=list)
 
@@ -132,7 +138,10 @@ def build_case(
         ref: versions[-1] for ref, versions in history.items()
     }
     topology = Topology(derive_edges(latest, events), latest)
-    runtime_graph = derive_runtime_graph(source.trace_observations())
+    trace_spans = source.trace_observations()
+    trace_index = canonicalize_trace_spans(trace_spans)
+    runtime_graph = derive_runtime_graph_from_index(trace_index)
+    runtime_evidence = derive_runtime_evidence(trace_index)
     symptoms = extract_symptoms(alerts)
     entities = symptom_entities(alerts, topology)
     context = Context(
@@ -222,6 +231,7 @@ def build_case(
         candidates=candidates,
         hypotheses=hypotheses,
         runtime_graph=runtime_graph,
+        runtime_evidence=runtime_evidence,
         structural_alternatives=structural_alternatives,
         hypothesis_diagnostics=grouping.diagnostics,
         steps=steps,

@@ -12,6 +12,12 @@ from typing import Any, Protocol
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from packages.rca.investigation.environment import (
+    InvestigationBackend,
+    SourceInvestigationBackend,
+    TempoInvestigationBackend,
+)
+from packages.rca.investigation.tempo import TempoTraceReader
 from packages.rca.json_access import child, object_content_hash
 from packages.rca.model import (
     CLUSTER_SCOPE,
@@ -372,6 +378,7 @@ class LiveSource:
     # whose window is frozen): an empty, non-live list must not be read as
     # "the cluster has none of these objects any more".
     current_is_live: bool = True
+    tempo_reader: TempoTraceReader | None = None
 
     def incident_id(self) -> str:
         return self.incident
@@ -448,6 +455,21 @@ class LiveSource:
     def trace_observations(self) -> Sequence[TraceSpanObservation]:
         # Live trace ingestion is not part of this source contract yet.
         return []
+
+    def supports(self, capability: str) -> bool:
+        if capability == "runtime_traces":
+            return self.tempo_reader is not None
+        return capability in {"history", "events", "logs", "resource_pressure", "traffic"}
+
+    def investigation_backend(self) -> InvestigationBackend:
+        base = SourceInvestigationBackend(self)
+        if self.tempo_reader is None:
+            return base
+        return TempoInvestigationBackend(
+            base=base,
+            tempo=self.tempo_reader,
+            observation_cutoff=self.observation_cutoff(),
+        )
 
     def logs(self, service: str, *, limit: int = 20) -> Sequence[dict[str, Any]]:
         return [

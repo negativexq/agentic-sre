@@ -5,8 +5,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Protocol
+from typing import Protocol, cast
 
+from packages.rca.investigation.tempo import TempoTraceReader
 from packages.rca.model import (
     Alert,
     ClusterEvent,
@@ -81,6 +82,9 @@ class SourceInvestigationBackend:
     source: ObservationSource
 
     def supports(self, capability: str) -> bool:
+        source_supports = getattr(self.source, "supports", None)
+        if capability == "runtime_traces" and callable(source_supports):
+            return bool(source_supports(capability))
         methods = {
             "history": "object_history",
             "events": "events",
@@ -161,7 +165,7 @@ class SourceInvestigationBackend:
     def query_traces(
         self, target: EntityRef, query: InvestigationQuery
     ) -> tuple[TraceSpanObservation, ...]:
-        return _query_trace_observations(
+        return _select_runtime_trace_context(
             self.source.trace_observations(),
             target,
             query,
@@ -194,7 +198,7 @@ def _trace_in_window(
     return cutoff is None or span.start_at <= cutoff
 
 
-def _query_trace_observations(
+def _select_runtime_trace_context(
     spans: Sequence[TraceSpanObservation],
     target: EntityRef,
     query: InvestigationQuery,
@@ -228,6 +232,59 @@ def _query_trace_observations(
         key=lambda span: (span.start_at, span.trace_id, span.span_id, span.evidence_id),
     )
     return tuple(ordered[: query.limit])
+
+
+def _query_trace_observations(
+    spans: Sequence[TraceSpanObservation],
+    target: EntityRef,
+    query: InvestigationQuery,
+    cutoff: datetime | None,
+) -> tuple[TraceSpanObservation, ...]:
+    """Compatibility name for the A2 source-backed selector."""
+    return _select_runtime_trace_context(spans, target, query, cutoff)
+
+
+@dataclass(frozen=True)
+class TempoInvestigationBackend:
+    """Existing investigation reads plus an active Tempo trace provider."""
+
+    base: InvestigationBackend
+    tempo: TempoTraceReader
+    observation_cutoff: datetime | None
+
+    def query_history(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[ObjectVersion, ...]:
+        return self.base.query_history(target, query)
+
+    def query_events(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[ClusterEvent, ...]:
+        return self.base.query_events(target, query)
+
+    def query_logs(self, target: EntityRef, query: InvestigationQuery) -> tuple[LogRecord, ...]:
+        return self.base.query_logs(target, query)
+
+    def query_resource_pressure(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[ResourcePressure, ...]:
+        return self.base.query_resource_pressure(target, query)
+
+    def query_traffic(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[TrafficObservation, ...]:
+        return self.base.query_traffic(target, query)
+
+    def query_traces(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[TraceSpanObservation, ...]:
+        batch = self.tempo.query(target, query)
+        return _select_runtime_trace_context(batch.spans, target, query, self.observation_cutoff)
+
+    def supports(self, capability: str) -> bool:
+        if capability == "runtime_traces":
+            return True
+        return self.base.supports(capability)
 
 
 @dataclass(frozen=True)
@@ -409,10 +466,22 @@ def initial_view(
 
 def investigation_backend(source: ObservationSource) -> InvestigationBackend:
     """Resolve the full raw backend for a source or an initial view."""
-
-    if isinstance(source, InitialObservationView):
-        return SourceInvestigationBackend(source.full_source)
-    return SourceInvestigationBackend(source)
+    full_source = source.full_source if isinstance(source, InitialObservationView) else source
+    custom = getattr(full_source, "investigation_backend", None)
+    if callable(custom):
+        candidate = custom()
+        required = (
+            "query_history",
+            "query_events",
+            "query_logs",
+            "query_resource_pressure",
+            "query_traffic",
+            "query_traces",
+            "supports",
+        )
+        if all(callable(getattr(candidate, name, None)) for name in required):
+            return cast(InvestigationBackend, candidate)
+    return SourceInvestigationBackend(full_source)
 
 
 __all__ = [
@@ -421,6 +490,8 @@ __all__ = [
     "InvestigationBackend",
     "SeedPolicy",
     "SourceInvestigationBackend",
+    "TempoInvestigationBackend",
     "initial_view",
     "investigation_backend",
+    "_select_runtime_trace_context",
 ]

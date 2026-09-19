@@ -17,6 +17,7 @@ from packages.rca.engine import Investigator, diagnose
 from packages.rca.investigation.graph import investigate_diagnosis
 from packages.rca.investigation.policy import LLMInvestigationPolicy
 from packages.rca.investigation.state import InvestigationPolicy
+from packages.rca.investigation.tempo import TempoConfig, TempoTraceReader
 from packages.rca.live import (
     ChangeWatcher,
     ClusterReader,
@@ -82,6 +83,7 @@ class DiagnosisService:
     # lock (e.g. a Postgres advisory lock) instead, or a single writer process.
     _snapshot_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     _last_snapshot_result: SnapshotResult | None = field(default=None, init=False, repr=False)
+    tempo_reader: TempoTraceReader | None = None
 
     @property
     def last_snapshot_result(self) -> SnapshotResult | None:
@@ -254,6 +256,7 @@ class DiagnosisService:
             error_items=logs,
             observed_at=window_end,
             current_is_live=not resolved,
+            tempo_reader=self.tempo_reader,
         )
         bounded_policy = self.bounded_policy_factory()
         if bounded_policy is not None:
@@ -286,6 +289,8 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
     )
     loki = os.getenv("SRE_LOKI_URL")
     log_reader = LokiLogReader(loki) if loki else None
+    tempo_config = TempoConfig.from_environment()
+    tempo_reader = TempoTraceReader(tempo_config) if tempo_config is not None else None
 
     # Built once and reused: OpenAIClient owns the call-budget counter, so a
     # fresh client per incident would reset SRE_LLM_MAX_CALLS every time.
@@ -319,6 +324,7 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
         evidence_namespaces=evidence_namespaces,
         reader=reader,
         log_reader=log_reader,
+        tempo_reader=tempo_reader,
         investigator_factory=investigator,
         bounded_policy_factory=bounded_policy,
     )

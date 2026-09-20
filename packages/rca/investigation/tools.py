@@ -25,13 +25,13 @@ from packages.rca.model import (
 )
 
 
-def _safe_payload(value: Any) -> Any:
+def _safe_payload(value: Any, *, list_limit: int = 32) -> Any:
     if hasattr(value, "model_dump"):
         return value.model_dump(mode="json")
     if isinstance(value, dict):
-        return {str(key): _safe_payload(item) for key, item in value.items()}
+        return {str(key): _safe_payload(item, list_limit=list_limit) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
-        return [_safe_payload(item) for item in value[:32]]
+        return [_safe_payload(item, list_limit=list_limit) for item in value[:list_limit]]
     if isinstance(value, str):
         return value[:4000]
     return value
@@ -47,8 +47,9 @@ def make_observation(
     observed_at: datetime | None = None,
     source_class: str = "observation_source",
     error: str | None = None,
+    record_limit: int = 32,
 ) -> InvestigationObservation:
-    bounded = _safe_payload(dict(payload))
+    bounded = _safe_payload(dict(payload), list_limit=record_limit)
     material = json.dumps(
         {
             "gap": gap.gap_id,
@@ -73,7 +74,7 @@ def make_observation(
         observed_at=observed_at,
         outcome=outcome,
         payload=bounded,
-        evidence_refs=tuple(dict.fromkeys(evidence_refs))[:32],
+        evidence_refs=tuple(dict.fromkeys(evidence_refs))[:record_limit],
         source_class=source_class,
         error=error,
     )
@@ -109,6 +110,7 @@ class _BaseTool:
         *,
         refs: tuple[str, ...] = (),
         observed_at: datetime | None = None,
+        record_limit: int = 32,
     ) -> InvestigationObservation:
         return make_observation(
             gap=gap,
@@ -117,6 +119,7 @@ class _BaseTool:
             payload=payload,
             evidence_refs=refs,
             observed_at=observed_at,
+            record_limit=record_limit,
         )
 
 
@@ -239,6 +242,82 @@ class EventsTool(_BaseTool):
                 (time for event in events for time in (event.last_at, event.first_at) if time),
                 default=None,
             ),
+        )
+
+
+class IncidentEventsTool(_BaseTool):
+    name = "incident_events"
+
+    def execute(
+        self, case: Case, gap: InformationGap, target: EntityRef
+    ) -> InvestigationObservation:
+        if self.backend is None:
+            return self._observation(gap, target, {})
+        requested = _default_query(None, onset=case.symptoms.onset)
+        events = self.backend.query_incident_events(target, requested)
+        return self._observation(
+            gap,
+            target,
+            {"events": [event.model_dump(mode="json") for event in events]},
+            refs=tuple(event.evidence_id for event in events),
+            observed_at=max(
+                (time for event in events for time in (event.last_at, event.first_at) if time),
+                default=None,
+            ),
+            record_limit=64,
+        )
+
+    def execute_query(
+        self, case: Case, gap: InformationGap, target: EntityRef, query: InvestigationQuery | None
+    ) -> InvestigationObservation:
+        if self.backend is None or query is None:
+            return self.execute(case, gap, target)
+        events = self.backend.query_incident_events(target, query)
+        return self._observation(
+            gap,
+            target,
+            {"events": [event.model_dump(mode="json") for event in events]},
+            refs=tuple(event.evidence_id for event in events),
+            observed_at=max(
+                (time for event in events for time in (event.last_at, event.first_at) if time),
+                default=None,
+            ),
+            record_limit=64,
+        )
+
+
+class IncidentChangesTool(_BaseTool):
+    name = "incident_changes"
+
+    def execute(
+        self, case: Case, gap: InformationGap, target: EntityRef
+    ) -> InvestigationObservation:
+        if self.backend is None:
+            return self._observation(gap, target, {})
+        requested = _default_query(None, onset=case.symptoms.onset)
+        versions = self.backend.query_incident_changes(target, requested)
+        return self._observation(
+            gap,
+            target,
+            {"versions": [version.model_dump(mode="json") for version in versions]},
+            refs=tuple(version.evidence_id for version in versions),
+            observed_at=max((version.observed_at for version in versions), default=None),
+            record_limit=64,
+        )
+
+    def execute_query(
+        self, case: Case, gap: InformationGap, target: EntityRef, query: InvestigationQuery | None
+    ) -> InvestigationObservation:
+        if self.backend is None or query is None:
+            return self.execute(case, gap, target)
+        versions = self.backend.query_incident_changes(target, query)
+        return self._observation(
+            gap,
+            target,
+            {"versions": [version.model_dump(mode="json") for version in versions]},
+            refs=tuple(version.evidence_id for version in versions),
+            observed_at=max((version.observed_at for version in versions), default=None),
+            record_limit=64,
         )
 
 
@@ -396,6 +475,8 @@ def default_tools(backend: InvestigationBackend | None = None) -> dict[str, Inve
         DescribeTool(backend),
         HistoryTool(backend),
         EventsTool(backend),
+        IncidentEventsTool(backend),
+        IncidentChangesTool(backend),
         NeighborsTool(backend),
         LogsTool(backend),
         ResourcePressureTool(backend),
@@ -406,6 +487,8 @@ def default_tools(backend: InvestigationBackend | None = None) -> dict[str, Inve
 
 
 __all__ = [
+    "IncidentChangesTool",
+    "IncidentEventsTool",
     "InvestigationTool",
     "RuntimeTracesTool",
     "default_tools",

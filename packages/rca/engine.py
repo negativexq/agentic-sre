@@ -18,7 +18,12 @@ from packages.rca.hypotheses import (
     group_candidates,
     hypothesis_candidate,
 )
-from packages.rca.information_gap import InformationGapContext, derive_information_gaps
+from packages.rca.information_gap import (
+    InformationGapContext,
+    authorized_event_namespaces,
+    derive_information_gaps,
+    incident_namespaces,
+)
 from packages.rca.mechanism_bridge import (
     RuntimeMechanismBridges,
     derive_runtime_mechanism_bridges,
@@ -129,6 +134,15 @@ class EngineConfig:
     alternatives: int = 4
     # Metrics older than onset minus this gap are the pressure baseline.
     pressure_baseline_gap: timedelta = timedelta(minutes=5)
+    # Explicit infrastructure namespaces that may be queried only by the
+    # incident-scoped event discovery capability.
+    auxiliary_event_namespaces: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        normalized = tuple(
+            sorted({value.strip() for value in self.auxiliary_event_namespaces if value.strip()})
+        )
+        object.__setattr__(self, "auxiliary_event_namespaces", normalized[:4])
 
 
 def _pods(entities: Iterable[EntityRef], topology: Topology) -> set[EntityRef]:
@@ -359,6 +373,8 @@ def diagnose_case(
                 runtime_propagation=case.runtime_propagation,
                 runtime_mechanism_bridges=case.runtime_mechanism_bridges,
             ),
+            discovery_event_namespaces=authorized_event_namespaces(case, config),
+            discovery_change_namespaces=incident_namespaces(case),
         )
         return Diagnosis(
             incident_id=case.incident_id,
@@ -407,6 +423,8 @@ def diagnose_case(
             runtime_propagation=case.runtime_propagation,
             runtime_mechanism_bridges=case.runtime_mechanism_bridges,
         ),
+        discovery_event_namespaces=authorized_event_namespaces(case, config),
+        discovery_change_namespaces=incident_namespaces(case),
     )
     selectable_hypotheses = _root_cause_selectable_hypotheses(case)
     if not selectable_hypotheses:

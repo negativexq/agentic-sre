@@ -106,6 +106,13 @@ def resolve_effective_query(
             end=causal_anchor + engine_config.ranking.grace,
             cutoff=cutoff,
         )
+    if capability in {"incident_events", "incident_changes"}:
+        return _bounded_query(
+            start=causal_anchor - engine_config.ranking.lookback,
+            end=causal_anchor + engine_config.ranking.grace,
+            cutoff=cutoff,
+            limit=64,
+        )
     if capability in {"logs", "runtime_traces", "resource_pressure", "traffic"}:
         return _bounded_query(
             start=anchor - _BOUNDED_WINDOW,

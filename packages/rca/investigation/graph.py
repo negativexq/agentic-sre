@@ -175,6 +175,8 @@ class _Runtime:
         source_capabilities = {
             "history",
             "events",
+            "incident_events",
+            "incident_changes",
             "logs",
             "resource_pressure",
             "traffic",

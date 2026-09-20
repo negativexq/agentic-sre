@@ -478,6 +478,13 @@ class GapResolvability(StrEnum):
     ALREADY_OBSERVED = "ALREADY_OBSERVED"
 
 
+class InformationGapOrigin(StrEnum):
+    """Whether a gap is causal reasoning work or incident-scope discovery."""
+
+    CAUSAL = "CAUSAL"
+    DISCOVERY = "DISCOVERY"
+
+
 class GapOutcomeKind(StrEnum):
     """Possible deterministic outcomes of an information request."""
 
@@ -538,6 +545,7 @@ class InformationGap(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     gap_id: str
+    origin: InformationGapOrigin = InformationGapOrigin.CAUSAL
     dimension: GapDimension
     hypothesis_ids: tuple[str, ...] = ()
     alternative_ids: tuple[str, ...] = ()
@@ -830,6 +838,7 @@ __all__ = [
     "ResolutionTrace",
     "GapDimension",
     "GapResolvability",
+    "InformationGapOrigin",
     "GapOutcomeKind",
     "GapOutcome",
     "ToolCapability",

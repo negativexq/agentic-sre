@@ -460,6 +460,10 @@ class LiveSource:
         return []
 
     def supports(self, capability: str) -> bool:
+        if capability == "incident_events":
+            return self.supports("events")
+        if capability == "incident_changes":
+            return self.supports("history")
         if capability == "runtime_traces":
             return self.tempo_reader is not None
         if capability in {"resource_pressure", "traffic"}:

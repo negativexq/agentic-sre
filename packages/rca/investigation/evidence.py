@@ -101,6 +101,8 @@ class InMemoryEvidenceStore:
 _PAYLOAD_KEYS: tuple[tuple[str, str, type[EvidenceRecord]], ...] = (
     ("history", "versions", ObjectVersion),
     ("events", "events", ClusterEvent),
+    ("incident_events", "events", ClusterEvent),
+    ("incident_changes", "versions", ObjectVersion),
     ("logs", "logs", LogRecord),
     ("resource_pressure", "resource_pressure", ResourcePressure),
     ("traffic", "traffic", TrafficObservation),

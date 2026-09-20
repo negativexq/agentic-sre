@@ -24,6 +24,7 @@ from packages.rca.model import (
     GapResolvability,
     Hypothesis,
     InformationGap,
+    InformationGapOrigin,
     Resolution,
     ResolutionTrace,
     StructuralAlternative,
@@ -69,6 +70,18 @@ CAPABILITIES: tuple[ToolCapability, ...] = (
         ),
         required_inputs=("entity", "incident_window"),
         evidence_sources=("event_journal",),
+    ),
+    ToolCapability(
+        name="incident_events",
+        dimensions=(GapDimension.EVENT_SEQUENCE,),
+        required_inputs=("namespace", "incident_window"),
+        evidence_sources=("event_journal",),
+    ),
+    ToolCapability(
+        name="incident_changes",
+        dimensions=(GapDimension.CHANGE_TIMING, GapDimension.CONFIG_DIFFERENCE),
+        required_inputs=("namespace", "incident_window"),
+        evidence_sources=("object_journal",),
     ),
     ToolCapability(
         name="neighbors",
@@ -186,6 +199,8 @@ def _capability_allows_target(capability: str, target: EntityRef) -> bool:
         return bool(target.kind)
     if capability == "traffic":
         return target.kind == "Service"
+    if capability in {"incident_events", "incident_changes"}:
+        return target.kind == "Namespace"
     if capability == "runtime_traces":
         return target.kind in {"Pod", "Deployment", "StatefulSet", "DaemonSet"}
     if capability in {"describe", "neighbors"}:
@@ -213,6 +228,7 @@ class _InformationNeed:
     authorized_queries: tuple[AuthorizedQuery, ...] = ()
     missing_fact: str = ""
     rationale: str = ""
+    origin: InformationGapOrigin = InformationGapOrigin.CAUSAL
 
 
 def _stable_gap_id(
@@ -433,6 +449,8 @@ def _available_capabilities(
     source_methods = {
         "history": "object_history",
         "events": "events",
+        "incident_events": "events",
+        "incident_changes": "object_history",
         "logs": "error_logs",
         "resource_pressure": "resource_pressure",
         "traffic": "traffic_observations",
@@ -447,7 +465,11 @@ def _available_capabilities(
         # probe.  Reading metrics/traffic here would leak whether incident
         # evidence exists before an investigation query is authorized.
         if callable(supports):
-            available_capability = bool(supports(capability.name))
+            aliases = {"incident_events": "events", "incident_changes": "history"}
+            alias = aliases.get(capability.name)
+            available_capability = bool(
+                supports(capability.name) or (alias is not None and supports(alias))
+            )
         else:
             available_capability = method_name is not None and callable(
                 getattr(capability_source, method_name, None)
@@ -479,6 +501,81 @@ def _query(
         target=target,
         alternative_ids=(alternative_id,) if alternative_id is not None else (),
     )
+
+
+def incident_namespaces(case: object) -> tuple[str, ...]:
+    """Return bounded namespaces visible in the current incident context."""
+    symptoms = getattr(case, "symptoms", None)
+    context = getattr(case, "context", None)
+    values = set(getattr(symptoms, "namespaces", ()))
+    values.update(
+        entity.namespace
+        for entity in getattr(context, "symptom_entities", set())
+        if getattr(entity, "namespace", "")
+    )
+    ordered = tuple(sorted(value for value in values if value))
+    return ordered[:4]
+
+
+def authorized_event_namespaces(case: object, config: object | None = None) -> tuple[str, ...]:
+    """Return visible plus explicitly configured event-observation namespaces."""
+    visible = incident_namespaces(case)
+    configured = getattr(config, "auxiliary_event_namespaces", ()) if config is not None else ()
+    auxiliary = tuple(sorted({value.strip() for value in configured if value.strip()}))[:4]
+    return tuple(sorted(set((*visible, *auxiliary))))[:8]
+
+
+def _discovery_needs(
+    source: ObservationSource | None,
+    event_namespaces: Sequence[str],
+    change_namespaces: Sequence[str],
+) -> tuple[_InformationNeed, ...]:
+    if source is None or not getattr(source, "initial_observation_bounded", False):
+        return ()
+    needs: list[_InformationNeed] = []
+    event_available = "incident_events" in _available_names(GapDimension.EVENT_SEQUENCE, source)
+    changes_available = "incident_changes" in _available_names(GapDimension.CHANGE_TIMING, source)
+    for namespace_name in event_namespaces:
+        namespace = EntityRef(kind="Namespace", name=namespace_name)
+        if event_available:
+            query = _query("incident_events", namespace)
+            if query is not None:
+                needs.append(
+                    _InformationNeed(
+                        dimension=GapDimension.EVENT_SEQUENCE,
+                        authorized_queries=(query,),
+                        missing_fact=(
+                            "whether incident-scoped Kubernetes events reveal an unobserved "
+                            "failure, autoscaling, scheduling, quota, or fault actor"
+                        ),
+                        rationale=(
+                            "bounded incident-event discovery may reveal causal actors absent "
+                            "from the initial structural frontier"
+                        ),
+                        origin=InformationGapOrigin.DISCOVERY,
+                    )
+                )
+    for namespace_name in change_namespaces:
+        namespace = EntityRef(kind="Namespace", name=namespace_name)
+        if changes_available:
+            query = _query("incident_changes", namespace)
+            if query is not None:
+                needs.append(
+                    _InformationNeed(
+                        dimension=GapDimension.CHANGE_TIMING,
+                        authorized_queries=(query,),
+                        missing_fact=(
+                            "whether incident-scoped source changes reveal an unobserved "
+                            "initiating object change"
+                        ),
+                        rationale=(
+                            "bounded incident-change discovery may reveal source-capable "
+                            "actors absent from the initial structural frontier"
+                        ),
+                        origin=InformationGapOrigin.DISCOVERY,
+                    )
+                )
+    return tuple(needs)
 
 
 def _actor_local_contract(
@@ -838,6 +935,8 @@ def _need_gap(
             for item in need.authorized_queries
         ],
     }
+    if need.origin is InformationGapOrigin.DISCOVERY:
+        payload["origin"] = need.origin.value
     gap_id = f"gap:{need.dimension.value.lower()}:{sha256(_json_value(payload).encode()).hexdigest()[:20]}"
     resolvability = (
         GapResolvability.RESOLVABLE
@@ -846,6 +945,7 @@ def _need_gap(
     )
     return InformationGap(
         gap_id=gap_id,
+        origin=need.origin,
         dimension=need.dimension,
         hypothesis_ids=tuple(item.hypothesis_id for item in ordered_hypotheses),
         alternative_ids=tuple(item.alternative_id for item in ordered_alternatives),
@@ -871,6 +971,8 @@ def _derive_runtime_aware_gaps(
     source: ObservationSource | None,
     alternatives: Sequence[StructuralAlternative],
     runtime_context: InformationGapContext,
+    discovery_event_namespaces: Sequence[str],
+    discovery_change_namespaces: Sequence[str],
 ) -> tuple[InformationGap, ...]:
     open_alternatives = tuple(
         item for item in alternatives if item.status is FrontierStatus.UNEXPLORED
@@ -878,6 +980,10 @@ def _derive_runtime_aware_gaps(
     if resolution.state is Resolution.RESOLVED and not open_alternatives:
         return ()
     needs = list(_hypothesis_needs(hypotheses, resolution, source, runtime_context))
+    if resolution.state is not Resolution.RESOLVED:
+        needs.extend(
+            _discovery_needs(source, discovery_event_namespaces, discovery_change_namespaces)
+        )
     for alternative in open_alternatives:
         for dimension in sorted(alternative.queryable_dimensions, key=lambda item: item.value):
             queries = _structural_contract(alternative, dimension, source)
@@ -1018,6 +1124,8 @@ def derive_information_gaps(
     structural_alternatives: Sequence[StructuralAlternative] = (),
     *,
     runtime_context: InformationGapContext | None = None,
+    discovery_event_namespaces: Sequence[str] = (),
+    discovery_change_namespaces: Sequence[str] = (),
 ) -> tuple[InformationGap, ...]:
     """Derive gaps for unresolved evidence or open structural alternatives."""
     if runtime_context is not None:
@@ -1027,6 +1135,8 @@ def derive_information_gaps(
             source,
             structural_alternatives,
             runtime_context,
+            discovery_event_namespaces,
+            discovery_change_namespaces,
         )
     open_alternatives = tuple(
         item for item in structural_alternatives if item.status is FrontierStatus.UNEXPLORED
@@ -1070,6 +1180,8 @@ def derive_information_gaps(
 __all__ = [
     "CAPABILITIES",
     "InformationGapContext",
+    "authorized_event_namespaces",
     "capabilities_for",
     "derive_information_gaps",
+    "incident_namespaces",
 ]

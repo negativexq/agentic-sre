@@ -20,9 +20,32 @@ from packages.rca.model import (
     TraceSpanObservation,
     TrafficObservation,
 )
-from packages.rca.signals import extract_symptoms, symptom_entities
+from packages.rca.signals import (
+    _HPA_FAILURE_REASONS,
+    _LIMIT_MESSAGE,
+    _QUOTA_MESSAGE,
+    extract_symptoms,
+    symptom_entities,
+)
 from packages.rca.source import ObservationSource
-from packages.rca.topology import Topology, derive_edges
+from packages.rca.topology import Topology, derive_edges, is_chaos_kind
+
+INCIDENT_CHANGE_DISCOVERY_KINDS = frozenset(
+    {
+        "ConfigMap",
+        "Deployment",
+        "StatefulSet",
+        "DaemonSet",
+        "Job",
+        "CronJob",
+        "Service",
+        "HorizontalPodAutoscaler",
+        "HPA",
+        "NetworkPolicy",
+        "ResourceQuota",
+        "LimitRange",
+    }
+)
 
 
 def _in_window(at: datetime | None, query: InvestigationQuery, cutoff: datetime | None) -> bool:
@@ -32,6 +55,85 @@ def _in_window(at: datetime | None, query: InvestigationQuery, cutoff: datetime 
         return False
     end = query.end or cutoff
     return end is None or at <= end
+
+
+def _event_time(event: ClusterEvent) -> datetime | None:
+    return event.last_at or event.first_at
+
+
+def _event_sort_key(event: ClusterEvent) -> tuple[str, str, str, str]:
+    at = _event_time(event)
+    return (
+        at.isoformat() if at is not None else "",
+        event.entity.canonical,
+        event.reason,
+        event.evidence_id,
+    )
+
+
+def _event_projection_group(event: ClusterEvent) -> tuple[int, int, str, str, str, str]:
+    """Return the existing signal semantics used to compact one event group."""
+    entity = event.entity.canonical
+    if is_chaos_kind(event.entity.kind):
+        reason_priority = {
+            "Applied": 0,
+            "Spawned": 0,
+            "Failed": 1,
+            "Started": 2,
+            "Recovered": 3,
+            "TimeUp": 4,
+            "Paused": 5,
+            "FinalizerInited": 6,
+            "Updated": 7,
+        }.get(event.reason, 8)
+        return (0, reason_priority, "fault", entity, event.reason, event.type)
+    if event.entity.kind in {"HorizontalPodAutoscaler", "HPA"} and (
+        event.reason in _HPA_FAILURE_REASONS or event.type == "Warning"
+    ):
+        return (
+            1,
+            0 if event.reason in _HPA_FAILURE_REASONS else 1,
+            "hpa",
+            entity,
+            event.reason,
+            event.type,
+        )
+    if event.type == "Warning" and event.entity.kind not in {
+        "PersistentVolume",
+        "PersistentVolumeClaim",
+        "VolumeAttachment",
+    }:
+        return (2, 0, "warning", entity, event.reason, event.type)
+    if match := _QUOTA_MESSAGE.search(event.message):
+        return (3, 0, "quota", entity, match.group(1) or "", event.type)
+    if match := _LIMIT_MESSAGE.search(event.message):
+        return (3, 0, "limit", entity, f"{match.group(1)}:{match.group(2)}", event.type)
+    return (4, 0, "other", entity, event.reason, event.type)
+
+
+def _project_incident_events(
+    events: Sequence[ClusterEvent], limit: int
+) -> tuple[ClusterEvent, ...]:
+    """Keep bounded raw representatives for the signal-relevant event groups."""
+    if limit <= 0:
+        return ()
+    grouped: dict[tuple[int, int, str, str, str, str], list[ClusterEvent]] = {}
+    for event in sorted(events, key=_event_sort_key):
+        grouped.setdefault(_event_projection_group(event), []).append(event)
+
+    ordered_groups = sorted(grouped.items(), key=lambda item: item[0])
+    selected: list[ClusterEvent] = []
+    for _, items in ordered_groups:
+        selected.append(items[0])
+        if len(selected) == limit:
+            break
+    if len(selected) < limit:
+        for _, items in ordered_groups:
+            if len(items) > 1:
+                selected.append(items[-1])
+                if len(selected) == limit:
+                    break
+    return tuple(sorted(selected, key=_event_sort_key))
 
 
 def _default_query(
@@ -59,6 +161,14 @@ class InvestigationBackend(Protocol):
         self, target: EntityRef, query: InvestigationQuery
     ) -> tuple[ClusterEvent, ...]: ...
 
+    def query_incident_events(
+        self, namespace: EntityRef, query: InvestigationQuery
+    ) -> tuple[ClusterEvent, ...]: ...
+
+    def query_incident_changes(
+        self, namespace: EntityRef, query: InvestigationQuery
+    ) -> tuple[ObjectVersion, ...]: ...
+
     def query_logs(self, target: EntityRef, query: InvestigationQuery) -> tuple[LogRecord, ...]: ...
 
     def query_resource_pressure(
@@ -85,10 +195,16 @@ class SourceInvestigationBackend:
     def supports(self, capability: str) -> bool:
         source_supports = getattr(self.source, "supports", None)
         if callable(source_supports):
-            return bool(source_supports(capability))
+            aliases = {"incident_events": "events", "incident_changes": "history"}
+            alias = aliases.get(capability)
+            return bool(
+                source_supports(capability) or (alias is not None and source_supports(alias))
+            )
         methods = {
             "history": "object_history",
             "events": "events",
+            "incident_events": "events",
+            "incident_changes": "object_history",
             "logs": "error_logs",
             "resource_pressure": "resource_pressure",
             "traffic": "traffic_observations",
@@ -114,7 +230,7 @@ class SourceInvestigationBackend:
             event
             for event in self.source.events()
             if event.entity == target
-            and _in_window(event.last_at or event.first_at, query, self.source.observation_cutoff())
+            and _in_window(_event_time(event), query, self.source.observation_cutoff())
             and (not query.reasons or event.reason in query.reasons)
             and (
                 not query.contains
@@ -122,6 +238,54 @@ class SourceInvestigationBackend:
             )
         ]
         return tuple(events[: query.limit])
+
+    def query_incident_events(
+        self, namespace: EntityRef, query: InvestigationQuery
+    ) -> tuple[ClusterEvent, ...]:
+        if namespace.kind != "Namespace":
+            raise ValueError("incident event discovery requires a Namespace target")
+        events = [
+            event
+            for event in self.source.events()
+            if event.entity.namespace == namespace.name
+            and _in_window(event.last_at or event.first_at, query, self.source.observation_cutoff())
+        ]
+        return _project_incident_events(events, min(query.limit, 64))
+
+    def query_incident_changes(
+        self, namespace: EntityRef, query: InvestigationQuery
+    ) -> tuple[ObjectVersion, ...]:
+        if namespace.kind != "Namespace":
+            raise ValueError("incident change discovery requires a Namespace target")
+        grouped: list[tuple[datetime, str, tuple[ObjectVersion, ...]]] = []
+        for entity, versions in self.source.object_history().items():
+            if (
+                entity.namespace != namespace.name
+                or entity.kind not in INCIDENT_CHANGE_DISCOVERY_KINDS
+            ):
+                continue
+            ordered = tuple(sorted(versions, key=lambda item: (item.observed_at, item.evidence_id)))
+            in_window = tuple(
+                version
+                for version in ordered
+                if _in_window(version.observed_at, query, self.source.observation_cutoff())
+            )
+            if not in_window:
+                continue
+            selected = list(in_window[:4])
+            predecessor = None
+            if query.start is not None:
+                predecessor = next(
+                    (version for version in reversed(ordered) if version.observed_at < query.start),
+                    None,
+                )
+            if predecessor is not None and predecessor not in selected:
+                selected.insert(0, predecessor)
+            grouped.append((in_window[0].observed_at, entity.canonical, tuple(selected)))
+        grouped.sort(key=lambda item: (item[0], item[1]))
+        result = [version for _, _, versions in grouped for version in versions]
+        result.sort(key=lambda item: (item.observed_at, item.entity.canonical, item.evidence_id))
+        return tuple(result[: min(query.limit, 64)])
 
     def query_logs(self, target: EntityRef, query: InvestigationQuery) -> tuple[LogRecord, ...]:
         latest = {
@@ -263,6 +427,16 @@ class TempoInvestigationBackend:
     ) -> tuple[ClusterEvent, ...]:
         return self.base.query_events(target, query)
 
+    def query_incident_events(
+        self, namespace: EntityRef, query: InvestigationQuery
+    ) -> tuple[ClusterEvent, ...]:
+        return self.base.query_incident_events(namespace, query)
+
+    def query_incident_changes(
+        self, namespace: EntityRef, query: InvestigationQuery
+    ) -> tuple[ObjectVersion, ...]:
+        return self.base.query_incident_changes(namespace, query)
+
     def query_logs(self, target: EntityRef, query: InvestigationQuery) -> tuple[LogRecord, ...]:
         return self.base.query_logs(target, query)
 
@@ -314,6 +488,16 @@ class PrometheusInvestigationBackend:
         self, target: EntityRef, query: InvestigationQuery
     ) -> tuple[ClusterEvent, ...]:
         return self.base.query_events(target, query)
+
+    def query_incident_events(
+        self, namespace: EntityRef, query: InvestigationQuery
+    ) -> tuple[ClusterEvent, ...]:
+        return self.base.query_incident_events(namespace, query)
+
+    def query_incident_changes(
+        self, namespace: EntityRef, query: InvestigationQuery
+    ) -> tuple[ObjectVersion, ...]:
+        return self.base.query_incident_changes(namespace, query)
 
     def query_logs(self, target: EntityRef, query: InvestigationQuery) -> tuple[LogRecord, ...]:
         return self.base.query_logs(target, query)
@@ -531,6 +715,8 @@ def investigation_backend(source: ObservationSource) -> InvestigationBackend:
         required = (
             "query_history",
             "query_events",
+            "query_incident_events",
+            "query_incident_changes",
             "query_logs",
             "query_resource_pressure",
             "query_traffic",
@@ -543,6 +729,7 @@ def investigation_backend(source: ObservationSource) -> InvestigationBackend:
 
 
 __all__ = [
+    "INCIDENT_CHANGE_DISCOVERY_KINDS",
     "InitialAccessLedger",
     "InitialObservationView",
     "InvestigationBackend",

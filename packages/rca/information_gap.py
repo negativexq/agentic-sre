@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from hashlib import sha256
 
+from packages.rca.causal_roles import HypothesisCausalRole, HypothesisCausalRoles
+from packages.rca.mechanism_bridge import RuntimeMechanismBridges
 from packages.rca.model import (
     AuthorizedQuery,
     EntityRef,
@@ -27,6 +30,11 @@ from packages.rca.model import (
     ToolCapability,
 )
 from packages.rca.resolution import hypothesis_signature
+from packages.rca.root_cause_eligibility import (
+    RootCauseEligibilities,
+    RootCauseEligibilityState,
+)
+from packages.rca.runtime_propagation import RuntimePropagation
 from packages.rca.signals import ACCESS_KINDS
 from packages.rca.source import ObservationSource
 from packages.rca.topology import WORKLOAD_KINDS
@@ -177,12 +185,34 @@ def _capability_allows_target(capability: str, target: EntityRef) -> bool:
     if capability in {"history", "events"}:
         return bool(target.kind)
     if capability == "traffic":
-        return bool(target.kind)
+        return target.kind == "Service"
     if capability == "runtime_traces":
         return target.kind in {"Pod", "Deployment", "StatefulSet", "DaemonSet"}
     if capability in {"describe", "neighbors"}:
         return bool(target.kind)
     return False
+
+
+@dataclass(frozen=True)
+class InformationGapContext:
+    """Deterministic causal products used to derive information needs."""
+
+    causal_roles: HypothesisCausalRoles
+    root_cause_eligibilities: RootCauseEligibilities
+    runtime_propagation: RuntimePropagation
+    runtime_mechanism_bridges: RuntimeMechanismBridges
+
+
+@dataclass(frozen=True)
+class _InformationNeed:
+    """Private causal predicate mapped to an exact bounded read surface."""
+
+    dimension: GapDimension
+    hypothesis_ids: tuple[str, ...] = ()
+    alternative_ids: tuple[str, ...] = ()
+    authorized_queries: tuple[AuthorizedQuery, ...] = ()
+    missing_fact: str = ""
+    rationale: str = ""
 
 
 def _stable_gap_id(
@@ -427,6 +457,468 @@ def _available_capabilities(
     return tuple(available)
 
 
+_WORKLOAD_CONTROLLER_KINDS = frozenset({"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"})
+_TRACE_TARGET_KINDS = frozenset({"Pod", "Deployment", "StatefulSet", "DaemonSet"})
+_CHAOS_KINDS = frozenset({"StressChaos", "NetworkChaos", "PodChaos", "Schedule", "Workflow"})
+
+
+def _available_names(dimension: GapDimension, source: ObservationSource | None) -> frozenset[str]:
+    return frozenset(item.name for item in _available_capabilities(dimension, (), source))
+
+
+def _query(
+    capability: str,
+    target: EntityRef,
+    *,
+    alternative_id: str | None = None,
+) -> AuthorizedQuery | None:
+    if not _capability_allows_target(capability, target):
+        return None
+    return AuthorizedQuery(
+        capability=capability,
+        target=target,
+        alternative_ids=(alternative_id,) if alternative_id is not None else (),
+    )
+
+
+def _actor_local_contract(
+    actor: EntityRef,
+    dimension: GapDimension,
+    source: ObservationSource | None,
+    *,
+    alternative_id: str | None = None,
+) -> tuple[AuthorizedQuery, ...]:
+    """Return only exact actor-local capabilities for one causal predicate."""
+    capability_by_kind: dict[str, tuple[str, ...]] = {
+        **{
+            kind: (
+                ("history",)
+                if dimension in {GapDimension.CHANGE_TIMING, GapDimension.CONFIG_DIFFERENCE}
+                else ("runtime_traces",)
+                if kind in _TRACE_TARGET_KINDS and dimension is GapDimension.DEPENDENCY_HEALTH
+                else ()
+            )
+            for kind in _WORKLOAD_CONTROLLER_KINDS
+        },
+        "ConfigMap": (
+            ("history",)
+            if dimension in {GapDimension.CHANGE_TIMING, GapDimension.CONFIG_DIFFERENCE}
+            else ()
+        ),
+        "HorizontalPodAutoscaler": (
+            "history"
+            if dimension in {GapDimension.CHANGE_TIMING, GapDimension.FAILURE_ONSET}
+            else "events",
+        ),
+        # Retain the repository's historical synthetic HPA spelling at this
+        # private compatibility boundary; production Kubernetes identity is
+        # still the exact HorizontalPodAutoscaler kind.
+        "HPA": (
+            "history"
+            if dimension in {GapDimension.CHANGE_TIMING, GapDimension.FAILURE_ONSET}
+            else "events",
+        ),
+        "Pod": {
+            GapDimension.FAILURE_ONSET: ("events",),
+            GapDimension.RESOURCE_PRESSURE: ("resource_pressure",),
+            GapDimension.DEPENDENCY_HEALTH: ("runtime_traces",),
+        }.get(dimension, ()),
+        "Service": {
+            GapDimension.DEPENDENCY_HEALTH: ("logs",),
+            GapDimension.LOG_ERROR_PATTERN: ("logs",),
+            GapDimension.METRIC_CHANGE: ("traffic",),
+            GapDimension.METRIC_BASELINE: ("traffic",),
+        }.get(dimension, ()),
+        "NetworkPolicy": ("history",) if dimension is GapDimension.CHANGE_TIMING else (),
+        **{
+            kind: (
+                ("events",)
+                if dimension is GapDimension.EVENT_SEQUENCE
+                else ("history", "events")
+                if dimension is GapDimension.FAILURE_ONSET
+                else ("history",)
+                if dimension is GapDimension.CHANGE_TIMING
+                else ()
+            )
+            for kind in _CHAOS_KINDS
+        },
+    }
+    if actor.kind in {"HorizontalPodAutoscaler", "HPA"} and dimension not in {
+        GapDimension.CHANGE_TIMING,
+        GapDimension.AUTOSCALING_TARGET_STATE,
+        GapDimension.FAILURE_ONSET,
+    }:
+        return ()
+    if (
+        actor.kind in {"HorizontalPodAutoscaler", "HPA"}
+        and dimension is GapDimension.AUTOSCALING_TARGET_STATE
+    ):
+        capability_by_kind[actor.kind] = ("events",)
+    capabilities = capability_by_kind.get(actor.kind, ())
+    available = _available_names(dimension, source)
+    result = [
+        query
+        for capability in capabilities
+        if capability in available
+        for query in (_query(capability, actor, alternative_id=alternative_id),)
+        if query is not None
+    ]
+    return tuple(sorted(result, key=lambda item: (item.capability, item.target.canonical)))
+
+
+def _dependency_trace_targets(alternative: StructuralAlternative) -> tuple[EntityRef, ...]:
+    kind_order = {"Deployment": 0, "StatefulSet": 1, "DaemonSet": 2}
+    targets = tuple(
+        sorted(
+            (
+                target
+                for target in alternative.observation_targets
+                if target.kind in {"Deployment", "StatefulSet", "DaemonSet"}
+            ),
+            key=lambda item: (kind_order[item.kind], item.canonical),
+        )
+    )
+    if targets:
+        return targets
+    return tuple(
+        sorted(
+            (target for target in alternative.observation_targets if target.kind == "Pod"),
+            key=lambda item: item.canonical,
+        )
+    )
+
+
+def _ambiguity_dimensions(actor: EntityRef) -> tuple[GapDimension, ...]:
+    """Return dimensions for resolver-supported ambiguity, scoped to the actor."""
+    if actor.kind in _WORKLOAD_CONTROLLER_KINDS or actor.kind in {"ConfigMap", "NetworkPolicy"}:
+        return (GapDimension.CHANGE_TIMING, GapDimension.CONFIG_DIFFERENCE)
+    if actor.kind in {"HorizontalPodAutoscaler", "HPA"}:
+        return (
+            GapDimension.AUTOSCALING_TARGET_STATE,
+            GapDimension.EVENT_SEQUENCE,
+            GapDimension.RESOURCE_PRESSURE,
+            GapDimension.FAILURE_ONSET,
+        )
+    if actor.kind == "Pod":
+        return (
+            GapDimension.DEPENDENCY_HEALTH,
+            GapDimension.EVENT_SEQUENCE,
+            GapDimension.FAILURE_ONSET,
+            GapDimension.RESOURCE_PRESSURE,
+        )
+    if actor.kind == "Service":
+        return (
+            GapDimension.DEPENDENCY_HEALTH,
+            GapDimension.LOG_ERROR_PATTERN,
+            GapDimension.METRIC_CHANGE,
+        )
+    if actor.kind in _CHAOS_KINDS:
+        return (GapDimension.EVENT_SEQUENCE, GapDimension.FAILURE_ONSET)
+    return ()
+
+
+def _initiating_dimensions(actor: EntityRef) -> tuple[GapDimension, ...]:
+    """Dimensions whose actor-local evidence can establish initiation."""
+    return _ambiguity_dimensions(actor)
+
+
+def _structural_contract(
+    alternative: StructuralAlternative,
+    dimension: GapDimension,
+    source: ObservationSource | None,
+) -> tuple[AuthorizedQuery, ...]:
+    """Map a structural role to its exact observation actor(s)."""
+    actor = alternative.actor
+    role = alternative.role
+    if role in {"configuration_source", "workload_controller"}:
+        if dimension in {GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING}:
+            return _actor_local_contract(
+                actor, dimension, source, alternative_id=alternative.alternative_id
+            )
+        return ()
+    if role == "autoscaler":
+        if dimension in {GapDimension.AUTOSCALING_TARGET_STATE, GapDimension.EVENT_SEQUENCE}:
+            return _actor_local_contract(
+                actor, dimension, source, alternative_id=alternative.alternative_id
+            )
+        return ()
+    if role == "fault_actor":
+        if dimension in {GapDimension.EVENT_SEQUENCE, GapDimension.FAILURE_ONSET}:
+            return _actor_local_contract(
+                actor, dimension, source, alternative_id=alternative.alternative_id
+            )
+        return ()
+    if role == "dependency":
+        if dimension in {GapDimension.DEPENDENCY_HEALTH, GapDimension.LOG_ERROR_PATTERN}:
+            queries: list[AuthorizedQuery] = []
+            if dimension in {GapDimension.DEPENDENCY_HEALTH, GapDimension.LOG_ERROR_PATTERN}:
+                query = _query("logs", actor, alternative_id=alternative.alternative_id)
+                if query is not None and "logs" in _available_names(dimension, source):
+                    queries.append(query)
+            if dimension is GapDimension.DEPENDENCY_HEALTH:
+                for target in _dependency_trace_targets(alternative):
+                    query = _query(
+                        "runtime_traces", target, alternative_id=alternative.alternative_id
+                    )
+                    if query is not None and "runtime_traces" in _available_names(
+                        dimension, source
+                    ):
+                        queries.append(query)
+            return tuple(sorted(queries, key=lambda item: (item.capability, item.target.canonical)))
+        return ()
+    if role == "network_policy" and dimension is GapDimension.CHANGE_TIMING:
+        return _actor_local_contract(
+            actor, dimension, source, alternative_id=alternative.alternative_id
+        )
+    return ()
+
+
+def _hypothesis_needs(
+    hypotheses: Sequence[Hypothesis],
+    resolution: ResolutionTrace,
+    source: ObservationSource | None,
+    runtime_context: InformationGapContext,
+) -> tuple[_InformationNeed, ...]:
+    by_id = {item.hypothesis_id: item for item in hypotheses}
+    selected_ids = set(resolution.unresolved_hypotheses)
+    if resolution.state is Resolution.AMBIGUOUS:
+        selected_ids.update(resolution.leading_hypothesis_ids)
+    if not selected_ids:
+        selected_ids.update(resolution.plausible_hypotheses)
+    needs: list[_InformationNeed] = []
+    for audit in sorted(resolution.hypothesis_audits, key=lambda item: item.hypothesis_id):
+        hypothesis = by_id.get(audit.hypothesis_id)
+        if hypothesis is None or audit.hypothesis_id not in selected_ids:
+            continue
+        eligibility = runtime_context.root_cause_eligibilities.for_hypothesis(
+            hypothesis.hypothesis_id
+        )
+        role = runtime_context.causal_roles.for_hypothesis(hypothesis.hypothesis_id)
+        if (
+            audit.epistemic_state.value == "UNRESOLVED"
+            and "NO_ONSET_CAPABLE_INITIATING_EVIDENCE" in audit.plausibility_reasons
+            and (
+                eligibility is None
+                or eligibility.state is not RootCauseEligibilityState.INELIGIBLE_PROPAGATED_EFFECT
+            )
+        ):
+            for dimension in sorted(
+                _initiating_dimensions(hypothesis.causal_actor),
+                key=lambda item: item.value,
+            ):
+                queries = _actor_local_contract(hypothesis.causal_actor, dimension, source)
+                if queries:
+                    needs.append(
+                        _InformationNeed(
+                            dimension=dimension,
+                            hypothesis_ids=(hypothesis.hypothesis_id,),
+                            authorized_queries=queries,
+                            missing_fact=(
+                                f"whether {hypothesis.causal_actor.canonical} has actor-local "
+                                f"{dimension.value.lower()} evidence"
+                            ),
+                            rationale="the resolver audit explicitly lacks onset-capable initiating evidence",
+                        )
+                    )
+        if (
+            resolution.state is Resolution.AMBIGUOUS
+            and audit.hypothesis_id in resolution.leading_hypothesis_ids
+            and audit.epistemic_state.value == "SUPPORTED"
+        ):
+            for dimension in _ambiguity_dimensions(hypothesis.causal_actor):
+                queries = _actor_local_contract(hypothesis.causal_actor, dimension, source)
+                if queries or (
+                    dimension is GapDimension.RESOURCE_PRESSURE
+                    and any(
+                        finding.kind is FindingKind.RESOURCE_PRESSURE
+                        for finding in hypothesis.findings
+                    )
+                ):
+                    needs.append(
+                        _InformationNeed(
+                            dimension=dimension,
+                            hypothesis_ids=(hypothesis.hypothesis_id,),
+                            authorized_queries=queries,
+                            missing_fact=(
+                                f"which actor-local {dimension.value.lower()} evidence "
+                                f"distinguishes {hypothesis.causal_actor.canonical}"
+                            ),
+                            rationale=(
+                                "resolver ambiguity leaves the initiating evidence source "
+                                "unresolved for this causal actor"
+                            ),
+                        )
+                    )
+        if (
+            role is not None
+            and role.causal_actor == hypothesis.causal_actor
+            and role.role is HypothesisCausalRole.UNKNOWN
+            and role.unresolved_incoming_edges > 0
+            and (
+                eligibility is None
+                or eligibility.state is not RootCauseEligibilityState.INELIGIBLE_PROPAGATED_EFFECT
+            )
+            and hypothesis.causal_actor.kind in _TRACE_TARGET_KINDS
+        ):
+            runtime_queries = _actor_local_contract(
+                hypothesis.causal_actor, GapDimension.DEPENDENCY_HEALTH, source
+            )
+            if runtime_queries:
+                needs.append(
+                    _InformationNeed(
+                        dimension=GapDimension.DEPENDENCY_HEALTH,
+                        hypothesis_ids=(hypothesis.hypothesis_id,),
+                        authorized_queries=runtime_queries,
+                        missing_fact=(
+                            f"whether {hypothesis.causal_actor.canonical} was already "
+                            "participating in an unresolved runtime boundary"
+                        ),
+                        rationale="causal-role assessment has unresolved incoming runtime edges",
+                    )
+                )
+    merged: dict[tuple[str, str], _InformationNeed] = {}
+    for need in needs:
+        merge_key = (
+            need.dimension.value,
+            "resolver-ambiguity"
+            if need.rationale.startswith("resolver ambiguity")
+            else need.rationale,
+        )
+        previous = merged.get(merge_key)
+        if previous is None:
+            merged[merge_key] = need
+            continue
+        merged_queries = {
+            (item.capability, item.target.canonical): item
+            for item in (*previous.authorized_queries, *need.authorized_queries)
+        }
+        merged[merge_key] = _InformationNeed(
+            dimension=need.dimension,
+            hypothesis_ids=tuple(sorted({*previous.hypothesis_ids, *need.hypothesis_ids})),
+            alternative_ids=tuple(sorted({*previous.alternative_ids, *need.alternative_ids})),
+            authorized_queries=tuple(
+                sorted(
+                    merged_queries.values(),
+                    key=lambda item: (item.capability, item.target.canonical),
+                )
+            ),
+            missing_fact=previous.missing_fact,
+            rationale=previous.rationale,
+        )
+    return tuple(merged.values())
+
+
+def _need_gap(
+    need: _InformationNeed,
+    hypotheses: Sequence[Hypothesis],
+    alternatives: Sequence[StructuralAlternative],
+) -> InformationGap:
+    ordered_hypotheses = tuple(
+        sorted(
+            (item for item in hypotheses if item.hypothesis_id in need.hypothesis_ids),
+            key=lambda item: item.hypothesis_id,
+        )
+    )
+    ordered_alternatives = tuple(
+        sorted(
+            (item for item in alternatives if item.alternative_id in need.alternative_ids),
+            key=lambda item: item.alternative_id,
+        )
+    )
+    target_scope = tuple(
+        sorted({item.target for item in need.authorized_queries}, key=lambda item: item.canonical)
+    )
+    payload = {
+        "dimension": need.dimension.value,
+        "hypotheses": list(need.hypothesis_ids),
+        "alternatives": list(need.alternative_ids),
+        "queries": [
+            (item.capability, item.target.canonical, item.alternative_ids)
+            for item in need.authorized_queries
+        ],
+    }
+    gap_id = f"gap:{need.dimension.value.lower()}:{sha256(_json_value(payload).encode()).hexdigest()[:20]}"
+    resolvability = (
+        GapResolvability.RESOLVABLE
+        if need.authorized_queries
+        else GapResolvability.UNRESOLVABLE_WITH_CURRENT_TOOLS
+    )
+    return InformationGap(
+        gap_id=gap_id,
+        dimension=need.dimension,
+        hypothesis_ids=tuple(item.hypothesis_id for item in ordered_hypotheses),
+        alternative_ids=tuple(item.alternative_id for item in ordered_alternatives),
+        entity_scope=target_scope,
+        known_facts=_known_facts(ordered_hypotheses, need.dimension),
+        missing_fact=need.missing_fact or _missing_fact(need.dimension),
+        required_relation=_RELATIONS.get(need.dimension),
+        discriminating_outcomes=_outcomes(
+            ordered_hypotheses, ordered_alternatives, need.missing_fact, resolvability
+        ),
+        authorized_queries=need.authorized_queries,
+        candidate_tools=tuple(sorted({item.capability for item in need.authorized_queries})),
+        evidence_refs=_evidence_refs(ordered_hypotheses),
+        priority=1,
+        resolvability=resolvability,
+        rationale=need.rationale,
+    )
+
+
+def _derive_runtime_aware_gaps(
+    hypotheses: Sequence[Hypothesis],
+    resolution: ResolutionTrace,
+    source: ObservationSource | None,
+    alternatives: Sequence[StructuralAlternative],
+    runtime_context: InformationGapContext,
+) -> tuple[InformationGap, ...]:
+    open_alternatives = tuple(
+        item for item in alternatives if item.status is FrontierStatus.UNEXPLORED
+    )
+    if resolution.state is Resolution.RESOLVED and not open_alternatives:
+        return ()
+    needs = list(_hypothesis_needs(hypotheses, resolution, source, runtime_context))
+    for alternative in open_alternatives:
+        for dimension in sorted(alternative.queryable_dimensions, key=lambda item: item.value):
+            queries = _structural_contract(alternative, dimension, source)
+            if not queries:
+                continue
+            needs.append(
+                _InformationNeed(
+                    dimension=dimension,
+                    alternative_ids=(alternative.alternative_id,),
+                    authorized_queries=queries,
+                    missing_fact=(
+                        f"whether {alternative.actor.canonical} has actor-local evidence "
+                        f"for {dimension.value.lower()}"
+                    ),
+                    rationale=f"open {alternative.role} structural alternative requires actor-local evidence",
+                )
+            )
+    unique: dict[tuple[object, ...], _InformationNeed] = {}
+    for need in needs:
+        key = (
+            need.dimension.value,
+            need.hypothesis_ids,
+            need.alternative_ids,
+            tuple((item.capability, item.target.canonical) for item in need.authorized_queries),
+        )
+        unique[key] = need
+    return tuple(
+        _need_gap(need, hypotheses, alternatives)
+        for need in sorted(
+            unique.values(),
+            key=lambda item: (
+                item.dimension.value,
+                item.hypothesis_ids,
+                item.alternative_ids,
+                tuple(
+                    (query.capability, query.target.canonical) for query in item.authorized_queries
+                ),
+            ),
+        )
+    )
+
+
 def _gap_for(
     dimension: GapDimension,
     hypotheses: Sequence[Hypothesis],
@@ -523,8 +1015,18 @@ def derive_information_gaps(
     resolution: ResolutionTrace,
     source: ObservationSource | None = None,
     structural_alternatives: Sequence[StructuralAlternative] = (),
+    *,
+    runtime_context: InformationGapContext | None = None,
 ) -> tuple[InformationGap, ...]:
     """Derive gaps for unresolved evidence or open structural alternatives."""
+    if runtime_context is not None:
+        return _derive_runtime_aware_gaps(
+            hypotheses,
+            resolution,
+            source,
+            structural_alternatives,
+            runtime_context,
+        )
     open_alternatives = tuple(
         item for item in structural_alternatives if item.status is FrontierStatus.UNEXPLORED
     )
@@ -566,6 +1068,7 @@ def derive_information_gaps(
 
 __all__ = [
     "CAPABILITIES",
+    "InformationGapContext",
     "capabilities_for",
     "derive_information_gaps",
 ]

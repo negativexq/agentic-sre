@@ -18,7 +18,7 @@ from packages.rca.hypotheses import (
     group_candidates,
     hypothesis_candidate,
 )
-from packages.rca.information_gap import derive_information_gaps
+from packages.rca.information_gap import InformationGapContext, derive_information_gaps
 from packages.rca.mechanism_bridge import (
     RuntimeMechanismBridges,
     derive_runtime_mechanism_bridges,
@@ -353,6 +353,12 @@ def diagnose_case(
             resolution_trace,
             case.source,
             structural_alternatives=case.structural_alternatives,
+            runtime_context=InformationGapContext(
+                causal_roles=case.hypothesis_causal_roles,
+                root_cause_eligibilities=case.root_cause_eligibilities,
+                runtime_propagation=case.runtime_propagation,
+                runtime_mechanism_bridges=case.runtime_mechanism_bridges,
+            ),
         )
         return Diagnosis(
             incident_id=case.incident_id,
@@ -395,6 +401,12 @@ def diagnose_case(
         resolution_trace,
         case.source,
         structural_alternatives=case.structural_alternatives,
+        runtime_context=InformationGapContext(
+            causal_roles=case.hypothesis_causal_roles,
+            root_cause_eligibilities=case.root_cause_eligibilities,
+            runtime_propagation=case.runtime_propagation,
+            runtime_mechanism_bridges=case.runtime_mechanism_bridges,
+        ),
     )
     selectable_hypotheses = _root_cause_selectable_hypotheses(case)
     if not selectable_hypotheses:

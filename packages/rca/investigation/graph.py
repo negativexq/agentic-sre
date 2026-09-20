@@ -684,11 +684,12 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         alternative_id: {GapDimension(value) for value in dimensions}
         for alternative_id, dimensions in state.get("frontier_queried_dimensions", ())
     }
-    if observation.error is None and observation.capability != "runtime_traces":
+    if observation.error is None and observation.capability != "runtime_traces" and new_refs:
         covered = covered_frontier_dimensions(
             state["current_diagnosis"],
             capability=observation.capability,
             target=observation.target,
+            evidence_acquired=True,
         )
         for alternative_id, dimensions in covered.items():
             queried_dimensions.setdefault(alternative_id, set()).update(dimensions)
@@ -834,7 +835,6 @@ def _check_progress(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     no_progress = state["no_progress_count"]
     unchanged = (
         current_resolution is previous
-        and current_gap_fingerprint == _frozen(state["previous_gap_fingerprint"])
         and current_evidence_fingerprint == _frozen(state["previous_evidence_fingerprint"])
         and current_hypothesis_fingerprint == _frozen(state["previous_hypothesis_fingerprint"])
         and current_world_model_fingerprint == state["previous_world_model_fingerprint"]

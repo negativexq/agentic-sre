@@ -168,8 +168,11 @@ def covered_frontier_dimensions(
     *,
     capability: str,
     target: EntityRef,
+    evidence_acquired: bool = True,
 ) -> dict[str, tuple[GapDimension, ...]]:
     """Return structural dimensions covered by one authorized telemetry read."""
+    if not evidence_acquired or capability == "runtime_traces":
+        return {}
     covered: dict[str, set[GapDimension]] = {}
     for gap in diagnosis.information_gaps:
         if any(

@@ -1,0 +1,342 @@
+"""Deterministic physical-observation utility and selection."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+
+from packages.rca.engine import Case, EngineConfig
+from packages.rca.investigation.actions import observation_identity
+from packages.rca.investigation.candidates import (
+    ObservationCandidate,
+    build_observation_candidates,
+)
+from packages.rca.model import (
+    Diagnosis,
+    GapResolvability,
+    InvestigationAction,
+    InvestigationLedgerEntry,
+)
+
+_OVERLAP_PREFERENCE = {
+    "low": 3,
+    "medium": 2,
+    "high": 1,
+}
+_COST_TIER = {
+    "history": 0,
+    "events": 0,
+    "logs": 1,
+    "resource_pressure": 1,
+    "traffic": 1,
+    "runtime_traces": 2,
+}
+
+
+@dataclass(frozen=True)
+class ObservationUtility:
+    """Inspectable ordinal utility; fields are not probabilities or scores."""
+
+    admissible: bool
+    hypothesis_relevance: int
+    structural_relevance: int
+    discriminating_gap_coverage: int
+    dimension_coverage: int
+    overlap_preference: int
+    shared_gap_coverage: int
+    shared_alternative_coverage: int
+    cost_tier: int
+    stable_tiebreak: str
+
+
+@dataclass(frozen=True)
+class ScoredObservationCandidate:
+    candidate: ObservationCandidate
+    utility: ObservationUtility
+    overlap_class: str
+
+
+def _unresolved_hypothesis_ids(diagnosis: Diagnosis) -> tuple[set[str], set[str]]:
+    trace = diagnosis.resolution_trace
+    if trace is None:
+        return set(), set()
+    leading = set(trace.leading_hypothesis_ids)
+    unresolved = set(trace.unresolved_hypotheses)
+    if not unresolved:
+        unresolved.update(trace.plausible_hypotheses)
+    return leading, unresolved
+
+
+def _hypothesis_relevance(candidate: ObservationCandidate, diagnosis: Diagnosis) -> int:
+    leading, unresolved = _unresolved_hypothesis_ids(diagnosis)
+    candidate_ids = set(candidate.hypothesis_ids)
+    if candidate_ids & leading:
+        return 3
+    if candidate_ids & unresolved:
+        return 2
+    return 1 if candidate_ids else 0
+
+
+def _structural_relevance(candidate: ObservationCandidate, diagnosis: Diagnosis) -> int:
+    alternatives = {item.alternative_id: item for item in diagnosis.structural_alternatives}
+    referenced = {
+        alternative_id
+        for alternative_id in candidate.alternative_ids
+        if alternative_id in alternatives
+    }
+    if any(alternatives[item].status.value == "UNEXPLORED" for item in referenced):
+        return 2
+    return 1 if referenced else 0
+
+
+def _overlap_class(capability: str) -> str:
+    if capability == "history":
+        return "medium"
+    return "low"
+
+
+def _attempted_identities(
+    *,
+    attempted_observations: Sequence[str],
+    previous_investigations: Sequence[InvestigationLedgerEntry],
+) -> set[str]:
+    identities = set(attempted_observations)
+    for entry in previous_investigations:
+        if entry.query is not None:
+            identities.add(observation_identity(entry.capability, entry.target, entry.query))
+    return identities
+
+
+def score_observation_candidate(
+    *,
+    candidate: ObservationCandidate,
+    diagnosis: Diagnosis,
+    attempted_observations: Sequence[str] = (),
+    previous_investigations: Sequence[InvestigationLedgerEntry] = (),
+) -> ScoredObservationCandidate:
+    """Assign a deterministic utility vector using only visible state."""
+    attempted = _attempted_identities(
+        attempted_observations=attempted_observations,
+        previous_investigations=previous_investigations,
+    )
+    physical_identity = observation_identity(
+        candidate.capability, candidate.target, candidate.query
+    )
+    admissible = physical_identity not in attempted
+    current_gaps = {
+        gap.gap_id: gap
+        for gap in diagnosis.information_gaps
+        if gap.resolvability is GapResolvability.RESOLVABLE
+    }
+    covered_gap_ids = set(candidate.gap_ids) & set(current_gaps)
+    covered_dimensions = {current_gaps[gap_id].dimension for gap_id in covered_gap_ids}
+    covered_alternatives = {
+        alternative_id
+        for gap_id in covered_gap_ids
+        for alternative_id in current_gaps[gap_id].alternative_ids
+    }
+    overlap_class = _overlap_class(candidate.capability)
+    utility = ObservationUtility(
+        admissible=admissible,
+        hypothesis_relevance=_hypothesis_relevance(candidate, diagnosis),
+        structural_relevance=_structural_relevance(candidate, diagnosis),
+        discriminating_gap_coverage=len(covered_gap_ids),
+        dimension_coverage=len(covered_dimensions),
+        overlap_preference=_OVERLAP_PREFERENCE[overlap_class],
+        shared_gap_coverage=max(0, len(covered_gap_ids) - 1),
+        shared_alternative_coverage=max(0, len(covered_alternatives) - 1),
+        cost_tier=_COST_TIER.get(candidate.capability, 2),
+        stable_tiebreak=candidate.candidate_id,
+    )
+    return ScoredObservationCandidate(
+        candidate=candidate,
+        utility=utility,
+        overlap_class=overlap_class,
+    )
+
+
+def utility_sort_key(scored: ScoredObservationCandidate) -> tuple[object, ...]:
+    """Return the single documented lexicographic selection order.
+
+    Causal relevance precedes structural relevance, coverage, potential seed
+    overlap, shared-read value, and cost.  The candidate ID is the final
+    deterministic tie-break and has no semantic meaning.
+    """
+    utility = scored.utility
+    return (
+        not utility.admissible,
+        -utility.hypothesis_relevance,
+        -utility.structural_relevance,
+        -utility.discriminating_gap_coverage,
+        -utility.dimension_coverage,
+        -utility.overlap_preference,
+        -utility.shared_gap_coverage,
+        -utility.shared_alternative_coverage,
+        utility.cost_tier,
+        utility.stable_tiebreak,
+    )
+
+
+def rank_observation_candidates(
+    *,
+    candidates: Sequence[ObservationCandidate],
+    diagnosis: Diagnosis,
+    attempted_observations: Sequence[str] = (),
+    previous_investigations: Sequence[InvestigationLedgerEntry] = (),
+) -> tuple[ScoredObservationCandidate, ...]:
+    """Score and order physical candidates without performing a read."""
+    scored = tuple(
+        score_observation_candidate(
+            candidate=candidate,
+            diagnosis=diagnosis,
+            attempted_observations=attempted_observations,
+            previous_investigations=previous_investigations,
+        )
+        for candidate in candidates
+    )
+    return tuple(sorted((item for item in scored if item.utility.admissible), key=utility_sort_key))
+
+
+def _representative_gap(
+    candidate: ObservationCandidate,
+    diagnosis: Diagnosis,
+) -> str | None:
+    leading, unresolved = _unresolved_hypothesis_ids(diagnosis)
+    alternatives = {item.alternative_id: item for item in diagnosis.structural_alternatives}
+    gaps = {
+        gap.gap_id: gap
+        for gap in diagnosis.information_gaps
+        if gap.resolvability is GapResolvability.RESOLVABLE and gap.gap_id in candidate.gap_ids
+    }
+    if not gaps:
+        return None
+
+    def key(gap_id: str) -> tuple[int, int, str]:
+        gap = gaps[gap_id]
+        hypothesis_score = (
+            2
+            if set(gap.hypothesis_ids) & leading
+            else 1
+            if set(gap.hypothesis_ids) & unresolved
+            else 0
+        )
+        structural_score = int(
+            any(
+                alternative_id in alternatives
+                and alternatives[alternative_id].status.value == "UNEXPLORED"
+                for alternative_id in gap.alternative_ids
+            )
+        )
+        return (-hypothesis_score, -structural_score, gap_id)
+
+    return min(gaps, key=key)
+
+
+def candidate_to_action(
+    scored_candidate: ScoredObservationCandidate,
+    diagnosis: Diagnosis,
+    *,
+    previous_investigations: Sequence[InvestigationLedgerEntry] = (),
+    max_tool_calls_per_gap: int | None = None,
+) -> InvestigationAction | None:
+    """Convert one selected physical read to the existing action contract."""
+    candidate = scored_candidate.candidate
+    gap_ids = [
+        gap_id
+        for gap_id in candidate.gap_ids
+        if max_tool_calls_per_gap is None
+        or sum(entry.gap_id == gap_id for entry in previous_investigations) < max_tool_calls_per_gap
+    ]
+    if not gap_ids:
+        return None
+    executable_candidate = (
+        candidate
+        if tuple(gap_ids) == candidate.gap_ids
+        else ObservationCandidate(
+            candidate_id=candidate.candidate_id,
+            capability=candidate.capability,
+            target=candidate.target,
+            query=candidate.query,
+            gap_ids=tuple(gap_ids),
+            dimensions=candidate.dimensions,
+            hypothesis_ids=candidate.hypothesis_ids,
+            alternative_ids=candidate.alternative_ids,
+        )
+    )
+    gap_id = _representative_gap(executable_candidate, diagnosis)
+    if gap_id is None:
+        return None
+    utility = scored_candidate.utility
+    rationale = (
+        f"deterministic candidate {candidate.candidate_id}; "
+        f"utility={utility.hypothesis_relevance}/"
+        f"{utility.structural_relevance}/"
+        f"{utility.discriminating_gap_coverage}/"
+        f"{utility.dimension_coverage}"
+    )
+    return InvestigationAction(
+        action="inspect",
+        gap_id=gap_id,
+        capability=candidate.capability,
+        target=candidate.target,
+        query=candidate.query,
+        rationale=rationale,
+    )
+
+
+def select_observation_candidate(
+    *,
+    case: Case,
+    diagnosis: Diagnosis,
+    engine_config: EngineConfig,
+    attempted_observations: Sequence[str] = (),
+    previous_investigations: Sequence[InvestigationLedgerEntry] = (),
+    max_tool_calls_per_gap: int | None = None,
+) -> ScoredObservationCandidate | None:
+    """Build, rank, and select one currently admissible physical read."""
+    candidates = build_observation_candidates(
+        case=case,
+        diagnosis=diagnosis,
+        engine_config=engine_config,
+    )
+    ranked = rank_observation_candidates(
+        candidates=candidates,
+        diagnosis=diagnosis,
+        attempted_observations=attempted_observations,
+        previous_investigations=previous_investigations,
+    )
+    for item in ranked:
+        if (
+            candidate_to_action(
+                item,
+                diagnosis,
+                previous_investigations=previous_investigations,
+                max_tool_calls_per_gap=max_tool_calls_per_gap,
+            )
+            is not None
+        ):
+            return item
+    return None
+
+
+@dataclass
+class DeterministicObservationPolicy:
+    """Marker policy whose action is supplied by the graph-bound selector."""
+
+    counts_as_model: bool = False
+    uses_candidate_selector: bool = True
+
+    def choose_action(self, _context: object) -> InvestigationAction:
+        return InvestigationAction(action="stop", rationale="selector path required")
+
+
+__all__ = [
+    "DeterministicObservationPolicy",
+    "ObservationUtility",
+    "ScoredObservationCandidate",
+    "candidate_to_action",
+    "rank_observation_candidates",
+    "score_observation_candidate",
+    "select_observation_candidate",
+    "utility_sort_key",
+]

@@ -20,6 +20,7 @@ from packages.rca.investigation.policy import (
     LLMInvestigationPolicy,
     ScriptedInvestigationPolicy,
 )
+from packages.rca.investigation.selection import DeterministicObservationPolicy
 
 __all__ = [
     "InvestigationConfig",
@@ -27,6 +28,7 @@ __all__ = [
     "InitialObservationView",
     "InvestigationBackend",
     "LLMInvestigationPolicy",
+    "DeterministicObservationPolicy",
     "SourceInvestigationBackend",
     "ScriptedInvestigationPolicy",
     "SeedPolicy",

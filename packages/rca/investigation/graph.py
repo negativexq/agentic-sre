@@ -42,6 +42,11 @@ from packages.rca.investigation.normalizers import (
     new_investigation_findings,
     normalize_observation,
 )
+from packages.rca.investigation.selection import (
+    DeterministicObservationPolicy,
+    candidate_to_action,
+    select_observation_candidate,
+)
 from packages.rca.investigation.state import (
     CaseRebuilder,
     InvestigationConfig,
@@ -368,6 +373,62 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         }
     diagnosis = state["current_diagnosis"]
     gaps = _resolvable_gaps(diagnosis)
+    if isinstance(rt.policy, DeterministicObservationPolicy):
+        case = rt.case_for(state.get("acquired_evidence_refs", ()), state["investigation_findings"])
+        selected = select_observation_candidate(
+            case=case,
+            diagnosis=diagnosis,
+            engine_config=rt.engine_config,
+            attempted_observations=state.get("attempted_observations", ()),
+            previous_investigations=tuple(state.get("ledger", ())),
+            max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+        )
+        if selected is None:
+            return {
+                "stop_reason": InvestigationStopReason.NO_RESOLVABLE_GAP,
+                "turns": state["turns"] + 1,
+                "model_calls": state["model_calls"],
+                "trace_steps": _with_step(
+                    state,
+                    "select_action",
+                    "deterministic selector found no admissible physical candidate",
+                ),
+            }
+        action = candidate_to_action(
+            selected,
+            diagnosis,
+            previous_investigations=tuple(state.get("ledger", ())),
+            max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+        )
+        if action is None:
+            return {
+                "stop_reason": InvestigationStopReason.NO_RESOLVABLE_GAP,
+                "turns": state["turns"] + 1,
+                "model_calls": state["model_calls"],
+                "trace_steps": _with_step(
+                    state,
+                    "select_action",
+                    "deterministic candidate had no executable representative gap",
+                ),
+            }
+        utility = selected.utility
+        detail = (
+            f"{action.action} {action.capability or ''} {action.target or ''}: {action.rationale}; "
+            f"hypothesis={utility.hypothesis_relevance}; "
+            f"structural={utility.structural_relevance}; "
+            f"overlap={selected.overlap_class}; cost={utility.cost_tier}; "
+            f"gaps={utility.discriminating_gap_coverage}; "
+            f"dimensions={utility.dimension_coverage}; "
+            f"shared-gaps={utility.shared_gap_coverage}; "
+            f"shared-alternatives={utility.shared_alternative_coverage}"
+        )
+        return {
+            "pending_action": action,
+            "stop_reason": None,
+            "turns": state["turns"] + 1,
+            "model_calls": state["model_calls"],
+            "trace_steps": _with_step(state, "select_action", detail),
+        }
     context = InvestigationPolicyContext(
         incident_id=state["incident_id"],
         diagnosis=diagnosis,

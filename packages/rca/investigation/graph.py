@@ -36,6 +36,10 @@ from packages.rca.investigation.evidence import (
     records_from_observation,
     visible_evidence_refs,
 )
+from packages.rca.investigation.intents import (
+    DeterministicIntentPolicy,
+    select_observation_intent_candidate,
+)
 from packages.rca.investigation.normalizers import (
     deduplicate_findings,
     finding_identity,
@@ -375,16 +379,28 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         }
     diagnosis = state["current_diagnosis"]
     gaps = _resolvable_gaps(diagnosis)
-    if isinstance(rt.policy, DeterministicObservationPolicy):
+    if isinstance(rt.policy, (DeterministicObservationPolicy, DeterministicIntentPolicy)):
         case = rt.case_for(state.get("acquired_evidence_refs", ()), state["investigation_findings"])
-        selected = select_observation_candidate(
-            case=case,
-            diagnosis=diagnosis,
-            engine_config=rt.engine_config,
-            attempted_observations=state.get("attempted_observations", ()),
-            previous_investigations=tuple(state.get("ledger", ())),
-            max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
-        )
+        selected_intent = None
+        if isinstance(rt.policy, DeterministicIntentPolicy):
+            selected_intent = select_observation_intent_candidate(
+                case=case,
+                diagnosis=diagnosis,
+                engine_config=rt.engine_config,
+                attempted_observations=state.get("attempted_observations", ()),
+                previous_investigations=tuple(state.get("ledger", ())),
+                max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+            )
+            selected = selected_intent.physical if selected_intent is not None else None
+        else:
+            selected = select_observation_candidate(
+                case=case,
+                diagnosis=diagnosis,
+                engine_config=rt.engine_config,
+                attempted_observations=state.get("attempted_observations", ()),
+                previous_investigations=tuple(state.get("ledger", ())),
+                max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+            )
         if selected is None:
             return {
                 "stop_reason": InvestigationStopReason.NO_RESOLVABLE_GAP,
@@ -413,17 +429,29 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                     "deterministic candidate had no executable representative gap",
                 ),
             }
-        utility = selected.utility
-        detail = (
-            f"{action.action} {action.capability or ''} {action.target or ''}: {action.rationale}; "
-            f"hypothesis={utility.hypothesis_relevance}; "
-            f"structural={utility.structural_relevance}; "
-            f"overlap={selected.overlap_class}; cost={utility.cost_tier}; "
-            f"gaps={utility.discriminating_gap_coverage}; "
-            f"dimensions={utility.dimension_coverage}; "
-            f"shared-gaps={utility.shared_gap_coverage}; "
-            f"shared-alternatives={utility.shared_alternative_coverage}"
-        )
+        if selected_intent is not None:
+            bundle_utility = selected_intent.scored_bundle.utility
+            bundle = selected_intent.scored_bundle.bundle
+            detail = (
+                f"{action.action} {action.capability or ''} {action.target or ''}: "
+                f"phase={selected_intent.phase.value}; intent={bundle.intent.value}; "
+                f"bundle-size={len(bundle.candidate_ids)}; "
+                f"blocker={bundle_utility.decision_blocker_match}; "
+                f"leading={bundle_utility.leading_hypothesis_relevance}; "
+                f"unresolved={bundle_utility.unresolved_hypothesis_relevance}; "
+                f"candidate={selected.candidate.candidate_id}"
+            )
+        else:
+            utility = selected.utility
+            detail = (
+                f"{action.action} {action.capability or ''} {action.target or ''}: "
+                f"{action.rationale}; hypothesis={utility.hypothesis_relevance}; "
+                f"structural={utility.structural_relevance}; overlap={selected.overlap_class}; "
+                f"cost={utility.cost_tier}; gaps={utility.discriminating_gap_coverage}; "
+                f"dimensions={utility.dimension_coverage}; "
+                f"shared-gaps={utility.shared_gap_coverage}; "
+                f"shared-alternatives={utility.shared_alternative_coverage}"
+            )
         return {
             "pending_action": action,
             "stop_reason": None,

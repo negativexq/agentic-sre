@@ -16,6 +16,11 @@ from packages.rca.investigation.graph import (
     investigate_diagnosis,
     resume_investigation,
 )
+from packages.rca.investigation.intents import (
+    DeterministicIntentPolicy,
+    InvestigationIntentKind,
+    InvestigationPhase,
+)
 from packages.rca.investigation.policy import (
     LLMInvestigationPolicy,
     ScriptedInvestigationPolicy,
@@ -29,6 +34,9 @@ __all__ = [
     "InvestigationBackend",
     "LLMInvestigationPolicy",
     "DeterministicObservationPolicy",
+    "DeterministicIntentPolicy",
+    "InvestigationIntentKind",
+    "InvestigationPhase",
     "SourceInvestigationBackend",
     "ScriptedInvestigationPolicy",
     "SeedPolicy",

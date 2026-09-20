@@ -107,6 +107,23 @@ def _attempted_identities(
     return identities
 
 
+def is_observation_candidate_admissible(
+    candidate: ObservationCandidate,
+    *,
+    attempted_observations: Sequence[str] = (),
+    previous_investigations: Sequence[InvestigationLedgerEntry] = (),
+) -> bool:
+    """Return whether one exact physical read has not already been attempted."""
+    attempted = _attempted_identities(
+        attempted_observations=attempted_observations,
+        previous_investigations=previous_investigations,
+    )
+    return (
+        observation_identity(candidate.capability, candidate.target, candidate.query)
+        not in attempted
+    )
+
+
 def score_observation_candidate(
     *,
     candidate: ObservationCandidate,
@@ -335,6 +352,7 @@ __all__ = [
     "ObservationUtility",
     "ScoredObservationCandidate",
     "candidate_to_action",
+    "is_observation_candidate_admissible",
     "rank_observation_candidates",
     "score_observation_candidate",
     "select_observation_candidate",

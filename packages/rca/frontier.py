@@ -36,7 +36,7 @@ _ROLE_BY_RELATION = {
 _DIMENSIONS_BY_ROLE = {
     "configuration_source": (GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING),
     "autoscaler": (GapDimension.AUTOSCALING_TARGET_STATE, GapDimension.EVENT_SEQUENCE),
-    "network_policy": (GapDimension.TOPOLOGY_RELATION, GapDimension.ENTITY_STATE),
+    "network_policy": (GapDimension.CHANGE_TIMING,),
     "fault_actor": (GapDimension.EVENT_SEQUENCE, GapDimension.FAILURE_ONSET),
     "dependency": (GapDimension.DEPENDENCY_HEALTH, GapDimension.LOG_ERROR_PATTERN),
     "workload_controller": (GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING),

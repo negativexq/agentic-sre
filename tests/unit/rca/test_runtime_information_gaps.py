@@ -3,17 +3,22 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from packages.rca.causal_roles import HypothesisCausalRoles
-from packages.rca.frontier import covered_frontier_dimensions
+from packages.rca.frontier import apply_frontier_progress, covered_frontier_dimensions
 from packages.rca.information_gap import (
     InformationGapContext,
     _capability_allows_target,
     derive_information_gaps,
 )
+from packages.rca.investigation.actions import observation_identity
 from packages.rca.mechanism_bridge import RuntimeMechanismBridges
 from packages.rca.model import (
     AuthorizedQuery,
+    Confidence,
+    Diagnosis,
     EntityRef,
+    FrontierStatus,
     GapDimension,
+    GapResolvability,
     Hypothesis,
     HypothesisEpistemicState,
     HypothesisResolutionAudit,
@@ -22,6 +27,7 @@ from packages.rca.model import (
     ResolutionReasonCode,
     ResolutionTrace,
     StructuralAlternative,
+    Symptoms,
 )
 from packages.rca.root_cause_eligibility import RootCauseEligibilities
 from packages.rca.runtime_propagation import RuntimePropagation
@@ -151,13 +157,192 @@ def test_dependency_trace_prefers_controller_over_replica_pods() -> None:
     )
 
 
+def test_autoscaler_events_cover_both_structural_dimensions() -> None:
+    hpa = _entity("HorizontalPodAutoscaler", "payment-hpa")
+    alternative = StructuralAlternative(
+        alternative_id="alternative:autoscaler",
+        actor=hpa,
+        role="autoscaler",
+        queryable_dimensions=(
+            GapDimension.AUTOSCALING_TARGET_STATE,
+            GapDimension.EVENT_SEQUENCE,
+        ),
+        observation_targets=(hpa,),
+    )
+    gaps = derive_information_gaps(
+        (),
+        ResolutionTrace(state=Resolution.RESOLVED),
+        InMemorySource(name="autoscaler-gap"),
+        structural_alternatives=(alternative,),
+        runtime_context=_context(),
+    )
+    assert {
+        (gap.dimension, query.capability, query.target)
+        for gap in gaps
+        for query in gap.authorized_queries
+    } == {
+        (GapDimension.AUTOSCALING_TARGET_STATE, "events", hpa),
+        (GapDimension.EVENT_SEQUENCE, "events", hpa),
+    }
+    assert all(
+        query.target.kind not in {"Pod", "Deployment"}
+        and query.capability not in {"traffic", "logs", "runtime_traces"}
+        for gap in gaps
+        for query in gap.authorized_queries
+    )
+
+    diagnosis = Diagnosis(
+        incident_id="autoscaler-frontier",
+        root_cause=None,
+        confidence=Confidence.UNVERIFIED,
+        resolution=Resolution.AMBIGUOUS,
+        summary="autoscaler frontier",
+        symptoms=Symptoms(
+            onset=datetime(2026, 1, 1, tzinfo=UTC),
+            last_seen=None,
+            services=(),
+            namespaces=(),
+            alert_names=(),
+        ),
+        information_gaps=gaps,
+    )
+    covered = covered_frontier_dimensions(
+        diagnosis,
+        capability="events",
+        target=hpa,
+        evidence_acquired=True,
+    )
+    assert covered == {
+        alternative.alternative_id: (
+            GapDimension.AUTOSCALING_TARGET_STATE,
+            GapDimension.EVENT_SEQUENCE,
+        )
+    }
+    updated = apply_frontier_progress(
+        (alternative,), hypotheses=(), queried_dimensions_by_alternative=covered
+    )
+    assert updated[0].status is FrontierStatus.QUERIED_NO_CAUSAL_FINDING
+
+
+def test_network_policy_has_actor_local_history_frontier_contract() -> None:
+    policy = _entity("NetworkPolicy", "deny-egress")
+    alternative = StructuralAlternative(
+        alternative_id="alternative:network-policy",
+        actor=policy,
+        role="network_policy",
+        queryable_dimensions=(GapDimension.CHANGE_TIMING,),
+        observation_targets=(policy,),
+    )
+    gaps = derive_information_gaps(
+        (),
+        ResolutionTrace(state=Resolution.RESOLVED),
+        InMemorySource(name="network-policy-gap"),
+        structural_alternatives=(alternative,),
+        runtime_context=_context(),
+    )
+    assert len(gaps) == 1
+    assert gaps[0].dimension is GapDimension.CHANGE_TIMING
+    assert [(query.capability, query.target) for query in gaps[0].authorized_queries] == [
+        ("history", policy)
+    ]
+
+    diagnosis = Diagnosis(
+        incident_id="network-policy-frontier",
+        root_cause=None,
+        confidence=Confidence.UNVERIFIED,
+        resolution=Resolution.AMBIGUOUS,
+        summary="network policy frontier",
+        symptoms=Symptoms(
+            onset=datetime(2026, 1, 1, tzinfo=UTC),
+            last_seen=None,
+            services=(),
+            namespaces=(),
+            alert_names=(),
+        ),
+        information_gaps=gaps,
+    )
+    covered = covered_frontier_dimensions(
+        diagnosis,
+        capability="history",
+        target=policy,
+        evidence_acquired=True,
+    )
+    updated = apply_frontier_progress(
+        (alternative,), hypotheses=(), queried_dimensions_by_alternative=covered
+    )
+    assert updated[0].status is FrontierStatus.QUERIED_NO_CAUSAL_FINDING
+
+
+def test_logical_history_gaps_share_one_physical_observation_identity() -> None:
+    deployment = _entity("Deployment", "payment")
+    first = AuthorizedQuery(capability="history", target=deployment)
+    second = AuthorizedQuery(capability="history", target=deployment)
+    assert observation_identity(first.capability, first.target, None) == observation_identity(
+        second.capability, second.target, None
+    )
+    assert observation_identity(first.capability, first.target, None) == (
+        "history|shop/Deployment/payment|{}"
+    )
+
+
+def test_supported_structural_roles_have_no_orphan_queryable_dimensions() -> None:
+    roles = (
+        (
+            "configuration_source",
+            _entity("ConfigMap", "payment-config"),
+            (GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING),
+        ),
+        (
+            "workload_controller",
+            _entity("Deployment", "payment"),
+            (GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING),
+        ),
+        (
+            "autoscaler",
+            _entity("HorizontalPodAutoscaler", "payment-hpa"),
+            (GapDimension.AUTOSCALING_TARGET_STATE, GapDimension.EVENT_SEQUENCE),
+        ),
+        (
+            "fault_actor",
+            _entity("PodChaos", "payment-chaos"),
+            (GapDimension.EVENT_SEQUENCE, GapDimension.FAILURE_ONSET),
+        ),
+        (
+            "dependency",
+            _entity("Service", "postgres"),
+            (GapDimension.DEPENDENCY_HEALTH, GapDimension.LOG_ERROR_PATTERN),
+        ),
+        (
+            "network_policy",
+            _entity("NetworkPolicy", "deny-egress"),
+            (GapDimension.CHANGE_TIMING,),
+        ),
+    )
+    for role, actor, dimensions in roles:
+        alternative = StructuralAlternative(
+            alternative_id=f"alternative:{role}",
+            actor=actor,
+            role=role,
+            queryable_dimensions=dimensions,
+            observation_targets=(actor,),
+        )
+        gaps = derive_information_gaps(
+            (),
+            ResolutionTrace(state=Resolution.RESOLVED),
+            InMemorySource(name=f"role-{role}"),
+            structural_alternatives=(alternative,),
+            runtime_context=_context(),
+        )
+        assert {gap.dimension for gap in gaps} == set(dimensions)
+        assert all(gap.authorized_queries for gap in gaps), role
+
+
 def test_frontier_coverage_requires_novel_evidence_and_excludes_traces() -> None:
     target = _entity("Deployment", "payment")
     query = AuthorizedQuery(capability="history", target=target, alternative_ids=("a",))
     from packages.rca.model import (
         Confidence,
         Diagnosis,
-        GapResolvability,
         InformationGap,
         Symptoms,
     )

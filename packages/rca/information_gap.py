@@ -546,6 +546,7 @@ def _actor_local_contract(
     if actor.kind in {"HorizontalPodAutoscaler", "HPA"} and dimension not in {
         GapDimension.CHANGE_TIMING,
         GapDimension.AUTOSCALING_TARGET_STATE,
+        GapDimension.EVENT_SEQUENCE,
         GapDimension.FAILURE_ONSET,
     }:
         return ()

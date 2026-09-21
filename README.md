@@ -1,133 +1,156 @@
-# Agentic SRE
+# Agentic SRE — Deterministic Root Cause Analysis for Kubernetes Incidents
 
-Deterministic-first root-cause analysis for Kubernetes incidents. Agentic SRE
-starts with the incident symptoms, reconstructs what changed, connects
-candidate causes to those symptoms, verifies the strongest explanation, and
-shows the evidence and causal path. It proposes reversible remediation; the
-control plane never modifies the cluster.
-
-The model is optional. Evidence collection, temporal boundaries, ranking,
-verification, replay, and safety constraints remain deterministic system
-behavior.
-
-Current code release: **v1.1.1 — Checkpoint-Safe Bounded Investigation Agent**. The
-deterministic RCA path remains the default; investigation is entered only when
-the available evidence leaves a concrete ambiguity or evidence gap.
-
-The v1.1.1 patch keeps runtime services out of LangGraph checkpoints and makes
-resumed no-progress detection representation-safe. See the
-[release notes](docs/releases/v1.1.1.md).
+Agentic SRE is an evidence-driven root-cause analysis engine for Kubernetes
+incidents. It performs bounded, read-only investigation over changes, events,
+logs, traces, dependencies, and topology, then rebuilds hypotheses and makes
+the final root-cause judgment deterministically. An LLM is optional; it never
+owns the diagnosis.
 
 [![CI](https://github.com/negativexq/agentic-sre/actions/workflows/checks.yml/badge.svg)](https://github.com/negativexq/agentic-sre/actions/workflows/checks.yml)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-## What it does
+### At a glance
 
-- Change-first RCA for Kubernetes alerts, rollouts, policies, faults, and dependency failures.
-- Append-only object observations, replayable Kubernetes Events, and bounded persisted Loki error observations.
-- Explicit incident observation cutoffs and deterministic resolved-incident replay.
-- Relation-aware directional causal traversal rather than generic undirected proximity.
-- Causal hypotheses group coherent actor/manifestation evidence across ownership chains without double-counting observations.
-- Deterministic confidence and verification: `VERIFIED`, `LIKELY`, or `UNVERIFIED`.
-- Separate deterministic resolution: `RESOLVED`, `AMBIGUOUS`, or `INSUFFICIENT_EVIDENCE`; confidence is not a proxy for distinguishability.
-- Causal paths visible in JSON/API output, the CLI, and the HTML report.
-- Real Kind lifecycle validation through Prometheus, Alertmanager, and the control plane.
-- Bounded LangGraph investigation that acquires allowlisted read-only evidence when deterministic resolution is ambiguous.
-- Remediation proposals only; no cluster writes or autonomous repair.
+- **84% blind exact-root agreement** — 21/25 on the frozen ITBench-Lite TEST25 holdout.
+- **0 model calls** — the measured benchmark path is fully deterministic.
+- **Bounded investigation** — six physical reads per TEST25 incident, one read at a time.
+- **Evidence-backed RCA** — observations become normalized Findings before they can change a diagnosis.
+- **Read-only by design** — the investigator cannot mutate the cluster or execute remediation.
 
-## Measured results
+## Measured root-cause performance
 
-The frozen ITBench-Lite SRE snapshot benchmark is regression evidence, not a
-claim of pristine unseen generalization. Prior exposure to parts of the test
-data is documented in [`evals/README.md`](evals/README.md).
+The current frozen architecture was evaluated on ITBench-Lite with exact
+canonical entity comparison. The blind TEST25 result is the primary public
+measurement; the development split is shown separately so development evidence
+is not confused with holdout evidence.
 
-| Run | Split | Scenarios | Macro F1 | Top-1 | Top-3 | Model calls |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| **Engine v1.0.2** | Test | 25 | **0.680** | **68%** | **80%** | **0** |
-| Engine v1.0.1 | Test | 25 | 0.680 | 68% | 80% | 0 |
-| Engine v1.0.0 | Test | 25 | 0.680 | 68% | 80% | 0 |
-| Engine v0.7.0 | Dev | 10 | 0.900 | 90% | 90% | 0 |
-| Engine v0.5.0 + LLM investigator | Test | 25 | 0.640 | 64% | 80% | 44 |
+| Evaluation | Exact root agreement | Model calls |
+| --- | ---: | ---: |
+| DEV10 development split | 10/10 | 0 |
+| **Blind TEST25 holdout** | **21/25 (84%)** | **0** |
+| **Combined 35 scenarios** | **31/35 (88.6%)** | **0** |
 
-Confidence is separate from benchmark correctness. In v1.0.2, 9/25 predictions
-were labelled `VERIFIED`, 8 of those were correct, giving 36.0% VERIFIED
-coverage and 88.9% VERIFIED accuracy; the remaining 16 were `LIKELY`. The
-official root-cause score is unchanged from v1.0.1. Scenario-38 selected the
-new normalized HPA candidate instead of a Pod candidate; the published
-ground-truth cause is not observable, so this did not change the score.
+On TEST25, every scenario used six bounded physical reads: 150 reads across
+25 incidents. The frozen run produced 2,226 new evidence references and 244
+normalized Finding emissions. The detailed [frozen benchmark report](evals/results/v1.1.2/README.md)
+contains the dataset revision, manifest hash, prediction-freeze procedure, and
+full aggregate metrics.
 
-The latest hardening validation passed 240 tests and the real Kind release
-gate. The stored [v1.0.2 result](evals/results/v1.0.2/README.md) records the
-tagged release SHA.
+## What is Agentic SRE?
 
-## Real Kubernetes validation
+Agentic SRE is a Kubernetes incident investigation and SRE root-cause
+analysis system. It starts from an alert and an observation cutoff, identifies
+candidate causal actors, explains how they can reach the affected workload, and
+tests unresolved questions with a bounded set of legal read-only observations.
 
-The canonical release gate runs a real incident lifecycle in a fresh Kind
-cluster:
+The investigator gathers evidence; it does not decide the root cause. Every
+new observation returns through the same deterministic path:
 
 ```text
-healthy payment-service
-  → baseline snapshot
-  → real bad Deployment rollout
-  → Prometheus alert
-  → Alertmanager webhook
-  → incident and persisted observations
-  → deterministic RCA: sre-demo/Deployment/payment-service VERIFIED
-  → rollback
-  → A → B → A object journal
-  → stable resolved diagnosis replay
+observation → EvidenceStore → normalization → Finding
+            → hypothesis rebuild → verification → resolution
 ```
 
-The scenario also exercises Kubernetes Event persistence. It does not claim
-that every supported fault type has a real-cluster E2E scenario.
+This separation makes an investigation auditable. A diagnosis includes the
+selected root entity, confidence, resolution state, evidence, and causal path;
+it does not rely on an opaque model answer.
 
-Run the full gate with:
+## Why Agentic SRE?
 
-```bash
-make e2e-kind
-```
+### Evidence before answers
 
-## How it works
+The engine does not ask a model to guess what caused an incident. It acquires
+bounded evidence, normalizes that evidence into typed Findings, and rebuilds
+the deterministic diagnosis.
+
+### Deterministic judgment
+
+The RCA engine owns verification, confidence, resolution, and root-cause
+selection. An optional policy can choose among already-legal observation
+actions, but it cannot create evidence, Findings, hypotheses, or a root cause.
+
+### Bounded autonomous investigation
+
+Investigation is a controlled state machine with explicit turn, tool, wall-time,
+per-gap, invalid-action, and no-progress limits. It selects one validated read
+at a time from a legal observation surface.
+
+### Causal topology
+
+The engine distinguishes structural connectivity from directional causal paths.
+Ownership, configuration use, declared dependencies, policies, fault targets,
+scaling relationships, and workload topology are interpreted as explicit
+relations rather than generic graph proximity.
+
+### Reproducibility and safety
+
+The deterministic path produces repeatable trajectories for the same snapshot
+and configuration. Kubernetes access is read-only, remediation is proposed
+but never executed, and `NO_DATA` is neutral rather than evidence for a theory.
+
+## How does Agentic SRE find a root cause?
 
 ```mermaid
-flowchart LR
-  K8s[Kubernetes API<br/>read-only] --> O[Persisted observations]
-  Loki[Loki] --> O
-  AM[Prometheus / Alertmanager] --> CP[Control plane]
-  CP --> O
-  O --> E[Deterministic RCA engine]
-  E --> T[Directional causal topology]
-  T --> R[Ranking + verification]
-  R --> X[Resolution<br/>distinguish hypotheses]
-  X --> D[Diagnosis<br/>evidence + causal path + proposal]
-  X -. AMBIGUOUS / gap .-> L[Bounded LangGraph investigator]
-  L -->|read-only observation| O
+flowchart TD
+    A[Alert or incident] --> B[Initial observation view]
+    B --> J1[Deterministic RCA]
+    J1 --> H[Hypotheses and information gaps]
+
+    subgraph I[Investigator: bounded evidence acquisition]
+        H --> P[Select one legal read]
+        P --> V[Validate scope and budget]
+        V --> R[Execute one read-only observation]
+    end
+
+    R --> E[EvidenceStore]
+    E --> N[Normalize observations into Findings]
+    N --> J2[Rebuild hypotheses]
+    J2 --> Q[Verify and resolve deterministically]
+    Q -->|remaining gap| P
+    Q --> O[Root cause, confidence, causal path, proposal]
 ```
 
-1. The control plane creates and freezes incident episodes from Alertmanager events.
-2. Object, Event, and bounded log observations are normalized with explicit observation times.
-3. The engine extracts deterministic signals from changes, failures, policies, dependencies, and Events.
-4. Directional topology links a candidate cause to the alerting symptom.
-5. Candidate evidence is grouped into deterministic causal hypotheses; verification assigns confidence, while resolution checks whether competing hypotheses are actually distinguishable.
-6. The optional investigator may review bounded candidates with read-only tools. It is not authoritative.
+The runtime is orchestrated as a bounded LangGraph state machine:
 
-More detail is in [`docs/architecture.md`](docs/architecture.md) and
-[ADR-003](docs/adr/ADR-003-change-first-rca-product.md).
-
-For a stored prediction run, grouping measurements can be summarized without
-loading benchmark ground truth:
-
-```bash
-agentic-sre hypothesis-report --run .local/runs/dev-<run-id> --json
+```text
+assess → select action → validate → execute one read
+       → check novelty → normalize → rebuild hypotheses
+       → check progress → repeat or finalize
 ```
+
+LangGraph coordinates this state machine; it does not determine the root
+cause. The same RCA and normalization code is used for initial observations and
+new investigation evidence.
+
+## What it investigates
+
+Supported evidence depends on the configured observation sources, but the
+engine understands these Kubernetes incident classes and signals:
+
+- Deployment, ReplicaSet, Pod, ConfigMap, image, environment, and scale changes.
+- Kubernetes Events, including warning events, failed scheduling, quota failures,
+  container failures, and HPA metric failures.
+- Dependency errors from bounded log observations and declared workload calls.
+- Runtime traces and captured Loki observations when those sources are present.
+- Network policy changes, resource pressure, quota/LimitRange behavior, and
+  traffic changes when the corresponding observation data is available.
+- Chaos Mesh faults and their targeted workloads.
+- Ownership, selectors, configuration references, service dependencies, HPA
+  relationships, and other topology needed to build a causal path.
+
+Captured logs are replayable evidence, not an unbounded historical log archive.
+The engine reports when a signal is missing instead of treating missing data as
+proof against a hypothesis.
 
 ## Example diagnosis
 
-The offline demo produces a diagnosis like:
+The offline demo produces a diagnosis in this form:
 
 ```text
 Root cause   shop/Deployment/payment
 Confidence   VERIFIED
+Resolution   RESOLVED
 
 Causal path
   Deployment/payment --serves--> Service/payment
@@ -135,164 +158,182 @@ Causal path
 
 Evidence
   Deployment/payment changed FAULT_DELAY_MS from 0 to 2500
-  the diagnostic alerts began after the rollout
+  diagnostic alerts began after the rollout
 
 Proposed remediation
   kubectl rollout undo deployment/payment -n shop
-  [not executed]
+  [proposed only; not executed]
 ```
 
 ## Quick start
 
-Offline:
+For the deterministic offline demo:
 
 ```bash
 make install
 make demo
 ```
 
-The demo writes `.local/demo/diagnosis.html`. For a live local cluster,
-install Docker, Kind, and kubectl, then run:
+The report is written to `.local/demo/diagnosis.html`. The CLI also supports a
+JSON diagnosis with `agentic-sre demo --json`.
+
+For a local live Kubernetes validation with Kind, Docker, and kubectl:
 
 ```bash
 make cluster-up
 make deploy
-make load                  # use another terminal; generates steady traffic
+make load                  # use another terminal to generate steady traffic
 make inject-bad-rollout
 make ui                    # http://localhost:8080
 make recover
 ```
 
-`make rbac-check` verifies that the control-plane service account can observe
-the cluster but cannot read Secrets or write workloads.
+Use `make rbac-check` to verify that the control-plane service account can
+observe the cluster without reading Secrets or writing workloads. The complete
+real-cluster lifecycle gate is `make e2e-kind`.
 
-## Causal reasoning
+## Architecture and trust boundaries
 
-Structural connectivity answers “what is connected?”; causal traversal asks
-“could a change or failure here propagate to that symptom?”. The engine uses
-explicit direction for relationships such as:
+Agentic SRE has four practical layers:
+
+1. **RCA engine** — deterministic signals, causal hypotheses, verification,
+   confidence, resolution, and remediation proposals.
+2. **Investigation runtime** — bounded evidence acquisition through validated,
+   read-only observation tools.
+3. **Observation sources** — Kubernetes object versions and Events, Prometheus
+   and Alertmanager context, Loki logs, traces, and configured snapshot data.
+4. **Control plane** — incident lifecycle, persistence, API, CLI, and HTML/UI
+   reporting.
+
+The trust boundary is explicit:
+
+- Kubernetes observation is read-only; Secrets are deliberately not read.
+- There is no arbitrary shell execution or autonomous cluster write capability.
+- Remediation text is proposed for an operator and is never executed.
+- Only in-scope, allowlisted observation capabilities can run.
+- Invalid actions, duplicate reads, tool errors, `NO_DATA`, and exhausted
+  budgets terminate safely with the current deterministic diagnosis.
+- A diagnosis changes only after typed evidence is normalized into Findings and
+  the hypotheses are rebuilt.
+
+The built-in deployment is currently a single control-plane process/replica.
+Read endpoints are unauthenticated by default and can expose operationally
+sensitive incident and log-derived data, so deployment authentication and
+network controls remain an operator responsibility.
+
+## Real Kubernetes validation
+
+The Kind lifecycle validation exercises the product against a real cluster:
 
 ```text
-Deployment → ReplicaSet → Pod
-ConfigMap → consuming workload
-backend dependency → caller
-NetworkPolicy → selected Pod
-Chaos fault → target
-HPA → controlled workload
+healthy workload
+  → injected Deployment rollout failure
+  → Prometheus alert
+  → Alertmanager incident
+  → persisted observations and RCA
+  → proposed rollback
+  → A → B → A object journal
+  → stable resolved diagnosis replay
 ```
 
-Unknown relations are structural-only until explicitly allowlisted. Shared
-ConfigMaps and broad NetworkPolicies do not causally bridge sibling workloads.
-Causal paths retain structured entities and relation labels and are rendered
-in the CLI and HTML report. This is relation-aware causal traversal, not formal
-causal inference.
+This validates the incident path, observation persistence, replay, and safety
+boundary. It is complementary to the ITBench-Lite benchmark and is not a claim
+that every supported fault class has a live-cluster end-to-end scenario.
 
-Ranking, verification, resolution, and confidence are separate axes. A stable
-canonical order keeps serialization deterministic, but it is never treated as
-causal evidence. If two onset-aligned hypotheses have equivalent evidence
-structure, the diagnosis exposes `AMBIGUOUS` and the leading hypotheses rather
-than presenting the first name as uniquely established. A diagnosis with no
-sufficiently supported causal hypothesis produces `INSUFFICIENT_EVIDENCE`.
-Resolution traces record the considered hypotheses, eliminated predicates,
-evidence-backed discriminators, and any structural dominance relation. For an
-ambiguous diagnosis, deterministic `InformationGap` records describe the
-missing fact, the hypotheses it could distinguish, and the bounded read-only
-capabilities that could observe it; no capability is executed by this layer.
+## Benchmark methodology and reproducibility
 
-## Evidence and replay
+The benchmark uses the pinned ITBench-Lite revision
+`d0916b08ba421ce5e672e9ad68aa947d938dfef0` and manifest SHA256
+`08a5e56dbfa604c59eed8282683d7b3ec224cd7db9303f90618dafd436423eac`.
 
-- **Objects:** append-only versions preserve `CREATED`, `UPDATED`, and `DELETED` lifecycle evidence, including A → B → A rollback history. A partial Kubernetes listing cannot fabricate deletion tombstones.
-- **Events:** observed Kubernetes Event versions remain in the journal; replay uses the latest visible logical Event state at the incident cutoff, so coalesced versions are not double-counted.
-- **Logs:** bounded error observations captured from Loki are persisted for replay. This is captured-observation replay, not a complete historical log archive.
-- **Cutoffs:** open diagnosis uses a coherent snapshot boundary; resolved diagnosis freezes at incident resolution. Evidence observed later cannot leak backward into a resolved incident.
+DEV10 is the development split used while building the frozen architecture.
+TEST25 was held out until that architecture was frozen. For TEST25, all 25
+bounded predictions were persisted and hashed before any FULL_SOURCE diagnosis
+was opened. Grading then compared exact canonical entities by scenario ID.
+The run used the deterministic policy and zero model calls.
 
-Alert fingerprints identify an alert shape, while `(fingerprint, starts_at)`
-identifies one occurrence. A firing alert after resolution creates a new
-incident episode; concurrent duplicate delivery of one occurrence is
-database-idempotent.
+**Exact root agreement** means that the bounded prediction's canonical root
+entity is exactly equal to the canonical root entity from the separate
+FULL_SOURCE deterministic diagnosis. A same-workload or nearby entity does not
+count as a match.
 
-## Bounded Investigation Agent
+The [public benchmark report](evals/results/v1.1.2/README.md) records the
+commit, dataset identity, prediction artifact hash, frozen configuration, and
+aggregate results. Historical runs remain available under
+[`evals/results/`](evals/results/) for reproducibility; they are not the main
+product claim.
 
-When deterministic RCA returns `AMBIGUOUS` (or has a concrete resolvable gap),
-the optional investigator runs a bounded LangGraph state machine. The model may
-select one listed gap, capability, and in-scope target; a deterministic policy
-gate validates the request before a read-only semantic tool runs. Tool output is
-typed, normalized through the same deterministic signal code as the initial RCA,
-and then hypotheses are rebuilt and re-verified.
+## FAQ
 
-The model cannot create findings, set confidence or resolution, choose a root
-cause, or mutate the cluster. `NO_DATA`, invalid actions, repeated observations,
-tool failures, and exhausted budgets terminate safely with the current
-`AMBIGUOUS` or `INSUFFICIENT_EVIDENCE` result. The default remains deterministic
-and makes no model calls. Try the offline path with a scripted action file:
+### What is Agentic SRE?
 
-```bash
-agentic-sre investigate Scenario-1 --actions actions.json
-```
+Agentic SRE is a Kubernetes root-cause analysis engine for automated incident
+investigation. It combines deterministic causal reasoning with bounded,
+read-only evidence acquisition and produces an auditable diagnosis.
 
-The optional `--llm --authorize-live-model` path uses the existing provider-
-neutral client and strict JSON action schema; it is not required for CI or the
-Kind release gate.
+### How does Agentic SRE perform root-cause analysis?
 
-Information gaps are classified as `RESOLVABLE`, `ALREADY_OBSERVED`, or
-`UNRESOLVABLE_WITH_CURRENT_TOOLS`; already-known dimensions are not sent to the
-policy as investigation work. The current DEV diagnostic contains 19 gaps:
-13 resolvable, 6 already observed, and 0 unresolvable. These are operational
-diagnostics, not benchmark claims.
+It reconstructs changes and symptoms at an incident cutoff, forms causal
+hypotheses from typed Findings, identifies information gaps, and performs legal
+bounded reads when evidence is insufficient. Each observation is normalized and
+the hypotheses are rebuilt before deterministic verification and resolution.
 
-The release-hardening path also rejects invalid actions before tool lookup,
-rejects out-of-scope targets, compares progress with the previous investigation
-iteration, and includes a production-path test from a real observation source
-through normalization, default case rebuilding, and deterministic resolution.
+### Does Agentic SRE require an LLM?
 
-## Optional LLM investigator
+No. The default and measured benchmark path is deterministic and used zero
+model calls. An optional LLM policy can choose among bounded semantic
+observation choices, but the model cannot create evidence or own the final
+root-cause judgment.
 
-The LLM investigator is off by default and bounded by a call budget. It reviews
-deterministically generated candidates through read-only tools; it cannot
-invent candidates, create evidence, or assign final confidence. The
-deterministic engine remains the default and source of truth.
+### What telemetry can Agentic SRE investigate?
 
-The measured v0.5.0 candidate-review LLM run did not improve the deterministic
-engine on ITBench-Lite. The current bounded investigator is therefore optional
-and replaceable, and is not used by the published deterministic benchmark or the
-Kind release gate.
+It can use Kubernetes object history and Events, Alertmanager incident context,
+captured Loki logs, runtime traces, Prometheus-derived signals, and configured
+snapshot observations. Actual coverage depends on which sources were captured;
+the system does not pretend that an unavailable query surface contains data.
 
-## Safety and trust boundaries
+### Can Agentic SRE modify my Kubernetes cluster?
 
-- Kubernetes access is read-only; Secrets are deliberately not read.
-- Remediation is proposal text and is never executed by the control plane.
-- Write API endpoints can use the shared `SRE_API_TOKEN` bearer token.
-- Built-in read endpoints are unauthenticated and may expose operationally sensitive incident, evidence, topology, and log-derived data.
-- There is no per-user identity, rate limiting, or built-in read authentication.
-- The supported writer model is one control-plane process / one replica; the journal lock is not multi-replica coordination.
+No autonomous cluster writes are available. Investigation is read-only and
+remediation is returned as a proposal for an operator to review and execute.
 
-GitHub Actions runs `check`, `images`, and `kind-e2e` on pushes and pull requests.
+### How accurate is Agentic SRE?
 
-## Reproducibility and benchmark methodology
+On the frozen blind ITBench-Lite TEST25 evaluation, it achieved **21/25 (84%)
+exact FULL_SOURCE root agreement** with zero model calls. This is a measured
+25-scenario benchmark result, not a universal accuracy guarantee; VERIFIED
+predictions were 9/9 correct.
 
-The tested Python dependency graph is captured in [`uv.lock`](uv.lock), and CI
-and Docker builds use the locked environment. The ITBench-Lite setup uses a
-pinned snapshot revision. Frozen test prediction requires a clean tagged
-commit and never reads ground truth; prediction files are sealed before
-grading. `seal.json` protects the prediction manifest and prediction files;
-`report-seal.json` separately protects derived grading reports.
+### What makes it different from an AI SRE agent?
 
-```bash
-make itbench-setup     # downloads the pinned ITBench-Lite snapshots
-make itbench-index
-make eval-dev
-make eval-test         # release-only: clean tagged commit
-```
+The investigator and the judge are separate. A bounded policy can select a
+legal read, while deterministic normalization, hypothesis rebuilding,
+verification, and root-cause resolution remain authoritative. This makes the
+evidence path inspectable and keeps an LLM from turning a plausible answer into
+an unverified diagnosis.
 
-To re-grade the stored v1.0.2 run:
+### Is Agentic SRE production-ready?
 
-```bash
-agentic-sre grade --out evals/results/v1.0.2/test
-```
+It is suitable for controlled evaluation and read-only incident-assistance
+workflows, with a real Kind lifecycle gate and a frozen blind benchmark. It is
+not a universal replacement for an experienced SRE: query coverage,
+authentication, deployment high availability, bounded budgets, and captured
+telemetry impose real limits.
 
-Do not repeatedly run the frozen test while tuning. The immutable `v1.0.1`
-tag remains at its release-code commit. The `v1.0.2` result is similarly
-sealed against the `v1.0.2` release tag.
+## Current limitations
+
+- Bounded query windows and captured telemetry can miss older or unavailable
+  decisive evidence.
+- Captured Loki data is not a complete historical log archive.
+- Investigation has fixed turn, read, wall-time, and per-gap budgets.
+- Some diagnoses depend on the configured read APIs and their authentication;
+  built-in read endpoints are unauthenticated by default.
+- The supported deployment is single-process/single-replica rather than HA.
+- The system is evidence-driven RCA, not formal causal inference.
+- There is no autonomous remediation, arbitrary shell execution, or cluster write
+  tool.
+- Current generalization evidence is the frozen 25-scenario blind TEST25 run;
+  larger and more diverse production datasets are still needed.
 
 ## Repository structure
 
@@ -301,19 +342,16 @@ packages/rca          deterministic RCA engine, topology, ranking, reports
 packages/storage      incident, observation, and journal persistence
 apps/control_plane    API, Alertmanager webhook, UI, and live diagnosis
 apps/cli              agentic-sre CLI and benchmark entrypoints
-packages/evals        ITBench integration and grading
-evals                 splits, methods, and sealed results
+packages/evals        ITBench-Lite integration and grading
+evals                 benchmark splits, methodology, and public results
 infra                 Docker, Kind, Kubernetes, and observability manifests
 tests                 unit, integration, and release regression coverage
 ```
 
-## Current limitations
+## Documentation
 
-- RCA quality depends on evidence that is observable and captured by the configured sources.
-- Bounded captured Loki observations are not a complete historical log archive.
-- The built-in deployment is single-process/single-replica and is not production HA.
-- Read endpoints are unauthenticated by default; the shared bearer token has no per-user identity or RBAC.
-- There is no autonomous remediation, arbitrary write tool, or formal causal-inference guarantee.
-- The deterministic benchmark is frozen regression evidence with prior-exposure caveats; generalization to unseen incidents is not established.
-- The value of the optional LLM investigator on harder, messier live incidents remains unproven.
-- The bounded investigator is a read-only evidence-acquisition policy, not an autonomous SRE loop; the model never determines the final root cause.
+- [Architecture details](docs/architecture.md)
+- [Evaluation methodology](evals/README.md)
+- [Frozen benchmark report](evals/results/v1.1.2/README.md)
+- [Architecture decision records](docs/adr/)
+- [Release documentation](docs/releases/)

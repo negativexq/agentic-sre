@@ -1,0 +1,36 @@
+{
+  "commit": "8ccce160dda3848b2f4b03ea51ef7663ee14f0b7",
+  "benchmark": "ITBench-Lite",
+  "benchmark_revision": "d0916b08ba421ce5e672e9ad68aa947d938dfef0",
+  "manifest_sha256": "08a5e56dbfa604c59eed8282683d7b3ec224cd7db9303f90618dafd436423eac",
+  "architecture_frozen_before_test25": true,
+  "ground_truth_read_during_prediction": false,
+  "prediction_artifact_sha256": "879cab5f951bacae783160bd214f4962ce6782be38f74cc0870b9ffe67be9819",
+  "policy": "DeterministicIntentPolicy",
+  "model_calls": 0,
+  "results": {
+    "dev10": {"scenarios": 10, "exact_full_source_root_agreement": 10},
+    "test25": {
+      "scenarios": 25,
+      "exact_full_source_root_agreement": 21,
+      "exact_full_source_root_agreement_percent": 84.0,
+      "tool_calls": 150,
+      "reads_per_incident": 6,
+      "new_refs": 2226,
+      "finding_emissions": 244,
+      "decision_relevant_calls": 37,
+      "no_data_calls": 95,
+      "tool_errors": 0,
+      "confidence": {
+        "VERIFIED": {"correct": 9, "total": 9},
+        "LIKELY": {"correct": 11, "total": 12},
+        "UNVERIFIED": {"correct": 1, "total": 4}
+      }
+    },
+    "all35": {
+      "scenarios": 35,
+      "exact_full_source_root_agreement": 31,
+      "exact_full_source_root_agreement_percent": 88.6
+    }
+  }
+}

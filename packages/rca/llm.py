@@ -14,6 +14,8 @@ LIVE_ENABLED_ENV = "SRE_LLM_ENABLED"
 MODEL_ENV = "SRE_LLM_MODEL"
 MAX_CALLS_ENV = "SRE_LLM_MAX_CALLS"
 DEFAULT_MODEL = "gpt-5.6-luna"
+REQUEST_TIMEOUT_SECONDS = 20.0
+REQUEST_MAX_RETRIES = 0
 
 
 class LLMError(RuntimeError):
@@ -174,7 +176,10 @@ class OpenAIClient:
         if self._client is None:
             from openai import OpenAI
 
-            self._client = OpenAI()
+            self._client = OpenAI(
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                max_retries=REQUEST_MAX_RETRIES,
+            )
         return self._client
 
     def complete_json(
@@ -272,6 +277,8 @@ __all__ = [
     "LLMError",
     "LLMOutputError",
     "OpenAIClient",
+    "REQUEST_MAX_RETRIES",
+    "REQUEST_TIMEOUT_SECONDS",
     "ProviderErrorDetails",
     "ProviderRequestError",
     "ProviderTransportError",

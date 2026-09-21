@@ -12,7 +12,7 @@ owns the diagnosis.
 
 ### At a glance
 
-- **[84% blind exact-root agreement](evals/results/v1.1.2/README.md)** — 21/25 on the frozen ITBench-Lite TEST25 holdout.
+- **[84% exact root-cause accuracy](evals/results/v1.1.2/README.md)** — 26/31 against ITBench-Lite ground truth, over every scenario whose published label is matchable.
 - **0 model calls** — the measured benchmark path is fully deterministic.
 - **Bounded investigation** — the frozen TEST25 run used six validated physical reads per incident, one read at a time.
 - **Evidence-backed RCA** — observations become normalized Findings before they can change a diagnosis.
@@ -20,16 +20,29 @@ owns the diagnosis.
 
 ## Measured root-cause performance
 
-The current frozen architecture was evaluated on ITBench-Lite with exact
-canonical entity comparison. The blind TEST25 result is the primary public
-measurement; the development split is shown separately so development evidence
-is not confused with holdout evidence.
+The current frozen architecture was evaluated against ITBench-Lite ground
+truth with exact canonical entity comparison. The blind TEST25 result is the
+primary public measurement; the development split is shown separately so
+development evidence is not confused with holdout evidence.
 
-| Evaluation | Exact root agreement | Model calls |
-| --- | ---: | ---: |
-| DEV10 development split | 10/10 | 0 |
-| **Blind TEST25 holdout** | **[21/25 (84%)](evals/results/v1.1.2/README.md)** | **0** |
-| **Combined 35 scenarios** | **31/35 (88.6%)** | **0** |
+Four of the 35 published labels cannot be matched by any prediction: their
+entity filters match nothing in the scenario's own snapshot (Scenario-29, 23,
+38, 105; Scenario-38's filter is not even a valid expression). Those four are
+excluded from the accuracy denominator and reported separately.
+
+| Evaluation | Exact root-cause accuracy | Raw | Model calls |
+| --- | ---: | ---: | ---: |
+| DEV10 development split | 9/9 (100%) | 9/10 | 0 |
+| **Blind TEST25 holdout** | **[17/22 (77.3%)](evals/results/v1.1.2/README.md)** | 17/25 | **0** |
+| **Combined 35 scenarios** | **26/31 (83.9%)** | 26/35 | **0** |
+
+Confidence against ground truth on the 31 scoreable scenarios: `VERIFIED`
+predictions were 13/16 correct and `LIKELY` predictions 13/19.
+
+These accuracy figures are measured on the deterministic full-source path. The
+bounded investigation path is measured separately, by how often it reaches the
+same answer as the full-source path (21/25 on TEST25); its own ground-truth
+accuracy has not been established.
 
 On the frozen TEST25 run, every scenario used six validated physical reads:
 150 reads across 25 incidents. The run produced 2,226 new evidence references and 244
@@ -252,10 +265,12 @@ bounded predictions were persisted and hashed before any FULL_SOURCE diagnosis
 was opened. Grading then compared exact canonical entities by scenario ID.
 The run used the deterministic policy and zero model calls.
 
-**Exact root agreement** means that the bounded prediction's canonical root
-entity is exactly equal to the canonical root entity from the separate
-FULL_SOURCE deterministic diagnosis. A same-workload or nearby entity does not
-count as a match.
+**Exact root-cause accuracy** means that the predicted canonical root entity
+matches the scenario's published ITBench-Lite ground-truth entity. A
+same-workload or nearby entity does not count as a match. Separately, the
+bounded prediction agreed with the FULL_SOURCE deterministic diagnosis on
+21/25 TEST25 scenarios; that agreement measures information loss under a
+bounded read budget, not correctness.
 
 The [public benchmark report](evals/results/v1.1.2/README.md) records the
 commit, dataset identity, prediction artifact hash, frozen configuration, and
@@ -299,10 +314,12 @@ remediation is returned as a proposal for an operator to review and execute.
 
 ### How accurate is Agentic SRE?
 
-On the frozen blind ITBench-Lite TEST25 evaluation, it achieved **21/25 (84%)
-exact FULL_SOURCE root agreement** with zero model calls. This is a measured
-25-scenario benchmark result, not a universal accuracy guarantee; VERIFIED
-predictions were 9/9 correct.
+Against ITBench-Lite ground truth it reached **17/22 (77.3%)** on the blind
+TEST25 holdout and **26/31 (83.9%)** across all 35 scenarios, with zero model
+calls. Denominators exclude four scenarios whose published labels match
+nothing in their own snapshots. This is a measured 35-scenario benchmark
+result, not a universal accuracy guarantee; `VERIFIED` predictions were 13/16
+correct against ground truth.
 
 ### What makes it different from an AI SRE agent?
 

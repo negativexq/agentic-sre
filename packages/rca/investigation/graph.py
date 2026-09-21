@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, fields, is_dataclass
 from datetime import UTC, datetime
 from enum import Enum
@@ -25,6 +25,7 @@ from packages.rca.investigation.actions import (
     observation_identity,
     validate_action,
 )
+from packages.rca.investigation.candidates import build_observation_candidates
 from packages.rca.investigation.environment import (
     InvestigationBackend,
     initial_view,
@@ -49,6 +50,7 @@ from packages.rca.investigation.normalizers import (
 from packages.rca.investigation.selection import (
     DeterministicObservationPolicy,
     candidate_to_action,
+    exploration_coverage_atoms,
     select_observation_candidate,
 )
 from packages.rca.investigation.state import (
@@ -272,6 +274,24 @@ def _gap_fingerprint(diagnosis: Diagnosis) -> tuple[tuple[str, ...], ...]:
     )
 
 
+def record_successful_exploration(
+    *,
+    successful_observations: Sequence[str],
+    covered_atoms: Sequence[tuple[str, str]],
+    identity: str,
+    error: str | None,
+    candidate_atoms: Sequence[tuple[str, str]] = (),
+) -> tuple[tuple[str, ...], tuple[tuple[str, str], ...], bool]:
+    """Record one novel successful exact read without touching RCA state."""
+    successful = tuple(successful_observations)
+    covered: set[tuple[str, str]] = {(atom[0], atom[1]) for atom in covered_atoms}
+    if error is not None or identity in successful:
+        return successful, tuple(sorted(covered)), False
+    successful = (*successful, identity)
+    covered.update(candidate_atoms)
+    return successful, tuple(sorted(covered)), True
+
+
 def _evidence_fingerprint(case: Case) -> tuple[str, ...]:
     """Stable identity of all effective findings in the current case."""
     return tuple(
@@ -390,6 +410,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                 attempted_observations=state.get("attempted_observations", ()),
                 previous_investigations=tuple(state.get("ledger", ())),
                 max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+                exploration_covered_atoms=state.get("exploration_covered_atoms", ()),
             )
             selected = selected_intent.physical if selected_intent is not None else None
         else:
@@ -432,6 +453,9 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         if selected_intent is not None:
             bundle_utility = selected_intent.scored_bundle.utility
             bundle = selected_intent.scored_bundle.bundle
+            covered_atoms = {
+                (atom[0], atom[1]) for atom in state.get("exploration_covered_atoms", ())
+            }
             detail = (
                 f"{action.action} {action.capability or ''} {action.target or ''}: "
                 f"phase={selected_intent.phase.value}; intent={bundle.intent.value}; "
@@ -439,6 +463,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                 f"blocker={bundle_utility.decision_blocker_match}; "
                 f"leading={bundle_utility.leading_hypothesis_relevance}; "
                 f"unresolved={bundle_utility.unresolved_hypothesis_relevance}; "
+                f"marginal-coverage={len(exploration_coverage_atoms(selected.candidate, diagnosis) - covered_atoms)}; "
                 f"candidate={selected.candidate.candidate_id}"
             )
         else:
@@ -711,7 +736,59 @@ def _check_novelty(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
 def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     observation = state.get("pending_observation")
     if observation is None:
-        return {"last_new_evidence_count": 0}
+        return {"last_new_evidence_count": 0, "last_exploration_progress": False}
+    successful = tuple(state.get("successful_exploration_observations", ()))
+    covered_atoms: tuple[tuple[str, str], ...] = tuple(
+        (atom[0], atom[1]) for atom in state.get("exploration_covered_atoms", ())
+    )
+    candidate_atoms: tuple[tuple[str, str], ...] = ()
+    action = state.get("pending_action")
+    if (
+        isinstance(rt.policy, DeterministicIntentPolicy)
+        and observation.error is None
+        and action is not None
+        and action.capability is not None
+    ):
+        identity = observation_identity(action.capability, observation.target, action.query)
+        if identity not in successful:
+            newly_acquired = set(state.get("pending_new_evidence_refs", ()))
+            pre_read_refs = tuple(
+                ref for ref in state.get("acquired_evidence_refs", ()) if ref not in newly_acquired
+            )
+            current_case = rt.case_for(pre_read_refs, state["investigation_findings"])
+            candidate = next(
+                (
+                    item
+                    for item in build_observation_candidates(
+                        case=current_case,
+                        diagnosis=state["current_diagnosis"],
+                        engine_config=rt.engine_config,
+                    )
+                    if observation_identity(item.capability, item.target, item.query) == identity
+                ),
+                None,
+            )
+            if candidate is not None:
+                candidate_atoms = tuple(
+                    exploration_coverage_atoms(candidate, state["current_diagnosis"])
+                )
+    successful, covered_atoms, exploration_progress = record_successful_exploration(
+        successful_observations=successful,
+        covered_atoms=covered_atoms,
+        identity=(
+            observation_identity(action.capability, observation.target, action.query)
+            if action is not None and action.capability is not None
+            else ""
+        ),
+        error=(
+            observation.error
+            if isinstance(rt.policy, DeterministicIntentPolicy)
+            and action is not None
+            and action.capability is not None
+            else "disabled"
+        ),
+        candidate_atoms=candidate_atoms,
+    )
     gap = next(
         (
             gap
@@ -724,6 +801,9 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         return {
             "observations": (*state["observations"], observation),
             "last_new_evidence_count": 0,
+            "successful_exploration_observations": tuple(successful),
+            "exploration_covered_atoms": tuple(sorted(covered_atoms)),
+            "last_exploration_progress": exploration_progress,
             "trace_steps": _with_step(state, "normalize", "observation gap no longer exists"),
         }
     native_records = records_from_observation(observation)
@@ -770,7 +850,6 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         f"{finding.kind.value}:{finding.entity.canonical}:{','.join(finding.evidence_ids)}"
         for finding in fresh_findings
     )
-    action = state.get("pending_action")
     queried_dimensions = {
         alternative_id: {GapDimension(value) for value in dimensions}
         for alternative_id, dimensions in state.get("frontier_queried_dimensions", ())
@@ -807,6 +886,9 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         "observations": observations,
         "ledger": (*state.get("ledger", ()), ledger_entry),
         "pending_findings": fresh_findings,
+        "successful_exploration_observations": tuple(successful),
+        "exploration_covered_atoms": tuple(sorted(covered_atoms)),
+        "last_exploration_progress": exploration_progress,
         "frontier_queried_dimensions": tuple(
             (alternative_id, tuple(sorted(dimensions, key=lambda item: item.value)))
             for alternative_id, dimensions in sorted(queried_dimensions.items())
@@ -931,7 +1013,9 @@ def _check_progress(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         and current_world_model_fingerprint == state["previous_world_model_fingerprint"]
         and state.get("last_new_raw_evidence_count", 0) == 0
     )
-    if unchanged:
+    gap_changed = current_gap_fingerprint != _frozen(state["previous_gap_fingerprint"])
+    exploration_progress = state.get("last_exploration_progress", False)
+    if unchanged and not exploration_progress and not gap_changed:
         no_progress += 1
     else:
         no_progress = 0
@@ -967,6 +1051,7 @@ def _check_progress(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             state,
             "check_progress",
             f"new evidence={state['last_new_evidence_count']}; unchanged={unchanged}; "
+            f"gap-changed={gap_changed}; exploration={exploration_progress}; "
             f"no-progress={no_progress}",
         ),
     }
@@ -1161,6 +1246,9 @@ def build_investigation_state(
         "acquired_evidence_refs": (),
         "attempted_actions": (),
         "attempted_observations": (),
+        "successful_exploration_observations": (),
+        "exploration_covered_atoms": (),
+        "last_exploration_progress": False,
         "attempted_gap_ids": (),
         "pending_action": None,
         "pending_observation": None,
@@ -1204,6 +1292,7 @@ __all__ = [
     "build_investigation_graph",
     "build_investigation_state",
     "investigate_diagnosis",
+    "record_successful_exploration",
     "resume_investigation",
     "world_model_fingerprint",
 ]

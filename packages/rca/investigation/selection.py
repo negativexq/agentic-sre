@@ -56,6 +56,39 @@ class ScoredObservationCandidate:
     overlap_class: str
 
 
+def observation_relevance_key(scored: ScoredObservationCandidate) -> tuple[int, ...]:
+    """Return A6.2's relevance fields without its semantic-free tie-break."""
+    utility = scored.utility
+    return (
+        utility.hypothesis_relevance,
+        utility.structural_relevance,
+        utility.discriminating_gap_coverage,
+        utility.dimension_coverage,
+        utility.overlap_preference,
+        utility.shared_gap_coverage,
+        utility.shared_alternative_coverage,
+        utility.cost_tier,
+    )
+
+
+def exploration_coverage_atoms(
+    candidate: ObservationCandidate,
+    diagnosis: Diagnosis,
+) -> frozenset[tuple[str, str]]:
+    """Return visible structural atoms covered by one exact physical read."""
+    gaps = {
+        gap.gap_id: gap
+        for gap in diagnosis.information_gaps
+        if gap.resolvability is GapResolvability.RESOLVABLE
+    }
+    return frozenset(
+        (alternative_id, gaps[gap_id].dimension.value)
+        for gap_id in candidate.gap_ids
+        if gap_id in gaps
+        for alternative_id in gaps[gap_id].alternative_ids
+    )
+
+
 def _unresolved_hypothesis_ids(diagnosis: Diagnosis) -> tuple[set[str], set[str]]:
     trace = diagnosis.resolution_trace
     if trace is None:
@@ -352,7 +385,9 @@ __all__ = [
     "ObservationUtility",
     "ScoredObservationCandidate",
     "candidate_to_action",
+    "exploration_coverage_atoms",
     "is_observation_candidate_admissible",
+    "observation_relevance_key",
     "rank_observation_candidates",
     "score_observation_candidate",
     "select_observation_candidate",

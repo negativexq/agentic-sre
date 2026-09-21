@@ -19,7 +19,9 @@ from packages.rca.investigation.candidates import (
 from packages.rca.investigation.selection import (
     ScoredObservationCandidate,
     candidate_to_action,
+    exploration_coverage_atoms,
     is_observation_candidate_admissible,
+    observation_relevance_key,
     rank_observation_candidates,
 )
 from packages.rca.model import (
@@ -499,6 +501,49 @@ def select_observation_bundle(
     return ranked[0] if ranked else None
 
 
+def select_intent_physical_candidate(
+    *,
+    candidates: Sequence[ObservationCandidate],
+    diagnosis: Diagnosis,
+    attempted_observations: Sequence[str] = (),
+    previous_investigations: Sequence[InvestigationLedgerEntry] = (),
+    max_tool_calls_per_gap: int | None = None,
+    exploration_covered_atoms: Sequence[tuple[str, str]] = (),
+) -> ScoredObservationCandidate | None:
+    """Select one physical read after A6.2 ranking and exploration tie-breaking."""
+    ranked = rank_observation_candidates(
+        candidates=candidates,
+        diagnosis=diagnosis,
+        attempted_observations=attempted_observations,
+        previous_investigations=previous_investigations,
+    )
+    executable = tuple(
+        scored
+        for scored in ranked
+        if candidate_to_action(
+            scored,
+            diagnosis,
+            previous_investigations=previous_investigations,
+            max_tool_calls_per_gap=max_tool_calls_per_gap,
+        )
+        is not None
+    )
+    if not executable:
+        return None
+    relevance = observation_relevance_key(executable[0])
+    equivalent = tuple(
+        scored for scored in executable if observation_relevance_key(scored) == relevance
+    )
+    covered: set[tuple[str, str]] = {(atom[0], atom[1]) for atom in exploration_covered_atoms}
+    return min(
+        equivalent,
+        key=lambda scored: (
+            -len(exploration_coverage_atoms(scored.candidate, diagnosis) - covered),
+            scored.candidate.candidate_id,
+        ),
+    )
+
+
 def select_observation_intent_candidate(
     *,
     case: Case,
@@ -507,6 +552,7 @@ def select_observation_intent_candidate(
     attempted_observations: Sequence[str] = (),
     previous_investigations: Sequence[InvestigationLedgerEntry] = (),
     max_tool_calls_per_gap: int | None = None,
+    exploration_covered_atoms: Sequence[tuple[str, str]] = (),
 ) -> SelectedObservationIntent | None:
     candidates = build_observation_candidates(
         case=case, diagnosis=diagnosis, engine_config=engine_config
@@ -534,24 +580,19 @@ def select_observation_intent_candidate(
             for candidate in candidates
             if candidate.candidate_id in scored_bundle.bundle.candidate_ids
         )
-        for scored in rank_observation_candidates(
+        selected = select_intent_physical_candidate(
             candidates=allowed,
             diagnosis=diagnosis,
             attempted_observations=attempted_observations,
             previous_investigations=previous_investigations,
-        ):
-            if (
-                candidate_to_action(
-                    scored,
-                    diagnosis,
-                    previous_investigations=previous_investigations,
-                    max_tool_calls_per_gap=max_tool_calls_per_gap,
-                )
-                is not None
-            ):
-                return SelectedObservationIntent(
-                    phase=phase, scored_bundle=scored_bundle, physical=scored
-                )
+            max_tool_calls_per_gap=max_tool_calls_per_gap,
+            exploration_covered_atoms=exploration_covered_atoms,
+        )
+        if selected is None:
+            continue
+        return SelectedObservationIntent(
+            phase=phase, scored_bundle=scored_bundle, physical=selected
+        )
     return None
 
 
@@ -581,5 +622,6 @@ __all__ = [
     "rank_observation_bundles",
     "score_observation_bundle",
     "select_observation_bundle",
+    "select_intent_physical_candidate",
     "select_observation_intent_candidate",
 ]

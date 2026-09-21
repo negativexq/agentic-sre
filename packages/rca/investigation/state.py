@@ -118,6 +118,9 @@ class InvestigationState(TypedDict, total=False):
     acquired_evidence_refs: tuple[str, ...]
     attempted_actions: tuple[str, ...]
     attempted_observations: tuple[str, ...]
+    successful_exploration_observations: tuple[str, ...]
+    exploration_covered_atoms: tuple[tuple[str, str], ...]
+    last_exploration_progress: bool
     attempted_gap_ids: tuple[str, ...]
     pending_action: InvestigationAction | None
     pending_observation: InvestigationObservation | None

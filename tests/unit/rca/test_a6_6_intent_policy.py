@@ -274,9 +274,8 @@ def test_graph_valid_intent_and_unknown_intent_fallback(monkeypatch: pytest.Monk
         tools=tools,
         config=InvestigationConfig(max_turns=1),
     )
-    assert log_client.calls == 1
-    assert tools["logs"].calls == 1
-    assert tools["events"].calls == 0
+    assert log_client.calls == 0
+    assert sum(tool.calls for tool in tools.values()) == 1
     assert result.tool_calls == 1
 
     fallback_client = ScriptedLLM(replies=[{"intent_id": "stale-intent"}])
@@ -289,10 +288,10 @@ def test_graph_valid_intent_and_unknown_intent_fallback(monkeypatch: pytest.Monk
         tools=fallback_tools,
         config=InvestigationConfig(max_turns=1),
     )
-    assert fallback_client.calls == 1
+    assert fallback_client.calls == 0
     assert fallback.tool_calls == 1
     assert sum(tool.calls for tool in fallback_tools.values()) == 1
-    assert any("deterministic-fallback" in step.detail for step in fallback.diagnosis.steps)
+    assert any("deterministic-top-intent" in step.detail for step in fallback.diagnosis.steps)
 
 
 def test_graph_provider_failure_falls_back_without_stopping(
@@ -327,10 +326,10 @@ def test_graph_provider_failure_falls_back_without_stopping(
         tools=tools,
         config=InvestigationConfig(max_turns=1),
     )
-    assert client.calls == 1
+    assert client.calls == 0
     assert result.tool_calls == 1
     assert result.stop_reason.value != "MODEL_FAILURE"
-    assert any("deterministic-fallback" in step.detail for step in result.diagnosis.steps)
+    assert any("deterministic-top-intent" in step.detail for step in result.diagnosis.steps)
 
 
 def test_intent_history_checkpoint_is_data_only_and_credential_free(

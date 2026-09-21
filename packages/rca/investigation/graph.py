@@ -42,6 +42,7 @@ from packages.rca.investigation.intents import (
     build_intent_menu,
     build_observation_bundles,
     derive_investigation_phase,
+    intent_relevance_key,
     rank_observation_bundles,
     select_intent_physical_candidate,
     select_observation_intent_candidate,
@@ -427,7 +428,13 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                 bundle.intent.value == "INCIDENT_ACTOR_DISCOVERY" for bundle in bundles
             ),
         )
-        menu = build_intent_menu(ranked_bundles)
+        top_relevance = intent_relevance_key(ranked_bundles[0]) if ranked_bundles else None
+        top_bundles = tuple(
+            scored
+            for scored in ranked_bundles
+            if top_relevance is not None and intent_relevance_key(scored) == top_relevance
+        )
+        menu = build_intent_menu(top_bundles)
         if not menu:
             return {
                 "stop_reason": InvestigationStopReason.NO_RESOLVABLE_GAP,
@@ -435,8 +442,8 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                 "model_calls": state["model_calls"],
                 "trace_steps": _with_step(state, "select_action", "no admissible intent menu"),
             }
-        selected_id = menu[0].intent_id
-        selection_source = "deterministic-single-option"
+        selected_id = top_bundles[0].bundle.bundle_id
+        selection_source = "deterministic-top-intent"
         fallback_reason: str | None = None
         model_calls = state["model_calls"]
         if len(menu) > 1:
@@ -447,16 +454,16 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                 )
                 if returned_id in {item.intent_id for item in menu}:
                     selected_id = returned_id
-                    selection_source = "Luna"
+                    selection_source = "Luna-top-tiebreak"
                 else:
                     fallback_reason = "unknown intent_id"
             except LLMError as error:
                 fallback_reason = f"model failure: {type(error).__name__}"
             model_calls += max(0, _policy_calls(rt.policy) - before)
             if fallback_reason is not None:
-                selection_source = "deterministic-fallback"
+                selection_source = "deterministic-top-fallback"
         selected_bundle = next(
-            scored for scored in ranked_bundles if scored.bundle.bundle_id == selected_id
+            scored for scored in top_bundles if scored.bundle.bundle_id == selected_id
         )
         allowed = tuple(
             candidate

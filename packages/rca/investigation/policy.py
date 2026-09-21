@@ -133,6 +133,7 @@ Return JSON matching the schema exactly."""
 
 
 INTENT_SYSTEM_PROMPT = """Choose exactly one intent_id from the supplied semantic menu.
+All supplied intents are deterministically equivalent at the current semantic relevance level.
 Evidence interpretation belongs to deterministic code. Do not infer root cause,
 confidence, resolution, Findings, or Hypotheses. Do not generate queries or choose
 physical targets, services, namespaces, or capabilities. NO_DATA is neutral; absence

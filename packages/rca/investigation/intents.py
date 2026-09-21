@@ -446,6 +446,19 @@ def intent_utility_sort_key(scored: ScoredObservationBundle) -> tuple[object, ..
     )
 
 
+def intent_relevance_key(scored: ScoredObservationBundle) -> tuple[int, ...]:
+    """Return semantic relevance fields, excluding the stable identity tie-break."""
+    utility = scored.utility
+    return (
+        utility.phase_match,
+        utility.decision_blocker_match,
+        utility.leading_hypothesis_relevance,
+        utility.unresolved_hypothesis_relevance,
+        utility.eligibility_relevance,
+        utility.semantic_priority,
+    )
+
+
 def score_observation_bundle(
     *,
     bundle: ObservationBundle,
@@ -674,6 +687,7 @@ __all__ = [
     "build_intent_menu",
     "classify_observation_candidate",
     "derive_investigation_phase",
+    "intent_relevance_key",
     "intent_utility_sort_key",
     "rank_observation_bundles",
     "score_observation_bundle",

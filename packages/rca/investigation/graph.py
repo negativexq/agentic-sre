@@ -25,7 +25,7 @@ from packages.rca.investigation.actions import (
     observation_identity,
     validate_action,
 )
-from packages.rca.investigation.candidates import build_observation_candidates
+from packages.rca.investigation.candidates import ObservationCandidate, build_observation_candidates
 from packages.rca.investigation.environment import (
     InvestigationBackend,
     initial_view,
@@ -39,6 +39,7 @@ from packages.rca.investigation.evidence import (
 )
 from packages.rca.investigation.intents import (
     DeterministicIntentPolicy,
+    SelectedObservationIntent,
     build_intent_menu,
     build_observation_bundles,
     derive_investigation_phase,
@@ -58,6 +59,8 @@ from packages.rca.investigation.selection import (
     DeterministicObservationPolicy,
     candidate_to_action,
     exploration_coverage_atoms,
+    rank_observation_candidates,
+    score_observation_candidate,
     select_observation_candidate,
 )
 from packages.rca.investigation.state import (
@@ -377,6 +380,142 @@ def _route_after_assess(state: InvestigationState) -> str:
     return "finalize" if state.get("stop_reason") is not None else "select_action"
 
 
+def _selected_intent_for_candidate(
+    *,
+    candidate: ObservationCandidate,
+    case: Case,
+    diagnosis: Diagnosis,
+    engine_config: EngineConfig,
+    attempted_observations: Sequence[str],
+    previous_investigations: Sequence[InvestigationLedgerEntry],
+    max_tool_calls_per_gap: int,
+) -> SelectedObservationIntent | None:
+    """Bind one existing candidate back to its ranked semantic bundle.
+
+    The discovery obligation is an ordering constraint over the already-built
+    candidate surface.  It must not manufacture a target or bypass the
+    existing semantic bundle/action contracts.
+    """
+    candidates = build_observation_candidates(
+        case=case, diagnosis=diagnosis, engine_config=engine_config
+    )
+    phase = derive_investigation_phase(case, diagnosis)
+    bundles = build_observation_bundles(
+        case=case,
+        diagnosis=diagnosis,
+        candidates=candidates,
+        attempted_observations=attempted_observations,
+        previous_investigations=previous_investigations,
+    )
+    ranked_bundles = rank_observation_bundles(
+        bundles=bundles,
+        phase=phase,
+        diagnosis=diagnosis,
+        case=case,
+        source_actor_bundle_available=any(
+            bundle.intent.value == "INCIDENT_ACTOR_DISCOVERY" for bundle in bundles
+        ),
+    )
+    matching_bundle = next(
+        (
+            scored
+            for scored in ranked_bundles
+            if candidate.candidate_id in scored.bundle.candidate_ids
+        ),
+        None,
+    )
+    if matching_bundle is None:
+        return None
+    scored_candidate = score_observation_candidate(
+        candidate=candidate,
+        diagnosis=diagnosis,
+        attempted_observations=attempted_observations,
+        previous_investigations=previous_investigations,
+    )
+    if (
+        candidate_to_action(
+            scored_candidate,
+            diagnosis,
+            previous_investigations=previous_investigations,
+            max_tool_calls_per_gap=max_tool_calls_per_gap,
+        )
+        is None
+    ):
+        return None
+    return SelectedObservationIntent(
+        phase=phase,
+        scored_bundle=matching_bundle,
+        physical=scored_candidate,
+    )
+
+
+def _select_pending_incident_change_discovery(
+    *,
+    baseline: SelectedObservationIntent | None,
+    case: Case,
+    diagnosis: Diagnosis,
+    engine_config: EngineConfig,
+    attempted_observations: Sequence[str],
+    previous_investigations: Sequence[InvestigationLedgerEntry],
+    max_tool_calls_per_gap: int,
+) -> SelectedObservationIntent | None:
+    """Return the one-shot namespace change discovery override, if required.
+
+    This is deliberately a scheduling boundary.  The normal semantic and
+    physical selectors run first; an unattempted, legal namespace
+    ``incident_changes`` candidate only displaces a normal non-discovery read
+    while SOURCE_DISCOVERY is active.  Candidate ranking remains the sole
+    deterministic ordering inside the discovery surface.
+    """
+    if baseline is None:
+        return None
+    if baseline.phase.value != "SOURCE_DISCOVERY":
+        return None
+    if baseline.physical.candidate.capability in {"incident_events", "incident_changes"}:
+        return None
+
+    candidates = build_observation_candidates(
+        case=case, diagnosis=diagnosis, engine_config=engine_config
+    )
+    pending = tuple(
+        candidate
+        for candidate in candidates
+        if candidate.capability == "incident_changes" and candidate.target.kind == "Namespace"
+    )
+    if not pending:
+        return None
+
+    ranked = rank_observation_candidates(
+        candidates=pending,
+        diagnosis=diagnosis,
+        attempted_observations=attempted_observations,
+        previous_investigations=previous_investigations,
+    )
+    for scored in ranked:
+        if (
+            candidate_to_action(
+                scored,
+                diagnosis,
+                previous_investigations=previous_investigations,
+                max_tool_calls_per_gap=max_tool_calls_per_gap,
+            )
+            is None
+        ):
+            continue
+        selected = _selected_intent_for_candidate(
+            candidate=scored.candidate,
+            case=case,
+            diagnosis=diagnosis,
+            engine_config=engine_config,
+            attempted_observations=attempted_observations,
+            previous_investigations=previous_investigations,
+            max_tool_calls_per_gap=max_tool_calls_per_gap,
+        )
+        if selected is not None:
+            return selected
+    return None
+
+
 def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     # Invalid-action retries bypass ``assess`` by design.  Re-check budgets at
     # this boundary so a malformed provider response (including its bounded
@@ -406,8 +545,53 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         }
     diagnosis = state["current_diagnosis"]
     gaps = _resolvable_gaps(diagnosis)
+    case = rt.case_for(state.get("acquired_evidence_refs", ()), state["investigation_findings"])
+    baseline_intent = None
+    if isinstance(rt.policy, (DeterministicIntentPolicy, LLMIntentPolicy)):
+        baseline_intent = select_observation_intent_candidate(
+            case=case,
+            diagnosis=diagnosis,
+            engine_config=rt.engine_config,
+            attempted_observations=state.get("attempted_observations", ()),
+            previous_investigations=tuple(state.get("ledger", ())),
+            max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+            exploration_covered_atoms=state.get("exploration_covered_atoms", ()),
+        )
+        obligated = _select_pending_incident_change_discovery(
+            baseline=baseline_intent,
+            case=case,
+            diagnosis=diagnosis,
+            engine_config=rt.engine_config,
+            attempted_observations=state.get("attempted_observations", ()),
+            previous_investigations=tuple(state.get("ledger", ())),
+            max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+        )
+        if obligated is not None:
+            action = candidate_to_action(
+                obligated.physical,
+                diagnosis,
+                previous_investigations=tuple(state.get("ledger", ())),
+                max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+            )
+            if action is not None:
+                bundle = obligated.scored_bundle.bundle
+                return {
+                    "pending_action": action,
+                    "pending_intent_id": bundle.bundle_id,
+                    "pending_intent_kind": bundle.intent.value,
+                    "stop_reason": None,
+                    "turns": state["turns"] + 1,
+                    "model_calls": state["model_calls"],
+                    "trace_steps": _with_step(
+                        state,
+                        "select_action",
+                        f"{action.action} {action.capability or ''} {action.target or ''}: "
+                        f"phase={obligated.phase.value}; intent={bundle.intent.value}; "
+                        "selection=discovery-obligation; "
+                        f"candidate={obligated.physical.candidate.candidate_id}",
+                    ),
+                }
     if isinstance(rt.policy, LLMIntentPolicy):
-        case = rt.case_for(state.get("acquired_evidence_refs", ()), state["investigation_findings"])
         candidates = build_observation_candidates(
             case=case, diagnosis=diagnosis, engine_config=rt.engine_config
         )
@@ -525,18 +709,9 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             "trace_steps": _with_step(state, "select_action", detail),
         }
     if isinstance(rt.policy, (DeterministicObservationPolicy, DeterministicIntentPolicy)):
-        case = rt.case_for(state.get("acquired_evidence_refs", ()), state["investigation_findings"])
         selected_intent = None
         if isinstance(rt.policy, DeterministicIntentPolicy):
-            selected_intent = select_observation_intent_candidate(
-                case=case,
-                diagnosis=diagnosis,
-                engine_config=rt.engine_config,
-                attempted_observations=state.get("attempted_observations", ()),
-                previous_investigations=tuple(state.get("ledger", ())),
-                max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
-                exploration_covered_atoms=state.get("exploration_covered_atoms", ()),
-            )
+            selected_intent = baseline_intent
             selected = selected_intent.physical if selected_intent is not None else None
         else:
             selected = select_observation_candidate(

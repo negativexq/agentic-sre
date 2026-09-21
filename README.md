@@ -12,9 +12,9 @@ owns the diagnosis.
 
 ### At a glance
 
-- **84% blind exact-root agreement** — 21/25 on the frozen ITBench-Lite TEST25 holdout.
+- **[84% blind exact-root agreement](evals/results/v1.1.2/README.md)** — 21/25 on the frozen ITBench-Lite TEST25 holdout.
 - **0 model calls** — the measured benchmark path is fully deterministic.
-- **Bounded investigation** — six physical reads per TEST25 incident, one read at a time.
+- **Bounded investigation** — the frozen TEST25 run used six validated physical reads per incident, one read at a time.
 - **Evidence-backed RCA** — observations become normalized Findings before they can change a diagnosis.
 - **Read-only by design** — the investigator cannot mutate the cluster or execute remediation.
 
@@ -28,11 +28,11 @@ is not confused with holdout evidence.
 | Evaluation | Exact root agreement | Model calls |
 | --- | ---: | ---: |
 | DEV10 development split | 10/10 | 0 |
-| **Blind TEST25 holdout** | **21/25 (84%)** | **0** |
+| **Blind TEST25 holdout** | **[21/25 (84%)](evals/results/v1.1.2/README.md)** | **0** |
 | **Combined 35 scenarios** | **31/35 (88.6%)** | **0** |
 
-On TEST25, every scenario used six bounded physical reads: 150 reads across
-25 incidents. The frozen run produced 2,226 new evidence references and 244
+On the frozen TEST25 run, every scenario used six validated physical reads:
+150 reads across 25 incidents. The run produced 2,226 new evidence references and 244
 normalized Finding emissions. The detailed [frozen benchmark report](evals/results/v1.1.2/README.md)
 contains the dataset revision, manifest hash, prediction-freeze procedure, and
 full aggregate metrics.

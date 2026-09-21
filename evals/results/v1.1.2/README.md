@@ -13,8 +13,8 @@ file or a replacement for the repository's sealed release artifacts.
 | **Blind TEST25 holdout** | **25** | **21/25 (84%)** | **0** |
 | **Combined** | **35** | **31/35 (88.6%)** | **0** |
 
-The TEST25 run used six bounded physical reads per incident: 150 tool calls in
-total. It acquired 2,226 new evidence references, emitted 244 normalized
+The frozen TEST25 run used six validated physical reads per incident: 150 tool
+calls in total. It acquired 2,226 new evidence references, emitted 244 normalized
 Findings, and made 37 decision-relevant calls. It produced 95 `NO_DATA`
 observations and zero tool errors.
 
@@ -32,9 +32,10 @@ Confidence calibration on TEST25 was:
 - **Revision:** `d0916b08ba421ce5e672e9ad68aa947d938dfef0`.
 - **Dataset manifest SHA256:** `08a5e56dbfa604c59eed8282683d7b3ec224cd7db9303f90618dafd436423eac`.
 - **Policy:** deterministic investigation policy; model calls were disabled.
-- **Configuration:** six turns, six model-call budget, eight tool-call budget,
-  two calls per gap, two invalid actions, two no-progress rounds, and a
-  120-second wall-time limit.
+- **Configuration:** six turns, `max_model_calls=6`, eight tool calls, two
+  calls per gap, two invalid actions, two no-progress rounds, and a 120-second
+  wall-time limit. The deterministic benchmark policy made **0 model calls**;
+  `max_model_calls=6` is the generic investigation budget, not observed usage.
 - **Engine:** the configured auxiliary event namespace was `chaos-mesh`.
 - **Blindness:** TEST25 bounded predictions were persisted and SHA256-hashed
   before any FULL_SOURCE diagnosis was evaluated.

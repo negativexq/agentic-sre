@@ -38,7 +38,7 @@ from packages.rca.root_cause_eligibility import (
 from packages.rca.runtime_propagation import RuntimePropagation
 from packages.rca.signals import ACCESS_KINDS
 from packages.rca.source import ObservationSource
-from packages.rca.topology import WORKLOAD_KINDS
+from packages.rca.topology import WORKLOAD_KINDS, Topology
 
 CAPABILITIES: tuple[ToolCapability, ...] = (
     ToolCapability(
@@ -216,6 +216,8 @@ class InformationGapContext:
     root_cause_eligibilities: RootCauseEligibilities
     runtime_propagation: RuntimePropagation
     runtime_mechanism_bridges: RuntimeMechanismBridges
+    topology: Topology | None = None
+    symptom_entities: frozenset[EntityRef] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -686,6 +688,40 @@ def _dependency_trace_targets(alternative: StructuralAlternative) -> tuple[Entit
     )
 
 
+def _dependency_log_targets(
+    alternative: StructuralAlternative,
+    runtime_context: InformationGapContext,
+) -> tuple[EntityRef, ...]:
+    """Return symptom-linked callers whose logs feed dependency_findings().
+
+    ``dependency_findings`` indexes connection errors by the service names of
+    the caller workload, not by the downstream dependency actor.  The caller
+    must be visible in the incident context and have a direct ``calls`` edge
+    to this structural dependency alternative.
+    """
+    topology = runtime_context.topology
+    if topology is None:
+        # Preserve the standalone information-gap helper contract for callers
+        # that do not have topology context.  Production diagnosis always
+        # supplies the case topology below.
+        return (alternative.actor,)
+    symptoms = runtime_context.symptom_entities
+    callers: set[EntityRef] = set()
+    candidates = tuple(
+        target for target in alternative.observation_targets if target.kind in WORKLOAD_KINDS
+    )
+    if not candidates:
+        candidates = tuple(topology.latest)
+    for entity in candidates:
+        if entity.kind not in WORKLOAD_KINDS:
+            continue
+        if alternative.actor not in topology.outgoing(entity, "calls"):
+            continue
+        if entity in symptoms or any(topology.workload_of(item) == entity for item in symptoms):
+            callers.add(entity)
+    return tuple(sorted(callers, key=lambda item: item.canonical))
+
+
 def _ambiguity_dimensions(actor: EntityRef) -> tuple[GapDimension, ...]:
     """Return dimensions for resolver-supported ambiguity, scoped to the actor."""
     if actor.kind in _WORKLOAD_CONTROLLER_KINDS or actor.kind in {"ConfigMap", "NetworkPolicy"}:
@@ -724,6 +760,7 @@ def _structural_contract(
     alternative: StructuralAlternative,
     dimension: GapDimension,
     source: ObservationSource | None,
+    runtime_context: InformationGapContext,
 ) -> tuple[AuthorizedQuery, ...]:
     """Map a structural role to its exact observation actor(s)."""
     actor = alternative.actor
@@ -750,9 +787,10 @@ def _structural_contract(
         if dimension in {GapDimension.DEPENDENCY_HEALTH, GapDimension.LOG_ERROR_PATTERN}:
             queries: list[AuthorizedQuery] = []
             if dimension in {GapDimension.DEPENDENCY_HEALTH, GapDimension.LOG_ERROR_PATTERN}:
-                query = _query("logs", actor, alternative_id=alternative.alternative_id)
-                if query is not None and "logs" in _available_names(dimension, source):
-                    queries.append(query)
+                for target in _dependency_log_targets(alternative, runtime_context):
+                    query = _query("logs", target, alternative_id=alternative.alternative_id)
+                    if query is not None and "logs" in _available_names(dimension, source):
+                        queries.append(query)
             if dimension is GapDimension.DEPENDENCY_HEALTH:
                 for target in _dependency_trace_targets(alternative):
                     query = _query(
@@ -986,7 +1024,7 @@ def _derive_runtime_aware_gaps(
         )
     for alternative in open_alternatives:
         for dimension in sorted(alternative.queryable_dimensions, key=lambda item: item.value):
-            queries = _structural_contract(alternative, dimension, source)
+            queries = _structural_contract(alternative, dimension, source, runtime_context)
             if not queries:
                 continue
             needs.append(

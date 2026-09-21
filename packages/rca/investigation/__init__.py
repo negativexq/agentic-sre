@@ -18,10 +18,12 @@ from packages.rca.investigation.graph import (
 )
 from packages.rca.investigation.intents import (
     DeterministicIntentPolicy,
+    IntentMenuItem,
     InvestigationIntentKind,
     InvestigationPhase,
 )
 from packages.rca.investigation.policy import (
+    LLMIntentPolicy,
     LLMInvestigationPolicy,
     ScriptedInvestigationPolicy,
 )
@@ -33,10 +35,12 @@ __all__ = [
     "InitialObservationView",
     "InvestigationBackend",
     "LLMInvestigationPolicy",
+    "LLMIntentPolicy",
     "DeterministicObservationPolicy",
     "DeterministicIntentPolicy",
     "InvestigationIntentKind",
     "InvestigationPhase",
+    "IntentMenuItem",
     "SourceInvestigationBackend",
     "ScriptedInvestigationPolicy",
     "SeedPolicy",

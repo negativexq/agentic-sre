@@ -88,6 +88,38 @@ class ScoredObservationBundle:
 
 
 @dataclass(frozen=True)
+class IntentMenuItem:
+    """Bounded semantic metadata exposed to an intent planner."""
+
+    intent_id: str
+    intent: InvestigationIntentKind
+    phase: InvestigationPhase
+    dimensions: tuple[GapDimension, ...]
+    capabilities: tuple[str, ...]
+    physical_candidate_count: int
+    decision_blocker_match: int
+    leading_hypothesis_relevance: int
+    unresolved_hypothesis_relevance: int
+    eligibility_relevance: int
+    semantic_priority: int
+
+    def as_prompt_dict(self) -> dict[str, object]:
+        return {
+            "intent_id": self.intent_id,
+            "intent_kind": self.intent.value,
+            "phase": self.phase.value,
+            "dimensions": [item.value for item in self.dimensions],
+            "capabilities": list(self.capabilities),
+            "physical_candidate_count": self.physical_candidate_count,
+            "decision_blocker_match": self.decision_blocker_match,
+            "leading_hypothesis_relevance": self.leading_hypothesis_relevance,
+            "unresolved_hypothesis_relevance": self.unresolved_hypothesis_relevance,
+            "eligibility_relevance": self.eligibility_relevance,
+            "semantic_priority": self.semantic_priority,
+        }
+
+
+@dataclass(frozen=True)
 class SelectedObservationIntent:
     """The selected semantic bundle and the physical read chosen within it."""
 
@@ -473,6 +505,28 @@ def rank_observation_bundles(
     )
 
 
+def build_intent_menu(
+    ranked_bundles: Sequence[ScoredObservationBundle],
+) -> tuple[IntentMenuItem, ...]:
+    """Expose only semantic bundle metadata, in deterministic ranked order."""
+    return tuple(
+        IntentMenuItem(
+            intent_id=scored.bundle.bundle_id,
+            intent=scored.bundle.intent,
+            phase=scored.bundle.phase,
+            dimensions=scored.bundle.dimensions,
+            capabilities=scored.bundle.capabilities,
+            physical_candidate_count=len(scored.bundle.candidate_ids),
+            decision_blocker_match=scored.utility.decision_blocker_match,
+            leading_hypothesis_relevance=scored.utility.leading_hypothesis_relevance,
+            unresolved_hypothesis_relevance=scored.utility.unresolved_hypothesis_relevance,
+            eligibility_relevance=scored.utility.eligibility_relevance,
+            semantic_priority=scored.utility.semantic_priority,
+        )
+        for scored in ranked_bundles
+    )
+
+
 def select_observation_bundle(
     *,
     case: Case,
@@ -610,12 +664,14 @@ class DeterministicIntentPolicy:
 __all__ = [
     "DeterministicIntentPolicy",
     "IntentUtility",
+    "IntentMenuItem",
     "InvestigationIntentKind",
     "InvestigationPhase",
     "ObservationBundle",
     "ScoredObservationBundle",
     "SelectedObservationIntent",
     "build_observation_bundles",
+    "build_intent_menu",
     "classify_observation_candidate",
     "derive_investigation_phase",
     "intent_utility_sort_key",

@@ -134,11 +134,13 @@ class OpenAIClient:
         self,
         *,
         model: str | None = None,
+        reasoning_effort: str = "none",
         max_calls: int | None = None,
         enabled: bool | None = None,
         client: Any | None = None,
     ) -> None:
         self.model: str = model or os.environ.get(MODEL_ENV) or DEFAULT_MODEL
+        self.reasoning_effort = reasoning_effort
         self.max_calls = (
             max_calls if max_calls is not None else int(os.environ.get(MAX_CALLS_ENV, "0"))
         )
@@ -199,6 +201,7 @@ class OpenAIClient:
                         "strict": True,
                     }
                 },
+                reasoning={"effort": self.reasoning_effort},
             )
         except Exception as error:  # the SDK raises many transport-specific types
             details = _provider_error_details(error)

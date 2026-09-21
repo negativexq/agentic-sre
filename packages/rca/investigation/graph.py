@@ -39,6 +39,11 @@ from packages.rca.investigation.evidence import (
 )
 from packages.rca.investigation.intents import (
     DeterministicIntentPolicy,
+    build_intent_menu,
+    build_observation_bundles,
+    derive_investigation_phase,
+    rank_observation_bundles,
+    select_intent_physical_candidate,
     select_observation_intent_candidate,
 )
 from packages.rca.investigation.normalizers import (
@@ -47,6 +52,7 @@ from packages.rca.investigation.normalizers import (
     new_investigation_findings,
     normalize_observation,
 )
+from packages.rca.investigation.policy import LLMIntentPolicy
 from packages.rca.investigation.selection import (
     DeterministicObservationPolicy,
     candidate_to_action,
@@ -399,6 +405,118 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         }
     diagnosis = state["current_diagnosis"]
     gaps = _resolvable_gaps(diagnosis)
+    if isinstance(rt.policy, LLMIntentPolicy):
+        case = rt.case_for(state.get("acquired_evidence_refs", ()), state["investigation_findings"])
+        candidates = build_observation_candidates(
+            case=case, diagnosis=diagnosis, engine_config=rt.engine_config
+        )
+        phase = derive_investigation_phase(case, diagnosis)
+        bundles = build_observation_bundles(
+            case=case,
+            diagnosis=diagnosis,
+            candidates=candidates,
+            attempted_observations=state.get("attempted_observations", ()),
+            previous_investigations=tuple(state.get("ledger", ())),
+        )
+        ranked_bundles = rank_observation_bundles(
+            bundles=bundles,
+            phase=phase,
+            diagnosis=diagnosis,
+            case=case,
+            source_actor_bundle_available=any(
+                bundle.intent.value == "INCIDENT_ACTOR_DISCOVERY" for bundle in bundles
+            ),
+        )
+        menu = build_intent_menu(ranked_bundles)
+        if not menu:
+            return {
+                "stop_reason": InvestigationStopReason.NO_RESOLVABLE_GAP,
+                "turns": state["turns"] + 1,
+                "model_calls": state["model_calls"],
+                "trace_steps": _with_step(state, "select_action", "no admissible intent menu"),
+            }
+        selected_id = menu[0].intent_id
+        selection_source = "deterministic-single-option"
+        fallback_reason: str | None = None
+        model_calls = state["model_calls"]
+        if len(menu) > 1:
+            before = _policy_calls(rt.policy)
+            try:
+                returned_id = rt.policy.choose_intent(
+                    menu, tuple(state.get("intent_history", ())[-6:])
+                )
+                if returned_id in {item.intent_id for item in menu}:
+                    selected_id = returned_id
+                    selection_source = "Luna"
+                else:
+                    fallback_reason = "unknown intent_id"
+            except LLMError as error:
+                fallback_reason = f"model failure: {type(error).__name__}"
+            model_calls += max(0, _policy_calls(rt.policy) - before)
+            if fallback_reason is not None:
+                selection_source = "deterministic-fallback"
+        selected_bundle = next(
+            scored for scored in ranked_bundles if scored.bundle.bundle_id == selected_id
+        )
+        allowed = tuple(
+            candidate
+            for candidate in candidates
+            if candidate.candidate_id in selected_bundle.bundle.candidate_ids
+        )
+        selected = select_intent_physical_candidate(
+            candidates=allowed,
+            diagnosis=diagnosis,
+            attempted_observations=state.get("attempted_observations", ()),
+            previous_investigations=tuple(state.get("ledger", ())),
+            max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+            exploration_covered_atoms=state.get("exploration_covered_atoms", ()),
+        )
+        if selected is None:
+            return {
+                "stop_reason": InvestigationStopReason.NO_RESOLVABLE_GAP,
+                "turns": state["turns"] + 1,
+                "model_calls": model_calls,
+                "trace_steps": _with_step(
+                    state, "select_action", "selected intent had no executable candidate"
+                ),
+            }
+        action = candidate_to_action(
+            selected,
+            diagnosis,
+            previous_investigations=tuple(state.get("ledger", ())),
+            max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+        )
+        if action is None:
+            return {
+                "stop_reason": InvestigationStopReason.NO_RESOLVABLE_GAP,
+                "turns": state["turns"] + 1,
+                "model_calls": model_calls,
+                "trace_steps": _with_step(
+                    state, "select_action", "selected candidate had no executable gap"
+                ),
+            }
+        intent_utility = selected_bundle.utility
+        detail = (
+            f"{action.action} {action.capability or ''} {action.target or ''}: "
+            f"phase={phase.value}; intent={selected_bundle.bundle.intent.value}; "
+            f"selection={selection_source}; menu={len(menu)}; "
+            f"bundle-size={len(selected_bundle.bundle.candidate_ids)}; "
+            f"blocker={intent_utility.decision_blocker_match}; "
+            f"leading={intent_utility.leading_hypothesis_relevance}; "
+            f"unresolved={intent_utility.unresolved_hypothesis_relevance}; "
+            f"candidate={selected.candidate.candidate_id}"
+        )
+        if fallback_reason is not None:
+            detail += f"; fallback={fallback_reason}"
+        return {
+            "pending_action": action,
+            "pending_intent_id": selected_id,
+            "pending_intent_kind": selected_bundle.bundle.intent.value,
+            "stop_reason": None,
+            "turns": state["turns"] + 1,
+            "model_calls": model_calls,
+            "trace_steps": _with_step(state, "select_action", detail),
+        }
     if isinstance(rt.policy, (DeterministicObservationPolicy, DeterministicIntentPolicy)):
         case = rt.case_for(state.get("acquired_evidence_refs", ()), state["investigation_findings"])
         selected_intent = None
@@ -479,6 +597,16 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             )
         return {
             "pending_action": action,
+            "pending_intent_id": (
+                selected_intent.scored_bundle.bundle.bundle_id
+                if selected_intent is not None
+                else None
+            ),
+            "pending_intent_kind": (
+                selected_intent.scored_bundle.bundle.intent.value
+                if selected_intent is not None
+                else None
+            ),
             "stop_reason": None,
             "turns": state["turns"] + 1,
             "model_calls": state["model_calls"],
@@ -744,7 +872,7 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     candidate_atoms: tuple[tuple[str, str], ...] = ()
     action = state.get("pending_action")
     if (
-        isinstance(rt.policy, DeterministicIntentPolicy)
+        isinstance(rt.policy, (DeterministicIntentPolicy, LLMIntentPolicy))
         and observation.error is None
         and action is not None
         and action.capability is not None
@@ -782,7 +910,7 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         ),
         error=(
             observation.error
-            if isinstance(rt.policy, DeterministicIntentPolicy)
+            if isinstance(rt.policy, (DeterministicIntentPolicy, LLMIntentPolicy))
             and action is not None
             and action.capability is not None
             else "disabled"
@@ -876,6 +1004,18 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         affected_hypothesis_ids=normalized_observation.hypothesis_ids,
         outcome=normalized_observation.outcome,
     )
+    intent_history = (
+        *state.get("intent_history", ()),
+        {
+            "intent_kind": state.get("pending_intent_kind") or "unknown",
+            "capability": observation.capability,
+            "outcome": normalized_observation.outcome.value,
+            "returned_refs": len(returned_refs),
+            "new_refs": len(new_refs),
+            "findings": len(finding_ids),
+            "decision_state_changed": False,
+        },
+    )[-6:]
     existing_ids = {item.observation_id for item in state["observations"]}
     observations = (
         state["observations"]
@@ -885,6 +1025,7 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     return {
         "observations": observations,
         "ledger": (*state.get("ledger", ()), ledger_entry),
+        "intent_history": intent_history,
         "pending_findings": fresh_findings,
         "successful_exploration_observations": tuple(successful),
         "exploration_covered_atoms": tuple(sorted(covered_atoms)),
@@ -1019,6 +1160,15 @@ def _check_progress(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         no_progress += 1
     else:
         no_progress = 0
+    intent_history = list(state.get("intent_history", ()))
+    if intent_history:
+        latest_history = dict(intent_history[-1])
+        latest_history["decision_state_changed"] = bool(
+            state.get("last_new_evidence_count", 0)
+            or current_resolution is not previous
+            or current_hypothesis_fingerprint != _frozen(state["previous_hypothesis_fingerprint"])
+        )
+        intent_history[-1] = latest_history
     resolvable = _resolvable_gaps(current)
     stop: InvestigationStopReason | None = None
     if current.resolution is Resolution.RESOLVED and current.investigation_status.value != "OPEN":
@@ -1045,6 +1195,7 @@ def _check_progress(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         "previous_evidence_fingerprint": current_evidence_fingerprint,
         "previous_hypothesis_fingerprint": current_hypothesis_fingerprint,
         "previous_world_model_fingerprint": current_world_model_fingerprint,
+        "intent_history": tuple(intent_history[-6:]),
         "no_progress_count": no_progress,
         "stop_reason": stop,
         "trace_steps": _with_step(
@@ -1249,6 +1400,9 @@ def build_investigation_state(
         "successful_exploration_observations": (),
         "exploration_covered_atoms": (),
         "last_exploration_progress": False,
+        "intent_history": (),
+        "pending_intent_id": None,
+        "pending_intent_kind": None,
         "attempted_gap_ids": (),
         "pending_action": None,
         "pending_observation": None,

@@ -37,6 +37,7 @@ from packages.rca.investigation.evidence import (
     records_from_observation,
     visible_evidence_refs,
 )
+from packages.rca.investigation.focus import exact_workload_dependency_candidates
 from packages.rca.investigation.intents import (
     DeterministicIntentPolicy,
     SelectedObservationIntent,
@@ -516,6 +517,28 @@ def _select_pending_incident_change_discovery(
     return None
 
 
+def _focused_physical_candidates(
+    *,
+    selected_intent: SelectedObservationIntent,
+    candidates: Sequence[ObservationCandidate],
+    case: Case,
+    diagnosis: Diagnosis,
+    attempted_observations: Sequence[str],
+    previous_investigations: Sequence[InvestigationLedgerEntry],
+    max_tool_calls_per_gap: int,
+) -> tuple[ObservationCandidate, ...]:
+    """Apply exact-workload focus after semantic intent selection only."""
+    return exact_workload_dependency_candidates(
+        intent=selected_intent.scored_bundle.bundle.intent,
+        candidates=candidates,
+        case=case,
+        diagnosis=diagnosis,
+        attempted_observations=attempted_observations,
+        previous_investigations=previous_investigations,
+        max_tool_calls_per_gap=max_tool_calls_per_gap,
+    )
+
+
 def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     # Invalid-action retries bypass ``assess`` by design.  Re-check budgets at
     # this boundary so a malformed provider response (including its bounded
@@ -654,8 +677,18 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             for candidate in candidates
             if candidate.candidate_id in selected_bundle.bundle.candidate_ids
         )
-        selected = select_intent_physical_candidate(
+        focused = exact_workload_dependency_candidates(
+            intent=selected_bundle.bundle.intent,
             candidates=allowed,
+            case=case,
+            diagnosis=diagnosis,
+            attempted_observations=state.get("attempted_observations", ()),
+            previous_investigations=tuple(state.get("ledger", ())),
+            max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+        )
+        physical_pool = focused or allowed
+        selected = select_intent_physical_candidate(
+            candidates=physical_pool,
             diagnosis=diagnosis,
             attempted_observations=state.get("attempted_observations", ()),
             previous_investigations=tuple(state.get("ledger", ())),
@@ -697,6 +730,8 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             f"unresolved={intent_utility.unresolved_hypothesis_relevance}; "
             f"candidate={selected.candidate.candidate_id}"
         )
+        if focused:
+            detail += "; physical-focus=EXACT_SAME_WORKLOAD"
         if fallback_reason is not None:
             detail += f"; fallback={fallback_reason}"
         return {
@@ -710,9 +745,45 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         }
     if isinstance(rt.policy, (DeterministicObservationPolicy, DeterministicIntentPolicy)):
         selected_intent = None
+        focus_applied = False
         if isinstance(rt.policy, DeterministicIntentPolicy):
             selected_intent = baseline_intent
             selected = selected_intent.physical if selected_intent is not None else None
+            if selected_intent is not None:
+                candidates = build_observation_candidates(
+                    case=case, diagnosis=diagnosis, engine_config=rt.engine_config
+                )
+                allowed = tuple(
+                    candidate
+                    for candidate in candidates
+                    if candidate.candidate_id in selected_intent.scored_bundle.bundle.candidate_ids
+                )
+                focused = _focused_physical_candidates(
+                    selected_intent=selected_intent,
+                    candidates=allowed,
+                    case=case,
+                    diagnosis=diagnosis,
+                    attempted_observations=state.get("attempted_observations", ()),
+                    previous_investigations=tuple(state.get("ledger", ())),
+                    max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+                )
+                if focused:
+                    focused_selected = select_intent_physical_candidate(
+                        candidates=focused,
+                        diagnosis=diagnosis,
+                        attempted_observations=state.get("attempted_observations", ()),
+                        previous_investigations=tuple(state.get("ledger", ())),
+                        max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+                        exploration_covered_atoms=state.get("exploration_covered_atoms", ()),
+                    )
+                    if focused_selected is not None:
+                        selected_intent = SelectedObservationIntent(
+                            phase=selected_intent.phase,
+                            scored_bundle=selected_intent.scored_bundle,
+                            physical=focused_selected,
+                        )
+                        selected = focused_selected
+                        focus_applied = True
         else:
             selected = select_observation_candidate(
                 case=case,
@@ -766,6 +837,8 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                 f"marginal-coverage={len(exploration_coverage_atoms(selected.candidate, diagnosis) - covered_atoms)}; "
                 f"candidate={selected.candidate.candidate_id}"
             )
+            if focus_applied:
+                detail += "; physical-focus=EXACT_SAME_WORKLOAD"
         else:
             utility = selected.utility
             detail = (

@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -20,6 +20,7 @@ from apps.control_plane.console.dto import (
     IncidentDetail,
     IncidentListItem,
     IncidentPage,
+    ReportSummary,
     SystemStatus,
     TimelineView,
 )
@@ -28,11 +29,14 @@ from apps.control_plane.console.mappers import (
     diagnosis_view,
     evidence_view,
     incident_list_item,
+    report_summary,
     timeline_view,
 )
 from apps.control_plane.console.stream import global_stream, incident_stream
+from apps.control_plane.timeline import diagnosis_phases
 from packages.contracts import ChangeScope, ChangeType
 from packages.rca.model import Diagnosis
+from packages.report import ReportSnapshot, build_report
 from packages.storage import (
     AlertRepository,
     ChangeRecordRepository,
@@ -41,6 +45,7 @@ from packages.storage import (
     IncidentEventRepository,
     IncidentNotFoundError,
     IncidentRepository,
+    ReportRepository,
 )
 
 INACTIVE_STATUSES = {"RESOLVED", "CLOSED"}
@@ -278,6 +283,76 @@ def create_console_router(
             limit=200,
         )
         return [change_view(record, onset, leading) for record in records]
+
+    def _build_report(session: Session, incident_id: UUID) -> ReportSnapshot:
+        incident = IncidentRepository(session).get(incident_id)
+        if incident is None:
+            raise IncidentNotFoundError(str(incident_id))
+        diagnoses = DiagnosisRepository(session)
+        document = diagnoses.latest(incident_id)
+        if document is None:
+            raise HTTPException(status_code=409, detail="incident has no diagnosis to report")
+        diagnosis = Diagnosis.model_validate(document)
+        run_id = diagnoses.latest_run_id(incident_id)
+        events = IncidentEventRepository(session).list_for_incident(incident_id)
+        alerts = AlertRepository(session).list_for_incident(incident_id)
+        evidence = EvidenceRepository(session).list_for_incident(incident_id)
+        return build_report(
+            incident_id=str(incident_id),
+            title=incident.title,
+            severity=incident.severity.value,
+            status=incident.status.value,
+            diagnosis=diagnosis,
+            run_id=run_id,
+            alert_fired=min((alert.starts_at for alert in alerts), default=None),
+            incident_opened=incident.created_at,
+            diagnosed_at=diagnoses.latest_created_at(incident_id),
+            phases=diagnosis_phases(events, run_id),
+            evidence_count=len(evidence),
+            generated_at=datetime.now(UTC),
+        )
+
+    @router.post("/incidents/{incident_id}/reports", response_model=ReportSnapshot, status_code=201)
+    def create_report(
+        incident_id: UUID,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> ReportSnapshot:
+        snapshot = _build_report(session, incident_id)
+        ReportRepository(session).save(
+            report_id=snapshot.report_id,
+            incident_id=incident_id,
+            diagnosis_run_id=snapshot.diagnosis_run_id,
+            report_version=snapshot.report_version,
+            created_at=snapshot.generated_at,
+            document=snapshot.model_dump(mode="json"),
+        )
+        return snapshot
+
+    @router.get("/reports", response_model=list[ReportSummary])
+    def list_reports(
+        session: Session = Depends(get_session),  # noqa: B008
+        limit: int = Query(default=100, ge=1, le=500),
+    ) -> list[ReportSummary]:
+        documents = ReportRepository(session).list_all(limit=limit)
+        return [report_summary(ReportSnapshot.model_validate(doc)) for doc in documents]
+
+    @router.get("/reports/{report_id}", response_model=ReportSnapshot, responses={404: {}})
+    def get_report(
+        report_id: str,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> ReportSnapshot:
+        document = ReportRepository(session).get(report_id)
+        if document is None:
+            raise HTTPException(status_code=404, detail="report not found")
+        return ReportSnapshot.model_validate(document)
+
+    @router.get("/incidents/{incident_id}/reports", response_model=list[ReportSummary])
+    def list_incident_reports(
+        incident_id: UUID,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> list[ReportSummary]:
+        documents = ReportRepository(session).list_all(incident_id=incident_id, limit=100)
+        return [report_summary(ReportSnapshot.model_validate(doc)) for doc in documents]
 
     @router.get("/stream")
     def stream() -> StreamingResponse:

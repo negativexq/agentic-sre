@@ -191,6 +191,7 @@ def test_alembic_migration_up_and_down(tmp_path: Path) -> None:
         "payments",
         "policy_decisions",
         "remediation_proposals",
+        "report_snapshots",
         "tool_calls",
         "verification_results",
     }

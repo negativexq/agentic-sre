@@ -13,6 +13,7 @@ from packages.storage.repositories import (
     IncidentRepository,
     LogObservationRepository,
     ObjectVersionRepository,
+    ReportRepository,
 )
 
 __all__ = [
@@ -27,6 +28,7 @@ __all__ = [
     "LogObservationRepository",
     "JournalEntry",
     "ObjectVersionRepository",
+    "ReportRepository",
     "create_database_engine",
     "create_session_factory",
     "session_scope",

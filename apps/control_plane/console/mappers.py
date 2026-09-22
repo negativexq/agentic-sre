@@ -20,6 +20,7 @@ from apps.control_plane.console.dto import (
     IncidentListItem,
     LifecyclePhaseView,
     RemediationView,
+    ReportSummary,
     StepView,
     TimelineEventView,
     TimelineView,
@@ -40,6 +41,7 @@ from packages.rca.model import (
     Hypothesis,
     ResolutionTrace,
 )
+from packages.report import ReportSnapshot
 
 
 def _finding_view(finding: Finding) -> FindingView:
@@ -229,6 +231,22 @@ def incident_list_item(incident: Incident, view: dict[str, Any] | None) -> Incid
         created_at=incident.created_at,
         updated_at=incident.updated_at,
         age_seconds=max((now - incident.created_at).total_seconds(), 0.0),
+    )
+
+
+def report_summary(snapshot: ReportSnapshot) -> ReportSummary:
+    return ReportSummary(
+        report_id=snapshot.report_id,
+        incident_id=snapshot.incident_id,
+        title=snapshot.title,
+        severity=snapshot.severity,
+        confidence=snapshot.confidence,
+        resolution=snapshot.resolution,
+        root_actor=snapshot.root_actor,
+        leading_root_actor=snapshot.leading_root_actor,
+        diagnosis_run_id=snapshot.diagnosis_run_id,
+        report_version=snapshot.report_version,
+        generated_at=snapshot.generated_at,
     )
 
 

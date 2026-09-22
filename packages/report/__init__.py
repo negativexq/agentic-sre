@@ -1,0 +1,21 @@
+"""Canonical, immutable incident report snapshots over a stored diagnosis."""
+
+from packages.report.builder import build_report
+from packages.report.model import (
+    REPORT_VERSION,
+    ReportAlternative,
+    ReportFinding,
+    ReportHop,
+    ReportLifecyclePhase,
+    ReportSnapshot,
+)
+
+__all__ = [
+    "REPORT_VERSION",
+    "ReportAlternative",
+    "ReportFinding",
+    "ReportHop",
+    "ReportLifecyclePhase",
+    "ReportSnapshot",
+    "build_report",
+]

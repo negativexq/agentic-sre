@@ -185,6 +185,21 @@ class DiagnosisRow(Base):
     document: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 
+class ReportRow(Base):
+    """An immutable incident report snapshot pinned to one diagnosis run."""
+
+    __tablename__ = "report_snapshots"
+
+    report_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    incident_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("incidents.incident_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    diagnosis_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    report_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    document: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
 class LogObservationRow(Base):
     """One bounded, normalized log observation captured for replay."""
 

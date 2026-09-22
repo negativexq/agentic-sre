@@ -40,6 +40,7 @@ from packages.storage.models import (
     IncidentRow,
     LogObservationRow,
     ObjectVersionRow,
+    ReportRow,
 )
 
 if TYPE_CHECKING:
@@ -860,6 +861,58 @@ class DiagnosisRepository:
                 "run_id": row.run_id,
             }
         return result
+
+
+class ReportRepository:
+    """Immutable incident report snapshots.
+
+    A snapshot is written once and never updated; a new report of the same
+    incident is a new row with its own ``report_id``. This preserves the history
+    of what was reported for each diagnosis run.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def save(
+        self,
+        *,
+        report_id: str,
+        incident_id: object,
+        diagnosis_run_id: str | None,
+        report_version: str,
+        created_at: datetime,
+        document: dict[str, Any],
+    ) -> None:
+        self._session.add(
+            ReportRow(
+                report_id=report_id,
+                incident_id=incident_id,
+                diagnosis_run_id=diagnosis_run_id,
+                report_version=report_version,
+                created_at=created_at,
+                document=document,
+            )
+        )
+        self._session.commit()
+
+    def get(self, report_id: str) -> dict[str, Any] | None:
+        row = self._session.get(ReportRow, report_id)
+        return dict(row.document) if row is not None else None
+
+    def list_all(
+        self, *, incident_id: object | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """Newest reports first, optionally scoped to one incident."""
+        if limit < 1:
+            raise ValueError("limit must be positive")
+        statement = select(ReportRow)
+        if incident_id is not None:
+            statement = statement.where(ReportRow.incident_id == incident_id)
+        rows = self._session.scalars(
+            statement.order_by(desc(ReportRow.created_at), desc(ReportRow.report_id)).limit(limit)
+        ).all()
+        return [dict(row.document) for row in rows]
 
 
 def _canonical(value: Any) -> str:

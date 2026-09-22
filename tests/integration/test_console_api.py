@@ -375,6 +375,41 @@ def test_incident_changes_mark_leading_actor_without_claiming_cause(
     assert by_resource["frontend"]["matches_leading_actor"] is False
 
 
+def test_report_create_fetch_and_immutability(
+    app_client: tuple[TestClient, dict[str, UUID]],
+) -> None:
+    client, ids = app_client
+    created = client.post(f"/api/v1/console/incidents/{ids['resolved']}/reports")
+    assert created.status_code == 201
+    report = created.json()
+    assert report["diagnosis_run_id"]
+    assert report["root_actor"] == "sre-demo/Deployment/payment-service"
+    assert report["report_version"] == "1.0"
+
+    fetched = client.get(f"/api/v1/console/reports/{report['report_id']}").json()
+    assert fetched == report  # the stored snapshot is returned verbatim
+
+    # A second report is a new immutable row; the first is unchanged.
+    again = client.post(f"/api/v1/console/incidents/{ids['resolved']}/reports").json()
+    assert again["report_id"] != report["report_id"]
+    still = client.get(f"/api/v1/console/reports/{report['report_id']}").json()
+    assert still == report
+
+    listed = client.get("/api/v1/console/reports").json()
+    assert {item["report_id"] for item in listed} >= {report["report_id"], again["report_id"]}
+
+
+def test_report_requires_a_diagnosis(app_client: tuple[TestClient, dict[str, UUID]]) -> None:
+    client, ids = app_client
+    response = client.post(f"/api/v1/console/incidents/{ids['pending']}/reports")
+    assert response.status_code == 409
+
+
+def test_missing_report_is_not_found(app_client: tuple[TestClient, dict[str, UUID]]) -> None:
+    client, _ = app_client
+    assert client.get("/api/v1/console/reports/does-not-exist").status_code == 404
+
+
 def test_legacy_incident_api_is_unchanged(
     app_client: tuple[TestClient, dict[str, UUID]],
 ) -> None:

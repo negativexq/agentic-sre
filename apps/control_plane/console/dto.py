@@ -226,6 +226,25 @@ class ChangeView(ConsoleModel):
     matches_leading_actor: bool = False
 
 
+# --- reports ---------------------------------------------------------------
+
+
+class ReportSummary(ConsoleModel):
+    """One immutable report as it appears in the reports library."""
+
+    report_id: str
+    incident_id: str
+    title: str
+    severity: str
+    confidence: str
+    resolution: str
+    root_actor: str | None
+    leading_root_actor: str | None
+    diagnosis_run_id: str | None
+    report_version: str
+    generated_at: datetime
+
+
 # --- system ----------------------------------------------------------------
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import statistics
 from collections.abc import Callable, Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, sessionmaker
 
 from apps.control_plane.console.dto import (
+    ChangeView,
     DashboardCounters,
     DashboardSummary,
     DiagnosisView,
@@ -23,15 +24,18 @@ from apps.control_plane.console.dto import (
     TimelineView,
 )
 from apps.control_plane.console.mappers import (
+    change_view,
     diagnosis_view,
     evidence_view,
     incident_list_item,
     timeline_view,
 )
 from apps.control_plane.console.stream import global_stream, incident_stream
+from packages.contracts import ChangeScope, ChangeType
 from packages.rca.model import Diagnosis
 from packages.storage import (
     AlertRepository,
+    ChangeRecordRepository,
     DiagnosisRepository,
     EvidenceRepository,
     IncidentEventRepository,
@@ -239,6 +243,41 @@ def create_console_router(
             evidence_view(item)
             for item in EvidenceRepository(session).list_for_incident(incident_id)
         ]
+
+    @router.get("/changes", response_model=list[ChangeView])
+    def changes(
+        session: Session = Depends(get_session),  # noqa: B008
+        scope: ChangeScope | None = None,
+        change_type: ChangeType | None = None,
+        q: str | None = None,
+        limit: int = Query(default=100, ge=1, le=500),
+    ) -> list[ChangeView]:
+        records = ChangeRecordRepository(session).recent(
+            limit=limit, scope=scope, change_type=change_type, resource_query=q
+        )
+        return [change_view(record) for record in records]
+
+    @router.get("/incidents/{incident_id}/changes", response_model=list[ChangeView])
+    def incident_changes(
+        incident_id: UUID,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> list[ChangeView]:
+        incident = IncidentRepository(session).get(incident_id)
+        if incident is None:
+            raise IncidentNotFoundError(str(incident_id))
+        document = DiagnosisRepository(session).latest(incident_id)
+        diagnosis = Diagnosis.model_validate(document) if document is not None else None
+        onset = diagnosis.symptoms.onset if diagnosis else None
+        if onset is None:
+            alerts = AlertRepository(session).list_for_incident(incident_id)
+            onset = min((alert.starts_at for alert in alerts), default=incident.created_at)
+        leading = diagnosis.root_cause.name if diagnosis and diagnosis.root_cause else None
+        records = ChangeRecordRepository(session).recent(
+            starts_at=onset - timedelta(hours=2),
+            ends_at=onset + timedelta(minutes=30),
+            limit=200,
+        )
+        return [change_view(record, onset, leading) for record in records]
 
     @router.get("/stream")
     def stream() -> StreamingResponse:

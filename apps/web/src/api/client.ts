@@ -1,4 +1,6 @@
 import type {
+  ChangeFilters,
+  ChangeView,
   DashboardSummary,
   EvidenceView,
   IncidentDetail,
@@ -36,7 +38,7 @@ async function get<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-function query(filters: IncidentFilters): string {
+function query(filters: IncidentFilters | ChangeFilters): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {
     if (value !== undefined && value !== null && value !== "") {
@@ -54,4 +56,6 @@ export const api = {
     get<IncidentPage>(`/incidents${query(filters)}`),
   incident: (id: string) => get<IncidentDetail>(`/incidents/${id}`),
   incidentEvidence: (id: string) => get<EvidenceView[]>(`/incidents/${id}/evidence`),
+  incidentChanges: (id: string) => get<ChangeView[]>(`/incidents/${id}/changes`),
+  changes: (filters: ChangeFilters = {}) => get<ChangeView[]>(`/changes${query(filters)}`),
 };

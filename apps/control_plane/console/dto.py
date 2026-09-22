@@ -221,6 +221,9 @@ class ChangeView(ConsoleModel):
     revision: str | None
     source: str | None
     onset_delta_seconds: float | None
+    # True when this change touches the actor the engine named as leading — a
+    # labeling aid, not a causal claim by the UI (see product-contract.md, G6).
+    matches_leading_actor: bool = False
 
 
 # --- system ----------------------------------------------------------------

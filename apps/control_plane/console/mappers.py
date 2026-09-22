@@ -232,7 +232,17 @@ def incident_list_item(incident: Incident, view: dict[str, Any] | None) -> Incid
     )
 
 
-def change_view(record: ChangeRecord, onset: datetime | None) -> ChangeView:
+def change_view(
+    record: ChangeRecord,
+    onset: datetime | None = None,
+    leading_actor_name: str | None = None,
+) -> ChangeView:
+    if onset is None:
+        delta: float | None = None
+    elif record.timestamp >= onset:
+        delta = (record.timestamp - onset).total_seconds()
+    else:
+        delta = -abs((onset - record.timestamp).total_seconds())
     return ChangeView(
         change_id=str(record.change_id),
         timestamp=record.timestamp,
@@ -242,11 +252,8 @@ def change_view(record: ChangeRecord, onset: datetime | None) -> ChangeView:
         scope=record.scope.value,
         revision=record.revision,
         source=record.source,
-        onset_delta_seconds=_seconds(onset, record.timestamp)
-        if onset and record.timestamp >= onset
-        else (
-            -abs((onset - record.timestamp).total_seconds())
-            if onset and record.timestamp < onset
-            else None
+        onset_delta_seconds=delta,
+        matches_leading_actor=bool(
+            leading_actor_name and record.resource_name == leading_actor_name
         ),
     )

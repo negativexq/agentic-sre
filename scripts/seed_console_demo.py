@@ -19,6 +19,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from packages.contracts import (
+    ChangeRecord,
+    ChangeScope,
+    ChangeType,
     Incident,
     IncidentEvent,
     IncidentEventType,
@@ -41,10 +44,17 @@ from packages.rca.model import (
 from packages.storage.database import create_session_factory
 from packages.storage.models import AlertRow, Base, EvidenceRow
 from packages.storage.repositories import (
+    ChangeRecordRepository,
     DiagnosisRepository,
     IncidentEventRepository,
     IncidentRepository,
 )
+
+_CHANGE_TYPE = {
+    FindingKind.SPEC_CHANGE: ChangeType.UPDATED,
+    FindingKind.CONFIG_CHANGE: ChangeType.UPDATED,
+    FindingKind.SCALE_CHANGE: ChangeType.SCALED,
+}
 
 PHASES = [
     (IncidentEventType.DIAGNOSIS_STARTED, 0.0),
@@ -185,9 +195,44 @@ def seed(session: Session, now: datetime) -> int:
     incidents = IncidentRepository(session)
     diagnoses = DiagnosisRepository(session)
     events = IncidentEventRepository(session)
+    changes = ChangeRecordRepository(session)
     count = 0
     for scenario in SCENARIOS:
         onset = now - timedelta(minutes=scenario.minutes_ago)
+        change_type = _CHANGE_TYPE.get(scenario.finding_kind)
+        if change_type is not None:
+            # The durable change on the leading actor, 30s before onset.
+            changes.append(
+                ChangeRecord(
+                    timestamp=onset - timedelta(seconds=30),
+                    resource_type=scenario.actor_kind,
+                    resource_name=scenario.actor_name,
+                    change_type=change_type,
+                    scope=(
+                        ChangeScope.CONFIGURATION
+                        if scenario.finding_kind is FindingKind.CONFIG_CHANGE
+                        else ChangeScope.DEPLOYMENT
+                    ),
+                    before={"revision": "1"},
+                    after={"revision": "2"},
+                    revision="2",
+                    source="harness",
+                )
+            )
+            # An unrelated earlier change, to show the explorer separates noise.
+            changes.append(
+                ChangeRecord(
+                    timestamp=onset - timedelta(minutes=7),
+                    resource_type="Deployment",
+                    resource_name="frontend",
+                    change_type=ChangeType.SCALED,
+                    scope=ChangeScope.DEPLOYMENT,
+                    before={"replicas": 2},
+                    after={"replicas": 3},
+                    revision="9",
+                    source="harness",
+                )
+            )
         incident = Incident(
             status=scenario.status,
             severity=scenario.severity,

@@ -155,6 +155,14 @@ export interface ChangeView {
   revision: string | null;
   source: string | null;
   onset_delta_seconds: number | null;
+  matches_leading_actor: boolean;
+}
+
+export interface ChangeFilters {
+  scope?: string;
+  change_type?: string;
+  q?: string;
+  limit?: number;
 }
 
 export interface SystemConnector {

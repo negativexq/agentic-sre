@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import { useIncident } from "@/api/hooks";
+import { useIncident, useIncidentChanges } from "@/api/hooks";
 import { useLiveUpdates } from "@/api/useLiveUpdates";
+import { ChangesTable } from "@/components/ChangesTable";
 import { LiveBadge } from "@/components/LiveBadge";
 import type { DiagnosisView, IncidentListItem } from "@/api/types";
 import { CausalPath } from "@/components/workspace/CausalPath";
@@ -96,6 +97,21 @@ function InvestigationTrace({ diagnosis }: { diagnosis: DiagnosisView }) {
         ))}
       </tbody>
     </Table>
+  );
+}
+
+function ChangesAroundOnset({ incidentId }: { incidentId: string }) {
+  const { data } = useIncidentChanges(incidentId);
+  return (
+    <Card>
+      <CardHeader
+        title="Changes around onset"
+        action={<span className="text-xs text-subtle">±2h window</span>}
+      />
+      <CardBody className="p-0">
+        <ChangesTable changes={data ?? []} showOnset />
+      </CardBody>
+    </Card>
   );
 }
 
@@ -203,6 +219,8 @@ export function IncidentWorkspacePage() {
               </CardBody>
             </Card>
           </div>
+
+          <ChangesAroundOnset incidentId={incident.incident_id} />
 
           <Card>
             <CardHeader title="Evidence & trace" />

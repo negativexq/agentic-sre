@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/api/client";
-import type { IncidentFilters } from "@/api/types";
+import type { ChangeFilters, IncidentFilters } from "@/api/types";
 
 // SSE (useLiveUpdates) drives real-time refetches; the intervals below are a
 // fallback for when EventSource is unavailable or a stream drops.
@@ -37,6 +37,22 @@ export function useIncidentEvidence(id: string | undefined, enabled: boolean) {
     queryKey: ["incident-evidence", id],
     queryFn: () => api.incidentEvidence(id as string),
     enabled: Boolean(id) && enabled,
+  });
+}
+
+export function useChanges(filters: ChangeFilters) {
+  return useQuery({
+    queryKey: ["changes", filters],
+    queryFn: () => api.changes(filters),
+    refetchInterval: FALLBACK_INTERVAL,
+  });
+}
+
+export function useIncidentChanges(id: string | undefined) {
+  return useQuery({
+    queryKey: ["incident-changes", id],
+    queryFn: () => api.incidentChanges(id as string),
+    enabled: Boolean(id),
   });
 }
 

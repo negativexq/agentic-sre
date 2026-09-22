@@ -254,6 +254,56 @@ class ChangeRecordRepository:
         self._session.commit()
         return record
 
+    def recent(
+        self,
+        *,
+        limit: int = 100,
+        scope: ChangeScope | None = None,
+        change_type: ChangeType | None = None,
+        resource_query: str | None = None,
+        starts_at: datetime | None = None,
+        ends_at: datetime | None = None,
+    ) -> list[ChangeRecord]:
+        """List recent change facts across resources for the changes explorer.
+
+        This is a read-only, bounded view for the UI; investigation backends
+        still use the tighter :meth:`between` window keyed to one resource.
+        """
+        if limit < 1:
+            raise ValueError("limit must be positive")
+        filters = []
+        if scope is not None:
+            filters.append(ChangeRecordRow.scope == scope.value)
+        if change_type is not None:
+            filters.append(ChangeRecordRow.change_type == change_type.value)
+        if resource_query:
+            filters.append(ChangeRecordRow.resource_name.ilike(f"%{resource_query}%"))
+        if starts_at is not None:
+            filters.append(ChangeRecordRow.timestamp >= starts_at)
+        if ends_at is not None:
+            filters.append(ChangeRecordRow.timestamp <= ends_at)
+        rows = self._session.scalars(
+            select(ChangeRecordRow)
+            .where(*filters)
+            .order_by(desc(ChangeRecordRow.timestamp), ChangeRecordRow.change_id)
+            .limit(limit)
+        ).all()
+        return [
+            ChangeRecord(
+                change_id=row.change_id,
+                timestamp=row.timestamp,
+                resource_type=row.resource_type,
+                resource_name=row.resource_name,
+                change_type=ChangeType(row.change_type),
+                scope=ChangeScope(row.scope),
+                before=row.before,
+                after=row.after,
+                revision=row.revision,
+                source=row.source,
+            )
+            for row in rows
+        ]
+
     def between(
         self,
         *,

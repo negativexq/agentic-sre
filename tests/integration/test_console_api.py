@@ -16,6 +16,9 @@ from apps.control_plane.main import create_app
 from packages.contracts import (
     AlertSource,
     AlertStatus,
+    ChangeRecord,
+    ChangeScope,
+    ChangeType,
     Incident,
     IncidentEvent,
     IncidentEventType,
@@ -38,6 +41,7 @@ from packages.rca.model import (
 from packages.storage.database import create_session_factory
 from packages.storage.models import AlertRow, Base, EvidenceRow
 from packages.storage.repositories import (
+    ChangeRecordRepository,
     DiagnosisRepository,
     IncidentEventRepository,
     IncidentRepository,
@@ -166,6 +170,33 @@ def _seed(
             tool_call_id=uuid4(),
             raw_result_reference="obj-1",
             collected_at=T0 + timedelta(seconds=5),
+        )
+    )
+    # A durable change on the leading actor 30s before onset, plus unrelated noise.
+    ChangeRecordRepository(session).append(
+        ChangeRecord(
+            timestamp=T0 - timedelta(seconds=30),
+            resource_type="Deployment",
+            resource_name="payment-service",
+            change_type=ChangeType.UPDATED,
+            scope=ChangeScope.DEPLOYMENT,
+            before={"revision": "1"},
+            after={"revision": "2"},
+            revision="2",
+            source="harness",
+        )
+    )
+    ChangeRecordRepository(session).append(
+        ChangeRecord(
+            timestamp=T0 - timedelta(minutes=7),
+            resource_type="Deployment",
+            resource_name="frontend",
+            change_type=ChangeType.SCALED,
+            scope=ChangeScope.DEPLOYMENT,
+            before={"replicas": 2},
+            after={"replicas": 3},
+            revision="9",
+            source="harness",
         )
     )
     session.commit()
@@ -317,6 +348,31 @@ def test_unknown_incident_is_typed_not_found(
     missing = client.get(f"/api/v1/console/incidents/{uuid4()}")
     assert missing.status_code == 404
     assert missing.json()["error"]["code"] == "INCIDENT_NOT_FOUND"
+
+
+def test_global_changes_list_and_filter(
+    app_client: tuple[TestClient, dict[str, UUID]],
+) -> None:
+    client, _ = app_client
+    everything = client.get("/api/v1/console/changes").json()
+    assert len(everything) >= 2
+    scaled = client.get("/api/v1/console/changes?change_type=SCALED").json()
+    assert scaled and all(change["change_type"] == "SCALED" for change in scaled)
+    named = client.get("/api/v1/console/changes?q=payment").json()
+    assert named and all("payment" in change["resource_name"] for change in named)
+
+
+def test_incident_changes_mark_leading_actor_without_claiming_cause(
+    app_client: tuple[TestClient, dict[str, UUID]],
+) -> None:
+    client, ids = app_client
+    changes = client.get(f"/api/v1/console/incidents/{ids['resolved']}/changes").json()
+    by_resource = {change["resource_name"]: change for change in changes}
+    # The payment-service change sits 30s before onset and is flagged as the
+    # leading actor; the frontend change is present but not flagged.
+    assert by_resource["payment-service"]["matches_leading_actor"] is True
+    assert by_resource["payment-service"]["onset_delta_seconds"] == -30.0
+    assert by_resource["frontend"]["matches_leading_actor"] is False
 
 
 def test_legacy_incident_api_is_unchanged(

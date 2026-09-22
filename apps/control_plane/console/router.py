@@ -8,7 +8,8 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session, sessionmaker
 
 from apps.control_plane.console.dto import (
     DashboardCounters,
@@ -27,6 +28,7 @@ from apps.control_plane.console.mappers import (
     incident_list_item,
     timeline_view,
 )
+from apps.control_plane.console.stream import global_stream, incident_stream
 from packages.rca.model import Diagnosis
 from packages.storage import (
     AlertRepository,
@@ -71,13 +73,18 @@ def _passes(
 def create_console_router(
     get_session: Callable[[], Iterator[Session]],
     system_status: Callable[[Session], SystemStatus],
+    session_factory: sessionmaker[Session],
 ) -> APIRouter:
     """Build the console router bound to the app's session dependency.
 
     ``system_status`` is injected so the router stays free of connector wiring;
     the app supplies a provider that probes what it can honestly determine.
+    ``session_factory`` backs the SSE streams, which open a short-lived session
+    per poll rather than holding a request-scoped one open.
     """
     router = APIRouter(prefix="/api/v1/console", tags=["console"])
+
+    sse_headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
     def _items(session: Session) -> list[IncidentListItem]:
         views = DiagnosisRepository(session).latest_views()
@@ -232,5 +239,23 @@ def create_console_router(
             evidence_view(item)
             for item in EvidenceRepository(session).list_for_incident(incident_id)
         ]
+
+    @router.get("/stream")
+    def stream() -> StreamingResponse:
+        """Emit an event whenever incidents, events or diagnoses change."""
+        return StreamingResponse(
+            global_stream(session_factory),
+            media_type="text/event-stream",
+            headers=sse_headers,
+        )
+
+    @router.get("/incidents/{incident_id}/stream")
+    def incident_stream_route(incident_id: UUID) -> StreamingResponse:
+        """Emit an event whenever this incident gains an event or a diagnosis."""
+        return StreamingResponse(
+            incident_stream(session_factory, incident_id),
+            media_type="text/event-stream",
+            headers=sse_headers,
+        )
 
     return router

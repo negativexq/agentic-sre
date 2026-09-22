@@ -1,6 +1,9 @@
+import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { useIncident } from "@/api/hooks";
+import { useLiveUpdates } from "@/api/useLiveUpdates";
+import { LiveBadge } from "@/components/LiveBadge";
 import type { DiagnosisView, IncidentListItem } from "@/api/types";
 import { CausalPath } from "@/components/workspace/CausalPath";
 import { CompetingHypotheses } from "@/components/workspace/CompetingHypotheses";
@@ -15,12 +18,15 @@ import { Tabs } from "@/components/ui/Tabs";
 import { dateTime, shortEntity } from "@/lib/format";
 import { confidenceTone, resolutionTone, severityTone } from "@/lib/tones";
 
-function Header({ incident }: { incident: IncidentListItem }) {
+function Header({ incident, live }: { incident: IncidentListItem; live: ReactNode }) {
   return (
     <div className="mb-5">
-      <Link to="/incidents" className="text-sm text-accent hover:underline">
-        ← All incidents
-      </Link>
+      <div className="flex items-center justify-between">
+        <Link to="/incidents" className="text-sm text-accent hover:underline">
+          ← All incidents
+        </Link>
+        {live}
+      </div>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight text-text break-anywhere">
         {incident.title}
       </h1>
@@ -96,6 +102,9 @@ function InvestigationTrace({ diagnosis }: { diagnosis: DiagnosisView }) {
 export function IncidentWorkspacePage() {
   const { incidentId } = useParams<{ incidentId: string }>();
   const { data, isLoading, isError, error } = useIncident(incidentId);
+  const live = useLiveUpdates(incidentId ? `/incidents/${incidentId}/stream` : "/stream", [
+    ["incident", incidentId],
+  ]);
 
   if (isError) return <ErrorState message={(error as Error).message} />;
   if (isLoading || !data) {
@@ -109,19 +118,32 @@ export function IncidentWorkspacePage() {
   }
 
   const { incident, diagnosis, timeline } = data;
+  const failed = timeline.events.some((event) => event.event_type === "DIAGNOSIS_FAILED");
 
   return (
     <>
-      <Header incident={incident} />
+      <Header incident={incident} live={<LiveBadge state={live} />} />
 
       {!diagnosis ? (
         <Card>
           <CardBody>
-            <p className="text-sm text-text">Diagnosis in progress.</p>
-            <p className="mt-1 text-sm text-muted">
-              The alert opened this incident and auto-diagnosis is running. This page refreshes
-              automatically.
-            </p>
+            {failed ? (
+              <>
+                <p className="text-sm font-medium text-critical">Diagnosis failed.</p>
+                <p className="mt-1 text-sm text-muted">
+                  A diagnosis run started but did not complete. The engine records the failure; a
+                  retry will open a new run. No partial result is shown.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-text">Diagnosis in progress.</p>
+                <p className="mt-1 text-sm text-muted">
+                  The alert opened this incident and auto-diagnosis is running. This view updates
+                  live as each phase is recorded.
+                </p>
+              </>
+            )}
           </CardBody>
         </Card>
       ) : (

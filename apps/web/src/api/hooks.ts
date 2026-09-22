@@ -3,12 +3,15 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import type { IncidentFilters } from "@/api/types";
 
-/** Dashboard refetches on an interval so "what is happening now" stays live. */
+// SSE (useLiveUpdates) drives real-time refetches; the intervals below are a
+// fallback for when EventSource is unavailable or a stream drops.
+const FALLBACK_INTERVAL = 30_000;
+
 export function useDashboard() {
   return useQuery({
     queryKey: ["dashboard"],
     queryFn: api.dashboard,
-    refetchInterval: 5_000,
+    refetchInterval: FALLBACK_INTERVAL,
   });
 }
 
@@ -16,7 +19,7 @@ export function useIncidents(filters: IncidentFilters) {
   return useQuery({
     queryKey: ["incidents", filters],
     queryFn: () => api.incidents(filters),
-    refetchInterval: 10_000,
+    refetchInterval: FALLBACK_INTERVAL,
   });
 }
 
@@ -25,7 +28,7 @@ export function useIncident(id: string | undefined) {
     queryKey: ["incident", id],
     queryFn: () => api.incident(id as string),
     enabled: Boolean(id),
-    refetchInterval: 5_000,
+    refetchInterval: FALLBACK_INTERVAL,
   });
 }
 

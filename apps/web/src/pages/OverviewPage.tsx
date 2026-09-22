@@ -1,5 +1,7 @@
 import { useDashboard } from "@/api/hooks";
+import { useLiveUpdates } from "@/api/useLiveUpdates";
 import { IncidentsTable } from "@/components/IncidentsTable";
+import { LiveBadge } from "@/components/LiveBadge";
 import { PageHeader } from "@/components/PageHeader";
 import { StatTile } from "@/components/StatTile";
 import { SystemHealth } from "@/components/SystemHealth";
@@ -9,12 +11,14 @@ import { humanizeSeconds } from "@/lib/format";
 
 export function OverviewPage() {
   const { data, isLoading, isError, error } = useDashboard();
+  const live = useLiveUpdates("/stream", [["dashboard"], ["incidents"]]);
 
   return (
     <>
       <PageHeader
         title="Overview"
         description="What is happening across the cluster right now."
+        action={<LiveBadge state={live} />}
       />
 
       {isError && <ErrorState message={(error as Error).message} />}

@@ -1,8 +1,10 @@
 import { useState } from "react";
 
 import { useIncidents } from "@/api/hooks";
+import { useLiveUpdates } from "@/api/useLiveUpdates";
 import type { IncidentFilters } from "@/api/types";
 import { IncidentsTable } from "@/components/IncidentsTable";
+import { LiveBadge } from "@/components/LiveBadge";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Card, CardBody } from "@/components/ui/Card";
@@ -57,6 +59,7 @@ export function IncidentsPage() {
     offset,
   };
   const { data, isLoading, isError, error } = useIncidents(filters);
+  const live = useLiveUpdates("/stream", [["incidents"]]);
 
   const reset = (mutate: () => void) => {
     setOffset(0);
@@ -71,6 +74,7 @@ export function IncidentsPage() {
       <PageHeader
         title="Incidents"
         description="Every incident, filterable by impact and diagnosis outcome."
+        action={<LiveBadge state={live} />}
       />
 
       <Card className="mb-4">

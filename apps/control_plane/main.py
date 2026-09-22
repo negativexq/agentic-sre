@@ -210,7 +210,7 @@ def create_app(
     def system_status_provider(session: Session) -> SystemStatus:
         return build_system_status(session, reader_configured=reader_configured)
 
-    app.include_router(create_console_router(get_session, system_status_provider))
+    app.include_router(create_console_router(get_session, system_status_provider, session_factory))
 
     @app.exception_handler(IncidentNotFoundError)
     async def incident_not_found_handler(

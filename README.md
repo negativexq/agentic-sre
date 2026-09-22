@@ -232,8 +232,29 @@ The same fault-injection path drives the internal live scenario suite:
 ```bash
 make live-scenarios        # list the suite
 make live-bench            # stage every scenario, grade the stored diagnosis
-make live-demo SCENARIO=payment_config_change   # stage one and leave it in the UI
+make live-demo SCENARIO=payment_config_change   # stage one fault and leave it in place
+make ui                    # in another terminal, then open http://localhost:8080
+make live-restore          # undo the staged fault when finished
 ```
+
+### Live incident UI
+
+`make ui` port-forwards the control plane to **http://localhost:8080**. The
+incident list refreshes itself, and each incident page shows the diagnosis the
+control plane stored together with its lifecycle timing:
+
+```text
+Alert fired → Incident opened → Diagnosis started
+  → Evidence gathered (objects · journal · events · logs)
+  → RCA engine completed (leading actor · reads)
+  → Diagnosis stored (root cause · resolution)
+```
+
+Each stage carries the real recorded timestamp and a `T+` offset, so the page
+answers "how long from alert to root cause, and what was read to get there" —
+with the model-call count shown alongside (zero on the deterministic path). The
+[timeline design](docs/diagnosis-timeline.md) documents the per-run events
+behind it.
 
 ## Architecture and trust boundaries
 

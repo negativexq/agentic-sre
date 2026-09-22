@@ -51,6 +51,27 @@ normalized Finding emissions. The detailed [frozen benchmark report](evals/resul
 contains the dataset revision, manifest hash, prediction-freeze procedure, and
 full aggregate metrics.
 
+### Live scenario suite
+
+ITBench-Lite grades root-cause accuracy on frozen snapshots. The internal live
+scenario suite instead stages 25 real faults on a running Kubernetes cluster —
+config, image, scale, NetworkPolicy, resource-starvation, deletion, crash, and
+runtime-only faults — lets the real alerting path open an incident, and grades
+the diagnosis the control plane actually stored.
+
+| Tier | Scenarios | Correct |
+| --- | ---: | ---: |
+| DEV | 19 | 18 |
+| **HOLDOUT** | **6** | **6** |
+| **Total** | **25** | **[24/25 (96%)](evals/results/live-suite-2026-09-22.md)** |
+
+Zero fabrications: every scenario that staged a real change had its actor named,
+and every scenario that staged no cluster change was correctly not resolved.
+This is a **separate** in-house measurement — its labels have no external
+validity, so it is never combined with the ITBench-Lite number above. The
+[methodology](docs/benchmarks/live-suite.md) documents what the single-node
+platform can and cannot stage, and `make live-bench` reproduces the run.
+
 ## What is Agentic SRE?
 
 Agentic SRE is a Kubernetes incident investigation and SRE root-cause
@@ -259,24 +280,9 @@ healthy workload
 ```
 
 This validates the incident path, observation persistence, replay, and safety
-boundary.
-
-### Live scenario suite
-
-Beyond the single lifecycle above, the internal live scenario suite stages 25
-distinct faults on a running cluster — config and image changes, scale-downs,
-NetworkPolicy isolation, resource starvation, deletions, crashes, and
-runtime-only faults — lets the real alerting path open an incident, and grades
-the diagnosis the control plane actually stored.
-
-In its [first full run](evals/results/live-suite-2026-09-22.md) it reached
-**24/25 correct (96%) with zero fabrications**: every scenario that staged a
-real change had its actor named, and every scenario that staged no cluster
-change was correctly not resolved. This is a separate measurement from
-ITBench-Lite — its labels are set in-house against a live pipeline and have no
-external validity, so the two numbers are never combined. The
-[methodology](docs/benchmarks/live-suite.md) documents what the single-node
-platform can and cannot stage.
+boundary. The broader [live scenario suite](docs/benchmarks/live-suite.md) —
+25 staged faults, graded end to end — is summarised under
+[Measured root-cause performance](#measured-root-cause-performance) above.
 
 ## Benchmark methodology and reproducibility
 

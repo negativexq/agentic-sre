@@ -1,5 +1,6 @@
 import type {
   DashboardSummary,
+  EvidenceView,
   IncidentDetail,
   IncidentFilters,
   IncidentPage,
@@ -52,4 +53,5 @@ export const api = {
   incidents: (filters: IncidentFilters = {}) =>
     get<IncidentPage>(`/incidents${query(filters)}`),
   incident: (id: string) => get<IncidentDetail>(`/incidents/${id}`),
+  incidentEvidence: (id: string) => get<EvidenceView[]>(`/incidents/${id}/evidence`),
 };

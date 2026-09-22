@@ -29,6 +29,14 @@ export function useIncident(id: string | undefined) {
   });
 }
 
+export function useIncidentEvidence(id: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ["incident-evidence", id],
+    queryFn: () => api.incidentEvidence(id as string),
+    enabled: Boolean(id) && enabled,
+  });
+}
+
 export function useSystemStatus() {
   return useQuery({
     queryKey: ["system"],

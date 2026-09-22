@@ -36,7 +36,12 @@ from packages.contracts import (
 )
 from packages.incident import IncidentManager, normalize_alert
 from packages.rca.model import Diagnosis
-from packages.rca.report import diagnosis_html, diagnosis_pending_html, incidents_html
+from packages.rca.report import (
+    Lifecycle,
+    diagnosis_html,
+    diagnosis_pending_html,
+    incidents_html,
+)
 from packages.storage import (
     AlertRepository,
     ChangeRecordRepository,
@@ -303,13 +308,25 @@ def create_app(
         incident_id: UUID,
         session: Session = Depends(get_session),  # noqa: B008
     ) -> str:
-        """Diagnosis page for one incident."""
-        if IncidentRepository(session).get(incident_id) is None:
+        """Diagnosis page for one incident, with its alert-to-diagnosis lifecycle."""
+        incident = IncidentRepository(session).get(incident_id)
+        if incident is None:
             raise IncidentNotFoundError(str(incident_id))
-        document = DiagnosisRepository(session).latest(incident_id)
+        diagnoses = DiagnosisRepository(session)
+        document = diagnoses.latest(incident_id)
         if document is None:
             return diagnosis_pending_html(str(incident_id), back_link="/")
-        return diagnosis_html(Diagnosis.model_validate(document), back_link="/")
+        diagnosis = Diagnosis.model_validate(document)
+        alerts = AlertRepository(session).list_for_incident(incident_id)
+        lifecycle = Lifecycle(
+            alert_fired=min((alert.starts_at for alert in alerts), default=None),
+            incident_opened=incident.created_at,
+            diagnosis_ready=diagnoses.latest_created_at(incident_id),
+            reads=len(diagnosis.steps),
+            evidence=len(diagnosis.evidence),
+            model_calls=diagnosis.model_calls,
+        )
+        return diagnosis_html(diagnosis, back_link="/", lifecycle=lifecycle)
 
     @app.post(
         "/api/v1/webhooks/alertmanager",

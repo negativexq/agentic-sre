@@ -52,7 +52,7 @@ def test_html_get_never_generates_or_persists_diagnosis(tmp_path: Path, monkeypa
     with TestClient(create_app(factory, diagnosis_service=service)) as client:
         response = client.get(f"/incidents/{incident_id}")
         assert response.status_code == 200
-        assert "Diagnosis not generated yet" in response.text
+        assert "Diagnosis running" in response.text
         assert calls == 0
     with Session(engine) as session:
         assert session.scalar(select(DiagnosisRow.diagnosis_id)) is None

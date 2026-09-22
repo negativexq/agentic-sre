@@ -3,9 +3,79 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import datetime
 from html import escape
 
 from packages.rca.model import Confidence, Diagnosis, InvestigationResult
+
+
+@dataclass(frozen=True, slots=True)
+class Lifecycle:
+    """The observable timing of one incident, from alert to stored diagnosis.
+
+    All times are what the control plane actually recorded; nothing here is
+    estimated. ``diagnosis_ready`` is ``None`` while auto-diagnosis is still
+    running.
+    """
+
+    alert_fired: datetime | None
+    incident_opened: datetime
+    diagnosis_ready: datetime | None
+    reads: int
+    evidence: int
+    model_calls: int
+
+
+def _fmt_delta(earlier: datetime | None, later: datetime | None) -> str:
+    if earlier is None or later is None:
+        return "—"
+    seconds = (later - earlier).total_seconds()
+    if seconds < 0:
+        return "—"
+    if seconds < 90:
+        return f"{seconds:.1f} s"
+    return f"{seconds / 60:.1f} min"
+
+
+def _lifecycle_section(lifecycle: Lifecycle) -> str:
+    def clock(value: datetime | None) -> str:
+        return escape(value.isoformat(timespec="seconds")) if value else "pending"
+
+    steps = [
+        ("Alert fired", clock(lifecycle.alert_fired), "Prometheus threshold breached"),
+        (
+            "Incident opened",
+            clock(lifecycle.incident_opened),
+            f"+{_fmt_delta(lifecycle.alert_fired, lifecycle.incident_opened)} — Alertmanager → webhook",
+        ),
+        (
+            "Root cause diagnosed",
+            clock(lifecycle.diagnosis_ready),
+            f"+{_fmt_delta(lifecycle.incident_opened, lifecycle.diagnosis_ready)} — auto-diagnosis"
+            if lifecycle.diagnosis_ready
+            else "auto-diagnosis running…",
+        ),
+    ]
+    rows = "".join(
+        f"<tr><td>{escape(name)}</td><td>{when}</td><td class='muted'>{detail}</td></tr>"
+        for name, when, detail in steps
+    )
+    total = _fmt_delta(
+        lifecycle.alert_fired or lifecycle.incident_opened, lifecycle.diagnosis_ready
+    )
+    return (
+        "<h2>Lifecycle</h2>"
+        "<div class='grid'>"
+        f"<div class='card'><div class='muted'>Alert → diagnosis</div><div class='cause'>{total}</div></div>"
+        f"<div class='card'><div class='muted'>Read-only observations</div><div class='cause'>{lifecycle.reads}</div></div>"
+        f"<div class='card'><div class='muted'>Evidence findings</div><div class='cause'>{lifecycle.evidence}</div></div>"
+        f"<div class='card'><div class='muted'>Model calls</div><div class='cause'>{lifecycle.model_calls}</div></div>"
+        "</div>"
+        "<div class='table-wrap'><table><tr><th>Stage</th><th>At</th><th>Detail</th></tr>"
+        f"{rows}</table></div>"
+    )
+
 
 _STYLE = """
 :root { --bg:#fbfbfa; --fg:#1d1d1b; --muted:#6b6b66; --line:#e3e2dd; --card:#ffffff;
@@ -37,11 +107,12 @@ pre { background:var(--bg); border:1px solid var(--line); border-radius:6px; pad
 """
 
 
-def _page(title: str, body: str) -> str:
+def _page(title: str, body: str, *, refresh_seconds: int | None = None) -> str:
+    refresh = f"<meta http-equiv='refresh' content='{refresh_seconds}'>" if refresh_seconds else ""
     return (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        f"<title>{escape(title)}</title><style>{_STYLE}</style></head>"
+        f"{refresh}<title>{escape(title)}</title><style>{_STYLE}</style></head>"
         f"<body><main>{body}</main></body></html>"
     )
 
@@ -56,6 +127,7 @@ def diagnosis_html(
     *,
     back_link: str | None = None,
     investigation: InvestigationResult | None = None,
+    lifecycle: Lifecycle | None = None,
 ) -> str:
     """Render one diagnosis as a standalone page."""
     symptoms = diagnosis.symptoms
@@ -66,6 +138,8 @@ def diagnosis_html(
     parts.append(
         f"<p class='muted'>Mode {escape(diagnosis.mode)} · {diagnosis.model_calls} model call(s)</p>"
     )
+    if lifecycle is not None:
+        parts.append(_lifecycle_section(lifecycle))
     cause = (
         escape(diagnosis.root_cause.canonical) if diagnosis.root_cause else "No root cause found"
     )
@@ -238,7 +312,11 @@ def incidents_html(rows: Sequence[dict[str, str]]) -> str:
         if rows
         else "<p class='muted'>No incidents yet. Alerts arrive through the Alertmanager webhook.</p>"
     )
-    return _page("Incidents", f"<h1>Incidents</h1>{table}")
+    return _page(
+        "Incidents",
+        f"<h1>Incidents</h1><p class='muted'>Live — refreshes automatically.</p>{table}",
+        refresh_seconds=5,
+    )
 
 
 def diagnosis_pending_html(incident_id: str, *, back_link: str | None = None) -> str:
@@ -246,11 +324,11 @@ def diagnosis_pending_html(incident_id: str, *, back_link: str | None = None) ->
     back = f"<p><a href='{escape(back_link)}'>&larr; All incidents</a></p>" if back_link else ""
     body = (
         f"{back}<h1>Incident {escape(incident_id)}</h1>"
-        "<div class='card'><h2>Diagnosis not generated yet</h2>"
-        "<p>No diagnosis has been generated for this incident yet.</p>"
-        "<p>Use the authenticated diagnosis API action to generate one.</p></div>"
+        "<div class='card'><h2>Diagnosis running…</h2>"
+        "<p>The alert has opened this incident and auto-diagnosis is in progress. "
+        "This page refreshes automatically.</p></div>"
     )
-    return _page(f"Diagnosis pending {incident_id}", body)
+    return _page(f"Diagnosis pending {incident_id}", body, refresh_seconds=3)
 
 
-__all__ = ["diagnosis_html", "diagnosis_pending_html", "incidents_html"]
+__all__ = ["Lifecycle", "diagnosis_html", "diagnosis_pending_html", "incidents_html"]

@@ -746,6 +746,15 @@ class DiagnosisRepository:
         ).first()
         return dict(row.document) if row is not None else None
 
+    def latest_created_at(self, incident_id: object) -> datetime | None:
+        """When the latest diagnosis was stored, for lifecycle timing."""
+        return self._session.scalars(
+            select(DiagnosisRow.created_at)
+            .where(DiagnosisRow.incident_id == incident_id)
+            .order_by(desc(DiagnosisRow.created_at), desc(DiagnosisRow.diagnosis_id))
+            .limit(1)
+        ).first()
+
     def summaries(self) -> dict[str, dict[str, Any]]:
         """Latest root cause and confidence per incident id."""
         result: dict[str, dict[str, Any]] = {}

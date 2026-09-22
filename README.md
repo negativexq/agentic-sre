@@ -13,6 +13,7 @@ owns the diagnosis.
 ### At a glance
 
 - **[84% exact root-cause accuracy](evals/results/v1.1.2/README.md)** — 26/31 against ITBench-Lite ground truth, over every scenario whose published label is matchable.
+- **[24/25 on the live suite](evals/results/live-suite-2026-09-22.md)** — 25 faults staged on a real cluster, graded end to end, zero fabrications (a separate in-house measurement, not combined with the above).
 - **0 model calls** — the measured benchmark path is fully deterministic.
 - **Bounded investigation** — the frozen TEST25 run used six validated physical reads per incident, one read at a time.
 - **Evidence-backed RCA** — observations become normalized Findings before they can change a diagnosis.
@@ -205,6 +206,14 @@ Use `make rbac-check` to verify that the control-plane service account can
 observe the cluster without reading Secrets or writing workloads. The complete
 real-cluster lifecycle gate is `make e2e-kind`.
 
+The same fault-injection path drives the internal live scenario suite:
+
+```bash
+make live-scenarios        # list the suite
+make live-bench            # stage every scenario, grade the stored diagnosis
+make live-demo SCENARIO=payment_config_change   # stage one and leave it in the UI
+```
+
 ## Architecture and trust boundaries
 
 Agentic SRE has four practical layers:
@@ -250,8 +259,24 @@ healthy workload
 ```
 
 This validates the incident path, observation persistence, replay, and safety
-boundary. It is complementary to the ITBench-Lite benchmark and is not a claim
-that every supported fault class has a live-cluster end-to-end scenario.
+boundary.
+
+### Live scenario suite
+
+Beyond the single lifecycle above, the internal live scenario suite stages 25
+distinct faults on a running cluster — config and image changes, scale-downs,
+NetworkPolicy isolation, resource starvation, deletions, crashes, and
+runtime-only faults — lets the real alerting path open an incident, and grades
+the diagnosis the control plane actually stored.
+
+In its [first full run](evals/results/live-suite-2026-09-22.md) it reached
+**24/25 correct (96%) with zero fabrications**: every scenario that staged a
+real change had its actor named, and every scenario that staged no cluster
+change was correctly not resolved. This is a separate measurement from
+ITBench-Lite — its labels are set in-house against a live pipeline and have no
+external validity, so the two numbers are never combined. The
+[methodology](docs/benchmarks/live-suite.md) documents what the single-node
+platform can and cannot stage.
 
 ## Benchmark methodology and reproducibility
 

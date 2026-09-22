@@ -7,6 +7,7 @@ investigation tool surface, and no action reads or writes diagnosis state.
 
 from __future__ import annotations
 
+import http.client
 import json
 import socket
 import subprocess
@@ -15,11 +16,13 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Protocol
-from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 NAMESPACE = "sre-demo"
 REQUEST_TIMEOUT_SECONDS = 15
+# A port-forward left stale by a rollout drops the connection, so a POST to a
+# workload endpoint must fail as an ActionError, not an unhandled exception.
+_TRANSPORT_ERRORS = (OSError, http.client.HTTPException)
 
 
 class ActionError(RuntimeError):
@@ -69,6 +72,38 @@ def kubectl(*args: str, context: Context, check: bool = True) -> str:
     return result.stdout
 
 
+# The engine looks back two hours over the object-version and change journals,
+# so a rollout from a baseline reset or an adjacent scenario stays visible long
+# enough to be blamed.  Clearing these tables and taking a fresh baseline
+# snapshot makes the change a scenario stages the only change in its window.
+_JOURNAL_TABLES = ("object_versions", "event_versions", "change_records")
+
+
+def truncate_change_journal(context: Context) -> None:
+    """Empty the change-detection tables so each scenario starts from a clean slate."""
+    if context.dry_run:
+        return
+    statement = f"TRUNCATE {', '.join(_JOURNAL_TABLES)} RESTART IDENTITY CASCADE;"
+    command = (
+        "kubectl",
+        "-n",
+        context.namespace,
+        "exec",
+        "deployment/postgres",
+        "--",
+        "psql",
+        "-U",
+        "postgres",
+        "-d",
+        "agentic_sre",
+        "-c",
+        statement,
+    )
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        raise ActionError("truncate_change_journal", {"stderr": result.stderr})
+
+
 def post_json(url: str, payload: dict[str, Any], *, context: Context) -> Any:
     """POST a JSON body and return the decoded response."""
     if context.dry_run:
@@ -82,10 +117,8 @@ def post_json(url: str, payload: dict[str, Any], *, context: Context) -> Any:
     try:
         with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
             body = response.read().decode()
-    except HTTPError as error:
-        raise ActionError("post_json", {"url": url, "status": error.code}) from error
-    except URLError as error:
-        raise ActionError("post_json", {"url": url, "reason": str(error.reason)}) from error
+    except _TRANSPORT_ERRORS as error:
+        raise ActionError("post_json", {"url": url, "reason": str(error)}) from error
     return json.loads(body) if body else None
 
 
@@ -311,25 +344,38 @@ class SetResources:
 
 @dataclass(frozen=True, slots=True)
 class RestartContainer:
-    """Kill the main process repeatedly so the container restarts."""
+    """Force the workload process to restart repeatedly.
+
+    The workload images are distroless and run the app as PID 1, which the
+    kernel shields from in-container signals, so a crash cannot be injected with
+    ``kill``.  Deleting the pod forces a fresh process each time, which moves
+    ``service_process_start_time_seconds`` and drives the runtime-instability
+    alert exactly as a crash loop would.
+    """
 
     deployment: str
     times: int = 2
+    interval_seconds: float = 8.0
 
     def describe(self) -> str:
-        return f"{self.deployment} crash x{self.times}"
+        return f"{self.deployment} forced restart x{self.times}"
 
     def apply(self, context: Context) -> None:
-        for _ in range(self.times):
+        for index in range(self.times):
             kubectl(
-                "exec",
-                f"deployment/{self.deployment}",
-                "--",
-                "kill",
-                "1",
+                "delete",
+                "pod",
+                "-l",
+                f"app={self.deployment}",
+                "--wait=true",
                 context=context,
                 check=False,
             )
+            if index + 1 < self.times:
+                if context.dry_run:
+                    continue
+                WaitRollout(self.deployment, timeout_seconds=60).apply(context)
+                time.sleep(self.interval_seconds)
 
 
 @dataclass(frozen=True, slots=True)
@@ -376,6 +422,7 @@ DEFAULT_FORWARDS: tuple[Forward, ...] = (
     Forward("order-service", 18000),
     Forward("payment-service", 18001),
     Forward("control-plane", 18080),
+    Forward("prometheus", 19090, remote_port=9090, namespace="observability"),
 )
 
 
@@ -385,54 +432,101 @@ def _port_is_open(port: int) -> bool:
         return probe.connect_ex(("127.0.0.1", port)) == 0
 
 
+class PortForwarder:
+    """Owns the ``kubectl port-forward`` processes for a run.
+
+    ``kubectl port-forward svc/x`` binds to one pod and does not follow a
+    rollout to the replacement pod, so any forward whose service was just rolled
+    is stale.  ``refresh`` tears such a forward down and stands a fresh one up so
+    workload requests reach the current pod.  A port that some other process
+    already holds (for example the user's ``make ui`` forward) is treated as
+    externally managed: it is used as-is and never killed or refreshed.
+    """
+
+    def __init__(self, forwards: tuple[Forward, ...], *, timeout_seconds: float) -> None:
+        self._forwards = {item.service: item for item in forwards}
+        self._timeout_seconds = timeout_seconds
+        self._processes: dict[str, subprocess.Popen[str]] = {}
+        self._external: set[str] = set()
+
+    def _spawn(self, forward: Forward) -> None:
+        self._processes[forward.service] = subprocess.Popen(
+            (
+                "kubectl",
+                "port-forward",
+                "-n",
+                forward.namespace,
+                f"svc/{forward.service}",
+                f"{forward.local_port}:{forward.remote_port}",
+            ),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+
+    def _await_open(self, forward: Forward) -> None:
+        deadline = time.monotonic() + self._timeout_seconds
+        while not _port_is_open(forward.local_port):
+            if time.monotonic() > deadline:
+                raise ActionError(
+                    "port_forward", {"service": forward.service, "port": forward.local_port}
+                )
+            time.sleep(0.5)
+
+    def start_all(self) -> None:
+        for forward in self._forwards.values():
+            if _port_is_open(forward.local_port):
+                self._external.add(forward.service)
+                continue
+            self._spawn(forward)
+        for forward in self._forwards.values():
+            if forward.service not in self._external:
+                self._await_open(forward)
+
+    def refresh(self, services: tuple[str, ...]) -> None:
+        """Restart the named forwards so they point at the current pods."""
+        for service in services:
+            forward = self._forwards.get(service)
+            if forward is None or service in self._external:
+                continue
+            process = self._processes.pop(service, None)
+            if process is not None:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+            self._spawn(forward)
+        for service in services:
+            forward = self._forwards.get(service)
+            if forward is not None and service not in self._external:
+                self._await_open(forward)
+
+    def stop_all(self) -> None:
+        for process in self._processes.values():
+            process.terminate()
+        for process in self._processes.values():
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+        self._processes.clear()
+
+
 @contextmanager
 def port_forwards(
     forwards: tuple[Forward, ...] = DEFAULT_FORWARDS,
     *,
     timeout_seconds: float = 30.0,
-) -> Iterator[None]:
+) -> Iterator[PortForwarder]:
     """Expose the demo services on localhost while the block runs.
 
     A port that is already open is left alone, so this composes with a
     port-forward the user started themselves for the UI.
     """
-    processes: list[subprocess.Popen[str]] = []
-    started: list[Forward] = []
+    forwarder = PortForwarder(forwards, timeout_seconds=timeout_seconds)
     try:
-        for forward in forwards:
-            if _port_is_open(forward.local_port):
-                continue
-            processes.append(
-                subprocess.Popen(
-                    (
-                        "kubectl",
-                        "port-forward",
-                        "-n",
-                        forward.namespace,
-                        f"svc/{forward.service}",
-                        f"{forward.local_port}:{forward.remote_port}",
-                    ),
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                )
-            )
-            started.append(forward)
-        deadline = time.monotonic() + timeout_seconds
-        for forward in started:
-            while not _port_is_open(forward.local_port):
-                if time.monotonic() > deadline:
-                    raise ActionError(
-                        "port_forward",
-                        {"service": forward.service, "port": forward.local_port},
-                    )
-                time.sleep(0.5)
-        yield
+        forwarder.start_all()
+        yield forwarder
     finally:
-        for process in processes:
-            process.terminate()
-        for process in processes:
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
+        forwarder.stop_all()

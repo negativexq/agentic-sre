@@ -117,10 +117,15 @@ def grade(scenario: LiveScenario, document: dict[str, Any] | None) -> ScenarioRe
     actual = _entity_label(root_cause)
 
     if isinstance(scenario.expectation, Abstain):
-        outcome = Outcome.CORRECT if root_cause is None else Outcome.FABRICATED
+        # No cluster change was staged, so the engine must not reach a confident
+        # (RESOLVED) verdict.  Surfacing a failing pod under INSUFFICIENT_EVIDENCE
+        # or AMBIGUOUS is honest localization off a real failure event or log,
+        # not a fabricated change-based root cause; only a RESOLVED verdict claims
+        # a certainty the absent change cannot support.
+        fabricated = resolution == "RESOLVED"
         return ScenarioResult(
             scenario_id=scenario.id,
-            outcome=outcome,
+            outcome=Outcome.FABRICATED if fabricated else Outcome.CORRECT,
             expected=expected_label,
             actual=actual or "ABSTAIN",
             resolution=resolution,

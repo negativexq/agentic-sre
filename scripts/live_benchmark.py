@@ -10,7 +10,7 @@ from contextlib import AbstractContextManager, nullcontext
 from dataclasses import asdict
 from pathlib import Path
 
-from packages.evals.live.actions import Context, port_forwards
+from packages.evals.live.actions import Context, PortForwarder, port_forwards
 from packages.evals.live.runner import RunOptions, restore_namespace, run_suite
 from packages.evals.live.scenarios import SCENARIOS, Tier, scenarios_for
 
@@ -66,7 +66,9 @@ def main() -> int:
         control_plane_url=args.control_plane_url,
     )
 
-    forwarding: AbstractContextManager[None] = nullcontext() if args.no_forward else port_forwards()
+    forwarding: AbstractContextManager[PortForwarder | None] = (
+        nullcontext(None) if args.no_forward else port_forwards()
+    )
 
     if args.restore:
         with forwarding:
@@ -88,11 +90,12 @@ def main() -> int:
         api_token=args.api_token,
         keep_fault=args.keep_fault,
     )
-    with forwarding:
+    with forwarding as forwarder:
         report = run_suite(
             selected,
             context,
             options,
+            forwarder=forwarder,
             on_event=(lambda message: None) if args.quiet else (lambda message: print(message)),
         )
     print()

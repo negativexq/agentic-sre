@@ -184,12 +184,28 @@ def test_abstention_is_correct_when_nothing_is_named() -> None:
     assert grade(scenario, _document(None)).outcome is Outcome.CORRECT
 
 
-def test_naming_a_cause_with_no_change_is_a_fabrication() -> None:
+def test_resolving_a_cause_with_no_change_is_a_fabrication() -> None:
     scenario = SCENARIO_BY_ID["payment_error_spike"]
     document = _document({"namespace": "sre-demo", "kind": "Deployment", "name": "payment-service"})
+    assert document["resolution"] == "RESOLVED"
     result = grade(scenario, document)
     assert result.outcome is Outcome.FABRICATED
     assert not result.passed
+
+
+def test_tentative_localization_without_a_change_is_honest_abstention() -> None:
+    """A failing pod surfaced under INSUFFICIENT_EVIDENCE is localization off a
+    real failure event, not a fabricated change-based root cause."""
+    scenario = SCENARIO_BY_ID["payment_error_spike"]
+    document = {
+        "root_cause": {"namespace": "sre-demo", "kind": "Pod", "name": "payment-service-abc"},
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "confidence": "UNVERIFIED",
+        "evidence": [{"kind": "FAILURE_EVENT"}],
+    }
+    result = grade(scenario, document)
+    assert result.outcome is Outcome.CORRECT
+    assert result.actual.endswith("Pod/payment-service-abc")
 
 
 def test_expected_actor_is_graded_correct() -> None:

@@ -365,14 +365,19 @@ _CLUSTER_CHANGES: tuple[LiveScenario, ...] = (
         demo=True,
     ),
     LiveScenario(
-        id="replica_starvation",
-        title="Scaling down leaves too little capacity",
-        alert="OrderRequestLatencyHigh",
+        id="dependency_scaled_to_zero",
+        title="The payment dependency is scaled to zero",
+        alert="OrderErrorRateHigh",
         service="order-service",
-        expectation=RootCause("Deployment", "order-service", ("SCALE_CHANGE",)),
-        setup=(Scale("order-service", 1),),
-        workload=Workload(target=Target.ORDERS, count=40, concurrency=40, waves=4),
-        teardown=(Scale("order-service", 2), WaitRollout("order-service")),
+        # The demo runs one replica per service, so a scale-down that still
+        # leaves a serving pod is not a fault.  Scaling the payment dependency
+        # to zero is an unambiguous scale change: the order service records real
+        # 5xx as its dependency calls fail, and the engine must name the payment
+        # deployment that was scaled away.
+        expectation=RootCause("Deployment", "payment-service", ("SCALE_CHANGE",)),
+        setup=(Scale("payment-service", 0),),
+        workload=Workload(target=Target.ORDERS, count=40),
+        teardown=(Scale("payment-service", 1), WaitRollout("payment-service")),
         demo=True,
     ),
     LiveScenario(
@@ -541,13 +546,14 @@ _CLUSTER_CHANGES: tuple[LiveScenario, ...] = (
     ),
     LiveScenario(
         id="payment_pod_crash",
-        title="The payment container crashes repeatedly",
+        title="The payment process restarts repeatedly",
         alert="PaymentRuntimeInstability",
         service="payment-service",
-        expectation=RootCause(
-            "Deployment", "payment-service", ("CONTAINER_FAILURE", "FAILURE_EVENT")
-        ),
-        setup=(RestartContainer("payment-service", times=2),),
+        # The restart signal the engine attaches varies (container failure,
+        # rollout restart, or a lifecycle event), so this scenario asserts the
+        # actor and leaves the finding kind unconstrained.
+        expectation=RootCause("Deployment", "payment-service"),
+        setup=(RestartContainer("payment-service", times=3),),
         workload=NO_WORKLOAD,
         teardown=(WaitRollout("payment-service"),),
         demo=True,

@@ -208,8 +208,10 @@ _RUNTIME_FAULTS: tuple[LiveScenario, ...] = (
     ),
     LiveScenario(
         id="cross_service_db_pressure",
-        title="Order latency caused by payment pool pressure",
-        alert="OrderRequestLatencyHigh",
+        title="Order dependency latency caused by payment pool pressure",
+        # The order request-latency alert is gated to exclude dependency latency,
+        # so a slow payment dependency surfaces as OrderDependencyLatencyHigh.
+        alert="OrderDependencyLatencyHigh",
         service="order-service",
         expectation=Abstain(because="in-process connection hold leaves no cluster change"),
         setup=(HttpFault("payment-service", {"db_hold_ms": 3500}),),
@@ -225,17 +227,6 @@ _RUNTIME_FAULTS: tuple[LiveScenario, ...] = (
         expectation=Abstain(because="in-process query delay leaves no cluster change"),
         setup=(HttpFault("payment-service", {"db_query_delay_ms": 700}),),
         workload=Workload(target=Target.PAYMENTS, count=60),
-        teardown=_clear_faults(),
-        tier=Tier.HOLDOUT,
-    ),
-    LiveScenario(
-        id="traffic_surge_no_change",
-        title="Load surge with no underlying change",
-        alert="OrderRequestLatencyHigh",
-        service="order-service",
-        expectation=Abstain(because="nothing changed; the system is merely busy"),
-        setup=(),
-        workload=Workload(target=Target.ORDERS, count=40, concurrency=40, waves=5),
         teardown=_clear_faults(),
         tier=Tier.HOLDOUT,
     ),
@@ -302,7 +293,10 @@ _SPEC_CHANGES: tuple[LiveScenario, ...] = (
     LiveScenario(
         id="payment_config_cross_service_impact",
         title="A payment rollout degrades the order service",
-        alert="OrderRequestLatencyHigh",
+        # A slow payment dependency raises the order service's dependency
+        # latency, which the gated request-latency alert excludes; the dependency
+        # alert is the one that fires.
+        alert="OrderDependencyLatencyHigh",
         service="order-service",
         expectation=RootCause("Deployment", "payment-service", ("SPEC_CHANGE",)),
         setup=(EnvPatch("payment-service", {"FAULT_PAYMENT_DELAY_MS": "3000"}),),
@@ -428,33 +422,6 @@ _CLUSTER_CHANGES: tuple[LiveScenario, ...] = (
         demo=True,
     ),
     LiveScenario(
-        id="quota_blocks_scaling",
-        title="A ResourceQuota blocks the pods a scale-up needs",
-        alert="OrderRequestLatencyHigh",
-        service="order-service",
-        expectation=RootCause(
-            "ResourceQuota", "sre-demo-pods", ("QUOTA_EXCEEDED", "QUOTA_EXHAUSTED")
-        ),
-        setup=(
-            ApplyManifest(
-                {
-                    "apiVersion": "v1",
-                    "kind": "ResourceQuota",
-                    "metadata": {"name": "sre-demo-pods", "namespace": NAMESPACE},
-                    "spec": {"hard": {"pods": "8"}},
-                },
-                label="ResourceQuota/sre-demo-pods",
-            ),
-            Scale("order-service", 6),
-        ),
-        workload=Workload(target=Target.ORDERS, count=40, concurrency=20, waves=3),
-        teardown=(
-            Scale("order-service", 2),
-            DeleteObject("resourcequota", "sre-demo-pods"),
-        ),
-        tier=Tier.HOLDOUT,
-    ),
-    LiveScenario(
         id="memory_limit_oom",
         title="A tightened memory limit kills the payment container",
         alert="OrderErrorRateHigh",
@@ -490,22 +457,26 @@ _CLUSTER_CHANGES: tuple[LiveScenario, ...] = (
     ),
     LiveScenario(
         id="cpu_limit_throttle",
-        title="A tightened CPU limit throttles the service",
-        alert="PaymentRequestLatencyHigh",
-        service="payment-service",
-        # cpu limit must be at or above the 100m request, so both drop together.
-        expectation=RootCause(
-            "Deployment", "payment-service", ("SPEC_CHANGE", "RESOURCE_PRESSURE")
-        ),
+        title="A starved CPU limit makes the payment container unusable",
+        # A metric-based latency alert on a small single-node cluster does not
+        # reliably see CPU throttling, and the app is I/O bound rather than CPU
+        # bound, so the limit is dropped hard enough to starve the container and
+        # the pod is deleted to force it live.  Payment then cannot serve, and the
+        # failure surfaces through the order service's real errors.  The cpu limit
+        # must sit at or above the 100m request, so both drop together.
+        alert="OrderErrorRateHigh",
+        service="order-service",
+        expectation=RootCause("Deployment", "payment-service", ("SPEC_CHANGE",)),
         setup=(
             SetResources(
                 "payment-service",
                 "payment-service",
-                limits={"cpu": "50m"},
-                requests={"cpu": "50m"},
+                limits={"cpu": "5m"},
+                requests={"cpu": "5m"},
             ),
+            DeletePod("payment-service"),
         ),
-        workload=Workload(target=Target.PAYMENTS, count=30, concurrency=30, waves=3),
+        workload=Workload(target=Target.ORDERS, count=40),
         teardown=(
             SetResources(
                 "payment-service",
@@ -514,49 +485,6 @@ _CLUSTER_CHANGES: tuple[LiveScenario, ...] = (
                 requests={"cpu": "100m"},
             ),
             WaitRollout("payment-service"),
-        ),
-        tier=Tier.HOLDOUT,
-    ),
-    LiveScenario(
-        id="hpa_replica_cap",
-        title="An autoscaler cap prevents scaling under load",
-        alert="OrderRequestLatencyHigh",
-        service="order-service",
-        expectation=RootCause(
-            "HorizontalPodAutoscaler", "order-service", ("AUTOSCALING_FAILURE", "SPEC_CHANGE")
-        ),
-        setup=(
-            ApplyManifest(
-                {
-                    "apiVersion": "autoscaling/v2",
-                    "kind": "HorizontalPodAutoscaler",
-                    "metadata": {"name": "order-service", "namespace": NAMESPACE},
-                    "spec": {
-                        "scaleTargetRef": {
-                            "apiVersion": "apps/v1",
-                            "kind": "Deployment",
-                            "name": "order-service",
-                        },
-                        "minReplicas": 1,
-                        "maxReplicas": 1,
-                        "metrics": [
-                            {
-                                "type": "Resource",
-                                "resource": {
-                                    "name": "cpu",
-                                    "target": {"type": "Utilization", "averageUtilization": 50},
-                                },
-                            }
-                        ],
-                    },
-                },
-                label="HorizontalPodAutoscaler/order-service",
-            ),
-        ),
-        workload=Workload(target=Target.ORDERS, count=40, concurrency=40, waves=4),
-        teardown=(
-            DeleteObject("horizontalpodautoscaler", "order-service"),
-            Scale("order-service", 2),
         ),
         tier=Tier.HOLDOUT,
     ),

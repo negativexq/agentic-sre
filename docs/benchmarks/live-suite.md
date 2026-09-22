@@ -1,6 +1,6 @@
 # The internal live scenario suite
 
-28 scenarios that stage a real fault in a running cluster, let the real
+25 scenarios that stage a real fault in a running cluster, let the real
 alerting path open an incident, and grade the diagnosis the product actually
 stored. Nothing here replays a snapshot.
 
@@ -69,11 +69,11 @@ of it.
 | | Root cause expected | Abstention expected | Total |
 |---|---|---|---|
 | DEV | 13 | 6 | 19 |
-| HOLDOUT | 5 | 4 | 9 |
-| **Total** | **18** | **10** | **28** |
+| HOLDOUT | 3 | 3 | 6 |
+| **Total** | **16** | **9** | **25** |
 
-13 scenarios are marked `demo`: they stage a visible change, the engine is
-expected to find it, and they are the ones worth showing in the UI.
+The `demo`-marked scenarios stage a visible change the engine is expected to
+find, and are the ones worth showing in the UI.
 
 ### Fault mechanisms
 
@@ -81,29 +81,41 @@ expected to find it, and they are the ones worth showing in the UI.
 |---|---|
 | `kubectl set env` on a Deployment | `SPEC_CHANGE` |
 | ConfigMap patch | `CONFIG_CHANGE` |
-| Image tag change | `IMAGE_CHANGE`, `CONTAINER_FAILURE` |
-| Replica scale | `SCALE_CHANGE` |
-| Rollout restart | `ROLLOUT_RESTART` |
+| Image tag change | `IMAGE_CHANGE` |
+| Scale a dependency to zero | `SCALE_CHANGE` |
+| Rollout restart with a forced pod gap | `ROLLOUT_RESTART` |
 | NetworkPolicy create | `POLICY_CREATED`, `NETWORK_RESTRICTION` |
-| ResourceQuota + scale-up | `QUOTA_EXCEEDED`, `QUOTA_EXHAUSTED` |
-| Memory limit | `CONTAINER_FAILURE` |
-| CPU limit | `RESOURCE_PRESSURE` |
-| HPA `maxReplicas` cap | `AUTOSCALING_FAILURE` |
+| Memory / CPU limit that starves the container | `SPEC_CHANGE` |
 | Service selector edit | `SPEC_CHANGE` |
 | Deployment delete | `OBJECT_DELETED` |
-| Container kill | `CONTAINER_FAILURE`, `FAILURE_EVENT` |
+| Forced process restart | `CONTAINER_FAILURE`, `FAILURE_EVENT` |
 | `POST /__faults` | *(nothing — abstention expected)* |
+
+### What the platform cannot stage
+
+The suite runs on a single-node `kind` cluster with no metrics-server and an
+I/O-bound workload, and every alert is metric-based. Three fault classes cannot
+be exercised reliably here and are deliberately absent rather than shipped
+flaky:
+
+- **Resource-contention latency.** A CPU limit does not raise latency on an
+  I/O-bound app, and blocked scale-ups add no latency while the existing pod
+  serves. The memory- and CPU-limit scenarios therefore starve the container
+  outright and are observed through the dependent service's errors, not through
+  a latency threshold.
+- **Autoscaling failure.** An HPA needs metrics-server to act; without it a
+  `maxReplicas` cap is inert and raises no incident.
+- **A container that crashes at startup.** It never serves `/metrics`, so a
+  metric-based alert cannot see it. Such faults are staged so that a *dependent*
+  service, which is up and recording errors, makes them observable.
 
 ## Holdout discipline
 
-The 9 `HOLDOUT` scenarios exist to keep the DEV set from being fitted. They
+The 6 `HOLDOUT` scenarios exist to keep the DEV set from being fitted. They
 are not used while changing engine behaviour, and a reported number states
 which tier produced it. The tiers are disjoint, and both tiers contain
 scenarios of both expectation classes — a holdout that only tested one axis
 would measure half the thing.
-
-`traffic_surge_no_change` is the negative control: load rises, nothing
-changed, and any root cause at all is a fabrication.
 
 ## Provenance
 

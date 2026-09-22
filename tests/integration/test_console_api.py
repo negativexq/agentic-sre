@@ -399,6 +399,28 @@ def test_report_create_fetch_and_immutability(
     assert {item["report_id"] for item in listed} >= {report["report_id"], again["report_id"]}
 
 
+def test_report_exports_markdown_json_and_pdf(
+    app_client: tuple[TestClient, dict[str, UUID]],
+) -> None:
+    client, ids = app_client
+    report = client.post(f"/api/v1/console/incidents/{ids['resolved']}/reports").json()
+    rid = report["report_id"]
+
+    markdown = client.get(f"/api/v1/console/reports/{rid}/markdown")
+    assert markdown.status_code == 200
+    assert markdown.headers["content-type"].startswith("text/markdown")
+    assert "Incident report" in markdown.text
+
+    body = client.get(f"/api/v1/console/reports/{rid}/json")
+    assert body.headers["content-type"].startswith("application/json")
+    assert body.json()["report_id"] == rid
+
+    pdf = client.get(f"/api/v1/console/reports/{rid}/pdf")
+    assert pdf.status_code == 200
+    assert pdf.headers["content-type"] == "application/pdf"
+    assert pdf.content.startswith(b"%PDF-")
+
+
 def test_report_requires_a_diagnosis(app_client: tuple[TestClient, dict[str, UUID]]) -> None:
     client, ids = app_client
     response = client.post(f"/api/v1/console/incidents/{ids['pending']}/reports")

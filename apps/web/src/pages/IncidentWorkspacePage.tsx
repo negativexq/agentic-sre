@@ -5,6 +5,7 @@ import { useIncident, useIncidentChanges } from "@/api/hooks";
 import { useLiveUpdates } from "@/api/useLiveUpdates";
 import { ChangesTable } from "@/components/ChangesTable";
 import { LiveBadge } from "@/components/LiveBadge";
+import { ReportExport } from "@/components/workspace/ReportExport";
 import type { DiagnosisView, IncidentListItem } from "@/api/types";
 import { CausalPath } from "@/components/workspace/CausalPath";
 import { CompetingHypotheses } from "@/components/workspace/CompetingHypotheses";
@@ -221,6 +222,8 @@ export function IncidentWorkspacePage() {
           </div>
 
           <ChangesAroundOnset incidentId={incident.incident_id} />
+
+          <ReportExport incidentId={incident.incident_id} />
 
           <Card>
             <CardHeader title="Evidence & trace" />

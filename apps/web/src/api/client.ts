@@ -6,6 +6,7 @@ import type {
   IncidentDetail,
   IncidentFilters,
   IncidentPage,
+  ReportSummary,
   SystemStatus,
 } from "@/api/types";
 
@@ -58,4 +59,21 @@ export const api = {
   incidentEvidence: (id: string) => get<EvidenceView[]>(`/incidents/${id}/evidence`),
   incidentChanges: (id: string) => get<ChangeView[]>(`/incidents/${id}/changes`),
   changes: (filters: ChangeFilters = {}) => get<ChangeView[]>(`/changes${query(filters)}`),
+  createReport: async (id: string): Promise<{ report_id: string }> => {
+    const response = await fetch(`${BASE}/incidents/${id}/reports`, {
+      method: "POST",
+      headers: { accept: "application/json" },
+    });
+    if (!response.ok) {
+      throw new ApiError(response.status, `Could not create report (${response.status})`);
+    }
+    return (await response.json()) as { report_id: string };
+  },
+  incidentReports: (id: string) => get<ReportSummary[]>(`/incidents/${id}/reports`),
+  reports: () => get<ReportSummary[]>("/reports"),
 };
+
+/** Absolute URL to a report export, safe to open or download directly. */
+export function reportUrl(reportId: string, format: "markdown" | "pdf" | "json"): string {
+  return `${BASE}/reports/${reportId}/${format}`;
+}

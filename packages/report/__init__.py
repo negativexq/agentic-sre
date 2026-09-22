@@ -9,6 +9,7 @@ from packages.report.model import (
     ReportLifecyclePhase,
     ReportSnapshot,
 )
+from packages.report.render import to_markdown, to_pdf
 
 __all__ = [
     "REPORT_VERSION",
@@ -18,4 +19,6 @@ __all__ = [
     "ReportLifecyclePhase",
     "ReportSnapshot",
     "build_report",
+    "to_markdown",
+    "to_pdf",
 ]

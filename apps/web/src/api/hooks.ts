@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/api/client";
 import type { ChangeFilters, IncidentFilters } from "@/api/types";
@@ -53,6 +53,33 @@ export function useIncidentChanges(id: string | undefined) {
     queryKey: ["incident-changes", id],
     queryFn: () => api.incidentChanges(id as string),
     enabled: Boolean(id),
+  });
+}
+
+export function useReports() {
+  return useQuery({
+    queryKey: ["reports"],
+    queryFn: api.reports,
+    refetchInterval: FALLBACK_INTERVAL,
+  });
+}
+
+export function useIncidentReports(id: string | undefined) {
+  return useQuery({
+    queryKey: ["incident-reports", id],
+    queryFn: () => api.incidentReports(id as string),
+    enabled: Boolean(id),
+  });
+}
+
+export function useCreateReport(incidentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.createReport(incidentId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["incident-reports", incidentId] });
+      void queryClient.invalidateQueries({ queryKey: ["reports"] });
+    },
   });
 }
 

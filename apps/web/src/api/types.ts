@@ -165,6 +165,20 @@ export interface ChangeFilters {
   limit?: number;
 }
 
+export interface ReportSummary {
+  report_id: string;
+  incident_id: string;
+  title: string;
+  severity: string;
+  confidence: Confidence;
+  resolution: Resolution;
+  root_actor: string | null;
+  leading_root_actor: string | null;
+  diagnosis_run_id: string | null;
+  report_version: string;
+  generated_at: string;
+}
+
 export interface SystemConnector {
   name: string;
   status: ConnectorStatus;

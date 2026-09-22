@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session, sessionmaker
 
 from apps.control_plane.console.dto import (
@@ -36,7 +36,7 @@ from apps.control_plane.console.stream import global_stream, incident_stream
 from apps.control_plane.timeline import diagnosis_phases
 from packages.contracts import ChangeScope, ChangeType
 from packages.rca.model import Diagnosis
-from packages.report import ReportSnapshot, build_report
+from packages.report import ReportSnapshot, build_report, to_markdown, to_pdf
 from packages.storage import (
     AlertRepository,
     ChangeRecordRepository,
@@ -353,6 +353,48 @@ def create_console_router(
     ) -> list[ReportSummary]:
         documents = ReportRepository(session).list_all(incident_id=incident_id, limit=100)
         return [report_summary(ReportSnapshot.model_validate(doc)) for doc in documents]
+
+    def _load_report(session: Session, report_id: str) -> ReportSnapshot:
+        document = ReportRepository(session).get(report_id)
+        if document is None:
+            raise HTTPException(status_code=404, detail="report not found")
+        return ReportSnapshot.model_validate(document)
+
+    @router.get("/reports/{report_id}/markdown", response_class=PlainTextResponse)
+    def report_markdown(
+        report_id: str,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> PlainTextResponse:
+        snapshot = _load_report(session, report_id)
+        return PlainTextResponse(
+            to_markdown(snapshot),
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": f'inline; filename="report-{report_id}.md"'},
+        )
+
+    @router.get("/reports/{report_id}/json")
+    def report_json(
+        report_id: str,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Response:
+        snapshot = _load_report(session, report_id)
+        return Response(
+            snapshot.model_dump_json(indent=2),
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="report-{report_id}.json"'},
+        )
+
+    @router.get("/reports/{report_id}/pdf")
+    def report_pdf(
+        report_id: str,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Response:
+        snapshot = _load_report(session, report_id)
+        return Response(
+            to_pdf(snapshot),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'inline; filename="report-{report_id}.pdf"'},
+        )
 
     @router.get("/stream")
     def stream() -> StreamingResponse:

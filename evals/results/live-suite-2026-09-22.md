@@ -28,7 +28,7 @@ By expectation class:
 
 | Class | Scenarios | Correct | Notes |
 |---|---:|---:|---|
-| Root cause expected | 16 | 15 | 15 named the right actor as the leading hypothesis (`AMBIGUOUS`); 1 wrong actor |
+| Root cause expected | 16 | 15 | 14 named the right actor at `AMBIGUOUS`, 1 (`payment_pod_crash`) at `INSUFFICIENT_EVIDENCE`; 1 wrong actor |
 | Abstention expected | 9 | 9 | none reached a confident (`RESOLVED`) verdict |
 
 ## How a run works
@@ -109,9 +109,11 @@ just rolled) is offered without confidence, which is the intended behaviour.
 ## Root-cause scenarios (16) — 15 correct, 1 wrong
 
 Each stages a durable change; ground truth is the actor that changed. 15 named
-it as the leading hypothesis (`AMBIGUOUS`); none reached `RESOLVED`, which is the
-resolver's current behaviour on live data — it surfaces a correct leading actor
-but holds short of a single confident verdict.
+it as the leading hypothesis — 14 at `AMBIGUOUS` and `payment_pod_crash` at
+`INSUFFICIENT_EVIDENCE`. None reached `RESOLVED`, which is the resolver's current
+behaviour on live data — it surfaces a correct leading actor but holds short of a
+single confident verdict. See [Why nothing reached
+`RESOLVED`](#why-nothing-reached-resolved) below.
 
 ### Change on the service that is blamed
 
@@ -159,18 +161,69 @@ rollout-restart signal can be attributed to.
 
 ---
 
-## Resolution distribution
+## Why nothing reached `RESOLVED`
 
-No scenario reached `RESOLVED`. That is the resolver's current behaviour on live
-data, not a suite artifact: it surfaces a correct leading hypothesis but holds
-short of a confident verdict. The suite measures whether the leading actor is
-right; moving `AMBIGUOUS` to `RESOLVED` is the separate resolver work.
+The absence of `RESOLVED` outcomes is deliberate resolver behaviour rather than a
+failure to rank a useful hypothesis. Seeing `0 RESOLVED` alone reads like "the
+resolver is not working"; by the code's own semantics it is intentional
+epistemic caution.
+
+The run's resolution distribution:
 
 | Resolution | Count | Where |
 |---|---:|---|
-| `AMBIGUOUS` | 15 | the correctly-named root-cause scenarios |
-| `INSUFFICIENT_EVIDENCE` | 10 | all 9 abstentions + `payment_pod_crash` + the one miss |
+| `AMBIGUOUS` | 14 | correctly-named root-cause scenarios (leading actor right, an alternative still unresolved) |
+| `INSUFFICIENT_EVIDENCE` | 11 | all 9 abstentions + `payment_pod_crash` (right actor, but weakly) + the one wrong-actor miss |
 | `RESOLVED` | 0 | — |
+
+The deterministic resolver distinguishes three hypothesis states:
+
+- **SUPPORTED** — there is a causal path to the symptom and an onset-aligned
+  initiating change.
+- **UNRESOLVED** — the hypothesis is causally plausible, but there is no
+  initiating-change evidence proving it.
+- **CONTRADICTED** — available evidence positively conflicts with the hypothesis.
+
+Resolution is intentionally conservative:
+
+```text
+no SUPPORTED + some UNRESOLVED  → INSUFFICIENT_EVIDENCE
+some SUPPORTED + some UNRESOLVED → AMBIGUOUS
+SUPPORTED + no viable unresolved alternative → RESOLVED
+```
+
+A missing change is not treated as proof that an alternative is impossible. An
+alternative is removed only through positive exclusion such as temporal
+contradiction, dominance by a stronger hypothesis, or causal eligibility rules.
+
+This explains the live-suite results. For the change-backed incidents, the
+staged root cause usually receives onset-aligned initiating evidence and becomes
+the leading `SUPPORTED` hypothesis. Structural neighbours — for example the
+symptom-producing workload, Pod, or ReplicaSet — may remain causally plausible
+without their own initiating evidence. Because those alternatives are still
+`UNRESOLVED`, the final state remains `AMBIGUOUS` even when the leading actor is
+correct.
+
+For the nine runtime-only fault scenarios, no Kubernetes change exists.
+Therefore no hypothesis receives initiating-change proof. Plausible structural
+candidates remain `UNRESOLVED`, producing `INSUFFICIENT_EVIDENCE` rather than a
+confident root-cause claim.
+
+This conservatism is also why the suite produced zero confident fabrications.
+Improving the rate of `RESOLVED` outcomes therefore requires better elimination
+of competing hypotheses, not simply lowering the resolver's confidence
+threshold. In short, the current behaviour is:
+
+```text
+Find the correct leading actor   → good
+Confidently blame the wrong one  → does not happen
+Eliminate the alternatives       → incomplete
+Issue a confident verdict        → therefore very cautious
+```
+
+The next step is positive elimination of the structural alternatives — through
+bounded investigation that proves a neighbour did not change or is a propagated
+effect, or through stronger dominance/eligibility rules — not a lower threshold.
 
 ## Timing
 

@@ -134,6 +134,31 @@ recover:
 	kubectl rollout undo deployment/payment-service -n $(NAMESPACE)
 	kubectl rollout status deployment/payment-service -n $(NAMESPACE) --timeout=120s
 
+# The internal live scenario suite: real faults, the real alerting path, and a
+# graded answer. Needs a deployed cluster (make deploy). SCENARIO=<id> selects one.
+LIVE := $(PY) scripts/live_benchmark.py
+
+live-scenarios:
+	$(LIVE) --list
+
+live-bench:
+	$(LIVE) --json .local/live-bench/results.json
+
+live-bench-dev:
+	$(LIVE) --tier DEV --json .local/live-bench/dev.json
+
+live-bench-holdout:
+	$(LIVE) --tier HOLDOUT --json .local/live-bench/holdout.json
+
+# Stage one scenario and leave the fault in place so the incident and its
+# diagnosis stay visible in the UI. Run `make live-restore` when finished.
+live-demo:
+	@test -n "$(SCENARIO)" || { echo "usage: make live-demo SCENARIO=<id>  (see make live-scenarios)"; exit 2; }
+	$(LIVE) --scenario $(SCENARIO) --keep-fault
+
+live-restore:
+	$(LIVE) --restore
+
 rbac-check:
 	sa=system:serviceaccount:$(NAMESPACE):agentic-sre-reader; \
 	test "$$(kubectl auth can-i list deployments --as=$$sa -n $(NAMESPACE))" = yes && \

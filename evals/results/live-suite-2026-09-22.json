@@ -1,0 +1,382 @@
+[
+  {
+    "scenario_id": "payment_error_spike",
+    "outcome": "CORRECT",
+    "expected": "ABSTAIN",
+    "actual": "sre-demo/Pod/payment-service-688845db64-7b5fq",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "9c57495d-0b6b-43f4-b7d5-2c4357c353dd",
+    "alert_seconds": 30.171298541128635,
+    "detail": "in-process error injection leaves no cluster change"
+  },
+  {
+    "scenario_id": "order_error_spike",
+    "outcome": "CORRECT",
+    "expected": "ABSTAIN",
+    "actual": "sre-demo/ReplicaSet/order-service-555b8dc77",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "13e984b0-c0d8-4d46-b10b-d60a88c1c464",
+    "alert_seconds": 25.152237124741077,
+    "detail": "in-process error injection leaves no cluster change"
+  },
+  {
+    "scenario_id": "payment_dependency_latency",
+    "outcome": "CORRECT",
+    "expected": "ABSTAIN",
+    "actual": "sre-demo/ReplicaSet/order-service-555b8dc77",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "379eb23f-e61d-4504-9526-4a8751b8b05a",
+    "alert_seconds": 25.146361666731536,
+    "detail": "in-process delay leaves no cluster change"
+  },
+  {
+    "scenario_id": "order_latency_spike",
+    "outcome": "CORRECT",
+    "expected": "ABSTAIN",
+    "actual": "sre-demo/ReplicaSet/order-service-555b8dc77",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "76f175bb-181a-4cbd-b55b-81af0a03a31f",
+    "alert_seconds": 25.113215417135507,
+    "detail": "in-process delay leaves no cluster change"
+  },
+  {
+    "scenario_id": "payment_db_pool_pressure",
+    "outcome": "CORRECT",
+    "expected": "ABSTAIN",
+    "actual": "sre-demo/Pod/payment-service-688845db64-7b5fq",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "9cfdf099-8b0a-40c1-8068-1455472f47e4",
+    "alert_seconds": 35.18438158323988,
+    "detail": "in-process connection hold leaves no cluster change"
+  },
+  {
+    "scenario_id": "order_db_query_latency",
+    "outcome": "CORRECT",
+    "expected": "ABSTAIN",
+    "actual": "sre-demo/ReplicaSet/order-service-555b8dc77",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "c2c3d9a4-8673-45f8-9710-ad6359f70301",
+    "alert_seconds": 25.137296041008085,
+    "detail": "in-process query delay leaves no cluster change"
+  },
+  {
+    "scenario_id": "cross_service_payment_failure",
+    "outcome": "CORRECT",
+    "expected": "ABSTAIN",
+    "actual": "sre-demo/ReplicaSet/order-service-555b8dc77",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "82f66669-b6a5-4a6e-b405-b6c340a42d42",
+    "alert_seconds": 20.10321820806712,
+    "detail": "in-process error injection leaves no cluster change"
+  },
+  {
+    "scenario_id": "cross_service_db_pressure",
+    "outcome": "CORRECT",
+    "expected": "ABSTAIN",
+    "actual": "sre-demo/ReplicaSet/order-service-555b8dc77",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "d37756ef-4552-41ca-baf8-61f0d5529c62",
+    "alert_seconds": 25.19813337503001,
+    "detail": "in-process connection hold leaves no cluster change"
+  },
+  {
+    "scenario_id": "payment_db_query_latency",
+    "outcome": "CORRECT",
+    "expected": "ABSTAIN",
+    "actual": "sre-demo/Pod/payment-service-688845db64-7b5fq",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "8c4325e4-0d9b-480d-b0ec-ff558994765f",
+    "alert_seconds": 25.152753834147006,
+    "detail": "in-process query delay leaves no cluster change"
+  },
+  {
+    "scenario_id": "order_worker_lag",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/order-worker",
+    "actual": "sre-demo/Deployment/order-worker",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SPEC_CHANGE"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "1906df84-3f69-4ed3-8e8f-a5c9293a3c08",
+    "alert_seconds": 35.174888874869794,
+    "detail": ""
+  },
+  {
+    "scenario_id": "order_worker_failure",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/order-worker",
+    "actual": "sre-demo/Deployment/order-worker",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SPEC_CHANGE"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "453d632a-3012-43c8-90d0-74d738da413c",
+    "alert_seconds": 90.44894358282909,
+    "detail": ""
+  },
+  {
+    "scenario_id": "payment_config_change",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/payment-service",
+    "actual": "sre-demo/Deployment/payment-service",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SPEC_CHANGE"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "1ab097f5-e3a8-4da2-aa80-11c2d5aa037a",
+    "alert_seconds": 20.108210082631558,
+    "detail": ""
+  },
+  {
+    "scenario_id": "order_config_latency",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/order-service",
+    "actual": "sre-demo/Deployment/order-service",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SPEC_CHANGE"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "34b5e292-f058-4f50-8eaa-f94f8c8f09bc",
+    "alert_seconds": 25.13936029188335,
+    "detail": ""
+  },
+  {
+    "scenario_id": "payment_config_cross_service_impact",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/payment-service",
+    "actual": "sre-demo/Deployment/payment-service",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SPEC_CHANGE"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "b5bc7fcf-563f-4cef-b2dc-d19986a63d5f",
+    "alert_seconds": 30.15558204194531,
+    "detail": ""
+  },
+  {
+    "scenario_id": "dependency_endpoint_misconfig",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/order-service",
+    "actual": "sre-demo/Deployment/order-service",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SPEC_CHANGE"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "babbb573-aa46-43e1-92f7-68bb203eb9aa",
+    "alert_seconds": 35.27514945808798,
+    "detail": ""
+  },
+  {
+    "scenario_id": "configmap_dependency_change",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/ConfigMap/workload-config",
+    "actual": "sre-demo/ConfigMap/workload-config",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "CONFIG_CHANGE"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "49605b3b-284e-473d-a5f0-25c0c43e6551",
+    "alert_seconds": 35.342581417411566,
+    "detail": ""
+  },
+  {
+    "scenario_id": "image_regression",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/payment-service",
+    "actual": "sre-demo/Deployment/payment-service",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "IMAGE_CHANGE",
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "ee52cfc2-69fa-456b-ade2-2d49845099ec",
+    "alert_seconds": 30.1432429170236,
+    "detail": ""
+  },
+  {
+    "scenario_id": "dependency_scaled_to_zero",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/payment-service",
+    "actual": "sre-demo/Deployment/payment-service",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SCALE_CHANGE"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "12aa3f76-310d-4105-aea6-5013fac84664",
+    "alert_seconds": 30.271761334035546,
+    "detail": ""
+  },
+  {
+    "scenario_id": "rollout_restart_disruption",
+    "outcome": "WRONG_ACTOR",
+    "expected": "sre-demo/Deployment/payment-service",
+    "actual": "sre-demo/ReplicaSet/order-service-555b8dc77",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "d8585bd3-e056-45da-8279-65b936499799",
+    "alert_seconds": 30.138061415869743,
+    "detail": ""
+  },
+  {
+    "scenario_id": "network_policy_isolation",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/NetworkPolicy/deny-order-egress",
+    "actual": "sre-demo/NetworkPolicy/deny-order-egress",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "POLICY_CREATED"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "d6bf36e8-08c0-4c7d-9843-ea7ad1b6cf09",
+    "alert_seconds": 50.29011162510142,
+    "detail": ""
+  },
+  {
+    "scenario_id": "memory_limit_oom",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/payment-service",
+    "actual": "sre-demo/Deployment/payment-service",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SPEC_CHANGE",
+      "FAILURE_EVENT",
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "f73a353f-6daa-4798-a0d4-f3a1303ef62f",
+    "alert_seconds": 25.1489054588601,
+    "detail": ""
+  },
+  {
+    "scenario_id": "cpu_limit_throttle",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/payment-service",
+    "actual": "sre-demo/Deployment/payment-service",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SPEC_CHANGE",
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "45701e13-c03e-4855-8812-8a82b2eaff52",
+    "alert_seconds": 25.18872974999249,
+    "detail": ""
+  },
+  {
+    "scenario_id": "service_selector_drift",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Service/payment-service",
+    "actual": "sre-demo/Service/payment-service",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SPEC_CHANGE",
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "18c5e625-a862-43f6-af6e-23126d0a808c",
+    "alert_seconds": 25.145817916840315,
+    "detail": ""
+  },
+  {
+    "scenario_id": "worker_deployment_deleted",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/order-worker",
+    "actual": "sre-demo/Deployment/order-worker",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "OBJECT_DELETED"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "5fd06862-0a77-4b15-9cdf-864dc9cb5f15",
+    "alert_seconds": 65.36541791725904,
+    "detail": ""
+  },
+  {
+    "scenario_id": "payment_pod_crash",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/payment-service",
+    "actual": "sre-demo/Pod/payment-service-688845db64-7b5fq",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "c0ec3d2d-453a-4819-b72c-21c642c6ede6",
+    "alert_seconds": 0.0123859578743577,
+    "detail": ""
+  }
+]

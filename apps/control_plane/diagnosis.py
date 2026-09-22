@@ -174,8 +174,9 @@ class DiagnosisService:
     ) -> None:
         """Append one timeline event for the diagnosis pipeline.
 
-        Best effort: timeline observability must never fail or slow a diagnosis,
-        so a recording error is logged and swallowed.
+        Best effort: a recording error is logged and swallowed, so timeline
+        persistence cannot fail the diagnosis path. It is a synchronous commit,
+        so it adds the event-persistence overhead but nothing else.
         """
         try:
             with self.session_factory() as session:
@@ -310,15 +311,26 @@ class DiagnosisService:
             prometheus_reader=self.prometheus_reader,
         )
         bounded_policy = self.bounded_policy_factory()
-        if bounded_policy is not None:
-            diagnosis = investigate_diagnosis(source, policy=bounded_policy).diagnosis
-        else:
-            diagnosis = diagnose(source, investigator=self.investigator_factory())
+        try:
+            if bounded_policy is not None:
+                diagnosis = investigate_diagnosis(source, policy=bounded_policy).diagnosis
+            else:
+                diagnosis = diagnose(source, investigator=self.investigator_factory())
+        except Exception as error:
+            # Record the failed run so its timeline is a terminated one, not an
+            # incomplete run that the UI could pair with an older diagnosis.
+            self._emit(
+                incident_id,
+                correlation_id,
+                IncidentEventType.DIAGNOSIS_FAILED,
+                {"run_id": run_id, "error": type(error).__name__},
+            )
+            raise
         leading = diagnosis.hypothesis.causal_actor.canonical if diagnosis.hypothesis else None
         self._emit(
             incident_id,
             correlation_id,
-            IncidentEventType.HYPOTHESIS_CREATED,
+            IncidentEventType.RCA_ENGINE_COMPLETED,
             {
                 "run_id": run_id,
                 "leading_actor": leading,

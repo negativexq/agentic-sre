@@ -14,21 +14,31 @@ four immutable `IncidentEvent`s, in order:
 |---|---|---|
 | `DIAGNOSIS_STARTED` | run begins | `run_id`, `alerts` |
 | `EVIDENCE_GATHERED` | observations collected | `run_id`, `objects`, `journal`, `events`, `logs` |
-| `HYPOTHESIS_CREATED` | RCA engine returned | `run_id`, `leading_actor`, `reads`, `evidence` |
+| `RCA_ENGINE_COMPLETED` | RCA engine returned | `run_id`, `leading_actor`, `reads`, `evidence` |
 | `DIAGNOSIS_COMPLETED` | diagnosis stored | `run_id`, `root_cause`, `resolution`, `confidence`, `model_calls` |
 
+A run that raises inside the engine instead emits `DIAGNOSIS_FAILED`
+(`run_id`, `error`) and the error re-raises, so a crashed run leaves a terminated
+timeline rather than an open one.
+
 The counts are the real source counts and the real diagnosis output; nothing is
-estimated. `DIAGNOSIS_COMPLETED` is used rather than a `ROOT_CAUSE_IDENTIFIED`
-event because not every run ends with a root cause — an `INSUFFICIENT_EVIDENCE`
+estimated. `RCA_ENGINE_COMPLETED` is named for the engine returning, not for a
+hypothesis existing, because the engine can complete with no hypothesis
+(`leading_actor = null`). `DIAGNOSIS_COMPLETED` is used rather than a
+`ROOT_CAUSE_IDENTIFIED` event for the same reason — an `INSUFFICIENT_EVIDENCE`
 run completes with `root_cause = null`, and the timeline records that honestly.
 
 ## Why `run_id` instead of suppressing re-diagnosis
 
 The control plane re-diagnoses an open incident on its watch cycle. Rather than
 suppressing events on later runs (which would hide real work), each run carries a
-distinct `run_id`. The timeline keeps every run; the incident UI shows the phases
-of the most recent one, selected by its latest event timestamp. A re-diagnosis is
-therefore visible as a new run, never mistaken for a duplicate.
+distinct `run_id`. The timeline keeps every run.
+
+The incident page renders the stored diagnosis of the latest *completed* run, so
+the timeline it shows is that same run's — never a newer run that crashed after
+starting, which would otherwise pair a fresh half-timeline with an older
+diagnosis. If a run newer than the one on screen is still in progress or has
+failed, the page says so in a line beneath the timeline instead of hiding it.
 
 ## Where it shows
 
@@ -38,8 +48,9 @@ therefore visible as a new run, never mistaken for a duplicate.
   diagnosis started → evidence gathered → RCA engine completed → diagnosis
   stored`, each with a `T+` offset from the start of the run.
 
-Recording is best effort: a failure to write a timeline event is logged and
-swallowed, so observability can never fail or slow a diagnosis.
+Timeline persistence is best effort: a failure to write an event is logged and
+swallowed, so it cannot fail the diagnosis path. Each event is a synchronous
+commit, so it adds the event-persistence overhead but nothing else.
 
 ## Verified behaviour
 

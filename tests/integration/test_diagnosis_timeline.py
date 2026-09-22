@@ -6,16 +6,17 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from apps.control_plane.diagnosis import DiagnosisService
-from apps.control_plane.main import create_app, diagnosis_phases
+from apps.control_plane.main import create_app, diagnosis_phases, newer_run_note
 from packages.contracts import (
     Incident,
+    IncidentEvent,
     IncidentEventType,
     IncidentSeverity,
     IncidentSource,
@@ -29,9 +30,19 @@ T0 = datetime(2026, 9, 22, 12, 0, 0, tzinfo=UTC)
 _PHASES = {
     IncidentEventType.DIAGNOSIS_STARTED,
     IncidentEventType.EVIDENCE_GATHERED,
-    IncidentEventType.HYPOTHESIS_CREATED,
+    IncidentEventType.RCA_ENGINE_COMPLETED,
     IncidentEventType.DIAGNOSIS_COMPLETED,
 }
+
+
+def _event(event_type: IncidentEventType, run_id: str, seconds: int) -> IncidentEvent:
+    return IncidentEvent(
+        incident_id=uuid4(),
+        event_type=event_type,
+        timestamp=T0 + timedelta(seconds=seconds),
+        correlation_id=uuid4(),
+        payload={"run_id": run_id},
+    )
 
 
 def _monotonic_clock() -> Any:
@@ -79,7 +90,7 @@ def test_one_diagnosis_run_emits_exactly_one_of_each_phase(tmp_path: Path) -> No
     assert counts[IncidentEventType.DIAGNOSIS_STARTED] == 1
     assert counts[IncidentEventType.DIAGNOSIS_COMPLETED] == 1
     assert counts[IncidentEventType.EVIDENCE_GATHERED] == 1
-    assert counts[IncidentEventType.HYPOTHESIS_CREATED] == 1
+    assert counts[IncidentEventType.RCA_ENGINE_COMPLETED] == 1
 
 
 def test_phase_timestamps_are_monotonic_within_a_run(tmp_path: Path) -> None:
@@ -168,3 +179,86 @@ def test_incident_page_shows_the_phase_timeline(tmp_path: Path) -> None:
     assert "RCA engine completed" in page
     assert "Diagnosis stored" in page
     assert "T+" in page
+
+
+def test_phases_ignore_a_newer_incomplete_run() -> None:
+    """The mismatch fix: an old completed run plus a newer half-run must render
+    the completed run's timeline, never the incomplete one."""
+    ES = IncidentEventType
+    events = [
+        _event(ES.DIAGNOSIS_STARTED, "run-1", 0),
+        _event(ES.EVIDENCE_GATHERED, "run-1", 1),
+        _event(ES.RCA_ENGINE_COMPLETED, "run-1", 2),
+        _event(ES.DIAGNOSIS_COMPLETED, "run-1", 3),
+        # A newer run that crashed after starting.
+        _event(ES.DIAGNOSIS_STARTED, "run-2", 10),
+        _event(ES.EVIDENCE_GATHERED, "run-2", 11),
+    ]
+    phases = diagnosis_phases(events)
+    assert [p.name for p in phases] == [
+        "Diagnosis started",
+        "Evidence gathered",
+        "RCA engine completed",
+        "Diagnosis stored",
+    ]
+    # The shown run is run-1 (its start at T+0), not the newer run-2 (T+10).
+    assert phases[0].at == T0
+    assert phases[-1].at == T0 + timedelta(seconds=3)
+
+
+def test_newer_run_note_flags_a_failed_later_run() -> None:
+    ES = IncidentEventType
+    events = [
+        _event(ES.DIAGNOSIS_STARTED, "run-1", 0),
+        _event(ES.DIAGNOSIS_COMPLETED, "run-1", 3),
+        _event(ES.DIAGNOSIS_STARTED, "run-2", 10),
+        _event(ES.DIAGNOSIS_FAILED, "run-2", 11),
+    ]
+    phases = diagnosis_phases(events)
+    note = newer_run_note(events, phases)
+    assert note is not None
+    assert "failed" in note
+
+
+def test_newer_run_note_flags_a_still_running_later_run() -> None:
+    ES = IncidentEventType
+    events = [
+        _event(ES.DIAGNOSIS_STARTED, "run-1", 0),
+        _event(ES.DIAGNOSIS_COMPLETED, "run-1", 3),
+        _event(ES.DIAGNOSIS_STARTED, "run-2", 10),
+        _event(ES.EVIDENCE_GATHERED, "run-2", 11),
+    ]
+    note = newer_run_note(events, diagnosis_phases(events))
+    assert note is not None
+    assert "in progress" in note
+
+
+def test_no_note_when_the_latest_run_completed() -> None:
+    ES = IncidentEventType
+    events = [
+        _event(ES.DIAGNOSIS_STARTED, "run-1", 0),
+        _event(ES.DIAGNOSIS_COMPLETED, "run-1", 3),
+    ]
+    assert newer_run_note(events, diagnosis_phases(events)) is None
+
+
+def test_a_failed_run_emits_diagnosis_failed_and_reraises(tmp_path: Path, monkeypatch: Any) -> None:
+    _engine, factory, incident_id, service = _app(tmp_path)
+
+    def boom(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("engine exploded")
+
+    monkeypatch.setattr("apps.control_plane.diagnosis.diagnose", boom)
+    try:
+        service.run(incident_id)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("run() should have re-raised the engine error")
+
+    with Session(factory().bind) as session:
+        events = IncidentEventRepository(session).list_for_incident(incident_id)
+    kinds = {event.event_type for event in events}
+    assert IncidentEventType.DIAGNOSIS_STARTED in kinds
+    assert IncidentEventType.DIAGNOSIS_FAILED in kinds
+    assert IncidentEventType.DIAGNOSIS_COMPLETED not in kinds

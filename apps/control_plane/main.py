@@ -87,10 +87,11 @@ def get_session() -> Iterator[Session]:
 _PHASE_LABELS = {
     IncidentEventType.DIAGNOSIS_STARTED: "Diagnosis started",
     IncidentEventType.EVIDENCE_GATHERED: "Evidence gathered",
-    IncidentEventType.HYPOTHESIS_CREATED: "RCA engine completed",
+    IncidentEventType.RCA_ENGINE_COMPLETED: "RCA engine completed",
     IncidentEventType.DIAGNOSIS_COMPLETED: "Diagnosis stored",
 }
 _PHASE_ORDER = list(_PHASE_LABELS)
+_PIPELINE_EVENTS = {*_PHASE_LABELS, IncidentEventType.DIAGNOSIS_FAILED}
 
 
 def _phase_detail(event: IncidentEvent) -> str:
@@ -100,36 +101,82 @@ def _phase_detail(event: IncidentEvent) -> str:
             f"objects {payload.get('objects', 0)} · journal {payload.get('journal', 0)} · "
             f"events {payload.get('events', 0)} · logs {payload.get('logs', 0)}"
         )
-    if event.event_type is IncidentEventType.HYPOTHESIS_CREATED:
+    if event.event_type is IncidentEventType.RCA_ENGINE_COMPLETED:
         return f"leading {payload.get('leading_actor') or '—'} · {payload.get('reads', 0)} reads"
     if event.event_type is IncidentEventType.DIAGNOSIS_COMPLETED:
         return f"{payload.get('root_cause') or 'no root cause'} · {payload.get('resolution', '')}"
     return "reasoning begins"
 
 
-def diagnosis_phases(events: list[IncidentEvent]) -> tuple[LifecyclePhase, ...]:
-    """The four timeline phases of the most recent diagnosis run, in order.
-
-    Each diagnosis run is tagged with its own ``run_id``, so a re-diagnosis adds
-    a new run rather than being mistaken for a duplicate; the UI shows the
-    latest run's phases.
-    """
+def _runs(events: list[IncidentEvent]) -> dict[str, list[IncidentEvent]]:
     runs: dict[str, list[IncidentEvent]] = {}
     for event in events:
-        if event.event_type not in _PHASE_LABELS:
+        if event.event_type not in _PIPELINE_EVENTS:
             continue
-        run_id = str(event.payload.get("run_id", ""))
-        runs.setdefault(run_id, []).append(event)
-    if not runs:
+        runs.setdefault(str(event.payload.get("run_id", "")), []).append(event)
+    return runs
+
+
+def diagnosis_phases(events: list[IncidentEvent]) -> tuple[LifecyclePhase, ...]:
+    """The phases of the diagnosis run that produced the diagnosis on screen.
+
+    Each run is tagged with its own ``run_id``. The page renders the stored
+    diagnosis from the latest *completed* run, so the timeline must be that same
+    run — never a newer run that crashed after starting, which would pair a fresh
+    half-timeline with an older diagnosis. Only runs that reached
+    ``DIAGNOSIS_COMPLETED`` are eligible.
+    """
+    completed = [
+        group
+        for group in _runs(events).values()
+        if any(item.event_type is IncidentEventType.DIAGNOSIS_COMPLETED for item in group)
+    ]
+    if not completed:
         return ()
-    latest = max(runs.values(), key=lambda group: max(item.timestamp for item in group))
-    ordered = sorted(latest, key=lambda item: _PHASE_ORDER.index(item.event_type))
+    latest = max(
+        completed,
+        key=lambda group: next(
+            item.timestamp
+            for item in group
+            if item.event_type is IncidentEventType.DIAGNOSIS_COMPLETED
+        ),
+    )
+    ordered = sorted(
+        (item for item in latest if item.event_type in _PHASE_LABELS),
+        key=lambda item: _PHASE_ORDER.index(item.event_type),
+    )
     return tuple(
         LifecyclePhase(
             name=_PHASE_LABELS[event.event_type], at=event.timestamp, detail=_phase_detail(event)
         )
         for event in ordered
     )
+
+
+def newer_run_note(
+    events: list[IncidentEvent], shown_phases: tuple[LifecyclePhase, ...]
+) -> str | None:
+    """Flag a run started after the shown one that has not completed.
+
+    So the page can say a later diagnosis is in progress or failed, instead of
+    silently hiding it behind the completed run it renders.
+    """
+    if not shown_phases:
+        return None
+    shown_start = shown_phases[0].at
+    for group in _runs(events).values():
+        started = next(
+            (i for i in group if i.event_type is IncidentEventType.DIAGNOSIS_STARTED), None
+        )
+        if started is None or started.timestamp <= shown_start:
+            continue
+        kinds = {item.event_type for item in group}
+        if IncidentEventType.DIAGNOSIS_COMPLETED in kinds:
+            continue
+        if IncidentEventType.DIAGNOSIS_FAILED in kinds:
+            return "A newer diagnosis run failed; showing the last completed one."
+        return "A newer diagnosis run is in progress; showing the last completed one."
+    return None
 
 
 API_TOKEN_ENV = "SRE_API_TOKEN"
@@ -369,6 +416,7 @@ def create_app(
         diagnosis = Diagnosis.model_validate(document)
         alerts = AlertRepository(session).list_for_incident(incident_id)
         events = IncidentEventRepository(session).list_for_incident(incident_id)
+        phases = diagnosis_phases(events)
         lifecycle = Lifecycle(
             alert_fired=min((alert.starts_at for alert in alerts), default=None),
             incident_opened=incident.created_at,
@@ -376,7 +424,8 @@ def create_app(
             reads=len(diagnosis.steps),
             evidence=len(diagnosis.evidence),
             model_calls=diagnosis.model_calls,
-            phases=diagnosis_phases(events),
+            phases=phases,
+            run_note=newer_run_note(events, phases),
         )
         return diagnosis_html(diagnosis, back_link="/", lifecycle=lifecycle)
 

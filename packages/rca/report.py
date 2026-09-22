@@ -36,6 +36,7 @@ class Lifecycle:
     evidence: int
     model_calls: int
     phases: tuple[LifecyclePhase, ...] = ()
+    run_note: str | None = None
 
 
 def _fmt_delta(earlier: datetime | None, later: datetime | None) -> str:
@@ -95,6 +96,7 @@ def _lifecycle_section(lifecycle: Lifecycle) -> str:
         "</div>"
         "<div class='table-wrap'><table><tr><th>Stage</th><th>At</th><th>Detail</th></tr>"
         f"{rows}</table></div>"
+        + (f"<p class='muted'>{escape(lifecycle.run_note)}</p>" if lifecycle.run_note else "")
     )
 
 

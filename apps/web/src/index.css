@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+/* Class-based dark mode: `.dark` on <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Semantic design tokens. Light values on :root, dark overrides on .dark.
+ * Colors are decoupled from raw red/green so resolution states (AMBIGUOUS /
+ * INSUFFICIENT_EVIDENCE) never read as errors — see docs/ui/product-contract.md.
+ */
+:root {
+  --color-bg: hsl(0 0% 100%);
+  --color-surface: hsl(0 0% 98.5%);
+  --color-surface-raised: hsl(0 0% 100%);
+  --color-border: hsl(220 13% 91%);
+  --color-border-strong: hsl(220 13% 82%);
+  --color-text: hsl(222 47% 11%);
+  --color-text-muted: hsl(220 9% 46%);
+  --color-text-subtle: hsl(220 9% 60%);
+
+  --color-accent: hsl(221 83% 53%);
+  --color-accent-fg: hsl(0 0% 100%);
+  --color-accent-soft: hsl(221 83% 96%);
+
+  --color-critical: hsl(0 72% 45%);
+  --color-critical-soft: hsl(0 80% 96%);
+  --color-warning: hsl(35 92% 42%);
+  --color-warning-soft: hsl(40 90% 95%);
+  --color-healthy: hsl(142 71% 36%);
+  --color-healthy-soft: hsl(142 60% 95%);
+
+  --color-verified: hsl(142 71% 36%);
+  --color-verified-soft: hsl(142 55% 95%);
+  --color-likely: hsl(221 83% 53%);
+  --color-likely-soft: hsl(221 83% 96%);
+  --color-unverified: hsl(220 9% 46%);
+  --color-unverified-soft: hsl(220 14% 96%);
+}
+
+.dark {
+  --color-bg: hsl(222 47% 7%);
+  --color-surface: hsl(222 33% 10%);
+  --color-surface-raised: hsl(222 30% 13%);
+  --color-border: hsl(220 17% 20%);
+  --color-border-strong: hsl(220 15% 28%);
+  --color-text: hsl(210 40% 96%);
+  --color-text-muted: hsl(217 15% 65%);
+  --color-text-subtle: hsl(217 12% 48%);
+
+  --color-accent: hsl(217 91% 60%);
+  --color-accent-fg: hsl(222 47% 7%);
+  --color-accent-soft: hsl(217 60% 18%);
+
+  --color-critical: hsl(0 84% 68%);
+  --color-critical-soft: hsl(0 50% 18%);
+  --color-warning: hsl(38 92% 60%);
+  --color-warning-soft: hsl(38 50% 16%);
+  --color-healthy: hsl(142 65% 55%);
+  --color-healthy-soft: hsl(142 40% 15%);
+
+  --color-verified: hsl(142 65% 55%);
+  --color-verified-soft: hsl(142 40% 15%);
+  --color-likely: hsl(217 91% 68%);
+  --color-likely-soft: hsl(217 55% 18%);
+  --color-unverified: hsl(217 15% 65%);
+  --color-unverified-soft: hsl(220 15% 18%);
+}
+
+/* Expose tokens to Tailwind utilities (bg-surface, text-muted, border-border…). */
+@theme inline {
+  --color-bg: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-surface-raised: var(--color-surface-raised);
+  --color-border: var(--color-border);
+  --color-border-strong: var(--color-border-strong);
+  --color-text: var(--color-text);
+  --color-muted: var(--color-text-muted);
+  --color-subtle: var(--color-text-subtle);
+
+  --color-accent: var(--color-accent);
+  --color-accent-fg: var(--color-accent-fg);
+  --color-accent-soft: var(--color-accent-soft);
+
+  --color-critical: var(--color-critical);
+  --color-critical-soft: var(--color-critical-soft);
+  --color-warning: var(--color-warning);
+  --color-warning-soft: var(--color-warning-soft);
+  --color-healthy: var(--color-healthy);
+  --color-healthy-soft: var(--color-healthy-soft);
+
+  --color-verified: var(--color-verified);
+  --color-verified-soft: var(--color-verified-soft);
+  --color-likely: var(--color-likely);
+  --color-likely-soft: var(--color-likely-soft);
+  --color-unverified: var(--color-unverified);
+  --color-unverified-soft: var(--color-unverified-soft);
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Long identifiers (namespace/Kind/name) must wrap, never overflow. */
+.break-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

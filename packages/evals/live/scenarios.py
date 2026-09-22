@@ -456,16 +456,34 @@ _CLUSTER_CHANGES: tuple[LiveScenario, ...] = (
     ),
     LiveScenario(
         id="memory_limit_oom",
-        title="A tightened memory limit kills the container",
-        alert="PaymentRuntimeInstability",
-        service="payment-service",
-        expectation=RootCause(
-            "Deployment", "payment-service", ("SPEC_CHANGE", "CONTAINER_FAILURE")
+        title="A tightened memory limit kills the payment container",
+        alert="OrderErrorRateHigh",
+        service="order-service",
+        # A container that OOMs at startup never serves /metrics, so the
+        # metric-based runtime-instability alert cannot see it.  Its failure only
+        # becomes observable through the dependent order service, which records
+        # real errors when payment is down; the engine must trace those to the
+        # payment memory-limit change.  The limit must sit at or above the 128Mi
+        # request, so both drop together, and the pod is deleted to force the
+        # starved spec live past the rolling update.
+        expectation=RootCause("Deployment", "payment-service", ("SPEC_CHANGE",)),
+        setup=(
+            SetResources(
+                "payment-service",
+                "payment-service",
+                limits={"memory": "32Mi"},
+                requests={"memory": "32Mi"},
+            ),
+            DeletePod("payment-service"),
         ),
-        setup=(SetResources("payment-service", "payment-service", limits={"memory": "48Mi"}),),
-        workload=Workload(target=Target.PAYMENTS, count=30),
+        workload=Workload(target=Target.ORDERS, count=40),
         teardown=(
-            SetResources("payment-service", "payment-service", limits={"memory": "512Mi"}),
+            SetResources(
+                "payment-service",
+                "payment-service",
+                limits={"memory": "512Mi"},
+                requests={"memory": "128Mi"},
+            ),
             WaitRollout("payment-service"),
         ),
         demo=True,
@@ -475,13 +493,26 @@ _CLUSTER_CHANGES: tuple[LiveScenario, ...] = (
         title="A tightened CPU limit throttles the service",
         alert="PaymentRequestLatencyHigh",
         service="payment-service",
+        # cpu limit must be at or above the 100m request, so both drop together.
         expectation=RootCause(
             "Deployment", "payment-service", ("SPEC_CHANGE", "RESOURCE_PRESSURE")
         ),
-        setup=(SetResources("payment-service", "payment-service", limits={"cpu": "50m"}),),
+        setup=(
+            SetResources(
+                "payment-service",
+                "payment-service",
+                limits={"cpu": "50m"},
+                requests={"cpu": "50m"},
+            ),
+        ),
         workload=Workload(target=Target.PAYMENTS, count=30, concurrency=30, waves=3),
         teardown=(
-            SetResources("payment-service", "payment-service", limits={"cpu": "500m"}),
+            SetResources(
+                "payment-service",
+                "payment-service",
+                limits={"cpu": "500m"},
+                requests={"cpu": "100m"},
+            ),
             WaitRollout("payment-service"),
         ),
         tier=Tier.HOLDOUT,

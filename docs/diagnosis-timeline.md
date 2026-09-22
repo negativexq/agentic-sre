@@ -17,7 +17,8 @@ four immutable `IncidentEvent`s, in order:
 | `RCA_ENGINE_COMPLETED` | RCA engine returned | `run_id`, `leading_actor`, `reads`, `evidence` |
 | `DIAGNOSIS_COMPLETED` | diagnosis stored | `run_id`, `root_cause`, `resolution`, `confidence`, `model_calls` |
 
-A run that raises inside the engine instead emits `DIAGNOSIS_FAILED`
+A run that raises anywhere after it started — gathering evidence, inside the
+engine, or persisting the diagnosis — instead emits `DIAGNOSIS_FAILED`
 (`run_id`, `error`) and the error re-raises, so a crashed run leaves a terminated
 timeline rather than an open one.
 
@@ -34,11 +35,14 @@ The control plane re-diagnoses an open incident on its watch cycle. Rather than
 suppressing events on later runs (which would hide real work), each run carries a
 distinct `run_id`. The timeline keeps every run.
 
-The incident page renders the stored diagnosis of the latest *completed* run, so
-the timeline it shows is that same run's — never a newer run that crashed after
-starting, which would otherwise pair a fresh half-timeline with an older
-diagnosis. If a run newer than the one on screen is still in progress or has
-failed, the page says so in a line beneath the timeline instead of hiding it.
+The stored diagnosis carries its own `diagnosis_run_id`, and the incident page
+renders the timeline of exactly that run — looked up by id, not inferred from
+"the latest completed event". This holds the invariant *the timeline I see
+belongs to the diagnosis I see* even when a completing event was lost (timeline
+persistence is best effort): the run then has no rendered phases and the page
+says the timeline is unavailable rather than borrowing another run's. If a run
+newer than the one on screen is still in progress or has failed, the page notes
+that beneath the timeline instead of hiding it.
 
 ## Where it shows
 

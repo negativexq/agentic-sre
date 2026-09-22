@@ -24,7 +24,11 @@ from packages.contracts import (
 )
 from packages.storage.database import create_session_factory
 from packages.storage.models import Base
-from packages.storage.repositories import IncidentEventRepository, IncidentRepository
+from packages.storage.repositories import (
+    DiagnosisRepository,
+    IncidentEventRepository,
+    IncidentRepository,
+)
 
 T0 = datetime(2026, 9, 22, 12, 0, 0, tzinfo=UTC)
 _PHASES = {
@@ -132,25 +136,29 @@ def test_rediagnosis_appends_a_new_run_rather_than_duplicating(tmp_path: Path) -
     assert len(completes) == 2
 
 
-def test_diagnosis_phases_selects_the_latest_run_in_order(tmp_path: Path) -> None:
+def test_stored_diagnosis_carries_its_run_id_and_binds_the_timeline(tmp_path: Path) -> None:
     _engine, factory, incident_id, service = _app(tmp_path)
     service.run(incident_id)
     service.run(incident_id)
     with Session(factory().bind) as session:
+        repository = DiagnosisRepository(session)
+        document = repository.latest(incident_id)
+        run_id = repository.latest_run_id(incident_id)
         events = IncidentEventRepository(session).list_for_incident(incident_id)
-    phases = diagnosis_phases(events)
+    assert document is not None
+    # The pure document is unchanged; the run id lives in its own column.
+    assert "diagnosis_run_id" not in document
+    assert run_id
+    phases = diagnosis_phases(events, run_id)
     assert [phase.name for phase in phases] == [
         "Diagnosis started",
         "Evidence gathered",
         "RCA engine completed",
         "Diagnosis stored",
     ]
-    # The selected run is the most recent one.
-    latest_complete = max(
-        (e for e in events if e.event_type is IncidentEventType.DIAGNOSIS_COMPLETED),
-        key=lambda e: e.timestamp,
-    )
-    assert phases[-1].at == latest_complete.timestamp
+    # Every phase belongs to the run that produced the stored diagnosis.
+    run_events = {e.timestamp for e in events if str(e.payload.get("run_id")) == run_id}
+    assert all(phase.at in run_events for phase in phases)
 
 
 def test_events_api_returns_the_timeline_in_order(tmp_path: Path) -> None:
@@ -194,14 +202,14 @@ def test_phases_ignore_a_newer_incomplete_run() -> None:
         _event(ES.DIAGNOSIS_STARTED, "run-2", 10),
         _event(ES.EVIDENCE_GATHERED, "run-2", 11),
     ]
-    phases = diagnosis_phases(events)
+    phases = diagnosis_phases(events, "run-1")
     assert [p.name for p in phases] == [
         "Diagnosis started",
         "Evidence gathered",
         "RCA engine completed",
         "Diagnosis stored",
     ]
-    # The shown run is run-1 (its start at T+0), not the newer run-2 (T+10).
+    # Only run-1's phases render; the newer half-run run-2 is never mixed in.
     assert phases[0].at == T0
     assert phases[-1].at == T0 + timedelta(seconds=3)
 
@@ -214,7 +222,7 @@ def test_newer_run_note_flags_a_failed_later_run() -> None:
         _event(ES.DIAGNOSIS_STARTED, "run-2", 10),
         _event(ES.DIAGNOSIS_FAILED, "run-2", 11),
     ]
-    phases = diagnosis_phases(events)
+    phases = diagnosis_phases(events, "run-1")
     note = newer_run_note(events, phases)
     assert note is not None
     assert "failed" in note
@@ -228,7 +236,7 @@ def test_newer_run_note_flags_a_still_running_later_run() -> None:
         _event(ES.DIAGNOSIS_STARTED, "run-2", 10),
         _event(ES.EVIDENCE_GATHERED, "run-2", 11),
     ]
-    note = newer_run_note(events, diagnosis_phases(events))
+    note = newer_run_note(events, diagnosis_phases(events, "run-1"))
     assert note is not None
     assert "in progress" in note
 
@@ -239,7 +247,7 @@ def test_no_note_when_the_latest_run_completed() -> None:
         _event(ES.DIAGNOSIS_STARTED, "run-1", 0),
         _event(ES.DIAGNOSIS_COMPLETED, "run-1", 3),
     ]
-    assert newer_run_note(events, diagnosis_phases(events)) is None
+    assert newer_run_note(events, diagnosis_phases(events, "run-1")) is None
 
 
 def test_a_failed_run_emits_diagnosis_failed_and_reraises(tmp_path: Path, monkeypatch: Any) -> None:
@@ -262,3 +270,62 @@ def test_a_failed_run_emits_diagnosis_failed_and_reraises(tmp_path: Path, monkey
     assert IncidentEventType.DIAGNOSIS_STARTED in kinds
     assert IncidentEventType.DIAGNOSIS_FAILED in kinds
     assert IncidentEventType.DIAGNOSIS_COMPLETED not in kinds
+
+
+def test_lost_completing_event_yields_no_phases_for_that_run() -> None:
+    """run_id binding: if the run's DIAGNOSIS_COMPLETED was lost, its timeline is
+    empty (the page then says 'unavailable') rather than borrowing another run."""
+    ES = IncidentEventType
+    events = [
+        # An older run that completed cleanly.
+        _event(ES.DIAGNOSIS_STARTED, "run-1", 0),
+        _event(ES.DIAGNOSIS_COMPLETED, "run-1", 3),
+        # The shown diagnosis is run-2, whose completing event never persisted.
+        _event(ES.DIAGNOSIS_STARTED, "run-2", 10),
+        _event(ES.EVIDENCE_GATHERED, "run-2", 11),
+        _event(ES.RCA_ENGINE_COMPLETED, "run-2", 12),
+    ]
+    assert diagnosis_phases(events, "run-2") == ()
+    # And it never falls back to run-1's timeline.
+    assert diagnosis_phases(events, "run-1")[0].at == T0
+
+
+def test_no_run_id_yields_no_phases() -> None:
+    events = [_event(IncidentEventType.DIAGNOSIS_STARTED, "run-1", 0)]
+    assert diagnosis_phases(events, None) == ()
+
+
+def test_newer_run_note_picks_the_newest_incomplete_run() -> None:
+    ES = IncidentEventType
+    events = [
+        _event(ES.DIAGNOSIS_STARTED, "run-1", 0),
+        _event(ES.DIAGNOSIS_COMPLETED, "run-1", 3),
+        # An in-progress run and, after it, a failed one: the newest wins.
+        _event(ES.DIAGNOSIS_STARTED, "run-2", 10),
+        _event(ES.EVIDENCE_GATHERED, "run-2", 11),
+        _event(ES.DIAGNOSIS_STARTED, "run-3", 20),
+        _event(ES.DIAGNOSIS_FAILED, "run-3", 21),
+    ]
+    note = newer_run_note(events, diagnosis_phases(events, "run-1"))
+    assert note is not None
+    assert "failed" in note
+
+
+def test_incident_page_reports_an_unavailable_timeline(tmp_path: Path) -> None:
+    from sqlalchemy import text
+
+    _engine, factory, incident_id, service = _app(tmp_path)
+    service.run(incident_id)
+    # Drop this run's pipeline timeline events, keeping the stored diagnosis.
+    with Session(factory().bind) as session:
+        session.execute(
+            text(
+                "delete from incident_events where event_type in "
+                "('DIAGNOSIS_STARTED','EVIDENCE_GATHERED','RCA_ENGINE_COMPLETED',"
+                "'DIAGNOSIS_COMPLETED')"
+            )
+        )
+        session.commit()
+    with TestClient(create_app(factory, diagnosis_service=service)) as client:
+        page = client.get(f"/incidents/{incident_id}").text
+    assert "Timeline unavailable or incomplete" in page

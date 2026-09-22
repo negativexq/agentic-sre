@@ -117,32 +117,22 @@ def _runs(events: list[IncidentEvent]) -> dict[str, list[IncidentEvent]]:
     return runs
 
 
-def diagnosis_phases(events: list[IncidentEvent]) -> tuple[LifecyclePhase, ...]:
-    """The phases of the diagnosis run that produced the diagnosis on screen.
+def diagnosis_phases(events: list[IncidentEvent], run_id: str | None) -> tuple[LifecyclePhase, ...]:
+    """The phases of exactly the diagnosis run that produced the shown diagnosis.
 
-    Each run is tagged with its own ``run_id``. The page renders the stored
-    diagnosis from the latest *completed* run, so the timeline must be that same
-    run — never a newer run that crashed after starting, which would pair a fresh
-    half-timeline with an older diagnosis. Only runs that reached
-    ``DIAGNOSIS_COMPLETED`` are eligible.
+    The stored diagnosis carries its own ``diagnosis_run_id``, so the timeline is
+    bound to that run by id — not inferred from "latest completed event". If the
+    completing event was lost (timeline persistence is best effort), that run has
+    no phases here and the page says the timeline is unavailable rather than
+    rendering an unrelated run.
     """
-    completed = [
-        group
-        for group in _runs(events).values()
-        if any(item.event_type is IncidentEventType.DIAGNOSIS_COMPLETED for item in group)
-    ]
-    if not completed:
+    if not run_id:
         return ()
-    latest = max(
-        completed,
-        key=lambda group: next(
-            item.timestamp
-            for item in group
-            if item.event_type is IncidentEventType.DIAGNOSIS_COMPLETED
-        ),
-    )
+    group = _runs(events).get(run_id, [])
+    if not any(item.event_type is IncidentEventType.DIAGNOSIS_COMPLETED for item in group):
+        return ()
     ordered = sorted(
-        (item for item in latest if item.event_type in _PHASE_LABELS),
+        (item for item in group if item.event_type in _PHASE_LABELS),
         key=lambda item: _PHASE_ORDER.index(item.event_type),
     )
     return tuple(
@@ -156,7 +146,7 @@ def diagnosis_phases(events: list[IncidentEvent]) -> tuple[LifecyclePhase, ...]:
 def newer_run_note(
     events: list[IncidentEvent], shown_phases: tuple[LifecyclePhase, ...]
 ) -> str | None:
-    """Flag a run started after the shown one that has not completed.
+    """Flag the newest run started after the shown one that has not completed.
 
     So the page can say a later diagnosis is in progress or failed, instead of
     silently hiding it behind the completed run it renders.
@@ -164,6 +154,7 @@ def newer_run_note(
     if not shown_phases:
         return None
     shown_start = shown_phases[0].at
+    newest: tuple[datetime, bool] | None = None
     for group in _runs(events).values():
         started = next(
             (i for i in group if i.event_type is IncidentEventType.DIAGNOSIS_STARTED), None
@@ -173,10 +164,14 @@ def newer_run_note(
         kinds = {item.event_type for item in group}
         if IncidentEventType.DIAGNOSIS_COMPLETED in kinds:
             continue
-        if IncidentEventType.DIAGNOSIS_FAILED in kinds:
-            return "A newer diagnosis run failed; showing the last completed one."
-        return "A newer diagnosis run is in progress; showing the last completed one."
-    return None
+        failed = IncidentEventType.DIAGNOSIS_FAILED in kinds
+        if newest is None or started.timestamp > newest[0]:
+            newest = (started.timestamp, failed)
+    if newest is None:
+        return None
+    if newest[1]:
+        return "A newer diagnosis run failed; showing the last completed one."
+    return "A newer diagnosis run is in progress; showing the last completed one."
 
 
 API_TOKEN_ENV = "SRE_API_TOKEN"
@@ -413,10 +408,18 @@ def create_app(
         document = diagnoses.latest(incident_id)
         if document is None:
             return diagnosis_pending_html(str(incident_id), back_link="/")
+        run_id = diagnoses.latest_run_id(incident_id)
         diagnosis = Diagnosis.model_validate(document)
         alerts = AlertRepository(session).list_for_incident(incident_id)
         events = IncidentEventRepository(session).list_for_incident(incident_id)
-        phases = diagnosis_phases(events)
+        phases = diagnosis_phases(events, run_id)
+        # A diagnosis that carries a run id but has no rendered phases means its
+        # timeline events were lost; say so rather than showing another run's.
+        timeline_note = (
+            "Timeline unavailable or incomplete for this diagnosis run."
+            if run_id and not phases
+            else newer_run_note(events, phases)
+        )
         lifecycle = Lifecycle(
             alert_fired=min((alert.starts_at for alert in alerts), default=None),
             incident_opened=incident.created_at,
@@ -425,7 +428,7 @@ def create_app(
             evidence=len(diagnosis.evidence),
             model_calls=diagnosis.model_calls,
             phases=phases,
-            run_note=newer_run_note(events, phases),
+            run_note=timeline_note,
         )
         return diagnosis_html(diagnosis, back_link="/", lifecycle=lifecycle)
 

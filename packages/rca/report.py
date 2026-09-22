@@ -63,13 +63,16 @@ def _lifecycle_section(lifecycle: Lifecycle) -> str:
         ),
     ]
     if lifecycle.phases:
-        # Per-phase timing of the latest diagnosis run, offsets from its start.
+        # Per-phase timing of the diagnosis run that produced the shown result,
+        # offsets from its start.
         origin = lifecycle.phases[0].at
         steps.extend(
             (phase.name, clock(phase.at), f"T+{_fmt_delta(origin, phase.at)} · {phase.detail}")
             for phase in lifecycle.phases
         )
-    else:
+    elif lifecycle.run_note is None:
+        # No per-run timeline (an incident from before this instrumentation);
+        # a run_note, when present, explains the absence instead.
         steps.append(
             (
                 "Root cause diagnosed",

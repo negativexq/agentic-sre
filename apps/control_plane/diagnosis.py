@@ -13,7 +13,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from packages.contracts import IncidentEvent, IncidentEventType
+from packages.contracts import Incident, IncidentEvent, IncidentEventType
 from packages.rca.engine import Investigator, diagnose
 from packages.rca.investigation.graph import investigate_diagnosis
 from packages.rca.investigation.policy import LLMInvestigationPolicy
@@ -215,6 +215,28 @@ class DiagnosisService:
             IncidentEventType.DIAGNOSIS_STARTED,
             {"run_id": run_id, "alerts": [alert.name for alert in alerts]},
         )
+        try:
+            return self._diagnose(run_id, incident, incident_id, correlation_id, alerts)
+        except Exception as error:
+            # Any failure after the run started — gathering evidence, the engine,
+            # or persisting the diagnosis — terminates this run's timeline, so the
+            # UI never pairs an incomplete run with an older stored diagnosis.
+            self._emit(
+                incident_id,
+                correlation_id,
+                IncidentEventType.DIAGNOSIS_FAILED,
+                {"run_id": run_id, "error": type(error).__name__},
+            )
+            raise
+
+    def _diagnose(
+        self,
+        run_id: str,
+        incident: Incident,
+        incident_id: UUID,
+        correlation_id: UUID,
+        alerts: list[Alert],
+    ) -> Diagnosis:
         # Once resolved, the incident's causal window is frozen at its last
         # transition; otherwise it keeps growing to "now" so an open incident
         # keeps picking up fresh evidence. Freezing it also stops fetching a
@@ -311,21 +333,10 @@ class DiagnosisService:
             prometheus_reader=self.prometheus_reader,
         )
         bounded_policy = self.bounded_policy_factory()
-        try:
-            if bounded_policy is not None:
-                diagnosis = investigate_diagnosis(source, policy=bounded_policy).diagnosis
-            else:
-                diagnosis = diagnose(source, investigator=self.investigator_factory())
-        except Exception as error:
-            # Record the failed run so its timeline is a terminated one, not an
-            # incomplete run that the UI could pair with an older diagnosis.
-            self._emit(
-                incident_id,
-                correlation_id,
-                IncidentEventType.DIAGNOSIS_FAILED,
-                {"run_id": run_id, "error": type(error).__name__},
-            )
-            raise
+        if bounded_policy is not None:
+            diagnosis = investigate_diagnosis(source, policy=bounded_policy).diagnosis
+        else:
+            diagnosis = diagnose(source, investigator=self.investigator_factory())
         leading = diagnosis.hypothesis.causal_actor.canonical if diagnosis.hypothesis else None
         self._emit(
             incident_id,
@@ -338,9 +349,12 @@ class DiagnosisService:
                 "evidence": len(diagnosis.evidence),
             },
         )
+        # Stamp the stored row with its run id, so the UI can render the timeline
+        # of exactly the run that produced this diagnosis rather than inferring it
+        # from "latest completed event". The document stays the pure diagnosis.
         with self.session_factory() as session:
             DiagnosisRepository(session).save(
-                incident_id, diagnosis.model_dump(mode="json"), self.clock()
+                incident_id, diagnosis.model_dump(mode="json"), self.clock(), run_id=run_id
             )
         self._emit(
             incident_id,

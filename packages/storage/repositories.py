@@ -724,7 +724,13 @@ class DiagnosisRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def save(self, incident_id: object, document: dict[str, Any], created_at: datetime) -> None:
+    def save(
+        self,
+        incident_id: object,
+        document: dict[str, Any],
+        created_at: datetime,
+        run_id: str | None = None,
+    ) -> None:
         self._session.add(
             DiagnosisRow(
                 incident_id=incident_id,
@@ -732,6 +738,7 @@ class DiagnosisRepository:
                 root_cause=document.get("root_cause") and _canonical(document["root_cause"]),
                 confidence=str(document.get("confidence")),
                 mode=str(document.get("mode")),
+                run_id=run_id,
                 document=document,
             )
         )
@@ -750,6 +757,15 @@ class DiagnosisRepository:
         """When the latest diagnosis was stored, for lifecycle timing."""
         return self._session.scalars(
             select(DiagnosisRow.created_at)
+            .where(DiagnosisRow.incident_id == incident_id)
+            .order_by(desc(DiagnosisRow.created_at), desc(DiagnosisRow.diagnosis_id))
+            .limit(1)
+        ).first()
+
+    def latest_run_id(self, incident_id: object) -> str | None:
+        """The pipeline run id of the latest stored diagnosis, to bind its timeline."""
+        return self._session.scalars(
+            select(DiagnosisRow.run_id)
             .where(DiagnosisRow.incident_id == incident_id)
             .order_by(desc(DiagnosisRow.created_at), desc(DiagnosisRow.diagnosis_id))
             .limit(1)

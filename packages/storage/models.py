@@ -179,6 +179,9 @@ class DiagnosisRow(Base):
     root_cause: Mapped[str | None] = mapped_column(String(512), nullable=True)
     confidence: Mapped[str] = mapped_column(String(32), nullable=False)
     mode: Mapped[str] = mapped_column(String(64), nullable=False)
+    # The diagnosis pipeline run that produced this row, binding it to its
+    # timeline events. Nullable for diagnoses stored before this existed.
+    run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     document: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 

@@ -157,6 +157,35 @@ class HttpFault:
 
 
 @dataclass(frozen=True, slots=True)
+class DeletePod:
+    """Delete a deployment's pods, forcing the current spec to take effect now.
+
+    A rolling update keeps the healthy old pod until a new one is ready, so a
+    deliberately broken image or spec never actually displaces it.  Deleting the
+    pod forces the broken spec live, turning a stuck rollout into a real outage.
+    """
+
+    deployment: str
+    wait_ready: bool = False
+
+    def describe(self) -> str:
+        return f"{self.deployment} delete pod"
+
+    def apply(self, context: Context) -> None:
+        kubectl(
+            "delete",
+            "pod",
+            "-l",
+            f"app={self.deployment}",
+            "--wait=false",
+            context=context,
+            check=False,
+        )
+        if self.wait_ready:
+            WaitRollout(self.deployment, timeout_seconds=60).apply(context)
+
+
+@dataclass(frozen=True, slots=True)
 class EnvPatch:
     """Patch deployment environment variables, producing a real SPEC_CHANGE."""
 
@@ -473,18 +502,38 @@ class PortForwarder:
                 )
             time.sleep(0.5)
 
-    def start_all(self) -> None:
+    def start_all(self) -> tuple[str, ...]:
+        """Open every forward; return the services that could not be reached.
+
+        Best effort like :meth:`refresh`: a run may start while a service is
+        still broken from an interrupted run, and it is ``restore`` that repairs
+        it, so a forward that will not open must not abort startup.
+        """
         for forward in self._forwards.values():
             if _port_is_open(forward.local_port):
                 self._external.add(forward.service)
                 continue
             self._spawn(forward)
+        unavailable: list[str] = []
         for forward in self._forwards.values():
-            if forward.service not in self._external:
+            if forward.service in self._external:
+                continue
+            try:
                 self._await_open(forward)
+            except ActionError:
+                unavailable.append(forward.service)
+        return tuple(unavailable)
 
-    def refresh(self, services: tuple[str, ...]) -> None:
-        """Restart the named forwards so they point at the current pods."""
+    def refresh(self, services: tuple[str, ...]) -> tuple[str, ...]:
+        """Restart the named forwards so they point at the current pods.
+
+        Best effort: a service a scenario has intentionally broken (its selector
+        edited, or scaled to zero) has no endpoints and cannot be forwarded.
+        That is expected, not fatal, so such a forward is left down and its name
+        returned rather than raising — the traffic that needed it simply fails,
+        which is the symptom under test.
+        """
+        unavailable: list[str] = []
         for service in services:
             forward = self._forwards.get(service)
             if forward is None or service in self._external:
@@ -499,8 +548,13 @@ class PortForwarder:
             self._spawn(forward)
         for service in services:
             forward = self._forwards.get(service)
-            if forward is not None and service not in self._external:
+            if forward is None or service in self._external:
+                continue
+            try:
                 self._await_open(forward)
+            except ActionError:
+                unavailable.append(service)
+        return tuple(unavailable)
 
     def stop_all(self) -> None:
         for process in self._processes.values():

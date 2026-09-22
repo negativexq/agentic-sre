@@ -353,6 +353,12 @@ def run_scenario(
         forwarder.refresh(("order-service", "payment-service"))
     on_event(f"[{scenario.id}] baseline")
     reset_baseline(context)
+    # Baseline should have restored every service, so a forward that still will
+    # not open now points at a genuinely unhealthy dependency, not scenario state.
+    if forwarder is not None:
+        down = forwarder.refresh(("order-service", "payment-service"))
+        if down:
+            on_event(f"[{scenario.id}] warning: {', '.join(down)} not reachable after baseline")
     # The alert must be clear before staging, or Alertmanager will not deliver a
     # fresh firing and no incident will be raised for this run.
     if not _wait_for_alert_clear(context, scenario.alert, timeout_seconds=120):
@@ -378,9 +384,9 @@ def run_scenario(
             detail=str(error),
         )
 
-    # Baseline reset and setup both roll deployments, and kubectl port-forward
-    # does not follow a rollout, so the workload forwards must be re-pointed at
-    # the current pods before any traffic is sent.
+    # Setup may roll or break a service, and kubectl port-forward does not follow
+    # a rollout, so re-point the workload forwards before traffic.  A forward the
+    # scenario intentionally broke stays down; its traffic then fails, as intended.
     if forwarder is not None:
         forwarder.refresh(("order-service", "payment-service"))
 
@@ -461,15 +467,36 @@ def run_suite(
     on_event: Callable[[str], None] = lambda message: None,
 ) -> SuiteReport:
     """Run every scenario in order and aggregate the outcomes."""
-    results = tuple(
-        run_scenario(scenario, context, options, forwarder=forwarder, on_event=on_event)
-        for scenario in scenarios
-    )
-    return SuiteReport(results=results)
+    results: list[ScenarioResult] = []
+    for scenario in scenarios:
+        try:
+            results.append(
+                run_scenario(scenario, context, options, forwarder=forwarder, on_event=on_event)
+            )
+        except Exception as error:  # noqa: BLE001 - one scenario must not sink the suite
+            on_event(f"[{scenario.id}] unexpected error: {error!r}")
+            results.append(
+                ScenarioResult(
+                    scenario_id=scenario.id,
+                    outcome=Outcome.ERROR,
+                    expected=scenario.expectation.label,
+                    actual="",
+                    detail=repr(error),
+                )
+            )
+    return SuiteReport(results=tuple(results))
+
+
+WORKLOAD_MANIFEST = "infra/kubernetes/workload.yaml"
 
 
 def restore_namespace(context: Context) -> None:
-    """Undo anything a partial run may have left behind."""
+    """Undo anything a partial run may have left behind.
+
+    Re-applying the workload manifest resets every deployment's env, image,
+    resources, replicas and Service selector to their shipped state in one step,
+    which is more robust after a crashed run than undoing each field piecemeal.
+    """
     reset_baseline(context)
     for kind, name in (
         ("networkpolicy", "deny-order-egress"),
@@ -477,27 +504,7 @@ def restore_namespace(context: Context) -> None:
         ("horizontalpodautoscaler", "order-service"),
     ):
         kubectl("delete", kind, name, "--ignore-not-found", context=context, check=False)
-    # Every workload deployment ships one replica; restore that after any scale.
-    for deployment in ("order-service", "payment-service"):
-        kubectl("scale", f"deployment/{deployment}", "--replicas=1", context=context, check=False)
-    kubectl(
-        "set",
-        "image",
-        "deployment/payment-service",
-        "payment-service=agentic-sre/payment-service:dev",
-        context=context,
-        check=False,
-    )
-    kubectl(
-        "patch",
-        "service",
-        "payment-service",
-        "--type=merge",
-        "-p",
-        json.dumps({"spec": {"selector": {"app": "payment-service"}}}),
-        context=context,
-        check=False,
-    )
+    kubectl("apply", "-f", WORKLOAD_MANIFEST, context=context, check=False)
     for deployment in ("order-service", "payment-service", "order-worker"):
         WaitRollout(deployment, timeout_seconds=120).apply(context)
 

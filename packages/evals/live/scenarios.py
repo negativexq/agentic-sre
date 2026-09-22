@@ -26,6 +26,7 @@ from packages.evals.live.actions import (
     ApplyFile,
     ApplyManifest,
     DeleteObject,
+    DeletePod,
     EnvPatch,
     EnvUnset,
     HttpFault,
@@ -351,13 +352,18 @@ _CLUSTER_CHANGES: tuple[LiveScenario, ...] = (
     LiveScenario(
         id="image_regression",
         title="A deploy pins an image tag that does not exist",
-        alert="PaymentRuntimeInstability",
-        service="payment-service",
-        expectation=RootCause(
-            "Deployment", "payment-service", ("IMAGE_CHANGE", "CONTAINER_FAILURE")
+        alert="OrderErrorRateHigh",
+        service="order-service",
+        # A rolling update keeps the healthy pod while the bad-image pod fails to
+        # pull, so the pod is deleted to force the broken spec live.  Payment then
+        # has no serving pod and the order service records real dependency errors;
+        # the engine must trace them to the payment image change.
+        expectation=RootCause("Deployment", "payment-service", ("IMAGE_CHANGE",)),
+        setup=(
+            SetImage("payment-service", "payment-service", "agentic-sre/payment-service:v0"),
+            DeletePod("payment-service"),
         ),
-        setup=(SetImage("payment-service", "payment-service", "agentic-sre/payment-service:v0"),),
-        workload=Workload(target=Target.PAYMENTS, count=30),
+        workload=Workload(target=Target.ORDERS, count=40),
         teardown=(
             SetImage("payment-service", "payment-service", "agentic-sre/payment-service:dev"),
             WaitRollout("payment-service"),
@@ -382,12 +388,16 @@ _CLUSTER_CHANGES: tuple[LiveScenario, ...] = (
     ),
     LiveScenario(
         id="rollout_restart_disruption",
-        title="A rollout restart disrupts in-flight requests",
-        alert="PaymentErrorRateHigh",
-        service="payment-service",
+        title="A rollout restart disrupts the payment dependency",
+        alert="OrderErrorRateHigh",
+        service="order-service",
+        # A graceful rolling restart at one replica keeps a pod serving, so the
+        # restart annotation is recorded but the old pod is deleted to force a
+        # real serving gap.  The order service records the dependency errors and
+        # the engine must attribute them to the payment restart.
         expectation=RootCause("Deployment", "payment-service", ("ROLLOUT_RESTART",)),
-        setup=(RolloutRestart("payment-service"),),
-        workload=Workload(target=Target.PAYMENTS, count=30, concurrency=30, waves=2),
+        setup=(RolloutRestart("payment-service"), DeletePod("payment-service")),
+        workload=Workload(target=Target.ORDERS, count=40),
         teardown=(WaitRollout("payment-service"),),
     ),
     LiveScenario(

@@ -33,11 +33,13 @@ from packages.contracts import (
     Evidence,
     Incident,
     IncidentEvent,
+    IncidentEventType,
 )
 from packages.incident import IncidentManager, normalize_alert
 from packages.rca.model import Diagnosis
 from packages.rca.report import (
     Lifecycle,
+    LifecyclePhase,
     diagnosis_html,
     diagnosis_pending_html,
     incidents_html,
@@ -80,6 +82,54 @@ def get_session() -> Iterator[Session]:
     """Dependency placeholder replaced by ``create_app``."""
     raise RuntimeError("database session dependency is not configured")
     yield  # pragma: no cover
+
+
+_PHASE_LABELS = {
+    IncidentEventType.DIAGNOSIS_STARTED: "Diagnosis started",
+    IncidentEventType.EVIDENCE_GATHERED: "Evidence gathered",
+    IncidentEventType.HYPOTHESIS_CREATED: "RCA engine completed",
+    IncidentEventType.DIAGNOSIS_COMPLETED: "Diagnosis stored",
+}
+_PHASE_ORDER = list(_PHASE_LABELS)
+
+
+def _phase_detail(event: IncidentEvent) -> str:
+    payload = event.payload
+    if event.event_type is IncidentEventType.EVIDENCE_GATHERED:
+        return (
+            f"objects {payload.get('objects', 0)} · journal {payload.get('journal', 0)} · "
+            f"events {payload.get('events', 0)} · logs {payload.get('logs', 0)}"
+        )
+    if event.event_type is IncidentEventType.HYPOTHESIS_CREATED:
+        return f"leading {payload.get('leading_actor') or '—'} · {payload.get('reads', 0)} reads"
+    if event.event_type is IncidentEventType.DIAGNOSIS_COMPLETED:
+        return f"{payload.get('root_cause') or 'no root cause'} · {payload.get('resolution', '')}"
+    return "reasoning begins"
+
+
+def diagnosis_phases(events: list[IncidentEvent]) -> tuple[LifecyclePhase, ...]:
+    """The four timeline phases of the most recent diagnosis run, in order.
+
+    Each diagnosis run is tagged with its own ``run_id``, so a re-diagnosis adds
+    a new run rather than being mistaken for a duplicate; the UI shows the
+    latest run's phases.
+    """
+    runs: dict[str, list[IncidentEvent]] = {}
+    for event in events:
+        if event.event_type not in _PHASE_LABELS:
+            continue
+        run_id = str(event.payload.get("run_id", ""))
+        runs.setdefault(run_id, []).append(event)
+    if not runs:
+        return ()
+    latest = max(runs.values(), key=lambda group: max(item.timestamp for item in group))
+    ordered = sorted(latest, key=lambda item: _PHASE_ORDER.index(item.event_type))
+    return tuple(
+        LifecyclePhase(
+            name=_PHASE_LABELS[event.event_type], at=event.timestamp, detail=_phase_detail(event)
+        )
+        for event in ordered
+    )
 
 
 API_TOKEN_ENV = "SRE_API_TOKEN"
@@ -318,6 +368,7 @@ def create_app(
             return diagnosis_pending_html(str(incident_id), back_link="/")
         diagnosis = Diagnosis.model_validate(document)
         alerts = AlertRepository(session).list_for_incident(incident_id)
+        events = IncidentEventRepository(session).list_for_incident(incident_id)
         lifecycle = Lifecycle(
             alert_fired=min((alert.starts_at for alert in alerts), default=None),
             incident_opened=incident.created_at,
@@ -325,6 +376,7 @@ def create_app(
             reads=len(diagnosis.steps),
             evidence=len(diagnosis.evidence),
             model_calls=diagnosis.model_calls,
+            phases=diagnosis_phases(events),
         )
         return diagnosis_html(diagnosis, back_link="/", lifecycle=lifecycle)
 

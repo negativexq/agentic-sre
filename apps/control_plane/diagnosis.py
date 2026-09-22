@@ -9,10 +9,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from packages.contracts import IncidentEvent, IncidentEventType
 from packages.rca.engine import Investigator, diagnose
 from packages.rca.investigation.graph import investigate_diagnosis
 from packages.rca.investigation.policy import LLMInvestigationPolicy
@@ -36,6 +37,7 @@ from packages.storage import (
     AlertRepository,
     DiagnosisRepository,
     EventRepository,
+    IncidentEventRepository,
     IncidentNotFoundError,
     IncidentRepository,
     LogObservationRepository,
@@ -163,11 +165,39 @@ class DiagnosisService:
                 logger.warning("cluster snapshot failed", exc_info=True)
             stop.wait(interval_seconds)
 
+    def _emit(
+        self,
+        incident_id: UUID,
+        correlation_id: UUID,
+        event_type: IncidentEventType,
+        payload: dict[str, Any],
+    ) -> None:
+        """Append one timeline event for the diagnosis pipeline.
+
+        Best effort: timeline observability must never fail or slow a diagnosis,
+        so a recording error is logged and swallowed.
+        """
+        try:
+            with self.session_factory() as session:
+                IncidentEventRepository(session).append(
+                    IncidentEvent(
+                        incident_id=incident_id,
+                        event_type=event_type,
+                        timestamp=self.clock(),
+                        correlation_id=correlation_id,
+                        payload=payload,
+                    )
+                )
+        except Exception:  # noqa: BLE001 - observability must not break diagnosis
+            logger.warning("failed to record %s timeline event", event_type.value, exc_info=True)
+
     def run(self, incident_id: UUID) -> Diagnosis:
+        run_id = str(uuid4())
         with self.session_factory() as session:
             incident = IncidentRepository(session).get(incident_id)
             if incident is None:
                 raise IncidentNotFoundError(str(incident_id))
+            correlation_id = incident.correlation_id
             alerts = [
                 Alert(
                     name=item.alert_name,
@@ -178,6 +208,12 @@ class DiagnosisService:
                 )
                 for item in AlertRepository(session).list_for_incident(incident_id)
             ]
+        self._emit(
+            incident_id,
+            correlation_id,
+            IncidentEventType.DIAGNOSIS_STARTED,
+            {"run_id": run_id, "alerts": [alert.name for alert in alerts]},
+        )
         # Once resolved, the incident's causal window is frozen at its last
         # transition; otherwise it keeps growing to "now" so an open incident
         # keeps picking up fresh evidence. Freezing it also stops fetching a
@@ -249,6 +285,18 @@ class DiagnosisService:
                 logs = LogObservationRepository(session).list_for_incident(
                     incident_id=incident_id, starts_at=starts_at, ends_at=ends_at
                 )
+        self._emit(
+            incident_id,
+            correlation_id,
+            IncidentEventType.EVIDENCE_GATHERED,
+            {
+                "run_id": run_id,
+                "objects": len(current),
+                "journal": len(journal),
+                "events": len(event_bodies),
+                "logs": len(logs),
+            },
+        )
         source = LiveSource(
             incident=str(incident_id),
             alert_items=alerts,
@@ -266,10 +314,34 @@ class DiagnosisService:
             diagnosis = investigate_diagnosis(source, policy=bounded_policy).diagnosis
         else:
             diagnosis = diagnose(source, investigator=self.investigator_factory())
+        leading = diagnosis.hypothesis.causal_actor.canonical if diagnosis.hypothesis else None
+        self._emit(
+            incident_id,
+            correlation_id,
+            IncidentEventType.HYPOTHESIS_CREATED,
+            {
+                "run_id": run_id,
+                "leading_actor": leading,
+                "reads": len(diagnosis.steps),
+                "evidence": len(diagnosis.evidence),
+            },
+        )
         with self.session_factory() as session:
             DiagnosisRepository(session).save(
                 incident_id, diagnosis.model_dump(mode="json"), self.clock()
             )
+        self._emit(
+            incident_id,
+            correlation_id,
+            IncidentEventType.DIAGNOSIS_COMPLETED,
+            {
+                "run_id": run_id,
+                "root_cause": diagnosis.root_cause.canonical if diagnosis.root_cause else None,
+                "resolution": diagnosis.resolution.value,
+                "confidence": diagnosis.confidence.value,
+                "model_calls": diagnosis.model_calls,
+            },
+        )
         return diagnosis
 
 

@@ -11,12 +11,22 @@ from packages.rca.model import Confidence, Diagnosis, InvestigationResult
 
 
 @dataclass(frozen=True, slots=True)
+class LifecyclePhase:
+    """One recorded step of a single diagnosis run, from its timeline events."""
+
+    name: str
+    at: datetime
+    detail: str
+
+
+@dataclass(frozen=True, slots=True)
 class Lifecycle:
     """The observable timing of one incident, from alert to stored diagnosis.
 
     All times are what the control plane actually recorded; nothing here is
     estimated. ``diagnosis_ready`` is ``None`` while auto-diagnosis is still
-    running.
+    running. ``phases`` are the timeline events of the latest diagnosis run,
+    empty for incidents diagnosed before this instrumentation existed.
     """
 
     alert_fired: datetime | None
@@ -25,6 +35,7 @@ class Lifecycle:
     reads: int
     evidence: int
     model_calls: int
+    phases: tuple[LifecyclePhase, ...] = ()
 
 
 def _fmt_delta(earlier: datetime | None, later: datetime | None) -> str:
@@ -49,16 +60,26 @@ def _lifecycle_section(lifecycle: Lifecycle) -> str:
             clock(lifecycle.incident_opened),
             f"+{_fmt_delta(lifecycle.alert_fired, lifecycle.incident_opened)} — Alertmanager → webhook",
         ),
-        (
-            "Root cause diagnosed",
-            clock(lifecycle.diagnosis_ready),
-            f"+{_fmt_delta(lifecycle.incident_opened, lifecycle.diagnosis_ready)} — auto-diagnosis"
-            if lifecycle.diagnosis_ready
-            else "auto-diagnosis running…",
-        ),
     ]
+    if lifecycle.phases:
+        # Per-phase timing of the latest diagnosis run, offsets from its start.
+        origin = lifecycle.phases[0].at
+        steps.extend(
+            (phase.name, clock(phase.at), f"T+{_fmt_delta(origin, phase.at)} · {phase.detail}")
+            for phase in lifecycle.phases
+        )
+    else:
+        steps.append(
+            (
+                "Root cause diagnosed",
+                clock(lifecycle.diagnosis_ready),
+                f"+{_fmt_delta(lifecycle.incident_opened, lifecycle.diagnosis_ready)} — auto-diagnosis"
+                if lifecycle.diagnosis_ready
+                else "auto-diagnosis running…",
+            )
+        )
     rows = "".join(
-        f"<tr><td>{escape(name)}</td><td>{when}</td><td class='muted'>{detail}</td></tr>"
+        f"<tr><td>{escape(name)}</td><td>{when}</td><td class='muted'>{escape(detail)}</td></tr>"
         for name, when, detail in steps
     )
     total = _fmt_delta(
@@ -331,4 +352,10 @@ def diagnosis_pending_html(incident_id: str, *, back_link: str | None = None) ->
     return _page(f"Diagnosis pending {incident_id}", body, refresh_seconds=3)
 
 
-__all__ = ["Lifecycle", "diagnosis_html", "diagnosis_pending_html", "incidents_html"]
+__all__ = [
+    "Lifecycle",
+    "LifecyclePhase",
+    "diagnosis_html",
+    "diagnosis_pending_html",
+    "incidents_html",
+]

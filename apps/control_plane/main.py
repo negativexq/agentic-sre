@@ -346,7 +346,7 @@ def create_app(
                     "incident_id": str(incident.incident_id),
                     "title": incident.title,
                     "status": incident.status.value,
-                    "created_at": incident.created_at.isoformat(timespec="seconds"),
+                    "created_at": incident.created_at.strftime("%Y-%m-%d %H:%M"),
                     "root_cause": summary.get("root_cause") or "",
                     "confidence": summary.get("confidence") or "",
                 }

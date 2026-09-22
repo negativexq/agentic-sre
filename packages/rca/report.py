@@ -110,16 +110,23 @@ main { max-width:960px; margin:0 auto; padding:24px 16px 64px; }
 h1 { font-size:22px; margin:0 0 4px; } h2 { font-size:16px; margin:28px 0 8px; }
 a { color:var(--accent); }
 .muted { color:var(--muted); }
-p, td { overflow-wrap:anywhere; }
+/* break-word keeps a column at least one word wide, so short labels like
+   RESOLVED or ranking never break mid-word; long canonical names still wrap. */
+p, td { overflow-wrap:break-word; }
 td:first-child { white-space:nowrap; overflow-wrap:normal; }
+td.wrap { white-space:normal; }
 .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; }
 .cause { font:600 17px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; word-break:break-all; }
 .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:600;
   border:1px solid currentColor; }
 .VERIFIED { color:var(--ok); } .LIKELY { color:var(--warn); } .UNVERIFIED { color:var(--low); }
 table { width:100%; border-collapse:collapse; font-size:14px; }
-th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+th, td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
 th { color:var(--muted); font-weight:500; }
+tbody tr:hover, table tr:hover { background:color-mix(in srgb, var(--accent) 6%, transparent); }
+.trace td:first-child { white-space:nowrap; overflow-wrap:normal; color:var(--muted); }
+.trace td:last-child { line-height:1.55; }
+.trace td:first-child code { color:var(--fg); }
 code, pre { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:13px; }
 pre { background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:8px;
   overflow-x:auto; white-space:pre-wrap; }
@@ -306,12 +313,15 @@ def diagnosis_html(
             + "</div>"
         )
     steps = "".join(
-        f"<tr><td>{escape(s.actor)}</td><td>{escape(s.action)}</td><td>{escape(s.detail)}</td></tr>"
+        "<tr>"
+        f"<td><code>{escape(s.actor)}</code> · {escape(s.action)}</td>"
+        f"<td>{escape(s.detail)}</td>"
+        "</tr>"
         for s in diagnosis.steps
     )
     parts.append(
-        "<h2>Investigation trace</h2><div class='table-wrap'><table>"
-        f"<tr><th>Actor</th><th>Step</th><th>Detail</th></tr>{steps}</table></div>"
+        "<h2>Investigation trace</h2><div class='table-wrap'><table class='trace'>"
+        f"<tr><th>Step</th><th>Detail</th></tr>{steps}</table></div>"
     )
     return _page(f"Diagnosis {diagnosis.incident_id}", "".join(parts))
 

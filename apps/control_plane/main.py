@@ -20,11 +20,14 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
+from apps.control_plane.console import create_console_router
+from apps.control_plane.console.dto import SystemConnector, SystemStatus
 from apps.control_plane.diagnosis import DiagnosisService, service_from_environment
 from apps.control_plane.schemas import (
     ErrorDetail,
     ErrorResponse,
 )
+from apps.control_plane.timeline import diagnosis_phases, newer_run_note
 from packages.contracts import (
     Alert,
     AlertmanagerWebhook,
@@ -33,13 +36,11 @@ from packages.contracts import (
     Evidence,
     Incident,
     IncidentEvent,
-    IncidentEventType,
 )
 from packages.incident import IncidentManager, normalize_alert
 from packages.rca.model import Diagnosis
 from packages.rca.report import (
     Lifecycle,
-    LifecyclePhase,
     diagnosis_html,
     diagnosis_pending_html,
     incidents_html,
@@ -84,97 +85,52 @@ def get_session() -> Iterator[Session]:
     yield  # pragma: no cover
 
 
-_PHASE_LABELS = {
-    IncidentEventType.DIAGNOSIS_STARTED: "Diagnosis started",
-    IncidentEventType.EVIDENCE_GATHERED: "Evidence gathered",
-    IncidentEventType.RCA_ENGINE_COMPLETED: "RCA engine completed",
-    IncidentEventType.DIAGNOSIS_COMPLETED: "Diagnosis stored",
-}
-_PHASE_ORDER = list(_PHASE_LABELS)
-_PIPELINE_EVENTS = {*_PHASE_LABELS, IncidentEventType.DIAGNOSIS_FAILED}
-
-
-def _phase_detail(event: IncidentEvent) -> str:
-    payload = event.payload
-    if event.event_type is IncidentEventType.EVIDENCE_GATHERED:
-        return (
-            f"objects {payload.get('objects', 0)} · journal {payload.get('journal', 0)} · "
-            f"events {payload.get('events', 0)} · logs {payload.get('logs', 0)}"
-        )
-    if event.event_type is IncidentEventType.RCA_ENGINE_COMPLETED:
-        return f"leading {payload.get('leading_actor') or '—'} · {payload.get('reads', 0)} reads"
-    if event.event_type is IncidentEventType.DIAGNOSIS_COMPLETED:
-        return f"{payload.get('root_cause') or 'no root cause'} · {payload.get('resolution', '')}"
-    return "reasoning begins"
-
-
-def _runs(events: list[IncidentEvent]) -> dict[str, list[IncidentEvent]]:
-    runs: dict[str, list[IncidentEvent]] = {}
-    for event in events:
-        if event.event_type not in _PIPELINE_EVENTS:
-            continue
-        runs.setdefault(str(event.payload.get("run_id", "")), []).append(event)
-    return runs
-
-
-def diagnosis_phases(events: list[IncidentEvent], run_id: str | None) -> tuple[LifecyclePhase, ...]:
-    """The phases of exactly the diagnosis run that produced the shown diagnosis.
-
-    The stored diagnosis carries its own ``diagnosis_run_id``, so the timeline is
-    bound to that run by id — not inferred from "latest completed event". If the
-    completing event was lost (timeline persistence is best effort), that run has
-    no phases here and the page says the timeline is unavailable rather than
-    rendering an unrelated run.
-    """
-    if not run_id:
-        return ()
-    group = _runs(events).get(run_id, [])
-    if not any(item.event_type is IncidentEventType.DIAGNOSIS_COMPLETED for item in group):
-        return ()
-    ordered = sorted(
-        (item for item in group if item.event_type in _PHASE_LABELS),
-        key=lambda item: _PHASE_ORDER.index(item.event_type),
-    )
-    return tuple(
-        LifecyclePhase(
-            name=_PHASE_LABELS[event.event_type], at=event.timestamp, detail=_phase_detail(event)
-        )
-        for event in ordered
-    )
-
-
-def newer_run_note(
-    events: list[IncidentEvent], shown_phases: tuple[LifecyclePhase, ...]
-) -> str | None:
-    """Flag the newest run started after the shown one that has not completed.
-
-    So the page can say a later diagnosis is in progress or failed, instead of
-    silently hiding it behind the completed run it renders.
-    """
-    if not shown_phases:
-        return None
-    shown_start = shown_phases[0].at
-    newest: tuple[datetime, bool] | None = None
-    for group in _runs(events).values():
-        started = next(
-            (i for i in group if i.event_type is IncidentEventType.DIAGNOSIS_STARTED), None
-        )
-        if started is None or started.timestamp <= shown_start:
-            continue
-        kinds = {item.event_type for item in group}
-        if IncidentEventType.DIAGNOSIS_COMPLETED in kinds:
-            continue
-        failed = IncidentEventType.DIAGNOSIS_FAILED in kinds
-        if newest is None or started.timestamp > newest[0]:
-            newest = (started.timestamp, failed)
-    if newest is None:
-        return None
-    if newest[1]:
-        return "A newer diagnosis run failed; showing the last completed one."
-    return "A newer diagnosis run is in progress; showing the last completed one."
-
-
 API_TOKEN_ENV = "SRE_API_TOKEN"
+
+
+def _env_connector(name: str, env_var: str) -> SystemConnector:
+    """Report a push/pull upstream from its configuration, honestly unprobed.
+
+    The control plane does not hold a live connection to Prometheus, Loki or
+    Tempo (metrics and alerts arrive via webhook; evidence sources are read on
+    demand), so the console reports whether each is configured rather than
+    claiming a health it has not verified.
+    """
+    if os.environ.get(env_var):
+        return SystemConnector(
+            name=name, status="connected", detail="configured; not actively probed"
+        )
+    return SystemConnector(name=name, status="not_configured", detail=f"set {env_var} to enable")
+
+
+def build_system_status(session: Session, *, reader_configured: bool) -> SystemStatus:
+    """Assemble connector health from what the control plane can truthfully tell."""
+    try:
+        session.execute(text("SELECT 1"))
+        database = SystemConnector(name="Database", status="connected", detail=None)
+    except SQLAlchemyError:
+        database = SystemConnector(name="Database", status="unavailable", detail="SELECT 1 failed")
+    kubernetes = (
+        SystemConnector(name="Kubernetes", status="connected", detail="cluster reader configured")
+        if reader_configured
+        else SystemConnector(
+            name="Kubernetes", status="not_configured", detail="no in-cluster reader"
+        )
+    )
+    alertmanager = SystemConnector(
+        name="Alertmanager", status="connected", detail="webhook receiver ready"
+    )
+    return SystemStatus(
+        connectors=[
+            database,
+            kubernetes,
+            alertmanager,
+            _env_connector("Prometheus", "PROMETHEUS_URL"),
+            _env_connector("Loki", "SRE_LOKI_URL"),
+            _env_connector("Tempo", "TEMPO_URL"),
+            _env_connector("Email", "SRE_SMTP_HOST"),
+        ]
+    )
 
 
 def _require_api_token(request: Request) -> None:
@@ -248,6 +204,13 @@ def create_app(
     app.add_middleware(TelemetryMiddleware, runtime=telemetry)
     app.mount("/metrics", make_asgi_app(registry=registry))
     app.dependency_overrides[get_session] = session_dependency
+
+    reader_configured = diagnoser.reader is not None
+
+    def system_status_provider(session: Session) -> SystemStatus:
+        return build_system_status(session, reader_configured=reader_configured)
+
+    app.include_router(create_console_router(get_session, system_status_provider))
 
     @app.exception_handler(IncidentNotFoundError)
     async def incident_not_found_handler(

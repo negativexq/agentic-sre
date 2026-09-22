@@ -316,7 +316,9 @@ class EvidenceRepository:
                 source_type=EvidenceSourceType(row.source_type),
                 source_system=row.source_system,
                 observation=row.observation,
-                time_window=TimeWindow.model_validate(row.time_window),
+                # Stored as a JSON dict of ISO strings; coerce on read rather
+                # than requiring datetime instances the JSON column cannot hold.
+                time_window=TimeWindow.model_validate(row.time_window, strict=False),
                 tool_call_id=row.tool_call_id,
                 raw_result_reference=row.raw_result_reference,
                 collected_at=row.collected_at,
@@ -781,6 +783,31 @@ class DiagnosisRepository:
                 "root_cause": row.root_cause,
                 "confidence": row.confidence,
                 "created_at": row.created_at,
+            }
+        return result
+
+    def latest_views(self) -> dict[str, dict[str, Any]]:
+        """Latest diagnosis view per incident for list/dashboard rendering.
+
+        One query for every incident's diagnoses, reduced to the newest per
+        incident in Python. ``resolution`` and the affected ``services`` live in
+        the stored document, so they are read from it rather than joined; this
+        keeps the list at two queries (incidents + this) with no per-row fetch.
+        """
+        result: dict[str, dict[str, Any]] = {}
+        for row in self._session.scalars(
+            select(DiagnosisRow).order_by(DiagnosisRow.created_at, DiagnosisRow.diagnosis_id)
+        ).all():
+            document = row.document
+            symptoms = document.get("symptoms") or {}
+            services = symptoms.get("services") or ()
+            result[str(row.incident_id)] = {
+                "root_cause": row.root_cause,
+                "confidence": row.confidence,
+                "resolution": document.get("resolution"),
+                "services": tuple(services),
+                "created_at": row.created_at,
+                "run_id": row.run_id,
             }
         return result
 

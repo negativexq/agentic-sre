@@ -376,6 +376,22 @@ The 11 active choices in `baseline-preserving-v1` had five old value-4 event cho
 
 Thus all 10 false positive elimination claims were removed; eight of those ten exact old action choices were no longer selected. Two history actions remain selectable only for the separate, permitted redundancy tie-break with elimination value 0. The genuine Kafka-like decision-changing override class remains available without a scenario-specific rule.
 
+Per-choice old-audit fields and same-turn transition-certified disposition:
+
+| Scenario/turn | Capability / target | Gap | Old discrimination / EEV / known risk | Old returned/new/already-known refs | Old outcome / state changed | Same-candidate certificate and new EEV | Current selection |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Scenario-6 t5 | history / Deployment `frontend` | CHANGE_TIMING | 17 / 3 / 2 | 1 / 0 / 1 | UNKNOWN / no | structural alternative: `object_change`, EEV 0 | events `otel-collector` / active, lower redundancy |
+| Scenario-6 t6 | history / ConfigMap `kube-root-ca.crt` | CHANGE_TIMING | 17 / 3 / 2 | 1 / 0 / 1 | UNKNOWN / no | structural alternative: `object_change`, EEV 0 | resource pressure `otel-collector` / active, lower redundancy |
+| Scenario-9 t5 | history / Deployment `frontend-proxy` | CHANGE_TIMING | 17 / 3 / 2 | 1 / 0 / 1 | UNKNOWN / no | structural alternative: `object_change`, EEV 0 | same history action / active only by lower-redundancy tie-break |
+| Scenario-9 t6 | history / ConfigMap `kube-root-ca.crt` | CHANGE_TIMING | 17 / 3 / 2 | 1 / 0 / 1 | UNKNOWN / no | structural alternative: `object_change`, EEV 0 | same history action / active only by lower-redundancy tie-break |
+| Scenario-22 t6 | history / ConfigMap `kube-root-ca.crt` | CHANGE_TIMING | 17 / 3 / 2 | 1 / 0 / 1 | UNKNOWN / no | structural alternative: `object_change`, EEV 0 | history `ad` / baseline preserved |
+| Scenario-33 t6 | history / ConfigMap `kube-root-ca.crt` | CHANGE_TIMING | 20 / 3 / 2 | 1 / 0 / 1 | UNKNOWN / no | structural alternative: `object_change`, EEV 0 | events `cart` / active, lower redundancy |
+| Scenario-38 t2 | events / HPA `kafka` | AUTOSCALING_TARGET_STATE | 13 / 4 / 1 | 6 / 6 / 0 | SUPPORTS / yes | hypothesis: `autoscaling_failure_event`, EEV 4 | same Kafka event / active, higher certified impact |
+| Scenario-38 t3 | events / HPA `fraud-detection` | AUTOSCALING_TARGET_STATE | 13 / 4 / 3 | 8 / 2 / 6 | SUPPORTS / no | none, EEV 0 | logs `fraud-detection` / baseline preserved |
+| Scenario-38 t4 | events / HPA `ad` | AUTOSCALING_TARGET_STATE | 13 / 4 / 3 | 9 / 3 / 6 | SUPPORTS / no | none, EEV 0 | history `otel-collector` / baseline preserved |
+| Scenario-38 t5 | events / HPA `recommendation` | EVENT_SEQUENCE | 13 / 4 / 3 | 8 / 1 / 7 | SUPPORTS / no | none, EEV 0 | history `fraud-detection` / baseline preserved |
+| Scenario-38 t6 | history / HPA `kafka` | FAILURE_ONSET | 13 / 4 / 5 | 1 / 0 / 1 | SUPPORTS / no | none, EEV 0 | history `ad` / baseline preserved |
+
 Across the new full run there are 10 active overrides: 6 for equivalent epistemic value with lower redundancy, 3 for stronger discrimination with no lower decision impact, and 1 for higher certified decision impact. Two of the 10 changed decision state. Fourteen selected `history` reads returned `UNKNOWN`, added no refs and made no state change; every such selection had expected-elimination value 0. Some history candidates had only the separate ordinal-1 structural actor-frontier certificate, not elimination credit.
 
 ### Frontier and recovery replay
@@ -413,7 +429,7 @@ The 114 calls without a decision-state change were assigned one exclusive outcom
 
 The largest NO_DATA targets were frontend and frontend-proxy logs (24 each), checkout logs (11), recommendation logs (9), and shipping logs (6). The 23 KNOWN_FACT calls were 14 history reads (frontend-proxy 4, kube-root-ca ConfigMap 4, ad 3, and three other Deployments) and 9 namespace `incident_changes` reads. All 114 selected reads had a nonzero frontier coverage and no prior-NO_DATA repeat penalty; therefore there is no evidence of a fully exhausted selected frontier or repeated identical NO_DATA probe in this run.
 
-As an additional value-path diagnostic, 100/114 selected candidates had no transition certificate, 17/114 had zero discrimination value, and 83/114 had both zero expected decision impact and no transition certificate (discovery value is accounted separately). No selected call had positive expected-elimination value because the no-state-change subset cannot retrospectively confer that value. In 86/114 calls the same-turn candidate list contained at least one candidate with a higher current `expected_decision_impact` field than the selected candidate; that field is not by itself proof of a certified selection improvement. The remaining 88 NO_DATA calls dominate the outcome bottleneck. Do not treat this audit as authorization to change metric definitions or ranking weights.
+As an additional value-path diagnostic, 100/114 selected candidates had no transition certificate, 17/114 had zero named-state pairwise discrimination (these are discovery reads, whose gap value is scored separately), and 83/114 had both zero expected decision impact and no transition certificate (`NO_TRANSITION_PATH` for the selected candidate). No selected call had positive expected-elimination value because the no-state-change subset cannot retrospectively confer that value. No call had zero frontier coverage (`EXHAUSTED_FRONTIER=0`), and no selected call repeated a prior NO_DATA semantic probe. In 86/114 calls the same-turn candidate list contained at least one candidate with a higher current `expected_decision_impact` field than the selected candidate; that field is not by itself proof of a certified selection improvement. The remaining 88 NO_DATA calls dominate the outcome bottleneck. The exclusive outcome partition leaves `OTHER=0`. Do not treat this audit as authorization to change metric definitions or ranking weights.
 
 ### Validation and hard gates
 

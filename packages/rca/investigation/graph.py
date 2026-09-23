@@ -1255,17 +1255,12 @@ def _selection_candidate_audit(
         ),
     )
     selected_bundle_id = selected_intent.scored_bundle.bundle.bundle_id
+    selected_pool_ids = {item.candidate_id for item in selected_pool}
     trace: list[InvestigationCandidateSelectionAudit] = []
     for intent_rank, scored_bundle in enumerate(ranked_bundles, start=1):
         bundle = scored_bundle.bundle
-        pool = (
-            tuple(selected_pool)
-            if bundle.bundle_id == selected_bundle_id
-            else tuple(
-                candidate
-                for candidate in candidates
-                if candidate.candidate_id in bundle.candidate_ids
-            )
+        pool = tuple(
+            candidate for candidate in candidates if candidate.candidate_id in bundle.candidate_ids
         )
         ranked_candidates = rank_observation_candidates(
             candidates=pool,
@@ -1313,6 +1308,11 @@ def _selection_candidate_audit(
                     intent_rank=intent_rank,
                     candidate_rank=candidate_rank,
                     candidate_id=candidate.candidate_id,
+                    considered_by_physical_selector=(
+                        candidate.candidate_id in selected_pool_ids
+                        if bundle.bundle_id == selected_bundle_id
+                        else False
+                    ),
                     gap_ids=candidate.gap_ids,
                     dimensions=candidate.dimensions,
                     capability=candidate.capability,
@@ -1389,6 +1389,7 @@ def _physical_selection_candidate_audit(
                 intent_rank=1,
                 candidate_rank=rank,
                 candidate_id=candidate.candidate_id,
+                considered_by_physical_selector=True,
                 gap_ids=candidate.gap_ids,
                 dimensions=candidate.dimensions,
                 capability=candidate.capability,
@@ -1403,6 +1404,7 @@ def _physical_selection_candidate_audit(
                 transition_certificates=item.transition_certificates,
                 discrimination_value=utility.discrimination_value,
                 expected_elimination_value=utility.expected_elimination_value,
+                expected_decision_impact=utility.expected_decision_impact,
                 semantic_duplicate_risk=utility.semantic_duplicate_penalty,
                 no_data_repeat_risk=utility.no_data_repeat_penalty,
                 known_evidence_risk=utility.known_evidence_penalty,

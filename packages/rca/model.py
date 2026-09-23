@@ -787,6 +787,7 @@ class InvestigationCandidateSelectionAudit(BaseModel):
     intent_rank: int
     candidate_rank: int
     candidate_id: str
+    considered_by_physical_selector: bool | None = None
     gap_ids: tuple[str, ...] = ()
     dimensions: tuple[GapDimension, ...] = ()
     capability: str

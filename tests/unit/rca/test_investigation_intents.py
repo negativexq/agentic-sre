@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from packages.rca.engine import Case, EngineConfig, build_case, diagnose_case
 from packages.rca.investigation.actions import observation_identity
 from packages.rca.investigation.candidates import ObservationCandidate
@@ -330,3 +332,50 @@ def test_intent_policy_is_deterministic_and_uses_no_model() -> None:
     assert result.model_calls == 0
     assert result.tool_calls > 0
     assert len(result.ledger) == result.tool_calls
+
+
+def test_selection_audit_keeps_bundle_candidates_outside_physical_focus(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import packages.rca.investigation.graph as graph
+
+    def focus_one_candidate(**kwargs: object) -> tuple[ObservationCandidate, ...]:
+        candidates = kwargs["candidates"]
+        assert isinstance(candidates, tuple)
+        return candidates[:1] if len(candidates) > 1 else ()
+
+    monkeypatch.setattr(graph, "_focused_physical_candidates", focus_one_candidate)
+    from packages.rca.demo import demo_source
+
+    result = investigate_diagnosis(demo_source(), policy=DeterministicIntentPolicy())
+    selected_action = next(
+        audit
+        for audit in result.action_audits
+        for selected_candidate in audit.selection_candidates
+        if selected_candidate.selected
+        and any(
+            candidate.intent_id == selected_candidate.intent_id
+            and candidate.capability == "incident_changes"
+            for candidate in audit.selection_candidates
+        )
+    )
+    selected = next(
+        candidate for candidate in selected_action.selection_candidates if candidate.selected
+    )
+    selected_bundle = tuple(
+        candidate
+        for candidate in selected_action.selection_candidates
+        if candidate.intent_id == selected.intent_id
+    )
+
+    assert len(selected_bundle) == 2
+    assert (
+        sum(candidate.considered_by_physical_selector is True for candidate in selected_bundle) == 1
+    )
+    omitted = next(
+        candidate
+        for candidate in selected_bundle
+        if candidate.considered_by_physical_selector is False
+    )
+    assert omitted.capability == "incident_changes"
+    assert omitted.selected is False

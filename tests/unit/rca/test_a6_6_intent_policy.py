@@ -9,8 +9,9 @@ from types import SimpleNamespace
 import pytest
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
-from packages.rca.engine import build_case, diagnose_case
+from packages.rca.engine import EngineConfig, build_case, diagnose_case
 from packages.rca.investigation.candidates import CandidateDiscriminator, ObservationCandidate
+from packages.rca.investigation.environment import initial_view
 from packages.rca.investigation.graph import build_investigation_state, investigate_diagnosis
 from packages.rca.investigation.intents import (
     IntentMenuItem,
@@ -40,6 +41,7 @@ from packages.rca.model import (
     GapOutcomeKind,
     GapResolvability,
     InformationGap,
+    InformationGapOrigin,
     InvestigationAction,
     InvestigationObservation,
     InvestigationQuery,
@@ -334,6 +336,64 @@ def test_action_without_candidate_discriminator_is_rejected_before_execution(
     assert result.action_audits[0].backend_execution_status.value == "NOT_EXECUTED"
     assert "positive discriminator" in result.action_audits[0].authorization_reason
     assert not any("deterministic-fallback" in step.detail for step in result.diagnosis.steps)
+
+
+def test_discovery_no_data_is_audited_as_neutral_without_elimination() -> None:
+    from packages.rca.investigation.candidates import build_observation_candidates
+
+    onset = datetime(2026, 2, 1, 12, 0, tzinfo=UTC)
+    source = InMemorySource(
+        name="discovery-neutral",
+        alert_items=[Alert(name="latency", service="api", namespace="shop", starts_at=onset)],
+        cutoff=onset,
+    )
+    initial_case = build_case(initial_view(source))
+    initial = diagnose_case(initial_case)
+    gap = next(
+        item
+        for item in initial.information_gaps
+        if item.origin is InformationGapOrigin.DISCOVERY
+        and item.dimension is GapDimension.EVENT_SEQUENCE
+    )
+    diagnosis = initial
+    candidate = next(
+        item
+        for item in build_observation_candidates(
+            case=initial_case,
+            diagnosis=diagnosis,
+            engine_config=EngineConfig(),
+        )
+        if gap.gap_id in item.gap_ids and item.capability == "incident_events"
+    )
+    assert candidate.discriminators
+    action = InvestigationAction(
+        action="inspect",
+        gap_id=gap.gap_id,
+        capability=candidate.capability,
+        target=candidate.target,
+        query=candidate.query,
+    )
+    tool = _NoDataTool("incident_events")
+
+    result = investigate_diagnosis(
+        source,
+        diagnosis=diagnosis,
+        initial_case=initial_case,
+        policy=ScriptedInvestigationPolicy(actions=[action]),
+        tools={"incident_events": tool},
+        config=InvestigationConfig(max_turns=1),
+    )
+
+    audit = result.action_audits[0]
+    assert tool.calls == 1
+    assert audit.discriminator is not None
+    assert audit.discriminator.kind.value == "DISCOVERY_DISCRIMINATION"
+    assert audit.observation_outcome is GapOutcomeKind.NO_DATA
+    assert audit.discriminator.no_data_is_discriminating is False
+    assert audit.decision_state_changed is False
+    assert audit.resolution_before == audit.resolution_after
+    assert audit.hypothesis_states_before == audit.hypothesis_states_after
+    assert result.diagnosis.resolution == diagnosis.resolution
 
 
 def test_graph_valid_intent_and_unknown_intent_fallback(monkeypatch: pytest.MonkeyPatch) -> None:

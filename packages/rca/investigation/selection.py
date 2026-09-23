@@ -232,12 +232,16 @@ def _semantic_question_fingerprints(candidate: ObservationCandidate) -> set[tupl
         )
         fingerprints.add(
             (
+                discriminator.kind.value,
                 candidate.capability,
                 candidate.target.canonical,
                 discriminator.dimension.value,
                 supported,
                 tuple(sorted(discriminator.comparison_hypothesis_ids)),
                 tuple(sorted(discriminator.comparison_alternative_ids)),
+                discriminator.unknown_slots,
+                discriminator.expected_fact_families,
+                discriminator.possible_outcomes,
                 _query_scope_class(candidate.query),
             )
         )
@@ -256,12 +260,16 @@ def _audit_semantic_question_fingerprint(audit: InvestigationActionAudit) -> tup
         )
     )
     return (
+        discriminator.kind.value,
         audit.action.capability,
         audit.action.target.canonical,
         audit.gap_dimension.value,
         supported,
         tuple(sorted(discriminator.comparison_hypothesis_ids)),
         tuple(sorted(discriminator.comparison_alternative_ids)),
+        discriminator.unknown_slots,
+        discriminator.expected_fact_families,
+        discriminator.possible_outcomes,
         _query_scope_class(audit.action.query or InvestigationQuery()),
     )
 
@@ -583,23 +591,31 @@ def candidate_to_action(
         f"{utility.dimension_coverage}"
     )
     if discriminator is not None:
-        supported_count = len(
-            {
-                state_id
-                for outcome in discriminator.support_outcomes
-                for state_id in (*outcome.hypothesis_ids, *outcome.alternative_ids)
-            }
-        )
-        competing_count = len(
-            {
-                *discriminator.comparison_hypothesis_ids,
-                *discriminator.comparison_alternative_ids,
-            }
-        )
-        rationale += (
-            f"; discriminator gap={gap_id}; positive-states={supported_count}; "
-            f"competing-states={competing_count}; NO_DATA/UNKNOWN are non-discriminating"
-        )
+        if discriminator.kind.value == "DISCOVERY_DISCRIMINATION":
+            rationale += (
+                f"; discovery discriminator gap={gap_id}; "
+                f"unknown-slots={','.join(discriminator.unknown_slots)}; "
+                f"fact-families={','.join(discriminator.expected_fact_families)}; "
+                "NO_DATA/NO_MATCH are neutral"
+            )
+        else:
+            supported_count = len(
+                {
+                    state_id
+                    for outcome in discriminator.support_outcomes
+                    for state_id in (*outcome.hypothesis_ids, *outcome.alternative_ids)
+                }
+            )
+            competing_count = len(
+                {
+                    *discriminator.comparison_hypothesis_ids,
+                    *discriminator.comparison_alternative_ids,
+                }
+            )
+            rationale += (
+                f"; discriminator gap={gap_id}; positive-states={supported_count}; "
+                f"competing-states={competing_count}; NO_DATA/UNKNOWN are non-discriminating"
+            )
     return InvestigationAction(
         action="inspect",
         gap_id=gap_id,

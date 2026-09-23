@@ -494,6 +494,13 @@ class GapOutcomeKind(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
+class InvestigationDiscriminatorKind(StrEnum):
+    """Epistemic question type proved by one bounded observation candidate."""
+
+    HYPOTHESIS = "HYPOTHESIS_DISCRIMINATION"
+    DISCOVERY = "DISCOVERY_DISCRIMINATION"
+
+
 class InvestigationQuery(BaseModel):
     """Provider-neutral, bounded semantic query parameters."""
 
@@ -760,10 +767,14 @@ class InvestigationDiscriminatorAudit(BaseModel):
     gap_id: str
     dimension: GapDimension
     missing_fact: str
+    kind: InvestigationDiscriminatorKind = InvestigationDiscriminatorKind.HYPOTHESIS
     support_outcomes: tuple[GapOutcome, ...] = ()
     comparison_hypothesis_ids: tuple[str, ...] = ()
     comparison_alternative_ids: tuple[str, ...] = ()
     no_data_outcomes: tuple[GapOutcome, ...] = ()
+    unknown_slots: tuple[str, ...] = ()
+    expected_fact_families: tuple[str, ...] = ()
+    possible_outcomes: tuple[str, ...] = ()
     no_data_is_discriminating: bool = False
 
 

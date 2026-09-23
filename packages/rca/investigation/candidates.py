@@ -18,12 +18,53 @@ from packages.rca.model import (
     GapOutcomeKind,
     GapResolvability,
     InformationGap,
+    InformationGapOrigin,
+    InvestigationDiscriminatorKind,
     InvestigationQuery,
 )
 
 _BOUNDED_WINDOW = timedelta(minutes=30)
 _MAX_PROVIDER_WINDOW = timedelta(hours=1)
 _CANDIDATE_LIMIT = 32
+_DiscoveryContract = tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]
+_DISCOVERY_DISCRIMINATOR_CONTRACTS: dict[GapDimension, dict[str, _DiscoveryContract]] = {
+    GapDimension.EVENT_SEQUENCE: {
+        "incident_events": (
+            ("causal_actor", "relevant_event", "temporal_sequence"),
+            ("incident_event", "event_sequence"),
+            (
+                "NEW_RELEVANT_EVENT",
+                "NEW_ACTOR",
+                "TEMPORAL_SEQUENCE_DISCOVERED",
+                "NO_MATCH",
+                "NO_DATA",
+            ),
+        ),
+        "events": (
+            ("causal_actor", "relevant_event", "temporal_sequence"),
+            ("kubernetes_event", "event_sequence"),
+            (
+                "NEW_RELEVANT_EVENT",
+                "NEW_ACTOR",
+                "TEMPORAL_SEQUENCE_DISCOVERED",
+                "NO_MATCH",
+                "NO_DATA",
+            ),
+        ),
+    },
+    GapDimension.CHANGE_TIMING: {
+        "incident_changes": (
+            ("initiating_object", "change_timing"),
+            ("incident_change", "object_change_timing"),
+            ("CHANGE_BEFORE_ONSET", "NO_MATCH", "NO_DATA"),
+        ),
+        "history": (
+            ("initiating_object", "change_timing"),
+            ("object_change", "deployment_change", "change_timing"),
+            ("CHANGE_BEFORE_ONSET", "NO_MATCH", "NO_DATA"),
+        ),
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -42,6 +83,10 @@ class CandidateDiscriminator:
     comparison_hypothesis_ids: tuple[str, ...]
     comparison_alternative_ids: tuple[str, ...]
     no_data_outcomes: tuple[GapOutcome, ...]
+    kind: InvestigationDiscriminatorKind = InvestigationDiscriminatorKind.HYPOTHESIS
+    unknown_slots: tuple[str, ...] = ()
+    expected_fact_families: tuple[str, ...] = ()
+    possible_outcomes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -191,11 +236,41 @@ def _plausible_state_ids(diagnosis: Diagnosis) -> tuple[set[str], set[str]]:
 def _candidate_discriminator(
     gap: InformationGap,
     *,
+    capability: str,
     plausible_hypothesis_ids: set[str],
     plausible_alternative_ids: set[str],
     target_hypothesis_ids: set[str] | None = None,
     target_alternative_ids: set[str] | None = None,
 ) -> CandidateDiscriminator | None:
+    if (
+        gap.origin is InformationGapOrigin.DISCOVERY
+        and not gap.hypothesis_ids
+        and not gap.alternative_ids
+    ):
+        contract = _DISCOVERY_DISCRIMINATOR_CONTRACTS.get(gap.dimension, {}).get(capability)
+        if contract is None or (gap.candidate_tools and capability not in gap.candidate_tools):
+            return None
+        unknown_slots, fact_families, possible_outcomes = contract
+        if not unknown_slots or not fact_families or not possible_outcomes:
+            return None
+        return CandidateDiscriminator(
+            gap_id=gap.gap_id,
+            dimension=gap.dimension,
+            missing_fact=gap.missing_fact,
+            support_outcomes=(),
+            comparison_hypothesis_ids=(),
+            comparison_alternative_ids=(),
+            no_data_outcomes=tuple(
+                outcome
+                for outcome in gap.discriminating_outcomes
+                if outcome.kind is GapOutcomeKind.NO_DATA
+            ),
+            kind=InvestigationDiscriminatorKind.DISCOVERY,
+            unknown_slots=unknown_slots,
+            expected_fact_families=fact_families,
+            possible_outcomes=possible_outcomes,
+        )
+
     supports = tuple(
         outcome
         for outcome in gap.discriminating_outcomes
@@ -246,6 +321,7 @@ def _candidate_discriminator(
             for outcome in gap.discriminating_outcomes
             if outcome.kind is GapOutcomeKind.NO_DATA
         ),
+        kind=InvestigationDiscriminatorKind.HYPOTHESIS,
     )
 
 
@@ -409,6 +485,7 @@ def build_observation_candidates(
                 target_alternative_ids = None
             discriminator = _candidate_discriminator(
                 gap,
+                capability=authorized.capability,
                 plausible_hypothesis_ids=plausible_hypothesis_ids,
                 plausible_alternative_ids=plausible_alternative_ids,
                 target_hypothesis_ids=target_hypothesis_ids,

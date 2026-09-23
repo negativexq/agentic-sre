@@ -27,9 +27,11 @@ from packages.rca.model import (
     GapOutcomeKind,
     GapResolvability,
     InformationGap,
+    InformationGapOrigin,
     InvestigationAction,
     InvestigationActionAudit,
     InvestigationDiscriminatorAudit,
+    InvestigationDiscriminatorKind,
     InvestigationExecutionStatus,
     InvestigationLedgerEntry,
     InvestigationQuery,
@@ -796,6 +798,100 @@ def test_candidate_does_not_claim_discrimination_from_no_data_alone() -> None:
 
     assert len(candidates) == 1
     assert candidates[0].discriminators == ()
+
+
+@pytest.mark.parametrize(
+    ("dimension", "capability", "unknown_slots", "fact_families"),
+    (
+        (
+            GapDimension.EVENT_SEQUENCE,
+            "incident_events",
+            ("causal_actor", "relevant_event", "temporal_sequence"),
+            ("incident_event", "event_sequence"),
+        ),
+        (
+            GapDimension.CHANGE_TIMING,
+            "incident_changes",
+            ("initiating_object", "change_timing"),
+            ("incident_change", "object_change_timing"),
+        ),
+    ),
+)
+def test_discovery_gap_candidate_has_truth_blind_bounded_discriminator(
+    dimension: GapDimension,
+    capability: str,
+    unknown_slots: tuple[str, ...],
+    fact_families: tuple[str, ...],
+) -> None:
+    from packages.rca.model import AuthorizedQuery
+
+    case = _case()
+    target = EntityRef(kind="Namespace", name="shop", namespace="_cluster")
+    gap = InformationGap(
+        gap_id=f"discovery-{dimension.value.lower()}",
+        origin=InformationGapOrigin.DISCOVERY,
+        dimension=dimension,
+        missing_fact="an incident-scoped bounded fact is not yet known",
+        authorized_queries=(AuthorizedQuery(capability=capability, target=target),),
+        candidate_tools=(capability,),
+        resolvability=GapResolvability.RESOLVABLE,
+    )
+    diagnosis = _diagnosis(case, (gap,))
+
+    candidates = build_observation_candidates(
+        case=case, diagnosis=diagnosis, engine_config=EngineConfig()
+    )
+    eligible = rank_observation_candidates(
+        candidates=candidates,
+        diagnosis=diagnosis,
+        require_discriminator=True,
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].query.start is not None
+    assert candidates[0].query.end is not None
+    assert len(eligible) == 1
+    discriminator = candidates[0].discriminators[0]
+    assert discriminator.kind is InvestigationDiscriminatorKind.DISCOVERY
+    assert discriminator.gap_id == gap.gap_id
+    assert discriminator.dimension is dimension
+    assert discriminator.unknown_slots == unknown_slots
+    assert discriminator.expected_fact_families == fact_families
+    assert discriminator.support_outcomes == ()
+    assert discriminator.comparison_hypothesis_ids == ()
+    assert discriminator.comparison_alternative_ids == ()
+    assert "future-actor" not in repr(discriminator)
+    assert all(outcome in discriminator.possible_outcomes for outcome in ("NO_MATCH", "NO_DATA"))
+
+
+def test_discovery_discriminator_does_not_authorize_unrelated_capability() -> None:
+    from packages.rca.model import AuthorizedQuery
+
+    case = _case()
+    target = _entity("Service", "payments")
+    gap = InformationGap(
+        gap_id="event-discovery",
+        origin=InformationGapOrigin.DISCOVERY,
+        dimension=GapDimension.EVENT_SEQUENCE,
+        missing_fact="an incident event is unknown",
+        authorized_queries=(AuthorizedQuery(capability="logs", target=target),),
+        candidate_tools=("logs",),
+        resolvability=GapResolvability.RESOLVABLE,
+    )
+    diagnosis = _diagnosis(case, (gap,))
+
+    candidates = build_observation_candidates(
+        case=case, diagnosis=diagnosis, engine_config=EngineConfig()
+    )
+    eligible = rank_observation_candidates(
+        candidates=candidates,
+        diagnosis=diagnosis,
+        require_discriminator=True,
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].discriminators == ()
+    assert eligible == ()
 
 
 def test_ranked_action_names_positive_discriminator_and_keeps_no_data_neutral() -> None:

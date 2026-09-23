@@ -1091,10 +1091,14 @@ def _as_discriminator_audit(
         gap_id=discriminator.gap_id,
         dimension=discriminator.dimension,
         missing_fact=discriminator.missing_fact,
+        kind=discriminator.kind,
         support_outcomes=discriminator.support_outcomes,
         comparison_hypothesis_ids=discriminator.comparison_hypothesis_ids,
         comparison_alternative_ids=discriminator.comparison_alternative_ids,
         no_data_outcomes=discriminator.no_data_outcomes,
+        unknown_slots=discriminator.unknown_slots,
+        expected_fact_families=discriminator.expected_fact_families,
+        possible_outcomes=discriminator.possible_outcomes,
         no_data_is_discriminating=False,
     )
 

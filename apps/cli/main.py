@@ -289,9 +289,10 @@ def cmd_investigation_eval(args: argparse.Namespace) -> int:
     elif args.max_total_model_calls is not None:
         raise SystemExit("--max-total-model-calls requires --llm")
     dataset = _dataset(args.dataset)
+    scenario_ids = [args.scenario] if args.scenario else load_split(args.split)
     manifest = predict_investigations(
         dataset,
-        load_split(args.split),
+        scenario_ids,
         args.out,
         split=args.split,
         config=InvestigationConfig(
@@ -496,6 +497,7 @@ def build_parser() -> argparse.ArgumentParser:
     investigation_eval_cmd.add_argument("--split", choices=["dev", "test"], default="dev")
     investigation_eval_cmd.add_argument("--out", type=Path, required=True)
     investigation_eval_cmd.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
+    investigation_eval_cmd.add_argument("--scenario", default=None)
     investigation_eval_cmd.add_argument("--confirm-test", action="store_true")
     investigation_eval_cmd.add_argument("--max-turns", type=int, default=6)
     investigation_eval_cmd.add_argument("--max-model-calls", type=int, default=6)

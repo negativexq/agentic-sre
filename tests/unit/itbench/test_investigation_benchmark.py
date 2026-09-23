@@ -164,3 +164,8 @@ def test_class_one_fake_provider_smoke_is_one_bounded_action_roundtrip(
     assert result["real_provider_calls"] == 1
     assert result["max_total_model_calls"] == 1
     assert result["mode"] == "llm-action-policy"
+    assert result["benchmark"] == "ITBench-Lite provider compatibility smoke"
+    grader_dataset = _FixtureDataset(scenario, tmp_path / "smoke")
+    with pytest.raises(BenchmarkError, match="not a benchmark evaluation"):
+        grade_investigations(grader_dataset, tmp_path / "smoke")
+    assert grader_dataset.ground_truth_reads == 0

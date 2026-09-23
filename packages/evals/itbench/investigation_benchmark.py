@@ -214,7 +214,11 @@ def predict_investigations(
         )
 
     manifest = {
-        "benchmark": "ITBench-Lite bounded investigation",
+        "benchmark": (
+            "ITBench-Lite provider compatibility smoke"
+            if api_usage_class == "CLASS 1" and model_client is not None
+            else "ITBench-Lite bounded investigation"
+        ),
         "metric_version": "m14.v1",
         "split": split,
         "scenario_ids": list(ids),
@@ -272,6 +276,8 @@ def _prediction_correct(output: ITBenchAgentOutput, truth: Any) -> bool:
 def grade_investigations(dataset: GradingDataset, out_dir: Path) -> dict[str, Any]:
     """Grade only after the complete prediction/metric set passes seal checks."""
     manifest = _verify_investigation_seal(out_dir)
+    if manifest.get("api_usage_class") == "CLASS 1":
+        raise BenchmarkError("provider compatibility smoke is not a benchmark evaluation")
     rows: list[dict[str, Any]] = []
     metric_payloads: list[InvestigationMetricsV1] = []
     for scenario_id in manifest["scenario_ids"]:

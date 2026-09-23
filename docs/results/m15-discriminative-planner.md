@@ -478,3 +478,61 @@ As an additional value-path diagnostic, 100/114 selected candidates had no trans
 | G15.10 deterministic RCA | PASS with disclosed metadata caveat | Primary initial RCA fields match M14 on all 25; Scenario-38 serialized non-leading `alternatives` metadata variance remains disclosed. |
 
 **M15 remains IN_PROGRESS. Do not start M16 and do not run GPT-6 Luna.** The task removed the ID-overlap elimination inflation and preserved the M14 quality floor, but G15.8 remains a substantial failure. The next step is the focused truth-blind analysis of the 80 `logs` / `DEPENDENCY_HEALTH` NO_DATA calls, including why they were selected while same-turn alternatives had higher raw expected-impact fields and whether those alternatives have actual normalized state-transition routes. No selection-weight change is justified until that trace is complete.
+
+## 2026-09-24 — Dependency-health NO_DATA attribution
+
+This section analyzes the 80 `logs` / `DEPENDENCY_HEALTH` / `NO_DATA` turns in the sealed `transition-certified-v1` run. It is a prediction-path attribution; it did not read scenario labels or grader outcomes. The same 25 scenarios were replayed from the pinned dataset loader, and selected action sequences matched the sealed predictions on all 25 (`sequence_mismatches=0`). No ranking, stopping, metric, RCA, authorization, or execution behavior changed.
+
+### Primary classification
+
+Exactly one primary category was assigned per selected call:
+
+| Category | Count | Finding |
+| --- | ---: | --- |
+| A — `CERTIFIED_BETTER_ALTERNATIVE_AVAILABLE` | 0 | No same-gap alternative had a stronger relevant certified transition/discovery path. |
+| B — `RAW_IMPACT_ONLY` | 0 primary | Higher raw impact fields existed, but belonged to candidates answering other gaps; they did not certify a better `DEPENDENCY_HEALTH` observation. |
+| C — `FRONTIER_MISSING_CERTIFIED_ALTERNATIVE` | 0 primary | A runtime-trace candidate was physically present for this gap, but it had no normalizer/transition certificate; this is recorded as a shared capability limitation, not evidence that it was a better available action. |
+| D — `LOG_VALUE_OVERESTIMATED` | 0 | Logs have an existing typed dependency-error normalization route; the 80 selected turns themselves returned `NO_DATA`, which was not predictable before execution. |
+| E — `LOG_WAS_REASONABLE_FIRST_PROBE` | **80** | The selected log candidate carried an explicit pre-turn hypothesis discriminator and had a real typed log normalizer route. No better certified same-gap action was available. Its eventual `NO_DATA` outcome was a neutral, unpredictable first result. |
+| F — `ACQUISITION_MEMORY_MISS` | 0 | No equivalent prior same-target `NO_DATA` probe existed on these turns. |
+| G — `OTHER` | 0 | Not needed. |
+
+The “higher raw expected decision impact” observation does not establish a selector bug: all 80 turns had higher raw values somewhere in the complete frontier, and all had at least one higher-valued candidate with a transition certificate, but these candidates answered other gaps. There were **zero** same-`DEPENDENCY_HEALTH` candidates with a transition certificate and **zero** same-gap candidates whose raw impact exceeded the selected log candidate. Raw values across different gaps are not comparable evidence of a superior answer to the active dependency-health question. The selector chose `DEPENDENCY_ERROR_INSPECTION` on all 80 turns: 77 were `BASELINE_FALLBACK`, and 3 were `ACTIVE_DOMINATES_BASELINE` because of stronger discriminator value without lower decision impact.
+
+### Distribution and complete-frontier coverage
+
+| Dimension | Counts |
+| --- | --- |
+| Selected turn | t1: 1; t3: 24; t4: 24; t5: 17; t6: 14 |
+| Selected target | frontend: 24; frontend-proxy: 24; checkout: 11; recommendation: 9; shipping: 6; fraud-detection: 3; cart: 2; product-catalog: 1 |
+| Scenarios | 4 calls: Scenario-1/5/13/15/16/18/19/20/23/24/81/102/105; 3 calls: Scenario-2/14/25/33; 2 calls: Scenario-6/9/22/31/35/38/80/83 |
+| Selection strategy | BASELINE_FALLBACK: 77; ACTIVE_DOMINATES_BASELINE: 3 |
+| Full executable physical frontier | minimum 10, median 20, maximum 38 candidates |
+| Selected intent candidates omitted by physical focus | 24 candidate rows across 7 turns; the audit change below now records them explicitly |
+
+The complete per-call candidate frontiers, ordering fields, primary classifications, secondary capability limitation, replay provenance and sequence-match result are retained locally in ignored `.local/eval/m15/dependency-health-attribution-v1/classification.json` and `prediction-only-attribution-input.json`. Both record zero provider calls and `replay_ground_truth_read=false`. The immutable source prediction seal is identified in those files. They are local diagnostic artifacts, not a new frozen evaluation or a result intended to be committed.
+
+### Capability and deterministic-path matrix
+
+| Capability | Same-gap candidate present? | Existing normalization / typed facts | Existing deterministic path for this gap | Attribution |
+| --- | --- | --- | --- | --- |
+| `logs` | Yes; selected on all 80 turns | `normalizers._log_findings` → `signals.dependency_findings` → `FindingKind.DEPENDENCY_ERRORS`; normalization enters case/hypothesis rebuild | A typed finding can affect rebuilt state in cases where deterministic RCA rules match it; current formal transition-certificate generator does not issue a `DEPENDENCY_HEALTH` log certificate | Reasonable first bounded probe; do not penalize logs globally. The 80 actual returns were `NO_DATA`, neutral and not knowable pre-turn. |
+| `runtime_traces` | Yes; one physical candidate per turn (80/80) | Tool returns typed spans; bounded investigation normalization has no explicit runtime-trace span-to-Finding branch (generic pretyped payload `findings` are a separate pass-through) | No transition certificate; current `RUNTIME_DISCRIMINATION` intent admission requires overlap with viable hypothesis IDs, which these alternative-bound candidates lack | Telemetry backend availability was not tested here. The candidate exists physically but is not currently a normalized, certified action in the intent selector; this is a capability-to-intent/normalization limitation, not a demonstrated backend outage. |
+| `traffic` | No same-gap candidate | Typed `TrafficObservation` → `traffic_findings` / `TRAFFIC_INCREASE` | Candidate mapping supports metric-change/baseline traffic questions, not this gap | Not an available dependency-health replacement. |
+| `events` | No same-gap candidate | `ClusterEvent` → failure/autoscaling Findings | Existing event/failure/autoscaling gaps | Cross-gap only. |
+| `resource_pressure` | No same-gap candidate | `ResourcePressure` → `RESOURCE_PRESSURE` Finding | Existing resource-pressure gap | Cross-gap only. |
+| `history` | Cross-gap candidates present | `ObjectVersion` → `change_findings` | Change timing/configuration certificates apply to their source-change gaps | Higher raw impact from these candidates does not answer dependency health. |
+| `incident_events` / `incident_changes` | No same-gap candidate | Separate discovery normalizers and discovery discriminators | `EVENT_SEQUENCE` / `CHANGE_TIMING` | M14 recovery path remains intact; unrelated to these 80 dependency probes. |
+| topology/neighbors | No independent same-gap observation capability | Used by dependency normalization to interpret caller/callee relationships | Not a standalone observation family here | Cannot replace an executed read. |
+
+No exact or semantic prior `NO_DATA` probe was found for any of the selected log turns (`equivalent_prior_no_data_probe_count=0` each). The absence of a result therefore does not support `ACQUISITION_MEMORY_MISS`. No candidate value or causal state was inferred from `NO_DATA`.
+
+### Audit-only improvement
+
+The old intent audit persisted the candidates after physical focus for the selected intent, so it could omit other executable members of that intent’s pre-focus bundle. It already persisted `expected_decision_impact`; that field was not missing. The audit now records all executable candidates belonging to each ranked intent and adds optional `considered_by_physical_selector` membership. `true` means the candidate entered the final physical selection pool, `false` means the intent candidate was not passed to that selector; `null` remains available for older persisted audit data. This is descriptive only and does not modify selection.
+
+Focused audit test: one candidate is deliberately focused from a two-candidate intent bundle; the resulting structured trace retains both, marks one `true`, and marks the omitted candidate `false`. No full frozen evaluation was rerun because attribution established no selection defect to fix. Current M15 measurements and gates remain those of `transition-certified-v1`: 150 calls, 23/150 duplicates (15.3%), 36/150 decision-relevant (24.0%), 8 recoveries, 0 harm; G15.8 remains FAIL at the unchanged 41.6% threshold. The M14 quality floor and 34/34 frontier remain preserved. Provider/model calls: 0.
+
+### Next diagnostic
+
+The remaining 34 decision-neutral calls are not yet fully classified against their complete same-turn frontiers. In particular, 14 `history` / `CHANGE_TIMING` reads returned one already-known reference with no new Finding, while 9 `incident_changes` / `CHANGE_TIMING` reads returned 44–45 already-known references and no normalized Finding. Attribute those groups from pre-turn candidate and fact-family state before changing ranking or normalization. M15 remains IN_PROGRESS; do not start M16.

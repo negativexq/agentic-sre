@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { useSettings } from "@/api/hooks";
+import { ApiTokenCard } from "@/components/ApiTokenCard";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
@@ -71,14 +72,7 @@ export function SettingsPage() {
             </CardBody>
           </Card>
 
-          <Card>
-            <CardHeader title="Security" />
-            <CardBody>
-              <Row label="API token">
-                <Configured value={data.api_token_configured} />
-              </Row>
-            </CardBody>
-          </Card>
+          <ApiTokenCard required={data.api_token_configured} />
 
           <Card>
             <CardHeader title="Integrations" />

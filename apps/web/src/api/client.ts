@@ -1,3 +1,4 @@
+import { authHeaders } from "@/lib/authToken";
 import type {
   ChangeFilters,
   ChangeView,
@@ -66,10 +67,14 @@ export const api = {
   createReport: async (id: string): Promise<{ report_id: string }> => {
     const response = await fetch(`${BASE}/incidents/${id}/reports`, {
       method: "POST",
-      headers: { accept: "application/json" },
+      headers: { accept: "application/json", ...authHeaders() },
     });
     if (!response.ok) {
-      throw new ApiError(response.status, `Could not create report (${response.status})`);
+      const message =
+        response.status === 401
+          ? "API token required or invalid — set it in Settings."
+          : `Could not create report (${response.status})`;
+      throw new ApiError(response.status, message);
     }
     return (await response.json()) as { report_id: string };
   },
@@ -80,14 +85,17 @@ export const api = {
   shareReport: async (reportId: string, request: ShareRequest): Promise<DeliveryView> => {
     const response = await fetch(`${BASE}/reports/${reportId}/email`, {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
+      headers: { "content-type": "application/json", accept: "application/json", ...authHeaders() },
       body: JSON.stringify(request),
     });
     if (!response.ok) {
-      let message = `Could not share report (${response.status})`;
+      let message =
+        response.status === 401
+          ? "API token required or invalid — set it in Settings."
+          : `Could not share report (${response.status})`;
       try {
         const body = (await response.json()) as { detail?: string };
-        if (body?.detail) message = body.detail;
+        if (body?.detail && response.status !== 401) message = body.detail;
       } catch {
         /* non-JSON */
       }

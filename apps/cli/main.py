@@ -263,7 +263,10 @@ def cmd_eval(args: argparse.Namespace) -> int:
 
 def cmd_investigation_eval(args: argparse.Namespace) -> int:
     from packages.evals.itbench.benchmark import load_split
-    from packages.evals.itbench.investigation_benchmark import predict_investigations
+    from packages.evals.itbench.investigation_benchmark import (
+        PRIMARY_EVALUATION_MODEL,
+        predict_investigations,
+    )
     from packages.rca.investigation.state import InvestigationConfig
 
     if args.split == "test" and not args.confirm_test:
@@ -272,6 +275,19 @@ def cmd_investigation_eval(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
+    model_client = None
+    if args.llm:
+        if args.max_total_model_calls is None or args.max_total_model_calls <= 0:
+            raise SystemExit("--llm requires a positive --max-total-model-calls evaluation budget")
+        from packages.rca.llm import OpenAIClient
+
+        model = args.model or PRIMARY_EVALUATION_MODEL
+        model_client = OpenAIClient(model=model, max_calls=args.max_total_model_calls)
+        problem = model_client.readiness_problem()
+        if problem:
+            raise SystemExit(f"--llm: {problem}")
+    elif args.max_total_model_calls is not None:
+        raise SystemExit("--max-total-model-calls requires --llm")
     dataset = _dataset(args.dataset)
     manifest = predict_investigations(
         dataset,
@@ -283,6 +299,9 @@ def cmd_investigation_eval(args: argparse.Namespace) -> int:
             max_model_calls=args.max_model_calls,
             max_tool_calls=args.max_tool_calls,
         ),
+        model_client=model_client,
+        max_model_calls_per_scenario=args.max_model_calls if model_client else None,
+        max_total_model_calls=args.max_total_model_calls or 0,
     )
     print(json.dumps(manifest, indent=2, sort_keys=True))
     return 0
@@ -479,6 +498,9 @@ def build_parser() -> argparse.ArgumentParser:
     investigation_eval_cmd.add_argument("--max-turns", type=int, default=6)
     investigation_eval_cmd.add_argument("--max-model-calls", type=int, default=6)
     investigation_eval_cmd.add_argument("--max-tool-calls", type=int, default=8)
+    investigation_eval_cmd.add_argument("--llm", action="store_true")
+    investigation_eval_cmd.add_argument("--model", default=None)
+    investigation_eval_cmd.add_argument("--max-total-model-calls", type=int, default=None)
     investigation_eval_cmd.set_defaults(handler=cmd_investigation_eval)
 
     grade_investigation_eval_cmd = sub.add_parser(

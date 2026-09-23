@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from packages.rca.investigation.intents import IntentMenuItem
 from packages.rca.investigation.state import InvestigationPolicyContext
-from packages.rca.llm import DEFAULT_MODEL, LLMClient, LLMOutputError, OpenAIClient
+from packages.rca.llm import LLMClient, LLMOutputError
 from packages.rca.model import EntityRef, InvestigationAction, InvestigationQuery
 
 
@@ -301,12 +301,6 @@ class LLMIntentPolicy:
     client: LLMClient
     counts_as_model: bool = True
     prompts: list[str] = field(default_factory=list)
-
-    def __post_init__(self) -> None:
-        if isinstance(self.client, OpenAIClient) and (
-            self.client.model != DEFAULT_MODEL or self.client.reasoning_effort != "none"
-        ):
-            raise ValueError("A6.6 requires OpenAI gpt-5.6-luna with reasoning_effort=none")
 
     def _complete(self, prompt: str) -> str:
         try:

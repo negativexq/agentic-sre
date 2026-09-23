@@ -136,6 +136,15 @@ def test_live_client_contract_is_fixed_to_luna_without_exposing_credentials() ->
     assert client.reasoning_effort == "none"
 
 
+def test_intent_policy_accepts_configuration_driven_model_identity() -> None:
+    client = OpenAIClient(model="gpt-6-luna", enabled=False, max_calls=1)
+
+    policy = LLMIntentPolicy(client)
+
+    assert policy.client.model == "gpt-6-luna"
+    assert client.calls == 0
+
+
 def test_openai_sdk_is_bounded_without_touching_injected_clients(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -12,10 +12,14 @@ from packages.evals.itbench.contracts import (
     ITBenchScenario,
 )
 from packages.evals.itbench.investigation_benchmark import (
+    PRIMARY_EVALUATION_MODEL,
+    EvaluationCallBudget,
+    PerScenarioLLMClient,
     _verify_investigation_seal,
     grade_investigations,
     predict_investigations,
 )
+from packages.rca.llm import LLMError
 
 
 class _FixtureDataset:
@@ -44,6 +48,19 @@ class _FixtureDataset:
                 ),
             ),
         )
+
+
+class _RecordingClient:
+    def __init__(self) -> None:
+        self.model = PRIMARY_EVALUATION_MODEL
+        self.calls = 0
+
+    def complete_json(
+        self, *, system: str, user: str, schema: dict[str, object], name: str
+    ) -> dict[str, object]:
+        del system, user, schema, name
+        self.calls += 1
+        return {"intent_id": "intent:test"}
 
 
 def test_prediction_seals_runtime_metrics_without_opening_labels(tmp_path: Path) -> None:
@@ -91,3 +108,20 @@ def test_modified_prediction_fails_before_grader_reads_labels(tmp_path: Path) ->
     with pytest.raises(BenchmarkError, match="changed after sealing"):
         grade_investigations(dataset, out_dir)
     assert dataset.ground_truth_reads == 0
+
+
+def test_provider_budget_fails_closed_per_scenario_and_for_the_whole_run() -> None:
+    provider = _RecordingClient()
+    run_budget = EvaluationCallBudget(max_calls=2)
+    first_scenario = PerScenarioLLMClient(provider, run_budget=run_budget, max_calls=1)
+    second_scenario = PerScenarioLLMClient(provider, run_budget=run_budget, max_calls=1)
+
+    first_scenario.complete_json(system="", user="", schema={}, name="")
+    with pytest.raises(LLMError, match="scenario model-call budget exhausted"):
+        first_scenario.complete_json(system="", user="", schema={}, name="")
+    second_scenario.complete_json(system="", user="", schema={}, name="")
+    with pytest.raises(LLMError, match="evaluation model-call budget exhausted"):
+        run_budget.consume()
+
+    assert provider.calls == 2
+    assert run_budget.calls == 2

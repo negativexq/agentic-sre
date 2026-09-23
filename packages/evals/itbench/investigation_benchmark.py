@@ -29,8 +29,55 @@ from packages.evals.itbench.io import atomic_json_write
 from packages.evals.itbench.source import SnapshotSource
 from packages.rca.investigation.graph import investigate_diagnosis
 from packages.rca.investigation.intents import DeterministicIntentPolicy
+from packages.rca.investigation.policy import LLMIntentPolicy
 from packages.rca.investigation.state import InvestigationConfig
+from packages.rca.llm import LLMClient, LLMError
 from packages.rca.model import Diagnosis, InvestigationResult
+
+PRIMARY_EVALUATION_MODEL = "gpt-6-luna"
+
+
+class EvaluationCallBudget:
+    """Evaluation-wide provider-attempt budget shared across scenarios."""
+
+    def __init__(self, max_calls: int) -> None:
+        if max_calls <= 0:
+            raise ValueError("provider evaluation requires a positive total call budget")
+        self.max_calls = max_calls
+        self.calls = 0
+
+    def consume(self) -> None:
+        if self.calls >= self.max_calls:
+            raise LLMError(f"evaluation model-call budget exhausted ({self.max_calls})")
+        self.calls += 1
+
+
+class PerScenarioLLMClient:
+    """Bound one scenario while sharing the run-level provider-call budget."""
+
+    def __init__(
+        self,
+        client: LLMClient,
+        *,
+        run_budget: EvaluationCallBudget,
+        max_calls: int,
+    ) -> None:
+        if max_calls <= 0:
+            raise ValueError("per-scenario model-call budget must be positive")
+        self._client = client
+        self._run_budget = run_budget
+        self._max_calls = max_calls
+        self.calls = 0
+        self.model = client.model
+
+    def complete_json(
+        self, *, system: str, user: str, schema: dict[str, Any], name: str
+    ) -> dict[str, Any]:
+        if self.calls >= self._max_calls:
+            raise LLMError(f"scenario model-call budget exhausted ({self._max_calls})")
+        self._run_budget.consume()
+        self.calls += 1
+        return self._client.complete_json(system=system, user=user, schema=schema, name=name)
 
 
 class ScenarioDataset(Protocol):
@@ -56,6 +103,9 @@ def predict_investigations(
     *,
     split: str,
     config: InvestigationConfig | None = None,
+    model_client: LLMClient | None = None,
+    max_model_calls_per_scenario: int | None = None,
+    max_total_model_calls: int = 0,
 ) -> dict[str, Any]:
     """Run deterministic bounded investigations and seal output before grading.
 
@@ -72,17 +122,51 @@ def predict_investigations(
         raise BenchmarkError("frozen test predictions require a clean working tree")
 
     effective_config = config or InvestigationConfig()
+    call_budget: EvaluationCallBudget | None = None
+    per_scenario_budget = 0
+    if model_client is not None:
+        if model_client.model != PRIMARY_EVALUATION_MODEL:
+            raise BenchmarkError(
+                f"new live evaluation requires configured model {PRIMARY_EVALUATION_MODEL}"
+            )
+        per_scenario_budget = max_model_calls_per_scenario or effective_config.max_model_calls
+        required_total = len(ids) * per_scenario_budget
+        if max_total_model_calls < required_total:
+            raise BenchmarkError(
+                "evaluation total model-call budget is below scenario_count × "
+                "max_calls_per_scenario"
+            )
+        client_budget = getattr(model_client, "max_calls", max_total_model_calls)
+        if client_budget != max_total_model_calls:
+            raise BenchmarkError("provider client budget must equal the declared evaluation budget")
+        call_budget = EvaluationCallBudget(max_total_model_calls)
+    elif max_total_model_calls != 0 or max_model_calls_per_scenario is not None:
+        raise BenchmarkError("model-call budgets require a configured provider client")
+
     out_dir.mkdir(parents=True, exist_ok=True)
     records: list[dict[str, Any]] = []
     started = time.monotonic()
     total_model_calls = 0
     total_tool_calls = 0
     for scenario_id in ids:
+        if call_budget is not None and call_budget.calls >= call_budget.max_calls:
+            raise BenchmarkError("evaluation budget exhausted before the frozen scenario set ended")
         tick = time.monotonic()
         source = SnapshotSource(dataset.scenario(scenario_id))
+        policy = (
+            DeterministicIntentPolicy()
+            if model_client is None or call_budget is None
+            else LLMIntentPolicy(
+                PerScenarioLLMClient(
+                    model_client,
+                    run_budget=call_budget,
+                    max_calls=per_scenario_budget,
+                )
+            )
+        )
         result = investigate_diagnosis(
             source,
-            policy=DeterministicIntentPolicy(),
+            policy=policy,
             config=effective_config,
         )
         metrics = derive_investigation_metrics(result)
@@ -112,6 +196,11 @@ def predict_investigations(
             }
         )
 
+    if call_budget is not None and total_model_calls != call_budget.calls:
+        raise BenchmarkError(
+            "provider attempt count does not match investigation model-call accounting"
+        )
+
     manifest = {
         "benchmark": "ITBench-Lite bounded investigation",
         "metric_version": "m14.v1",
@@ -120,10 +209,12 @@ def predict_investigations(
         "created_at": datetime.now(UTC).isoformat(),
         "git_head": _git_head(),
         "git_dirty": _git_dirty(),
-        "mode": "deterministic-intent-policy",
-        "model": None,
-        "api_usage_class": "CLASS 0",
-        "real_provider_calls": 0,
+        "mode": "deterministic-intent-policy" if model_client is None else "llm-intent-policy",
+        "model": model_client.model if model_client is not None else None,
+        "api_usage_class": "CLASS 0" if model_client is None else "CLASS 2",
+        "max_total_model_calls": max_total_model_calls,
+        "max_calls_per_scenario": per_scenario_budget,
+        "real_provider_calls": call_budget.calls if call_budget is not None else 0,
         "investigation_config": json.loads(json.dumps(asdict(effective_config), default=str)),
         "ground_truth_read_during_prediction": False,
         "seconds_total": round(time.monotonic() - started, 3),

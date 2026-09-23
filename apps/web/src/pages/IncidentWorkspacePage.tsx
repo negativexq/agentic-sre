@@ -80,24 +80,76 @@ function RootActor({ diagnosis }: { diagnosis: DiagnosisView }) {
 }
 
 function InvestigationTrace({ diagnosis }: { diagnosis: DiagnosisView }) {
-  if (diagnosis.steps.length === 0) {
+  const audit = diagnosis.investigation_audit;
+  if (diagnosis.steps.length === 0 && audit === null) {
     return <p className="text-sm text-muted">No investigation steps recorded.</p>;
   }
   return (
-    <Table>
-      <THead columns={["Step", "Detail"]} />
-      <tbody>
-        {diagnosis.steps.map((step, index) => (
-          <TRow key={index}>
-            <TCell className="whitespace-nowrap align-top">
-              <code className="text-xs text-text">{step.actor}</code>
-              <span className="text-subtle"> · {step.action}</span>
-            </TCell>
-            <TCell className="text-muted break-anywhere">{step.detail}</TCell>
-          </TRow>
-        ))}
-      </tbody>
-    </Table>
+    <div className="space-y-4">
+      {diagnosis.steps.length > 0 && (
+        <Table>
+          <THead columns={["Step", "Detail"]} />
+          <tbody>
+            {diagnosis.steps.map((step, index) => (
+              <TRow key={index}>
+                <TCell className="whitespace-nowrap align-top">
+                  <code className="text-xs text-text">{step.actor}</code>
+                  <span className="text-subtle"> · {step.action}</span>
+                </TCell>
+                <TCell className="text-muted break-anywhere">{step.detail}</TCell>
+              </TRow>
+            ))}
+          </tbody>
+        </Table>
+      )}
+      {audit && (
+        <section className="space-y-2">
+          <div className="text-xs text-muted">
+            Persisted run {audit.diagnosis_run_id} · {audit.initial_resolution} → {audit.final_resolution}
+            {" · "}stop: {audit.stop_reason} · {audit.tool_calls} tool call(s)
+          </div>
+          {audit.action_audits.length > 0 ? (
+            <Table>
+              <THead columns={["Turn / observation", "Authorization", "Execution", "Evidence"]} />
+              <tbody>
+                {audit.action_audits.map((turn) => (
+                  <TRow key={turn.turn_index}>
+                    <TCell className="align-top">
+                      <div>{turn.turn_index}. {turn.capability ?? turn.action} · {turn.target ?? "—"}</div>
+                      <div className="text-xs text-subtle">{turn.action_rationale}</div>
+                      {turn.observation_id && (
+                        <div className="text-xs text-subtle">
+                          {turn.observation_id} · {turn.observation_outcome ?? "no outcome"}
+                        </div>
+                      )}
+                    </TCell>
+                    <TCell className="align-top">
+                      {turn.authorization_result}
+                      <div className="text-xs text-subtle">{turn.authorization_reason}</div>
+                    </TCell>
+                    <TCell className="align-top">
+                      {turn.backend_execution_status}
+                      <div className="text-xs text-subtle">{turn.progress_classification}</div>
+                    </TCell>
+                    <TCell className="align-top break-anywhere">
+                      <div>Returned: {turn.returned_evidence_refs.join(", ") || "—"}</div>
+                      <div className="text-xs text-subtle">
+                        New: {turn.new_evidence_refs.join(", ") || "—"}
+                      </div>
+                      <div className="text-xs text-subtle">
+                        Known: {turn.already_known_refs.join(", ") || "—"}
+                      </div>
+                    </TCell>
+                  </TRow>
+                ))}
+              </tbody>
+            </Table>
+          ) : (
+            <p className="text-sm text-muted">No bounded actions recorded for this run.</p>
+          )}
+        </section>
+      )}
+    </div>
   );
 }
 

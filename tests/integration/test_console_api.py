@@ -34,7 +34,11 @@ from packages.rca.model import (
     EvidenceTemporalRole,
     Finding,
     FindingKind,
+    GapOutcomeKind,
     Hypothesis,
+    InvestigationAction,
+    InvestigationActionAudit,
+    InvestigationExecutionStatus,
     InvestigationResult,
     InvestigationStopReason,
     Resolution,
@@ -323,6 +327,7 @@ def test_ambiguous_is_not_resolved(app_client: tuple[TestClient, dict[str, UUID]
     # Leading actor is still surfaced; root_cause is withheld until resolved.
     assert diagnosis["leading_root_actor"] == "sre-demo/Deployment/payment-service"
     assert diagnosis["root_cause"] is None
+    assert diagnosis["investigation_audit"] is None
 
 
 def test_timeline_unavailable_when_completing_event_lost(
@@ -422,12 +427,53 @@ def test_report_projects_persisted_investigation_artifact() -> None:
         run_id = DiagnosisRepository(session).latest_run_id(incident_id)
         assert diagnosis is not None
         assert run_id is not None
+        target = EntityRef(kind="Deployment", name="payment-service", namespace="sre-demo")
+        rejected = InvestigationActionAudit(
+            turn_index=1,
+            action=InvestigationAction(
+                action="inspect",
+                gap_id="gap-1",
+                capability="events",
+                target=target,
+                rationale="inspect the event sequence",
+            ),
+            authorization_result="REJECTED",
+            authorization_reason="target is outside the authorized set",
+            backend_execution_status=InvestigationExecutionStatus.NOT_EXECUTED,
+            resolution_before=Resolution.RESOLVED,
+        )
+        executed = InvestigationActionAudit(
+            turn_index=2,
+            action=InvestigationAction(
+                action="inspect",
+                gap_id="gap-1",
+                capability="events",
+                target=target,
+                rationale="read the authorized event sequence",
+            ),
+            authorization_result="AUTHORIZED",
+            authorization_reason="target is allowed for this gap",
+            backend_execution_status=InvestigationExecutionStatus.SUCCEEDED,
+            observation_id="obs-1",
+            observation_outcome=GapOutcomeKind.SUPPORTS,
+            returned_evidence_refs=("event:1", "event:2"),
+            new_evidence_refs=("event:2",),
+            already_known_refs=("event:1",),
+            resolution_before=Resolution.RESOLVED,
+            resolution_after=Resolution.RESOLVED,
+            decision_state_changed=False,
+            progress_classification="NO_DECISION_CHANGE",
+        )
         result = InvestigationResult(
             diagnosis=Diagnosis.model_validate(diagnosis),
             initial_diagnosis=Diagnosis.model_validate(diagnosis),
             initial_resolution=Resolution.RESOLVED,
             final_resolution=Resolution.RESOLVED,
+            turns=2,
+            tool_calls=1,
+            rejected_actions=1,
             stop_reason=InvestigationStopReason.NO_RESOLVABLE_GAP,
+            action_audits=(rejected, executed),
         )
         InvestigationRunRepository(session).save(
             diagnosis_run_id=run_id,
@@ -438,6 +484,23 @@ def test_report_projects_persisted_investigation_artifact() -> None:
         )
 
     with TestClient(create_app(session_factory=factory)) as client:
+        diagnosis_response = client.get(f"/api/v1/console/incidents/{incident_id}/diagnosis")
+        diagnosis_view = diagnosis_response.json()
+        assert diagnosis_response.status_code == 200
+        assert diagnosis_view["investigation_audit"]["diagnosis_run_id"] == run_id
+        assert diagnosis_view["investigation_audit"]["artifact_version"] == "1.0"
+        audits = diagnosis_view["investigation_audit"]["action_audits"]
+        assert [audit["authorization_result"] for audit in audits] == ["REJECTED", "AUTHORIZED"]
+        assert audits[0]["backend_execution_status"] == "NOT_EXECUTED"
+        assert audits[1]["backend_execution_status"] == "SUCCEEDED"
+        assert set(audits[1]["returned_evidence_refs"]) == {
+            *audits[1]["new_evidence_refs"],
+            *audits[1]["already_known_refs"],
+        }
+
+        incident_detail = client.get(f"/api/v1/console/incidents/{incident_id}").json()
+        assert incident_detail["diagnosis"]["investigation_audit"]["diagnosis_run_id"] == run_id
+
         response = client.post(f"/api/v1/console/incidents/{incident_id}/reports")
         assert response.status_code == 201
         frozen = response.json()
@@ -464,7 +527,7 @@ def test_report_projects_persisted_investigation_artifact() -> None:
     report = frozen
     assert report["investigation_summary"]["initial_resolution"] == "RESOLVED"
     assert report["investigation_summary"]["stop_reason"] == "NO_RESOLVABLE_GAP"
-    assert report["agent_safety_audit"]["selected_actions"] == 0
+    assert report["agent_safety_audit"]["selected_actions"] == 2
 
 
 def test_report_exports_markdown_json_and_pdf(

@@ -199,20 +199,42 @@ def create_console_router(
         diagnoses = DiagnosisRepository(session)
         document = diagnoses.latest(incident_id)
         diagnosis = Diagnosis.model_validate(document) if document is not None else None
+        run_id = diagnoses.latest_run_id(incident_id)
+        investigation_artifact = (
+            InvestigationRunRepository(session).get(run_id) if run_id is not None else None
+        )
+        investigation = (
+            InvestigationResult.model_validate(investigation_artifact["document"])
+            if investigation_artifact is not None
+            else None
+        )
         events = IncidentEventRepository(session).list_for_incident(incident_id)
         alerts = AlertRepository(session).list_for_incident(incident_id)
         evidence = EvidenceRepository(session).list_for_incident(incident_id)
         timeline = timeline_view(
             incident=incident,
             diagnosis=diagnosis,
-            run_id=diagnoses.latest_run_id(incident_id),
+            run_id=run_id,
             events=events,
             alerts=alerts,
             diagnosis_ready=diagnoses.latest_created_at(incident_id),
         )
         return IncidentDetail(
             incident=_load_incident(session, incident_id),
-            diagnosis=diagnosis_view(diagnosis) if diagnosis else None,
+            diagnosis=(
+                diagnosis_view(
+                    diagnosis,
+                    investigation=investigation,
+                    diagnosis_run_id=run_id,
+                    artifact_version=(
+                        investigation_artifact["artifact_version"]
+                        if investigation_artifact is not None
+                        else None
+                    ),
+                )
+                if diagnosis
+                else None
+            ),
             timeline=timeline,
             evidence_count=len(evidence),
         )
@@ -226,10 +248,29 @@ def create_console_router(
         incident_id: UUID,
         session: Session = Depends(get_session),  # noqa: B008
     ) -> DiagnosisView:
-        document = DiagnosisRepository(session).latest(incident_id)
+        diagnoses = DiagnosisRepository(session)
+        document = diagnoses.latest(incident_id)
         if document is None:
             raise IncidentNotFoundError(str(incident_id))
-        return diagnosis_view(Diagnosis.model_validate(document))
+        run_id = diagnoses.latest_run_id(incident_id)
+        investigation_artifact = (
+            InvestigationRunRepository(session).get(run_id) if run_id is not None else None
+        )
+        investigation = (
+            InvestigationResult.model_validate(investigation_artifact["document"])
+            if investigation_artifact is not None
+            else None
+        )
+        return diagnosis_view(
+            Diagnosis.model_validate(document),
+            investigation=investigation,
+            diagnosis_run_id=run_id,
+            artifact_version=(
+                investigation_artifact["artifact_version"]
+                if investigation_artifact is not None
+                else None
+            ),
+        )
 
     @router.get("/incidents/{incident_id}/timeline", response_model=TimelineView)
     def incident_timeline(

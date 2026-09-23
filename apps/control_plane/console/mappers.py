@@ -18,6 +18,8 @@ from apps.control_plane.console.dto import (
     FindingView,
     HypothesisView,
     IncidentListItem,
+    InvestigationActionAuditView,
+    InvestigationAuditView,
     LifecyclePhaseView,
     RemediationView,
     ReportSummary,
@@ -40,6 +42,7 @@ from packages.rca.model import (
     EntityRef,
     Finding,
     Hypothesis,
+    InvestigationResult,
     ResolutionTrace,
 )
 from packages.report import ReportSnapshot
@@ -96,7 +99,13 @@ def _candidate_view(candidate: Candidate) -> CandidateView:
     )
 
 
-def diagnosis_view(diagnosis: Diagnosis) -> DiagnosisView:
+def diagnosis_view(
+    diagnosis: Diagnosis,
+    *,
+    investigation: InvestigationResult | None = None,
+    diagnosis_run_id: str | None = None,
+    artifact_version: str | None = None,
+) -> DiagnosisView:
     """Shape a stored diagnosis for the workspace, preserving its semantics."""
     is_resolved = diagnosis.resolution.value == "RESOLVED"
     leading = diagnosis.root_cause.canonical if diagnosis.root_cause else None
@@ -140,6 +149,57 @@ def diagnosis_view(diagnosis: Diagnosis) -> DiagnosisView:
             for item in diagnosis.remediation
         ],
         steps=[StepView(actor=s.actor, action=s.action, detail=s.detail) for s in diagnosis.steps],
+        investigation_audit=(
+            InvestigationAuditView(
+                diagnosis_run_id=diagnosis_run_id or "",
+                artifact_version=artifact_version or "",
+                initial_resolution=investigation.initial_resolution.value,
+                final_resolution=investigation.final_resolution.value,
+                stop_reason=investigation.stop_reason.value,
+                turns=investigation.turns,
+                model_calls=investigation.model_calls,
+                tool_calls=investigation.tool_calls,
+                action_audits=[
+                    InvestigationActionAuditView(
+                        turn_index=audit.turn_index,
+                        gap_id=audit.action.gap_id,
+                        gap_dimension=audit.gap_dimension.value if audit.gap_dimension else None,
+                        missing_fact=audit.missing_fact,
+                        intent_id=audit.intent_id,
+                        intent_kind=audit.intent_kind,
+                        action=audit.action.action,
+                        capability=audit.action.capability,
+                        target=(
+                            audit.action.target.canonical
+                            if audit.action.target is not None
+                            else None
+                        ),
+                        action_rationale=audit.action.rationale,
+                        authorization_result=audit.authorization_result,
+                        authorization_reason=audit.authorization_reason,
+                        backend_execution_status=audit.backend_execution_status.value,
+                        observation_id=audit.observation_id,
+                        observation_outcome=(
+                            audit.observation_outcome.value if audit.observation_outcome else None
+                        ),
+                        returned_evidence_refs=list(audit.returned_evidence_refs),
+                        new_evidence_refs=list(audit.new_evidence_refs),
+                        already_known_refs=list(audit.already_known_refs),
+                        normalized_finding_ids=list(audit.normalized_finding_ids),
+                        affected_hypothesis_ids=list(audit.affected_hypothesis_ids),
+                        resolution_before=audit.resolution_before.value,
+                        resolution_after=(
+                            audit.resolution_after.value if audit.resolution_after else None
+                        ),
+                        decision_state_changed=audit.decision_state_changed,
+                        progress_classification=audit.progress_classification,
+                    )
+                    for audit in investigation.action_audits
+                ],
+            )
+            if investigation is not None
+            else None
+        ),
         services=list(symptoms.services),
         alert_names=list(symptoms.alert_names),
         onset=symptoms.onset,

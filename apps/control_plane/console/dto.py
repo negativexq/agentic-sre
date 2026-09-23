@@ -81,6 +81,49 @@ class StepView(ConsoleModel):
     detail: str
 
 
+class InvestigationActionAuditView(ConsoleModel):
+    """One selected action and its deterministic authorization/execution trace."""
+
+    turn_index: int
+    gap_id: str | None
+    gap_dimension: str | None
+    missing_fact: str | None
+    intent_id: str | None
+    intent_kind: str | None
+    action: str
+    capability: str | None
+    target: str | None
+    action_rationale: str
+    authorization_result: str
+    authorization_reason: str
+    backend_execution_status: str
+    observation_id: str | None
+    observation_outcome: str | None
+    returned_evidence_refs: list[str]
+    new_evidence_refs: list[str]
+    already_known_refs: list[str]
+    normalized_finding_ids: list[str]
+    affected_hypothesis_ids: list[str]
+    resolution_before: str
+    resolution_after: str | None
+    decision_state_changed: bool | None
+    progress_classification: str
+
+
+class InvestigationAuditView(ConsoleModel):
+    """The persisted investigation artifact bound to a diagnosis run."""
+
+    diagnosis_run_id: str
+    artifact_version: str
+    initial_resolution: str
+    final_resolution: str
+    stop_reason: str
+    turns: int
+    model_calls: int
+    tool_calls: int
+    action_audits: list[InvestigationActionAuditView]
+
+
 # --- diagnosis -------------------------------------------------------------
 
 
@@ -108,6 +151,7 @@ class DiagnosisView(ConsoleModel):
     alternatives: list[CandidateView]
     remediation: list[RemediationView]
     steps: list[StepView]
+    investigation_audit: InvestigationAuditView | None = None
     services: list[str]
     alert_names: list[str]
     onset: datetime | None

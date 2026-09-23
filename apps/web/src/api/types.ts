@@ -50,6 +50,45 @@ export interface StepView {
   detail: string;
 }
 
+export interface InvestigationActionAuditView {
+  turn_index: number;
+  gap_id: string | null;
+  gap_dimension: string | null;
+  missing_fact: string | null;
+  intent_id: string | null;
+  intent_kind: string | null;
+  action: string;
+  capability: string | null;
+  target: string | null;
+  action_rationale: string;
+  authorization_result: string;
+  authorization_reason: string;
+  backend_execution_status: string;
+  observation_id: string | null;
+  observation_outcome: string | null;
+  returned_evidence_refs: string[];
+  new_evidence_refs: string[];
+  already_known_refs: string[];
+  normalized_finding_ids: string[];
+  affected_hypothesis_ids: string[];
+  resolution_before: string;
+  resolution_after: string | null;
+  decision_state_changed: boolean | null;
+  progress_classification: string;
+}
+
+export interface InvestigationAuditView {
+  diagnosis_run_id: string;
+  artifact_version: string;
+  initial_resolution: string;
+  final_resolution: string;
+  stop_reason: string;
+  turns: number;
+  model_calls: number;
+  tool_calls: number;
+  action_audits: InvestigationActionAuditView[];
+}
+
 export interface DiagnosisView {
   incident_id: string;
   resolution: Resolution;
@@ -70,6 +109,7 @@ export interface DiagnosisView {
   alternatives: CandidateView[];
   remediation: RemediationView[];
   steps: StepView[];
+  investigation_audit: InvestigationAuditView | null;
   services: string[];
   alert_names: string[];
   onset: string | null;

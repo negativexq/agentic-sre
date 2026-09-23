@@ -88,7 +88,51 @@ M15 executed only `logs` (100 reads) and `history` (48 reads). There were 98 `NO
 
 ## Known limitations and next work
 
-- The current planner uses deterministic positive-outcome metadata, but its lexicographic utility still prioritizes causal/structural relevance ahead of discrimination value.
-- Exact-query duplicate suppression exists; semantic/known-evidence penalties are not yet effective.
-- The M15 deterministic run failed its duplicate-rate and decision-relevance targets. Preserve this run as a failed evaluation record; any fixed implementation must be measured against the same frozen set with a new output directory. Do not rerun or overwrite the sealed prediction.
+- The current planner uses deterministic positive-outcome metadata. The known-evidence and semantic-repeat penalties added at `556088f` did not affect any selected action in the frozen run: the action sequence is identical to the preceding M15 run across all 25 scenarios and 148 actions. This indicates the penalty fields are not influencing the effective selection frontier for the repeated reads.
+- Exact-query duplicate suppression exists; semantic/known-evidence penalties remain ineffective at reducing the measured duplicate rate.
+- The M15 deterministic run failed its duplicate-rate and decision-relevance targets. Preserve both sealed runs; any later fix must use the same frozen set with a new output directory. Do not overwrite either prediction.
 - Final accuracy/recovery fell from 10/25 correct after M14 deterministic investigation to 2/25 after M15; initial RCA outputs remained identical.
+
+## M15 deterministic ranking iteration 2
+
+| Field | Value |
+| --- | --- |
+| Date | 2026-09-23 |
+| Evaluated commit | `556088fbfcf8d2f40ab124e2c5270eff9e67a52c` |
+| Output | `.local/eval/m15/known-risk-v2` |
+| Evaluation class | CLASS 0 — offline deterministic evaluation |
+| Model calls / real provider calls | 0 / 0 |
+| Scenario set | Same frozen 25 ITBench-Lite TEST IDs as M14 and the first M15 run |
+| Configuration | `max_turns=6`, `max_model_calls=6` (LLM disabled), `max_tool_calls=8`, `max_tool_calls_per_gap=2` |
+| Metric version | `m14.v1` |
+| Prediction manifest SHA-256 | `70ac31f4ffc08c381b73233214d1e15f35db8b68df01652c9d3eebab768f4fd8` |
+| Prediction seal SHA-256 | `ac84cbabb21ec67b41fe29555bda200ca1ab2e1171bc0905bf0167bc1337497d` |
+| Graded evaluation SHA-256 | `979be35642577b563f3a4c3dd5499ab5d90da14731066300c6dc359630c4d3ca` |
+
+Commands:
+
+```bash
+.venv/bin/agentic-sre investigation-eval \
+  --split test --confirm-test \
+  --out .local/eval/m15/known-risk-v2 \
+  --dataset .local/itbench-lite \
+  --max-turns 6 --max-model-calls 6 --max-tool-calls 8
+.venv/bin/agentic-sre grade-investigation-eval \
+  --out .local/eval/m15/known-risk-v2 \
+  --dataset .local/itbench-lite
+```
+
+| Metric | First M15 run | Ranking iteration 2 | M15 gate |
+| --- | ---: | ---: | --- |
+| Scenarios | 25 | 25 | frozen set |
+| Tool calls | 148 | 148 | — |
+| Duplicate/already-known reads | 45 (30.4%) | 45 (30.4%) | ≤18.75% vs 37.5% M14 GPT-6 baseline |
+| Useful-call rate | 100.0% | 100.0% | report only |
+| Decision-relevant calls | 5 (3.4%) | 5 (3.4%) | ≥41.6% vs 20.8% M14 GPT-6 baseline |
+| Recovery | 0 | 0 | report only in M15 |
+| Harm | 0 | 0 | 0 |
+| Model/provider calls | 0/0 | 0/0 | 0 for CLASS 0 |
+
+All 148 selected action identities (capability, target, query and gap) exactly match the first M15 run. The deterministic initial diagnoses and final outcome counts also match: `RECOVERY=0`, `STABLE_CORRECT=2`, `STABLE_WRONG=23`, `HARM=0`. G15.3, G15.4, G15.7 and G15.8 remain FAIL; the other previously passing gates remain unchanged. No gate, metric, scenario ID or denominator changed. M15 remains `IN_PROGRESS`; no GPT-6 Luna comparison is authorized or performed.
+
+Focused diagnosis from the run: the penalties are calculated in physical candidate and intent bundle utilities, but the active ranking path still selects the exact same reads. The next task is to trace the effective per-turn candidate/bundle frontier and make the risk penalty participate at the actual selection boundary, with a regression test that proves a lower-risk discriminative candidate wins when both are offered. Keep the frozen 25-scenario evaluation sealed and unchanged.

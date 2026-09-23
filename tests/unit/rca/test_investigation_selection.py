@@ -7,7 +7,10 @@ import pytest
 
 from packages.rca.engine import Case, EngineConfig, build_case, diagnose_case
 from packages.rca.investigation.actions import observation_identity
-from packages.rca.investigation.candidates import ObservationCandidate
+from packages.rca.investigation.candidates import (
+    ObservationCandidate,
+    build_observation_candidates,
+)
 from packages.rca.investigation.selection import (
     candidate_to_action,
     rank_observation_candidates,
@@ -19,6 +22,8 @@ from packages.rca.model import (
     EntityRef,
     FrontierStatus,
     GapDimension,
+    GapOutcome,
+    GapOutcomeKind,
     GapResolvability,
     InformationGap,
     InvestigationLedgerEntry,
@@ -365,3 +370,90 @@ def test_candidate_selection_does_not_call_hidden_telemetry(
         engine_config=EngineConfig(),
     )
     assert selected is not None
+
+
+def test_candidate_carries_explicit_positive_discriminator_and_neutral_no_data() -> None:
+    case = _case()
+    gap = _gap(
+        "alt-a-gap",
+        GapDimension.CHANGE_TIMING,
+        alternative_ids=("alt-a",),
+    ).model_copy(
+        update={
+            "discriminating_outcomes": (
+                GapOutcome(
+                    kind=GapOutcomeKind.SUPPORTS,
+                    alternative_ids=("alt-a",),
+                    condition="pre-onset change is observed for alt-a",
+                    implication="supports alt-a",
+                ),
+                GapOutcome(
+                    kind=GapOutcomeKind.NO_DATA,
+                    alternative_ids=("alt-a", "alt-b"),
+                    condition="the source returns no observation",
+                    implication="ambiguity remains",
+                ),
+            )
+        }
+    )
+    alternatives = tuple(
+        StructuralAlternative(
+            alternative_id=alternative_id,
+            actor=_entity("Deployment", alternative_id),
+            role="candidate",
+            status=FrontierStatus.UNEXPLORED,
+        )
+        for alternative_id in ("alt-a", "alt-b")
+    )
+    diagnosis = _diagnosis(case, (gap,), alternatives=alternatives)
+
+    candidates = build_observation_candidates(
+        case=case, diagnosis=diagnosis, engine_config=EngineConfig()
+    )
+
+    assert len(candidates) == 1
+    assert len(candidates[0].discriminators) == 1
+    discriminator = candidates[0].discriminators[0]
+    assert discriminator.gap_id == gap.gap_id
+    assert discriminator.dimension is GapDimension.CHANGE_TIMING
+    assert discriminator.support_outcomes[0].alternative_ids == ("alt-a",)
+    assert discriminator.comparison_alternative_ids == ("alt-b",)
+    assert len(discriminator.no_data_outcomes) == 1
+    assert discriminator.no_data_outcomes[0].kind is GapOutcomeKind.NO_DATA
+
+
+def test_candidate_does_not_claim_discrimination_from_no_data_alone() -> None:
+    case = _case()
+    gap = _gap(
+        "alt-a-gap",
+        GapDimension.CHANGE_TIMING,
+        alternative_ids=("alt-a",),
+    ).model_copy(
+        update={
+            "discriminating_outcomes": (
+                GapOutcome(
+                    kind=GapOutcomeKind.NO_DATA,
+                    alternative_ids=("alt-a", "alt-b"),
+                    condition="the source returns no observation",
+                    implication="ambiguity remains",
+                ),
+            )
+        }
+    )
+    alternatives = tuple(
+        StructuralAlternative(
+            alternative_id=alternative_id,
+            actor=_entity("Deployment", alternative_id),
+            role="candidate",
+            status=FrontierStatus.UNEXPLORED,
+        )
+        for alternative_id in ("alt-a", "alt-b")
+    )
+    diagnosis = _diagnosis(case, (gap,), alternatives=alternatives)
+
+    candidates = build_observation_candidates(
+        case=case, diagnosis=diagnosis, engine_config=EngineConfig()
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].discriminators == ()

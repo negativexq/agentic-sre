@@ -12,13 +12,34 @@ from packages.rca.model import (
     Diagnosis,
     EntityRef,
     GapDimension,
+    GapOutcome,
+    GapOutcomeKind,
     GapResolvability,
+    InformationGap,
     InvestigationQuery,
 )
 
 _BOUNDED_WINDOW = timedelta(minutes=30)
 _MAX_PROVIDER_WINDOW = timedelta(hours=1)
 _CANDIDATE_LIMIT = 32
+
+
+@dataclass(frozen=True)
+class CandidateDiscriminator:
+    """One positive observation that can distinguish a candidate state.
+
+    ``comparison_*`` identifies other currently plausible states that remain
+    viable if this candidate-specific positive observation is absent. A
+    NO_DATA outcome is deliberately retained as non-discriminating context.
+    """
+
+    gap_id: str
+    dimension: GapDimension
+    missing_fact: str
+    support_outcomes: tuple[GapOutcome, ...]
+    comparison_hypothesis_ids: tuple[str, ...]
+    comparison_alternative_ids: tuple[str, ...]
+    no_data_outcomes: tuple[GapOutcome, ...]
 
 
 @dataclass(frozen=True)
@@ -33,6 +54,7 @@ class ObservationCandidate:
     dimensions: tuple[GapDimension, ...]
     hypothesis_ids: tuple[str, ...]
     alternative_ids: tuple[str, ...]
+    discriminators: tuple[CandidateDiscriminator, ...] = ()
 
 
 @dataclass
@@ -44,6 +66,7 @@ class _CandidateAccumulator:
     dimensions: set[GapDimension] = field(default_factory=set)
     hypothesis_ids: set[str] = field(default_factory=set)
     alternative_ids: set[str] = field(default_factory=set)
+    discriminators: dict[str, CandidateDiscriminator] = field(default_factory=dict)
 
 
 def _is_usable_anchor(value: datetime | None) -> bool:
@@ -135,6 +158,78 @@ def _query_sort_key(query: InvestigationQuery) -> tuple[str, str, int]:
     )
 
 
+def _plausible_state_ids(diagnosis: Diagnosis) -> tuple[set[str], set[str]]:
+    trace = diagnosis.resolution_trace
+    hypothesis_ids: set[str] = set()
+    if trace is not None:
+        hypothesis_ids.update(trace.leading_hypothesis_ids)
+        hypothesis_ids.update(trace.unresolved_hypotheses)
+        hypothesis_ids.update(trace.plausible_hypotheses)
+    if not hypothesis_ids:
+        hypothesis_ids.update(
+            hypothesis.hypothesis_id
+            for hypothesis in (
+                *((diagnosis.hypothesis,) if diagnosis.hypothesis is not None else ()),
+                *diagnosis.ambiguous_hypotheses,
+                *diagnosis.alternative_hypotheses,
+            )
+        )
+    alternative_ids = {
+        alternative.alternative_id
+        for alternative in diagnosis.structural_alternatives
+        if alternative.status.value == "UNEXPLORED"
+    }
+    return hypothesis_ids, alternative_ids
+
+
+def _candidate_discriminator(
+    gap: InformationGap,
+    *,
+    plausible_hypothesis_ids: set[str],
+    plausible_alternative_ids: set[str],
+) -> CandidateDiscriminator | None:
+    supports = tuple(
+        outcome
+        for outcome in gap.discriminating_outcomes
+        if outcome.kind is GapOutcomeKind.SUPPORTS
+        and (
+            set(outcome.hypothesis_ids) & plausible_hypothesis_ids
+            or set(outcome.alternative_ids) & plausible_alternative_ids
+        )
+    )
+    supported_hypothesis_ids = {
+        hypothesis_id
+        for outcome in supports
+        for hypothesis_id in outcome.hypothesis_ids
+        if hypothesis_id in plausible_hypothesis_ids
+    }
+    supported_alternative_ids = {
+        alternative_id
+        for outcome in supports
+        for alternative_id in outcome.alternative_ids
+        if alternative_id in plausible_alternative_ids
+    }
+    comparison_hypothesis_ids = plausible_hypothesis_ids - supported_hypothesis_ids
+    comparison_alternative_ids = plausible_alternative_ids - supported_alternative_ids
+    if not (supported_hypothesis_ids or supported_alternative_ids):
+        return None
+    if not (comparison_hypothesis_ids or comparison_alternative_ids):
+        return None
+    return CandidateDiscriminator(
+        gap_id=gap.gap_id,
+        dimension=gap.dimension,
+        missing_fact=gap.missing_fact,
+        support_outcomes=supports,
+        comparison_hypothesis_ids=tuple(sorted(comparison_hypothesis_ids)),
+        comparison_alternative_ids=tuple(sorted(comparison_alternative_ids)),
+        no_data_outcomes=tuple(
+            outcome
+            for outcome in gap.discriminating_outcomes
+            if outcome.kind is GapOutcomeKind.NO_DATA
+        ),
+    )
+
+
 def build_observation_candidates(
     *,
     case: Case,
@@ -143,6 +238,7 @@ def build_observation_candidates(
 ) -> tuple[ObservationCandidate, ...]:
     """Coalesce resolvable logical needs into explicit physical reads."""
     accumulators: dict[str, _CandidateAccumulator] = {}
+    plausible_hypothesis_ids, plausible_alternative_ids = _plausible_state_ids(diagnosis)
     for gap in diagnosis.information_gaps:
         if gap.resolvability is not GapResolvability.RESOLVABLE:
             continue
@@ -167,6 +263,13 @@ def build_observation_candidates(
             accumulator.dimensions.add(gap.dimension)
             accumulator.hypothesis_ids.update(gap.hypothesis_ids)
             accumulator.alternative_ids.update(gap.alternative_ids)
+            discriminator = _candidate_discriminator(
+                gap,
+                plausible_hypothesis_ids=plausible_hypothesis_ids,
+                plausible_alternative_ids=plausible_alternative_ids,
+            )
+            if discriminator is not None:
+                accumulator.discriminators[gap.gap_id] = discriminator
 
     candidates = [
         ObservationCandidate(
@@ -178,6 +281,9 @@ def build_observation_candidates(
             dimensions=tuple(sorted(accumulator.dimensions, key=lambda item: item.value)),
             hypothesis_ids=tuple(sorted(accumulator.hypothesis_ids)),
             alternative_ids=tuple(sorted(accumulator.alternative_ids)),
+            discriminators=tuple(
+                accumulator.discriminators[gap_id] for gap_id in sorted(accumulator.discriminators)
+            ),
         )
         for identity, accumulator in accumulators.items()
     ]
@@ -195,6 +301,7 @@ def build_observation_candidates(
 
 
 __all__ = [
+    "CandidateDiscriminator",
     "ObservationCandidate",
     "build_observation_candidates",
     "resolve_effective_query",

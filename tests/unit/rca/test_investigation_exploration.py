@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 from packages.rca.engine import Case, build_case, diagnose_case
-from packages.rca.investigation.candidates import ObservationCandidate
+from packages.rca.investigation.candidates import CandidateDiscriminator, ObservationCandidate
 from packages.rca.investigation.graph import (
     _check_progress,
     _Runtime,
@@ -22,6 +22,8 @@ from packages.rca.model import (
     Diagnosis,
     EntityRef,
     GapDimension,
+    GapOutcome,
+    GapOutcomeKind,
     GapResolvability,
     InformationGap,
     InvestigationAction,
@@ -156,7 +158,7 @@ def test_exploration_bookkeeping_does_not_mutate_rca_fingerprint() -> None:
     )
 
 
-def test_stronger_a6_2_relevance_beats_more_uncovered_atoms() -> None:
+def test_leading_hypothesis_elimination_beats_more_uncovered_alternatives() -> None:
     case = _case()
     gaps = (
         _gap("a-gap", alternatives=("alt-a",)),
@@ -171,9 +173,53 @@ def test_stronger_a6_2_relevance_beats_more_uncovered_atoms() -> None:
         ("b-gap-1", "b-gap-2", "b-gap-3"),
         alternative_ids=("alt-b1", "alt-b2", "alt-b3"),
     )
+    a = a.__class__(
+        **{
+            **a.__dict__,
+            "discriminators": (
+                CandidateDiscriminator(
+                    gap_id="a-gap",
+                    dimension=GapDimension.DEPENDENCY_HEALTH,
+                    missing_fact="leading hypothesis mechanism",
+                    support_outcomes=(
+                        GapOutcome(
+                            kind=GapOutcomeKind.SUPPORTS,
+                            hypothesis_ids=("h-leading",),
+                        ),
+                    ),
+                    comparison_hypothesis_ids=("h-peer-1", "h-peer-2", "h-peer-3"),
+                    comparison_alternative_ids=(),
+                    no_data_outcomes=(),
+                ),
+            ),
+        }
+    )
+    b = b.__class__(
+        **{
+            **b.__dict__,
+            "discriminators": (
+                CandidateDiscriminator(
+                    gap_id="b-gap-1",
+                    dimension=GapDimension.DEPENDENCY_HEALTH,
+                    missing_fact="alternative-specific mechanism",
+                    support_outcomes=(
+                        GapOutcome(
+                            kind=GapOutcomeKind.SUPPORTS,
+                            alternative_ids=("alt-b1",),
+                        ),
+                    ),
+                    comparison_hypothesis_ids=(),
+                    comparison_alternative_ids=("alt-peer",),
+                    no_data_outcomes=(),
+                ),
+            ),
+        }
+    )
     selected = select_intent_physical_candidate(candidates=(a, b), diagnosis=diagnosis)
     assert selected is not None
     assert selected.candidate.candidate_id == "candidate-a"
+    assert selected.utility.discrimination_value > 0
+    assert selected.utility.expected_elimination_value == 4
 
 
 def test_pre_read_equivalent_candidates_use_marginal_coverage() -> None:

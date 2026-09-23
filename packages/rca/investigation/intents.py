@@ -29,6 +29,7 @@ from packages.rca.model import (
     GapDimension,
     GapResolvability,
     InvestigationAction,
+    InvestigationActionAudit,
     InvestigationLedgerEntry,
 )
 from packages.rca.root_cause_eligibility import (
@@ -68,8 +69,13 @@ class ObservationBundle:
     discriminating_gap_coverage: int = 0
     positive_discriminator_states: int = 0
     competing_state_coverage: int = 0
+    discrimination_value: int = 0
+    expected_elimination_value: int = 0
     known_evidence_penalty: int = 0
     semantic_duplicate_penalty: int = 0
+    no_data_repeat_penalty: int = 0
+    frontier_coverage: int = 0
+    acquisition_cost: int = 0
 
 
 @dataclass(frozen=True)
@@ -87,8 +93,13 @@ class IntentUtility:
     discriminating_gap_coverage: int = 0
     positive_discriminator_states: int = 0
     competing_state_coverage: int = 0
+    discrimination_value: int = 0
+    expected_elimination_value: int = 0
     known_evidence_penalty: int = 0
     semantic_duplicate_penalty: int = 0
+    no_data_repeat_penalty: int = 0
+    frontier_coverage: int = 0
+    acquisition_cost: int = 0
 
 
 @dataclass(frozen=True)
@@ -364,6 +375,7 @@ def build_observation_bundles(
     candidates: Sequence[ObservationCandidate],
     attempted_observations: Sequence[str] = (),
     previous_investigations: Sequence[InvestigationLedgerEntry] = (),
+    previous_action_audits: Sequence[InvestigationActionAudit] = (),
     require_discriminator: bool = False,
 ) -> tuple[ObservationBundle, ...]:
     """Group every currently admissible physical candidate into one intent."""
@@ -393,6 +405,7 @@ def build_observation_bundles(
             diagnosis=diagnosis,
             attempted_observations=attempted_observations,
             previous_investigations=previous_investigations,
+            previous_action_audits=previous_action_audits,
             require_discriminator=require_discriminator,
         )
         representative = ranked_members[0].utility if ranked_members else None
@@ -433,12 +446,21 @@ def build_observation_bundles(
                 competing_state_coverage=(
                     representative.competing_state_coverage if representative else 0
                 ),
+                discrimination_value=representative.discrimination_value if representative else 0,
+                expected_elimination_value=(
+                    representative.expected_elimination_value if representative else 0
+                ),
                 known_evidence_penalty=(
                     representative.known_evidence_penalty if representative else 0
                 ),
                 semantic_duplicate_penalty=(
                     representative.semantic_duplicate_penalty if representative else 0
                 ),
+                no_data_repeat_penalty=(
+                    representative.no_data_repeat_penalty if representative else 0
+                ),
+                frontier_coverage=representative.frontier_coverage if representative else 0,
+                acquisition_cost=representative.cost_tier if representative else 0,
             )
         )
     candidate_ids = {
@@ -473,17 +495,13 @@ def intent_utility_sort_key(scored: ScoredObservationBundle) -> tuple[object, ..
     utility = scored.utility
     return (
         not utility.admissible,
-        -utility.phase_match,
-        -utility.decision_blocker_match,
-        -utility.leading_hypothesis_relevance,
-        -utility.unresolved_hypothesis_relevance,
-        -utility.eligibility_relevance,
-        -utility.discriminating_gap_coverage,
-        -utility.positive_discriminator_states,
-        -utility.competing_state_coverage,
-        utility.known_evidence_penalty,
+        -utility.discrimination_value,
+        -utility.expected_elimination_value,
         utility.semantic_duplicate_penalty,
-        -utility.semantic_priority,
+        utility.no_data_repeat_penalty,
+        utility.known_evidence_penalty,
+        -utility.frontier_coverage,
+        utility.acquisition_cost,
         utility.stable_tiebreak,
     )
 
@@ -492,17 +510,13 @@ def intent_relevance_key(scored: ScoredObservationBundle) -> tuple[int, ...]:
     """Return semantic relevance fields, excluding the stable identity tie-break."""
     utility = scored.utility
     return (
-        utility.phase_match,
-        utility.decision_blocker_match,
-        utility.leading_hypothesis_relevance,
-        utility.unresolved_hypothesis_relevance,
-        utility.eligibility_relevance,
-        utility.discriminating_gap_coverage,
-        utility.positive_discriminator_states,
-        utility.competing_state_coverage,
-        -utility.known_evidence_penalty,
+        utility.discrimination_value,
+        utility.expected_elimination_value,
         -utility.semantic_duplicate_penalty,
-        utility.semantic_priority,
+        -utility.no_data_repeat_penalty,
+        -utility.known_evidence_penalty,
+        utility.frontier_coverage,
+        -utility.acquisition_cost,
     )
 
 
@@ -539,8 +553,13 @@ def score_observation_bundle(
         discriminating_gap_coverage=bundle.discriminating_gap_coverage,
         positive_discriminator_states=bundle.positive_discriminator_states,
         competing_state_coverage=bundle.competing_state_coverage,
+        discrimination_value=bundle.discrimination_value,
+        expected_elimination_value=bundle.expected_elimination_value,
         known_evidence_penalty=bundle.known_evidence_penalty,
         semantic_duplicate_penalty=bundle.semantic_duplicate_penalty,
+        no_data_repeat_penalty=bundle.no_data_repeat_penalty,
+        frontier_coverage=bundle.frontier_coverage,
+        acquisition_cost=bundle.acquisition_cost,
     )
     return ScoredObservationBundle(bundle=bundle, utility=utility)
 
@@ -599,6 +618,7 @@ def select_observation_bundle(
     candidates: Sequence[ObservationCandidate],
     attempted_observations: Sequence[str] = (),
     previous_investigations: Sequence[InvestigationLedgerEntry] = (),
+    previous_action_audits: Sequence[InvestigationActionAudit] = (),
 ) -> ScoredObservationBundle | None:
     phase = derive_investigation_phase(case, diagnosis)
     bundles = build_observation_bundles(
@@ -607,6 +627,7 @@ def select_observation_bundle(
         candidates=candidates,
         attempted_observations=attempted_observations,
         previous_investigations=previous_investigations,
+        previous_action_audits=previous_action_audits,
     )
     ranked = rank_observation_bundles(
         bundles=bundles,
@@ -626,6 +647,7 @@ def select_intent_physical_candidate(
     diagnosis: Diagnosis,
     attempted_observations: Sequence[str] = (),
     previous_investigations: Sequence[InvestigationLedgerEntry] = (),
+    previous_action_audits: Sequence[InvestigationActionAudit] = (),
     max_tool_calls_per_gap: int | None = None,
     exploration_covered_atoms: Sequence[tuple[str, str]] = (),
     require_discriminator: bool = False,
@@ -636,6 +658,7 @@ def select_intent_physical_candidate(
         diagnosis=diagnosis,
         attempted_observations=attempted_observations,
         previous_investigations=previous_investigations,
+        previous_action_audits=previous_action_audits,
         require_discriminator=require_discriminator,
     )
     executable = tuple(
@@ -672,6 +695,7 @@ def select_observation_intent_candidate(
     engine_config: EngineConfig,
     attempted_observations: Sequence[str] = (),
     previous_investigations: Sequence[InvestigationLedgerEntry] = (),
+    previous_action_audits: Sequence[InvestigationActionAudit] = (),
     max_tool_calls_per_gap: int | None = None,
     exploration_covered_atoms: Sequence[tuple[str, str]] = (),
     require_discriminator: bool = False,
@@ -686,6 +710,7 @@ def select_observation_intent_candidate(
         candidates=candidates,
         attempted_observations=attempted_observations,
         previous_investigations=previous_investigations,
+        previous_action_audits=previous_action_audits,
         require_discriminator=require_discriminator,
     )
     ranked_bundles = rank_observation_bundles(
@@ -708,6 +733,7 @@ def select_observation_intent_candidate(
             diagnosis=diagnosis,
             attempted_observations=attempted_observations,
             previous_investigations=previous_investigations,
+            previous_action_audits=previous_action_audits,
             max_tool_calls_per_gap=max_tool_calls_per_gap,
             exploration_covered_atoms=exploration_covered_atoms,
             require_discriminator=require_discriminator,

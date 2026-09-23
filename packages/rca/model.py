@@ -767,6 +767,35 @@ class InvestigationDiscriminatorAudit(BaseModel):
     no_data_is_discriminating: bool = False
 
 
+class InvestigationCandidateSelectionAudit(BaseModel):
+    """Bounded deterministic utility comparison for one offered read."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    intent_id: str
+    intent_rank: int
+    candidate_rank: int
+    candidate_id: str
+    gap_ids: tuple[str, ...] = ()
+    dimensions: tuple[GapDimension, ...] = ()
+    capability: str
+    target: EntityRef
+    query: InvestigationQuery
+    hypothesis_ids: tuple[str, ...] = ()
+    alternative_ids: tuple[str, ...] = ()
+    discriminators: tuple[InvestigationDiscriminatorAudit, ...] = ()
+    discrimination_value: int = 0
+    expected_elimination_value: int = 0
+    semantic_duplicate_risk: int = 0
+    no_data_repeat_risk: int = 0
+    known_evidence_risk: int = 0
+    frontier_coverage: int = 0
+    acquisition_cost: int = 0
+    intent_ordering_key: tuple[int, ...] = ()
+    candidate_ordering_key: tuple[int, ...] = ()
+    selected: bool = False
+
+
 class InvestigationActionAudit(BaseModel):
     """Structured lifecycle and decision accounting for one selected action."""
 
@@ -779,6 +808,7 @@ class InvestigationActionAudit(BaseModel):
     gap_dimension: GapDimension | None = None
     missing_fact: str | None = None
     discriminator: InvestigationDiscriminatorAudit | None = None
+    selection_candidates: tuple[InvestigationCandidateSelectionAudit, ...] = ()
     authorization_result: Literal["AUTHORIZED", "REJECTED", "POLICY_STOP"] = "REJECTED"
     authorization_reason: str = ""
     backend_execution_status: InvestigationExecutionStatus = (

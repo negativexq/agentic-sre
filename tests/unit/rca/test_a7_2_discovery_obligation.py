@@ -192,6 +192,7 @@ def _select(
         engine_config=ENGINE,
         attempted_observations=attempted,
         previous_investigations=(),
+        previous_action_audits=(),
         max_tool_calls_per_gap=2,
     )
     return selected, diagnosis, change, history

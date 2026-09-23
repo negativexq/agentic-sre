@@ -8,12 +8,15 @@ from packages.rca.investigation.candidates import ObservationCandidate
 from packages.rca.investigation.graph import investigate_diagnosis
 from packages.rca.investigation.intents import (
     DeterministicIntentPolicy,
+    IntentUtility,
     InvestigationIntentKind,
     InvestigationPhase,
     ObservationBundle,
+    ScoredObservationBundle,
     build_observation_bundles,
     classify_observation_candidate,
     derive_investigation_phase,
+    intent_utility_sort_key,
     rank_observation_bundles,
     select_observation_intent_candidate,
 )
@@ -166,26 +169,61 @@ def test_attempted_physical_reads_are_removed_without_killing_bundle() -> None:
     assert bundles[0].candidate_ids == ("second",)
 
 
-def test_direct_blocker_beats_larger_unrelated_bundle() -> None:
-    case = _case()
-    log = _candidate("log", "logs", GapDimension.LOG_ERROR_PATTERN)
-    events = tuple(
-        _candidate(f"event-{index}", "events", GapDimension.ENTITY_STATE) for index in range(20)
+def test_discrimination_beats_a_stronger_static_decision_blocker() -> None:
+    blocker_bundle = ObservationBundle(
+        bundle_id="intent:blocker",
+        intent=InvestigationIntentKind.DEPENDENCY_ERROR_INSPECTION,
+        phase=InvestigationPhase.HYPOTHESIS_DISCRIMINATION,
+        candidate_ids=("blocker-candidate",),
+        capabilities=("logs",),
+        gap_ids=("blocker-gap",),
+        dimensions=(GapDimension.DEPENDENCY_HEALTH,),
+        hypothesis_ids=(),
+        alternative_ids=(),
     )
-    gaps = (_gap(log, log.dimensions[0]),) + tuple(
-        _gap(event, event.dimensions[0]) for event in events
+    discriminative_bundle = ObservationBundle(
+        bundle_id="intent:discriminative",
+        intent=InvestigationIntentKind.ACTOR_STATE_INSPECTION,
+        phase=InvestigationPhase.HYPOTHESIS_DISCRIMINATION,
+        candidate_ids=("discriminative-candidate",),
+        capabilities=("events",),
+        gap_ids=("discriminative-gap",),
+        dimensions=(GapDimension.ENTITY_STATE,),
+        hypothesis_ids=(),
+        alternative_ids=(),
     )
-    diagnosis = _diagnosis(case, gaps)
-    selected = select_observation_intent_candidate(
-        case=case,
-        diagnosis=diagnosis,
-        engine_config=EngineConfig(),
+    blocker = ScoredObservationBundle(
+        blocker_bundle,
+        IntentUtility(
+            admissible=True,
+            phase_match=1,
+            decision_blocker_match=4,
+            leading_hypothesis_relevance=0,
+            unresolved_hypothesis_relevance=0,
+            eligibility_relevance=0,
+            semantic_priority=5,
+            stable_tiebreak=blocker_bundle.bundle_id,
+            discrimination_value=2,
+            expected_elimination_value=2,
+        ),
     )
-    assert selected is not None
-    assert (
-        selected.scored_bundle.bundle.intent is InvestigationIntentKind.DEPENDENCY_ERROR_INSPECTION
+    discriminative = ScoredObservationBundle(
+        discriminative_bundle,
+        IntentUtility(
+            admissible=True,
+            phase_match=1,
+            decision_blocker_match=3,
+            leading_hypothesis_relevance=0,
+            unresolved_hypothesis_relevance=0,
+            eligibility_relevance=0,
+            semantic_priority=4,
+            stable_tiebreak=discriminative_bundle.bundle_id,
+            discrimination_value=6,
+            expected_elimination_value=3,
+        ),
     )
-    assert selected.physical.candidate.capability == "logs"
+
+    assert intent_utility_sort_key(discriminative) < intent_utility_sort_key(blocker)
 
 
 def test_runtime_discrimination_requires_real_relevant_hypothesis() -> None:
@@ -254,6 +292,8 @@ def test_bundle_candidate_discrimination_precedes_static_intent_priority() -> No
         discriminating_gap_coverage=1,
         positive_discriminator_states=1,
         competing_state_coverage=1,
+        discrimination_value=1,
+        expected_elimination_value=1,
     )
     trace_bundle = ObservationBundle(
         bundle_id="intent:trace",
@@ -268,6 +308,8 @@ def test_bundle_candidate_discrimination_precedes_static_intent_priority() -> No
         discriminating_gap_coverage=3,
         positive_discriminator_states=3,
         competing_state_coverage=2,
+        discrimination_value=3,
+        expected_elimination_value=2,
     )
 
     ranked = rank_observation_bundles(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from hashlib import sha256
@@ -11,6 +12,7 @@ from packages.rca.investigation.actions import observation_identity
 from packages.rca.model import (
     Diagnosis,
     EntityRef,
+    FindingKind,
     GapDimension,
     GapOutcome,
     GapOutcomeKind,
@@ -56,6 +58,7 @@ class ObservationCandidate:
     alternative_ids: tuple[str, ...]
     discriminators: tuple[CandidateDiscriminator, ...] = ()
     known_evidence_refs: tuple[str, ...] = ()
+    known_fact_keys: tuple[str, ...] = ()
 
 
 @dataclass
@@ -69,6 +72,7 @@ class _CandidateAccumulator:
     alternative_ids: set[str] = field(default_factory=set)
     discriminators: dict[str, CandidateDiscriminator] = field(default_factory=dict)
     known_evidence_refs: set[str] = field(default_factory=set)
+    known_fact_keys: set[str] = field(default_factory=set)
 
 
 def _is_usable_anchor(value: datetime | None) -> bool:
@@ -278,6 +282,57 @@ def _visible_known_refs(
     return refs
 
 
+def _fact_key(parts: object) -> str:
+    encoded = json.dumps(parts, sort_keys=True, separators=(",", ":"), default=str)
+    return sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _visible_known_fact_keys(*, case: Case, capability: str, target: EntityRef) -> set[str]:
+    """Describe semantically known facts a bounded read can reacquire.
+
+    Keys use normalized entity/kind/time/details or object lifecycle/spec
+    identity. Evidence reference strings are intentionally not the identity.
+    """
+    facts: set[str] = set()
+    for finding in case.findings:
+        workload = case.topology.workload_of(finding.entity)
+        if finding.entity != target and workload != target:
+            continue
+        if capability == "logs" and finding.kind is not FindingKind.DEPENDENCY_ERRORS:
+            continue
+        at_bucket = int(finding.at.timestamp() // 60) if finding.at is not None else None
+        facts.add(
+            _fact_key(
+                (
+                    finding.entity.canonical,
+                    finding.kind.value,
+                    finding.temporal_role.value,
+                    at_bucket,
+                    finding.details,
+                )
+            )
+        )
+    if capability in {"history", "describe"}:
+        version = case.topology.latest.get(target)
+        if version is not None:
+            metadata = version.body.get("metadata")
+            metadata = metadata if isinstance(metadata, dict) else {}
+            observed_minute = int(version.observed_at.timestamp() // 60)
+            facts.add(
+                _fact_key(
+                    (
+                        target.canonical,
+                        "OBJECT_VERSION",
+                        version.lifecycle.value,
+                        observed_minute,
+                        metadata.get("generation"),
+                        version.body.get("spec"),
+                    )
+                )
+            )
+    return facts
+
+
 def build_observation_candidates(
     *,
     case: Case,
@@ -329,6 +384,13 @@ def build_observation_candidates(
                     query=query,
                 )
             )
+            accumulator.known_fact_keys.update(
+                _visible_known_fact_keys(
+                    case=case,
+                    capability=authorized.capability,
+                    target=authorized.target,
+                )
+            )
             target_specific = len(targets_by_capability[authorized.capability]) > 1
             if target_specific:
                 target_hypothesis_ids = {
@@ -369,6 +431,7 @@ def build_observation_candidates(
                 accumulator.discriminators[gap_id] for gap_id in sorted(accumulator.discriminators)
             ),
             known_evidence_refs=tuple(sorted(accumulator.known_evidence_refs)),
+            known_fact_keys=tuple(sorted(accumulator.known_fact_keys)),
         )
         for identity, accumulator in accumulators.items()
     ]

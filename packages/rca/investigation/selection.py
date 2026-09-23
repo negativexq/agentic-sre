@@ -15,7 +15,10 @@ from packages.rca.model import (
     Diagnosis,
     GapResolvability,
     InvestigationAction,
+    InvestigationActionAudit,
+    InvestigationExecutionStatus,
     InvestigationLedgerEntry,
+    InvestigationQuery,
 )
 
 _OVERLAP_PREFERENCE = {
@@ -43,12 +46,16 @@ class ObservationUtility:
     discriminating_gap_coverage: int
     positive_discriminator_states: int
     competing_state_coverage: int
+    discrimination_value: int
+    expected_elimination_value: int
+    frontier_coverage: int
     dimension_coverage: int
     overlap_preference: int
     shared_gap_coverage: int
     shared_alternative_coverage: int
     known_evidence_penalty: int
     semantic_duplicate_penalty: int
+    no_data_repeat_penalty: int
     cost_tier: int
     stable_tiebreak: str
 
@@ -64,18 +71,13 @@ def observation_relevance_key(scored: ScoredObservationCandidate) -> tuple[int, 
     """Return A6.2's relevance fields without its semantic-free tie-break."""
     utility = scored.utility
     return (
-        utility.hypothesis_relevance,
-        utility.structural_relevance,
-        utility.discriminating_gap_coverage,
-        utility.positive_discriminator_states,
-        utility.competing_state_coverage,
-        utility.dimension_coverage,
-        utility.overlap_preference,
-        utility.shared_gap_coverage,
-        utility.shared_alternative_coverage,
-        -utility.known_evidence_penalty,
+        utility.discrimination_value,
+        utility.expected_elimination_value,
         -utility.semantic_duplicate_penalty,
-        utility.cost_tier,
+        -utility.no_data_repeat_penalty,
+        -utility.known_evidence_penalty,
+        utility.frontier_coverage,
+        -utility.cost_tier,
     )
 
 
@@ -166,15 +168,18 @@ def _query_windows_overlap(
 def _semantic_duplicate_penalty(
     candidate: ObservationCandidate,
     previous_investigations: Sequence[InvestigationLedgerEntry],
-) -> int:
-    """Count overlapping re-reads of the same semantic source and target.
+    previous_action_audits: Sequence[InvestigationActionAudit] = (),
+) -> tuple[int, int]:
+    """Count physical and semantic repeats of one bounded epistemic question.
 
     Exact physical repeats are excluded earlier by admissibility. This penalty
-    covers a changed bounded query that still revisits an already-read
-    capability/target/time surface.
+    also matches a prior successful action by capability, canonical target,
+    gap dimension, supported/comparison states and bounded time-scope class.
+    A prior NO_DATA response adds an explicit retry-risk count without changing
+    any causal state.
     """
     current_identity = observation_identity(candidate.capability, candidate.target, candidate.query)
-    return sum(
+    physical_repeats = sum(
         entry.capability == candidate.capability
         and entry.target == candidate.target
         and entry.query is not None
@@ -182,6 +187,165 @@ def _semantic_duplicate_penalty(
         and _query_windows_overlap(candidate, entry)
         for entry in previous_investigations
     )
+    current_fingerprints = _semantic_question_fingerprints(candidate)
+    repeated = 0
+    repeated_no_data = 0
+    for audit in previous_action_audits:
+        if (
+            audit.authorization_result != "AUTHORIZED"
+            or audit.backend_execution_status is not InvestigationExecutionStatus.SUCCEEDED
+            or audit.action.capability != candidate.capability
+            or audit.action.target != candidate.target
+            or audit.gap_dimension is None
+            or audit.discriminator is None
+        ):
+            continue
+        previous_fingerprint = _audit_semantic_question_fingerprint(audit)
+        if previous_fingerprint in current_fingerprints:
+            repeated += 1
+            repeated_no_data += int(
+                audit.observation_outcome is not None
+                and audit.observation_outcome.value == "NO_DATA"
+            )
+    return physical_repeats + repeated, repeated_no_data
+
+
+def _query_scope_class(query: InvestigationQuery) -> str:
+    if query.start is None or query.end is None:
+        return "unbounded"
+    seconds = max(0.0, (query.end - query.start).total_seconds())
+    if seconds <= 15 * 60:
+        return "short"
+    if seconds <= 60 * 60:
+        return "bounded"
+    return "wide"
+
+
+def _semantic_question_fingerprints(candidate: ObservationCandidate) -> set[tuple[object, ...]]:
+    fingerprints: set[tuple[object, ...]] = set()
+    for discriminator in candidate.discriminators:
+        supported = tuple(
+            sorted(
+                (tuple(sorted(outcome.hypothesis_ids)), tuple(sorted(outcome.alternative_ids)))
+                for outcome in discriminator.support_outcomes
+            )
+        )
+        fingerprints.add(
+            (
+                candidate.capability,
+                candidate.target.canonical,
+                discriminator.dimension.value,
+                supported,
+                tuple(sorted(discriminator.comparison_hypothesis_ids)),
+                tuple(sorted(discriminator.comparison_alternative_ids)),
+                _query_scope_class(candidate.query),
+            )
+        )
+    return fingerprints
+
+
+def _audit_semantic_question_fingerprint(audit: InvestigationActionAudit) -> tuple[object, ...]:
+    assert audit.action.capability is not None
+    assert audit.action.target is not None
+    discriminator = audit.discriminator
+    assert discriminator is not None and audit.gap_dimension is not None
+    supported = tuple(
+        sorted(
+            (tuple(sorted(outcome.hypothesis_ids)), tuple(sorted(outcome.alternative_ids)))
+            for outcome in discriminator.support_outcomes
+        )
+    )
+    return (
+        audit.action.capability,
+        audit.action.target.canonical,
+        audit.gap_dimension.value,
+        supported,
+        tuple(sorted(discriminator.comparison_hypothesis_ids)),
+        tuple(sorted(discriminator.comparison_alternative_ids)),
+        _query_scope_class(audit.action.query or InvestigationQuery()),
+    )
+
+
+def _frontier_coverage(
+    candidate: ObservationCandidate,
+    previous_action_audits: Sequence[InvestigationActionAudit],
+) -> int:
+    queried = {
+        (audit.action.capability, audit.action.target.canonical, audit.gap_dimension.value)
+        for audit in previous_action_audits
+        if audit.authorization_result == "AUTHORIZED"
+        and audit.backend_execution_status is InvestigationExecutionStatus.SUCCEEDED
+        and audit.action.capability is not None
+        and audit.action.target is not None
+        and audit.gap_dimension is not None
+    }
+    return sum(
+        (candidate.capability, candidate.target.canonical, discriminator.dimension.value)
+        not in queried
+        for discriminator in candidate.discriminators
+    )
+
+
+def _discrimination_value(candidate: ObservationCandidate) -> int:
+    pairs: set[tuple[str, str]] = set()
+    for discriminator in candidate.discriminators:
+        supports = {
+            f"hypothesis:{identifier}"
+            for outcome in discriminator.support_outcomes
+            for identifier in outcome.hypothesis_ids
+        } | {
+            f"alternative:{identifier}"
+            for outcome in discriminator.support_outcomes
+            for identifier in outcome.alternative_ids
+        }
+        comparisons = {
+            *(f"hypothesis:{identifier}" for identifier in discriminator.comparison_hypothesis_ids),
+            *(
+                f"alternative:{identifier}"
+                for identifier in discriminator.comparison_alternative_ids
+            ),
+        }
+        pairs.update((left, right) for left in supports for right in comparisons if left != right)
+    return len(pairs)
+
+
+def _expected_elimination_value(candidate: ObservationCandidate, diagnosis: Diagnosis) -> int:
+    leading = (
+        set(diagnosis.resolution_trace.leading_hypothesis_ids)
+        if diagnosis.resolution_trace
+        else set()
+    )
+    supports_hypothesis = {
+        identifier
+        for discriminator in candidate.discriminators
+        for outcome in discriminator.support_outcomes
+        for identifier in outcome.hypothesis_ids
+    }
+    supports_alternative = {
+        identifier
+        for discriminator in candidate.discriminators
+        for outcome in discriminator.support_outcomes
+        for identifier in outcome.alternative_ids
+    }
+    compares_hypothesis = {
+        identifier
+        for discriminator in candidate.discriminators
+        for identifier in discriminator.comparison_hypothesis_ids
+    }
+    compares_alternative = {
+        identifier
+        for discriminator in candidate.discriminators
+        for identifier in discriminator.comparison_alternative_ids
+    }
+    if supports_hypothesis & leading and (compares_hypothesis or compares_alternative):
+        return 4
+    if supports_alternative and compares_alternative:
+        return 3
+    if supports_hypothesis and compares_hypothesis:
+        return 2
+    if supports_hypothesis or supports_alternative:
+        return 1
+    return 0
 
 
 def is_observation_candidate_admissible(
@@ -207,6 +371,7 @@ def score_observation_candidate(
     diagnosis: Diagnosis,
     attempted_observations: Sequence[str] = (),
     previous_investigations: Sequence[InvestigationLedgerEntry] = (),
+    previous_action_audits: Sequence[InvestigationActionAudit] = (),
 ) -> ScoredObservationCandidate:
     """Assign a deterministic utility vector using only visible state."""
     attempted = _attempted_identities(
@@ -253,7 +418,12 @@ def score_observation_candidate(
         if entry.capability == candidate.capability and entry.target == candidate.target
         for ref in entry.already_known_refs
     }
-    known_evidence_penalty = len(set(candidate.known_evidence_refs) | previous_known_refs)
+    known_evidence_penalty = len(candidate.known_fact_keys) + len(
+        set(candidate.known_evidence_refs) | previous_known_refs
+    )
+    semantic_duplicate_penalty, no_data_repeat_penalty = _semantic_duplicate_penalty(
+        candidate, previous_investigations, previous_action_audits
+    )
     utility = ObservationUtility(
         admissible=admissible,
         hypothesis_relevance=_hypothesis_relevance(candidate, diagnosis),
@@ -261,12 +431,16 @@ def score_observation_candidate(
         discriminating_gap_coverage=len({item.gap_id for item in discriminators}),
         positive_discriminator_states=len(positive_states),
         competing_state_coverage=len(competing_states),
+        discrimination_value=_discrimination_value(candidate),
+        expected_elimination_value=_expected_elimination_value(candidate, diagnosis),
+        frontier_coverage=_frontier_coverage(candidate, previous_action_audits),
         dimension_coverage=len(covered_dimensions),
         overlap_preference=_OVERLAP_PREFERENCE[overlap_class],
         shared_gap_coverage=max(0, len(covered_gap_ids) - 1),
         shared_alternative_coverage=max(0, len(covered_alternatives) - 1),
         known_evidence_penalty=known_evidence_penalty,
-        semantic_duplicate_penalty=_semantic_duplicate_penalty(candidate, previous_investigations),
+        semantic_duplicate_penalty=semantic_duplicate_penalty,
+        no_data_repeat_penalty=no_data_repeat_penalty,
         cost_tier=_COST_TIER.get(candidate.capability, 2),
         stable_tiebreak=candidate.candidate_id,
     )
@@ -278,26 +452,16 @@ def score_observation_candidate(
 
 
 def utility_sort_key(scored: ScoredObservationCandidate) -> tuple[object, ...]:
-    """Return the single documented lexicographic selection order.
-
-    Causal relevance precedes structural relevance, coverage, potential seed
-    overlap, shared-read value, and cost.  The candidate ID is the final
-    deterministic tie-break and has no semantic meaning.
-    """
+    """Order by active-diagnosis value before redundancy, novelty and cost."""
     utility = scored.utility
     return (
         not utility.admissible,
-        -utility.hypothesis_relevance,
-        -utility.structural_relevance,
-        -utility.discriminating_gap_coverage,
-        -utility.positive_discriminator_states,
-        -utility.competing_state_coverage,
-        -utility.dimension_coverage,
-        -utility.overlap_preference,
-        -utility.shared_gap_coverage,
-        -utility.shared_alternative_coverage,
-        utility.known_evidence_penalty,
+        -utility.discrimination_value,
+        -utility.expected_elimination_value,
         utility.semantic_duplicate_penalty,
+        utility.no_data_repeat_penalty,
+        utility.known_evidence_penalty,
+        -utility.frontier_coverage,
         utility.cost_tier,
         utility.stable_tiebreak,
     )
@@ -309,6 +473,7 @@ def rank_observation_candidates(
     diagnosis: Diagnosis,
     attempted_observations: Sequence[str] = (),
     previous_investigations: Sequence[InvestigationLedgerEntry] = (),
+    previous_action_audits: Sequence[InvestigationActionAudit] = (),
     require_discriminator: bool = False,
 ) -> tuple[ScoredObservationCandidate, ...]:
     """Score and order physical candidates without performing a read."""
@@ -318,6 +483,7 @@ def rank_observation_candidates(
             diagnosis=diagnosis,
             attempted_observations=attempted_observations,
             previous_investigations=previous_investigations,
+            previous_action_audits=previous_action_audits,
         )
         for candidate in candidates
     )
@@ -451,6 +617,7 @@ def select_observation_candidate(
     engine_config: EngineConfig,
     attempted_observations: Sequence[str] = (),
     previous_investigations: Sequence[InvestigationLedgerEntry] = (),
+    previous_action_audits: Sequence[InvestigationActionAudit] = (),
     max_tool_calls_per_gap: int | None = None,
     require_discriminator: bool = False,
 ) -> ScoredObservationCandidate | None:
@@ -465,6 +632,7 @@ def select_observation_candidate(
         diagnosis=diagnosis,
         attempted_observations=attempted_observations,
         previous_investigations=previous_investigations,
+        previous_action_audits=previous_action_audits,
         require_discriminator=require_discriminator,
     )
     for item in ranked:

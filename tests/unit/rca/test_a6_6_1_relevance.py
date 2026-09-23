@@ -120,6 +120,8 @@ def _scored(
     *,
     priority: int = 5,
     blocker: int = 3,
+    discrimination: int = 1,
+    elimination: int = 1,
     stable: str | None = None,
 ) -> ScoredObservationBundle:
     bundle = ObservationBundle(
@@ -144,6 +146,8 @@ def _scored(
             eligibility_relevance=0,
             semantic_priority=priority,
             stable_tiebreak=stable or bundle_id,
+            discrimination_value=discrimination,
+            expected_elimination_value=elimination,
         ),
     )
 
@@ -192,15 +196,21 @@ def test_s1_relevance_key_excludes_stable_tiebreak() -> None:
     assert intent_relevance_key(a) == intent_relevance_key(b)
 
 
-def test_s2_higher_blocker_relevance_excludes_lower_bundle_from_model(
+def test_s2_discrimination_excludes_lower_bundle_even_with_static_blocker(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    a = _scored("intent:a", InvestigationIntentKind.INCIDENT_ACTOR_DISCOVERY, "candidate-a")
+    a = _scored(
+        "intent:a",
+        InvestigationIntentKind.INCIDENT_ACTOR_DISCOVERY,
+        "candidate-a",
+        discrimination=2,
+    )
     b = _scored(
         "intent:b",
         InvestigationIntentKind.RECENT_SOURCE_CHANGE,
         "candidate-b",
         blocker=2,
+        discrimination=1,
     )
     client, result, tools = _run_graph(monkeypatch, (a, b), [])
     assert client.calls == 0
@@ -208,7 +218,7 @@ def test_s2_higher_blocker_relevance_excludes_lower_bundle_from_model(
     assert any("intent=INCIDENT_ACTOR_DISCOVERY" in step.detail for step in result.diagnosis.steps)
 
 
-def test_s3_semantic_priority_difference_is_deterministic(
+def test_s3_discrimination_difference_is_deterministic(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     a = _scored("intent:a", InvestigationIntentKind.INCIDENT_ACTOR_DISCOVERY, "candidate-a")
@@ -217,6 +227,7 @@ def test_s3_semantic_priority_difference_is_deterministic(
         InvestigationIntentKind.RECENT_SOURCE_CHANGE,
         "candidate-b",
         priority=4,
+        discrimination=2,
     )
     client, result, _ = _run_graph(monkeypatch, (a, b), [])
     assert client.calls == 0
@@ -235,6 +246,7 @@ def test_s4_true_top_tie_exposes_only_top_class_and_preserves_physical_selection
         InvestigationIntentKind.DEPENDENCY_ERROR_INSPECTION,
         "candidate-c",
         priority=4,
+        discrimination=0,
     )
     client, result, tools = _run_graph(monkeypatch, (a, b, c), [{"intent_id": "intent:b"}])
     assert client.calls == 1
@@ -259,6 +271,7 @@ def test_s5_invalid_lower_ranked_choice_uses_top_fallback(
         InvestigationIntentKind.DEPENDENCY_ERROR_INSPECTION,
         "candidate-c",
         priority=4,
+        discrimination=0,
     )
     client, result, tools = _run_graph(monkeypatch, (a, b, c), [{"intent_id": "intent:c"}])
     assert client.calls == 1
@@ -276,6 +289,7 @@ def test_s6_provider_failure_stays_in_top_class(monkeypatch: pytest.MonkeyPatch)
         InvestigationIntentKind.DEPENDENCY_ERROR_INSPECTION,
         "candidate-c",
         priority=4,
+        discrimination=0,
     )
 
     class FailingClient(ScriptedLLM):
@@ -315,6 +329,7 @@ def test_s8_multiple_legal_non_equivalent_intents_do_not_reach_model(
         InvestigationIntentKind.RECENT_SOURCE_CHANGE,
         "candidate-b",
         blocker=1,
+        discrimination=2,
     )
     client, result, _ = _run_graph(monkeypatch, (a, b), [])
     assert client.calls == 0

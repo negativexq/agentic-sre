@@ -27,6 +27,10 @@ from packages.rca.model import (
     GapOutcomeKind,
     GapResolvability,
     InformationGap,
+    InvestigationAction,
+    InvestigationActionAudit,
+    InvestigationDiscriminatorAudit,
+    InvestigationExecutionStatus,
     InvestigationLedgerEntry,
     InvestigationQuery,
     Resolution,
@@ -187,6 +191,72 @@ def _candidate(
     )
 
 
+def _candidate_with_states(
+    candidate_id: str,
+    *,
+    target: EntityRef | None = None,
+    capability: str = "history",
+    support: tuple[str, ...] = ("h1",),
+    comparisons: tuple[str, ...] = ("h2",),
+    known_fact_keys: tuple[str, ...] = (),
+) -> ObservationCandidate:
+    candidate = _candidate(candidate_id, capability=capability, target=target)
+    discriminator = candidate.discriminators[0]
+    return candidate.__class__(
+        **{
+            **candidate.__dict__,
+            "known_fact_keys": known_fact_keys,
+            "discriminators": (
+                discriminator.__class__(
+                    **{
+                        **discriminator.__dict__,
+                        "support_outcomes": (
+                            GapOutcome(
+                                kind=GapOutcomeKind.SUPPORTS,
+                                hypothesis_ids=support,
+                                condition="positive state",
+                            ),
+                        ),
+                        "comparison_hypothesis_ids": comparisons,
+                    }
+                ),
+            ),
+        }
+    )
+
+
+def _prior_audit(
+    candidate: ObservationCandidate,
+    *,
+    outcome: GapOutcomeKind = GapOutcomeKind.SUPPORTS,
+) -> InvestigationActionAudit:
+    discriminator = candidate.discriminators[0]
+    return InvestigationActionAudit(
+        turn_index=1,
+        action=InvestigationAction(
+            action="inspect",
+            gap_id=discriminator.gap_id,
+            capability=candidate.capability,
+            target=candidate.target,
+            query=candidate.query,
+        ),
+        gap_dimension=discriminator.dimension,
+        discriminator=InvestigationDiscriminatorAudit(
+            gap_id=discriminator.gap_id,
+            dimension=discriminator.dimension,
+            missing_fact=discriminator.missing_fact,
+            support_outcomes=discriminator.support_outcomes,
+            comparison_hypothesis_ids=discriminator.comparison_hypothesis_ids,
+            comparison_alternative_ids=discriminator.comparison_alternative_ids,
+            no_data_outcomes=discriminator.no_data_outcomes,
+        ),
+        authorization_result="AUTHORIZED",
+        backend_execution_status=InvestigationExecutionStatus.SUCCEEDED,
+        observation_outcome=outcome,
+        resolution_before=Resolution.AMBIGUOUS,
+    )
+
+
 def test_leading_hypothesis_beats_generic_breadth() -> None:
     case = _case()
     leading = _gap(
@@ -276,6 +346,130 @@ def test_overlapping_semantic_repeat_ranks_below_fresh_candidate() -> None:
     assert ranked[1].utility.known_evidence_penalty == 1
 
 
+def test_equivalent_discrimination_prefers_lower_semantic_duplicate_risk() -> None:
+    case = _case()
+    repeated = _candidate_with_states("repeat", target=_entity("Deployment", "payment"))
+    fresh = _candidate_with_states("fresh", target=_entity("Deployment", "orders"))
+    fresh = fresh.__class__(**{**fresh.__dict__, "discriminators": repeated.discriminators})
+    diagnosis = _diagnosis(
+        case,
+        (_gap("gap", GapDimension.CHANGE_TIMING),),
+    )
+
+    ranked = rank_observation_candidates(
+        candidates=(repeated, fresh),
+        diagnosis=diagnosis,
+        previous_action_audits=(_prior_audit(repeated),),
+    )
+
+    assert ranked[0].candidate.target == fresh.target
+    assert ranked[0].utility.discrimination_value == ranked[1].utility.discrimination_value
+    assert ranked[1].utility.semantic_duplicate_penalty == 1
+
+
+def test_discrimination_precedes_known_evidence_novelty() -> None:
+    case = _case()
+    high = _candidate_with_states(
+        "high", support=("h1", "h2"), comparisons=("h3", "h4"), known_fact_keys=("fact",)
+    )
+    low = _candidate_with_states("low", target=_entity("Deployment", "low"))
+    diagnosis = _diagnosis(case, (_gap("gap", GapDimension.CHANGE_TIMING),))
+
+    ranked = rank_observation_candidates(candidates=(low, high), diagnosis=diagnosis)
+
+    assert ranked[0].candidate.candidate_id == "high"
+    assert ranked[0].utility.discrimination_value > ranked[1].utility.discrimination_value
+    assert ranked[0].utility.known_evidence_penalty > ranked[1].utility.known_evidence_penalty
+
+
+def test_equal_discrimination_prefers_candidate_without_known_facts() -> None:
+    case = _case()
+    known = _candidate_with_states("known", known_fact_keys=("entity|fact|value",))
+    fresh = _candidate_with_states("fresh", target=_entity("Deployment", "fresh"))
+    fresh = fresh.__class__(**{**fresh.__dict__, "discriminators": known.discriminators})
+    diagnosis = _diagnosis(case, (_gap("gap", GapDimension.CHANGE_TIMING),))
+
+    ranked = rank_observation_candidates(candidates=(known, fresh), diagnosis=diagnosis)
+
+    assert ranked[0].candidate.candidate_id == "fresh"
+    assert ranked[0].utility.discrimination_value == ranked[1].utility.discrimination_value
+    assert ranked[1].utility.known_evidence_penalty == 1
+
+
+def test_equal_discrimination_prefers_unexplored_frontier() -> None:
+    case = _case()
+    queried = _candidate_with_states("queried", target=_entity("Deployment", "queried"))
+    unexplored = _candidate_with_states("unexplored", target=_entity("Deployment", "unexplored"))
+    unexplored = unexplored.__class__(
+        **{**unexplored.__dict__, "discriminators": queried.discriminators}
+    )
+    diagnosis = _diagnosis(case, (_gap("gap", GapDimension.CHANGE_TIMING),))
+
+    ranked = rank_observation_candidates(
+        candidates=(queried, unexplored),
+        diagnosis=diagnosis,
+        previous_action_audits=(_prior_audit(queried),),
+    )
+
+    assert ranked[0].candidate.candidate_id == "unexplored"
+    assert ranked[0].utility.frontier_coverage > ranked[1].utility.frontier_coverage
+
+
+def test_no_data_is_neutral_but_matching_retry_ranks_lower() -> None:
+    case = _case()
+    prior_probe = _candidate_with_states("probe", target=_entity("Deployment", "payment"))
+    retry = _candidate_with_states("retry", target=prior_probe.target)
+    retry = retry.__class__(**{**retry.__dict__, "discriminators": prior_probe.discriminators})
+    alternate = _candidate_with_states("alternate", target=_entity("Deployment", "orders"))
+    alternate = alternate.__class__(
+        **{**alternate.__dict__, "discriminators": prior_probe.discriminators}
+    )
+    diagnosis = _diagnosis(case, (_gap("gap", GapDimension.CHANGE_TIMING),))
+    before = diagnosis.model_dump(mode="json")
+
+    ranked = rank_observation_candidates(
+        candidates=(retry, alternate),
+        diagnosis=diagnosis,
+        previous_action_audits=(_prior_audit(prior_probe, outcome=GapOutcomeKind.NO_DATA),),
+    )
+
+    assert ranked[0].candidate.candidate_id == "alternate"
+    assert ranked[1].utility.semantic_duplicate_penalty == 1
+    assert ranked[1].utility.no_data_repeat_penalty == 1
+    assert diagnosis.model_dump(mode="json") == before
+
+
+def test_different_discriminator_is_not_a_semantic_duplicate() -> None:
+    case = _case()
+    prior_probe = _candidate_with_states("prior", target=_entity("Deployment", "payment"))
+    different_question = _candidate_with_states(
+        "different", target=prior_probe.target, comparisons=("h3",)
+    )
+    diagnosis = _diagnosis(case, (_gap("gap", GapDimension.CHANGE_TIMING),))
+
+    ranked = rank_observation_candidates(
+        candidates=(different_question,),
+        diagnosis=diagnosis,
+        previous_action_audits=(_prior_audit(prior_probe),),
+    )
+
+    assert ranked[0].utility.semantic_duplicate_penalty == 0
+
+
+def test_non_discriminative_candidate_cannot_beat_a_discriminative_candidate() -> None:
+    case = _case()
+    valid = _candidate_with_states("valid")
+    blind = valid.__class__(**{**valid.__dict__, "candidate_id": "blind", "discriminators": ()})
+    diagnosis = _diagnosis(case, (_gap("gap", GapDimension.CHANGE_TIMING),))
+
+    ranked = rank_observation_candidates(
+        candidates=(blind, valid), diagnosis=diagnosis, require_discriminator=True
+    )
+
+    assert ranked[0].candidate.candidate_id == "valid"
+    assert all(item.candidate.candidate_id != "blind" for item in ranked)
+
+
 def test_unresolved_structural_alternative_beats_irrelevant_candidate() -> None:
     case = _case()
     alternative = StructuralAlternative(
@@ -316,7 +510,7 @@ def test_shared_coverage_is_a_later_tiebreak() -> None:
     assert ranked[0].candidate.candidate_id == "four"
 
 
-def test_seed_hidden_overlap_beats_history_only_when_relevance_ties() -> None:
+def test_acquisition_cost_breaks_a_complete_discrimination_and_risk_tie() -> None:
     case = _case()
     history_gap = _gap("history", GapDimension.CHANGE_TIMING)
     trace_gap = _gap(
@@ -338,7 +532,10 @@ def test_seed_hidden_overlap_beats_history_only_when_relevance_ties() -> None:
         ),
         diagnosis=diagnosis,
     )
-    assert ranked[0].candidate.candidate_id == "trace-candidate"
+    assert ranked[0].candidate.candidate_id == "history-candidate"
+    assert ranked[0].utility.discrimination_value == ranked[1].utility.discrimination_value
+    assert ranked[0].utility.known_evidence_penalty == ranked[1].utility.known_evidence_penalty
+    assert ranked[0].utility.cost_tier < ranked[1].utility.cost_tier
 
 
 def test_cost_tier_breaks_equal_overlap_without_causal_relevance() -> None:
@@ -471,9 +668,22 @@ def test_deterministic_policy_replans_after_a_real_observation() -> None:
     assert len(result.ledger) == result.tool_calls
     assert len({entry.query_id for entry in result.ledger}) == result.tool_calls
     assert tuple(entry.capability for entry in result.ledger) == (
+        "logs",
         "events",
         "resource_pressure",
     )
+    assert all(audit.authorization_result == "AUTHORIZED" for audit in result.action_audits)
+    assert all(audit.discriminator is not None for audit in result.action_audits)
+    assert all(audit.selection_candidates for audit in result.action_audits)
+    for audit in result.action_audits:
+        selected_trace = tuple(item for item in audit.selection_candidates if item.selected)
+        assert len(selected_trace) == 1
+        assert selected_trace[0].candidate_id
+        assert selected_trace[0].discrimination_value > 0
+        assert selected_trace[0].candidate_ordering_key
+    assert result.action_audits[1].observation_outcome is GapOutcomeKind.SUPPORTS
+    assert result.action_audits[2].observation_outcome is GapOutcomeKind.NO_DATA
+    assert result.diagnosis.resolution == result.initial_resolution
 
 
 def test_candidate_selection_does_not_call_hidden_telemetry(

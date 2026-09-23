@@ -8,7 +8,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, fields, is_dataclass, replace
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
@@ -49,6 +49,7 @@ from packages.rca.investigation.intents import (
     build_observation_bundles,
     derive_investigation_phase,
     intent_relevance_key,
+    intent_utility_sort_key,
     rank_observation_bundles,
     select_intent_physical_candidate,
     select_observation_intent_candidate,
@@ -62,11 +63,14 @@ from packages.rca.investigation.normalizers import (
 from packages.rca.investigation.policy import LLMIntentPolicy
 from packages.rca.investigation.selection import (
     DeterministicObservationPolicy,
+    ScoredObservationCandidate,
     candidate_to_action,
     exploration_coverage_atoms,
+    observation_relevance_key,
     rank_observation_candidates,
     score_observation_candidate,
     select_observation_candidate,
+    utility_sort_key,
 )
 from packages.rca.investigation.state import (
     CaseRebuilder,
@@ -90,6 +94,7 @@ from packages.rca.model import (
     InvestigationAction,
     InvestigationActionAudit,
     InvestigationActionStatus,
+    InvestigationCandidateSelectionAudit,
     InvestigationDiscriminatorAudit,
     InvestigationExecutionStatus,
     InvestigationGapState,
@@ -401,6 +406,7 @@ def _selected_intent_for_candidate(
     engine_config: EngineConfig,
     attempted_observations: Sequence[str],
     previous_investigations: Sequence[InvestigationLedgerEntry],
+    previous_action_audits: Sequence[InvestigationActionAudit],
     max_tool_calls_per_gap: int,
 ) -> SelectedObservationIntent | None:
     """Bind one existing candidate back to its ranked semantic bundle.
@@ -419,6 +425,7 @@ def _selected_intent_for_candidate(
         candidates=candidates,
         attempted_observations=attempted_observations,
         previous_investigations=previous_investigations,
+        previous_action_audits=previous_action_audits,
         require_discriminator=True,
     )
     ranked_bundles = rank_observation_bundles(
@@ -445,6 +452,7 @@ def _selected_intent_for_candidate(
         diagnosis=diagnosis,
         attempted_observations=attempted_observations,
         previous_investigations=previous_investigations,
+        previous_action_audits=previous_action_audits,
     )
     if (
         candidate_to_action(
@@ -471,6 +479,7 @@ def _select_pending_incident_change_discovery(
     engine_config: EngineConfig,
     attempted_observations: Sequence[str],
     previous_investigations: Sequence[InvestigationLedgerEntry],
+    previous_action_audits: Sequence[InvestigationActionAudit],
     max_tool_calls_per_gap: int,
 ) -> SelectedObservationIntent | None:
     """Return the one-shot namespace change discovery override, if required.
@@ -506,6 +515,7 @@ def _select_pending_incident_change_discovery(
         diagnosis=diagnosis,
         attempted_observations=attempted_observations,
         previous_investigations=previous_investigations,
+        previous_action_audits=previous_action_audits,
     )
     for scored in ranked:
         if (
@@ -525,6 +535,7 @@ def _select_pending_incident_change_discovery(
             engine_config=engine_config,
             attempted_observations=attempted_observations,
             previous_investigations=previous_investigations,
+            previous_action_audits=previous_action_audits,
             max_tool_calls_per_gap=max_tool_calls_per_gap,
         )
         if selected is not None:
@@ -592,6 +603,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             engine_config=rt.engine_config,
             attempted_observations=state.get("attempted_observations", ()),
             previous_investigations=tuple(state.get("ledger", ())),
+            previous_action_audits=tuple(state.get("action_audits", ())),
             max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
             exploration_covered_atoms=state.get("exploration_covered_atoms", ()),
             require_discriminator=True,
@@ -603,6 +615,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             engine_config=rt.engine_config,
             attempted_observations=state.get("attempted_observations", ()),
             previous_investigations=tuple(state.get("ledger", ())),
+            previous_action_audits=tuple(state.get("action_audits", ())),
             max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
         )
         if obligated is not None:
@@ -642,6 +655,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             candidates=candidates,
             attempted_observations=state.get("attempted_observations", ()),
             previous_investigations=tuple(state.get("ledger", ())),
+            previous_action_audits=tuple(state.get("action_audits", ())),
             require_discriminator=True,
         )
         ranked_bundles = rank_observation_bundles(
@@ -710,6 +724,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             diagnosis=diagnosis,
             attempted_observations=state.get("attempted_observations", ()),
             previous_investigations=tuple(state.get("ledger", ())),
+            previous_action_audits=tuple(state.get("action_audits", ())),
             max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
             exploration_covered_atoms=state.get("exploration_covered_atoms", ()),
         )
@@ -763,6 +778,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         }
     if isinstance(rt.policy, (DeterministicObservationPolicy, DeterministicIntentPolicy)):
         selected_intent = None
+        selection_pool: tuple[ObservationCandidate, ...] = ()
         focus_applied = False
         if isinstance(rt.policy, DeterministicIntentPolicy):
             selected_intent = baseline_intent
@@ -785,12 +801,14 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                     previous_investigations=tuple(state.get("ledger", ())),
                     max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
                 )
+                selection_pool = focused or allowed
                 if focused:
                     focused_selected = select_intent_physical_candidate(
                         candidates=focused,
                         diagnosis=diagnosis,
                         attempted_observations=state.get("attempted_observations", ()),
                         previous_investigations=tuple(state.get("ledger", ())),
+                        previous_action_audits=tuple(state.get("action_audits", ())),
                         max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
                         exploration_covered_atoms=state.get("exploration_covered_atoms", ()),
                         require_discriminator=True,
@@ -810,6 +828,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                 engine_config=rt.engine_config,
                 attempted_observations=state.get("attempted_observations", ()),
                 previous_investigations=tuple(state.get("ledger", ())),
+                previous_action_audits=tuple(state.get("action_audits", ())),
                 max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
                 require_discriminator=True,
             )
@@ -841,6 +860,31 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                     "deterministic candidate had no executable representative gap",
                 ),
             }
+        selection_trace: tuple[InvestigationCandidateSelectionAudit, ...] = ()
+        if selected_intent is not None:
+            selection_trace = _selection_candidate_audit(
+                case=case,
+                diagnosis=diagnosis,
+                engine_config=rt.engine_config,
+                attempted_observations=state.get("attempted_observations", ()),
+                previous_investigations=tuple(state.get("ledger", ())),
+                previous_action_audits=tuple(state.get("action_audits", ())),
+                max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+                exploration_covered_atoms=state.get("exploration_covered_atoms", ()),
+                selected_intent=selected_intent,
+                selected_pool=selection_pool,
+            )
+        else:
+            selection_trace = _physical_selection_candidate_audit(
+                case=case,
+                diagnosis=diagnosis,
+                engine_config=rt.engine_config,
+                attempted_observations=state.get("attempted_observations", ()),
+                previous_investigations=tuple(state.get("ledger", ())),
+                previous_action_audits=tuple(state.get("action_audits", ())),
+                max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+                selected=selected,
+            )
         if selected_intent is not None:
             bundle_utility = selected_intent.scored_bundle.utility
             bundle = selected_intent.scored_bundle.bundle
@@ -882,6 +926,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                 if selected_intent is not None
                 else None
             ),
+            "pending_selection_candidates": selection_trace,
             "stop_reason": None,
             "turns": state["turns"] + 1,
             "model_calls": state["model_calls"],
@@ -895,6 +940,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         diagnosis=diagnosis,
         attempted_observations=state.get("attempted_observations", ()),
         previous_investigations=tuple(state.get("ledger", ())),
+        previous_action_audits=tuple(state.get("action_audits", ())),
         require_discriminator=True,
     )
     candidate_actions = tuple(
@@ -1053,6 +1099,208 @@ def _as_discriminator_audit(
     )
 
 
+def _ordering_key_numbers(values: tuple[object, ...]) -> tuple[int, ...]:
+    """Expose numeric utility precedence; stable string IDs remain separate."""
+    numeric = values[:-1] if values and isinstance(values[-1], str) else values
+    if not all(isinstance(value, (int, bool)) for value in numeric):
+        raise TypeError("candidate ordering key contains a non-numeric field")
+    return tuple(int(value) for value in cast(tuple[int | bool, ...], numeric))
+
+
+def _selection_candidate_audit(
+    *,
+    case: Case,
+    diagnosis: Diagnosis,
+    engine_config: EngineConfig,
+    attempted_observations: Sequence[str],
+    previous_investigations: Sequence[InvestigationLedgerEntry],
+    previous_action_audits: Sequence[InvestigationActionAudit],
+    max_tool_calls_per_gap: int,
+    exploration_covered_atoms: Sequence[tuple[str, str]],
+    selected_intent: SelectedObservationIntent,
+    selected_pool: Sequence[ObservationCandidate],
+) -> tuple[InvestigationCandidateSelectionAudit, ...]:
+    """Persist the bounded two-level ordering actually used by intent selection."""
+    candidates = build_observation_candidates(
+        case=case, diagnosis=diagnosis, engine_config=engine_config
+    )
+    phase = derive_investigation_phase(case, diagnosis)
+    bundles = build_observation_bundles(
+        case=case,
+        diagnosis=diagnosis,
+        candidates=candidates,
+        attempted_observations=attempted_observations,
+        previous_investigations=previous_investigations,
+        previous_action_audits=previous_action_audits,
+        require_discriminator=True,
+    )
+    ranked_bundles = rank_observation_bundles(
+        bundles=bundles,
+        phase=phase,
+        diagnosis=diagnosis,
+        case=case,
+        source_actor_bundle_available=any(
+            bundle.intent.value == "INCIDENT_ACTOR_DISCOVERY" for bundle in bundles
+        ),
+    )
+    selected_bundle_id = selected_intent.scored_bundle.bundle.bundle_id
+    trace: list[InvestigationCandidateSelectionAudit] = []
+    for intent_rank, scored_bundle in enumerate(ranked_bundles, start=1):
+        bundle = scored_bundle.bundle
+        pool = (
+            tuple(selected_pool)
+            if bundle.bundle_id == selected_bundle_id
+            else tuple(
+                candidate
+                for candidate in candidates
+                if candidate.candidate_id in bundle.candidate_ids
+            )
+        )
+        ranked_candidates = rank_observation_candidates(
+            candidates=pool,
+            diagnosis=diagnosis,
+            attempted_observations=attempted_observations,
+            previous_investigations=previous_investigations,
+            previous_action_audits=previous_action_audits,
+            require_discriminator=True,
+        )
+        executable = tuple(
+            item
+            for item in ranked_candidates
+            if candidate_to_action(
+                item,
+                diagnosis,
+                previous_investigations=previous_investigations,
+                max_tool_calls_per_gap=max_tool_calls_per_gap,
+            )
+            is not None
+        )
+        if not executable:
+            continue
+        best_relevance = observation_relevance_key(executable[0])
+        tied = tuple(
+            item for item in executable if observation_relevance_key(item) == best_relevance
+        )
+        covered_atoms = {(atom[0], atom[1]) for atom in exploration_covered_atoms}
+        tied_order = tuple(
+            sorted(
+                tied,
+                key=lambda item: (
+                    -len(exploration_coverage_atoms(item.candidate, diagnosis) - covered_atoms),
+                    item.candidate.candidate_id,
+                ),
+            )
+        )
+        ordered_candidates = (*tied_order, *(item for item in executable if item not in tied))
+        intent_key = _ordering_key_numbers(intent_utility_sort_key(scored_bundle))
+        for candidate_rank, item in enumerate(ordered_candidates, start=1):
+            candidate = item.candidate
+            utility = item.utility
+            trace.append(
+                InvestigationCandidateSelectionAudit(
+                    intent_id=bundle.bundle_id,
+                    intent_rank=intent_rank,
+                    candidate_rank=candidate_rank,
+                    candidate_id=candidate.candidate_id,
+                    gap_ids=candidate.gap_ids,
+                    dimensions=candidate.dimensions,
+                    capability=candidate.capability,
+                    target=candidate.target,
+                    query=candidate.query,
+                    hypothesis_ids=candidate.hypothesis_ids,
+                    alternative_ids=candidate.alternative_ids,
+                    discriminators=tuple(
+                        _as_discriminator_audit(discriminator)
+                        for discriminator in candidate.discriminators
+                    ),
+                    discrimination_value=utility.discrimination_value,
+                    expected_elimination_value=utility.expected_elimination_value,
+                    semantic_duplicate_risk=utility.semantic_duplicate_penalty,
+                    no_data_repeat_risk=utility.no_data_repeat_penalty,
+                    known_evidence_risk=utility.known_evidence_penalty,
+                    frontier_coverage=utility.frontier_coverage,
+                    acquisition_cost=utility.cost_tier,
+                    intent_ordering_key=intent_key,
+                    candidate_ordering_key=_ordering_key_numbers(utility_sort_key(item)),
+                    selected=(
+                        bundle.bundle_id == selected_bundle_id
+                        and candidate.candidate_id
+                        == selected_intent.physical.candidate.candidate_id
+                    ),
+                )
+            )
+    return tuple(trace)
+
+
+def _physical_selection_candidate_audit(
+    *,
+    case: Case,
+    diagnosis: Diagnosis,
+    engine_config: EngineConfig,
+    attempted_observations: Sequence[str],
+    previous_investigations: Sequence[InvestigationLedgerEntry],
+    previous_action_audits: Sequence[InvestigationActionAudit],
+    max_tool_calls_per_gap: int,
+    selected: ScoredObservationCandidate,
+) -> tuple[InvestigationCandidateSelectionAudit, ...]:
+    """Record the actual deterministic physical-candidate ordering."""
+    candidates = build_observation_candidates(
+        case=case, diagnosis=diagnosis, engine_config=engine_config
+    )
+    ranked = rank_observation_candidates(
+        candidates=candidates,
+        diagnosis=diagnosis,
+        attempted_observations=attempted_observations,
+        previous_investigations=previous_investigations,
+        previous_action_audits=previous_action_audits,
+        require_discriminator=True,
+    )
+    executable = tuple(
+        item
+        for item in ranked
+        if candidate_to_action(
+            item,
+            diagnosis,
+            previous_investigations=previous_investigations,
+            max_tool_calls_per_gap=max_tool_calls_per_gap,
+        )
+        is not None
+    )
+    rows: list[InvestigationCandidateSelectionAudit] = []
+    for rank, item in enumerate(executable, start=1):
+        candidate = item.candidate
+        utility = item.utility
+        rows.append(
+            InvestigationCandidateSelectionAudit(
+                intent_id="physical:deterministic",
+                intent_rank=1,
+                candidate_rank=rank,
+                candidate_id=candidate.candidate_id,
+                gap_ids=candidate.gap_ids,
+                dimensions=candidate.dimensions,
+                capability=candidate.capability,
+                target=candidate.target,
+                query=candidate.query,
+                hypothesis_ids=candidate.hypothesis_ids,
+                alternative_ids=candidate.alternative_ids,
+                discriminators=tuple(
+                    _as_discriminator_audit(discriminator)
+                    for discriminator in candidate.discriminators
+                ),
+                discrimination_value=utility.discrimination_value,
+                expected_elimination_value=utility.expected_elimination_value,
+                semantic_duplicate_risk=utility.semantic_duplicate_penalty,
+                no_data_repeat_risk=utility.no_data_repeat_penalty,
+                known_evidence_risk=utility.known_evidence_penalty,
+                frontier_coverage=utility.frontier_coverage,
+                acquisition_cost=utility.cost_tier,
+                candidate_ordering_key=_ordering_key_numbers(utility_sort_key(item)),
+                selected=candidate.candidate_id == selected.candidate.candidate_id,
+            )
+        )
+    return tuple(rows)
+
+
 def _leading_actor(diagnosis: Diagnosis) -> EntityRef | None:
     if diagnosis.hypothesis is not None:
         return diagnosis.hypothesis.causal_actor
@@ -1197,6 +1445,7 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                 None,
             ),
             authorization_result="REJECTED",
+            selection_candidates=state.get("pending_selection_candidates", ()),
             authorization_reason=result.reason,
             resolution_after=state["current_diagnosis"].resolution,
             leading_actor_after=_leading_actor(state["current_diagnosis"]),
@@ -1259,6 +1508,7 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         gap_dimension=gap.dimension,
         missing_fact=gap.missing_fact,
         discriminator=discriminator,
+        selection_candidates=state.get("pending_selection_candidates", ()),
         authorization_result="AUTHORIZED",
         authorization_reason="capability/target pair is authorized for the selected resolvable gap",
         **_audit_before_state(state["current_diagnosis"]),
@@ -2063,6 +2313,7 @@ def build_investigation_state(
         "intent_history": (),
         "pending_intent_id": None,
         "pending_intent_kind": None,
+        "pending_selection_candidates": (),
         "attempted_gap_ids": (),
         "pending_action": None,
         "pending_observation": None,

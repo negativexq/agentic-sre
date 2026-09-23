@@ -17,6 +17,7 @@ from packages.rca.model import (
     InvestigationAction,
     InvestigationActionAudit,
     InvestigationActionStatus,
+    InvestigationCandidateSelectionAudit,
     InvestigationLedgerEntry,
     InvestigationObservation,
     InvestigationResult,
@@ -127,6 +128,7 @@ class InvestigationState(TypedDict, total=False):
     intent_history: tuple[dict[str, object], ...]
     pending_intent_id: str | None
     pending_intent_kind: str | None
+    pending_selection_candidates: tuple[InvestigationCandidateSelectionAudit, ...]
     attempted_gap_ids: tuple[str, ...]
     pending_action: InvestigationAction | None
     pending_observation: InvestigationObservation | None

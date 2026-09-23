@@ -185,6 +185,7 @@ def test_alembic_migration_up_and_down(tmp_path: Path) -> None:
         "hypotheses",
         "incident_events",
         "incidents",
+        "investigation_runs",
         "event_versions",
         "log_observations",
         "object_versions",

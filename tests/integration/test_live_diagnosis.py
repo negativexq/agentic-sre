@@ -27,13 +27,27 @@ from packages.contracts import (
     IncidentSource,
     IncidentStatus,
 )
+from packages.rca.engine import diagnose
+from packages.rca.investigation.policy import ScriptedInvestigationPolicy
 from packages.rca.live import ListingFailure, ListingScope, LokiLogReader, ObjectListing
-from packages.rca.model import Confidence, EntityRef, FindingKind, LogRecord
+from packages.rca.model import (
+    Confidence,
+    EntityRef,
+    FindingKind,
+    GapOutcomeKind,
+    InvestigationLedgerEntry,
+    InvestigationObservation,
+    InvestigationResult,
+    InvestigationStopReason,
+    LogRecord,
+)
 from packages.storage.database import create_session_factory
 from packages.storage.models import AlertRow, Base, IncidentRow, LogObservationRow
 from packages.storage.repositories import (
+    DiagnosisRepository,
     EventRepository,
     IncidentRepository,
+    InvestigationRunRepository,
     ObjectVersionRepository,
 )
 
@@ -485,6 +499,71 @@ def test_diagnosis_without_cluster_access_is_explicit(setup: Any) -> None:
     diagnosis = service.run(incident_id)
     assert diagnosis.root_cause is None
     assert diagnosis.summary.startswith("No change")
+
+
+def test_bounded_investigation_result_survives_session_restart(
+    setup: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    factory, cluster, clock, incident_id = setup
+
+    def completed_investigation(source: Any, *, policy: Any) -> InvestigationResult:
+        del policy
+        diagnosis = diagnose(source)
+        observation = InvestigationObservation(
+            observation_id="obs-1",
+            gap_id="gap-1",
+            capability="events",
+            target=EntityRef.parse("sre-demo/Deployment/payment-service"),
+            outcome=GapOutcomeKind.NO_DATA,
+            evidence_refs=("event:known",),
+        )
+        entry = InvestigationLedgerEntry(
+            query_id="obs-1",
+            gap_id="gap-1",
+            capability="events",
+            target=observation.target,
+            returned_evidence_refs=("event:known",),
+            already_known_refs=("event:known",),
+            outcome=GapOutcomeKind.NO_DATA,
+        )
+        return InvestigationResult(
+            diagnosis=diagnosis,
+            initial_resolution=diagnosis.resolution,
+            final_resolution=diagnosis.resolution,
+            turns=1,
+            tool_calls=1,
+            unique_observations=1,
+            stop_reason=InvestigationStopReason.NO_PROGRESS,
+            observations=(observation,),
+            ledger=(entry,),
+        )
+
+    monkeypatch.setattr(
+        "apps.control_plane.diagnosis.investigate_diagnosis", completed_investigation
+    )
+    service = DiagnosisService(
+        session_factory=factory,
+        namespaces=("sre-demo",),
+        reader=cluster,
+        clock=clock,
+        bounded_policy_factory=lambda: ScriptedInvestigationPolicy(actions=[]),
+    )
+    service.run(incident_id)
+
+    with factory() as session:
+        diagnoses = DiagnosisRepository(session)
+        run_id = diagnoses.latest_run_id(incident_id)
+        assert run_id is not None
+        artifact = InvestigationRunRepository(session).get(run_id)
+
+    assert artifact is not None
+    assert artifact["diagnosis_run_id"] == run_id
+    assert artifact["incident_id"] == str(incident_id)
+    assert artifact["artifact_version"] == "1.0"
+    result = InvestigationResult.model_validate(artifact["document"])
+    assert result.stop_reason is InvestigationStopReason.NO_PROGRESS
+    assert result.observations[0].observation_id == "obs-1"
+    assert result.ledger[0].already_known_refs == ("event:known",)
 
 
 def test_open_diagnosis_persists_and_deduplicates_log_observations(setup: Any) -> None:

@@ -185,6 +185,20 @@ class DiagnosisRow(Base):
     document: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 
+class InvestigationRunRow(Base):
+    """Versioned, append-only audit artifact for one bounded diagnosis run."""
+
+    __tablename__ = "investigation_runs"
+
+    diagnosis_run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    incident_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("incidents.incident_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    artifact_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    document: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
 class ReportRow(Base):
     """An immutable incident report snapshot pinned to one diagnosis run."""
 

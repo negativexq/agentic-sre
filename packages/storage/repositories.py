@@ -40,6 +40,7 @@ from packages.storage.models import (
     EvidenceRow,
     IncidentEventRow,
     IncidentRow,
+    InvestigationRunRow,
     LogObservationRow,
     ObjectVersionRow,
     ReportRow,
@@ -785,6 +786,8 @@ class DiagnosisRepository:
         document: dict[str, Any],
         created_at: datetime,
         run_id: str | None = None,
+        *,
+        commit: bool = True,
     ) -> None:
         self._session.add(
             DiagnosisRow(
@@ -797,7 +800,8 @@ class DiagnosisRepository:
                 document=document,
             )
         )
-        self._session.commit()
+        if commit:
+            self._session.commit()
 
     def latest(self, incident_id: object) -> dict[str, Any] | None:
         row = self._session.scalars(
@@ -915,6 +919,70 @@ class ReportRepository:
             statement.order_by(desc(ReportRow.created_at), desc(ReportRow.report_id)).limit(limit)
         ).all()
         return [dict(row.document) for row in rows]
+
+
+class InvestigationRunRepository:
+    """Append-only persistence for a structured bounded-investigation result."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def save(
+        self,
+        *,
+        diagnosis_run_id: str,
+        incident_id: object,
+        artifact_version: str,
+        created_at: datetime,
+        document: dict[str, Any],
+        commit: bool = True,
+    ) -> None:
+        if not diagnosis_run_id:
+            raise ValueError("diagnosis_run_id is required")
+        if not artifact_version:
+            raise ValueError("artifact_version is required")
+        self._session.add(
+            InvestigationRunRow(
+                diagnosis_run_id=diagnosis_run_id,
+                incident_id=incident_id,
+                artifact_version=artifact_version,
+                created_at=created_at,
+                document=document,
+            )
+        )
+        if commit:
+            self._session.commit()
+
+    def get(self, diagnosis_run_id: str) -> dict[str, Any] | None:
+        row = self._session.get(InvestigationRunRow, diagnosis_run_id)
+        if row is None:
+            return None
+        return {
+            "diagnosis_run_id": row.diagnosis_run_id,
+            "incident_id": str(row.incident_id),
+            "artifact_version": row.artifact_version,
+            "created_at": row.created_at.isoformat(),
+            "document": dict(row.document),
+        }
+
+    def latest_for_incident(self, incident_id: object) -> dict[str, Any] | None:
+        row = self._session.scalars(
+            select(InvestigationRunRow)
+            .where(InvestigationRunRow.incident_id == incident_id)
+            .order_by(
+                desc(InvestigationRunRow.created_at), desc(InvestigationRunRow.diagnosis_run_id)
+            )
+            .limit(1)
+        ).first()
+        if row is None:
+            return None
+        return {
+            "diagnosis_run_id": row.diagnosis_run_id,
+            "incident_id": str(row.incident_id),
+            "artifact_version": row.artifact_version,
+            "created_at": row.created_at.isoformat(),
+            "document": dict(row.document),
+        }
 
 
 class EmailDeliveryRepository:

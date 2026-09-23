@@ -40,6 +40,7 @@ from packages.storage import (
     IncidentEventRepository,
     IncidentNotFoundError,
     IncidentRepository,
+    InvestigationRunRepository,
     LogObservationRepository,
     ObjectVersionRepository,
 )
@@ -47,6 +48,7 @@ from packages.storage import (
 logger = logging.getLogger(__name__)
 
 _TERMINAL_STATUSES = frozenset({"RESOLVED", "CLOSED", "FAILED"})
+_INVESTIGATION_ARTIFACT_VERSION = "1.0"
 
 
 @dataclass(frozen=True)
@@ -333,8 +335,10 @@ class DiagnosisService:
             prometheus_reader=self.prometheus_reader,
         )
         bounded_policy = self.bounded_policy_factory()
+        investigation_result = None
         if bounded_policy is not None:
-            diagnosis = investigate_diagnosis(source, policy=bounded_policy).diagnosis
+            investigation_result = investigate_diagnosis(source, policy=bounded_policy)
+            diagnosis = investigation_result.diagnosis
         else:
             diagnosis = diagnose(source, investigator=self.investigator_factory())
         leading = diagnosis.hypothesis.causal_actor.canonical if diagnosis.hypothesis else None
@@ -351,11 +355,26 @@ class DiagnosisService:
         )
         # Stamp the stored row with its run id, so the UI can render the timeline
         # of exactly the run that produced this diagnosis rather than inferring it
-        # from "latest completed event". The document stays the pure diagnosis.
+        # from "latest completed event". The diagnosis stays a pure Diagnosis;
+        # the bounded investigation has its own versioned run artifact.
         with self.session_factory() as session:
             DiagnosisRepository(session).save(
-                incident_id, diagnosis.model_dump(mode="json"), self.clock(), run_id=run_id
+                incident_id,
+                diagnosis.model_dump(mode="json"),
+                self.clock(),
+                run_id=run_id,
+                commit=False,
             )
+            if investigation_result is not None:
+                InvestigationRunRepository(session).save(
+                    diagnosis_run_id=run_id,
+                    incident_id=incident_id,
+                    artifact_version=_INVESTIGATION_ARTIFACT_VERSION,
+                    created_at=self.clock(),
+                    document=investigation_result.model_dump(mode="json"),
+                    commit=False,
+                )
+            session.commit()
         self._emit(
             incident_id,
             correlation_id,

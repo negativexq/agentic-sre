@@ -13,7 +13,7 @@ owns the diagnosis.
 ### At a glance
 
 - **[84% exact root-cause accuracy](evals/results/v1.1.2/README.md)** — 26/31 against ITBench-Lite ground truth, over every scenario whose published label is matchable.
-- **[24/25 on the live suite](evals/results/live-suite-2026-09-22.md)** — 25 faults staged on a real cluster, graded end to end, zero fabrications (a separate in-house measurement, not combined with the above).
+- **[25/25 on the live suite](evals/results/live-suite-2026-09-23.md)** — 25 faults staged on a real cluster, graded end to end, zero fabrications, zero model calls (a separate in-house measurement, not combined with the above).
 - **0 model calls** — the measured benchmark path is fully deterministic.
 - **Bounded investigation** — the frozen TEST25 run used six validated physical reads per incident, one read at a time.
 - **Evidence-backed RCA** — observations become normalized Findings before they can change a diagnosis.
@@ -61,12 +61,21 @@ the diagnosis the control plane actually stored.
 
 | Tier | Scenarios | Correct |
 | --- | ---: | ---: |
-| DEV | 19 | 18 |
+| DEV | 19 | 19 |
 | **HOLDOUT** | **6** | **6** |
-| **Total** | **25** | **[24/25 (96%)](evals/results/live-suite-2026-09-22.md)** |
+| **Total** | **25** | **[25/25 (100%)](evals/results/live-suite-2026-09-23.md)** |
 
 Zero fabrications: every scenario that staged a real change had its actor named,
-and every scenario that staged no cluster change was correctly not resolved.
+and every scenario that staged no cluster change was correctly not resolved. The
+[2026-09-23 run](evals/results/live-suite-2026-09-23.md) re-anchors the result to
+current `HEAD` after the UI/productization track (control-plane, storage, report,
+auth and migrations changed; `packages/rca/` did not). Model calls are verified
+against the cluster at 0. The one delta from the prior
+[24/25 run](evals/results/live-suite-2026-09-22.md) is a single borderline
+scenario that flipped correct — run-to-run live variance, not a code change; the
+resolution distribution (0 `RESOLVED` / 14 `AMBIGUOUS` / 11
+`INSUFFICIENT_EVIDENCE`) is identical across both runs.
+
 This is a **separate** in-house measurement — its labels have no external
 validity, so it is never combined with the ITBench-Lite number above. The
 [methodology](docs/benchmarks/live-suite.md) documents what the single-node

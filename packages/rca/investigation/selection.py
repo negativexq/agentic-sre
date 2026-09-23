@@ -258,6 +258,7 @@ def rank_observation_candidates(
     diagnosis: Diagnosis,
     attempted_observations: Sequence[str] = (),
     previous_investigations: Sequence[InvestigationLedgerEntry] = (),
+    require_discriminator: bool = False,
 ) -> tuple[ScoredObservationCandidate, ...]:
     """Score and order physical candidates without performing a read."""
     scored = tuple(
@@ -269,7 +270,17 @@ def rank_observation_candidates(
         )
         for candidate in candidates
     )
-    return tuple(sorted((item for item in scored if item.utility.admissible), key=utility_sort_key))
+    return tuple(
+        sorted(
+            (
+                item
+                for item in scored
+                if item.utility.admissible
+                and (not require_discriminator or item.utility.discriminating_gap_coverage > 0)
+            ),
+            key=utility_sort_key,
+        )
+    )
 
 
 def _representative_gap(
@@ -355,22 +366,22 @@ def candidate_to_action(
         f"{utility.dimension_coverage}"
     )
     if discriminator is not None:
-        supported_ids = sorted(
+        supported_count = len(
             {
                 state_id
                 for outcome in discriminator.support_outcomes
                 for state_id in (*outcome.hypothesis_ids, *outcome.alternative_ids)
             }
         )
-        competing_ids = sorted(
+        competing_count = len(
             {
                 *discriminator.comparison_hypothesis_ids,
                 *discriminator.comparison_alternative_ids,
             }
         )
         rationale += (
-            f"; discriminator gap={gap_id}; supports={','.join(supported_ids)}; "
-            f"competes={','.join(competing_ids)}; NO_DATA/UNKNOWN are non-discriminating"
+            f"; discriminator gap={gap_id}; positive-states={supported_count}; "
+            f"competing-states={competing_count}; NO_DATA/UNKNOWN are non-discriminating"
         )
     return InvestigationAction(
         action="inspect",
@@ -390,6 +401,7 @@ def select_observation_candidate(
     attempted_observations: Sequence[str] = (),
     previous_investigations: Sequence[InvestigationLedgerEntry] = (),
     max_tool_calls_per_gap: int | None = None,
+    require_discriminator: bool = False,
 ) -> ScoredObservationCandidate | None:
     """Build, rank, and select one currently admissible physical read."""
     candidates = build_observation_candidates(
@@ -402,6 +414,7 @@ def select_observation_candidate(
         diagnosis=diagnosis,
         attempted_observations=attempted_observations,
         previous_investigations=previous_investigations,
+        require_discriminator=require_discriminator,
     )
     for item in ranked:
         if (

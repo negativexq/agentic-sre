@@ -73,6 +73,7 @@ class InvestigationPolicyContext:
     previous_investigations: tuple[InvestigationLedgerEntry, ...] = ()
     last_rejection: tuple[str, str, str] | None = None
     structural_alternatives: tuple[StructuralAlternative, ...] = ()
+    candidate_actions: tuple[InvestigationAction, ...] = ()
 
 
 class InvestigationPolicy(Protocol):

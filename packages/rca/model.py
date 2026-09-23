@@ -752,6 +752,21 @@ class InvestigationGapState(BaseModel):
     resolvability: GapResolvability
 
 
+class InvestigationDiscriminatorAudit(BaseModel):
+    """Machine-readable competing states for one selected bounded read."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    gap_id: str
+    dimension: GapDimension
+    missing_fact: str
+    support_outcomes: tuple[GapOutcome, ...] = ()
+    comparison_hypothesis_ids: tuple[str, ...] = ()
+    comparison_alternative_ids: tuple[str, ...] = ()
+    no_data_outcomes: tuple[GapOutcome, ...] = ()
+    no_data_is_discriminating: bool = False
+
+
 class InvestigationActionAudit(BaseModel):
     """Structured lifecycle and decision accounting for one selected action."""
 
@@ -763,6 +778,7 @@ class InvestigationActionAudit(BaseModel):
     intent_kind: str | None = None
     gap_dimension: GapDimension | None = None
     missing_fact: str | None = None
+    discriminator: InvestigationDiscriminatorAudit | None = None
     authorization_result: Literal["AUTHORIZED", "REJECTED", "POLICY_STOP"] = "REJECTED"
     authorization_reason: str = ""
     backend_execution_status: InvestigationExecutionStatus = (

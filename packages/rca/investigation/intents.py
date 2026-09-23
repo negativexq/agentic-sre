@@ -354,11 +354,14 @@ def build_observation_bundles(
     candidates: Sequence[ObservationCandidate],
     attempted_observations: Sequence[str] = (),
     previous_investigations: Sequence[InvestigationLedgerEntry] = (),
+    require_discriminator: bool = False,
 ) -> tuple[ObservationBundle, ...]:
     """Group every currently admissible physical candidate into one intent."""
     phase = derive_investigation_phase(case, diagnosis)
     grouped: dict[InvestigationIntentKind, list[ObservationCandidate]] = {}
     for candidate in candidates:
+        if require_discriminator and not candidate.discriminators:
+            continue
         if not is_observation_candidate_admissible(
             candidate,
             attempted_observations=attempted_observations,
@@ -414,7 +417,8 @@ def build_observation_bundles(
     admissible_ids = {
         candidate.candidate_id
         for candidate in candidates
-        if is_observation_candidate_admissible(
+        if (not require_discriminator or candidate.discriminators)
+        and is_observation_candidate_admissible(
             candidate,
             attempted_observations=attempted_observations,
             previous_investigations=previous_investigations,
@@ -576,6 +580,7 @@ def select_intent_physical_candidate(
     previous_investigations: Sequence[InvestigationLedgerEntry] = (),
     max_tool_calls_per_gap: int | None = None,
     exploration_covered_atoms: Sequence[tuple[str, str]] = (),
+    require_discriminator: bool = False,
 ) -> ScoredObservationCandidate | None:
     """Select one physical read after A6.2 ranking and exploration tie-breaking."""
     ranked = rank_observation_candidates(
@@ -583,6 +588,7 @@ def select_intent_physical_candidate(
         diagnosis=diagnosis,
         attempted_observations=attempted_observations,
         previous_investigations=previous_investigations,
+        require_discriminator=require_discriminator,
     )
     executable = tuple(
         scored
@@ -620,6 +626,7 @@ def select_observation_intent_candidate(
     previous_investigations: Sequence[InvestigationLedgerEntry] = (),
     max_tool_calls_per_gap: int | None = None,
     exploration_covered_atoms: Sequence[tuple[str, str]] = (),
+    require_discriminator: bool = False,
 ) -> SelectedObservationIntent | None:
     candidates = build_observation_candidates(
         case=case, diagnosis=diagnosis, engine_config=engine_config
@@ -631,6 +638,7 @@ def select_observation_intent_candidate(
         candidates=candidates,
         attempted_observations=attempted_observations,
         previous_investigations=previous_investigations,
+        require_discriminator=require_discriminator,
     )
     ranked_bundles = rank_observation_bundles(
         bundles=bundles,
@@ -654,6 +662,7 @@ def select_observation_intent_candidate(
             previous_investigations=previous_investigations,
             max_tool_calls_per_gap=max_tool_calls_per_gap,
             exploration_covered_atoms=exploration_covered_atoms,
+            require_discriminator=require_discriminator,
         )
         if selected is None:
             continue

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -9,7 +10,7 @@ import pytest
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 from packages.rca.engine import build_case, diagnose_case
-from packages.rca.investigation.candidates import ObservationCandidate
+from packages.rca.investigation.candidates import CandidateDiscriminator, ObservationCandidate
 from packages.rca.investigation.graph import build_investigation_state, investigate_diagnosis
 from packages.rca.investigation.intents import (
     IntentMenuItem,
@@ -19,6 +20,7 @@ from packages.rca.investigation.intents import (
 from packages.rca.investigation.policy import (
     INTENT_SELECTION_SCHEMA,
     LLMIntentPolicy,
+    ScriptedInvestigationPolicy,
 )
 from packages.rca.investigation.state import InvestigationConfig
 from packages.rca.investigation.tools import make_observation
@@ -34,8 +36,11 @@ from packages.rca.model import (
     Diagnosis,
     EntityRef,
     GapDimension,
+    GapOutcome,
+    GapOutcomeKind,
     GapResolvability,
     InformationGap,
+    InvestigationAction,
     InvestigationObservation,
     InvestigationQuery,
 )
@@ -220,7 +225,25 @@ def _graph_fixture(
             gap_ids=(f"gap-{index}",),
             dimensions=(dimension,),
             hypothesis_ids=(),
-            alternative_ids=(),
+            alternative_ids=(f"alt-{index}",),
+            discriminators=(
+                CandidateDiscriminator(
+                    gap_id=f"gap-{index}",
+                    dimension=dimension,
+                    missing_fact="bounded fact",
+                    support_outcomes=(
+                        GapOutcome(
+                            kind=GapOutcomeKind.SUPPORTS,
+                            alternative_ids=(f"alt-{index}",),
+                            condition="positive target observation",
+                            implication="supports this state",
+                        ),
+                    ),
+                    comparison_hypothesis_ids=(),
+                    comparison_alternative_ids=(f"other-alt-{index}",),
+                    no_data_outcomes=(),
+                ),
+            ),
         )
         for index, (capability, dimension) in enumerate(capabilities)
     )
@@ -228,7 +251,16 @@ def _graph_fixture(
         InformationGap(
             gap_id=candidate.gap_ids[0],
             dimension=candidate.dimensions[0],
+            alternative_ids=candidate.alternative_ids,
             missing_fact="bounded fact",
+            discriminating_outcomes=(
+                GapOutcome(
+                    kind=GapOutcomeKind.SUPPORTS,
+                    alternative_ids=candidate.alternative_ids,
+                    condition="positive target observation",
+                    implication="supports this state",
+                ),
+            ),
             authorized_queries=(
                 AuthorizedQuery(capability=candidate.capability, target=candidate.target),
             ),
@@ -259,6 +291,48 @@ def test_graph_single_intent_bypasses_model(monkeypatch: pytest.MonkeyPatch) -> 
     assert client.calls == 0
     assert tool.calls == 1
     assert result.tool_calls == 1
+    assert result.action_audits[0].discriminator is not None
+    assert result.action_audits[0].discriminator.gap_id == result.action_audits[0].action.gap_id
+    assert result.action_audits[0].discriminator.no_data_is_discriminating is False
+
+
+def test_action_without_candidate_discriminator_is_rejected_before_execution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source, diagnosis, candidates = _graph_fixture((("events", GapDimension.EVENT_SEQUENCE),))
+    candidate = candidates[0]
+    monkeypatch.setattr(
+        "packages.rca.investigation.graph.build_observation_candidates",
+        lambda **_: (replace(candidate, discriminators=()),),
+    )
+    tool = _NoDataTool("events")
+    policy = ScriptedInvestigationPolicy(
+        actions=[
+            InvestigationAction(
+                action="inspect",
+                gap_id=candidate.gap_ids[0],
+                capability=candidate.capability,
+                target=candidate.target,
+                query=candidate.query,
+                rationale="attempt a legal but non-discriminating read",
+            )
+        ]
+    )
+
+    result = investigate_diagnosis(
+        source,
+        diagnosis=diagnosis,
+        initial_case=build_case(source),
+        policy=policy,
+        tools={"events": tool},
+        config=InvestigationConfig(max_turns=1),
+    )
+
+    assert result.tool_calls == 0
+    assert tool.calls == 0
+    assert result.action_audits[0].authorization_result == "REJECTED"
+    assert result.action_audits[0].backend_execution_status.value == "NOT_EXECUTED"
+    assert "positive discriminator" in result.action_audits[0].authorization_reason
     assert not any("deterministic-fallback" in step.detail for step in result.diagnosis.steps)
 
 

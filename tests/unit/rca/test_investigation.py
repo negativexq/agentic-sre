@@ -41,7 +41,6 @@ from packages.rca.model import (
     HypothesisDiagnostics,
     InvestigationAction,
     InvestigationObservation,
-    InvestigationQuery,
     InvestigationStopReason,
     Resolution,
     Symptoms,
@@ -206,67 +205,23 @@ class _ContextCapturePolicy:
         return self.actions.pop(0)
 
 
-class _ProgressThenNoDataTool:
-    name = "events"
-
-    def __init__(self, finding: Finding) -> None:
-        self.finding = finding
-        self.calls = 0
-
-    def execute(self, case: Case, gap: Any, target: EntityRef) -> InvestigationObservation:
-        del case
-        self.calls += 1
-        if self.calls == 1:
-            return make_observation(
-                gap=gap,
-                capability=self.name,
-                target=target,
-                payload={"findings": [self.finding.model_dump(mode="json")]},
-                evidence_refs=self.finding.evidence_ids,
-                observed_at=self.finding.at,
-            )
-        return make_observation(gap=gap, capability=self.name, target=target, payload={})
-
-
-class _ChangingGapPolicy:
+class _CandidateAwareNoProgressPolicy:
     counts_as_model = False
 
-    def __init__(self, first_target: EntityRef, second_target: EntityRef) -> None:
-        self.first_target = first_target
-        self.second_target = second_target
+    def __init__(self) -> None:
         self.calls = 0
+        self.offered: list[tuple[InvestigationAction, ...]] = []
+        self.selected: list[InvestigationAction] = []
 
     def choose_action(self, context: InvestigationPolicyContext) -> InvestigationAction:
-        gap = next(gap for gap in context.gaps if "events" in gap.candidate_tools)
-        target = self.first_target if self.calls == 0 else self.second_target
-        if self.calls >= 2:
-            target = self.first_target
-        self.calls += 1
-        action = _policy_action(gap.gap_id, target)
-        if self.calls >= 3:
-            action = action.model_copy(update={"query": InvestigationQuery(contains=("retry",))})
-        return action
-
-
-def _rebuild_with_changed_gap_fingerprint(base: Case, findings: tuple[Finding, ...]) -> Case:
-    if not findings:
-        return base
-    hypotheses = [
-        hypothesis.model_copy(
-            update={
-                "hypothesis_id": f"{hypothesis.hypothesis_id}:observed",
-                "findings": (*hypothesis.findings, *findings),
-                "initiating_findings": (*hypothesis.initiating_findings, *findings),
-            }
+        candidates = tuple(
+            action for action in context.candidate_actions if action.capability == "events"
         )
-        for hypothesis in base.hypotheses
-    ]
-    return replace(
-        base,
-        findings=[*base.findings, *findings],
-        hypotheses=hypotheses,
-        candidates=[hypothesis_candidate(item) for item in hypotheses],
-    )
+        self.offered.append(candidates)
+        action = candidates[0]
+        self.calls += 1
+        self.selected.append(action)
+        return action
 
 
 def _rebuild_with_findings(base: Case, findings: tuple[Finding, ...]) -> Case:
@@ -702,12 +657,11 @@ def test_duplicate_evidence_from_a_different_action_is_no_progress() -> None:
     assert result.tool_calls == 2
 
 
-def test_no_progress_compares_against_the_previous_changed_gap_set() -> None:
-    case, left, right = _case()
+def test_valid_discriminating_candidate_reads_reach_no_progress() -> None:
+    case, _left, _right = _case()
     initial = diagnose_case(case)
-    progress = _finding(right, FindingKind.CONFIG_CHANGE, "config:progress")
-    tool = _ProgressThenNoDataTool(progress)
-    policy = _ChangingGapPolicy(right, left)
+    tool = _NoDataTool()
+    policy = _CandidateAwareNoProgressPolicy()
 
     result = investigate_diagnosis(
         case.source,
@@ -716,14 +670,31 @@ def test_no_progress_compares_against_the_previous_changed_gap_set() -> None:
         config=InvestigationConfig(max_no_progress_rounds=2),
         policy=policy,
         tools={"events": tool},
-        rebuild_case=_rebuild_with_changed_gap_fingerprint,
     )
 
     assert result.initial_resolution is Resolution.AMBIGUOUS
     assert result.final_resolution is Resolution.AMBIGUOUS
     assert result.stop_reason.value == "NO_PROGRESS"
-    assert policy.calls == 3
-    assert tool.calls == 3
+    assert result.rejected_actions == 0
+    assert policy.calls == 2
+    assert tool.calls == 2
+    assert len(result.observations) == 2
+    assert len(policy.selected) == 2
+    assert policy.selected[0] != policy.selected[1]
+    for audit, selected, offered in zip(
+        result.action_audits, policy.selected, policy.offered, strict=True
+    ):
+        assert selected in offered
+        assert audit.action == selected
+        assert audit.discriminator is not None
+        assert audit.discriminator.gap_id == selected.gap_id
+        assert audit.authorization_result == "AUTHORIZED"
+        assert audit.backend_execution_status.value == "SUCCEEDED"
+        assert audit.observation_outcome is GapOutcomeKind.NO_DATA
+        assert audit.decision_state_changed is False
+        assert audit.resolution_before == audit.resolution_after
+        assert audit.hypothesis_states_before == audit.hypothesis_states_after
+        assert audit.leading_actor_before == audit.leading_actor_after
     assert any("no-progress=2" in step.detail for step in result.diagnosis.steps)
 
 

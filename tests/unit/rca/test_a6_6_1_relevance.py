@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from packages.rca.engine import Case, build_case, diagnose_case
-from packages.rca.investigation.candidates import ObservationCandidate
+from packages.rca.investigation.candidates import CandidateDiscriminator, ObservationCandidate
 from packages.rca.investigation.graph import investigate_diagnosis
 from packages.rca.investigation.intents import (
     IntentUtility,
@@ -26,6 +26,8 @@ from packages.rca.model import (
     Diagnosis,
     EntityRef,
     GapDimension,
+    GapOutcome,
+    GapOutcomeKind,
     GapResolvability,
     InformationGap,
     InvestigationObservation,
@@ -67,7 +69,25 @@ def _fixture() -> tuple[InMemorySource, Diagnosis, tuple[ObservationCandidate, .
             gap_ids=(f"gap-{name}",),
             dimensions=(GapDimension.EVENT_SEQUENCE,),
             hypothesis_ids=(),
-            alternative_ids=(),
+            alternative_ids=(f"alternative-{name}",),
+            discriminators=(
+                CandidateDiscriminator(
+                    gap_id=f"gap-{name}",
+                    dimension=GapDimension.EVENT_SEQUENCE,
+                    missing_fact="bounded fact",
+                    support_outcomes=(
+                        GapOutcome(
+                            kind=GapOutcomeKind.SUPPORTS,
+                            alternative_ids=(f"alternative-{name}",),
+                            condition="positive event for this alternative",
+                            implication="supports this alternative over a competing state",
+                        ),
+                    ),
+                    comparison_hypothesis_ids=(),
+                    comparison_alternative_ids=("competing-alternative",),
+                    no_data_outcomes=(),
+                ),
+            ),
         )
         for name in ("a", "b", "c", "d")
     )
@@ -75,7 +95,16 @@ def _fixture() -> tuple[InMemorySource, Diagnosis, tuple[ObservationCandidate, .
         InformationGap(
             gap_id=candidate.gap_ids[0],
             dimension=GapDimension.EVENT_SEQUENCE,
+            alternative_ids=candidate.alternative_ids,
             missing_fact="bounded fact",
+            discriminating_outcomes=(
+                GapOutcome(
+                    kind=GapOutcomeKind.SUPPORTS,
+                    alternative_ids=candidate.alternative_ids,
+                    condition="positive event for this alternative",
+                    implication="supports this alternative over a competing state",
+                ),
+            ),
             authorized_queries=(AuthorizedQuery(capability="events", target=candidate.target),),
             resolvability=GapResolvability.RESOLVABLE,
         )

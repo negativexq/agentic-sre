@@ -8,7 +8,7 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 from packages.rca.engine import Case, EngineConfig, build_case, diagnose_case
 from packages.rca.investigation.actions import observation_identity
-from packages.rca.investigation.candidates import ObservationCandidate
+from packages.rca.investigation.candidates import CandidateDiscriminator, ObservationCandidate
 from packages.rca.investigation.graph import (
     _select_pending_incident_change_discovery,
     build_investigation_state,
@@ -35,6 +35,8 @@ from packages.rca.model import (
     Diagnosis,
     EntityRef,
     GapDimension,
+    GapOutcome,
+    GapOutcomeKind,
     GapResolvability,
     InformationGap,
     InvestigationObservation,
@@ -69,7 +71,25 @@ def _candidate(
         gap_ids=(gap_id,),
         dimensions=(dimension,),
         hypothesis_ids=(),
-        alternative_ids=(),
+        alternative_ids=(f"alt-{candidate_id}",),
+        discriminators=(
+            CandidateDiscriminator(
+                gap_id=gap_id,
+                dimension=dimension,
+                missing_fact="bounded fact",
+                support_outcomes=(
+                    GapOutcome(
+                        kind=GapOutcomeKind.SUPPORTS,
+                        alternative_ids=(f"alt-{candidate_id}",),
+                        condition="positive target observation",
+                        implication="supports this state",
+                    ),
+                ),
+                comparison_hypothesis_ids=(),
+                comparison_alternative_ids=(f"other-alt-{candidate_id}",),
+                no_data_outcomes=(),
+            ),
+        ),
     )
 
 
@@ -96,7 +116,16 @@ def _fixture() -> tuple[Case, Diagnosis, ObservationCandidate, ObservationCandid
         InformationGap(
             gap_id=candidate.gap_ids[0],
             dimension=candidate.dimensions[0],
+            alternative_ids=candidate.alternative_ids,
             missing_fact="bounded fact",
+            discriminating_outcomes=(
+                GapOutcome(
+                    kind=GapOutcomeKind.SUPPORTS,
+                    alternative_ids=candidate.alternative_ids,
+                    condition="positive target observation",
+                    implication="supports this state",
+                ),
+            ),
             authorized_queries=(
                 AuthorizedQuery(capability=candidate.capability, target=candidate.target),
             ),

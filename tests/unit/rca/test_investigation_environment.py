@@ -10,7 +10,7 @@ from packages.rca.investigation.environment import SeedPolicy, initial_view, inv
 from packages.rca.investigation.graph import investigate_diagnosis
 from packages.rca.investigation.multi_step_search import query_templates, search_incident
 from packages.rca.investigation.opportunity_audit import audit_incident
-from packages.rca.investigation.policy import ScriptedInvestigationPolicy
+from packages.rca.investigation.state import InvestigationPolicyContext
 from packages.rca.model import (
     Alert,
     ClusterEvent,
@@ -54,6 +54,27 @@ def _event(entity: EntityRef, reason: str, minute: float) -> ClusterEvent:
         count=1,
         evidence_id=f"event:{entity.canonical}:{reason}:{minute}",
     )
+
+
+class _TargetedCandidatePolicy:
+    counts_as_model = False
+
+    def __init__(self, capability: str, target: EntityRef) -> None:
+        self.capability = capability
+        self.target = target
+        self.offered: tuple[Any, ...] = ()
+        self.selected: Any = None
+
+    def choose_action(self, context: InvestigationPolicyContext) -> Any:
+        if self.selected is not None:
+            return InvestigationAction(action="stop", rationale="stop after the targeted read")
+        self.offered = context.candidate_actions
+        self.selected = next(
+            action
+            for action in self.offered
+            if action.capability == self.capability and action.target == self.target
+        )
+        return self.selected
 
 
 def _source_with_hidden_hpa_history(
@@ -144,23 +165,23 @@ def test_bounded_initial_view_can_resolve_from_real_history_query() -> None:
     gap = next(gap for gap in initial.information_gaps if gap.dimension.value == "FAILURE_ONSET")
     assert "history" in gap.candidate_tools
 
-    action = InvestigationAction(
-        action="inspect",
-        gap_id=gap.gap_id,
-        capability="history",
-        target=right_hpa,
-        query=InvestigationQuery(start=at(-30), end=at(30)),
-        rationale="inspect the wider HPA history",
-    )
+    policy = _TargetedCandidatePolicy("history", right_hpa)
     result = investigate_diagnosis(
         source,
-        policy=ScriptedInvestigationPolicy([action]),
+        policy=policy,
     )
 
     assert result.initial_resolution.value == "AMBIGUOUS"
     assert result.final_resolution.value == "RESOLVED"
     assert result.diagnosis.root_cause == right_hpa
     assert result.tool_calls == 1
+    audit = result.action_audits[0]
+    assert audit.action == policy.selected
+    assert policy.selected in policy.offered
+    assert audit.discriminator is not None
+    assert audit.discriminator.gap_id == gap.gap_id
+    assert audit.authorization_result == "AUTHORIZED"
+    assert audit.backend_execution_status.value == "SUCCEEDED"
     assert any(
         alternative.actor == right_hpa and alternative.status.value == "PROMOTED"
         for alternative in result.diagnosis.structural_alternatives

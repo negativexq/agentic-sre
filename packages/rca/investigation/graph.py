@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass, replace
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
@@ -25,7 +25,11 @@ from packages.rca.investigation.actions import (
     observation_identity,
     validate_action,
 )
-from packages.rca.investigation.candidates import ObservationCandidate, build_observation_candidates
+from packages.rca.investigation.candidates import (
+    CandidateDiscriminator,
+    ObservationCandidate,
+    build_observation_candidates,
+)
 from packages.rca.investigation.environment import (
     InvestigationBackend,
     initial_view,
@@ -83,8 +87,10 @@ from packages.rca.model import (
     GapResolvability,
     HypothesisEpistemicState,
     InformationGap,
+    InvestigationAction,
     InvestigationActionAudit,
     InvestigationActionStatus,
+    InvestigationDiscriminatorAudit,
     InvestigationExecutionStatus,
     InvestigationGapState,
     InvestigationHypothesisState,
@@ -413,6 +419,7 @@ def _selected_intent_for_candidate(
         candidates=candidates,
         attempted_observations=attempted_observations,
         previous_investigations=previous_investigations,
+        require_discriminator=True,
     )
     ranked_bundles = rank_observation_bundles(
         bundles=bundles,
@@ -487,7 +494,9 @@ def _select_pending_incident_change_discovery(
     pending = tuple(
         candidate
         for candidate in candidates
-        if candidate.capability == "incident_changes" and candidate.target.kind == "Namespace"
+        if candidate.capability == "incident_changes"
+        and candidate.target.kind == "Namespace"
+        and candidate.discriminators
     )
     if not pending:
         return None
@@ -573,8 +582,8 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             ),
         }
     diagnosis = state["current_diagnosis"]
-    gaps = _resolvable_gaps(diagnosis)
     case = rt.case_for(state.get("acquired_evidence_refs", ()), state["investigation_findings"])
+    gaps = _resolvable_gaps(diagnosis)
     baseline_intent = None
     if isinstance(rt.policy, (DeterministicIntentPolicy, LLMIntentPolicy)):
         baseline_intent = select_observation_intent_candidate(
@@ -585,6 +594,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             previous_investigations=tuple(state.get("ledger", ())),
             max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
             exploration_covered_atoms=state.get("exploration_covered_atoms", ()),
+            require_discriminator=True,
         )
         obligated = _select_pending_incident_change_discovery(
             baseline=baseline_intent,
@@ -624,6 +634,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         candidates = build_observation_candidates(
             case=case, diagnosis=diagnosis, engine_config=rt.engine_config
         )
+        candidates = tuple(item for item in candidates if item.discriminators)
         phase = derive_investigation_phase(case, diagnosis)
         bundles = build_observation_bundles(
             case=case,
@@ -631,6 +642,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             candidates=candidates,
             attempted_observations=state.get("attempted_observations", ()),
             previous_investigations=tuple(state.get("ledger", ())),
+            require_discriminator=True,
         )
         ranked_bundles = rank_observation_bundles(
             bundles=bundles,
@@ -781,6 +793,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                         previous_investigations=tuple(state.get("ledger", ())),
                         max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
                         exploration_covered_atoms=state.get("exploration_covered_atoms", ()),
+                        require_discriminator=True,
                     )
                     if focused_selected is not None:
                         selected_intent = SelectedObservationIntent(
@@ -798,6 +811,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                 attempted_observations=state.get("attempted_observations", ()),
                 previous_investigations=tuple(state.get("ledger", ())),
                 max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+                require_discriminator=True,
             )
         if selected is None:
             return {
@@ -873,6 +887,45 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             "model_calls": state["model_calls"],
             "trace_steps": _with_step(state, "select_action", detail),
         }
+    discriminator_candidates = build_observation_candidates(
+        case=case, diagnosis=diagnosis, engine_config=rt.engine_config
+    )
+    ranked_candidates = rank_observation_candidates(
+        candidates=discriminator_candidates,
+        diagnosis=diagnosis,
+        attempted_observations=state.get("attempted_observations", ()),
+        previous_investigations=tuple(state.get("ledger", ())),
+        require_discriminator=True,
+    )
+    candidate_actions = tuple(
+        action
+        for scored in ranked_candidates
+        if (
+            action := candidate_to_action(
+                scored,
+                diagnosis,
+                previous_investigations=tuple(state.get("ledger", ())),
+                max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+            )
+        )
+        is not None
+    )
+    if not candidate_actions and (
+        isinstance(rt.policy, LLMIntentPolicy) or getattr(rt.policy, "counts_as_model", False)
+    ):
+        return {
+            "stop_reason": InvestigationStopReason.NO_RESOLVABLE_GAP,
+            "turns": state["turns"] + 1,
+            "model_calls": state["model_calls"],
+            "trace_steps": _with_step(
+                state,
+                "select_action",
+                "no positive-discriminator candidate remains; policy was not invoked",
+            ),
+        }
+    if candidate_actions:
+        candidate_gap_ids = {action.gap_id for action in candidate_actions}
+        gaps = tuple(gap for gap in gaps if gap.gap_id in candidate_gap_ids)
     context = InvestigationPolicyContext(
         incident_id=state["incident_id"],
         diagnosis=diagnosis,
@@ -885,6 +938,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         previous_investigations=tuple(state.get("ledger", ())[-8:]),
         last_rejection=state.get("last_rejection"),
         structural_alternatives=diagnosis.structural_alternatives,
+        candidate_actions=candidate_actions,
     )
     before = _policy_calls(rt.policy)
     try:
@@ -947,6 +1001,55 @@ def _gap_states(diagnosis: Diagnosis) -> tuple[InvestigationGapState, ...]:
             resolvability=gap.resolvability,
         )
         for gap in sorted(diagnosis.information_gaps, key=lambda item: item.gap_id)
+    )
+
+
+def _discriminator_for_action(
+    *,
+    action: InvestigationAction,
+    case: Case,
+    diagnosis: Diagnosis,
+    engine_config: EngineConfig,
+) -> tuple[ObservationCandidate, CandidateDiscriminator] | None:
+    """Resolve the action to one exact candidate and deterministic proof."""
+    if (
+        action.action != "inspect"
+        or action.gap_id is None
+        or action.capability is None
+        or action.target is None
+    ):
+        return None
+    candidates = build_observation_candidates(
+        case=case, diagnosis=diagnosis, engine_config=engine_config
+    )
+    for candidate in candidates:
+        if (
+            candidate.capability != action.capability
+            or candidate.target != action.target
+            or (action.query is not None and candidate.query != action.query)
+        ):
+            continue
+        discriminator = next(
+            (item for item in candidate.discriminators if item.gap_id == action.gap_id),
+            None,
+        )
+        if discriminator is not None:
+            return candidate, discriminator
+    return None
+
+
+def _as_discriminator_audit(
+    discriminator: CandidateDiscriminator,
+) -> InvestigationDiscriminatorAudit:
+    return InvestigationDiscriminatorAudit(
+        gap_id=discriminator.gap_id,
+        dimension=discriminator.dimension,
+        missing_fact=discriminator.missing_fact,
+        support_outcomes=discriminator.support_outcomes,
+        comparison_hypothesis_ids=discriminator.comparison_hypothesis_ids,
+        comparison_alternative_ids=discriminator.comparison_alternative_ids,
+        no_data_outcomes=discriminator.no_data_outcomes,
+        no_data_is_discriminating=False,
     )
 
 
@@ -1031,6 +1134,17 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             "action_validation_status": InvestigationActionStatus.INVALID_EXHAUSTED,
             "trace_steps": _with_step(state, "rejected", "policy returned no action"),
         }
+    candidate_match = None
+    if action.action == "inspect":
+        case = rt.case_for(state.get("acquired_evidence_refs", ()), state["investigation_findings"])
+        candidate_match = _discriminator_for_action(
+            action=action,
+            case=case,
+            diagnosis=state["current_diagnosis"],
+            engine_config=rt.engine_config,
+        )
+        if candidate_match is not None and action.query is None:
+            action = action.model_copy(update={"query": candidate_match[0].query})
     result = validate_action(
         action,
         gaps=_resolvable_gaps(state["current_diagnosis"]),
@@ -1040,6 +1154,20 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         tool_calls=state["tool_calls"],
         config=rt.config,
     )
+    discriminator = None
+    if result.valid and action.action == "inspect":
+        if candidate_match is None:
+            result = replace(
+                result,
+                valid=False,
+                reason=(
+                    "selected action has no matching deterministic positive discriminator "
+                    "for its exact candidate query"
+                ),
+            )
+        else:
+            _, candidate_discriminator = candidate_match
+            discriminator = _as_discriminator_audit(candidate_discriminator)
     if not result.valid:
         invalid = state["invalid_actions"] + 1
         stop = (
@@ -1130,6 +1258,7 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         intent_kind=state.get("pending_intent_kind"),
         gap_dimension=gap.dimension,
         missing_fact=gap.missing_fact,
+        discriminator=discriminator,
         authorization_result="AUTHORIZED",
         authorization_reason="capability/target pair is authorized for the selected resolvable gap",
         **_audit_before_state(state["current_diagnosis"]),
@@ -1146,6 +1275,7 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         ),
         "stop_reason": None,
         "action_validation_status": InvestigationActionStatus.VALID_INSPECT,
+        "pending_action": action,
         "last_rejection": None,
         "trace_steps": _with_step(state, "validate_action", "allowed read-only action"),
     }

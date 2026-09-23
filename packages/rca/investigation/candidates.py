@@ -187,14 +187,26 @@ def _candidate_discriminator(
     *,
     plausible_hypothesis_ids: set[str],
     plausible_alternative_ids: set[str],
+    target_hypothesis_ids: set[str] | None = None,
+    target_alternative_ids: set[str] | None = None,
 ) -> CandidateDiscriminator | None:
     supports = tuple(
         outcome
         for outcome in gap.discriminating_outcomes
         if outcome.kind is GapOutcomeKind.SUPPORTS
         and (
-            set(outcome.hypothesis_ids) & plausible_hypothesis_ids
-            or set(outcome.alternative_ids) & plausible_alternative_ids
+            set(outcome.hypothesis_ids)
+            & (
+                target_hypothesis_ids
+                if target_hypothesis_ids is not None
+                else plausible_hypothesis_ids
+            )
+            or set(outcome.alternative_ids)
+            & (
+                target_alternative_ids
+                if target_alternative_ids is not None
+                else plausible_alternative_ids
+            )
         )
     )
     supported_hypothesis_ids = {
@@ -239,9 +251,19 @@ def build_observation_candidates(
     """Coalesce resolvable logical needs into explicit physical reads."""
     accumulators: dict[str, _CandidateAccumulator] = {}
     plausible_hypothesis_ids, plausible_alternative_ids = _plausible_state_ids(diagnosis)
+    hypotheses = (
+        *((diagnosis.hypothesis,) if diagnosis.hypothesis is not None else ()),
+        *diagnosis.ambiguous_hypotheses,
+        *diagnosis.alternative_hypotheses,
+    )
     for gap in diagnosis.information_gaps:
         if gap.resolvability is not GapResolvability.RESOLVABLE:
             continue
+        targets_by_capability: dict[str, set[str]] = {}
+        for authorized_query in gap.authorized_queries:
+            targets_by_capability.setdefault(authorized_query.capability, set()).add(
+                authorized_query.target.canonical
+            )
         for authorized in gap.authorized_queries:
             query = resolve_effective_query(
                 capability=authorized.capability,
@@ -263,10 +285,28 @@ def build_observation_candidates(
             accumulator.dimensions.add(gap.dimension)
             accumulator.hypothesis_ids.update(gap.hypothesis_ids)
             accumulator.alternative_ids.update(gap.alternative_ids)
+            target_specific = len(targets_by_capability[authorized.capability]) > 1
+            if target_specific:
+                target_hypothesis_ids = {
+                    hypothesis.hypothesis_id
+                    for hypothesis in hypotheses
+                    if hypothesis.causal_actor == authorized.target
+                }
+                target_alternative_ids = set(authorized.alternative_ids) | {
+                    alternative.alternative_id
+                    for alternative in diagnosis.structural_alternatives
+                    if alternative.actor == authorized.target
+                    or authorized.target in alternative.observation_targets
+                }
+            else:
+                target_hypothesis_ids = None
+                target_alternative_ids = None
             discriminator = _candidate_discriminator(
                 gap,
                 plausible_hypothesis_ids=plausible_hypothesis_ids,
                 plausible_alternative_ids=plausible_alternative_ids,
+                target_hypothesis_ids=target_hypothesis_ids,
+                target_alternative_ids=target_alternative_ids,
             )
             if discriminator is not None:
                 accumulator.discriminators[gap.gap_id] = discriminator

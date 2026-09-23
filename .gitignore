@@ -18,5 +18,8 @@ build/
 *.log
 .local/
 
+# Local editor/agent config
+.claude/
+
 # macOS
 .DS_Store

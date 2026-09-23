@@ -8,6 +8,7 @@ import pytest
 from packages.rca.engine import Case, EngineConfig, build_case, diagnose_case
 from packages.rca.investigation.actions import observation_identity
 from packages.rca.investigation.candidates import (
+    CandidateDiscriminator,
     ObservationCandidate,
     build_observation_candidates,
 )
@@ -63,17 +64,36 @@ def _gap(
     from packages.rca.model import AuthorizedQuery
 
     target = target or _entity("Deployment", gap_id)
+    candidate_alternative_ids = alternative_ids or (f"alt-{gap_id}",)
+    support_hypothesis_ids = hypothesis_ids
+    support_alternative_ids = candidate_alternative_ids if not hypothesis_ids else ()
     return InformationGap(
         gap_id=gap_id,
         dimension=dimension,
         hypothesis_ids=hypothesis_ids,
-        alternative_ids=alternative_ids,
+        alternative_ids=candidate_alternative_ids,
         missing_fact=gap_id,
+        discriminating_outcomes=(
+            GapOutcome(
+                kind=GapOutcomeKind.SUPPORTS,
+                hypothesis_ids=support_hypothesis_ids,
+                alternative_ids=support_alternative_ids,
+                condition=f"the missing fact supports {gap_id}",
+                implication="positive evidence may distinguish the target state",
+            ),
+            GapOutcome(
+                kind=GapOutcomeKind.NO_DATA,
+                hypothesis_ids=hypothesis_ids,
+                alternative_ids=candidate_alternative_ids,
+                condition="the source returns no observation",
+                implication="no state is contradicted",
+            ),
+        ),
         authorized_queries=(
             AuthorizedQuery(
                 capability=capability,
                 target=target,
-                alternative_ids=alternative_ids,
+                alternative_ids=candidate_alternative_ids,
             ),
         ),
         resolvability=GapResolvability.RESOLVABLE,
@@ -88,11 +108,31 @@ def _diagnosis(
     alternatives: tuple[StructuralAlternative, ...] = (),
 ) -> Diagnosis:
     diagnosis = diagnose_case(case)
+    explicit = {item.alternative_id: item for item in alternatives}
+    for gap in gaps:
+        for alternative_id in gap.alternative_ids:
+            explicit.setdefault(
+                alternative_id,
+                StructuralAlternative(
+                    alternative_id=alternative_id,
+                    actor=_entity("Deployment", alternative_id),
+                    role="candidate",
+                ),
+            )
+    if len(explicit) < 2:
+        explicit.setdefault(
+            "alt-peer",
+            StructuralAlternative(
+                alternative_id="alt-peer",
+                actor=_entity("Deployment", "alt-peer"),
+                role="candidate",
+            ),
+        )
     return diagnosis.model_copy(
         update={
             "information_gaps": gaps,
             "resolution_trace": trace,
-            "structural_alternatives": alternatives,
+            "structural_alternatives": tuple(explicit.values()),
         }
     )
 
@@ -118,6 +158,32 @@ def _candidate(
         dimensions=dimensions,
         hypothesis_ids=hypothesis_ids,
         alternative_ids=alternative_ids,
+        discriminators=tuple(
+            CandidateDiscriminator(
+                gap_id=gap_id,
+                dimension=dimensions[0],
+                missing_fact=gap_id,
+                support_outcomes=(
+                    GapOutcome(
+                        kind=GapOutcomeKind.SUPPORTS,
+                        hypothesis_ids=hypothesis_ids or (f"h-{candidate_id}",),
+                        alternative_ids=alternative_ids,
+                        condition=f"positive evidence for {candidate_id}",
+                        implication="distinguishes this candidate state",
+                    ),
+                ),
+                comparison_hypothesis_ids=(f"h-other-{candidate_id}",),
+                comparison_alternative_ids=(f"alt-other-{candidate_id}",),
+                no_data_outcomes=(
+                    GapOutcome(
+                        kind=GapOutcomeKind.NO_DATA,
+                        condition="no observation",
+                        implication="does not discriminate",
+                    ),
+                ),
+            )
+            for gap_id in gap_ids
+        ),
     )
 
 
@@ -457,3 +523,37 @@ def test_candidate_does_not_claim_discrimination_from_no_data_alone() -> None:
 
     assert len(candidates) == 1
     assert candidates[0].discriminators == ()
+
+
+def test_ranked_action_names_positive_discriminator_and_keeps_no_data_neutral() -> None:
+    case = _case()
+    gaps = tuple(
+        _gap(
+            f"gap-{alternative_id}",
+            GapDimension.CHANGE_TIMING,
+            alternative_ids=(alternative_id,),
+        )
+        for alternative_id in ("alt-a", "alt-b")
+    )
+    alternatives = tuple(
+        StructuralAlternative(
+            alternative_id=alternative_id,
+            actor=_entity("Deployment", alternative_id),
+            role="candidate",
+        )
+        for alternative_id in ("alt-a", "alt-b")
+    )
+    diagnosis = _diagnosis(case, gaps, alternatives=alternatives)
+    candidates = build_observation_candidates(
+        case=case, diagnosis=diagnosis, engine_config=EngineConfig()
+    )
+    blind_candidate = candidates[0].__class__(**{**candidates[0].__dict__, "discriminators": ()})
+    ranked = rank_observation_candidates(
+        candidates=(blind_candidate, *candidates), diagnosis=diagnosis
+    )
+
+    assert ranked[0].utility.discriminating_gap_coverage > 0
+    action = candidate_to_action(ranked[0], diagnosis)
+    assert action is not None
+    assert f"discriminator gap={action.gap_id}" in action.rationale
+    assert "NO_DATA/UNKNOWN are non-discriminating" in action.rationale

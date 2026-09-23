@@ -41,6 +41,8 @@ class ObservationUtility:
     hypothesis_relevance: int
     structural_relevance: int
     discriminating_gap_coverage: int
+    positive_discriminator_states: int
+    competing_state_coverage: int
     dimension_coverage: int
     overlap_preference: int
     shared_gap_coverage: int
@@ -63,6 +65,8 @@ def observation_relevance_key(scored: ScoredObservationCandidate) -> tuple[int, 
         utility.hypothesis_relevance,
         utility.structural_relevance,
         utility.discriminating_gap_coverage,
+        utility.positive_discriminator_states,
+        utility.competing_state_coverage,
         utility.dimension_coverage,
         utility.overlap_preference,
         utility.shared_gap_coverage,
@@ -186,11 +190,30 @@ def score_observation_candidate(
         for alternative_id in current_gaps[gap_id].alternative_ids
     }
     overlap_class = _overlap_class(candidate.capability)
+    discriminators = tuple(
+        item for item in candidate.discriminators if item.gap_id in covered_gap_ids
+    )
+    positive_states = {
+        state_id
+        for discriminator in discriminators
+        for outcome in discriminator.support_outcomes
+        for state_id in (*outcome.hypothesis_ids, *outcome.alternative_ids)
+    }
+    competing_states = {
+        state_id
+        for discriminator in discriminators
+        for state_id in (
+            *discriminator.comparison_hypothesis_ids,
+            *discriminator.comparison_alternative_ids,
+        )
+    }
     utility = ObservationUtility(
         admissible=admissible,
         hypothesis_relevance=_hypothesis_relevance(candidate, diagnosis),
         structural_relevance=_structural_relevance(candidate, diagnosis),
-        discriminating_gap_coverage=len(covered_gap_ids),
+        discriminating_gap_coverage=len({item.gap_id for item in discriminators}),
+        positive_discriminator_states=len(positive_states),
+        competing_state_coverage=len(competing_states),
         dimension_coverage=len(covered_dimensions),
         overlap_preference=_OVERLAP_PREFERENCE[overlap_class],
         shared_gap_coverage=max(0, len(covered_gap_ids) - 1),
@@ -218,6 +241,8 @@ def utility_sort_key(scored: ScoredObservationCandidate) -> tuple[object, ...]:
         -utility.hypothesis_relevance,
         -utility.structural_relevance,
         -utility.discriminating_gap_coverage,
+        -utility.positive_discriminator_states,
+        -utility.competing_state_coverage,
         -utility.dimension_coverage,
         -utility.overlap_preference,
         -utility.shared_gap_coverage,
@@ -261,7 +286,7 @@ def _representative_gap(
     if not gaps:
         return None
 
-    def key(gap_id: str) -> tuple[int, int, str]:
+    def key(gap_id: str) -> tuple[int, int, int, str]:
         gap = gaps[gap_id]
         hypothesis_score = (
             2
@@ -277,7 +302,8 @@ def _representative_gap(
                 for alternative_id in gap.alternative_ids
             )
         )
-        return (-hypothesis_score, -structural_score, gap_id)
+        discriminator_score = int(any(item.gap_id == gap_id for item in candidate.discriminators))
+        return (-discriminator_score, -hypothesis_score, -structural_score, gap_id)
 
     return min(gaps, key=key)
 
@@ -311,12 +337,16 @@ def candidate_to_action(
             dimensions=candidate.dimensions,
             hypothesis_ids=candidate.hypothesis_ids,
             alternative_ids=candidate.alternative_ids,
+            discriminators=tuple(
+                item for item in candidate.discriminators if item.gap_id in gap_ids
+            ),
         )
     )
     gap_id = _representative_gap(executable_candidate, diagnosis)
     if gap_id is None:
         return None
     utility = scored_candidate.utility
+    discriminator = next((item for item in candidate.discriminators if item.gap_id == gap_id), None)
     rationale = (
         f"deterministic candidate {candidate.candidate_id}; "
         f"utility={utility.hypothesis_relevance}/"
@@ -324,6 +354,24 @@ def candidate_to_action(
         f"{utility.discriminating_gap_coverage}/"
         f"{utility.dimension_coverage}"
     )
+    if discriminator is not None:
+        supported_ids = sorted(
+            {
+                state_id
+                for outcome in discriminator.support_outcomes
+                for state_id in (*outcome.hypothesis_ids, *outcome.alternative_ids)
+            }
+        )
+        competing_ids = sorted(
+            {
+                *discriminator.comparison_hypothesis_ids,
+                *discriminator.comparison_alternative_ids,
+            }
+        )
+        rationale += (
+            f"; discriminator gap={gap_id}; supports={','.join(supported_ids)}; "
+            f"competes={','.join(competing_ids)}; NO_DATA/UNKNOWN are non-discriminating"
+        )
     return InvestigationAction(
         action="inspect",
         gap_id=gap_id,

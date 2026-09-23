@@ -427,9 +427,34 @@ The 114 calls without a decision-state change were assigned one exclusive outcom
 | `NOVEL_BUT_NON_DECISIONAL` | 2 | `events` / `FAILURE_ONSET`: 2 (two otel-collector Pods) | t5:1, t6:1 | 7 / 8.5 / 10 |
 | `UNKNOWN_NO_STATE_CHANGE` | 1 | `resource_pressure` / `RESOURCE_PRESSURE`: 1 (otel-collector Pod) | t6:1 | 6 / 6 / 6 |
 
-The largest NO_DATA targets were frontend and frontend-proxy logs (24 each), checkout logs (11), recommendation logs (9), and shipping logs (6). The 23 KNOWN_FACT calls were 14 history reads (frontend-proxy 4, kube-root-ca ConfigMap 4, ad 3, and three other Deployments) and 9 namespace `incident_changes` reads. All 114 selected reads had a nonzero frontier coverage and no prior-NO_DATA repeat penalty; therefore there is no evidence of a fully exhausted selected frontier or repeated identical NO_DATA probe in this run.
+Exact target counts for every primary bucket:
 
-As an additional value-path diagnostic, 100/114 selected candidates had no transition certificate, 17/114 had zero named-state pairwise discrimination (these are discovery reads, whose gap value is scored separately), and 83/114 had both zero expected decision impact and no transition certificate (`NO_TRANSITION_PATH` for the selected candidate). No selected call had positive expected-elimination value because the no-state-change subset cannot retrospectively confer that value. No call had zero frontier coverage (`EXHAUSTED_FRONTIER=0`), and no selected call repeated a prior NO_DATA semantic probe. In 86/114 calls the same-turn candidate list contained at least one candidate with a higher current `expected_decision_impact` field than the selected candidate; that field is not by itself proof of a certified selection improvement. The remaining 88 NO_DATA calls dominate the outcome bottleneck. The exclusive outcome partition leaves `OTHER=0`. Do not treat this audit as authorization to change metric definitions or ranking weights.
+| Bucket | Capability / target | Gap | Calls |
+| --- | --- | --- | ---: |
+| NO_DATA | logs / Deployment `frontend` | DEPENDENCY_HEALTH | 24 |
+| NO_DATA | logs / Deployment `frontend-proxy` | DEPENDENCY_HEALTH | 24 |
+| NO_DATA | logs / Deployment `checkout` | DEPENDENCY_HEALTH | 11 |
+| NO_DATA | logs / Deployment `recommendation` | DEPENDENCY_HEALTH | 9 |
+| NO_DATA | logs / Deployment `shipping` | DEPENDENCY_HEALTH | 6 |
+| NO_DATA | logs / Deployment `fraud-detection` | DEPENDENCY_HEALTH | 3 |
+| NO_DATA | logs / Deployment `cart` | DEPENDENCY_HEALTH | 2 |
+| NO_DATA | logs / Deployment `product-catalog` | DEPENDENCY_HEALTH | 1 |
+| NO_DATA | incident_events / Namespace `otel-demo` | EVENT_SEQUENCE | 4 |
+| NO_DATA | incident_changes / Namespace `otel-demo` | CHANGE_TIMING | 4 |
+| KNOWN_FACT | history / Deployment `frontend-proxy` | CHANGE_TIMING | 4 |
+| KNOWN_FACT | history / ConfigMap `kube-root-ca.crt` | CHANGE_TIMING | 4 |
+| KNOWN_FACT | history / Deployment `ad` | CHANGE_TIMING | 3 |
+| KNOWN_FACT | history / Deployment `fraud-detection` | CHANGE_TIMING | 1 |
+| KNOWN_FACT | history / Deployment `otel-collector` | CHANGE_TIMING | 1 |
+| KNOWN_FACT | history / Deployment `recommendation` | CHANGE_TIMING | 1 |
+| KNOWN_FACT | incident_changes / Namespace `otel-demo` | CHANGE_TIMING | 9 |
+| NOVEL_BUT_NON_DECISIONAL | events / Pod `otel-collector-564d9c7987-cw2q8` | FAILURE_ONSET | 1 |
+| NOVEL_BUT_NON_DECISIONAL | events / Pod `otel-collector-564d9c7987-dbhm6` | FAILURE_ONSET | 1 |
+| UNKNOWN_NO_STATE_CHANGE | resource_pressure / Pod `otel-collector-564d9c7987-cw2q8` | RESOURCE_PRESSURE | 1 |
+
+The 23 KNOWN_FACT calls were 14 history reads and 9 namespace `incident_changes` reads. All 114 selected reads had nonzero frontier coverage and no prior-NO_DATA repeat penalty; therefore there is no evidence of a fully exhausted selected frontier or repeated identical NO_DATA probe in this run.
+
+As an additional value-path diagnostic, 100/114 selected candidates had no transition certificate, 17/114 had zero named-state pairwise discrimination (these are discovery reads, whose gap value is scored separately), and 83/114 had both zero expected decision impact and no transition certificate (`NO_TRANSITION_PATH` for the selected candidate). No selected call had positive expected-elimination value because the no-state-change subset cannot retrospectively confer that value. No call had zero frontier coverage (`EXHAUSTED_FRONTIER=0`), and no selected call repeated a prior NO_DATA semantic probe. In 86/114 calls the same-turn candidate list contained at least one candidate with a higher current `expected_decision_impact` field than the selected candidate: 80 NO_DATA log calls had 635 such alternatives in total, 3 known-fact calls had 6, 2 novel-but-non-decisional calls had 7, and the single UNKNOWN call had 3. Those raw values are not themselves proof of a certified selection improvement. The remaining 88 NO_DATA calls dominate the outcome bottleneck. The exclusive outcome partition leaves `OTHER=0`. Do not treat this audit as authorization to change metric definitions or ranking weights.
 
 ### Validation and hard gates
 

@@ -34,6 +34,7 @@ from packages.storage.models import (
     AlertRow,
     ChangeRecordRow,
     DiagnosisRow,
+    EmailDeliveryRow,
     EventVersionRow,
     EvidenceRow,
     IncidentEventRow,
@@ -913,6 +914,67 @@ class ReportRepository:
             statement.order_by(desc(ReportRow.created_at), desc(ReportRow.report_id)).limit(limit)
         ).all()
         return [dict(row.document) for row in rows]
+
+
+class EmailDeliveryRepository:
+    """Audit log of report shares over email."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def find_by_idempotency_key(self, key: str) -> dict[str, Any] | None:
+        row = self._session.scalars(
+            select(EmailDeliveryRow).where(EmailDeliveryRow.idempotency_key == key).limit(1)
+        ).first()
+        return _delivery_to_dict(row) if row is not None else None
+
+    def save(
+        self,
+        *,
+        delivery_id: str,
+        report_id: str,
+        incident_id: object | None,
+        recipients: list[str],
+        subject: str,
+        status: str,
+        error: str | None,
+        idempotency_key: str | None,
+        created_at: datetime,
+    ) -> dict[str, Any]:
+        row = EmailDeliveryRow(
+            delivery_id=delivery_id,
+            report_id=report_id,
+            incident_id=incident_id,
+            recipients=recipients,
+            subject=subject,
+            status=status,
+            error=error,
+            idempotency_key=idempotency_key,
+            created_at=created_at,
+        )
+        self._session.add(row)
+        self._session.commit()
+        return _delivery_to_dict(row)
+
+    def list_for_report(self, report_id: str) -> list[dict[str, Any]]:
+        rows = self._session.scalars(
+            select(EmailDeliveryRow)
+            .where(EmailDeliveryRow.report_id == report_id)
+            .order_by(desc(EmailDeliveryRow.created_at), desc(EmailDeliveryRow.delivery_id))
+        ).all()
+        return [_delivery_to_dict(row) for row in rows]
+
+
+def _delivery_to_dict(row: EmailDeliveryRow) -> dict[str, Any]:
+    return {
+        "delivery_id": row.delivery_id,
+        "report_id": row.report_id,
+        "recipients": list(row.recipients),
+        "subject": row.subject,
+        "status": row.status,
+        "error": row.error,
+        "created_at": row.created_at,
+    }
 
 
 def _canonical(value: Any) -> str:

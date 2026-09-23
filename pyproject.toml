@@ -63,6 +63,14 @@ python_version = "3.12"
 strict = true
 packages = ["apps", "packages"]
 
+# fpdf2 ships py.typed locally but is absent from the isolated pre-commit mypy
+# env; treat it as untyped everywhere so both agree (the subclass needs an
+# explicit ignore, which is then always used).
+[[tool.mypy.overrides]]
+module = "fpdf.*"
+follow_imports = "skip"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 addopts = "--strict-config --strict-markers"
 testpaths = ["tests"]

@@ -6,7 +6,9 @@ import type {
   IncidentDetail,
   IncidentFilters,
   IncidentPage,
+  DeliveryView,
   ReportSummary,
+  ShareRequest,
   SystemStatus,
 } from "@/api/types";
 
@@ -71,6 +73,26 @@ export const api = {
   },
   incidentReports: (id: string) => get<ReportSummary[]>(`/incidents/${id}/reports`),
   reports: () => get<ReportSummary[]>("/reports"),
+  reportDeliveries: (reportId: string) =>
+    get<DeliveryView[]>(`/reports/${reportId}/deliveries`),
+  shareReport: async (reportId: string, request: ShareRequest): Promise<DeliveryView> => {
+    const response = await fetch(`${BASE}/reports/${reportId}/email`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      let message = `Could not share report (${response.status})`;
+      try {
+        const body = (await response.json()) as { detail?: string };
+        if (body?.detail) message = body.detail;
+      } catch {
+        /* non-JSON */
+      }
+      throw new ApiError(response.status, message);
+    }
+    return (await response.json()) as DeliveryView;
+  },
 };
 
 /** Absolute URL to a report export, safe to open or download directly. */

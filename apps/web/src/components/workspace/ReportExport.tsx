@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { Drawer } from "@/components/ui/Drawer";
 import { Skeleton } from "@/components/ui/States";
+import { ShareReport } from "@/components/workspace/ShareReport";
 import { dateTime } from "@/lib/format";
 
 function PreviewDrawer({ reportId, onClose }: { reportId: string | null; onClose: () => void }) {
@@ -83,6 +84,7 @@ export function ReportExport({ incidentId }: { incidentId: string }) {
                 {reports.length} reports generated for this incident.
               </p>
             )}
+            <ShareReport reportId={latest.report_id} />
           </div>
         ) : (
           <p className="text-sm text-subtle">No report yet. Generate one to preview and export.</p>

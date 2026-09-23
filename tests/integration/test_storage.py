@@ -180,6 +180,7 @@ def test_alembic_migration_up_and_down(tmp_path: Path) -> None:
         "alerts",
         "change_records",
         "diagnoses",
+        "email_deliveries",
         "evidence",
         "hypotheses",
         "incident_events",

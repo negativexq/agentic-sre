@@ -83,6 +83,25 @@ export function useCreateReport(incidentId: string) {
   });
 }
 
+export function useReportDeliveries(reportId: string | undefined) {
+  return useQuery({
+    queryKey: ["deliveries", reportId],
+    queryFn: () => api.reportDeliveries(reportId as string),
+    enabled: Boolean(reportId),
+  });
+}
+
+export function useShareReport(reportId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: { recipients: string[]; include_pdf: boolean }) =>
+      api.shareReport(reportId, request),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["deliveries", reportId] });
+    },
+  });
+}
+
 export function useSystemStatus() {
   return useQuery({
     queryKey: ["system"],

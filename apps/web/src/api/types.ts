@@ -179,6 +179,22 @@ export interface ReportSummary {
   generated_at: string;
 }
 
+export interface DeliveryView {
+  delivery_id: string;
+  report_id: string;
+  recipients: string[];
+  subject: string;
+  status: string;
+  error: string | null;
+  created_at: string;
+}
+
+export interface ShareRequest {
+  recipients: string[];
+  include_pdf: boolean;
+  idempotency_key?: string;
+}
+
 export interface SystemConnector {
   name: string;
   status: ConnectorStatus;

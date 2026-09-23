@@ -200,6 +200,22 @@ class ReportRow(Base):
     document: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 
+class EmailDeliveryRow(Base):
+    """Audit record of a report share over email (recipients, status, errors)."""
+
+    __tablename__ = "email_deliveries"
+
+    delivery_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    report_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    incident_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    recipients: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    subject: Mapped[str] = mapped_column(String(512), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    error: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
 class LogObservationRow(Base):
     """One bounded, normalized log observation captured for replay."""
 

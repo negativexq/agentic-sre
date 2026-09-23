@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from apps.control_plane.console import create_console_router
 from apps.control_plane.console.dto import SystemConnector, SystemStatus
+from apps.control_plane.console.email_delivery import EmailDelivery, email_delivery_from_env
 from apps.control_plane.diagnosis import DiagnosisService, service_from_environment
 from apps.control_plane.schemas import (
     ErrorDetail,
@@ -160,8 +161,14 @@ def _require_api_token(request: Request) -> None:
 def create_app(
     session_factory: sessionmaker[Session] | None = None,
     diagnosis_service: DiagnosisService | None = None,
+    email_delivery: EmailDelivery | None = None,
 ) -> FastAPI:
-    """Create the control-plane application with injectable persistence."""
+    """Create the control-plane application with injectable persistence.
+
+    ``email_delivery`` overrides the environment-configured backend, so tests can
+    exercise the share path with a stub. When omitted, delivery is built from the
+    environment and is absent (share refuses) unless SMTP is configured.
+    """
     if session_factory is None:
         database_url = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
         engine = create_database_engine(database_url)
@@ -210,7 +217,16 @@ def create_app(
     def system_status_provider(session: Session) -> SystemStatus:
         return build_system_status(session, reader_configured=reader_configured)
 
-    app.include_router(create_console_router(get_session, system_status_provider, session_factory))
+    app.include_router(
+        create_console_router(
+            get_session,
+            system_status_provider,
+            session_factory,
+            email_delivery=email_delivery
+            if email_delivery is not None
+            else email_delivery_from_env(),
+        )
+    )
 
     @app.exception_handler(IncidentNotFoundError)
     async def incident_not_found_handler(

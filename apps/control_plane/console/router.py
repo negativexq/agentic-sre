@@ -5,7 +5,7 @@ from __future__ import annotations
 import statistics
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse, Response, StreamingResponse
@@ -15,15 +15,18 @@ from apps.control_plane.console.dto import (
     ChangeView,
     DashboardCounters,
     DashboardSummary,
+    DeliveryView,
     DiagnosisView,
     EvidenceView,
     IncidentDetail,
     IncidentListItem,
     IncidentPage,
     ReportSummary,
+    ShareRequest,
     SystemStatus,
     TimelineView,
 )
+from apps.control_plane.console.email_delivery import EmailDelivery
 from apps.control_plane.console.mappers import (
     change_view,
     diagnosis_view,
@@ -37,10 +40,12 @@ from apps.control_plane.timeline import diagnosis_phases
 from packages.contracts import ChangeScope, ChangeType
 from packages.rca.model import Diagnosis
 from packages.report import ReportSnapshot, build_report, to_markdown, to_pdf
+from packages.report.email import render_email
 from packages.storage import (
     AlertRepository,
     ChangeRecordRepository,
     DiagnosisRepository,
+    EmailDeliveryRepository,
     EvidenceRepository,
     IncidentEventRepository,
     IncidentNotFoundError,
@@ -83,6 +88,7 @@ def create_console_router(
     get_session: Callable[[], Iterator[Session]],
     system_status: Callable[[Session], SystemStatus],
     session_factory: sessionmaker[Session],
+    email_delivery: EmailDelivery | None = None,
 ) -> APIRouter:
     """Build the console router bound to the app's session dependency.
 
@@ -395,6 +401,61 @@ def create_console_router(
             media_type="application/pdf",
             headers={"Content-Disposition": f'inline; filename="report-{report_id}.pdf"'},
         )
+
+    @router.post("/reports/{report_id}/email", response_model=DeliveryView)
+    def share_report(
+        report_id: str,
+        request: ShareRequest,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> DeliveryView:
+        snapshot = _load_report(session, report_id)
+        recipients = [item.strip() for item in request.recipients if item.strip()]
+        if not recipients:
+            raise HTTPException(status_code=422, detail="at least one recipient is required")
+        if email_delivery is None:
+            # Honest refusal rather than a silent no-op: the console reports the
+            # Email connector as not configured and the share cannot proceed.
+            raise HTTPException(
+                status_code=503, detail="email delivery is not configured (set SRE_SMTP_HOST)"
+            )
+
+        deliveries = EmailDeliveryRepository(session)
+        if request.idempotency_key:
+            existing = deliveries.find_by_idempotency_key(request.idempotency_key)
+            if existing is not None:
+                return DeliveryView.model_validate(existing)
+
+        payload = render_email(snapshot, include_pdf=request.include_pdf)
+        status, error = "sent", None
+        try:
+            email_delivery.send(recipients, payload)
+        except Exception as failure:  # noqa: BLE001 - record every failure for audit/retry
+            status, error = "failed", str(failure)[:1000]
+        stored = deliveries.save(
+            delivery_id=str(uuid4()),
+            report_id=report_id,
+            incident_id=UUID(snapshot.incident_id) if snapshot.incident_id else None,
+            recipients=recipients,
+            subject=payload.subject,
+            status=status,
+            error=error,
+            idempotency_key=request.idempotency_key,
+            created_at=datetime.now(UTC),
+        )
+        if status == "failed":
+            # Persisted for audit and retry, but surfaced as a failure.
+            raise HTTPException(status_code=502, detail=f"email delivery failed: {error}")
+        return DeliveryView.model_validate(stored)
+
+    @router.get("/reports/{report_id}/deliveries", response_model=list[DeliveryView])
+    def report_deliveries(
+        report_id: str,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> list[DeliveryView]:
+        return [
+            DeliveryView.model_validate(item)
+            for item in EmailDeliveryRepository(session).list_for_report(report_id)
+        ]
 
     @router.get("/stream")
     def stream() -> StreamingResponse:

@@ -245,6 +245,29 @@ class ReportSummary(ConsoleModel):
     generated_at: datetime
 
 
+# --- email sharing ---------------------------------------------------------
+
+
+class ShareRequest(ConsoleModel):
+    """A request to share a report by email."""
+
+    recipients: list[str]
+    include_pdf: bool = True
+    idempotency_key: str | None = None
+
+
+class DeliveryView(ConsoleModel):
+    """An audit record of one report share."""
+
+    delivery_id: str
+    report_id: str
+    recipients: list[str]
+    subject: str
+    status: str  # sent | failed
+    error: str | None
+    created_at: datetime
+
+
 # --- system ----------------------------------------------------------------
 
 

@@ -76,7 +76,9 @@ def _http(
     data = json.dumps(payload).encode() if payload is not None else None
     headers = {"Content-Type": "application/json"} if data else {}
     if token:
-        headers["X-API-Token"] = token
+        # The control plane's shared guard expects a bearer token, not a
+        # custom header (see apps/control_plane/auth.py).
+        headers["Authorization"] = f"Bearer {token}"
     request = Request(url, data=data, headers=headers, method=method)  # noqa: S310
     with urlopen(request, timeout=timeout) as response:  # noqa: S310
         body = response.read().decode()

@@ -207,3 +207,62 @@ Initial resolution, root actor, leading hypothesis, alternative hypotheses, ambi
 | G15.10 Deterministic RCA does not regress | PASS, with disclosed variance | Primary resolution/root/hypothesis and resolution traces match in 25/25; non-leading structural alternative path metadata differs in Scenario-38 and is nondeterministic across repeated prediction processes. |
 
 **Milestone result: M15 remains IN_PROGRESS.** Numeric gates G15.7 and G15.8 fail. Do not start M16 or run the GPT-6 Luna comparison. No gate, metric definition, scenario ID, denominator or truth boundary changed.
+
+## M14 deterministic quality-floor differential — truth-blind replay
+
+| Field | Value |
+| --- | --- |
+| Replay date | 2026-09-24 |
+| M14 prediction artifact | `.local/eval/m14/deterministic` |
+| M14 prediction code HEAD | `93d438975898d3a8a582ebeccccb06fbb5c23f00` |
+| Current planner HEAD inspected | `84e731b7d949a56b7faf5072d033eba632b79ca7` |
+| Differential artifact | `.local/eval/m15/m14-differential-v1/differential.json` |
+| Differential SHA-256 | `3b1acc9b36e7073f3c396a521a443f100167e84db1f2a5973082e53634e96382` |
+| Scenario coverage | Same frozen 25 TEST IDs; all 150 M14 action/pre-turn states replayed |
+| Prediction ground-truth access | false |
+| Provider calls | 0 |
+| M14 replay transition mismatches | 0 / 150 |
+
+The replay reconstructed each M14 pre-turn deterministic state by applying its persisted prior observations through the current deterministic normalization/rebuild path, then generated and selected from the current bounded M15 candidates. Grader labels were not used to construct the differential; outcome labels were consulted only after the differential was sealed to identify which scenarios corresponded to the eight M14 recoveries.
+
+| Current M15 classification of M14 observations | Count |
+| --- | ---: |
+| `PRESENT_SELECTED` | 87 |
+| `PRESENT_NOT_SELECTED` | 15 |
+| `FILTERED_DISCRIMINATOR` | 48 |
+| Missing intent / missing physical candidate / known-fact filter / exhausted frontier / different canonicalization / downstream mismatch | 0 |
+
+Of the 34 M14 decision-relevant observations, all 34 had an exact physical candidate in the current M15 generated pool. Only 3 were discriminator-eligible and selected; 31 were filtered because no discriminator could be derived from current viable hypothesis/alternative IDs. Therefore raw physical candidate recall is 34/34 (100%), while decision-frontier recall under the current strict discriminator contract is 3/34 (8.8%), below the 100% development target. The 31 filtered reads were incident-scoped `incident_events` or `incident_changes`; the three `logs` reads survived and were selected. Across all 150 actions, the strict selector also selected 87 eligible reads and left 15 eligible baseline reads unselected.
+
+### First divergence in each M14 recovery
+
+All eight M14 recoveries first diverge on turn 1:
+
+| Scenario | M14 turn-1 observation | Current M15 first action | M14 evidence / transition |
+| --- | --- | --- | --- |
+| Scenario-2 | `incident_events` on namespace | `logs` on service, `NO_DATA` | 64 new refs; decision state changed |
+| Scenario-5 | `incident_events` on namespace | `logs` on service, `NO_DATA` | 64 new refs; decision state changed |
+| Scenario-6 | `incident_events` on namespace | `logs` on service, `NO_DATA` | 64 new refs; decision state changed |
+| Scenario-9 | `incident_events` on namespace | `logs` on service, `NO_DATA` | 64 new refs; decision state changed |
+| Scenario-13 | `incident_events` on namespace | `logs` on service, `NO_DATA` | 64 new refs; decision state changed |
+| Scenario-14 | `incident_events` on namespace | `logs` on service, `NO_DATA` | 64 new refs; decision state changed |
+| Scenario-15 | `incident_events` on namespace | `logs` on service, `NO_DATA` | 64 new refs; decision state changed |
+| Scenario-16 | `incident_events` on namespace | `logs` on service, `NO_DATA` | 64 new refs; decision state changed |
+
+On M14 turn 2, each recovery trajectory next used an `incident_changes` namespace observation; current M15 remained on other service-level reads. The key current pre-read gap in these trajectories is a broad discovery gap: `EVENT_SEQUENCE` / `CHANGE_TIMING` has empty hypothesis and alternative IDs and outcomes limited to `NO_DATA` / `UNKNOWN`. `_candidate_discriminator` requires a positive outcome tied to currently viable hypothesis/alternative states. The event read's useful normalized Finding and newly visible actor exist only after execution, so using that future actor as a pre-read discriminator would leak observation outcome into selection. Assigning a wildcard discriminator or allowing a discriminator-less action would weaken G15.1/G15.2. No such change was made.
+
+### Differential conclusion
+
+The dominant quality regression is **discriminator expressiveness at the broad discovery-gap eligibility boundary**, not physical candidate generation and not ranking precedence. Every M14 action had an exact physical candidate; all 31 lost decision-relevant observations were filtered before ranking. On the 3/34 eligible decision-relevant observations, the active selector selected them. This task therefore made no production planner or RCA change. The required conservative rule is: retain the baseline observation when active selection cannot prove equal-or-better deterministic discrimination and expected decision impact under the same pre-turn state; never manufacture a discriminator from future evidence.
+
+The M14 deterministic quality floor is not restored by current M15 iteration 3:
+
+| Measure | M14 deterministic floor | M15 iteration 3 | Result |
+| --- | ---: | ---: | --- |
+| Duplicate/already-known rate | 20.0% | 28.4% | FAIL |
+| Decision-relevant-call rate | 22.7% | 4.1% | FAIL |
+| Recoveries | 8 | 0 | FAIL |
+| Harm | 0 | 0 | PASS |
+| Initial deterministic RCA outputs | 25/25 reference | Stable across the M15 comparison | PASS |
+
+No new frozen 25-case M15 run, focused code test run, or `make check` was performed for this diagnostic-only task. The latest recorded `make check` at the M15 implementation revision passed (811 tests); it is prior validation evidence, not a rerun at this differential replay HEAD. The frozen iteration-3 outcome remains unchanged. G15.7/G15.8 and the additional M14 quality floor remain failed; M15 stays `IN_PROGRESS`, M16 is not authorized, and provider calls remain 0.

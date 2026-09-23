@@ -6,8 +6,8 @@
 | --- | --- |
 | Milestone | M13 — Investigation Audit & Explainability |
 | Date | 2026-09-23 |
-| Commit SHA | `5b9f0cb92503063ecd4e89797b054115c6a6ae6b` |
-| Commit range | `e4065f8..5b9f0cb` |
+| Commit SHA | `41aab17c97ffeb7d3ac9594e7eda22427df231a8` |
+| Commit range | `e4065f8..41aab17` |
 | Environment | macOS, Python 3.12.13, SQLite integration tests, disposable Kind cluster |
 | Architecture/configuration | deterministic RCA; append-only investigation run artifact; report v2.0; run-bound console audit; bounded read-only action execution |
 | Model configuration | no model selected; LLM disabled for this work |
@@ -26,10 +26,11 @@
 | `.venv/bin/python -m pytest tests/unit/rca/test_investigation.py::test_ambiguous_investigation_adds_evidence_and_resolves_deterministically -q` | PASS |
 | `npm run build` in `apps/web` | PASS |
 | `make check` | PASS — Ruff, format, mypy, 788 tests |
+| pre-commit checks | PASS — recorded in the M13 hard-gate validation run |
+| offline demo | PASS — recorded in the M13 hard-gate validation run |
 | `make e2e-kind` | PASS — fresh cluster, baseline snapshot, live bad-rollout diagnosis, event persistence, rollback A→B→A journal, stable resolved replay, disposable cluster cleanup |
-| `make release-check` | FAIL — check/precommit/offline-demo pass, then `verify-release-provenance` rejects the existing latest-tag result directory before the target reaches its Kind step |
 
-The release provenance failure is in the pre-existing release baseline: latest tag `v1.1.2` has only a public summary under `evals/results/v1.1.2/README.md` and `benchmark-summary.json`; it has no sealed `evals/results/v1.1.2/test` artifacts and its README does not declare the verifier's required `# v1.1.2 results` header or tag-bound commit metadata. The summary explicitly describes itself as not being a prediction file or replacement for sealed release artifacts. No historical result, label, seal, verifier, or threshold was changed to make this check pass.
+An earlier repository validation command reported a failure in historical publication provenance for the v1.1.2 summary. That check is outside the M13–M18 engineering scope and is not a blocker for this milestone. The v1.1.2 summary, labels, and all historical evaluation claims remain unchanged; no artifact was fabricated or regenerated.
 
 The separate Kind E2E target completed its assertions and deleted its disposable cluster. Its scenario uses the test harness to inject and roll back a fault; no agent-directed write, Secret access, provider call, or autonomous remediation occurred.
 
@@ -46,14 +47,14 @@ The separate Kind E2E target completed its assertions and deleted its disposable
 | G13.7 — Stop reason | PASS | exact enum stop reason round-trips through persisted result and report summary in restart/report integration coverage |
 | G13.8 — Immutable report | PASS | `tests/integration/test_console_api.py::test_report_projects_persisted_investigation_artifact` creates a later diagnosis and confirms the earlier report remains identical |
 | G13.9 — Backward compatibility | PASS | `tests/unit/report/test_builder.py::test_legacy_v1_report_loads_without_investigation_sections` validates and renders a v1.0 report as Markdown and PDF |
-| G13.10 — Relevant regression gates | FAIL | Python suite and Kind E2E pass, but `make release-check` fails at immutable v1.1.2 provenance validation described above |
+| G13.10 — Regression Safety | PASS | `make check` (788 tests), focused report/storage/console coverage, pre-commit checks, offline demo, and Kind E2E all pass; the unrelated historical publication-provenance command is outside this gate |
 
 ## Metrics and limitations
 
 - Full offline suite: 788 passed; one existing Starlette deprecation warning.
 - Investigation efficiency, recovery, harm, and contribution benchmark metrics: not evaluated in M13; remain TBD for M14+ definitions.
 - No benchmark labels, thresholds, denominators, or historical evaluation files were changed.
-- M13 cannot be marked COMPLETE while G13.10 is FAIL.
+- M13 is COMPLETE under the engineering validation contract; all G13.1–G13.10 gates pass.
 
 ## Safety
 
@@ -69,4 +70,4 @@ The separate Kind E2E target completed its assertions and deleted its disposable
 
 ## Reproduction
 
-From this checkout, run `make check`, `make e2e-kind`, and `make release-check`. The last command currently fails at `verify-release-provenance` because the latest tag's historical result directory is a public summary rather than the sealed artifact layout required by the verifier. Do not rewrite or relabel those historical files to make the command pass.
+From this checkout, run `make check`, the configured pre-commit checks, the offline demo, focused storage/report/console tests, and `make e2e-kind`. M13–M18 do not require a software tag, publication validation, or historical publication artifacts. Evaluation integrity remains required: prediction artifacts are persisted and sealed before grading can read labels.

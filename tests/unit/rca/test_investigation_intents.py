@@ -10,9 +10,11 @@ from packages.rca.investigation.intents import (
     DeterministicIntentPolicy,
     InvestigationIntentKind,
     InvestigationPhase,
+    ObservationBundle,
     build_observation_bundles,
     classify_observation_candidate,
     derive_investigation_phase,
+    rank_observation_bundles,
     select_observation_intent_candidate,
 )
 from packages.rca.model import (
@@ -225,6 +227,58 @@ def test_runtime_discrimination_requires_real_relevant_hypothesis() -> None:
         derive_investigation_phase(case, diagnosis) is InvestigationPhase.HYPOTHESIS_DISCRIMINATION
     )
     assert selected.scored_bundle.bundle.intent is InvestigationIntentKind.RUNTIME_DISCRIMINATION
+
+
+def test_bundle_candidate_discrimination_precedes_static_intent_priority() -> None:
+    case = _case()
+    diagnosis = _diagnosis(
+        case,
+        (),
+        resolution_trace=ResolutionTrace(
+            state=Resolution.AMBIGUOUS,
+            leading_hypothesis_ids=("h-current",),
+            unresolved_hypotheses=("h-current",),
+            unresolved_dimensions=("runtime_propagation",),
+        ),
+    )
+    log_bundle = ObservationBundle(
+        bundle_id="intent:logs",
+        intent=InvestigationIntentKind.DEPENDENCY_ERROR_INSPECTION,
+        phase=InvestigationPhase.HYPOTHESIS_DISCRIMINATION,
+        candidate_ids=("logs",),
+        capabilities=("logs",),
+        gap_ids=("log-gap",),
+        dimensions=(GapDimension.DEPENDENCY_HEALTH,),
+        hypothesis_ids=("h-current",),
+        alternative_ids=(),
+        discriminating_gap_coverage=1,
+        positive_discriminator_states=1,
+        competing_state_coverage=1,
+    )
+    trace_bundle = ObservationBundle(
+        bundle_id="intent:trace",
+        intent=InvestigationIntentKind.RUNTIME_DISCRIMINATION,
+        phase=InvestigationPhase.HYPOTHESIS_DISCRIMINATION,
+        candidate_ids=("trace",),
+        capabilities=("runtime_traces",),
+        gap_ids=("trace-gap",),
+        dimensions=(GapDimension.DEPENDENCY_HEALTH,),
+        hypothesis_ids=("h-current",),
+        alternative_ids=(),
+        discriminating_gap_coverage=3,
+        positive_discriminator_states=3,
+        competing_state_coverage=2,
+    )
+
+    ranked = rank_observation_bundles(
+        bundles=(log_bundle, trace_bundle),
+        phase=InvestigationPhase.HYPOTHESIS_DISCRIMINATION,
+        diagnosis=diagnosis,
+        case=case,
+    )
+
+    assert ranked[0].bundle.intent is InvestigationIntentKind.RUNTIME_DISCRIMINATION
+    assert ranked[1].utility.semantic_priority > ranked[0].utility.semantic_priority
 
 
 def test_intent_policy_is_deterministic_and_uses_no_model() -> None:

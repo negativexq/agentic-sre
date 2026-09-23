@@ -55,6 +55,7 @@ class ObservationCandidate:
     hypothesis_ids: tuple[str, ...]
     alternative_ids: tuple[str, ...]
     discriminators: tuple[CandidateDiscriminator, ...] = ()
+    known_evidence_refs: tuple[str, ...] = ()
 
 
 @dataclass
@@ -67,6 +68,7 @@ class _CandidateAccumulator:
     hypothesis_ids: set[str] = field(default_factory=set)
     alternative_ids: set[str] = field(default_factory=set)
     discriminators: dict[str, CandidateDiscriminator] = field(default_factory=dict)
+    known_evidence_refs: set[str] = field(default_factory=set)
 
 
 def _is_usable_anchor(value: datetime | None) -> bool:
@@ -209,6 +211,7 @@ def _candidate_discriminator(
             )
         )
     )
+
     supported_hypothesis_ids = {
         hypothesis_id
         for outcome in supports
@@ -240,6 +243,39 @@ def _candidate_discriminator(
             if outcome.kind is GapOutcomeKind.NO_DATA
         ),
     )
+
+
+def _visible_known_refs(
+    *, case: Case, capability: str, target: EntityRef, query: InvestigationQuery
+) -> set[str]:
+    """Return already-visible target evidence a bounded read could repeat.
+
+    This is candidate metadata only: it never opens the underlying source or
+    performs a backend query. The latest visible object version is a
+    particularly strong known-evidence risk for history reads.
+    """
+    refs: set[str] = set()
+    if capability in {"history", "describe"}:
+        version = case.topology.latest.get(target)
+        if version is not None and (
+            (
+                query.start is None
+                or version.observed_at is None
+                or version.observed_at >= query.start
+            )
+            and (
+                query.end is None or version.observed_at is None or version.observed_at <= query.end
+            )
+        ):
+            refs.add(version.evidence_id)
+    elif capability == "logs":
+        for finding in case.findings:
+            if finding.kind.value != "DEPENDENCY_ERRORS":
+                continue
+            finding_workload = case.topology.workload_of(finding.entity)
+            if finding.entity == target or finding_workload == target:
+                refs.update(finding.evidence_ids)
+    return refs
 
 
 def build_observation_candidates(
@@ -285,6 +321,14 @@ def build_observation_candidates(
             accumulator.dimensions.add(gap.dimension)
             accumulator.hypothesis_ids.update(gap.hypothesis_ids)
             accumulator.alternative_ids.update(gap.alternative_ids)
+            accumulator.known_evidence_refs.update(
+                _visible_known_refs(
+                    case=case,
+                    capability=authorized.capability,
+                    target=authorized.target,
+                    query=query,
+                )
+            )
             target_specific = len(targets_by_capability[authorized.capability]) > 1
             if target_specific:
                 target_hypothesis_ids = {
@@ -324,6 +368,7 @@ def build_observation_candidates(
             discriminators=tuple(
                 accumulator.discriminators[gap_id] for gap_id in sorted(accumulator.discriminators)
             ),
+            known_evidence_refs=tuple(sorted(accumulator.known_evidence_refs)),
         )
         for identity, accumulator in accumulators.items()
     ]

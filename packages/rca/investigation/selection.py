@@ -47,6 +47,8 @@ class ObservationUtility:
     overlap_preference: int
     shared_gap_coverage: int
     shared_alternative_coverage: int
+    known_evidence_penalty: int
+    semantic_duplicate_penalty: int
     cost_tier: int
     stable_tiebreak: str
 
@@ -71,6 +73,8 @@ def observation_relevance_key(scored: ScoredObservationCandidate) -> tuple[int, 
         utility.overlap_preference,
         utility.shared_gap_coverage,
         utility.shared_alternative_coverage,
+        -utility.known_evidence_penalty,
+        -utility.semantic_duplicate_penalty,
         utility.cost_tier,
     )
 
@@ -144,6 +148,42 @@ def _attempted_identities(
     return identities
 
 
+def _query_windows_overlap(
+    candidate: ObservationCandidate, entry: InvestigationLedgerEntry
+) -> bool:
+    previous = entry.query
+    if previous is None:
+        return True
+    left_start, right_start = candidate.query.start, previous.start
+    left_end, right_end = candidate.query.end, previous.end
+    if left_start is not None and right_end is not None and left_start > right_end:
+        return False
+    if right_start is not None and left_end is not None and right_start > left_end:
+        return False
+    return True
+
+
+def _semantic_duplicate_penalty(
+    candidate: ObservationCandidate,
+    previous_investigations: Sequence[InvestigationLedgerEntry],
+) -> int:
+    """Count overlapping re-reads of the same semantic source and target.
+
+    Exact physical repeats are excluded earlier by admissibility. This penalty
+    covers a changed bounded query that still revisits an already-read
+    capability/target/time surface.
+    """
+    current_identity = observation_identity(candidate.capability, candidate.target, candidate.query)
+    return sum(
+        entry.capability == candidate.capability
+        and entry.target == candidate.target
+        and entry.query is not None
+        and observation_identity(entry.capability, entry.target, entry.query) != current_identity
+        and _query_windows_overlap(candidate, entry)
+        for entry in previous_investigations
+    )
+
+
 def is_observation_candidate_admissible(
     candidate: ObservationCandidate,
     *,
@@ -207,6 +247,13 @@ def score_observation_candidate(
             *discriminator.comparison_alternative_ids,
         )
     }
+    previous_known_refs = {
+        ref
+        for entry in previous_investigations
+        if entry.capability == candidate.capability and entry.target == candidate.target
+        for ref in entry.already_known_refs
+    }
+    known_evidence_penalty = len(set(candidate.known_evidence_refs) | previous_known_refs)
     utility = ObservationUtility(
         admissible=admissible,
         hypothesis_relevance=_hypothesis_relevance(candidate, diagnosis),
@@ -218,6 +265,8 @@ def score_observation_candidate(
         overlap_preference=_OVERLAP_PREFERENCE[overlap_class],
         shared_gap_coverage=max(0, len(covered_gap_ids) - 1),
         shared_alternative_coverage=max(0, len(covered_alternatives) - 1),
+        known_evidence_penalty=known_evidence_penalty,
+        semantic_duplicate_penalty=_semantic_duplicate_penalty(candidate, previous_investigations),
         cost_tier=_COST_TIER.get(candidate.capability, 2),
         stable_tiebreak=candidate.candidate_id,
     )
@@ -247,6 +296,8 @@ def utility_sort_key(scored: ScoredObservationCandidate) -> tuple[object, ...]:
         -utility.overlap_preference,
         -utility.shared_gap_coverage,
         -utility.shared_alternative_coverage,
+        utility.known_evidence_penalty,
+        utility.semantic_duplicate_penalty,
         utility.cost_tier,
         utility.stable_tiebreak,
     )

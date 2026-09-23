@@ -213,6 +213,69 @@ def test_leading_hypothesis_beats_generic_breadth() -> None:
     assert ranked[0].utility.hypothesis_relevance == 3
 
 
+def test_known_evidence_risk_ranks_below_fresh_candidate() -> None:
+    case = _case()
+    gap_a = _gap("known", GapDimension.CHANGE_TIMING)
+    gap_b = _gap("fresh", GapDimension.CHANGE_TIMING)
+    diagnosis = _diagnosis(case, (gap_a, gap_b))
+    known_candidate = _candidate("a-known", gap_ids=("known",))
+    known = known_candidate.__class__(
+        **{**known_candidate.__dict__, "known_evidence_refs": ("visible:version-1",)}
+    )
+    fresh = _candidate("z-fresh", gap_ids=("fresh",))
+
+    ranked = rank_observation_candidates(candidates=(known, fresh), diagnosis=diagnosis)
+
+    assert ranked[0].candidate.candidate_id == "z-fresh"
+    assert ranked[1].utility.known_evidence_penalty == 1
+
+
+def test_overlapping_semantic_repeat_ranks_below_fresh_candidate() -> None:
+    case = _case()
+    repeated = _candidate("a-repeat")
+    fresh = _candidate("z-fresh")
+    diagnosis = _diagnosis(
+        case,
+        (
+            _gap(
+                repeated.gap_ids[0],
+                GapDimension.CHANGE_TIMING,
+                capability=repeated.capability,
+                target=repeated.target,
+            ),
+            _gap(
+                fresh.gap_ids[0],
+                GapDimension.CHANGE_TIMING,
+                capability=fresh.capability,
+                target=fresh.target,
+            ),
+        ),
+    )
+    previous = InvestigationLedgerEntry(
+        query_id="prior-query",
+        gap_id="prior-gap",
+        capability=repeated.capability,
+        target=repeated.target,
+        query=InvestigationQuery(
+            start=ONSET - timedelta(minutes=20),
+            end=ONSET + timedelta(minutes=20),
+            limit=16,
+        ),
+        returned_evidence_refs=("known:one",),
+        already_known_refs=("known:one",),
+    )
+
+    ranked = rank_observation_candidates(
+        candidates=(repeated, fresh),
+        diagnosis=diagnosis,
+        previous_investigations=(previous,),
+    )
+
+    assert ranked[0].candidate.candidate_id == "z-fresh"
+    assert ranked[1].utility.semantic_duplicate_penalty == 1
+    assert ranked[1].utility.known_evidence_penalty == 1
+
+
 def test_unresolved_structural_alternative_beats_irrelevant_candidate() -> None:
     case = _case()
     alternative = StructuralAlternative(

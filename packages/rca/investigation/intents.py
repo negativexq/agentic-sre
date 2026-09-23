@@ -65,6 +65,11 @@ class ObservationBundle:
     dimensions: tuple[GapDimension, ...]
     hypothesis_ids: tuple[str, ...]
     alternative_ids: tuple[str, ...]
+    discriminating_gap_coverage: int = 0
+    positive_discriminator_states: int = 0
+    competing_state_coverage: int = 0
+    known_evidence_penalty: int = 0
+    semantic_duplicate_penalty: int = 0
 
 
 @dataclass(frozen=True)
@@ -79,6 +84,11 @@ class IntentUtility:
     eligibility_relevance: int
     semantic_priority: int
     stable_tiebreak: str
+    discriminating_gap_coverage: int = 0
+    positive_discriminator_states: int = 0
+    competing_state_coverage: int = 0
+    known_evidence_penalty: int = 0
+    semantic_duplicate_penalty: int = 0
 
 
 @dataclass(frozen=True)
@@ -378,6 +388,14 @@ def build_observation_bundles(
     bundles: list[ObservationBundle] = []
     for intent, members in grouped.items():
         ordered = tuple(sorted(members, key=lambda item: item.candidate_id))
+        ranked_members = rank_observation_candidates(
+            candidates=ordered,
+            diagnosis=diagnosis,
+            attempted_observations=attempted_observations,
+            previous_investigations=previous_investigations,
+            require_discriminator=require_discriminator,
+        )
+        representative = ranked_members[0].utility if ranked_members else None
         bundles.append(
             ObservationBundle(
                 bundle_id=f"intent:{intent.value.lower()}",
@@ -405,6 +423,21 @@ def build_observation_bundles(
                             for alternative_id in item.alternative_ids
                         }
                     )
+                ),
+                discriminating_gap_coverage=(
+                    representative.discriminating_gap_coverage if representative else 0
+                ),
+                positive_discriminator_states=(
+                    representative.positive_discriminator_states if representative else 0
+                ),
+                competing_state_coverage=(
+                    representative.competing_state_coverage if representative else 0
+                ),
+                known_evidence_penalty=(
+                    representative.known_evidence_penalty if representative else 0
+                ),
+                semantic_duplicate_penalty=(
+                    representative.semantic_duplicate_penalty if representative else 0
                 ),
             )
         )
@@ -445,6 +478,11 @@ def intent_utility_sort_key(scored: ScoredObservationBundle) -> tuple[object, ..
         -utility.leading_hypothesis_relevance,
         -utility.unresolved_hypothesis_relevance,
         -utility.eligibility_relevance,
+        -utility.discriminating_gap_coverage,
+        -utility.positive_discriminator_states,
+        -utility.competing_state_coverage,
+        utility.known_evidence_penalty,
+        utility.semantic_duplicate_penalty,
         -utility.semantic_priority,
         utility.stable_tiebreak,
     )
@@ -459,6 +497,11 @@ def intent_relevance_key(scored: ScoredObservationBundle) -> tuple[int, ...]:
         utility.leading_hypothesis_relevance,
         utility.unresolved_hypothesis_relevance,
         utility.eligibility_relevance,
+        utility.discriminating_gap_coverage,
+        utility.positive_discriminator_states,
+        utility.competing_state_coverage,
+        -utility.known_evidence_penalty,
+        -utility.semantic_duplicate_penalty,
         utility.semantic_priority,
     )
 
@@ -493,6 +536,11 @@ def score_observation_bundle(
             else _DISCRIMINATION_ORDER[bundle.intent]
         ),
         stable_tiebreak=bundle.bundle_id,
+        discriminating_gap_coverage=bundle.discriminating_gap_coverage,
+        positive_discriminator_states=bundle.positive_discriminator_states,
+        competing_state_coverage=bundle.competing_state_coverage,
+        known_evidence_penalty=bundle.known_evidence_penalty,
+        semantic_duplicate_penalty=bundle.semantic_duplicate_penalty,
     )
     return ScoredObservationBundle(bundle=bundle, utility=utility)
 

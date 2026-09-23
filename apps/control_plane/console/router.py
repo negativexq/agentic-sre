@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session, sessionmaker
 
+from apps.control_plane.auth import require_api_token
 from apps.control_plane.console.dto import (
     ChangeView,
     DashboardCounters,
@@ -42,7 +43,7 @@ from apps.control_plane.timeline import diagnosis_phases
 from packages.contracts import ChangeScope, ChangeType
 from packages.rca.model import Diagnosis
 from packages.report import ReportSnapshot, build_report, to_markdown, to_pdf
-from packages.report.email import render_email
+from packages.report.email import render_email, subject_for
 from packages.storage import (
     AlertRepository,
     ChangeRecordRepository,
@@ -289,7 +290,7 @@ def create_console_router(
         if onset is None:
             alerts = AlertRepository(session).list_for_incident(incident_id)
             onset = min((alert.starts_at for alert in alerts), default=incident.created_at)
-        leading = diagnosis.root_cause.name if diagnosis and diagnosis.root_cause else None
+        leading = diagnosis.root_cause if diagnosis else None
         records = ChangeRecordRepository(session).recent(
             starts_at=onset - timedelta(hours=2),
             ends_at=onset + timedelta(minutes=30),
@@ -325,7 +326,12 @@ def create_console_router(
             generated_at=datetime.now(UTC),
         )
 
-    @router.post("/incidents/{incident_id}/reports", response_model=ReportSnapshot, status_code=201)
+    @router.post(
+        "/incidents/{incident_id}/reports",
+        response_model=ReportSnapshot,
+        status_code=201,
+        dependencies=[Depends(require_api_token)],
+    )
     def create_report(
         incident_id: UUID,
         session: Session = Depends(get_session),  # noqa: B008
@@ -409,7 +415,11 @@ def create_console_router(
             headers={"Content-Disposition": f'inline; filename="report-{report_id}.pdf"'},
         )
 
-    @router.post("/reports/{report_id}/email", response_model=DeliveryView)
+    @router.post(
+        "/reports/{report_id}/email",
+        response_model=DeliveryView,
+        dependencies=[Depends(require_api_token)],
+    )
     def share_report(
         report_id: str,
         request: ShareRequest,
@@ -427,10 +437,23 @@ def create_console_router(
             )
 
         deliveries = EmailDeliveryRepository(session)
-        if request.idempotency_key:
-            existing = deliveries.find_by_idempotency_key(request.idempotency_key)
+        # Reserve the delivery before sending. With an idempotency key this is
+        # the concurrency gate: a losing racer gets the existing row and never
+        # sends a second copy.
+        reserved = deliveries.reserve(
+            delivery_id=str(uuid4()),
+            report_id=report_id,
+            incident_id=UUID(snapshot.incident_id) if snapshot.incident_id else None,
+            recipients=recipients,
+            subject=subject_for(snapshot),
+            idempotency_key=request.idempotency_key,
+            created_at=datetime.now(UTC),
+        )
+        if reserved is None:
+            existing = deliveries.find_by_idempotency_key(request.idempotency_key or "")
             if existing is not None:
                 return DeliveryView.model_validate(existing)
+            raise HTTPException(status_code=409, detail="delivery already in progress")
 
         payload = render_email(snapshot, include_pdf=request.include_pdf)
         status, error = "sent", None
@@ -438,17 +461,7 @@ def create_console_router(
             email_delivery.send(recipients, payload)
         except Exception as failure:  # noqa: BLE001 - record every failure for audit/retry
             status, error = "failed", str(failure)[:1000]
-        stored = deliveries.save(
-            delivery_id=str(uuid4()),
-            report_id=report_id,
-            incident_id=UUID(snapshot.incident_id) if snapshot.incident_id else None,
-            recipients=recipients,
-            subject=payload.subject,
-            status=status,
-            error=error,
-            idempotency_key=request.idempotency_key,
-            created_at=datetime.now(UTC),
-        )
+        stored = deliveries.finalize(reserved["delivery_id"], status=status, error=error)
         if status == "failed":
             # Persisted for audit and retry, but surfaced as a failure.
             raise HTTPException(status_code=502, detail=f"email delivery failed: {error}")

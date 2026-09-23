@@ -421,6 +421,20 @@ def test_report_exports_markdown_json_and_pdf(
     assert pdf.content.startswith(b"%PDF-")
 
 
+def test_report_create_requires_token_when_configured(
+    app_client: tuple[TestClient, dict[str, UUID]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, ids = app_client
+    monkeypatch.setenv("SRE_API_TOKEN", "secret-token")
+    path = f"/api/v1/console/incidents/{ids['resolved']}/reports"
+
+    assert client.post(path).status_code == 401
+    assert client.post(path, headers={"Authorization": "Bearer secret-token"}).status_code == 201
+    # Read endpoints stay open even with a token configured.
+    assert client.get("/api/v1/console/reports").status_code == 200
+
+
 def test_report_requires_a_diagnosis(app_client: tuple[TestClient, dict[str, UUID]]) -> None:
     client, ids = app_client
     response = client.post(f"/api/v1/console/incidents/{ids['pending']}/reports")

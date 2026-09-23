@@ -263,7 +263,7 @@ class DeliveryView(ConsoleModel):
     report_id: str
     recipients: list[str]
     subject: str
-    status: str  # sent | failed
+    status: str  # pending | sent | failed
     error: str | None
     created_at: datetime
 

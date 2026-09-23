@@ -153,6 +153,27 @@ def test_share_is_idempotent_by_key(
     assert len(delivery.sent) == 1  # not sent twice
 
 
+def test_share_requires_token_when_configured(
+    sent_client: tuple[TestClient, FakeDelivery, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, delivery, report_id = sent_client
+    monkeypatch.setenv("SRE_API_TOKEN", "secret-token")
+    body = {"recipients": ["sre@example.com"]}
+
+    unauth = client.post(f"/api/v1/console/reports/{report_id}/email", json=body)
+    assert unauth.status_code == 401
+    assert delivery.sent == []  # nothing sent without the token
+
+    ok = client.post(
+        f"/api/v1/console/reports/{report_id}/email",
+        json=body,
+        headers={"Authorization": "Bearer secret-token"},
+    )
+    assert ok.status_code == 200
+    assert len(delivery.sent) == 1
+
+
 def test_share_requires_a_recipient(
     sent_client: tuple[TestClient, FakeDelivery, str],
 ) -> None:

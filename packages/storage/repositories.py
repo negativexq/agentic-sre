@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import desc, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from packages.contracts import (
@@ -928,7 +929,7 @@ class EmailDeliveryRepository:
         ).first()
         return _delivery_to_dict(row) if row is not None else None
 
-    def save(
+    def reserve(
         self,
         *,
         delivery_id: str,
@@ -936,23 +937,42 @@ class EmailDeliveryRepository:
         incident_id: object | None,
         recipients: list[str],
         subject: str,
-        status: str,
-        error: str | None,
         idempotency_key: str | None,
         created_at: datetime,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | None:
+        """Atomically claim a delivery in ``pending`` before any send is attempted.
+
+        The ``idempotency_key`` unique constraint makes this the concurrency
+        gate: of two racing requests with the same key, exactly one insert
+        succeeds and owns the send; the loser gets ``None`` and returns the
+        existing row instead of sending again.
+        """
         row = EmailDeliveryRow(
             delivery_id=delivery_id,
             report_id=report_id,
             incident_id=incident_id,
             recipients=recipients,
             subject=subject,
-            status=status,
-            error=error,
+            status="pending",
+            error=None,
             idempotency_key=idempotency_key,
             created_at=created_at,
         )
         self._session.add(row)
+        try:
+            self._session.commit()
+        except IntegrityError:
+            self._session.rollback()
+            return None
+        return _delivery_to_dict(row)
+
+    def finalize(self, delivery_id: str, *, status: str, error: str | None) -> dict[str, Any]:
+        """Record the send outcome on a previously reserved delivery."""
+        row = self._session.get(EmailDeliveryRow, delivery_id)
+        if row is None:  # pragma: no cover - reserve always precedes finalize
+            raise LookupError(delivery_id)
+        row.status = status
+        row.error = error
         self._session.commit()
         return _delivery_to_dict(row)
 

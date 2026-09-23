@@ -25,9 +25,14 @@ class EmailPayload:
     pdf_filename: str | None
 
 
-def _subject(snapshot: ReportSnapshot) -> str:
+def subject_for(snapshot: ReportSnapshot) -> str:
+    """The share subject line, cheap to compute without rendering the body."""
     actor = snapshot.root_actor or snapshot.leading_root_actor or snapshot.title
     return f"[Agentic SRE] {snapshot.severity} — {actor}"
+
+
+def _subject(snapshot: ReportSnapshot) -> str:
+    return subject_for(snapshot)
 
 
 def _html(snapshot: ReportSnapshot) -> str:

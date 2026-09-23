@@ -37,6 +37,7 @@ from packages.rca.model import (
     Candidate,
     CausalHop,
     Diagnosis,
+    EntityRef,
     Finding,
     Hypothesis,
     ResolutionTrace,
@@ -253,7 +254,7 @@ def report_summary(snapshot: ReportSnapshot) -> ReportSummary:
 def change_view(
     record: ChangeRecord,
     onset: datetime | None = None,
-    leading_actor_name: str | None = None,
+    leading_actor: EntityRef | None = None,
 ) -> ChangeView:
     if onset is None:
         delta: float | None = None
@@ -261,6 +262,14 @@ def change_view(
         delta = (record.timestamp - onset).total_seconds()
     else:
         delta = -abs((onset - record.timestamp).total_seconds())
+    # Match on kind and name so a like-named resource of a different kind is not
+    # falsely flagged. ChangeRecord carries no namespace, so namespace cannot be
+    # compared; the mark stays a label, never a causal claim.
+    matches = bool(
+        leading_actor
+        and record.resource_type == leading_actor.kind
+        and record.resource_name == leading_actor.name
+    )
     return ChangeView(
         change_id=str(record.change_id),
         timestamp=record.timestamp,
@@ -271,7 +280,5 @@ def change_view(
         revision=record.revision,
         source=record.source,
         onset_delta_seconds=delta,
-        matches_leading_actor=bool(
-            leading_actor_name and record.resource_name == leading_actor_name
-        ),
+        matches_leading_actor=matches,
     )

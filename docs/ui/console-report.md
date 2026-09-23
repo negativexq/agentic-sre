@@ -3,21 +3,25 @@
 A full account of the UI/productization track (**M0–M12**): what was built, how
 it is structured, how it was verified, and what was deliberately left out. The
 console is built strictly on top of the deterministic RCA engine — it renders
-the engine's output and never computes a causal claim of its own. The RCA
-scoring/resolution algorithm was **not touched** anywhere in this track, so the
-measured engine performance (24/25 live, 0 fabrications, 0 model calls) still
-holds.
+the engine's output and never computes a causal claim of its own. The UI track
+did not modify the RCA scoring/resolution implementation (`packages/rca/` is
+unchanged across the track). The latest **recorded** live-suite result remains
+24/25 with 0 confident fabrications and 0 model calls; it was **not re-measured**
+as part of this UI track (control-plane and storage code did change).
 
-- **Scope:** 13 milestones, one commit per milestone, `main`.
-- **Verification:** `make check` green — ruff + mypy over `apps packages tests
-  scripts` + **778 backend tests**; frontend `tsc -b` + `eslint` green.
+- **Scope:** 13 milestones (M0–M12), delivered as **14 milestone commits** (M2
+  landed in two) plus follow-up fixes, on `main`.
+- **Verification:** `make check` green — ruff + mypy (strict) over `apps packages
+  tests scripts` + **783 backend/console tests**; frontend `tsc -b` + `eslint` +
+  production build. No automated React/component/browser tests yet.
 - **Live demo:** `make console` → http://localhost:8000/app (no cluster needed).
 
 ---
 
 ## 1. Product shape
 
-Six operator screens, one design system, one honest data contract.
+Six product areas across **seven routes** (the incident list and the incident
+workspace are separate routes), one design system, one honest data contract.
 
 | Screen | Route | What it answers |
 |---|---|---|
@@ -68,10 +72,11 @@ Key boundary decisions:
   Pydantic DTOs (`apps/control_plane/console/dto.py`) are the stable wire
   contract. The frontend never sees internal persistence rows or the full RCA
   model. The pre-existing `/api/v1/*` endpoints and their tests are untouched.
-- **Two queries, no N+1.** Dashboard/list load = incidents (1 query) +
-  `DiagnosisRepository.latest_views()` (1 query). Service, resolution, confidence
-  and root actor come from the latest stored diagnosis document, not per-row
-  fetches.
+- **Bounded queries, no N+1.** Incident list/data assembly is two queries —
+  incidents (1) + `DiagnosisRepository.latest_views()` (1); service, resolution,
+  confidence and root actor come from the latest stored diagnosis document, not
+  per-row fetches. The dashboard additionally runs a `SELECT 1` health probe, so
+  its total is three bounded queries — still no N+1.
 - **Timeline binding by id.** The lifecycle timeline is bound to a diagnosis by
   its `diagnosis_run_id` (the v2a invariant), shared between the server-rendered
   page and the console via `apps/control_plane/timeline.py`. A run whose
@@ -80,7 +85,11 @@ Key boundary decisions:
 
 ---
 
-## 3. API surface — `/api/v1/console/*` (20 endpoints)
+## 3. API surface — `/api/v1/console/*` (21 endpoints)
+
+State-changing endpoints (`POST /incidents/{id}/reports`,
+`POST /reports/{id}/email`) require the shared bearer token when `SRE_API_TOKEN`
+is set; every GET is read-only and open, matching the legacy API.
 
 **Overview / config**
 - `GET /dashboard` → counters + active incidents + recent diagnoses + system health
@@ -90,6 +99,7 @@ Key boundary decisions:
 **Incidents**
 - `GET /incidents` → filtered + paginated list (`status, severity, service, confidence, resolution, active, q, limit, offset`)
 - `GET /incidents/{id}` → composite detail (header + diagnosis view + timeline)
+- `GET /incidents/{id}/diagnosis` → the diagnosis view alone (404 if none)
 - `GET /incidents/{id}/timeline` → alert→diagnosis lifecycle, run-bound
 - `GET /incidents/{id}/evidence` → raw provenance rows
 - `GET /incidents/{id}/changes` → changes in ±2h onset window, leading-actor marked
@@ -103,8 +113,8 @@ Key boundary decisions:
 - `GET /reports/{id}` → the snapshot (JSON)
 - `GET /reports/{id}/markdown` · `/json` · `/pdf` → exports from the same snapshot
 
-**Sharing**
-- `POST /reports/{id}/email` → share (503 if unconfigured, 422 no recipient, 502 on send failure, idempotent by key)
+**Sharing** (token-guarded when configured)
+- `POST /reports/{id}/email` → share (401 without token, 503 if unconfigured, 422 no recipient, 502 on send failure; atomically idempotent by key)
 - `GET /reports/{id}/deliveries` → audit log
 
 **Live**
@@ -177,15 +187,21 @@ inline PDF/MD/JSON export and a link back to its incident and run.
 ### M10 — Email sharing
 `packages/report/email.py` renders the email from the same snapshot;
 `apps/control_plane/console/email_delivery.py` sends over SMTP when
-`SRE_SMTP_HOST` is configured. Every attempt is written to an audit log
-(`email_deliveries`, migration `0013`) with status and error; idempotency keys
-prevent duplicate sends; failures are recorded and surfaced (502) for retry.
-Unconfigured is an **honest refusal** (503), and the UI shows a "set
+`SRE_SMTP_HOST` is configured. Each share **reserves** a `pending` delivery row
+before any send (the `idempotency_key` unique constraint is the concurrency
+gate: of two racing requests with the same key, exactly one insert wins and
+sends; the loser returns the existing row without sending). The row is then
+finalized to `sent`/`failed`; failures are recorded and surfaced (502) for
+retry. Unconfigured is an **honest refusal** (503), and when a token is
+configured the endpoint requires it (401 otherwise). The UI shows a "set
 `SRE_SMTP_HOST`" note with the send control disabled — nothing pretends to send.
 
 ### M11 — Connections & Settings
-Read-only. Connections shows probed connector health (Database and Alertmanager
-truthfully; upstreams reported as configured/not-configured). Settings shows
+Read-only. Connections shows connector health: **Database** is a real `SELECT 1`
+probe; **Kubernetes** reflects only whether a cluster reader is configured;
+**Alertmanager** is reported "connected — webhook receiver ready" (our receiver
+is up; upstream Alertmanager reachability is not probed); Prometheus/Loki/Tempo/
+Email are reported configured-or-not from the environment. Settings shows
 effective config; **secrets are never returned** — only whether each is set.
 
 ### M12 — Production hardening
@@ -205,29 +221,36 @@ lazy-loaded). Makefile: `make console` (build + seed + serve), `web-build`,
 | `report_snapshots` | `0012` | Immutable report, pinned to `diagnosis_run_id`. |
 | `email_deliveries` | `0013` | Audit log of shares (recipients, status, error, idempotency key). |
 
-Migrations are linear (`… → 0011 → 0012 → 0013`) and idempotent. Column
-additions only; no changes to existing RCA/diagnosis tables.
+Migrations are linear (`… → 0011 → 0012 → 0013`) and idempotent. Additive schema
+changes only — **two new tables**, no mutation of existing RCA/diagnosis tables.
 
 ---
 
 ## 6. Verification
 
-- **Backend:** 778 tests pass; ruff + mypy (strict) clean over `apps packages
-  tests scripts`.
-- **UI-focused tests (31):**
-  - `test_console_api.py` (15) — dashboard counters, list filters + pagination,
+- **Backend/console:** 783 tests pass; ruff + mypy (strict) clean over `apps
+  packages tests scripts`. These are Python tests of the console/report backend —
+  **not** React UI tests.
+- **Dedicated console/report tests (36):**
+  - `test_console_api.py` (16) — dashboard counters, list filters + pagination,
     detail timeline binding, `AMBIGUOUS` not resolved, timeline-unavailable,
     evidence, changes + leading-actor mark, report create/fetch/immutability,
-    exports, settings masking, legacy API unchanged, typed 404s.
+    report-create token guard, exports, settings masking, legacy API unchanged,
+    typed 404s.
   - `test_console_stream.py` (2) — fingerprint tracking; SSE pump emits
     retry + initial + on-change.
-  - `test_console_email.py` (5) — unconfigured refusal, send + audit,
-    idempotency, recipient validation, failed-delivery recording.
+  - `test_console_email.py` (6) — unconfigured refusal, send + audit,
+    idempotency, token guard, recipient validation, failed-delivery recording.
+  - `test_change_mapper.py` (3) — leading-actor mark by kind+name, no
+    false-positive on same-name/different-kind, no mark without a leading actor.
   - `test_builder.py` / `test_render.py` / `test_email.py` (9) — snapshot
     projection, resolved vs ambiguous, determinism, Markdown/PDF/email content.
-  - `test_api.py` — security headers + SPA serving.
-- **Visual:** every screen verified in the browser against real seeded data,
-  including the **production-served** SPA at `:8000/app` under CSP.
+  - `test_api.py` also covers security headers + SPA serving.
+- **Frontend:** TypeScript typecheck, ESLint, and production build pass; every
+  screen verified manually in the browser against real seeded data, including the
+  **production-served** SPA at `:8000/app` under CSP. Automated
+  React/component/browser tests are **not** implemented (no `test` script in
+  `apps/web/package.json`).
 
 ---
 
@@ -235,13 +258,16 @@ additions only; no changes to existing RCA/diagnosis tables.
 
 Claimed nowhere as done:
 
-- **Authentication / RBAC**, CSRF protection, rate limiting, list virtualization.
+- **User authentication / RBAC**, CSRF protection, rate limiting, list virtualization.
 
 Current security posture: an optional shared bearer token (`SRE_API_TOKEN`)
-guards state-changing endpoints; read endpoints are open in the local/demo
-deployment; secrets are never returned by the API; responses carry
-`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and a strict CSP.
-Auth/RBAC is the natural next epic before any multi-tenant exposure.
+guards **all** state-changing endpoints — the legacy write endpoints and the
+console's `POST /incidents/{id}/reports` and `POST /reports/{id}/email` (verified
+by tests). Read endpoints are open in the local/demo deployment; secrets are
+never returned by the API; responses carry `X-Content-Type-Options`,
+`X-Frame-Options`, `Referrer-Policy`, and a strict CSP. This is a single shared
+secret, not per-user auth: **user authentication and RBAC** are the natural next
+epic before any multi-tenant exposure.
 
 Also note: the raw `evidence` table has no writer in the current pipeline, so the
 "Raw provenance" tab is typically empty in the live product — the engine reasons
@@ -266,13 +292,15 @@ apps/web/src/
   pages/          Overview, Incidents, IncidentWorkspace, Changes, Reports,
                   Connections, Settings, NotFound
 
-apps/control_plane/console/
-  dto.py          UI wire contracts
-  mappers.py      domain → DTO
-  router.py       the 20 endpoints
-  stream.py       SSE fingerprint pump
-  settings.py     read-only config view (secrets masked)
-  email_delivery.py  SMTP delivery + env config
+apps/control_plane/
+  auth.py         shared bearer-token guard (legacy + console writes)
+  console/
+    dto.py          UI wire contracts
+    mappers.py      domain → DTO
+    router.py       the 21 endpoints
+    stream.py       SSE fingerprint pump
+    settings.py     read-only config view (secrets masked)
+    email_delivery.py  SMTP delivery + env config
 
 packages/report/  model.py, builder.py, render.py (PDF/MD), email.py
 scripts/seed_console_demo.py   demo data seeder

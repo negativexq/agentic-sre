@@ -221,8 +221,15 @@ lazy-loaded). Makefile: `make console` (build + seed + serve), `web-build`,
 | `report_snapshots` | `0012` | Immutable report, pinned to `diagnosis_run_id`. |
 | `email_deliveries` | `0013`, `0014` | Audit log of shares; idempotency unique scoped to `(report_id, idempotency_key)` in `0014`. |
 
-Migrations are linear (`… → 0011 → 0012 → 0013`) and idempotent. Additive schema
-changes only — **two new tables**, no mutation of existing RCA/diagnosis tables.
+Migrations are linear (`… → 0011 → 0012 → 0013 → 0014`) and idempotent. Additive
+schema changes only — **two new tables**, no mutation of existing RCA/diagnosis
+tables (`0014` re-scopes the `email_deliveries` unique constraint).
+
+**Idempotency contract.** A share with an `idempotency_key` is matched by
+`(report_id, key)`: a replay returns the **existing** delivery and never sends
+twice — including when that first attempt is `failed`. A genuine retry after a
+failure therefore needs a fresh key (a dedicated retry endpoint is a possible
+future addition); the recorded failure stays in the audit log either way.
 
 ---
 

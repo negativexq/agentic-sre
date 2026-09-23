@@ -47,6 +47,26 @@ serve-local:
 	DATABASE_URL=$(LOCAL_DB) $(PY) -m alembic upgrade head
 	DATABASE_URL=$(LOCAL_DB) $(CLI) serve
 
+# --- operator console (apps/web) ---------------------------------------------
+
+web-install:
+	cd apps/web && npm install
+
+web-build:
+	cd apps/web && npm run build
+
+web-dev:
+	cd apps/web && npm run dev
+
+# Build the console, seed a realistic incident mix, and serve everything from
+# the control plane at http://localhost:8000/app — no cluster required.
+console: web-build
+	mkdir -p .local
+	DATABASE_URL=$(LOCAL_DB) $(PY) -m alembic upgrade head
+	DATABASE_URL=$(LOCAL_DB) $(PY) scripts/seed_console_demo.py
+	@echo "Operator console: http://localhost:8000/app"
+	DATABASE_URL=$(LOCAL_DB) $(CLI) serve
+
 # --- benchmark (ITBench-Lite, offline) ---------------------------------------
 
 ITBENCH_WORKERS ?= 16
@@ -121,7 +141,7 @@ load:
 	$(PY) -m workload.load_generator --base-url http://localhost:8000 --rate 10 --duration 300 --seed 42
 
 ui:
-	@echo "Agentic SRE UI: http://localhost:8080"
+	@echo "Operator console: http://localhost:8080/app   (legacy pages at http://localhost:8080/)"
 	kubectl port-forward -n $(NAMESPACE) svc/control-plane 8080:8000
 
 # A bad rollout: payment requests start taking 2.5 s. The control plane records

@@ -8,12 +8,14 @@ from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from prometheus_client import make_asgi_app
 from prometheus_client.registry import CollectorRegistry
 from sqlalchemy import text
@@ -60,6 +62,16 @@ from packages.storage import (
 from packages.telemetry import TelemetryMiddleware, create_runtime
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/agentic_sre"
+
+# The built operator console (apps/web/dist), served under /app when present.
+WEB_DIST = Path(__file__).resolve().parents[2] / "apps" / "web" / "dist"
+
+# The console is self-contained: same-origin scripts, styles and API/SSE. This
+# keeps a strict policy while allowing the inline styles some libraries emit.
+CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+    "script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'"
+)
 
 try:
     PROJECT_VERSION = version("agentic-sre")
@@ -211,6 +223,16 @@ def create_app(
     app.add_middleware(TelemetryMiddleware, runtime=telemetry)
     app.mount("/metrics", make_asgi_app(registry=registry))
     app.dependency_overrides[get_session] = session_dependency
+
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next: Any) -> Response:
+        """Apply conservative security headers to every response."""
+        response: Response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault("Content-Security-Policy", CONTENT_SECURITY_POLICY)
+        return response
 
     reader_configured = diagnoser.reader is not None
 
@@ -431,6 +453,20 @@ def create_app(
             "accepted": len(incidents),
             "incident_ids": [str(incident.incident_id) for incident in incidents],
         }
+
+    # Serve the built operator console under /app when it has been built. In a
+    # source checkout without a build, the JSON API and server-rendered pages
+    # still work; only the SPA route is absent.
+    if (WEB_DIST / "index.html").exists():
+        assets = WEB_DIST / "assets"
+        if assets.is_dir():
+            app.mount("/app/assets", StaticFiles(directory=assets), name="web-assets")
+
+        @app.get("/app", response_class=HTMLResponse, include_in_schema=False)
+        @app.get("/app/{full_path:path}", response_class=HTMLResponse, include_in_schema=False)
+        def operator_console(full_path: str = "") -> FileResponse:
+            """Serve the SPA shell for the console and all its client routes."""
+            return FileResponse(WEB_DIST / "index.html")
 
     return app
 

@@ -237,11 +237,34 @@ make ui                    # in another terminal, then open http://localhost:808
 make live-restore          # undo the staged fault when finished
 ```
 
-### Live incident UI
+### Operator console
 
-`make ui` port-forwards the control plane to **http://localhost:8080**. The
-incident list refreshes itself, and each incident page shows the diagnosis the
-control plane stored together with its lifecycle timing:
+A React/TypeScript operator console (`apps/web`) renders the deterministic
+engine's output — it never computes a causal claim of its own. It has six
+screens: an **Overview** dashboard, a filterable **Incidents** list, the
+**Incident workspace** (root actor, causal path, run-bound lifecycle, "why this
+actor" vs competing hypotheses, evidence and trace), a **Changes** explorer,
+a **Reports** library, and read-only **Connections/Settings**.
+
+```bash
+make console   # builds the SPA, seeds a demo incident mix, serves it
+```
+
+Then open **http://localhost:8000/app**. Against a live cluster, `make ui`
+port-forwards the same console to **http://localhost:8080/app**. The control
+plane serves the built SPA under `/app` (with security headers and a strict
+content-security policy); the JSON contract lives under `/api/v1/console/*` and
+live updates stream over server-sent events (only persisted state transitions
+reach the UI). The product contract is documented in
+[docs/ui/product-contract.md](docs/ui/product-contract.md).
+
+**Reports.** Any incident with a diagnosis can be frozen into an immutable
+report pinned to its `diagnosis_run_id`, exported as PDF / Markdown / JSON, and
+shared by email (SMTP, when configured). A report never changes when the
+incident is re-diagnosed.
+
+Each incident page shows the diagnosis lifecycle with real recorded timestamps
+and `T+` offsets:
 
 ```text
 Alert fired → Incident opened → Diagnosis started
@@ -250,11 +273,14 @@ Alert fired → Incident opened → Diagnosis started
   → Diagnosis stored (root cause · resolution)
 ```
 
-Each stage carries the real recorded timestamp and a `T+` offset, so the page
-answers "how long from alert to root cause, and what was read to get there" —
-with the model-call count shown alongside (zero on the deterministic path). The
-[timeline design](docs/diagnosis-timeline.md) documents the per-run events
-behind it.
+So the page answers "how long from alert to root cause, and what was read to get
+there" — with the model-call count shown alongside (zero on the deterministic
+path). The [timeline design](docs/diagnosis-timeline.md) documents the per-run
+events behind it.
+
+> The console (M0–M12) is built strictly on top of the engine: the RCA scoring
+> and resolution algorithm is unchanged, so the measured performance above still
+> holds.
 
 ## Architecture and trust boundaries
 
@@ -408,8 +434,10 @@ telemetry impose real limits.
 
 ```text
 packages/rca          deterministic RCA engine, topology, ranking, reports
+packages/report       immutable report snapshots, PDF/Markdown/email rendering
 packages/storage      incident, observation, and journal persistence
-apps/control_plane    API, Alertmanager webhook, UI, and live diagnosis
+apps/control_plane    API, console DTOs, Alertmanager webhook, live diagnosis
+apps/web              React/TypeScript operator console (served at /app)
 apps/cli              agentic-sre CLI and benchmark entrypoints
 packages/evals        ITBench-Lite integration and grading
 evals                 benchmark splits, methodology, and public results
@@ -420,6 +448,7 @@ tests                 unit, integration, and release regression coverage
 ## Documentation
 
 - [Architecture details](docs/architecture.md)
+- [Operator console product contract](docs/ui/product-contract.md)
 - [Evaluation methodology](evals/README.md)
 - [Frozen benchmark report](evals/results/v1.1.2/README.md)
 - [Architecture decision records](docs/adr/)

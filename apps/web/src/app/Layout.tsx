@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 
+import { Skeleton } from "@/components/ui/States";
 import { cn } from "@/lib/cn";
 import { useTheme } from "@/lib/theme";
 
@@ -80,7 +82,9 @@ export function Layout() {
           ))}
         </header>
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">
-          <Outlet />
+          <Suspense fallback={<Skeleton className="h-48" />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>

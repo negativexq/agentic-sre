@@ -53,6 +53,27 @@ def test_health_and_readiness(client: tuple[TestClient, UUID]) -> None:
     assert test_client.get("/ready").json() == {"status": "ready"}
 
 
+def test_security_headers_applied(client: tuple[TestClient, UUID]) -> None:
+    test_client, _ = client
+    response = test_client.get("/health")
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert "default-src 'self'" in response.headers["Content-Security-Policy"]
+
+
+def test_spa_is_served_when_built(client: tuple[TestClient, UUID]) -> None:
+    from apps.control_plane.main import WEB_DIST
+
+    if not (WEB_DIST / "index.html").exists():
+        pytest.skip("operator console has not been built (apps/web/dist absent)")
+    test_client, _ = client
+    # Deep client routes fall back to the SPA shell.
+    response = test_client.get("/app/incidents/abc")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert '<div id="root">' in response.text
+
+
 def test_incident_and_timeline_queries(client: tuple[TestClient, UUID]) -> None:
     test_client, incident_id = client
 

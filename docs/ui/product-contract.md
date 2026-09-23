@@ -136,3 +136,33 @@ Secret values never returned to the UI.
 - [x] Benchmark UI separated from product UI.
 - [x] Incident detail information order fixed.
 - [x] RCA engine contract unchanged (no core edits in this milestone).
+
+## Delivered (M1–M12)
+
+- **M1** React/TS/Vite shell, semantic design tokens, light/dark, routing, primitives.
+- **M2** `/api/v1/console/*` DTO surface + typed client; internal models never exposed; legacy API untouched.
+- **M3** Overview dashboard + filterable incident list.
+- **M4** Incident workspace: root actor, causal path, run-bound lifecycle, why-this-actor vs competing hypotheses, evidence & trace.
+- **M5** Live updates over SSE (only persisted-state transitions; EventSource reconnect).
+- **M6** Changes explorer (global + onset-relative, leading-actor marked, no UI causal claim).
+- **M7** Canonical immutable `ReportSnapshot` pinned to `diagnosis_run_id`.
+- **M8** Report export: PDF (fpdf2), Markdown, JSON, in-app preview.
+- **M9** Reports library.
+- **M10** Email sharing (SMTP when configured; audit log; idempotency; honest refusal when unconfigured).
+- **M11** Read-only Connections (probed health) and Settings (secrets masked to booleans).
+- **M12** Control plane serves the built SPA at `/app` with security headers + CSP; frontend error boundary; route code-splitting.
+
+## G12 — product gate
+
+- [x] `make console` → dashboard → incident → root actor → evidence → causal path → export PDF → share, without reading the README.
+- [x] SPA served in production by the control plane under `/app`, security headers + CSP applied.
+- [x] RCA scoring/resolution algorithm untouched throughout (scope rule held).
+
+### Explicitly deferred (not claimed as done)
+
+Authentication / RBAC, CSRF protection, rate limiting, and list virtualization
+are **not** implemented. The current security posture is: an optional shared
+bearer token guards state-changing endpoints (`SRE_API_TOKEN`), read endpoints
+are open in the local/demo deployment, secrets are never returned by the API,
+and responses carry conservative security headers. Auth/RBAC is the natural next
+epic before multi-tenant exposure.

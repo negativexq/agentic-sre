@@ -13,7 +13,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from apps.control_plane.diagnosis import DiagnosisService
-from apps.control_plane.main import create_app, diagnosis_phases, newer_run_note
+from apps.control_plane.main import create_app
+from apps.control_plane.timeline import diagnosis_phases, newer_run_note
 from packages.contracts import (
     Incident,
     IncidentEvent,

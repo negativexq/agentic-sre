@@ -411,6 +411,11 @@ def test_ambiguous_investigation_adds_evidence_and_resolves_deterministically() 
     assert audit.backend_execution_status.value == "SUCCEEDED"
     assert audit.resolution_before is Resolution.AMBIGUOUS
     assert audit.resolution_after is Resolution.RESOLVED
+    assert audit.hypothesis_states_before
+    assert audit.hypothesis_states_after
+    assert audit.hypothesis_states_before != audit.hypothesis_states_after
+    assert audit.gap_states_before
+    assert audit.gap_states_after != audit.gap_states_before
     assert audit.decision_state_changed is True
     assert set(audit.returned_evidence_refs) == set(audit.new_evidence_refs) | set(
         audit.already_known_refs

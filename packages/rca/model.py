@@ -795,6 +795,7 @@ class InvestigationCandidateSelectionAudit(BaseModel):
     hypothesis_ids: tuple[str, ...] = ()
     alternative_ids: tuple[str, ...] = ()
     discriminators: tuple[InvestigationDiscriminatorAudit, ...] = ()
+    transition_certificates: tuple[InvestigationTransitionCertificate, ...] = ()
     discrimination_value: int = 0
     expected_elimination_value: int = 0
     expected_decision_impact: int = 0
@@ -806,6 +807,24 @@ class InvestigationCandidateSelectionAudit(BaseModel):
     intent_ordering_key: tuple[int, ...] = ()
     candidate_ordering_key: tuple[int, ...] = ()
     selected: bool = False
+
+
+class InvestigationTransitionCertificate(BaseModel):
+    """Truth-blind link from a bounded normalized outcome to an existing transition."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source_gap_id: str
+    capability: str
+    target: EntityRef
+    observation_fact_family: str
+    permitted_normalized_outcomes: tuple[FindingKind, ...]
+    affected_state_kind: Literal["HYPOTHESIS", "STRUCTURAL_ALTERNATIVE"]
+    affected_state_ids: tuple[str, ...]
+    normalizer_rule_id: str
+    transition_rule_id: str
+    preconditions: tuple[str, ...] = ()
+    ordinal_value: int = Field(ge=1, le=4)
 
 
 class InvestigationActionAudit(BaseModel):

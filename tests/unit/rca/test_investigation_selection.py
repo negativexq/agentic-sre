@@ -23,11 +23,14 @@ from packages.rca.model import (
     Alert,
     Diagnosis,
     EntityRef,
+    Finding,
+    FindingKind,
     FrontierStatus,
     GapDimension,
     GapOutcome,
     GapOutcomeKind,
     GapResolvability,
+    Hypothesis,
     InformationGap,
     InformationGapOrigin,
     InvestigationAction,
@@ -278,9 +281,18 @@ def test_leading_hypothesis_beats_generic_breadth() -> None:
             unresolved_hypotheses=("h-leading",),
         ),
     )
+    leading_target = _entity("Deployment", "leading-candidate")
     candidates = (
-        _candidate("leading-candidate", gap_ids=("leading",), hypothesis_ids=("h-leading",)),
+        _candidate(
+            "leading-candidate",
+            target=leading_target,
+            gap_ids=("leading",),
+            hypothesis_ids=("h-leading",),
+        ),
         _candidate("broad-candidate", gap_ids=tuple(gap.gap_id for gap in broad)),
+    )
+    diagnosis = diagnosis.model_copy(
+        update={"hypothesis": Hypothesis(hypothesis_id="h-leading", causal_actor=leading_target)}
     )
     ranked = rank_observation_candidates(candidates=candidates, diagnosis=diagnosis)
     assert ranked[0].candidate.candidate_id == "leading-candidate"
@@ -548,6 +560,273 @@ def test_active_choice_can_replace_equivalent_baseline_with_lower_repeat_risk() 
     assert reason == "equivalent_epistemic_value_lower_redundancy"
 
 
+def test_support_and_comparison_ids_without_transition_path_have_zero_elimination() -> None:
+    case = _case()
+    candidate = _candidate_with_states("history", target=_entity("ConfigMap", "tls"))
+    diagnosis = _diagnosis(case, (_gap("gap", GapDimension.CHANGE_TIMING),))
+
+    (scored,) = rank_observation_candidates(candidates=(candidate,), diagnosis=diagnosis)
+
+    assert scored.utility.expected_elimination_value == 0
+    assert scored.transition_certificates == ()
+
+
+def test_discovery_only_capability_without_finding_normalizer_gets_no_transition_value() -> None:
+    case = _case()
+    candidate = _candidate_with_states(
+        "incident-events",
+        capability="incident_events",
+        target=_entity("Namespace", "shop"),
+        support=("h1",),
+        comparisons=("h2",),
+    )
+    discriminator = candidate.discriminators[0]
+    candidate = replace(
+        candidate,
+        dimensions=(GapDimension.EVENT_SEQUENCE,),
+        discriminators=(replace(discriminator, dimension=GapDimension.EVENT_SEQUENCE),),
+    )
+    diagnosis = _diagnosis(case, (_gap("gap", GapDimension.EVENT_SEQUENCE),))
+
+    (scored,) = rank_observation_candidates(candidates=(candidate,), diagnosis=diagnosis)
+
+    assert scored.utility.expected_elimination_value == 0
+    assert scored.transition_certificates == ()
+
+
+def test_target_bound_normalized_history_path_can_certify_hypothesis_transition() -> None:
+    case = _case()
+    target = _entity("Deployment", "payment")
+    candidate = _candidate_with_states(
+        "history",
+        target=target,
+        support=("h-payment",),
+        comparisons=("h-other",),
+    )
+    diagnosis = _diagnosis(
+        case,
+        (_gap("gap", GapDimension.CHANGE_TIMING, hypothesis_ids=("h-payment",)),),
+        trace=ResolutionTrace(
+            state=Resolution.AMBIGUOUS,
+            leading_hypothesis_ids=("h-payment",),
+            unresolved_hypotheses=("h-payment",),
+        ),
+    ).model_copy(update={"hypothesis": Hypothesis(hypothesis_id="h-payment", causal_actor=target)})
+
+    (scored,) = rank_observation_candidates(candidates=(candidate,), diagnosis=diagnosis)
+
+    assert scored.utility.expected_elimination_value == 4
+    assert len(scored.transition_certificates) == 1
+    certificate = scored.transition_certificates[0]
+    assert certificate.observation_fact_family == "object_change"
+    assert certificate.permitted_normalized_outcomes == (
+        FindingKind.CONFIG_CHANGE,
+        FindingKind.SPEC_CHANGE,
+        FindingKind.IMAGE_CHANGE,
+        FindingKind.SCALE_CHANGE,
+        FindingKind.ROLLOUT_RESTART,
+        FindingKind.OBJECT_CREATED,
+        FindingKind.OBJECT_DELETED,
+    )
+    assert certificate.affected_state_ids == ("h-payment",)
+    assert certificate.normalizer_rule_id == (
+        "normalizers._history_findings→signals.change_findings"
+    )
+    assert certificate.transition_rule_id == (
+        "resolution.assess_hypothesis.aligned_initiating_evidence"
+    )
+
+
+def test_existing_normalized_fact_cannot_claim_new_transition_value() -> None:
+    case = _case()
+    target = _entity("Deployment", "payment")
+    candidate = _candidate_with_states(
+        "history",
+        target=target,
+        support=("h-payment",),
+        comparisons=("h-other",),
+    )
+    existing = Finding(
+        kind=FindingKind.ROLLOUT_RESTART,
+        entity=target,
+        at=ONSET - timedelta(minutes=1),
+        summary="already represented rollout restart",
+    )
+    diagnosis = _diagnosis(
+        case,
+        (_gap("gap", GapDimension.CHANGE_TIMING, hypothesis_ids=("h-payment",)),),
+    ).model_copy(
+        update={
+            "hypothesis": Hypothesis(
+                hypothesis_id="h-payment",
+                causal_actor=target,
+                findings=(existing,),
+            ),
+            "evidence": (existing,),
+        }
+    )
+
+    (scored,) = rank_observation_candidates(candidates=(candidate,), diagnosis=diagnosis)
+
+    assert scored.utility.expected_elimination_value == 0
+    assert scored.transition_certificates == ()
+
+
+def test_autoscaling_event_path_certifies_a_linked_unexplored_alternative() -> None:
+    case = _case()
+    target = _entity("HorizontalPodAutoscaler", "payment")
+    candidate = _candidate_with_states(
+        "events",
+        capability="events",
+        target=target,
+        support=(),
+        comparisons=(),
+    )
+    original = candidate.discriminators[0]
+    candidate = replace(
+        candidate,
+        dimensions=(GapDimension.AUTOSCALING_TARGET_STATE,),
+        discriminators=(
+            replace(
+                original,
+                dimension=GapDimension.AUTOSCALING_TARGET_STATE,
+                support_outcomes=(
+                    GapOutcome(
+                        kind=GapOutcomeKind.SUPPORTS,
+                        alternative_ids=("alt-hpa",),
+                        condition="normalized HPA failure is observed",
+                    ),
+                ),
+            ),
+        ),
+    )
+    diagnosis = _diagnosis(
+        case,
+        (_gap("gap", GapDimension.AUTOSCALING_TARGET_STATE),),
+        alternatives=(
+            StructuralAlternative(
+                alternative_id="alt-hpa",
+                actor=target,
+                role="autoscaling_controller",
+                linked_symptoms=("shop/Service/payment",),
+            ),
+        ),
+    )
+
+    (scored,) = rank_observation_candidates(candidates=(candidate,), diagnosis=diagnosis)
+
+    assert scored.utility.expected_elimination_value == 0
+    assert scored.utility.expected_decision_impact == 1
+    assert scored.transition_certificates[0].observation_fact_family == (
+        "autoscaling_failure_event"
+    )
+    assert scored.transition_certificates[0].affected_state_kind == "STRUCTURAL_ALTERNATIVE"
+    assert scored.transition_certificates[0].permitted_normalized_outcomes == (
+        FindingKind.AUTOSCALING_FAILURE,
+    )
+
+
+def test_uncertified_structural_elimination_claim_cannot_override_baseline() -> None:
+    case = _case()
+    diagnosis = _diagnosis(case, (_gap("gap", GapDimension.CHANGE_TIMING),))
+    (baseline,) = rank_observation_candidates(
+        candidates=(_candidate("baseline"),), diagnosis=diagnosis
+    )
+    active = replace(
+        baseline,
+        candidate=replace(baseline.candidate, candidate_id="active"),
+        utility=replace(
+            baseline.utility,
+            expected_elimination_value=3,
+            expected_decision_impact=3,
+        ),
+    )
+
+    dominates, reason = active_choice_dominates_baseline(active, baseline)
+
+    assert dominates is False
+    assert reason == "active_elimination_has_no_transition_certificate"
+
+
+def test_certified_hypothesis_transition_can_replace_equivalent_baseline() -> None:
+    case = _case()
+    target = _entity("HorizontalPodAutoscaler", "payment")
+    active_candidate = _candidate_with_states(
+        "active",
+        capability="events",
+        target=target,
+        support=(),
+        comparisons=(),
+    )
+    discriminator = active_candidate.discriminators[0]
+    active_candidate = replace(
+        active_candidate,
+        dimensions=(GapDimension.AUTOSCALING_TARGET_STATE,),
+        discriminators=(
+            replace(
+                discriminator,
+                dimension=GapDimension.AUTOSCALING_TARGET_STATE,
+                support_outcomes=(
+                    GapOutcome(
+                        kind=GapOutcomeKind.SUPPORTS,
+                        hypothesis_ids=("h-hpa",),
+                        alternative_ids=("alt-hpa",),
+                        condition="normalized HPA failure is observed",
+                    ),
+                ),
+            ),
+        ),
+    )
+    diagnosis = _diagnosis(
+        case,
+        (_gap("gap", GapDimension.AUTOSCALING_TARGET_STATE),),
+        trace=ResolutionTrace(
+            state=Resolution.AMBIGUOUS,
+            leading_hypothesis_ids=("h-hpa",),
+            unresolved_hypotheses=("h-hpa",),
+        ),
+        alternatives=(
+            StructuralAlternative(
+                alternative_id="alt-hpa",
+                actor=target,
+                role="autoscaling_controller",
+                linked_symptoms=("shop/Service/payment",),
+            ),
+        ),
+    ).model_copy(update={"hypothesis": Hypothesis(hypothesis_id="h-hpa", causal_actor=target)})
+    (active,) = rank_observation_candidates(candidates=(active_candidate,), diagnosis=diagnosis)
+    baseline_candidate = replace(active_candidate, candidate_id="baseline")
+    baseline_candidate = replace(
+        baseline_candidate,
+        discriminators=(
+            replace(
+                baseline_candidate.discriminators[0],
+                support_outcomes=(
+                    GapOutcome(
+                        kind=GapOutcomeKind.SUPPORTS,
+                        alternative_ids=("unmapped-alternative",),
+                        condition="no matching state transition exists",
+                    ),
+                ),
+            ),
+        ),
+    )
+    (baseline,) = rank_observation_candidates(candidates=(baseline_candidate,), diagnosis=diagnosis)
+    active = replace(
+        active,
+        utility=replace(
+            active.utility,
+            discrimination_value=baseline.utility.discrimination_value,
+        ),
+    )
+
+    dominates, reason = active_choice_dominates_baseline(active, baseline)
+
+    assert active.transition_certificates
+    assert dominates is True
+    assert reason == "higher_certified_decision_impact"
+
+
 def test_unresolved_structural_alternative_beats_irrelevant_candidate() -> None:
     case = _case()
     alternative = StructuralAlternative(
@@ -662,6 +941,10 @@ def test_representative_gap_is_deterministic_and_action_query_is_explicit() -> N
             leading_hypothesis_ids=("h",),
             unresolved_hypotheses=("h",),
         ),
+    ).model_copy(
+        update={
+            "hypothesis": Hypothesis(hypothesis_id="h", causal_actor=_entity("Deployment", "gap-a"))
+        }
     )
     selected = select_observation_candidate(
         case=case,

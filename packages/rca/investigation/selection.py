@@ -13,12 +13,18 @@ from packages.rca.investigation.candidates import (
 )
 from packages.rca.model import (
     Diagnosis,
+    EntityRef,
+    Finding,
+    FindingKind,
     GapResolvability,
+    Hypothesis,
     InvestigationAction,
     InvestigationActionAudit,
+    InvestigationDiscriminatorKind,
     InvestigationExecutionStatus,
     InvestigationLedgerEntry,
     InvestigationQuery,
+    InvestigationTransitionCertificate,
 )
 
 _OVERLAP_PREFERENCE = {
@@ -66,6 +72,7 @@ class ScoredObservationCandidate:
     candidate: ObservationCandidate
     utility: ObservationUtility
     overlap_class: str
+    transition_certificates: tuple[InvestigationTransitionCertificate, ...] = ()
 
 
 def observation_relevance_key(scored: ScoredObservationCandidate) -> tuple[int, ...]:
@@ -318,52 +325,240 @@ def _discrimination_value(candidate: ObservationCandidate) -> int:
     return len(pairs)
 
 
-def _expected_elimination_value(candidate: ObservationCandidate, diagnosis: Diagnosis) -> int:
+_NORMALIZED_TRANSITION_PATHS: dict[tuple[str, str], tuple[str, tuple[FindingKind, ...], str]] = {
+    ("history", "CHANGE_TIMING"): (
+        "object_change",
+        (
+            FindingKind.CONFIG_CHANGE,
+            FindingKind.SPEC_CHANGE,
+            FindingKind.IMAGE_CHANGE,
+            FindingKind.SCALE_CHANGE,
+            FindingKind.ROLLOUT_RESTART,
+            FindingKind.OBJECT_CREATED,
+            FindingKind.OBJECT_DELETED,
+        ),
+        "normalizers._history_findings→signals.change_findings",
+    ),
+    ("history", "CONFIG_DIFFERENCE"): (
+        "object_change",
+        (
+            FindingKind.CONFIG_CHANGE,
+            FindingKind.SPEC_CHANGE,
+            FindingKind.IMAGE_CHANGE,
+            FindingKind.SCALE_CHANGE,
+            FindingKind.ROLLOUT_RESTART,
+            FindingKind.OBJECT_CREATED,
+            FindingKind.OBJECT_DELETED,
+        ),
+        "normalizers._history_findings→signals.change_findings",
+    ),
+    ("events", "AUTOSCALING_TARGET_STATE"): (
+        "autoscaling_failure_event",
+        (FindingKind.AUTOSCALING_FAILURE,),
+        "normalizers._event_findings→signals.autoscaling_findings",
+    ),
+    ("events", "EVENT_SEQUENCE"): (
+        "incident_event",
+        (FindingKind.FAILURE_EVENT, FindingKind.AUTOSCALING_FAILURE),
+        "normalizers._event_findings→RCA hypothesis rebuild",
+    ),
+    ("traffic", "METRIC_CHANGE"): (
+        "traffic_change",
+        (FindingKind.TRAFFIC_INCREASE,),
+        "normalizers._metric_findings→RCA hypothesis rebuild",
+    ),
+}
+
+_INITIATING_TRANSITION_FINDINGS = frozenset(
+    {
+        FindingKind.CONFIG_CHANGE,
+        FindingKind.OBJECT_CREATED,
+        FindingKind.OBJECT_DELETED,
+        FindingKind.SPEC_CHANGE,
+        FindingKind.IMAGE_CHANGE,
+        FindingKind.SCALE_CHANGE,
+        FindingKind.ROLLOUT_RESTART,
+        FindingKind.AUTOSCALING_FAILURE,
+        FindingKind.TRAFFIC_INCREASE,
+    }
+)
+
+
+def _diagnosis_hypotheses(diagnosis: Diagnosis) -> tuple[Hypothesis, ...]:
+    items = (
+        *((diagnosis.hypothesis,) if diagnosis.hypothesis is not None else ()),
+        *diagnosis.ambiguous_hypotheses,
+        *diagnosis.alternative_hypotheses,
+    )
+    return tuple({item.hypothesis_id: item for item in items}.values())
+
+
+def _represented_findings(diagnosis: Diagnosis) -> tuple[Finding, ...]:
+    findings = list(diagnosis.evidence)
+    for hypothesis in _diagnosis_hypotheses(diagnosis):
+        findings.extend(hypothesis.findings)
+    return tuple(findings)
+
+
+def _fact_family_is_represented(
+    *,
+    family: str,
+    target: EntityRef,
+    outcomes: tuple[FindingKind, ...],
+    findings: Sequence[Finding],
+) -> bool:
+    for finding in findings:
+        if finding.entity != target or finding.kind not in outcomes:
+            continue
+        if family == "autoscaling_failure_event":
+            # Object-state-derived HPA failures and incident-event failures are
+            # distinct normalized facts even though both use the same Finding
+            # kind. Only an already-normalized event-provenance fact overlaps.
+            if any(
+                reference.startswith("k8s_events_raw.tsv:") for reference in finding.evidence_ids
+            ):
+                return True
+            continue
+        return True
+    return False
+
+
+def _transition_certificates(
+    candidate: ObservationCandidate,
+    diagnosis: Diagnosis,
+) -> tuple[InvestigationTransitionCertificate, ...]:
+    """Certify only pre-turn normalized outcomes with an existing state path.
+
+    The mapping is intentionally capability- and dimension-specific. A state ID
+    alone is never a transition proof; the target must bind to the visible state,
+    the trusted normalizer must produce an eligible Finding family, and that
+    family must be absent from the current state for the target.
+    """
+    hypotheses = {item.hypothesis_id: item for item in _diagnosis_hypotheses(diagnosis)}
+    alternatives = {item.alternative_id: item for item in diagnosis.structural_alternatives}
     leading = (
         set(diagnosis.resolution_trace.leading_hypothesis_ids)
-        if diagnosis.resolution_trace
+        if diagnosis.resolution_trace is not None
         else set()
     )
-    supports_hypothesis = {
-        identifier
-        for discriminator in candidate.discriminators
-        for outcome in discriminator.support_outcomes
-        for identifier in outcome.hypothesis_ids
-    }
-    supports_alternative = {
-        identifier
-        for discriminator in candidate.discriminators
-        for outcome in discriminator.support_outcomes
-        for identifier in outcome.alternative_ids
-    }
-    compares_hypothesis = {
-        identifier
-        for discriminator in candidate.discriminators
-        for identifier in discriminator.comparison_hypothesis_ids
-    }
-    compares_alternative = {
-        identifier
-        for discriminator in candidate.discriminators
-        for identifier in discriminator.comparison_alternative_ids
-    }
-    if supports_hypothesis & leading and (compares_hypothesis or compares_alternative):
-        return 4
-    if supports_alternative and compares_alternative:
-        return 3
-    if supports_hypothesis and compares_hypothesis:
-        return 2
-    if supports_hypothesis or supports_alternative:
-        return 1
-    return 0
+    represented = _represented_findings(diagnosis)
+    certificates: dict[tuple[str, str, str], InvestigationTransitionCertificate] = {}
+    for discriminator in candidate.discriminators:
+        if discriminator.kind is InvestigationDiscriminatorKind.DISCOVERY:
+            # Discovery/gap-state value is scored independently below.
+            continue
+        path = _NORMALIZED_TRANSITION_PATHS.get(
+            (candidate.capability, discriminator.dimension.value)
+        )
+        if path is None:
+            continue
+        family, outcomes, normalizer_rule = path
+        outcomes = tuple(kind for kind in outcomes if kind in _INITIATING_TRANSITION_FINDINGS)
+        if not outcomes:
+            continue
+        # A certificate is for a possible new fact, not an ID overlap or an
+        # already represented normalized fact on the same target.
+        if _fact_family_is_represented(
+            family=family,
+            target=candidate.target,
+            outcomes=outcomes,
+            findings=represented,
+        ):
+            continue
+        supported_hypotheses = {
+            identifier
+            for outcome in discriminator.support_outcomes
+            for identifier in outcome.hypothesis_ids
+        }
+        for identifier in sorted(supported_hypotheses):
+            hypothesis = hypotheses.get(identifier)
+            if hypothesis is None or candidate.target not in (
+                hypothesis.causal_actor,
+                *hypothesis.members,
+            ):
+                continue
+            ordinal = 4 if identifier in leading else 3
+            certificate = InvestigationTransitionCertificate(
+                source_gap_id=discriminator.gap_id,
+                capability=candidate.capability,
+                target=candidate.target,
+                observation_fact_family=family,
+                permitted_normalized_outcomes=outcomes,
+                affected_state_kind="HYPOTHESIS",
+                affected_state_ids=(identifier,),
+                normalizer_rule_id=normalizer_rule,
+                transition_rule_id="resolution.assess_hypothesis.aligned_initiating_evidence",
+                preconditions=(
+                    "normalizer returns a fresh Finding of an eligible kind",
+                    "Finding entity matches the selected target",
+                    "Finding is temporally aligned with the hypothesis onset rule",
+                ),
+                ordinal_value=ordinal,
+            )
+            certificates[(discriminator.gap_id, "HYPOTHESIS", identifier)] = certificate
+
+        supported_alternatives = {
+            identifier
+            for outcome in discriminator.support_outcomes
+            for identifier in outcome.alternative_ids
+        }
+        for identifier in sorted(supported_alternatives):
+            alternative = alternatives.get(identifier)
+            if (
+                alternative is None
+                or alternative.status.value != "UNEXPLORED"
+                or candidate.target != alternative.actor
+                or not alternative.linked_symptoms
+            ):
+                continue
+            certificate = InvestigationTransitionCertificate(
+                source_gap_id=discriminator.gap_id,
+                capability=candidate.capability,
+                target=candidate.target,
+                observation_fact_family=family,
+                permitted_normalized_outcomes=outcomes,
+                affected_state_kind="STRUCTURAL_ALTERNATIVE",
+                affected_state_ids=(identifier,),
+                normalizer_rule_id=normalizer_rule,
+                transition_rule_id="engine.rebuild_hypotheses→frontier.apply_frontier_progress.promote_actor",
+                preconditions=(
+                    "normalizer returns a fresh initiating Finding for the alternative actor",
+                    "the existing topology links that actor to a current symptom",
+                ),
+                # Promotion/frontier progress is decision impact, but it is
+                # not alternative elimination and must not inflate that
+                # separate utility dimension.
+                ordinal_value=1,
+            )
+            certificates[(discriminator.gap_id, "STRUCTURAL_ALTERNATIVE", identifier)] = certificate
+    return tuple(certificates[key] for key in sorted(certificates))
+
+
+def _expected_elimination_value(
+    candidate: ObservationCandidate,
+    diagnosis: Diagnosis,
+) -> tuple[int, tuple[InvestigationTransitionCertificate, ...]]:
+    certificates = _transition_certificates(candidate, diagnosis)
+    elimination = max(
+        (item.ordinal_value for item in certificates if item.affected_state_kind == "HYPOTHESIS"),
+        default=0,
+    )
+    return elimination, certificates
 
 
 def _expected_decision_impact_value(
     candidate: ObservationCandidate,
     *,
     expected_elimination_value: int,
+    transition_certificates: Sequence[InvestigationTransitionCertificate],
 ) -> int:
     """Return the strongest deterministic state transition a valid outcome may enable."""
-    impact = expected_elimination_value
+    impact = max(
+        (
+            expected_elimination_value,
+            *(item.ordinal_value for item in transition_certificates),
+        )
+    )
     for discriminator in candidate.discriminators:
         if discriminator.kind.value != "DISCOVERY_DISCRIMINATION":
             continue
@@ -453,7 +648,9 @@ def score_observation_candidate(
     semantic_duplicate_penalty, no_data_repeat_penalty = _semantic_duplicate_penalty(
         candidate, previous_investigations, previous_action_audits
     )
-    expected_elimination_value = _expected_elimination_value(candidate, diagnosis)
+    expected_elimination_value, transition_certificates = _expected_elimination_value(
+        candidate, diagnosis
+    )
     utility = ObservationUtility(
         admissible=admissible,
         hypothesis_relevance=_hypothesis_relevance(candidate, diagnosis),
@@ -464,7 +661,9 @@ def score_observation_candidate(
         discrimination_value=_discrimination_value(candidate),
         expected_elimination_value=expected_elimination_value,
         expected_decision_impact=_expected_decision_impact_value(
-            candidate, expected_elimination_value=expected_elimination_value
+            candidate,
+            expected_elimination_value=expected_elimination_value,
+            transition_certificates=transition_certificates,
         ),
         frontier_coverage=_frontier_coverage(candidate, previous_action_audits),
         dimension_coverage=len(covered_dimensions),
@@ -481,6 +680,7 @@ def score_observation_candidate(
         candidate=candidate,
         utility=utility,
         overlap_class=overlap_class,
+        transition_certificates=transition_certificates,
     )
 
 
@@ -503,7 +703,14 @@ def active_choice_dominates_baseline(
         return False, "active_choice_has_lower_expected_decision_impact"
     if active_utility.discrimination_value != baseline_utility.discrimination_value:
         return False, "choices_are_not_epistemically_comparable"
+    if active_utility.expected_decision_impact > baseline_utility.expected_decision_impact and any(
+        certificate.affected_state_kind == "HYPOTHESIS"
+        for certificate in active.transition_certificates
+    ):
+        return True, "higher_certified_decision_impact"
     if active_utility.expected_elimination_value > baseline_utility.expected_elimination_value:
+        if not active.transition_certificates:
+            return False, "active_elimination_has_no_transition_certificate"
         return True, "same_discrimination_stronger_elimination"
     if active_utility.expected_elimination_value != baseline_utility.expected_elimination_value:
         return False, "active_choice_has_lower_expected_elimination"

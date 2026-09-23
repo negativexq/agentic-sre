@@ -1324,6 +1324,7 @@ def _selection_candidate_audit(
                         _as_discriminator_audit(discriminator)
                         for discriminator in candidate.discriminators
                     ),
+                    transition_certificates=item.transition_certificates,
                     discrimination_value=utility.discrimination_value,
                     expected_elimination_value=utility.expected_elimination_value,
                     expected_decision_impact=utility.expected_decision_impact,
@@ -1399,6 +1400,7 @@ def _physical_selection_candidate_audit(
                     _as_discriminator_audit(discriminator)
                     for discriminator in candidate.discriminators
                 ),
+                transition_certificates=item.transition_certificates,
                 discrimination_value=utility.discrimination_value,
                 expected_elimination_value=utility.expected_elimination_value,
                 semantic_duplicate_risk=utility.semantic_duplicate_penalty,

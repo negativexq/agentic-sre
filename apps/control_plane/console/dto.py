@@ -285,6 +285,29 @@ class SystemStatus(ConsoleModel):
     connectors: list[SystemConnector]
 
 
+# --- settings --------------------------------------------------------------
+
+
+class SettingsView(ConsoleModel):
+    """Read-only effective configuration; secrets are reduced to booleans."""
+
+    watched_namespaces: list[str]
+    evidence_namespaces: list[str]
+    auto_diagnose: bool
+    watch_interval_seconds: float
+    cluster_access: str
+    llm_enabled: bool
+    llm_model: str | None
+    llm_max_calls: int
+    api_token_configured: bool
+    email_configured: bool
+    email_sender: str | None
+    prometheus_configured: bool
+    loki_configured: bool
+    tempo_configured: bool
+    report_version: str
+
+
 # --- dashboard -------------------------------------------------------------
 
 

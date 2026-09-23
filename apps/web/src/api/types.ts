@@ -205,6 +205,24 @@ export interface SystemStatus {
   connectors: SystemConnector[];
 }
 
+export interface SettingsView {
+  watched_namespaces: string[];
+  evidence_namespaces: string[];
+  auto_diagnose: boolean;
+  watch_interval_seconds: number;
+  cluster_access: string;
+  llm_enabled: boolean;
+  llm_model: string | null;
+  llm_max_calls: number;
+  api_token_configured: boolean;
+  email_configured: boolean;
+  email_sender: string | null;
+  prometheus_configured: boolean;
+  loki_configured: boolean;
+  tempo_configured: boolean;
+  report_version: string;
+}
+
 export interface DashboardCounters {
   active_incidents: number;
   critical_incidents: number;

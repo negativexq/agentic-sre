@@ -109,3 +109,10 @@ export function useSystemStatus() {
     refetchInterval: 15_000,
   });
 }
+
+export function useSettings() {
+  return useQuery({
+    queryKey: ["settings"],
+    queryFn: api.settings,
+  });
+}

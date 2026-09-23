@@ -432,6 +432,24 @@ def test_missing_report_is_not_found(app_client: tuple[TestClient, dict[str, UUI
     assert client.get("/api/v1/console/reports/does-not-exist").status_code == 404
 
 
+def test_settings_are_read_only_and_mask_secrets(
+    app_client: tuple[TestClient, dict[str, UUID]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = app_client
+    monkeypatch.setenv("SRE_API_TOKEN", "supersecret-token")
+    monkeypatch.setenv("SRE_WATCH_NAMESPACES", "sre-demo, other")
+    monkeypatch.setenv("SRE_AUTO_DIAGNOSE", "true")
+    response = client.get("/api/v1/console/settings")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["api_token_configured"] is True
+    assert body["auto_diagnose"] is True
+    assert body["watched_namespaces"] == ["sre-demo", "other"]
+    # The secret value itself is never returned anywhere in the payload.
+    assert "supersecret-token" not in response.text
+
+
 def test_legacy_incident_api_is_unchanged(
     app_client: tuple[TestClient, dict[str, UUID]],
 ) -> None:

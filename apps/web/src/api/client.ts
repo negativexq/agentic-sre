@@ -8,6 +8,7 @@ import type {
   IncidentPage,
   DeliveryView,
   ReportSummary,
+  SettingsView,
   ShareRequest,
   SystemStatus,
 } from "@/api/types";
@@ -55,6 +56,7 @@ function query(filters: IncidentFilters | ChangeFilters): string {
 export const api = {
   dashboard: () => get<DashboardSummary>("/dashboard"),
   system: () => get<SystemStatus>("/system"),
+  settings: () => get<SettingsView>("/settings"),
   incidents: (filters: IncidentFilters = {}) =>
     get<IncidentPage>(`/incidents${query(filters)}`),
   incident: (id: string) => get<IncidentDetail>(`/incidents/${id}`),

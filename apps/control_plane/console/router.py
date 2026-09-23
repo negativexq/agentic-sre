@@ -22,6 +22,7 @@ from apps.control_plane.console.dto import (
     IncidentListItem,
     IncidentPage,
     ReportSummary,
+    SettingsView,
     ShareRequest,
     SystemStatus,
     TimelineView,
@@ -35,6 +36,7 @@ from apps.control_plane.console.mappers import (
     report_summary,
     timeline_view,
 )
+from apps.control_plane.console.settings import read_settings
 from apps.control_plane.console.stream import global_stream, incident_stream
 from apps.control_plane.timeline import diagnosis_phases
 from packages.contracts import ChangeScope, ChangeType
@@ -138,6 +140,11 @@ def create_console_router(
     @router.get("/system", response_model=SystemStatus)
     def system(session: Session = Depends(get_session)) -> SystemStatus:  # noqa: B008
         return system_status(session)
+
+    @router.get("/settings", response_model=SettingsView)
+    def settings() -> SettingsView:
+        """Read-only effective configuration; secrets reduced to booleans."""
+        return read_settings()
 
     @router.get("/incidents", response_model=IncidentPage)
     def incidents(  # noqa: PLR0913

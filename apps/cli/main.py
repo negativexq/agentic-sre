@@ -302,6 +302,8 @@ def cmd_investigation_eval(args: argparse.Namespace) -> int:
         model_client=model_client,
         max_model_calls_per_scenario=args.max_model_calls if model_client else None,
         max_total_model_calls=args.max_total_model_calls or 0,
+        api_usage_class=args.api_usage_class,
+        llm_selection=args.llm_selection,
     )
     print(json.dumps(manifest, indent=2, sort_keys=True))
     return 0
@@ -501,6 +503,12 @@ def build_parser() -> argparse.ArgumentParser:
     investigation_eval_cmd.add_argument("--llm", action="store_true")
     investigation_eval_cmd.add_argument("--model", default=None)
     investigation_eval_cmd.add_argument("--max-total-model-calls", type=int, default=None)
+    investigation_eval_cmd.add_argument(
+        "--api-usage-class", choices=["CLASS 1", "CLASS 2"], default="CLASS 2"
+    )
+    investigation_eval_cmd.add_argument(
+        "--llm-selection", choices=["action", "intent"], default="action"
+    )
     investigation_eval_cmd.set_defaults(handler=cmd_investigation_eval)
 
     grade_investigation_eval_cmd = sub.add_parser(

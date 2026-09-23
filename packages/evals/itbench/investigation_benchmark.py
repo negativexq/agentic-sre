@@ -29,8 +29,8 @@ from packages.evals.itbench.io import atomic_json_write
 from packages.evals.itbench.source import SnapshotSource
 from packages.rca.investigation.graph import investigate_diagnosis
 from packages.rca.investigation.intents import DeterministicIntentPolicy
-from packages.rca.investigation.policy import LLMIntentPolicy
-from packages.rca.investigation.state import InvestigationConfig
+from packages.rca.investigation.policy import LLMIntentPolicy, LLMInvestigationPolicy
+from packages.rca.investigation.state import InvestigationConfig, InvestigationPolicy
 from packages.rca.llm import LLMClient, LLMError
 from packages.rca.model import Diagnosis, InvestigationResult
 
@@ -106,6 +106,8 @@ def predict_investigations(
     model_client: LLMClient | None = None,
     max_model_calls_per_scenario: int | None = None,
     max_total_model_calls: int = 0,
+    api_usage_class: str = "CLASS 2",
+    llm_selection: str = "action",
 ) -> dict[str, Any]:
     """Run deterministic bounded investigations and seal output before grading.
 
@@ -125,6 +127,10 @@ def predict_investigations(
     call_budget: EvaluationCallBudget | None = None
     per_scenario_budget = 0
     if model_client is not None:
+        if api_usage_class not in {"CLASS 1", "CLASS 2"}:
+            raise BenchmarkError("provider evaluations must declare CLASS 1 or CLASS 2")
+        if llm_selection not in {"action", "intent"}:
+            raise BenchmarkError("llm_selection must be 'action' or 'intent'")
         if model_client.model != PRIMARY_EVALUATION_MODEL:
             raise BenchmarkError(
                 f"new live evaluation requires configured model {PRIMARY_EVALUATION_MODEL}"
@@ -136,6 +142,10 @@ def predict_investigations(
                 "evaluation total model-call budget is below scenario_count × "
                 "max_calls_per_scenario"
             )
+        if api_usage_class == "CLASS 1" and (
+            len(ids) != 1 or per_scenario_budget != 1 or max_total_model_calls != 1
+        ):
+            raise BenchmarkError("CLASS 1 requires exactly one scenario and one maximum call")
         client_budget = getattr(model_client, "max_calls", max_total_model_calls)
         if client_budget != max_total_model_calls:
             raise BenchmarkError("provider client budget must equal the declared evaluation budget")
@@ -153,17 +163,19 @@ def predict_investigations(
             raise BenchmarkError("evaluation budget exhausted before the frozen scenario set ended")
         tick = time.monotonic()
         source = SnapshotSource(dataset.scenario(scenario_id))
-        policy = (
-            DeterministicIntentPolicy()
-            if model_client is None or call_budget is None
-            else LLMIntentPolicy(
-                PerScenarioLLMClient(
-                    model_client,
-                    run_budget=call_budget,
-                    max_calls=per_scenario_budget,
-                )
+        if model_client is None or call_budget is None:
+            policy: InvestigationPolicy = DeterministicIntentPolicy()
+        else:
+            bounded_client = PerScenarioLLMClient(
+                model_client,
+                run_budget=call_budget,
+                max_calls=per_scenario_budget,
             )
-        )
+            policy = (
+                LLMInvestigationPolicy(bounded_client)
+                if llm_selection == "action"
+                else LLMIntentPolicy(bounded_client)
+            )
         result = investigate_diagnosis(
             source,
             policy=policy,
@@ -209,9 +221,11 @@ def predict_investigations(
         "created_at": datetime.now(UTC).isoformat(),
         "git_head": _git_head(),
         "git_dirty": _git_dirty(),
-        "mode": "deterministic-intent-policy" if model_client is None else "llm-intent-policy",
+        "mode": (
+            "deterministic-intent-policy" if model_client is None else f"llm-{llm_selection}-policy"
+        ),
         "model": model_client.model if model_client is not None else None,
-        "api_usage_class": "CLASS 0" if model_client is None else "CLASS 2",
+        "api_usage_class": "CLASS 0" if model_client is None else api_usage_class,
         "max_total_model_calls": max_total_model_calls,
         "max_calls_per_scenario": per_scenario_budget,
         "real_provider_calls": call_budget.calls if call_budget is not None else 0,

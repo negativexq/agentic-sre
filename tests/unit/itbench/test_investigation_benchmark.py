@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,7 @@ from packages.evals.itbench.investigation_benchmark import (
     grade_investigations,
     predict_investigations,
 )
+from packages.rca.investigation.state import InvestigationConfig
 from packages.rca.llm import LLMError
 
 
@@ -58,9 +60,22 @@ class _RecordingClient:
     def complete_json(
         self, *, system: str, user: str, schema: dict[str, object], name: str
     ) -> dict[str, object]:
-        del system, user, schema, name
+        del system, schema, name
         self.calls += 1
-        return {"intent_id": "intent:test"}
+        if not user:
+            return {"intent_id": "intent:test"}
+        context = json.loads(user)
+        gap = context["gaps"][0]
+        allowed = gap["allowed_queries"][0]
+        namespace, kind, entity_name = allowed["target"].split("/", 2)
+        return {
+            "action": "inspect",
+            "gap_id": gap["gap_id"],
+            "capability": allowed["capability"],
+            "target": {"namespace": namespace, "kind": kind, "name": entity_name},
+            "query": {"start": None, "end": None, "reasons": [], "contains": [], "limit": 1},
+            "rationale": "bounded fixture selection",
+        }
 
 
 def test_prediction_seals_runtime_metrics_without_opening_labels(tmp_path: Path) -> None:
@@ -125,3 +140,27 @@ def test_provider_budget_fails_closed_per_scenario_and_for_the_whole_run() -> No
 
     assert provider.calls == 2
     assert run_budget.calls == 2
+
+
+def test_class_one_fake_provider_smoke_is_one_bounded_action_roundtrip(
+    tmp_path: Path,
+) -> None:
+    scenario = snapshot_scenario(tmp_path)
+    provider = _RecordingClient()
+    result = predict_investigations(
+        _FixtureDataset(scenario),
+        [scenario.scenario_id],
+        tmp_path / "smoke",
+        split="dev",
+        config=InvestigationConfig(max_turns=1, max_model_calls=1, max_tool_calls=1),
+        model_client=provider,
+        max_model_calls_per_scenario=1,
+        max_total_model_calls=1,
+        api_usage_class="CLASS 1",
+    )
+
+    assert provider.calls == 1
+    assert result["api_usage_class"] == "CLASS 1"
+    assert result["real_provider_calls"] == 1
+    assert result["max_total_model_calls"] == 1
+    assert result["mode"] == "llm-action-policy"

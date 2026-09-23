@@ -940,7 +940,12 @@ def _hypothesis_states(diagnosis: Diagnosis) -> tuple[InvestigationHypothesisSta
 
 def _gap_states(diagnosis: Diagnosis) -> tuple[InvestigationGapState, ...]:
     return tuple(
-        InvestigationGapState(gap_id=gap.gap_id, resolvability=gap.resolvability)
+        InvestigationGapState(
+            gap_id=gap.gap_id,
+            dimension=gap.dimension,
+            missing_fact=gap.missing_fact,
+            resolvability=gap.resolvability,
+        )
         for gap in sorted(diagnosis.information_gaps, key=lambda item: item.gap_id)
     )
 

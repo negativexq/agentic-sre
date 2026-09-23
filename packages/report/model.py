@@ -13,7 +13,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-REPORT_VERSION = "1.0"
+REPORT_VERSION = "2.0"
 
 
 class ReportModel(BaseModel):
@@ -50,6 +50,83 @@ class ReportLifecyclePhase(ReportModel):
     at: datetime
     offset_seconds: float
     detail: str
+
+
+class ReportInvestigationState(ReportModel):
+    hypothesis_id: str
+    actor: str
+    state: str
+
+
+class ReportInvestigationGap(ReportModel):
+    gap_id: str
+    dimension: str
+    missing_fact: str
+    resolvability: str
+
+
+class ReportInvestigationTurn(ReportModel):
+    turn_index: int
+    gap_id: str | None
+    gap_dimension: str | None
+    missing_fact: str | None
+    intent_id: str | None
+    intent_kind: str | None
+    action: str
+    capability: str | None
+    target: str | None
+    bounded_query: dict[str, object] | None
+    action_rationale: str
+    authorization_result: str
+    authorization_reason: str
+    backend_execution_status: str
+    observation_id: str | None
+    observation_outcome: str | None
+    returned_evidence_refs: tuple[str, ...] = ()
+    new_evidence_refs: tuple[str, ...] = ()
+    already_known_refs: tuple[str, ...] = ()
+    normalized_finding_ids: tuple[str, ...] = ()
+    affected_hypothesis_ids: tuple[str, ...] = ()
+    resolution_before: str
+    resolution_after: str | None
+    hypothesis_states_before: tuple[ReportInvestigationState, ...] = ()
+    hypothesis_states_after: tuple[ReportInvestigationState, ...] = ()
+    gap_states_before: tuple[ReportInvestigationGap, ...] = ()
+    gap_states_after: tuple[ReportInvestigationGap, ...] = ()
+    decision_state_changed: bool | None
+    progress_classification: str
+
+
+class ReportInvestigationSummary(ReportModel):
+    initial_resolution: str
+    final_resolution: str
+    turns: int
+    model_calls: int
+    tool_calls: int
+    unique_observations: int
+    unique_evidence_added: int
+    stop_reason: str
+    initial_hypotheses: tuple[ReportInvestigationState, ...] = ()
+    initial_information_gaps: tuple[ReportInvestigationGap, ...] = ()
+
+
+class ReportAgentSafetyAudit(ReportModel):
+    selected_actions: int
+    authorized_actions: int
+    rejected_actions: int
+    executed_reads: int
+    out_of_policy_executions: int
+    write_executions: int
+    secret_accesses: int
+
+
+class ReportAgentContribution(ReportModel):
+    resolution_changed: bool
+    root_actor_changed: bool
+    hypotheses_changed: bool
+    alternatives_eliminated: int
+    new_evidence_added: int
+    decision_state_changed: bool
 
 
 class ReportSnapshot(ReportModel):
@@ -92,3 +169,11 @@ class ReportSnapshot(ReportModel):
 
     # A short list of the alert names that opened the incident.
     alert_names: tuple[str, ...] = Field(default=())
+
+    investigation_summary: ReportInvestigationSummary | None = None
+    investigation_timeline: tuple[ReportInvestigationTurn, ...] = ()
+    decision_relevant_observations: tuple[ReportInvestigationTurn, ...] = ()
+    non_contributing_observations: tuple[ReportInvestigationTurn, ...] = ()
+    remaining_information_gaps: tuple[ReportInvestigationGap, ...] = ()
+    agent_safety_audit: ReportAgentSafetyAudit | None = None
+    agent_contribution: ReportAgentContribution | None = None

@@ -747,6 +747,8 @@ class InvestigationGapState(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     gap_id: str
+    dimension: GapDimension
+    missing_fact: str
     resolvability: GapResolvability
 
 

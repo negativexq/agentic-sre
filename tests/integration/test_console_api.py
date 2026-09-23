@@ -35,6 +35,8 @@ from packages.rca.model import (
     Finding,
     FindingKind,
     Hypothesis,
+    InvestigationResult,
+    InvestigationStopReason,
     Resolution,
     Symptoms,
 )
@@ -45,6 +47,7 @@ from packages.storage.repositories import (
     DiagnosisRepository,
     IncidentEventRepository,
     IncidentRepository,
+    InvestigationRunRepository,
 )
 
 T0 = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
@@ -384,7 +387,7 @@ def test_report_create_fetch_and_immutability(
     report = created.json()
     assert report["diagnosis_run_id"]
     assert report["root_actor"] == "sre-demo/Deployment/payment-service"
-    assert report["report_version"] == "1.0"
+    assert report["report_version"] == "2.0"
 
     fetched = client.get(f"/api/v1/console/reports/{report['report_id']}").json()
     assert fetched == report  # the stored snapshot is returned verbatim
@@ -397,6 +400,71 @@ def test_report_create_fetch_and_immutability(
 
     listed = client.get("/api/v1/console/reports").json()
     assert {item["report_id"] for item in listed} >= {report["report_id"], again["report_id"]}
+
+
+def test_report_projects_persisted_investigation_artifact() -> None:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory: sessionmaker[Session] = create_session_factory(engine)
+    with Session(engine) as session:
+        incident_id = _seed(
+            session,
+            title="persisted investigation report",
+            severity=IncidentSeverity.WARNING,
+            status=IncidentStatus.INVESTIGATING,
+            resolution=Resolution.RESOLVED,
+        )
+        diagnosis = DiagnosisRepository(session).latest(incident_id)
+        run_id = DiagnosisRepository(session).latest_run_id(incident_id)
+        assert diagnosis is not None
+        assert run_id is not None
+        result = InvestigationResult(
+            diagnosis=Diagnosis.model_validate(diagnosis),
+            initial_diagnosis=Diagnosis.model_validate(diagnosis),
+            initial_resolution=Resolution.RESOLVED,
+            final_resolution=Resolution.RESOLVED,
+            stop_reason=InvestigationStopReason.NO_RESOLVABLE_GAP,
+        )
+        InvestigationRunRepository(session).save(
+            diagnosis_run_id=run_id,
+            incident_id=incident_id,
+            artifact_version="1.0",
+            created_at=T0 + timedelta(seconds=11),
+            document=result.model_dump(mode="json"),
+        )
+
+    with TestClient(create_app(session_factory=factory)) as client:
+        response = client.post(f"/api/v1/console/incidents/{incident_id}/reports")
+        assert response.status_code == 201
+        frozen = response.json()
+
+        with factory() as session:
+            latest = DiagnosisRepository(session).latest(incident_id)
+            assert latest is not None
+            later_diagnosis = Diagnosis.model_validate(latest).model_copy(
+                update={"summary": "a later diagnosis with new wording"}
+            )
+            DiagnosisRepository(session).save(
+                incident_id,
+                later_diagnosis.model_dump(mode="json"),
+                created_at=T0 + timedelta(seconds=30),
+                run_id=str(uuid4()),
+            )
+
+        later_report = client.post(f"/api/v1/console/incidents/{incident_id}/reports").json()
+        fetched_frozen = client.get(f"/api/v1/console/reports/{frozen['report_id']}").json()
+
+    assert fetched_frozen == frozen
+    assert later_report["summary"] == "a later diagnosis with new wording"
+    assert later_report["report_id"] != frozen["report_id"]
+    report = frozen
+    assert report["investigation_summary"]["initial_resolution"] == "RESOLVED"
+    assert report["investigation_summary"]["stop_reason"] == "NO_RESOLVABLE_GAP"
+    assert report["agent_safety_audit"]["selected_actions"] == 0
 
 
 def test_report_exports_markdown_json_and_pdf(

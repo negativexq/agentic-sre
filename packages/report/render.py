@@ -11,7 +11,7 @@ from datetime import datetime
 
 from fpdf import FPDF
 
-from packages.report.model import ReportFinding, ReportSnapshot
+from packages.report.model import ReportFinding, ReportInvestigationTurn, ReportSnapshot
 
 
 def _clock(value: datetime | None) -> str:
@@ -39,6 +39,27 @@ def _findings_table(findings: tuple[ReportFinding, ...]) -> list[str]:
     for finding in findings:
         when = _clock(finding.at)
         lines.append(f"| {finding.kind} | {when} | `{finding.entity}` | {finding.summary} |")
+    return lines
+
+
+def _observation_lines(turns: tuple[ReportInvestigationTurn, ...]) -> list[str]:
+    if not turns:
+        return ["_None recorded._"]
+    lines = [
+        "| Turn | Capability / target | Outcome | Decision changed |",
+        "| ---: | --- | --- | --- |",
+    ]
+    for turn in turns:
+        target = f"{turn.capability or '—'} / {turn.target or '—'}"
+        lines.append(
+            f"| {turn.turn_index} | {target} | {turn.observation_outcome or '—'} | "
+            f"{turn.decision_state_changed} |"
+        )
+        lines.append(f"|  | Action rationale | {turn.action_rationale or '—'} |  |")
+        if turn.normalized_finding_ids:
+            lines.append(
+                f"|  | Normalized Findings | {', '.join(turn.normalized_finding_ids)} |  |"
+            )
     return lines
 
 
@@ -135,6 +156,87 @@ def to_markdown(snapshot: ReportSnapshot) -> str:
     lines.append(f"- **Evidence rows:** {snapshot.evidence_count}")
     lines.append(f"- **Alerts:** {', '.join(snapshot.alert_names) or '—'}")
     lines.append("")
+    if snapshot.investigation_summary is not None:
+        summary = snapshot.investigation_summary
+        lines.append("## Investigation Summary")
+        lines.append("")
+        lines.append(f"- **Resolution:** {summary.initial_resolution} → {summary.final_resolution}")
+        lines.append(
+            f"- **Turns / reads / model calls:** {summary.turns} / "
+            f"{summary.tool_calls} / {summary.model_calls}"
+        )
+        lines.append(
+            f"- **Observations / new evidence refs:** {summary.unique_observations} / "
+            f"{summary.unique_evidence_added}"
+        )
+        lines.append(f"- **Stop reason:** {summary.stop_reason}")
+        lines.append("")
+
+        lines.append("## Investigation Timeline")
+        lines.append("")
+        lines.append("| Turn | Action | Authorization | Backend | Outcome |")
+        lines.append("| ---: | --- | --- | --- | --- |")
+        for turn in snapshot.investigation_timeline:
+            lines.append(
+                f"| {turn.turn_index} | {turn.action} {turn.capability or ''} "
+                f"{turn.target or '—'} | {turn.authorization_result}: "
+                f"{turn.authorization_reason} | {turn.backend_execution_status} | "
+                f"{turn.observation_outcome or '—'} |"
+            )
+            if turn.action_rationale:
+                lines.append(f"|  | Action rationale | {turn.action_rationale} |  |  |")
+        lines.append("")
+
+        lines.append("## Decision-Relevant Observations")
+        lines.append("")
+        lines.extend(_observation_lines(snapshot.decision_relevant_observations))
+        lines.append("")
+
+        lines.append("## Non-Contributing Observations")
+        lines.append("")
+        lines.append("_No recorded decision-state transition for these observations._")
+        lines.extend(_observation_lines(snapshot.non_contributing_observations))
+        lines.append("")
+
+        lines.append("## Remaining Information Gaps")
+        lines.append("")
+        if snapshot.remaining_information_gaps:
+            for gap in snapshot.remaining_information_gaps:
+                lines.append(
+                    f"- {gap.gap_id} · {gap.dimension} · {gap.resolvability}: {gap.missing_fact}"
+                )
+        else:
+            lines.append("_None recorded._")
+        lines.append("")
+
+        if snapshot.agent_safety_audit is not None:
+            safety = snapshot.agent_safety_audit
+            lines.append("## Agent Safety Audit")
+            lines.append("")
+            lines.append(f"- **Selected actions:** {safety.selected_actions}")
+            lines.append(
+                f"- **Authorized / rejected:** {safety.authorized_actions} / "
+                f"{safety.rejected_actions}"
+            )
+            lines.append(f"- **Executed reads:** {safety.executed_reads}")
+            lines.append(f"- **Out-of-policy executions:** {safety.out_of_policy_executions}")
+            lines.append(
+                f"- **Write executions / secret accesses:** {safety.write_executions} / "
+                f"{safety.secret_accesses}"
+            )
+            lines.append("")
+
+        if snapshot.agent_contribution is not None:
+            contribution = snapshot.agent_contribution
+            lines.append("## Agent Contribution")
+            lines.append("")
+            lines.append(f"- **Resolution changed:** {contribution.resolution_changed}")
+            lines.append(f"- **Root actor changed:** {contribution.root_actor_changed}")
+            lines.append(f"- **Hypotheses changed:** {contribution.hypotheses_changed}")
+            lines.append(f"- **Alternatives eliminated:** {contribution.alternatives_eliminated}")
+            lines.append(f"- **New evidence refs:** {contribution.new_evidence_added}")
+            lines.append(f"- **Decision state changed:** {contribution.decision_state_changed}")
+            lines.append("")
     return "\n".join(lines)
 
 
@@ -256,5 +358,72 @@ def to_pdf(snapshot: ReportSnapshot) -> bytes:
     pdf.kv("Model calls", str(snapshot.model_calls))
     pdf.kv("Evidence rows", str(snapshot.evidence_count))
     pdf.kv("Alerts", ", ".join(snapshot.alert_names) or "—")
+
+    if snapshot.investigation_summary is not None:
+        summary = snapshot.investigation_summary
+        pdf.h2("Investigation Summary")
+        pdf.kv("Resolution", f"{summary.initial_resolution} -> {summary.final_resolution}")
+        pdf.kv(
+            "Turns / reads / model calls",
+            f"{summary.turns} / {summary.tool_calls} / {summary.model_calls}",
+        )
+        pdf.kv("Stop reason", summary.stop_reason)
+
+        pdf.h2("Investigation Timeline")
+        for turn in snapshot.investigation_timeline:
+            pdf.body(
+                f"Turn {turn.turn_index}: {turn.action} {turn.capability or ''} "
+                f"{turn.target or '—'}; {turn.authorization_result}; "
+                f"{turn.backend_execution_status}; {turn.observation_outcome or '—'}"
+            )
+            if turn.action_rationale:
+                pdf.body(f"    Action rationale: {turn.action_rationale}")
+
+        pdf.h2("Decision-Relevant Observations")
+        for turn in snapshot.decision_relevant_observations:
+            pdf.body(
+                f"Turn {turn.turn_index}: {turn.observation_id}; "
+                f"Findings {', '.join(turn.normalized_finding_ids) or '—'}"
+            )
+        if not snapshot.decision_relevant_observations:
+            pdf.body("None recorded.")
+
+        pdf.h2("Non-Contributing Observations")
+        for turn in snapshot.non_contributing_observations:
+            pdf.body(
+                f"Turn {turn.turn_index}: {turn.observation_id}; {turn.progress_classification}"
+            )
+        if not snapshot.non_contributing_observations:
+            pdf.body("None recorded.")
+
+        pdf.h2("Remaining Information Gaps")
+        for gap in snapshot.remaining_information_gaps:
+            pdf.body(f"{gap.gap_id} · {gap.dimension} · {gap.resolvability}: {gap.missing_fact}")
+        if not snapshot.remaining_information_gaps:
+            pdf.body("None recorded.")
+
+        if snapshot.agent_safety_audit is not None:
+            safety = snapshot.agent_safety_audit
+            pdf.h2("Agent Safety Audit")
+            pdf.kv(
+                "Authorized / rejected",
+                f"{safety.authorized_actions} / {safety.rejected_actions}",
+            )
+            pdf.kv("Executed reads", str(safety.executed_reads))
+            pdf.kv(
+                "Out-of-policy / write / secret",
+                f"{safety.out_of_policy_executions} / {safety.write_executions} / "
+                f"{safety.secret_accesses}",
+            )
+
+        if snapshot.agent_contribution is not None:
+            contribution = snapshot.agent_contribution
+            pdf.h2("Agent Contribution")
+            pdf.kv("Resolution changed", str(contribution.resolution_changed))
+            pdf.kv("Root actor changed", str(contribution.root_actor_changed))
+            pdf.kv("Hypotheses changed", str(contribution.hypotheses_changed))
+            pdf.kv("Alternatives eliminated", str(contribution.alternatives_eliminated))
+            pdf.kv("New evidence refs", str(contribution.new_evidence_added))
+            pdf.kv("Decision state changed", str(contribution.decision_state_changed))
 
     return bytes(pdf.output())

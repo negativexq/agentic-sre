@@ -41,7 +41,7 @@ from apps.control_plane.console.settings import read_settings
 from apps.control_plane.console.stream import global_stream, incident_stream
 from apps.control_plane.timeline import diagnosis_phases
 from packages.contracts import ChangeScope, ChangeType
-from packages.rca.model import Diagnosis
+from packages.rca.model import Diagnosis, InvestigationResult
 from packages.report import ReportSnapshot, build_report, to_markdown, to_pdf
 from packages.report.email import render_email, subject_for
 from packages.storage import (
@@ -53,6 +53,7 @@ from packages.storage import (
     IncidentEventRepository,
     IncidentNotFoundError,
     IncidentRepository,
+    InvestigationRunRepository,
     ReportRepository,
 )
 
@@ -308,6 +309,14 @@ def create_console_router(
             raise HTTPException(status_code=409, detail="incident has no diagnosis to report")
         diagnosis = Diagnosis.model_validate(document)
         run_id = diagnoses.latest_run_id(incident_id)
+        investigation_artifact = (
+            InvestigationRunRepository(session).get(run_id) if run_id is not None else None
+        )
+        investigation = (
+            InvestigationResult.model_validate(investigation_artifact["document"])
+            if investigation_artifact is not None
+            else None
+        )
         events = IncidentEventRepository(session).list_for_incident(incident_id)
         alerts = AlertRepository(session).list_for_incident(incident_id)
         evidence = EvidenceRepository(session).list_for_incident(incident_id)
@@ -324,6 +333,7 @@ def create_console_router(
             phases=diagnosis_phases(events, run_id),
             evidence_count=len(evidence),
             generated_at=datetime.now(UTC),
+            investigation=investigation,
         )
 
     @router.post(

@@ -48,6 +48,7 @@ class ObservationUtility:
     competing_state_coverage: int
     discrimination_value: int
     expected_elimination_value: int
+    expected_decision_impact: int
     frontier_coverage: int
     dimension_coverage: int
     overlap_preference: int
@@ -356,6 +357,26 @@ def _expected_elimination_value(candidate: ObservationCandidate, diagnosis: Diag
     return 0
 
 
+def _expected_decision_impact_value(
+    candidate: ObservationCandidate,
+    *,
+    expected_elimination_value: int,
+) -> int:
+    """Return the strongest deterministic state transition a valid outcome may enable."""
+    impact = expected_elimination_value
+    for discriminator in candidate.discriminators:
+        if discriminator.kind.value != "DISCOVERY_DISCRIMINATION":
+            continue
+        outcomes = set(discriminator.possible_outcomes)
+        if "NEW_ACTOR" in outcomes:
+            impact = max(impact, 4)
+        elif "CHANGE_BEFORE_ONSET" in outcomes:
+            impact = max(impact, 3)
+        elif outcomes & {"NEW_RELEVANT_EVENT", "TEMPORAL_SEQUENCE_DISCOVERED"}:
+            impact = max(impact, 2)
+    return impact
+
+
 def is_observation_candidate_admissible(
     candidate: ObservationCandidate,
     *,
@@ -432,6 +453,7 @@ def score_observation_candidate(
     semantic_duplicate_penalty, no_data_repeat_penalty = _semantic_duplicate_penalty(
         candidate, previous_investigations, previous_action_audits
     )
+    expected_elimination_value = _expected_elimination_value(candidate, diagnosis)
     utility = ObservationUtility(
         admissible=admissible,
         hypothesis_relevance=_hypothesis_relevance(candidate, diagnosis),
@@ -440,7 +462,10 @@ def score_observation_candidate(
         positive_discriminator_states=len(positive_states),
         competing_state_coverage=len(competing_states),
         discrimination_value=_discrimination_value(candidate),
-        expected_elimination_value=_expected_elimination_value(candidate, diagnosis),
+        expected_elimination_value=expected_elimination_value,
+        expected_decision_impact=_expected_decision_impact_value(
+            candidate, expected_elimination_value=expected_elimination_value
+        ),
         frontier_coverage=_frontier_coverage(candidate, previous_action_audits),
         dimension_coverage=len(covered_dimensions),
         overlap_preference=_OVERLAP_PREFERENCE[overlap_class],
@@ -459,6 +484,51 @@ def score_observation_candidate(
     )
 
 
+def active_choice_dominates_baseline(
+    active: ScoredObservationCandidate,
+    baseline: ScoredObservationCandidate,
+) -> tuple[bool, str]:
+    """Prove a narrowly defined active-planner improvement over the M14 choice."""
+    active_utility = active.utility
+    baseline_utility = baseline.utility
+    impact_at_least_equal = (
+        active_utility.expected_decision_impact >= baseline_utility.expected_decision_impact
+    )
+    if (
+        active_utility.discrimination_value > baseline_utility.discrimination_value
+        and impact_at_least_equal
+    ):
+        return True, "stronger_discrimination_without_lower_decision_impact"
+    if not impact_at_least_equal:
+        return False, "active_choice_has_lower_expected_decision_impact"
+    if active_utility.discrimination_value != baseline_utility.discrimination_value:
+        return False, "choices_are_not_epistemically_comparable"
+    if active_utility.expected_elimination_value > baseline_utility.expected_elimination_value:
+        return True, "same_discrimination_stronger_elimination"
+    if active_utility.expected_elimination_value != baseline_utility.expected_elimination_value:
+        return False, "active_choice_has_lower_expected_elimination"
+
+    active_risk = (
+        active_utility.semantic_duplicate_penalty,
+        active_utility.no_data_repeat_penalty,
+        active_utility.known_evidence_penalty,
+    )
+    baseline_risk = (
+        baseline_utility.semantic_duplicate_penalty,
+        baseline_utility.no_data_repeat_penalty,
+        baseline_utility.known_evidence_penalty,
+    )
+    if active_risk < baseline_risk:
+        return True, "equivalent_epistemic_value_lower_redundancy"
+    if active_risk != baseline_risk:
+        return False, "active_choice_has_higher_redundancy_risk"
+    if active_utility.frontier_coverage > baseline_utility.frontier_coverage:
+        return True, "equivalent_value_newer_frontier"
+    if active_utility.cost_tier < baseline_utility.cost_tier:
+        return True, "equivalent_value_lower_acquisition_cost"
+    return False, "active_choice_does_not_prove_improvement"
+
+
 def utility_sort_key(scored: ScoredObservationCandidate) -> tuple[object, ...]:
     """Order by active-diagnosis value before redundancy, novelty and cost."""
     utility = scored.utility
@@ -472,6 +542,25 @@ def utility_sort_key(scored: ScoredObservationCandidate) -> tuple[object, ...]:
         -utility.frontier_coverage,
         utility.cost_tier,
         utility.stable_tiebreak,
+    )
+
+
+def baseline_compatible_candidate_sort_key(
+    scored: ScoredObservationCandidate,
+) -> tuple[object, ...]:
+    """M14 physical ordering retained as a conservative fallback view."""
+    utility = scored.utility
+    return (
+        not scored.utility.admissible,
+        -utility.hypothesis_relevance,
+        -utility.structural_relevance,
+        -utility.discriminating_gap_coverage,
+        -utility.dimension_coverage,
+        -utility.overlap_preference,
+        -utility.shared_gap_coverage,
+        -utility.shared_alternative_coverage,
+        utility.cost_tier,
+        scored.utility.stable_tiebreak,
     )
 
 

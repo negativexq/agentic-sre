@@ -797,6 +797,7 @@ class InvestigationCandidateSelectionAudit(BaseModel):
     discriminators: tuple[InvestigationDiscriminatorAudit, ...] = ()
     discrimination_value: int = 0
     expected_elimination_value: int = 0
+    expected_decision_impact: int = 0
     semantic_duplicate_risk: int = 0
     no_data_repeat_risk: int = 0
     known_evidence_risk: int = 0
@@ -816,6 +817,10 @@ class InvestigationActionAudit(BaseModel):
     action: InvestigationAction
     intent_id: str | None = None
     intent_kind: str | None = None
+    selection_strategy: str | None = None
+    selection_reason: str | None = None
+    baseline_candidate_id: str | None = None
+    active_candidate_id: str | None = None
     gap_dimension: GapDimension | None = None
     missing_fact: str | None = None
     discriminator: InvestigationDiscriminatorAudit | None = None

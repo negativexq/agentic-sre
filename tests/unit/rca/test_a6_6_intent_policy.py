@@ -14,6 +14,7 @@ from packages.rca.investigation.candidates import CandidateDiscriminator, Observ
 from packages.rca.investigation.environment import initial_view
 from packages.rca.investigation.graph import build_investigation_state, investigate_diagnosis
 from packages.rca.investigation.intents import (
+    DeterministicIntentPolicy,
     IntentMenuItem,
     InvestigationIntentKind,
     InvestigationPhase,
@@ -394,6 +395,33 @@ def test_discovery_no_data_is_audited_as_neutral_without_elimination() -> None:
     assert audit.resolution_before == audit.resolution_after
     assert audit.hypothesis_states_before == audit.hypothesis_states_after
     assert result.diagnosis.resolution == diagnosis.resolution
+
+
+def test_deterministic_selector_comparison_is_persisted_in_action_audit() -> None:
+    onset = datetime(2026, 2, 1, 12, 0, tzinfo=UTC)
+    source = InMemorySource(
+        name="selection-comparison-audit",
+        alert_items=[Alert(name="latency", service="api", namespace="shop", starts_at=onset)],
+        cutoff=onset,
+    )
+    result = investigate_diagnosis(
+        source,
+        policy=DeterministicIntentPolicy(),
+        tools={"incident_events": _NoDataTool("incident_events")},
+        config=InvestigationConfig(max_turns=1),
+    )
+
+    audit = result.action_audits[0]
+    assert audit.action.capability == "incident_events"
+    assert audit.selection_strategy == "BASELINE_FALLBACK"
+    assert audit.selection_reason in {
+        "active_choice_does_not_prove_improvement",
+        "active_choice_has_lower_expected_decision_impact",
+    }
+    assert audit.baseline_candidate_id
+    assert audit.active_candidate_id
+    assert audit.authorization_result == "AUTHORIZED"
+    assert audit.backend_execution_status.value == "SUCCEEDED"
 
 
 def test_graph_valid_intent_and_unknown_intent_fallback(monkeypatch: pytest.MonkeyPatch) -> None:

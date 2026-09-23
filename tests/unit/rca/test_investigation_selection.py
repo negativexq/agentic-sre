@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import NoReturn
 
@@ -13,6 +14,7 @@ from packages.rca.investigation.candidates import (
     build_observation_candidates,
 )
 from packages.rca.investigation.selection import (
+    active_choice_dominates_baseline,
     candidate_to_action,
     rank_observation_candidates,
     select_observation_candidate,
@@ -470,6 +472,80 @@ def test_non_discriminative_candidate_cannot_beat_a_discriminative_candidate() -
 
     assert ranked[0].candidate.candidate_id == "valid"
     assert all(item.candidate.candidate_id != "blind" for item in ranked)
+
+
+def test_active_choice_falls_back_when_novelty_has_lower_decision_impact() -> None:
+    case = _case()
+    diagnosis = _diagnosis(case, (_gap("gap", GapDimension.EVENT_SEQUENCE),))
+    (baseline,) = rank_observation_candidates(
+        candidates=(_candidate("baseline"),), diagnosis=diagnosis
+    )
+    active = replace(
+        baseline,
+        candidate=replace(baseline.candidate, candidate_id="active"),
+        utility=replace(
+            baseline.utility,
+            discrimination_value=baseline.utility.discrimination_value + 1,
+            expected_decision_impact=baseline.utility.expected_decision_impact - 1,
+            known_evidence_penalty=0,
+        ),
+    )
+
+    dominates, reason = active_choice_dominates_baseline(active, baseline)
+
+    assert dominates is False
+    assert reason == "active_choice_has_lower_expected_decision_impact"
+
+
+def test_active_choice_can_replace_baseline_with_stronger_discrimination() -> None:
+    case = _case()
+    diagnosis = _diagnosis(case, (_gap("gap", GapDimension.EVENT_SEQUENCE),))
+    (baseline,) = rank_observation_candidates(
+        candidates=(_candidate("baseline"),), diagnosis=diagnosis
+    )
+    active = replace(
+        baseline,
+        candidate=replace(baseline.candidate, candidate_id="active"),
+        utility=replace(
+            baseline.utility,
+            discrimination_value=baseline.utility.discrimination_value + 1,
+        ),
+    )
+
+    dominates, reason = active_choice_dominates_baseline(active, baseline)
+
+    assert dominates is True
+    assert reason == "stronger_discrimination_without_lower_decision_impact"
+
+
+def test_active_choice_can_replace_equivalent_baseline_with_lower_repeat_risk() -> None:
+    case = _case()
+    diagnosis = _diagnosis(case, (_gap("gap", GapDimension.EVENT_SEQUENCE),))
+    (baseline,) = rank_observation_candidates(
+        candidates=(_candidate("baseline"),), diagnosis=diagnosis
+    )
+    baseline = replace(
+        baseline,
+        utility=replace(
+            baseline.utility,
+            semantic_duplicate_penalty=1,
+            known_evidence_penalty=1,
+        ),
+    )
+    active = replace(
+        baseline,
+        candidate=replace(baseline.candidate, candidate_id="active"),
+        utility=replace(
+            baseline.utility,
+            semantic_duplicate_penalty=0,
+            known_evidence_penalty=0,
+        ),
+    )
+
+    dominates, reason = active_choice_dominates_baseline(active, baseline)
+
+    assert dominates is True
+    assert reason == "equivalent_epistemic_value_lower_redundancy"
 
 
 def test_unresolved_structural_alternative_beats_irrelevant_candidate() -> None:

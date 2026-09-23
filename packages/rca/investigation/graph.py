@@ -64,6 +64,7 @@ from packages.rca.investigation.policy import LLMIntentPolicy
 from packages.rca.investigation.selection import (
     DeterministicObservationPolicy,
     ScoredObservationCandidate,
+    active_choice_dominates_baseline,
     candidate_to_action,
     exploration_coverage_atoms,
     observation_relevance_key,
@@ -565,6 +566,24 @@ def _focused_physical_candidates(
     )
 
 
+def _conservative_intent_choice(
+    *,
+    baseline: SelectedObservationIntent | None,
+    active: SelectedObservationIntent | None,
+) -> tuple[SelectedObservationIntent | None, str, str]:
+    """Use the active choice only when the same-state utility proves improvement."""
+    if baseline is None and active is None:
+        return None, "NO_CANDIDATE", "neither selector found an admissible read"
+    if baseline is None:
+        return active, "ACTIVE_ONLY", "no baseline-compatible candidate was available"
+    if active is None:
+        return baseline, "BASELINE_FALLBACK", "active selector found no admissible read"
+    dominates, reason = active_choice_dominates_baseline(active.physical, baseline.physical)
+    if dominates:
+        return active, "ACTIVE_DOMINATES_BASELINE", reason
+    return baseline, "BASELINE_FALLBACK", reason
+
+
 def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     # Invalid-action retries bypass ``assess`` by design.  Re-check budgets at
     # this boundary so a malformed provider response (including its bounded
@@ -596,7 +615,65 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     case = rt.case_for(state.get("acquired_evidence_refs", ()), state["investigation_findings"])
     gaps = _resolvable_gaps(diagnosis)
     baseline_intent = None
-    if isinstance(rt.policy, (DeterministicIntentPolicy, LLMIntentPolicy)):
+    active_intent = None
+    selected_intent = None
+    selector_mode = "ACTIVE_RANKING"
+    selector_reason = "existing active selector path"
+    if isinstance(rt.policy, DeterministicIntentPolicy):
+        baseline_intent = select_observation_intent_candidate(
+            case=case,
+            diagnosis=diagnosis,
+            engine_config=rt.engine_config,
+            attempted_observations=state.get("attempted_observations", ()),
+            previous_investigations=tuple(state.get("ledger", ())),
+            previous_action_audits=tuple(state.get("action_audits", ())),
+            max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+            exploration_covered_atoms=state.get("exploration_covered_atoms", ()),
+            require_discriminator=True,
+            baseline_compatible=True,
+        )
+        active_intent = select_observation_intent_candidate(
+            case=case,
+            diagnosis=diagnosis,
+            engine_config=rt.engine_config,
+            attempted_observations=state.get("attempted_observations", ()),
+            previous_investigations=tuple(state.get("ledger", ())),
+            previous_action_audits=tuple(state.get("action_audits", ())),
+            max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+            exploration_covered_atoms=state.get("exploration_covered_atoms", ()),
+            require_discriminator=True,
+        )
+        baseline_intent = (
+            _select_pending_incident_change_discovery(
+                baseline=baseline_intent,
+                case=case,
+                diagnosis=diagnosis,
+                engine_config=rt.engine_config,
+                attempted_observations=state.get("attempted_observations", ()),
+                previous_investigations=tuple(state.get("ledger", ())),
+                previous_action_audits=tuple(state.get("action_audits", ())),
+                max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+            )
+            or baseline_intent
+        )
+        active_intent = (
+            _select_pending_incident_change_discovery(
+                baseline=active_intent,
+                case=case,
+                diagnosis=diagnosis,
+                engine_config=rt.engine_config,
+                attempted_observations=state.get("attempted_observations", ()),
+                previous_investigations=tuple(state.get("ledger", ())),
+                previous_action_audits=tuple(state.get("action_audits", ())),
+                max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+            )
+            or active_intent
+        )
+        selected_intent, selector_mode, selector_reason = _conservative_intent_choice(
+            baseline=baseline_intent,
+            active=active_intent,
+        )
+    elif isinstance(rt.policy, LLMIntentPolicy):
         baseline_intent = select_observation_intent_candidate(
             case=case,
             diagnosis=diagnosis,
@@ -777,11 +854,9 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             "trace_steps": _with_step(state, "select_action", detail),
         }
     if isinstance(rt.policy, (DeterministicObservationPolicy, DeterministicIntentPolicy)):
-        selected_intent = None
         selection_pool: tuple[ObservationCandidate, ...] = ()
         focus_applied = False
         if isinstance(rt.policy, DeterministicIntentPolicy):
-            selected_intent = baseline_intent
             selected = selected_intent.physical if selected_intent is not None else None
             if selected_intent is not None:
                 candidates = build_observation_candidates(
@@ -812,6 +887,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                         max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
                         exploration_covered_atoms=state.get("exploration_covered_atoms", ()),
                         require_discriminator=True,
+                        baseline_compatible=selector_mode == "BASELINE_FALLBACK",
                     )
                     if focused_selected is not None:
                         selected_intent = SelectedObservationIntent(
@@ -901,6 +977,21 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                 f"marginal-coverage={len(exploration_coverage_atoms(selected.candidate, diagnosis) - covered_atoms)}; "
                 f"candidate={selected.candidate.candidate_id}"
             )
+            if isinstance(rt.policy, DeterministicIntentPolicy):
+                baseline_id = (
+                    baseline_intent.physical.candidate.candidate_id
+                    if baseline_intent is not None
+                    else "none"
+                )
+                active_id = (
+                    active_intent.physical.candidate.candidate_id
+                    if active_intent is not None
+                    else "none"
+                )
+                detail += (
+                    f"; selector={selector_mode}; baseline={baseline_id}; active={active_id}; "
+                    f"comparison={selector_reason}"
+                )
             if focus_applied:
                 detail += "; physical-focus=EXACT_SAME_WORKLOAD"
         else:
@@ -927,6 +1018,22 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                 else None
             ),
             "pending_selection_candidates": selection_trace,
+            "pending_selection_strategy": (
+                selector_mode if isinstance(rt.policy, DeterministicIntentPolicy) else None
+            ),
+            "pending_selection_reason": (
+                selector_reason if isinstance(rt.policy, DeterministicIntentPolicy) else None
+            ),
+            "pending_baseline_candidate_id": (
+                baseline_intent.physical.candidate.candidate_id
+                if isinstance(rt.policy, DeterministicIntentPolicy) and baseline_intent is not None
+                else None
+            ),
+            "pending_active_candidate_id": (
+                active_intent.physical.candidate.candidate_id
+                if isinstance(rt.policy, DeterministicIntentPolicy) and active_intent is not None
+                else None
+            ),
             "stop_reason": None,
             "turns": state["turns"] + 1,
             "model_calls": state["model_calls"],
@@ -1219,6 +1326,7 @@ def _selection_candidate_audit(
                     ),
                     discrimination_value=utility.discrimination_value,
                     expected_elimination_value=utility.expected_elimination_value,
+                    expected_decision_impact=utility.expected_decision_impact,
                     semantic_duplicate_risk=utility.semantic_duplicate_penalty,
                     no_data_repeat_risk=utility.no_data_repeat_penalty,
                     known_evidence_risk=utility.known_evidence_penalty,
@@ -1432,6 +1540,10 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             action=action,
             intent_id=state.get("pending_intent_id"),
             intent_kind=state.get("pending_intent_kind"),
+            selection_strategy=state.get("pending_selection_strategy"),
+            selection_reason=state.get("pending_selection_reason"),
+            baseline_candidate_id=state.get("pending_baseline_candidate_id"),
+            active_candidate_id=state.get("pending_active_candidate_id"),
             gap_dimension=next(
                 (
                     gap.dimension
@@ -1482,6 +1594,10 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             action=action,
             intent_id=state.get("pending_intent_id"),
             intent_kind=state.get("pending_intent_kind"),
+            selection_strategy=state.get("pending_selection_strategy"),
+            selection_reason=state.get("pending_selection_reason"),
+            baseline_candidate_id=state.get("pending_baseline_candidate_id"),
+            active_candidate_id=state.get("pending_active_candidate_id"),
             authorization_result="POLICY_STOP",
             authorization_reason="policy selected stop; no backend action authorized",
             resolution_after=state["current_diagnosis"].resolution,
@@ -1509,6 +1625,10 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         action=action,
         intent_id=state.get("pending_intent_id"),
         intent_kind=state.get("pending_intent_kind"),
+        selection_strategy=state.get("pending_selection_strategy"),
+        selection_reason=state.get("pending_selection_reason"),
+        baseline_candidate_id=state.get("pending_baseline_candidate_id"),
+        active_candidate_id=state.get("pending_active_candidate_id"),
         gap_dimension=gap.dimension,
         missing_fact=gap.missing_fact,
         discriminator=discriminator,

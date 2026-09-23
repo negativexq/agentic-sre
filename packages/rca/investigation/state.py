@@ -129,6 +129,10 @@ class InvestigationState(TypedDict, total=False):
     pending_intent_id: str | None
     pending_intent_kind: str | None
     pending_selection_candidates: tuple[InvestigationCandidateSelectionAudit, ...]
+    pending_selection_strategy: str | None
+    pending_selection_reason: str | None
+    pending_baseline_candidate_id: str | None
+    pending_active_candidate_id: str | None
     attempted_gap_ids: tuple[str, ...]
     pending_action: InvestigationAction | None
     pending_observation: InvestigationObservation | None

@@ -18,6 +18,7 @@ from packages.rca.investigation.candidates import (
 )
 from packages.rca.investigation.selection import (
     ScoredObservationCandidate,
+    baseline_compatible_candidate_sort_key,
     candidate_to_action,
     exploration_coverage_atoms,
     is_observation_candidate_admissible,
@@ -506,6 +507,23 @@ def intent_utility_sort_key(scored: ScoredObservationBundle) -> tuple[object, ..
     )
 
 
+def baseline_compatible_intent_sort_key(
+    scored: ScoredObservationBundle,
+) -> tuple[object, ...]:
+    """M14 semantic intent precedence retained as a conservative fallback view."""
+    utility = scored.utility
+    return (
+        not utility.admissible,
+        -utility.phase_match,
+        -utility.decision_blocker_match,
+        -utility.leading_hypothesis_relevance,
+        -utility.unresolved_hypothesis_relevance,
+        -utility.eligibility_relevance,
+        -utility.semantic_priority,
+        utility.stable_tiebreak,
+    )
+
+
 def intent_relevance_key(scored: ScoredObservationBundle) -> tuple[int, ...]:
     """Return semantic relevance fields, excluding the stable identity tie-break."""
     utility = scored.utility
@@ -571,6 +589,7 @@ def rank_observation_bundles(
     diagnosis: Diagnosis,
     case: Case | None = None,
     source_actor_bundle_available: bool = True,
+    baseline_compatible: bool = False,
 ) -> tuple[ScoredObservationBundle, ...]:
     return tuple(
         sorted(
@@ -584,7 +603,11 @@ def rank_observation_bundles(
                 )
                 for bundle in bundles
             ),
-            key=intent_utility_sort_key,
+            key=(
+                baseline_compatible_intent_sort_key
+                if baseline_compatible
+                else intent_utility_sort_key
+            ),
         )
     )
 
@@ -651,6 +674,7 @@ def select_intent_physical_candidate(
     max_tool_calls_per_gap: int | None = None,
     exploration_covered_atoms: Sequence[tuple[str, str]] = (),
     require_discriminator: bool = False,
+    baseline_compatible: bool = False,
 ) -> ScoredObservationCandidate | None:
     """Select one physical read after A6.2 ranking and exploration tie-breaking."""
     ranked = rank_observation_candidates(
@@ -661,6 +685,8 @@ def select_intent_physical_candidate(
         previous_action_audits=previous_action_audits,
         require_discriminator=require_discriminator,
     )
+    if baseline_compatible:
+        ranked = tuple(sorted(ranked, key=baseline_compatible_candidate_sort_key))
     executable = tuple(
         scored
         for scored in ranked
@@ -699,6 +725,7 @@ def select_observation_intent_candidate(
     max_tool_calls_per_gap: int | None = None,
     exploration_covered_atoms: Sequence[tuple[str, str]] = (),
     require_discriminator: bool = False,
+    baseline_compatible: bool = False,
 ) -> SelectedObservationIntent | None:
     candidates = build_observation_candidates(
         case=case, diagnosis=diagnosis, engine_config=engine_config
@@ -721,6 +748,7 @@ def select_observation_intent_candidate(
         source_actor_bundle_available=any(
             bundle.intent is InvestigationIntentKind.INCIDENT_ACTOR_DISCOVERY for bundle in bundles
         ),
+        baseline_compatible=baseline_compatible,
     )
     for scored_bundle in ranked_bundles:
         allowed = tuple(
@@ -737,6 +765,7 @@ def select_observation_intent_candidate(
             max_tool_calls_per_gap=max_tool_calls_per_gap,
             exploration_covered_atoms=exploration_covered_atoms,
             require_discriminator=require_discriminator,
+            baseline_compatible=baseline_compatible,
         )
         if selected is None:
             continue

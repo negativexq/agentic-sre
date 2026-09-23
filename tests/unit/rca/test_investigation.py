@@ -403,6 +403,19 @@ def test_ambiguous_investigation_adds_evidence_and_resolves_deterministically() 
     assert tool.calls == 1
     assert result.observations[0].outcome is GapOutcomeKind.SUPPORTS
     assert result.observations[0].hypothesis_ids
+    assert result.tool_calls == sum(
+        audit.backend_execution_status.value != "NOT_EXECUTED" for audit in result.action_audits
+    )
+    audit = result.action_audits[0]
+    assert audit.authorization_result == "AUTHORIZED"
+    assert audit.backend_execution_status.value == "SUCCEEDED"
+    assert audit.resolution_before is Resolution.AMBIGUOUS
+    assert audit.resolution_after is Resolution.RESOLVED
+    assert audit.decision_state_changed is True
+    assert set(audit.returned_evidence_refs) == set(audit.new_evidence_refs) | set(
+        audit.already_known_refs
+    )
+    assert set(audit.new_evidence_refs).isdisjoint(audit.already_known_refs)
 
 
 def test_investigation_observation_can_reveal_a_temporal_contradiction() -> None:
@@ -473,6 +486,10 @@ def test_invalid_and_out_of_scope_actions_are_rejected_without_tool_execution() 
     assert result.tool_calls == 0
     assert result.rejected_actions == 1
     assert result.stop_reason.value == "POLICY_STOP"
+    rejected_audit = result.action_audits[0]
+    assert rejected_audit.authorization_result == "REJECTED"
+    assert rejected_audit.backend_execution_status.value == "NOT_EXECUTED"
+    assert rejected_audit.authorization_reason == "unsupported capability 'logs'"
 
     out_of_scope = _policy_action(gap.gap_id, _entity("HPA", "unrelated"))
     out_of_scope_result = investigate_diagnosis(
@@ -486,6 +503,7 @@ def test_invalid_and_out_of_scope_actions_are_rejected_without_tool_execution() 
     )
     assert out_of_scope_result.tool_calls == 0
     assert out_of_scope_result.rejected_actions == 1
+    assert out_of_scope_result.action_audits[0].backend_execution_status.value == "NOT_EXECUTED"
 
 
 def test_invalid_action_retries_then_executes_only_the_valid_second_action() -> None:

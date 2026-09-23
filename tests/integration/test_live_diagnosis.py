@@ -35,6 +35,9 @@ from packages.rca.model import (
     EntityRef,
     FindingKind,
     GapOutcomeKind,
+    InvestigationAction,
+    InvestigationActionAudit,
+    InvestigationExecutionStatus,
     InvestigationLedgerEntry,
     InvestigationObservation,
     InvestigationResult,
@@ -526,8 +529,30 @@ def test_bounded_investigation_result_survives_session_restart(
             already_known_refs=("event:known",),
             outcome=GapOutcomeKind.NO_DATA,
         )
+        audit = InvestigationActionAudit(
+            turn_index=1,
+            action=InvestigationAction(
+                action="inspect",
+                gap_id="gap-1",
+                capability="events",
+                target=observation.target,
+                rationale="check the authorized event observation",
+            ),
+            authorization_result="AUTHORIZED",
+            authorization_reason="authorized by the selected gap",
+            backend_execution_status=InvestigationExecutionStatus.SUCCEEDED,
+            observation_id=observation.observation_id,
+            observation_outcome=observation.outcome,
+            returned_evidence_refs=("event:known",),
+            already_known_refs=("event:known",),
+            resolution_before=diagnosis.resolution,
+            resolution_after=diagnosis.resolution,
+            decision_state_changed=False,
+            progress_classification="NO_PROGRESS",
+        )
         return InvestigationResult(
             diagnosis=diagnosis,
+            initial_diagnosis=diagnosis,
             initial_resolution=diagnosis.resolution,
             final_resolution=diagnosis.resolution,
             turns=1,
@@ -536,6 +561,7 @@ def test_bounded_investigation_result_survives_session_restart(
             stop_reason=InvestigationStopReason.NO_PROGRESS,
             observations=(observation,),
             ledger=(entry,),
+            action_audits=(audit,),
         )
 
     monkeypatch.setattr(
@@ -562,8 +588,13 @@ def test_bounded_investigation_result_survives_session_restart(
     assert artifact["artifact_version"] == "1.0"
     result = InvestigationResult.model_validate(artifact["document"])
     assert result.stop_reason is InvestigationStopReason.NO_PROGRESS
+    assert result.initial_diagnosis is not None
     assert result.observations[0].observation_id == "obs-1"
     assert result.ledger[0].already_known_refs == ("event:known",)
+    assert (
+        result.action_audits[0].backend_execution_status is InvestigationExecutionStatus.SUCCEEDED
+    )
+    assert result.action_audits[0].authorization_result == "AUTHORIZED"
 
 
 def test_open_diagnosis_persists_and_deduplicates_log_observations(setup: Any) -> None:

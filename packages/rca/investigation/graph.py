@@ -76,12 +76,18 @@ from packages.rca.investigation.tools import default_tools, make_observation
 from packages.rca.llm import LLMError
 from packages.rca.model import (
     Diagnosis,
+    EntityRef,
     Finding,
     GapDimension,
     GapOutcomeKind,
     GapResolvability,
+    HypothesisEpistemicState,
     InformationGap,
+    InvestigationActionAudit,
     InvestigationActionStatus,
+    InvestigationExecutionStatus,
+    InvestigationGapState,
+    InvestigationHypothesisState,
     InvestigationLedgerEntry,
     InvestigationResult,
     InvestigationStep,
@@ -908,6 +914,110 @@ def _route_after_select(state: InvestigationState) -> str:
     return "finalize" if state.get("stop_reason") is not None else "validate_action"
 
 
+def _hypothesis_states(diagnosis: Diagnosis) -> tuple[InvestigationHypothesisState, ...]:
+    """Snapshot deterministic hypothesis epistemic states without inference."""
+    audited = (
+        {
+            item.hypothesis_id: item.epistemic_state
+            for item in diagnosis.resolution_trace.hypothesis_audits
+        }
+        if diagnosis.resolution_trace is not None
+        else {}
+    )
+    hypotheses = (
+        *((diagnosis.hypothesis,) if diagnosis.hypothesis is not None else ()),
+        *(diagnosis.alternative_hypotheses or diagnosis.ambiguous_hypotheses),
+    )
+    unique: dict[str, InvestigationHypothesisState] = {}
+    for hypothesis in hypotheses:
+        unique[hypothesis.hypothesis_id] = InvestigationHypothesisState(
+            hypothesis_id=hypothesis.hypothesis_id,
+            actor=hypothesis.causal_actor,
+            state=audited.get(hypothesis.hypothesis_id, HypothesisEpistemicState.UNRESOLVED),
+        )
+    return tuple(unique[key] for key in sorted(unique))
+
+
+def _gap_states(diagnosis: Diagnosis) -> tuple[InvestigationGapState, ...]:
+    return tuple(
+        InvestigationGapState(gap_id=gap.gap_id, resolvability=gap.resolvability)
+        for gap in sorted(diagnosis.information_gaps, key=lambda item: item.gap_id)
+    )
+
+
+def _leading_actor(diagnosis: Diagnosis) -> EntityRef | None:
+    if diagnosis.hypothesis is not None:
+        return diagnosis.hypothesis.causal_actor
+    if diagnosis.root_cause is not None:
+        return diagnosis.root_cause
+    if diagnosis.alternative_hypotheses:
+        return diagnosis.alternative_hypotheses[0].causal_actor
+    if diagnosis.ambiguous_hypotheses:
+        return diagnosis.ambiguous_hypotheses[0].causal_actor
+    return None
+
+
+def _append_action_audit(
+    state: InvestigationState, audit: InvestigationActionAudit
+) -> tuple[InvestigationActionAudit, ...]:
+    return (*state.get("action_audits", ()), audit)
+
+
+def _update_latest_action_audit(
+    state: InvestigationState, **changes: Any
+) -> tuple[InvestigationActionAudit, ...]:
+    audits = state.get("action_audits", ())
+    if not audits:
+        return ()
+    return (*audits[:-1], audits[-1].model_copy(update=changes))
+
+
+def _audit_before_state(diagnosis: Diagnosis) -> dict[str, Any]:
+    return {
+        "resolution_before": diagnosis.resolution,
+        "leading_actor_before": _leading_actor(diagnosis),
+        "hypothesis_states_before": _hypothesis_states(diagnosis),
+        "gap_states_before": _gap_states(diagnosis),
+    }
+
+
+def _audit_after_state(audit: InvestigationActionAudit, diagnosis: Diagnosis) -> dict[str, Any]:
+    hypothesis_states = _hypothesis_states(diagnosis)
+    gap_states = _gap_states(diagnosis)
+    leading_actor = _leading_actor(diagnosis)
+    changed = (
+        audit.resolution_before != diagnosis.resolution
+        or audit.leading_actor_before != leading_actor
+        or audit.hypothesis_states_before != hypothesis_states
+        or audit.gap_states_before != gap_states
+    )
+    return {
+        "resolution_after": diagnosis.resolution,
+        "leading_actor_after": leading_actor,
+        "hypothesis_states_after": hypothesis_states,
+        "gap_states_after": gap_states,
+        "decision_state_changed": changed,
+    }
+
+
+def _audit_progress_classification(
+    audit: InvestigationActionAudit, *, exploration_progress: bool
+) -> str:
+    if audit.authorization_result == "REJECTED":
+        return "REJECTED"
+    if audit.authorization_result == "POLICY_STOP":
+        return "POLICY_STOP"
+    if audit.decision_state_changed:
+        return "DECISION_STATE_CHANGED"
+    if audit.normalized_finding_ids:
+        return "NEW_FINDING"
+    if audit.new_evidence_refs:
+        return "NOVEL_EVIDENCE_ONLY"
+    if exploration_progress:
+        return "FRONTIER_PROGRESS"
+    return "NO_PROGRESS"
+
+
 def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     action = state.get("pending_action")
     if action is None:
@@ -932,7 +1042,39 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             if invalid >= rt.config.max_invalid_actions
             else None
         )
+        audit = InvestigationActionAudit(
+            turn_index=state["turns"],
+            action=action,
+            intent_id=state.get("pending_intent_id"),
+            intent_kind=state.get("pending_intent_kind"),
+            gap_dimension=next(
+                (
+                    gap.dimension
+                    for gap in state["current_diagnosis"].information_gaps
+                    if gap.gap_id == action.gap_id
+                ),
+                None,
+            ),
+            missing_fact=next(
+                (
+                    gap.missing_fact
+                    for gap in state["current_diagnosis"].information_gaps
+                    if gap.gap_id == action.gap_id
+                ),
+                None,
+            ),
+            authorization_result="REJECTED",
+            authorization_reason=result.reason,
+            resolution_after=state["current_diagnosis"].resolution,
+            leading_actor_after=_leading_actor(state["current_diagnosis"]),
+            hypothesis_states_after=_hypothesis_states(state["current_diagnosis"]),
+            gap_states_after=_gap_states(state["current_diagnosis"]),
+            decision_state_changed=False,
+            progress_classification="REJECTED",
+            **_audit_before_state(state["current_diagnosis"]),
+        )
         return {
+            "action_audits": _append_action_audit(state, audit),
             "invalid_actions": invalid,
             "rejected_actions": state["rejected_actions"] + 1,
             "stop_reason": stop,
@@ -949,7 +1091,23 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             "trace_steps": _with_step(state, "rejected", result.reason),
         }
     if action.action == "stop":
+        audit = InvestigationActionAudit(
+            turn_index=state["turns"],
+            action=action,
+            intent_id=state.get("pending_intent_id"),
+            intent_kind=state.get("pending_intent_kind"),
+            authorization_result="POLICY_STOP",
+            authorization_reason="policy selected stop; no backend action authorized",
+            resolution_after=state["current_diagnosis"].resolution,
+            leading_actor_after=_leading_actor(state["current_diagnosis"]),
+            hypothesis_states_after=_hypothesis_states(state["current_diagnosis"]),
+            gap_states_after=_gap_states(state["current_diagnosis"]),
+            decision_state_changed=False,
+            progress_classification="POLICY_STOP",
+            **_audit_before_state(state["current_diagnosis"]),
+        )
         return {
+            "action_audits": _append_action_audit(state, audit),
             "stop_reason": InvestigationStopReason.POLICY_STOP,
             "action_validation_status": InvestigationActionStatus.VALID_STOP,
             "trace_steps": _with_step(state, "policy_stop", action.rationale),
@@ -957,7 +1115,22 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     identity = action_identity(action)
     assert action.target is not None and action.capability is not None
     read_identity = observation_identity(action.capability, action.target, action.query)
+    gap = next(
+        item for item in state["current_diagnosis"].information_gaps if item.gap_id == action.gap_id
+    )
+    audit = InvestigationActionAudit(
+        turn_index=state["turns"],
+        action=action,
+        intent_id=state.get("pending_intent_id"),
+        intent_kind=state.get("pending_intent_kind"),
+        gap_dimension=gap.dimension,
+        missing_fact=gap.missing_fact,
+        authorization_result="AUTHORIZED",
+        authorization_reason="capability/target pair is authorized for the selected resolvable gap",
+        **_audit_before_state(state["current_diagnosis"]),
+    )
     return {
+        "action_audits": _append_action_audit(state, audit),
         "attempted_actions": (*state["attempted_actions"], identity),
         "attempted_observations": (
             *state.get("attempted_observations", ()),
@@ -1015,7 +1188,18 @@ def _execute_tool(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             source_class="tool_error",
             error=f"{type(error).__name__}: {error}",
         )
+    action_audits = _update_latest_action_audit(
+        state,
+        backend_execution_status=(
+            InvestigationExecutionStatus.FAILED
+            if observation.error is not None
+            else InvestigationExecutionStatus.SUCCEEDED
+        ),
+        observation_id=observation.observation_id,
+        observation_outcome=observation.outcome,
+    )
     return {
+        "action_audits": action_audits,
         "pending_observation": observation,
         "tool_calls": state["tool_calls"] + 1,
         "trace_steps": _with_step(
@@ -1050,19 +1234,31 @@ def _check_novelty(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     try:
         records = records_from_observation(observation)
     except ValueError as error:
+        returned_refs = tuple(dict.fromkeys(observation.evidence_refs))
+        already_known_refs = tuple(ref for ref in returned_refs if ref in known_refs)
+        invalid_new_refs = tuple(ref for ref in returned_refs if ref not in known_refs)
         failed_observation = observation.model_copy(
             update={
                 "payload": {},
-                "evidence_refs": (),
                 "error": f"{type(error).__name__}: {error}",
             }
         )
+        action_audits = _update_latest_action_audit(
+            state,
+            backend_execution_status=InvestigationExecutionStatus.FAILED,
+            observation_id=failed_observation.observation_id,
+            observation_outcome=failed_observation.outcome,
+            returned_evidence_refs=returned_refs,
+            new_evidence_refs=invalid_new_refs,
+            already_known_refs=already_known_refs,
+        )
         return {
+            "action_audits": action_audits,
             "pending_observation": failed_observation,
-            "pending_returned_evidence_refs": (),
-            "pending_new_evidence_refs": (),
-            "pending_already_known_refs": (),
-            "last_new_raw_evidence_count": 0,
+            "pending_returned_evidence_refs": returned_refs,
+            "pending_new_evidence_refs": invalid_new_refs,
+            "pending_already_known_refs": already_known_refs,
+            "last_new_raw_evidence_count": len(invalid_new_refs),
             "trace_steps": _with_step(state, "check_novelty", str(error)),
         }
     record_by_ref: dict[str, Any] = {}
@@ -1102,7 +1298,14 @@ def _check_novelty(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             known.append(ref)
         else:
             new_refs.append(ref)
+    action_audits = _update_latest_action_audit(
+        state,
+        returned_evidence_refs=returned_refs,
+        new_evidence_refs=tuple(new_refs),
+        already_known_refs=tuple(known),
+    )
     return {
+        "action_audits": action_audits,
         "pending_returned_evidence_refs": returned_refs,
         "pending_new_evidence_refs": tuple(new_refs),
         "pending_already_known_refs": tuple(known),
@@ -1181,7 +1384,14 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         None,
     )
     if gap is None:
+        action_audits = _update_latest_action_audit(
+            state,
+            returned_evidence_refs=state.get("pending_returned_evidence_refs", ()),
+            new_evidence_refs=state.get("pending_new_evidence_refs", ()),
+            already_known_refs=state.get("pending_already_known_refs", ()),
+        )
         return {
+            "action_audits": action_audits,
             "observations": (*state["observations"], observation),
             "last_new_evidence_count": 0,
             "successful_exploration_observations": tuple(successful),
@@ -1277,7 +1487,18 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         if observation.observation_id in existing_ids
         else (*state["observations"], normalized_observation)
     )
+    action_audits = _update_latest_action_audit(
+        state,
+        observation_id=normalized_observation.observation_id,
+        observation_outcome=normalized_observation.outcome,
+        returned_evidence_refs=returned_refs,
+        new_evidence_refs=new_refs,
+        already_known_refs=tuple(ref for ref in returned_refs if ref in known_refs),
+        normalized_finding_ids=finding_ids,
+        affected_hypothesis_ids=normalized_observation.hypothesis_ids,
+    )
     return {
+        "action_audits": action_audits,
         "observations": observations,
         "ledger": (*state.get("ledger", ()), ledger_entry),
         "intent_history": intent_history,
@@ -1377,7 +1598,29 @@ def _rebuild(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                 else item
                 for item in updated_observations
             )
+    action_audits = state.get("action_audits", ())
+    if action_audits:
+        latest_audit = action_audits[-1]
+        after_state = _audit_after_state(latest_audit, diagnosis)
+        if ledger:
+            latest_entry = ledger[-1]
+            after_state.update(
+                {
+                    "normalized_finding_ids": tuple(
+                        dict.fromkeys(
+                            (
+                                *latest_audit.normalized_finding_ids,
+                                *latest_entry.normalized_finding_ids,
+                            )
+                        )
+                    ),
+                    "affected_hypothesis_ids": latest_entry.affected_hypothesis_ids,
+                    "observation_outcome": latest_entry.outcome,
+                }
+            )
+        action_audits = _update_latest_action_audit(state, **after_state)
     return {
+        "action_audits": action_audits,
         "current_diagnosis": diagnosis,
         "investigation_findings": combined,
         "ledger": ledger,
@@ -1424,6 +1667,20 @@ def _check_progress(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             or current_hypothesis_fingerprint != _frozen(state["previous_hypothesis_fingerprint"])
         )
         intent_history[-1] = latest_history
+    action_audits = state.get("action_audits", ())
+    if action_audits and action_audits[-1].authorization_result == "AUTHORIZED":
+        latest_audit = action_audits[-1]
+        after_state = _audit_after_state(latest_audit, current)
+        updated_audit = latest_audit.model_copy(
+            update={
+                **after_state,
+                "progress_classification": _audit_progress_classification(
+                    latest_audit,
+                    exploration_progress=bool(exploration_progress),
+                ),
+            }
+        )
+        action_audits = (*action_audits[:-1], updated_audit)
     resolvable = _resolvable_gaps(current)
     stop: InvestigationStopReason | None = None
     if current.resolution is Resolution.RESOLVED and current.investigation_status.value != "OPEN":
@@ -1445,6 +1702,7 @@ def _check_progress(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     ):
         stop = InvestigationStopReason.MODEL_BUDGET_EXHAUSTED
     return {
+        "action_audits": action_audits,
         "previous_resolution": current.resolution,
         "previous_gap_fingerprint": current_gap_fingerprint,
         "previous_evidence_fingerprint": current_evidence_fingerprint,
@@ -1481,8 +1739,18 @@ def _finalize(state: InvestigationState) -> dict[str, Any]:
     evidence_refs = tuple(
         dict.fromkeys(ref for entry in state.get("ledger", ()) for ref in entry.new_evidence_refs)
     )
+    action_audits = state.get("action_audits", ())
+    executed_audit_count = sum(
+        item.backend_execution_status is not InvestigationExecutionStatus.NOT_EXECUTED
+        for item in action_audits
+    )
+    if executed_audit_count != state["tool_calls"]:
+        raise AssertionError(
+            "structured executed-action count does not match investigation tool_calls"
+        )
     result = InvestigationResult(
         diagnosis=diagnosis,
+        initial_diagnosis=state["initial_diagnosis"],
         initial_resolution=state["initial_diagnosis"].resolution,
         final_resolution=diagnosis.resolution,
         turns=state["turns"],
@@ -1498,6 +1766,7 @@ def _finalize(state: InvestigationState) -> dict[str, Any]:
         stop_reason=reason,
         observations=state["observations"],
         ledger=state.get("ledger", ()),
+        action_audits=action_audits,
         new_evidence_refs=evidence_refs,
         resolved_during_investigation=(
             state["initial_diagnosis"].resolution is not Resolution.RESOLVED
@@ -1648,6 +1917,7 @@ def build_investigation_state(
         "current_diagnosis": initial,
         "observations": (),
         "ledger": (),
+        "action_audits": (),
         "investigation_findings": (),
         "acquired_evidence_refs": (),
         "attempted_actions": (),

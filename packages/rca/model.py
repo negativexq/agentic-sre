@@ -723,6 +723,68 @@ class InvestigationLedgerEntry(BaseModel):
     outcome: GapOutcomeKind = GapOutcomeKind.UNKNOWN
 
 
+class InvestigationExecutionStatus(StrEnum):
+    """Whether the selected action reached a backend and what happened there."""
+
+    NOT_EXECUTED = "NOT_EXECUTED"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+
+
+class InvestigationHypothesisState(BaseModel):
+    """One hypothesis state captured at an investigation decision boundary."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    hypothesis_id: str
+    actor: EntityRef
+    state: HypothesisEpistemicState
+
+
+class InvestigationGapState(BaseModel):
+    """One currently visible information gap and its deterministic availability."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    gap_id: str
+    resolvability: GapResolvability
+
+
+class InvestigationActionAudit(BaseModel):
+    """Structured lifecycle and decision accounting for one selected action."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    turn_index: int
+    action: InvestigationAction
+    intent_id: str | None = None
+    intent_kind: str | None = None
+    gap_dimension: GapDimension | None = None
+    missing_fact: str | None = None
+    authorization_result: Literal["AUTHORIZED", "REJECTED", "POLICY_STOP"] = "REJECTED"
+    authorization_reason: str = ""
+    backend_execution_status: InvestigationExecutionStatus = (
+        InvestigationExecutionStatus.NOT_EXECUTED
+    )
+    observation_id: str | None = None
+    observation_outcome: GapOutcomeKind | None = None
+    returned_evidence_refs: tuple[str, ...] = ()
+    new_evidence_refs: tuple[str, ...] = ()
+    already_known_refs: tuple[str, ...] = ()
+    normalized_finding_ids: tuple[str, ...] = ()
+    affected_hypothesis_ids: tuple[str, ...] = ()
+    resolution_before: Resolution
+    resolution_after: Resolution | None = None
+    leading_actor_before: EntityRef | None = None
+    leading_actor_after: EntityRef | None = None
+    hypothesis_states_before: tuple[InvestigationHypothesisState, ...] = ()
+    hypothesis_states_after: tuple[InvestigationHypothesisState, ...] = ()
+    gap_states_before: tuple[InvestigationGapState, ...] = ()
+    gap_states_after: tuple[InvestigationGapState, ...] = ()
+    decision_state_changed: bool | None = None
+    progress_classification: str = "PENDING"
+
+
 class Diagnosis(BaseModel):
     """The product's answer for one incident."""
 
@@ -772,6 +834,7 @@ class InvestigationResult(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     diagnosis: Diagnosis
+    initial_diagnosis: Diagnosis | None = None
     initial_resolution: Resolution
     final_resolution: Resolution
     turns: int = 0
@@ -785,6 +848,7 @@ class InvestigationResult(BaseModel):
     stop_reason: InvestigationStopReason
     observations: tuple[InvestigationObservation, ...] = ()
     ledger: tuple[InvestigationLedgerEntry, ...] = ()
+    action_audits: tuple[InvestigationActionAudit, ...] = ()
     new_evidence_refs: tuple[str, ...] = ()
     resolved_during_investigation: bool = False
 

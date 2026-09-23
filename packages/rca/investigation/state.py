@@ -15,6 +15,7 @@ from packages.rca.model import (
     Hypothesis,
     InformationGap,
     InvestigationAction,
+    InvestigationActionAudit,
     InvestigationActionStatus,
     InvestigationLedgerEntry,
     InvestigationObservation,
@@ -114,6 +115,7 @@ class InvestigationState(TypedDict, total=False):
     current_diagnosis: Diagnosis
     observations: tuple[InvestigationObservation, ...]
     ledger: tuple[InvestigationLedgerEntry, ...]
+    action_audits: tuple[InvestigationActionAudit, ...]
     investigation_findings: tuple[Finding, ...]
     acquired_evidence_refs: tuple[str, ...]
     attempted_actions: tuple[str, ...]

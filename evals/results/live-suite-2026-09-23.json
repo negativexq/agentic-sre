@@ -1,0 +1,382 @@
+[
+  {
+    "scenario_id": "payment_error_spike",
+    "outcome": "CORRECT",
+    "expected": "ABSTAIN",
+    "actual": "sre-demo/Pod/payment-service-667fff77b9-4xdkp",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "03f89a67-8802-4d1e-9e3d-c13a64472836",
+    "alert_seconds": 25.166612457949668,
+    "detail": "in-process error injection leaves no cluster change"
+  },
+  {
+    "scenario_id": "order_error_spike",
+    "outcome": "CORRECT",
+    "expected": "ABSTAIN",
+    "actual": "sre-demo/Pod/order-service-587dc4df7-h9hjs",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "2047b683-819a-43a4-a25a-3d18955da5b9",
+    "alert_seconds": 25.165535415988415,
+    "detail": "in-process error injection leaves no cluster change"
+  },
+  {
+    "scenario_id": "payment_dependency_latency",
+    "outcome": "CORRECT",
+    "expected": "ABSTAIN",
+    "actual": "sre-demo/Pod/order-service-587dc4df7-h9hjs",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "aa7a9b8c-73db-428b-bab9-f8eb8959e56c",
+    "alert_seconds": 30.253629500046372,
+    "detail": "in-process delay leaves no cluster change"
+  },
+  {
+    "scenario_id": "order_latency_spike",
+    "outcome": "CORRECT",
+    "expected": "ABSTAIN",
+    "actual": "sre-demo/Pod/order-service-587dc4df7-h9hjs",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "616fe0c8-02e3-47eb-847c-5dac4b3ec69f",
+    "alert_seconds": 25.13315429072827,
+    "detail": "in-process delay leaves no cluster change"
+  },
+  {
+    "scenario_id": "payment_db_pool_pressure",
+    "outcome": "CORRECT",
+    "expected": "ABSTAIN",
+    "actual": "sre-demo/Pod/payment-service-667fff77b9-4xdkp",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "4a039d19-bf25-4504-b36d-1437745e96fb",
+    "alert_seconds": 50.30998500017449,
+    "detail": "in-process connection hold leaves no cluster change"
+  },
+  {
+    "scenario_id": "order_db_query_latency",
+    "outcome": "CORRECT",
+    "expected": "ABSTAIN",
+    "actual": "sre-demo/Pod/order-service-587dc4df7-h9hjs",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "24bc4a3b-a61b-4974-89b4-9d588de94515",
+    "alert_seconds": 25.16336770914495,
+    "detail": "in-process query delay leaves no cluster change"
+  },
+  {
+    "scenario_id": "cross_service_payment_failure",
+    "outcome": "CORRECT",
+    "expected": "ABSTAIN",
+    "actual": "sre-demo/Pod/order-service-587dc4df7-h9hjs",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "995ed4f3-867b-4c0b-921d-d85b4b867cb2",
+    "alert_seconds": 25.1578253749758,
+    "detail": "in-process error injection leaves no cluster change"
+  },
+  {
+    "scenario_id": "cross_service_db_pressure",
+    "outcome": "CORRECT",
+    "expected": "ABSTAIN",
+    "actual": "sre-demo/Pod/order-service-587dc4df7-h9hjs",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "9ac18ed7-ca73-4392-8bfb-3170c3de84bd",
+    "alert_seconds": 30.39757216675207,
+    "detail": "in-process connection hold leaves no cluster change"
+  },
+  {
+    "scenario_id": "payment_db_query_latency",
+    "outcome": "CORRECT",
+    "expected": "ABSTAIN",
+    "actual": "sre-demo/Pod/payment-service-6bc5657cd7-9nblj",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "68bae4b7-d0ab-48f6-8f75-0565d7bb195d",
+    "alert_seconds": 25.144685375038534,
+    "detail": "in-process query delay leaves no cluster change"
+  },
+  {
+    "scenario_id": "order_worker_lag",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/order-worker",
+    "actual": "sre-demo/Deployment/order-worker",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SPEC_CHANGE"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "ec3d84e1-d44f-4586-afa6-13e9cb0e15b5",
+    "alert_seconds": 35.222777666989714,
+    "detail": ""
+  },
+  {
+    "scenario_id": "order_worker_failure",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/order-worker",
+    "actual": "sre-demo/Deployment/order-worker",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SPEC_CHANGE"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "87be4da4-7e12-4748-92c9-ab38ec2ed18f",
+    "alert_seconds": 85.48569270921871,
+    "detail": ""
+  },
+  {
+    "scenario_id": "payment_config_change",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/payment-service",
+    "actual": "sre-demo/Deployment/payment-service",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SPEC_CHANGE"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "08eb3832-aea8-4acb-86bb-5157802e522a",
+    "alert_seconds": 20.138008291833103,
+    "detail": ""
+  },
+  {
+    "scenario_id": "order_config_latency",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/order-service",
+    "actual": "sre-demo/Deployment/order-service",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SPEC_CHANGE"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "01b9fc25-b5b6-46b5-b695-71f131c30940",
+    "alert_seconds": 20.09984958404675,
+    "detail": ""
+  },
+  {
+    "scenario_id": "payment_config_cross_service_impact",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/payment-service",
+    "actual": "sre-demo/Deployment/payment-service",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SPEC_CHANGE"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "025dc8e2-fc59-40b3-97c5-ec1438d61f7e",
+    "alert_seconds": 40.23569658305496,
+    "detail": ""
+  },
+  {
+    "scenario_id": "dependency_endpoint_misconfig",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/order-service",
+    "actual": "sre-demo/Deployment/order-service",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SPEC_CHANGE"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "7869162c-5430-4532-8afb-6ceb4b629b5c",
+    "alert_seconds": 35.24559104209766,
+    "detail": ""
+  },
+  {
+    "scenario_id": "configmap_dependency_change",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/ConfigMap/workload-config",
+    "actual": "sre-demo/ConfigMap/workload-config",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "CONFIG_CHANGE"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "0a2aad8a-9562-4e00-9bc9-378697db1df9",
+    "alert_seconds": 35.26224937522784,
+    "detail": ""
+  },
+  {
+    "scenario_id": "image_regression",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/payment-service",
+    "actual": "sre-demo/Pod/payment-service-86bdc56fbd-6rbkr",
+    "resolution": "AMBIGUOUS",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "CONTAINER_FAILURE",
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": false,
+    "incident_id": "a44c6cfb-abbb-4cb2-8b40-5a40d1966122",
+    "alert_seconds": 25.175138792023063,
+    "detail": "correct actor, but none of IMAGE_CHANGE backed it"
+  },
+  {
+    "scenario_id": "dependency_scaled_to_zero",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/payment-service",
+    "actual": "sre-demo/Deployment/payment-service",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SCALE_CHANGE"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "4346b78e-d83b-4de4-887a-c018a3ca7b8b",
+    "alert_seconds": 25.15155337518081,
+    "detail": ""
+  },
+  {
+    "scenario_id": "rollout_restart_disruption",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/payment-service",
+    "actual": "sre-demo/Deployment/payment-service",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "ROLLOUT_RESTART"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "9415494e-e2fd-48af-94e3-ed9618e0b4f9",
+    "alert_seconds": 25.259862542152405,
+    "detail": ""
+  },
+  {
+    "scenario_id": "network_policy_isolation",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/NetworkPolicy/deny-order-egress",
+    "actual": "sre-demo/NetworkPolicy/deny-order-egress",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "POLICY_CREATED"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "ae21f245-7d5f-4e48-baac-f8780389de12",
+    "alert_seconds": 45.23800583323464,
+    "detail": ""
+  },
+  {
+    "scenario_id": "memory_limit_oom",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/payment-service",
+    "actual": "sre-demo/Pod/payment-service-85b5dff97c-kw6j4",
+    "resolution": "AMBIGUOUS",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "CONTAINER_FAILURE",
+      "FAILURE_EVENT",
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": false,
+    "incident_id": "08ecccd2-4eab-4a00-bba1-a6d9f98611ee",
+    "alert_seconds": 25.16677308268845,
+    "detail": "correct actor, but none of SPEC_CHANGE backed it"
+  },
+  {
+    "scenario_id": "cpu_limit_throttle",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/payment-service",
+    "actual": "sre-demo/Deployment/payment-service",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SPEC_CHANGE",
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "b3b861ea-24fa-4109-a9dd-261f04d18101",
+    "alert_seconds": 30.141419291030616,
+    "detail": ""
+  },
+  {
+    "scenario_id": "service_selector_drift",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Service/payment-service",
+    "actual": "sre-demo/Service/payment-service",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "SPEC_CHANGE",
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "32959987-e018-45d2-8365-d254f83e8a20",
+    "alert_seconds": 20.131226500030607,
+    "detail": ""
+  },
+  {
+    "scenario_id": "worker_deployment_deleted",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/order-worker",
+    "actual": "sre-demo/Deployment/order-worker",
+    "resolution": "AMBIGUOUS",
+    "confidence": "VERIFIED",
+    "finding_kinds": [
+      "OBJECT_DELETED"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "fccf98cd-0585-40b6-9f27-905bbbb0d58b",
+    "alert_seconds": 65.53228195896372,
+    "detail": ""
+  },
+  {
+    "scenario_id": "payment_pod_crash",
+    "outcome": "CORRECT",
+    "expected": "sre-demo/Deployment/payment-service",
+    "actual": "sre-demo/Pod/payment-service-675bdc99d9-c5cqm",
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "confidence": "UNVERIFIED",
+    "finding_kinds": [
+      "FAILURE_EVENT"
+    ],
+    "supported_by_expected_kind": true,
+    "incident_id": "1f32dcf0-f03e-4eba-a6ac-4b00433bd4d4",
+    "alert_seconds": 0.013661874923855066,
+    "detail": ""
+  }
+]

@@ -204,6 +204,11 @@ class EmailDeliveryRow(Base):
     """Audit record of a report share over email (recipients, status, errors)."""
 
     __tablename__ = "email_deliveries"
+    # Idempotency is scoped to the report: the same client key may be reused for a
+    # different report without colliding, and a replay is matched by (report, key).
+    __table_args__ = (
+        UniqueConstraint("report_id", "idempotency_key", name="uq_email_delivery_report_key"),
+    )
 
     delivery_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     report_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
@@ -212,7 +217,7 @@ class EmailDeliveryRow(Base):
     subject: Mapped[str] = mapped_column(String(512), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     error: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
 
 

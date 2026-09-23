@@ -923,9 +923,15 @@ class EmailDeliveryRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def find_by_idempotency_key(self, key: str) -> dict[str, Any] | None:
+    def find_by_report_and_key(self, report_id: str, key: str) -> dict[str, Any] | None:
+        """Find a prior delivery for this report and idempotency key (a replay)."""
         row = self._session.scalars(
-            select(EmailDeliveryRow).where(EmailDeliveryRow.idempotency_key == key).limit(1)
+            select(EmailDeliveryRow)
+            .where(
+                EmailDeliveryRow.report_id == report_id,
+                EmailDeliveryRow.idempotency_key == key,
+            )
+            .limit(1)
         ).first()
         return _delivery_to_dict(row) if row is not None else None
 

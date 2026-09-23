@@ -450,7 +450,8 @@ def create_console_router(
             created_at=datetime.now(UTC),
         )
         if reserved is None:
-            existing = deliveries.find_by_idempotency_key(request.idempotency_key or "")
+            # A row already exists for this (report, key): a replay. Return it.
+            existing = deliveries.find_by_report_and_key(report_id, request.idempotency_key or "")
             if existing is not None:
                 return DeliveryView.model_validate(existing)
             raise HTTPException(status_code=409, detail="delivery already in progress")

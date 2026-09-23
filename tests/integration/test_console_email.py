@@ -174,6 +174,25 @@ def test_share_requires_token_when_configured(
     assert len(delivery.sent) == 1
 
 
+def test_same_key_across_reports_both_send(
+    sent_client: tuple[TestClient, FakeDelivery, str],
+) -> None:
+    client, delivery, first_report = sent_client
+    incident_id = client.get("/api/v1/console/incidents").json()["items"][0]["incident_id"]
+    second_report = client.post(f"/api/v1/console/incidents/{incident_id}/reports").json()[
+        "report_id"
+    ]
+    assert second_report != first_report
+
+    body = {"recipients": ["sre@example.com"], "idempotency_key": "shared-key"}
+    one = client.post(f"/api/v1/console/reports/{first_report}/email", json=body).json()
+    two = client.post(f"/api/v1/console/reports/{second_report}/email", json=body).json()
+
+    # The key is scoped per report: both send, with distinct deliveries.
+    assert one["delivery_id"] != two["delivery_id"]
+    assert len(delivery.sent) == 2
+
+
 def test_share_requires_a_recipient(
     sent_client: tuple[TestClient, FakeDelivery, str],
 ) -> None:

@@ -12,7 +12,7 @@ as part of this UI track (control-plane and storage code did change).
 - **Scope:** 13 milestones (M0–M12), delivered as **14 milestone commits** (M2
   landed in two) plus follow-up fixes, on `main`.
 - **Verification:** `make check` green — ruff + mypy (strict) over `apps packages
-  tests scripts` + **783 backend/console tests**; frontend `tsc -b` + `eslint` +
+  tests scripts` + **784 backend/console tests**; frontend `tsc -b` + `eslint` +
   production build. No automated React/component/browser tests yet.
 - **Live demo:** `make console` → http://localhost:8000/app (no cluster needed).
 
@@ -114,7 +114,7 @@ is set; every GET is read-only and open, matching the legacy API.
 - `GET /reports/{id}/markdown` · `/json` · `/pdf` → exports from the same snapshot
 
 **Sharing** (token-guarded when configured)
-- `POST /reports/{id}/email` → share (401 without token, 503 if unconfigured, 422 no recipient, 502 on send failure; atomically idempotent by key)
+- `POST /reports/{id}/email` → share (401 without token, 503 if unconfigured, 422 no recipient, 502 on send failure; atomically idempotent per `(report_id, key)`)
 - `GET /reports/{id}/deliveries` → audit log
 
 **Live**
@@ -219,7 +219,7 @@ lazy-loaded). Makefile: `make console` (build + seed + serve), `web-build`,
 | Table | Migration | Purpose |
 |---|---|---|
 | `report_snapshots` | `0012` | Immutable report, pinned to `diagnosis_run_id`. |
-| `email_deliveries` | `0013` | Audit log of shares (recipients, status, error, idempotency key). |
+| `email_deliveries` | `0013`, `0014` | Audit log of shares; idempotency unique scoped to `(report_id, idempotency_key)` in `0014`. |
 
 Migrations are linear (`… → 0011 → 0012 → 0013`) and idempotent. Additive schema
 changes only — **two new tables**, no mutation of existing RCA/diagnosis tables.
@@ -228,10 +228,10 @@ changes only — **two new tables**, no mutation of existing RCA/diagnosis table
 
 ## 6. Verification
 
-- **Backend/console:** 783 tests pass; ruff + mypy (strict) clean over `apps
+- **Backend/console:** 784 tests pass; ruff + mypy (strict) clean over `apps
   packages tests scripts`. These are Python tests of the console/report backend —
   **not** React UI tests.
-- **Dedicated console/report tests (36):**
+- **Dedicated console/report tests (37):**
   - `test_console_api.py` (16) — dashboard counters, list filters + pagination,
     detail timeline binding, `AMBIGUOUS` not resolved, timeline-unavailable,
     evidence, changes + leading-actor mark, report create/fetch/immutability,
@@ -239,8 +239,9 @@ changes only — **two new tables**, no mutation of existing RCA/diagnosis table
     typed 404s.
   - `test_console_stream.py` (2) — fingerprint tracking; SSE pump emits
     retry + initial + on-change.
-  - `test_console_email.py` (6) — unconfigured refusal, send + audit,
-    idempotency, token guard, recipient validation, failed-delivery recording.
+  - `test_console_email.py` (7) — unconfigured refusal, send + audit,
+    idempotency, cross-report key reuse, token guard, recipient validation,
+    failed-delivery recording.
   - `test_change_mapper.py` (3) — leading-actor mark by kind+name, no
     false-positive on same-name/different-kind, no mark without a leading actor.
   - `test_builder.py` / `test_render.py` / `test_email.py` (9) — snapshot
@@ -265,9 +266,13 @@ guards **all** state-changing endpoints — the legacy write endpoints and the
 console's `POST /incidents/{id}/reports` and `POST /reports/{id}/email` (verified
 by tests). Read endpoints are open in the local/demo deployment; secrets are
 never returned by the API; responses carry `X-Content-Type-Options`,
-`X-Frame-Options`, `Referrer-Policy`, and a strict CSP. This is a single shared
-secret, not per-user auth: **user authentication and RBAC** are the natural next
-epic before any multi-tenant exposure.
+`X-Frame-Options`, `Referrer-Policy`, and a strict CSP. When a token is
+configured the console collects it from the operator on the Settings screen and
+holds it in `sessionStorage` (this tab only — never the bundle, env, or
+`localStorage`), attaching it as `Authorization: Bearer` on the two write
+requests. This is a single shared secret, not per-user auth: **user
+authentication and RBAC** are the natural next epic before any multi-tenant
+exposure.
 
 Also note: the raw `evidence` table has no writer in the current pipeline, so the
 "Raw provenance" tab is typically empty in the live product — the engine reasons
@@ -288,7 +293,8 @@ apps/web/src/
                   CodeBlock, States
     workspace/    CausalPath, FindingsList, CompetingHypotheses,
                   LifecycleTimeline, RawEvidence, ReportExport, ShareReport
-  lib/            cn, format, tones, theme, queryClient
+    ApiTokenCard    session-scoped API-token entry (Settings)
+  lib/            cn, format, tones, theme, queryClient, authToken
   pages/          Overview, Incidents, IncidentWorkspace, Changes, Reports,
                   Connections, Settings, NotFound
 

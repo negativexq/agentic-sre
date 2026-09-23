@@ -1,6 +1,6 @@
 # M15 — Discriminative Planner Evaluation
 
-> **Current M15 status (iteration 3, evaluated at `16296d516b0957c086de82db37be08e15446b399`): IN_PROGRESS.** The effective deterministic ranking is now lexicographic and every executed action records its offered candidate/risk trace. The same frozen 25-scenario CLASS 0 run measured 42/148 duplicate/already-known reads (28.4%) and 6/148 decision-relevant calls (4.1%). Harm stayed at 0. G15.7 and G15.8 still fail; M16 must not start.
+> **Current M15 status (baseline-preserving run at `9e64be2f50045da3f2b5ba230ce60f4c7fcae212`): IN_PROGRESS.** The discovery discriminator restores all 34/34 previously decision-relevant M14 observations, and the conservative selector restores the deterministic M14 quality floor: 27/150 duplicate/already-known reads (18.0%), 35/150 decision-relevant calls (23.3%), 8 recoveries and 0 harm. G15.7 passes; G15.8 still fails at its 41.6% target. M16 must not start.
 
 ## Run identity
 
@@ -208,6 +208,8 @@ Initial resolution, root actor, leading hypothesis, alternative hypotheses, ambi
 
 **Milestone result: M15 remains IN_PROGRESS.** Numeric gates G15.7 and G15.8 fail. Do not start M16 or run the GPT-6 Luna comparison. No gate, metric definition, scenario ID, denominator or truth boundary changed.
 
+> The following differential section records the pre-discovery / pre-baseline-selector M15 state. Its 8.8% strict frontier recall and failed quality floor were superseded by the discovery-discriminator and baseline-preserving work recorded below.
+
 ## M14 deterministic quality-floor differential — truth-blind replay
 
 | Field | Value |
@@ -266,3 +268,48 @@ The M14 deterministic quality floor is not restored by current M15 iteration 3:
 | Initial deterministic RCA outputs | 25/25 reference | Stable across the M15 comparison | PASS |
 
 No new frozen 25-case M15 run, focused code test run, or `make check` was performed for this diagnostic-only task. The latest recorded `make check` at the M15 implementation revision passed (811 tests); it is prior validation evidence, not a rerun at this differential replay HEAD. The frozen iteration-3 outcome remains unchanged. G15.7/G15.8 and the additional M14 quality floor remain failed; M15 stays `IN_PROGRESS`, M16 is not authorized, and provider calls remain 0.
+
+## Discovery discriminators and M14-preserving selector
+
+The bounded discriminator now has two explicit modes: `HYPOTHESIS_DISCRIMINATION` and `DISCOVERY_DISCRIMINATION`. Discovery mode is restricted to pre-hypothesis `EVENT_SEQUENCE` and `CHANGE_TIMING` gaps with empty hypothesis/alternative state and a fixed capability-to-fact-family mapping. It records unknown slots, expected fact families and permitted outcomes; `NO_DATA` and `NO_MATCH` remain neutral. It does not include future actor/Finding values. Normal hypothesis discriminators remain unchanged after evidence has populated the case.
+
+M15 now computes M14-compatible and active choices from the same strict discriminator-filtered candidate architecture. The baseline-compatible path preserves the historical semantic intent precedence, physical candidate order and one-shot namespace change-discovery schedule. An active choice replaces it only when its deterministic discrimination, impact, elimination or redundancy comparison proves the documented improvement rule. Candidate-list validation, bounded queries and deterministic authorization remain in the execution path. The action audit persists selection strategy, comparison reason, and baseline/active candidate IDs alongside candidate utility diagnostics.
+
+Focused evidence:
+
+- `tests/unit/rca/test_investigation_selection.py`: 29 passed, including baseline fallback, stronger-discrimination override, and lower-repeat-risk override cases.
+- `tests/unit/rca/test_a6_6_intent_policy.py::test_deterministic_selector_comparison_is_persisted_in_action_audit`: passed; it verifies the comparison fields are durable and the selected discovery action was authorized and executed.
+- `make check`: Ruff, format and mypy passed; 819 pytest tests passed. The commit hook also passed Ruff, format and mypy.
+- Truth-blind representative replay of the eight M14 recovery scenarios: each selected `incident_events` then `incident_changes` on the namespace; the first three actions exactly match M14 in all eight. All eight remain `RECOVERY` in the new frozen run.
+- M14 decision-relevant frontier: the 34/34 discriminator-eligible result from the sealed v2 differential remains representable (candidate-generation code did not change in the selector commit). In the new frozen run, all 34 M14 decision-relevant observations were selected at the same turn with the same capability, target and bounded query: selected-frontier recall 34/34 (100%).
+
+## Baseline-preserving frozen deterministic evaluation
+
+| Field | Value |
+| --- | --- |
+| Evaluated code HEAD | `9e64be2f50045da3f2b5ba230ce60f4c7fcae212` |
+| Output | `.local/eval/m15/baseline-preserving-v1` |
+| Scenario set / metric | Same frozen 25 TEST IDs / `m14.v1` |
+| Configuration | Deterministic intent policy; 6 turns; 8 tool calls; 0 model-call budget |
+| Provider calls | 0, CLASS 0 |
+| Prediction-time ground truth | Not read |
+| Prediction manifest SHA-256 | `ac9ee4e764ef69e5dcd0f74a283dc9aa67ae0d182e19531cb9b52326b09451f4` |
+| Evaluation SHA-256 | `399e4264b3fb80f4ebf0e3284fb9866955e8d3ebae9cebb19cb1c7573fe679df` |
+
+| Measure | M14 deterministic | M15 baseline-preserving | M15 requirement / result |
+| --- | ---: | ---: | --- |
+| Tool calls | 150 | 150 | Same denominator |
+| Duplicate/already-known | 30/150 (20.0%) | 27/150 (18.0%) | G15.7 ≤18.75%: **PASS** |
+| Decision-relevant calls | 34/150 (22.7%) | 35/150 (23.3%) | G15.8 ≥41.6%: **FAIL** |
+| Recovery | 8 | 8 | M14 quality floor: **PASS** |
+| Harm | 0 | 0 | G15.9: **PASS** |
+| Stable correct / stable wrong | 2 / 15 | 2 / 15 | No scenario denominator changed |
+| Useful-call rate | 100.0% | 98.0% | `m14.v1`, unchanged |
+
+All 150 actions were authorized and executed successfully with a structured discriminator. Invalid actions, rejected actions, out-of-policy execution, writes and secret access were all zero. Initial resolution, root cause, confidence, hypothesis sets, resolution trace and verification were identical to M14 across all 25 scenarios; no RCA implementation or threshold changed.
+
+G15.1–G15.7, G15.9 and G15.10 pass for this run. G15.8 remains failed, so M15 remains `IN_PROGRESS` and M16 is not authorized. Do not run the GPT-6 Luna comparison.
+
+### Remaining planner-quality diagnosis
+
+The conservative selector used baseline fallback on 139/150 calls and active override on 11/150. Of the 11 active overrides, 10 returned already-known evidence with no decision-state change; the one decision-changing active override was an `events/kafka` read. Across the whole run, 18 history reads returned `UNKNOWN`, added no evidence refs and changed no decision state. Some of those history candidates still had expected-elimination value 3 because the current utility derives that value from support/comparison state IDs; the audit does not yet demonstrate the normalized fact path behind that value. This is the next bounded investigation target. Preserve the M14 floor and do not tune against scenario IDs or grader labels.

@@ -261,6 +261,41 @@ def cmd_eval(args: argparse.Namespace) -> int:
     return 0 if report["scenarios"] else 1
 
 
+def cmd_investigation_eval(args: argparse.Namespace) -> int:
+    from packages.evals.itbench.benchmark import load_split
+    from packages.evals.itbench.investigation_benchmark import predict_investigations
+    from packages.rca.investigation.state import InvestigationConfig
+
+    if args.split == "test" and not args.confirm_test:
+        print(
+            "The test split is frozen; use --confirm-test to write a prediction artifact.",
+            file=sys.stderr,
+        )
+        return 2
+    dataset = _dataset(args.dataset)
+    manifest = predict_investigations(
+        dataset,
+        load_split(args.split),
+        args.out,
+        split=args.split,
+        config=InvestigationConfig(
+            max_turns=args.max_turns,
+            max_model_calls=args.max_model_calls,
+            max_tool_calls=args.max_tool_calls,
+        ),
+    )
+    print(json.dumps(manifest, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_grade_investigation_eval(args: argparse.Namespace) -> int:
+    from packages.evals.itbench.investigation_benchmark import grade_investigations
+
+    result = grade_investigations(_dataset(args.dataset), args.out)
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
 def cmd_grade(args: argparse.Namespace) -> int:
     from packages.evals.itbench.benchmark import grade
 
@@ -432,6 +467,26 @@ def build_parser() -> argparse.ArgumentParser:
     eval_cmd.add_argument("--confirm-test", action="store_true")
     _add_llm_flags(eval_cmd)
     eval_cmd.set_defaults(handler=cmd_eval)
+
+    investigation_eval_cmd = sub.add_parser(
+        "investigation-eval",
+        help="predict and seal a bounded investigation evaluation without labels",
+    )
+    investigation_eval_cmd.add_argument("--split", choices=["dev", "test"], default="dev")
+    investigation_eval_cmd.add_argument("--out", type=Path, required=True)
+    investigation_eval_cmd.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
+    investigation_eval_cmd.add_argument("--confirm-test", action="store_true")
+    investigation_eval_cmd.add_argument("--max-turns", type=int, default=6)
+    investigation_eval_cmd.add_argument("--max-model-calls", type=int, default=6)
+    investigation_eval_cmd.add_argument("--max-tool-calls", type=int, default=8)
+    investigation_eval_cmd.set_defaults(handler=cmd_investigation_eval)
+
+    grade_investigation_eval_cmd = sub.add_parser(
+        "grade-investigation-eval", help="grade a sealed bounded investigation evaluation"
+    )
+    grade_investigation_eval_cmd.add_argument("--out", type=Path, required=True)
+    grade_investigation_eval_cmd.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
+    grade_investigation_eval_cmd.set_defaults(handler=cmd_grade_investigation_eval)
 
     grade_cmd = sub.add_parser("grade", help="re-grade a sealed run")
     grade_cmd.add_argument("--out", type=Path, required=True)

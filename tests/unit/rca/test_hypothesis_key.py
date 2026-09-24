@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from rca_builders import at, deployment, event, ref
+from rca_builders import alert, at, deployment, event, pod, ref, replicaset, service, version
 from test_hypotheses import _rollout_source
 
 from packages.rca.engine import build_case
-from packages.rca.hypotheses import _hypothesis_id, _hypothesis_key
+from packages.rca.hypotheses import _hypothesis_id, _hypothesis_key, matchable_by_key
 from packages.rca.model import (
     EvidenceTemporalRole,
     Finding,
     FindingKind,
     Hypothesis,
 )
+from packages.rca.source import InMemorySource
 
 POD = "shop/Pod/catalog-rs-abcde"
 
@@ -101,3 +102,60 @@ def test_records_without_a_key_still_load() -> None:
         {"hypothesis_id": "hypothesis:old", "causal_actor": ref("shop/Pod/p").model_dump()}
     )
     assert legacy.hypothesis_key == ""
+
+
+def _catalog_source(later_image_at: float | None) -> InMemorySource:
+    versions = [
+        version("shop/Deployment/catalog", 0, deployment("catalog", image="app:1")),
+        version("shop/ReplicaSet/catalog-rs", 0, replicaset("catalog-rs", "catalog")),
+        version("shop/Pod/catalog-rs-abcde", 0, pod("catalog-rs-abcde", "catalog", "catalog-rs")),
+        version("shop/Service/catalog", 0, service("catalog")),
+        version("shop/Deployment/catalog", 5, deployment("catalog", image="app:2"), 1),
+    ]
+    if later_image_at is not None:
+        versions.append(
+            version(
+                "shop/Deployment/catalog", later_image_at, deployment("catalog", image="app:3"), 2
+            )
+        )
+    source = InMemorySource(
+        name="hypothesis-key-counter",
+        alert_items=[alert("RequestErrorRate", "catalog", 7)],
+        versions=versions,
+        cutoff=at(40),
+    )
+    source.event_items.append(event(POD, "ImagePullBackOff", 6, type_="Warning"))
+    return source
+
+
+def _catalog(later_image_at: float | None) -> Hypothesis:
+    (hypothesis,) = (
+        item
+        for item in build_case(_catalog_source(later_image_at)).hypotheses
+        if item.causal_actor == ref("shop/Deployment/catalog")
+    )
+    return hypothesis
+
+
+def test_real_counter_evidence_keeps_the_key() -> None:
+    # A second image change 23 minutes after onset lands past the onset grace,
+    # so the pipeline records it as CONSEQUENCE counter evidence on the actor.
+    before, after = _catalog(None), _catalog(30)
+
+    assert before.contradictory_findings == ()
+    (counter,) = after.contradictory_findings
+    assert counter.temporal_role is EvidenceTemporalRole.CONSEQUENCE
+    assert counter.entity == after.causal_actor
+    assert after.hypothesis_key == before.hypothesis_key
+
+
+def test_repeated_key_in_one_revision_is_never_matched() -> None:
+    first, second = _pod_only("uid-a"), _pod_only("uid-b")
+    unique = _rollout()
+    assert first.hypothesis_key == second.hypothesis_key
+
+    matchable = matchable_by_key([first, second, unique])
+
+    assert first.hypothesis_key not in matchable
+    assert matchable == {unique.hypothesis_key: unique}
+    assert matchable_by_key([first]) == {first.hypothesis_key: first}

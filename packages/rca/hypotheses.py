@@ -285,6 +285,19 @@ def _hypothesis_key(actor: EntityRef, initiating: Sequence[Finding]) -> str:
     return f"hkey:{sha256(material.encode('utf-8')).hexdigest()[:16]}"
 
 
+def matchable_by_key(hypotheses: Iterable[Hypothesis]) -> dict[str, Hypothesis]:
+    """Hypotheses a revision diff may match, by ``hypothesis_key``.
+
+    A key that repeats within one revision is ambiguous, so none of its
+    hypotheses are matchable; empty keys never match.
+    """
+    by_key: dict[str, list[Hypothesis]] = {}
+    for hypothesis in hypotheses:
+        if hypothesis.hypothesis_key:
+            by_key.setdefault(hypothesis.hypothesis_key, []).append(hypothesis)
+    return {key: items[0] for key, items in by_key.items() if len(items) == 1}
+
+
 def _signature(hypothesis: Hypothesis) -> tuple[object, ...]:
     relations = tuple(sorted({hop.relation for path in hypothesis.causal_paths for hop in path}))
     return (
@@ -503,6 +516,7 @@ __all__ = [
     "build_hypotheses",
     "group_candidates",
     "hypothesis_candidate",
+    "matchable_by_key",
     "summarize_diagnoses",
     "summarize_diagnostics",
 ]

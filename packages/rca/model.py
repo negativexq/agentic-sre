@@ -812,6 +812,9 @@ class Hypothesis(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     hypothesis_id: str
+    # Revision-stable, evidence-independent matching key; empty on records
+    # that predate it. ``hypothesis_id`` stays revision-local.
+    hypothesis_key: str = ""
     causal_actor: EntityRef
     members: tuple[EntityRef, ...] = ()
     manifestations: tuple[EntityRef, ...] = ()

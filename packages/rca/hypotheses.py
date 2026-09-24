@@ -271,6 +271,20 @@ def _hypothesis_id(
     return f"hypothesis:{sha256(material.encode('utf-8')).hexdigest()[:16]}"
 
 
+def _hypothesis_key(actor: EntityRef, initiating: Sequence[Finding]) -> str:
+    """Evidence-independent identity for matching one hypothesis across revisions.
+
+    Built only from the actor and the episode's semantic class, so adding
+    supporting or contradicting evidence keeps the key; UIDs and evidence ids
+    never enter it. Keys are not unique within a revision.
+    """
+    kinds = sorted({finding.kind.value for finding in initiating})
+    episode = "INITIATED" if kinds else "MANIFESTATION_ONLY"
+    mechanism = ",".join(kinds) if kinds else "MANIFESTATION_ONLY"
+    material = "|".join([actor.canonical, mechanism, episode])
+    return f"hkey:{sha256(material.encode('utf-8')).hexdigest()[:16]}"
+
+
 def _signature(hypothesis: Hypothesis) -> tuple[object, ...]:
     relations = tuple(sorted({hop.relation for path in hypothesis.causal_paths for hop in path}))
     return (
@@ -361,6 +375,7 @@ def _make_hypothesis(
         grouping_reasons.append(f"deduplicated {duplicate_count} repeated evidence reference(s)")
     hypothesis = Hypothesis(
         hypothesis_id=_hypothesis_id(actor, members, all_findings),
+        hypothesis_key=_hypothesis_key(actor, initiating),
         causal_actor=actor,
         members=members,
         manifestations=manifestations,

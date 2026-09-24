@@ -16,10 +16,12 @@ from packages.rca.model import (
     InvestigationQuery,
     LogRecord,
     ObjectVersion,
+    PodStatusObservation,
     ResourcePressure,
     TraceSpanObservation,
     TrafficObservation,
 )
+from packages.rca.pod_status import pod_status_from_history
 from packages.rca.signals import (
     _HPA_FAILURE_REASONS,
     _LIMIT_MESSAGE,
@@ -800,6 +802,10 @@ class InitialObservationView:
 
     def trace_observations(self) -> tuple[TraceSpanObservation, ...]:
         return ()
+
+    def pod_status_observations(self) -> tuple[PodStatusObservation, ...]:
+        # Only the bounded view's own history, never the full source's.
+        return pod_status_from_history(self.object_history())
 
 
 def initial_view(

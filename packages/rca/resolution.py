@@ -13,6 +13,9 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from packages.rca.causal_roles import HypothesisCausalRole
+from packages.rca.episode_end import RULE_ID as EPISODE_END_RULE_ID
+from packages.rca.episode_end import RULE_VERSION as EPISODE_END_RULE_VERSION
+from packages.rca.episode_end import EndedEpisode
 from packages.rca.model import (
     Diagnosis,
     DominanceRelation,
@@ -274,6 +277,7 @@ def dominates(
 
 TEMPORAL_CONTRADICTION_RULE = ("m16.temporal-contradiction", "v1")
 PROPAGATED_EFFECT_RULE = ("m16.root-eligibility-propagated-effect", "v1")
+EPISODE_END_RULE = (EPISODE_END_RULE_ID, EPISODE_END_RULE_VERSION)
 
 
 def _time_basis(finding: Finding, grace: timedelta) -> EliminationTimeBasis:
@@ -357,6 +361,8 @@ def _legacy_elimination_reason(item: ResolutionElimination) -> str:
         return f"{item.hypothesis_id}: contradictory evidence"
     if item.code is ResolutionReasonCode.ROOT_CAUSE_INELIGIBLE_PROPAGATED_EFFECT:
         return f"{item.hypothesis_id}: root-cause ineligible propagated effect"
+    if item.code is ResolutionReasonCode.MANIFESTATION_EPISODE_ENDED_BEFORE_ONSET:
+        return f"{item.hypothesis_id}: manifestation episode ended before onset"
     raise ValueError(
         f"non-eliminative reason code cannot be emitted as an elimination: {item.code}"
     )
@@ -412,6 +418,40 @@ def _root_cause_eligibility_elimination(
     )
 
 
+def _ended_episode_elimination(ended: EndedEpisode) -> ResolutionElimination:
+    basis = ended.basis.value
+    return ResolutionElimination(
+        hypothesis_id=ended.hypothesis_id,
+        code=ResolutionReasonCode.MANIFESTATION_EPISODE_ENDED_BEFORE_ONSET,
+        evidence_ids=(*ended.manifestation_evidence_ids, ended.end_evidence_id),
+        detail=(
+            "the actor carries only its own failure manifestations, all of which precede a "
+            f"positively observed episode end ({basis}) before incident onset"
+        ),
+        rule_id=EPISODE_END_RULE[0],
+        rule_version=EPISODE_END_RULE[1],
+        consequence=EliminationConsequence.ROOT_INELIGIBILITY,
+        targets=(ended.actor.canonical,),
+        mechanism="EPISODE_TIMING",
+        observation_ids=(ended.end_evidence_id,),
+        time_basis=(
+            EliminationTimeBasis(
+                evidence_ids=(ended.end_evidence_id,),
+                onset=ended.onset,
+                boundary=ended.boundary,
+                interval_start=ended.ended_at,
+                interval_end=ended.observed_at,
+                certainty=basis,
+            ),
+        ),
+        coverage_basis=(
+            f"last manifestation {ended.last_manifestation_at.isoformat()}; "
+            f"episode ended {ended.ended_at.isoformat()} ({basis})"
+        ),
+        preconditions=ended.preconditions,
+    )
+
+
 def _eligibility_discriminator(
     selected: Hypothesis,
     excluded: Sequence[Hypothesis],
@@ -427,8 +467,9 @@ def _eligibility_discriminator(
         )[:12],
         finding_kinds=tuple(sorted({finding.kind.value for finding in selected.findings})),
         detail=(
-            "competing hypotheses were excluded from root-cause competition by verified "
-            "propagated-effect evidence without episode-level initiating support"
+            "competing hypotheses were excluded from root-cause competition by positive "
+            "root-eligibility evidence: "
+            + ", ".join(sorted({item.code.value for item in eliminations}))
         ),
     )
 
@@ -603,9 +644,14 @@ def resolve_hypotheses(
         hypothesis
         for hypothesis in (*supported_all, *unresolved_all)
         if root_cause_eligibilities is not None
-        and (eligibility := root_cause_eligibilities.for_hypothesis(hypothesis.hypothesis_id))
-        is not None
-        and eligibility.state is RootCauseEligibilityState.INELIGIBLE_PROPAGATED_EFFECT
+        and (
+            (
+                (eligibility := root_cause_eligibilities.for_hypothesis(hypothesis.hypothesis_id))
+                is not None
+                and eligibility.state is RootCauseEligibilityState.INELIGIBLE_PROPAGATED_EFFECT
+            )
+            or root_cause_eligibilities.ended_episode(hypothesis.hypothesis_id) is not None
+        )
     )
     supported = tuple(
         hypothesis for hypothesis in supported_all if hypothesis not in eligibility_excluded
@@ -621,10 +667,16 @@ def resolve_hypotheses(
     if root_cause_eligibilities is not None:
         for hypothesis in eligibility_excluded:
             eligibility = root_cause_eligibilities.for_hypothesis(hypothesis.hypothesis_id)
-            if eligibility is not None:
+            ended = root_cause_eligibilities.ended_episode(hypothesis.hypothesis_id)
+            if (
+                eligibility is not None
+                and eligibility.state is RootCauseEligibilityState.INELIGIBLE_PROPAGATED_EFFECT
+            ):
                 eligibility_elimination_items.append(
                     _root_cause_eligibility_elimination(hypothesis, eligibility)
                 )
+            elif ended is not None:
+                eligibility_elimination_items.append(_ended_episode_elimination(ended))
     eligibility_eliminations = tuple(eligibility_elimination_items)
     eliminations = contradiction_eliminations + eligibility_eliminations
     legacy_reasons = tuple(_legacy_elimination_reason(item) for item in eliminations)
@@ -664,8 +716,8 @@ def resolve_hypotheses(
                     state=Resolution.INSUFFICIENT_EVIDENCE,
                     decision_basis="NO_ROOT_CAUSE_ELIGIBLE_HYPOTHESIS",
                     rationale=(
-                        "Available hypotheses are either contradicted or positively identified "
-                        "as propagated effects without source-capable initiating evidence."
+                        "Available hypotheses are either contradicted or positively excluded "
+                        "from root-cause competition (propagated effect or ended episode)."
                     ),
                 ),
                 hypotheses,

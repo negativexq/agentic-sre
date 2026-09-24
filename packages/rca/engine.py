@@ -8,6 +8,7 @@ from datetime import timedelta
 from typing import Protocol
 
 from packages.rca.causal_roles import HypothesisCausalRoles, derive_hypothesis_causal_roles
+from packages.rca.episode_end import assess_ended_episodes
 from packages.rca.frontier import (
     apply_frontier_progress,
     derive_structural_frontier,
@@ -226,7 +227,17 @@ def build_case(
     grouping: GroupingResult = group_candidates(candidates, topology, context, config.ranking)
     hypotheses = list(grouping.hypotheses)
     hypothesis_causal_roles = derive_hypothesis_causal_roles(hypotheses, runtime_propagation)
-    root_cause_eligibilities = derive_root_cause_eligibilities(hypotheses, hypothesis_causal_roles)
+    root_cause_eligibilities = derive_root_cause_eligibilities(
+        hypotheses, hypothesis_causal_roles
+    ).with_ended_episodes(
+        assess_ended_episodes(
+            hypotheses,
+            history=history,
+            pod_statuses=source.pod_status_observations(),
+            onset=symptoms.onset,
+            grace=config.ranking.verification_onset_grace,
+        )
+    )
     structural_alternatives = (
         list(derive_structural_frontier(context))
         if getattr(source, "initial_observation_bounded", False)

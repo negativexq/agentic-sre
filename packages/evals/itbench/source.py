@@ -23,10 +23,12 @@ from packages.rca.model import (
     Lifecycle,
     LogRecord,
     ObjectVersion,
+    PodStatusObservation,
     ResourcePressure,
     TraceSpanObservation,
     TrafficObservation,
 )
+from packages.rca.pod_status import pod_status_from_history
 from packages.rca.traces import normalize_trace_status, parse_trace_mapping, semantic_attributes
 
 _OBJECTS = "k8s_objects_raw.tsv"
@@ -552,6 +554,9 @@ class SnapshotSource:
         if cutoff is None:
             return self._trace_observations
         return [item for item in self._trace_observations if item.start_at <= cutoff]
+
+    def pod_status_observations(self) -> Sequence[PodStatusObservation]:
+        return pod_status_from_history(self.object_history())
 
     def logs(self, service: str, *, limit: int = 20) -> Sequence[dict[str, Any]]:
         """Error-level log lines for one service, bounded."""

@@ -3,14 +3,16 @@
 Eligibility is deliberately separate from both epistemic assessment and causal
 role.  It only removes a hypothesis from root-cause competition when a
 propagated effect is positively established and the complete hypothesis
-episode has no source-capable initiating evidence.
+episode has no source-capable initiating evidence, or when the ended
+manifestation episode rule (``packages.rca.episode_end``) positively applies.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -26,6 +28,9 @@ from packages.rca.model import (
     FindingKind,
     Hypothesis,
 )
+
+if TYPE_CHECKING:
+    from packages.rca.episode_end import EndedEpisode
 
 
 class RootCauseEligibilityState(StrEnum):
@@ -274,10 +279,22 @@ class RootCauseEligibilityStats(BaseModel):
 
 
 class RootCauseEligibilities:
-    __slots__ = ("assessments", "stats")
+    """Root-cause eligibility per hypothesis.
 
-    def __init__(self, assessments: Sequence[HypothesisRootCauseEligibility]) -> None:
+    ``ended_episodes`` holds hypotheses excluded by the ended-manifestation
+    episode rule (contract section 17); they are ineligible independently of
+    their propagation-based assessment.
+    """
+
+    __slots__ = ("assessments", "ended_episodes", "stats")
+
+    def __init__(
+        self,
+        assessments: Sequence[HypothesisRootCauseEligibility],
+        ended_episodes: Mapping[str, EndedEpisode] | None = None,
+    ) -> None:
         self.assessments = tuple(sorted(assessments, key=lambda item: item.hypothesis_id))
+        self.ended_episodes: Mapping[str, EndedEpisode] = dict(ended_episodes or {})
         states = [item.state for item in self.assessments]
         self.stats = RootCauseEligibilityStats(
             hypotheses=len(states),
@@ -300,7 +317,15 @@ class RootCauseEligibilities:
             (item for item in self.assessments if item.hypothesis_id == hypothesis_id), None
         )
 
+    def with_ended_episodes(self, ended: Mapping[str, EndedEpisode]) -> RootCauseEligibilities:
+        return RootCauseEligibilities(self.assessments, {**self.ended_episodes, **ended})
+
+    def ended_episode(self, hypothesis_id: str) -> EndedEpisode | None:
+        return self.ended_episodes.get(hypothesis_id)
+
     def is_root_cause_selectable(self, hypothesis_id: str) -> bool:
+        if hypothesis_id in self.ended_episodes:
+            return False
         item = self.for_hypothesis(hypothesis_id)
         return (
             item is None or item.state is not RootCauseEligibilityState.INELIGIBLE_PROPAGATED_EFFECT

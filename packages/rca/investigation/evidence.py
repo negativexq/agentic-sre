@@ -15,10 +15,12 @@ from packages.rca.model import (
     InvestigationObservation,
     LogRecord,
     ObjectVersion,
+    PodStatusObservation,
     ResourcePressure,
     TraceSpanObservation,
     TrafficObservation,
 )
+from packages.rca.pod_status import ordered, pod_status_from_history
 from packages.rca.source import ObservationSource
 
 type EvidenceRecord = (
@@ -290,6 +292,14 @@ class OverlayObservationSource:
                 item.span_id,
                 item.evidence_id,
             ),
+        )
+
+    def pod_status_observations(self) -> tuple[PodStatusObservation, ...]:
+        return ordered(
+            (
+                *self.base.pod_status_observations(),
+                *pod_status_from_history(self.object_history()),
+            )
         )
 
 

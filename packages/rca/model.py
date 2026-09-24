@@ -86,6 +86,25 @@ class ObjectVersion(BaseModel):
     lifecycle: Lifecycle = Lifecycle.UPDATED
 
 
+class PodStatusObservation(BaseModel):
+    """What one Pod's status showed at one observation time.
+
+    The object journal versions desired state only, so status is carried here
+    separately. ``ready_since`` is the Ready condition's ``lastTransitionTime``:
+    with ``ready`` true it means the Pod was continuously Ready from then until
+    ``observed_at``.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    pod: EntityRef
+    uid: str | None = None
+    observed_at: datetime
+    ready: bool | None = None
+    ready_since: datetime | None = None
+    evidence_id: str
+
+
 class LogRecord(BaseModel):
     """One warning or error log line from a service."""
 
@@ -420,6 +439,7 @@ class ResolutionReasonCode(StrEnum):
     EXPLICIT_TEMPORAL_CONTRADICTION = "EXPLICIT_TEMPORAL_CONTRADICTION"
     STRUCTURALLY_DOMINATED = "STRUCTURALLY_DOMINATED"
     ROOT_CAUSE_INELIGIBLE_PROPAGATED_EFFECT = "ROOT_CAUSE_INELIGIBLE_PROPAGATED_EFFECT"
+    MANIFESTATION_EPISODE_ENDED_BEFORE_ONSET = "MANIFESTATION_EPISODE_ENDED_BEFORE_ONSET"
 
 
 class EliminationConsequence(StrEnum):

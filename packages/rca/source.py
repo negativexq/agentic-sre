@@ -13,10 +13,12 @@ from packages.rca.model import (
     EntityRef,
     LogRecord,
     ObjectVersion,
+    PodStatusObservation,
     ResourcePressure,
     TraceSpanObservation,
     TrafficObservation,
 )
+from packages.rca.pod_status import pod_status_from_history
 
 
 class ObservationSource(Protocol):
@@ -52,6 +54,10 @@ class ObservationSource(Protocol):
 
     def trace_observations(self) -> Sequence[TraceSpanObservation]:
         """Typed distributed-trace spans up to the source observation cutoff."""
+        ...
+
+    def pod_status_observations(self) -> Sequence[PodStatusObservation]:
+        """Pod status as observed bodies reported it; never inferred between observations."""
         ...
 
 
@@ -122,6 +128,10 @@ class InMemorySource:
         if self.cutoff is None:
             return self.trace_items
         return [item for item in self.trace_items if item.start_at <= self.cutoff]
+
+    def pod_status_observations(self) -> Sequence[PodStatusObservation]:
+        """Pod status exactly as observed Pod bodies reported it, oldest first."""
+        return pod_status_from_history(self.object_history())
 
 
 __all__ = ["InMemorySource", "ObservationSource"]

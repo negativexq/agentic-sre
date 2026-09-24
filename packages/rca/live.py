@@ -30,10 +30,12 @@ from packages.rca.model import (
     Lifecycle,
     LogRecord,
     ObjectVersion,
+    PodStatusObservation,
     ResourcePressure,
     TraceSpanObservation,
     TrafficObservation,
 )
+from packages.rca.pod_status import ordered, pod_status_from_body, pod_status_from_history
 
 # (API group client attribute, list method, kind). Secrets are deliberately not read.
 _NAMESPACED_LISTS: tuple[tuple[str, str, str], ...] = (
@@ -489,6 +491,22 @@ class LiveSource:
     def trace_observations(self) -> Sequence[TraceSpanObservation]:
         # Live trace ingestion is not part of this source contract yet.
         return []
+
+    def pod_status_observations(self) -> Sequence[PodStatusObservation]:
+        """Journal-time status plus the current listing's status.
+
+        The current listing is kept here even when its desired state matches
+        the journal, which is exactly when ``object_history`` drops it.
+        """
+        current: list[PodStatusObservation] = []
+        if self.current_is_live:
+            for body in self.current_objects:
+                entity = _entity(body)
+                if entity is not None and entity.kind == "Pod":
+                    current.append(
+                        pod_status_from_body(entity, body, self.observed_at, "cluster:current")
+                    )
+        return ordered((*pod_status_from_history(self.object_history()), *current))
 
     def supports(self, capability: str) -> bool:
         if capability == "incident_events":

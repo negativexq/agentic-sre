@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, UniqueConstraint, Uuid
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, Uuid
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
@@ -127,13 +127,23 @@ class EventVersionRow(Base):
     """
 
     __tablename__ = "event_versions"
-    __table_args__ = (UniqueConstraint("namespace", "dedup_key"),)
+    __table_args__ = (
+        UniqueConstraint("namespace", "dedup_key"),
+        Index(
+            "ix_event_versions_namespace_involved_kind_name_involved_uid",
+            "namespace",
+            "involved_kind",
+            "involved_name",
+            "involved_uid",
+        ),
+    )
 
     version_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     namespace: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     # involvedObject kind/name, for cheap filtering without a JSON query.
     involved_kind: Mapped[str] = mapped_column(String(255), nullable=False)
     involved_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    involved_uid: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # (uid or name)|count|lastTimestamp: identifies one observed state of one
     # Kubernetes event object; a coalesced repeat (count/lastTimestamp advance)
     # gets a new key and is stored again, matching the object journal's model
@@ -152,12 +162,22 @@ class ObjectVersionRow(Base):
     """
 
     __tablename__ = "object_versions"
+    __table_args__ = (
+        Index(
+            "ix_object_versions_namespace_kind_name_uid",
+            "namespace",
+            "kind",
+            "name",
+            "uid",
+        ),
+    )
 
     version_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     object_key: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
     namespace: Mapped[str] = mapped_column(String(255), nullable=False)
     kind: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    uid: Mapped[str | None] = mapped_column(String(64), nullable=True)
     observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False, index=True)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     body: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)

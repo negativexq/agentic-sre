@@ -13,11 +13,11 @@ owns the diagnosis.
 ### At a glance
 
 - **[84% exact root-cause accuracy](evals/results/v1.1.2/README.md)** — 26/31 against ITBench-Lite ground truth, over every scenario whose published label is matchable.
-- **[25/25 on the live suite](evals/results/live-suite-2026-09-23.md)** — 25 faults staged on a real cluster, graded end to end, zero fabrications, zero model calls (a separate in-house measurement, not combined with the above).
+- **[25/25 on the live suite at `da6f0e6`](evals/results/live-suite-2026-09-24.md)** — current-HEAD Kind run: 16/16 root-cause actors, 9/9 abstentions, and 0 fabrications (a separate in-house measurement, not combined with ITBench-Lite).
 - **0 model calls** — the measured benchmark path is fully deterministic.
 - **Bounded investigation** — the frozen TEST25 run used six validated physical reads per incident, one read at a time.
 - **Evidence-backed RCA** — observations become normalized Findings before they can change a diagnosis.
-- **Read-only by design** — the investigator cannot mutate the cluster or execute remediation.
+- **Read-only by design** — the RCA investigator cannot mutate the cluster or execute remediation. The live benchmark harness separately stages and restores test faults.
 
 ## Measured root-cause performance
 
@@ -63,18 +63,22 @@ the diagnosis the control plane actually stored.
 | --- | ---: | ---: |
 | DEV | 19 | 19 |
 | **HOLDOUT** | **6** | **6** |
-| **Total** | **25** | **[25/25 (100%)](evals/results/live-suite-2026-09-23.md)** |
+| **Total** | **25** | **[25/25 (100%) at `da6f0e6`](evals/results/live-suite-2026-09-24.md)** |
 
-Zero fabrications: every scenario that staged a real change had its actor named,
-and every scenario that staged no cluster change was correctly not resolved. The
-[2026-09-23 run](evals/results/live-suite-2026-09-23.md) re-anchors the result to
-current `HEAD` after the UI/productization track (control-plane, storage, report,
-auth and migrations changed; `packages/rca/` did not). Model calls are verified
-against the cluster at 0. The one delta from the prior
-[24/25 run](evals/results/live-suite-2026-09-22.md) is a single borderline
-scenario that flipped correct — run-to-run live variance, not a code change; the
-resolution distribution (0 `RESOLVED` / 14 `AMBIGUOUS` / 11
-`INSUFFICIENT_EVIDENCE`) is identical across both runs.
+The latest live re-anchor ran the official 25-scenario suite on a fresh Kind
+cluster against exact commit `da6f0e671775e3ddba9374d3b2fd46e678478a56`:
+16/16 root-cause actors, 9/9 abstentions, 25/25 expected outcomes, and no
+`RESOLVED` abstention. Persisted diagnoses for all 25 run incident IDs reported
+`mode=deterministic` and `model_calls=0`. Its resolution distribution is 0
+`RESOLVED`, 14 `AMBIGUOUS`, and 11 `INSUFFICIENT_EVIDENCE`.
+
+The [2026-09-23 report](evals/results/live-suite-2026-09-23.md) is historical
+evidence for commit `9e8add2`, not current `HEAD`. Its statements that the run
+re-anchored current `HEAD` and that `packages/rca/` had not changed describe only
+the code history at that earlier checkpoint. The fresh 2026-09-24 run matches
+the historical outcomes and resolution distribution; its report records
+ephemeral Pod-name and live-evidence differences, plus a Loki lookback-bound
+limitation. The two reports are kept separate and neither rewrites the other.
 
 This is a **separate** in-house measurement — its labels have no external
 validity, so it is never combined with the ITBench-Lite number above. The

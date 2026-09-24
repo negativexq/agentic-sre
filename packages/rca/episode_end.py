@@ -6,6 +6,10 @@ to be this incident's root cause. The end must be observed: a journal
 tombstone recorded at or before onset, or a status observation taken after
 onset plus grace that shows the Pod continuously Ready since before onset.
 Missing data never ends an episode.
+
+Every manifestation must name its exact Pod UID, and each UID's episode needs
+its own end from evidence of that same UID; a same-named Pod with another UID
+never ends it. A manifestation without a UID makes the rule inapplicable.
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
+from packages.rca.json_access import child
 from packages.rca.model import (
     EliminationPrecondition,
     EntityRef,
@@ -40,50 +45,108 @@ class EpisodeEndBasis(StrEnum):
 
 
 @dataclass(frozen=True)
-class EndedEpisode:
-    """A passed rule evaluation, with everything its audit record needs."""
+class InstanceEpisodeEnd:
+    """The positively observed end of one exact Pod instance's episode."""
 
-    hypothesis_id: str
-    actor: EntityRef
+    uid: str
+    target: str
     basis: EpisodeEndBasis
-    onset: datetime
-    boundary: datetime
     ended_at: datetime
     observed_at: datetime
     last_manifestation_at: datetime
-    manifestation_evidence_ids: tuple[str, ...]
     end_evidence_id: str
+
+
+@dataclass(frozen=True)
+class EndedEpisode:
+    """A passed rule evaluation, with everything its audit record needs.
+
+    ``instances`` holds one end per exact Pod UID the manifestations name, in
+    UID order. The single-value accessors are defined only for one instance.
+    """
+
+    hypothesis_id: str
+    actor: EntityRef
+    onset: datetime
+    boundary: datetime
+    instances: tuple[InstanceEpisodeEnd, ...]
+    manifestation_evidence_ids: tuple[str, ...]
     preconditions: tuple[EliminationPrecondition, ...]
+
+    def _only(self) -> InstanceEpisodeEnd:
+        if len(self.instances) != 1:
+            raise ValueError(f"{len(self.instances)} instances; read ``instances`` instead")
+        return self.instances[0]
+
+    @property
+    def basis(self) -> EpisodeEndBasis:
+        return self._only().basis
+
+    @property
+    def ended_at(self) -> datetime:
+        return self._only().ended_at
+
+    @property
+    def observed_at(self) -> datetime:
+        return self._only().observed_at
+
+    @property
+    def last_manifestation_at(self) -> datetime:
+        return self._only().last_manifestation_at
+
+    @property
+    def end_evidence_id(self) -> str:
+        return self._only().end_evidence_id
+
+
+def _version_uid(version: ObjectVersion) -> str | None:
+    """The UID the version itself records; never looked up by name."""
+    if version.uid:
+        return version.uid
+    uid = child(version.body, "metadata").get("uid")
+    return uid if isinstance(uid, str) and uid else None
 
 
 def _terminated(
+    uid: str,
     versions: Sequence[ObjectVersion],
     statuses: Sequence[PodStatusObservation],
     onset: datetime,
 ) -> tuple[datetime, datetime, str] | None:
-    """(end, observed_at, evidence) when the Pod was positively deleted by onset."""
-    if not versions:
+    """(end, observed_at, evidence) when this exact Pod instance was deleted by onset."""
+    own = [version for version in versions if _version_uid(version) == uid]
+    if not own:
         return None
-    last = versions[-1]
+    last = own[-1]
     if last.lifecycle is not Lifecycle.DELETED or last.evidence_id in _SYNTHETIC_TOMBSTONES:
         return None
     if last.observed_at > onset:
         return None
-    # A later sighting means a same-named Pod existed again after the tombstone.
-    if any(status.observed_at > last.observed_at for status in statuses):
+    # A later sighting of the same instance, or one whose identity is unknown,
+    # means deletion is not proven; another UID under the same name is not it.
+    if any(
+        _version_uid(version) in (uid, None) and version.observed_at > last.observed_at
+        for version in versions
+    ):
+        return None
+    if any(
+        status.uid in (uid, None) and status.observed_at > last.observed_at for status in statuses
+    ):
         return None
     return last.observed_at, last.observed_at, last.evidence_id
 
 
 def _recovered(
+    uid: str,
     statuses: Sequence[PodStatusObservation],
     onset: datetime,
     boundary: datetime,
 ) -> tuple[datetime, datetime, str] | None:
-    """(ready_since, observed_at, evidence) for continuous readiness across onset."""
+    """(ready_since, observed_at, evidence) for this instance's readiness across onset."""
+    own = [status for status in statuses if status.uid == uid]
     covering = [
         status
-        for status in statuses
+        for status in own
         if status.observed_at >= boundary
         and status.ready is True
         and status.ready_since is not None
@@ -96,8 +159,8 @@ def _recovered(
     assert since is not None
     # Every observation of the same Pod instance inside [since, latest] must
     # agree; a disagreeing one means the continuity claim is not safe.
-    for status in statuses:
-        if since <= status.observed_at <= latest.observed_at and status.uid == latest.uid:
+    for status in own:
+        if since <= status.observed_at <= latest.observed_at:
             if status.ready is not True or status.ready_since != since:
                 return None
     return since, latest.observed_at, latest.evidence_id
@@ -126,44 +189,60 @@ def assess_ended_episode(
         )
     ):
         return None
-    times = [finding.at for finding in findings]
-    if any(at is None for at in times):
+    if any(finding.at is None for finding in findings):
         return None
-    last_manifestation = max(at for at in times if at is not None)
+    # instance_bound: every manifestation must name its exact Pod UID.
+    groups: dict[str, list[datetime]] = {}
+    for finding in findings:
+        if finding.entity_instance is None or finding.at is None:
+            return None
+        groups.setdefault(finding.entity_instance.uid, []).append(finding.at)
     boundary = onset + grace
+    versions = history.get(actor, ())
     statuses = tuple(status for status in pod_statuses if status.pod == actor)
-    end = _terminated(history.get(actor, ()), statuses, onset)
-    basis = EpisodeEndBasis.TERMINATED
-    if end is None:
-        end = _recovered(statuses, onset, boundary)
-        basis = EpisodeEndBasis.RECOVERED
-    if end is None:
-        return None
-    ended_at, observed_at, evidence_id = end
-    if not last_manifestation < ended_at:
-        return None
+    instances: list[InstanceEpisodeEnd] = []
+    for uid in sorted(groups):
+        basis = EpisodeEndBasis.TERMINATED
+        end = _terminated(uid, versions, statuses, onset)
+        if end is None:
+            basis = EpisodeEndBasis.RECOVERED
+            end = _recovered(uid, statuses, onset, boundary)
+        if end is None:
+            return None
+        ended_at, observed_at, evidence_id = end
+        last_manifestation = max(groups[uid])
+        if not last_manifestation < ended_at:
+            return None
+        instances.append(
+            InstanceEpisodeEnd(
+                uid=uid,
+                target=f"{actor.canonical}@{uid}",
+                basis=basis,
+                ended_at=ended_at,
+                observed_at=observed_at,
+                last_manifestation_at=last_manifestation,
+                end_evidence_id=evidence_id,
+            )
+        )
     manifestation_ids = tuple(
         dict.fromkeys(evidence for finding in findings for evidence in finding.evidence_ids)
     )
-    end_detail = (
-        f"journal tombstone recorded at {observed_at.isoformat()} <= onset {onset.isoformat()}"
-        if basis is EpisodeEndBasis.TERMINATED
-        else (
-            f"Ready since {ended_at.isoformat()} <= onset, observed at "
-            f"{observed_at.isoformat()} >= onset + grace"
+    targets = ", ".join(item.target for item in instances)
+    end_checks = tuple(
+        EliminationPrecondition(
+            name=f"positive_episode_end_{basis.value.lower()}",
+            passed=True,
+            detail="; ".join(_end_detail(item, onset) for item in instances if item.basis is basis),
         )
+        for basis in sorted({item.basis for item in instances})
     )
     return EndedEpisode(
         hypothesis_id=hypothesis.hypothesis_id,
         actor=actor,
-        basis=basis,
         onset=onset,
         boundary=boundary,
-        ended_at=ended_at,
-        observed_at=observed_at,
-        last_manifestation_at=last_manifestation,
+        instances=tuple(instances),
         manifestation_evidence_ids=manifestation_ids,
-        end_evidence_id=evidence_id,
         preconditions=(
             EliminationPrecondition(name="pod_actor", passed=True, detail=actor.canonical),
             EliminationPrecondition(
@@ -178,19 +257,39 @@ def assess_ended_episode(
                 name="timed_manifestations", passed=True, detail="every finding is timestamped"
             ),
             EliminationPrecondition(
-                name=f"positive_episode_end_{basis.value.lower()}",
+                name="instance_bound",
                 passed=True,
-                detail=end_detail,
+                detail=f"every manifestation names its exact Pod UID: {targets}",
             ),
+            EliminationPrecondition(
+                name="per_instance_end",
+                passed=True,
+                detail=f"{len(instances)} instance(s), each with its own observed end",
+            ),
+            *end_checks,
             EliminationPrecondition(
                 name="no_overlap",
                 passed=True,
-                detail=(
-                    f"last manifestation {last_manifestation.isoformat()} < episode end "
-                    f"{ended_at.isoformat()}"
+                detail="; ".join(
+                    f"{item.target}: last manifestation "
+                    f"{item.last_manifestation_at.isoformat()} < episode end "
+                    f"{item.ended_at.isoformat()}"
+                    for item in instances
                 ),
             ),
         ),
+    )
+
+
+def _end_detail(item: InstanceEpisodeEnd, onset: datetime) -> str:
+    if item.basis is EpisodeEndBasis.TERMINATED:
+        return (
+            f"{item.target}: journal tombstone recorded at {item.observed_at.isoformat()} "
+            f"<= onset {onset.isoformat()}"
+        )
+    return (
+        f"{item.target}: Ready since {item.ended_at.isoformat()} <= onset, observed at "
+        f"{item.observed_at.isoformat()} >= onset + grace"
     )
 
 
@@ -217,6 +316,7 @@ __all__ = [
     "RULE_VERSION",
     "EndedEpisode",
     "EpisodeEndBasis",
+    "InstanceEpisodeEnd",
     "assess_ended_episode",
     "assess_ended_episodes",
 ]

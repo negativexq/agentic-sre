@@ -10,6 +10,7 @@ from packages.rca.live import LiveSource
 from packages.rca.model import (
     CausalHop,
     EliminationConsequence,
+    EntityInstanceRef,
     EntityRef,
     EvidenceTemporalRole,
     Finding,
@@ -30,10 +31,17 @@ GRACE = timedelta(minutes=15)
 POD = EntityRef(namespace="shop", kind="Pod", name="worker-abc")
 
 
-def _failure(minutes: float, *, entity: EntityRef = POD, evidence: str = "event-1") -> Finding:
+def _failure(
+    minutes: float,
+    *,
+    entity: EntityRef = POD,
+    evidence: str = "event-1",
+    uid: str | None = "u1",
+) -> Finding:
     return Finding(
         kind=FindingKind.FAILURE_EVENT,
         entity=entity,
+        entity_instance=EntityInstanceRef(entity=entity, uid=uid) if uid else None,
         at=ONSET + timedelta(minutes=minutes),
         incident_onset=ONSET,
         onset_delta_seconds=minutes * 60,
@@ -111,6 +119,8 @@ def test_recovered_pod_whose_failures_precede_continuous_readiness_is_ended() ->
         "pod_actor",
         "manifestation_only",
         "timed_manifestations",
+        "instance_bound",
+        "per_instance_end",
         "positive_episode_end_recovered",
         "no_overlap",
     ]

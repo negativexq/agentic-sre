@@ -464,34 +464,38 @@ def _mechanism_elimination(mismatch: MechanismMismatch) -> ResolutionElimination
 
 
 def _ended_episode_elimination(ended: EndedEpisode) -> ResolutionElimination:
-    basis = ended.basis.value
+    bases = "/".join(sorted({item.basis.value for item in ended.instances}))
+    end_ids = tuple(dict.fromkeys(item.end_evidence_id for item in ended.instances))
     return ResolutionElimination(
         hypothesis_id=ended.hypothesis_id,
         code=ResolutionReasonCode.MANIFESTATION_EPISODE_ENDED_BEFORE_ONSET,
-        evidence_ids=(*ended.manifestation_evidence_ids, ended.end_evidence_id),
+        evidence_ids=tuple(dict.fromkeys((*ended.manifestation_evidence_ids, *end_ids))),
         detail=(
             "the actor carries only its own failure manifestations, all of which precede a "
-            f"positively observed episode end ({basis}) before incident onset"
+            f"positively observed episode end ({bases}) before incident onset"
         ),
         rule_id=EPISODE_END_RULE[0],
         rule_version=EPISODE_END_RULE[1],
         consequence=EliminationConsequence.ROOT_INELIGIBILITY,
         targets=(ended.actor.canonical,),
         mechanism="EPISODE_TIMING",
-        observation_ids=(ended.end_evidence_id,),
-        time_basis=(
+        observation_ids=end_ids,
+        time_basis=tuple(
             EliminationTimeBasis(
-                evidence_ids=(ended.end_evidence_id,),
+                evidence_ids=(item.end_evidence_id,),
                 onset=ended.onset,
                 boundary=ended.boundary,
-                interval_start=ended.ended_at,
-                interval_end=ended.observed_at,
-                certainty=basis,
-            ),
+                interval_start=item.ended_at,
+                interval_end=item.observed_at,
+                certainty=item.basis.value,
+                target=item.target,
+            )
+            for item in ended.instances
         ),
-        coverage_basis=(
-            f"last manifestation {ended.last_manifestation_at.isoformat()}; "
-            f"episode ended {ended.ended_at.isoformat()} ({basis})"
+        coverage_basis="; ".join(
+            f"{item.target}: last manifestation {item.last_manifestation_at.isoformat()}; "
+            f"episode ended {item.ended_at.isoformat()} ({item.basis.value})"
+            for item in ended.instances
         ),
         preconditions=ended.preconditions,
     )

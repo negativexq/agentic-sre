@@ -847,11 +847,16 @@ def _lifecycle_record(row: LifecycleObservationRow) -> LifecycleRecord:
     )
 
 
+# Concurrent writers of one instance may race for the same sequence number.
+_LIFECYCLE_APPEND_ATTEMPTS = 5
+
+
 class LifecycleRepository:
     """Append-only ledger of lifecycle observations (authoritative evidence).
 
     Rows are only ever inserted: there is deliberately no update or delete.
-    Writers must be serialized, like the object journal.
+    Concurrent writers may collide on an instance's next sequence number; the
+    loser re-reads it and retries, so a different fact is never dropped.
     """
 
     def __init__(self, session: Session) -> None:
@@ -866,6 +871,16 @@ class LifecycleRepository:
         ).all()
         used = [int(item[len(prefix) :]) for item in ids if item[len(prefix) :].isdigit()]
         return max(used, default=0) + 1
+
+    def _evidence_id_taken(self, evidence_id: str) -> bool:
+        return (
+            self._session.scalar(
+                select(LifecycleObservationRow.observation_id).where(
+                    LifecycleObservationRow.evidence_id == evidence_id
+                )
+            )
+            is not None
+        )
 
     def _exists(self, uid: str, type_: str, observed_at: datetime, source: str) -> bool:
         return (
@@ -899,31 +914,41 @@ class LifecycleRepository:
             raise ValueError(f"unknown lifecycle observation type: {type}")
         if not instance_uid:
             raise ValueError("lifecycle observations need the exact instance uid")
-        if self._exists(instance_uid, type, observed_at, source):
-            return None
-        sequence = self._next_sequence(namespace, kind, instance_uid)
-        row = LifecycleObservationRow(
-            evidence_id=f"lifecycle:{namespace}:{kind}:{instance_uid}:{sequence}",
-            instance_uid=instance_uid,
-            namespace=namespace,
-            kind=kind,
-            name=name,
-            type=type,
-            source_at=source_at,
-            observed_at=observed_at,
-            ingested_at=ingested_at or datetime.now(UTC),
-            source=source,
-            payload=payload,
-        )
-        self._session.add(row)
-        try:
-            self._session.commit()
-        except IntegrityError:
-            self._session.rollback()
+        for _ in range(_LIFECYCLE_APPEND_ATTEMPTS):
             if self._exists(instance_uid, type, observed_at, source):
                 return None
-            raise
-        return _lifecycle_record(row)
+            sequence = self._next_sequence(namespace, kind, instance_uid)
+            evidence_id = f"lifecycle:{namespace}:{kind}:{instance_uid}:{sequence}"
+            row = LifecycleObservationRow(
+                evidence_id=evidence_id,
+                instance_uid=instance_uid,
+                namespace=namespace,
+                kind=kind,
+                name=name,
+                type=type,
+                source_at=source_at,
+                observed_at=observed_at,
+                ingested_at=ingested_at or datetime.now(UTC),
+                source=source,
+                payload=payload,
+            )
+            self._session.add(row)
+            try:
+                self._session.commit()
+            except IntegrityError:
+                self._session.rollback()
+                if self._exists(instance_uid, type, observed_at, source):
+                    return None
+                # Another writer took this sequence for a different fact:
+                # re-read the sequence and try again rather than lose evidence.
+                if self._evidence_id_taken(evidence_id):
+                    continue
+                raise
+            return _lifecycle_record(row)
+        raise RuntimeError(
+            f"could not allocate a lifecycle sequence for {namespace}/{kind}/{instance_uid} "
+            f"after {_LIFECYCLE_APPEND_ATTEMPTS} attempts"
+        )
 
     def list_for(self, namespace: str, kind: str, uid: str) -> list[LifecycleRecord]:
         """Every observation of one exact instance, oldest first."""

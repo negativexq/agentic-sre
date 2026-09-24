@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect as pyinspect
 import re
+import threading
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -182,3 +183,97 @@ def test_append_and_dedupe_on_postgres(postgres_url: str) -> None:
             "READY_TRUE",
             "OBSERVED",
         ]
+
+
+def test_sequence_collision_with_a_different_fact_is_retried(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = LifecycleRepository(session)
+    assert _id(_append(repo, type="OBSERVED")) == "lifecycle:shop:Pod:uid-a:1"
+    real = LifecycleRepository._next_sequence
+    stale = iter([1])
+
+    def racing(self: LifecycleRepository, namespace: str, kind: str, uid: str) -> int:
+        # The first read is stale, as if another writer took seq 1 meanwhile.
+        return next(stale, None) or real(self, namespace, kind, uid)
+
+    monkeypatch.setattr(LifecycleRepository, "_next_sequence", racing)
+    assert _id(_append(repo, type="READY_TRUE")) == "lifecycle:shop:Pod:uid-a:2"
+    assert [item.type for item in repo.list_for("shop", "Pod", "uid-a")] == [
+        "OBSERVED",
+        "READY_TRUE",
+    ]
+
+
+def test_exhausted_sequence_retries_fail_loudly(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = LifecycleRepository(session)
+    _append(repo, type="OBSERVED")
+    monkeypatch.setattr(LifecycleRepository, "_next_sequence", lambda *_: 1)
+    with pytest.raises(RuntimeError, match="could not allocate a lifecycle sequence"):
+        _append(repo, type="READY_TRUE")
+
+
+def _race(
+    postgres_url: str, monkeypatch: pytest.MonkeyPatch, types: tuple[str, str]
+) -> list[LifecycleRecord | None]:
+    """Two writers that both read the same next sequence before either inserts."""
+    for session in _session(postgres_url):
+        session.close()  # create the schema once
+    engine = create_engine(postgres_url)
+    factory = sessionmaker(engine, expire_on_commit=False)
+    barrier = threading.Barrier(2, timeout=10)
+    first_read = threading.local()
+    real = LifecycleRepository._next_sequence
+
+    def synchronized(self: LifecycleRepository, namespace: str, kind: str, uid: str) -> int:
+        sequence = real(self, namespace, kind, uid)
+        if not getattr(first_read, "done", False):
+            first_read.done = True
+            barrier.wait()
+        return sequence
+
+    monkeypatch.setattr(LifecycleRepository, "_next_sequence", synchronized)
+    results: list[LifecycleRecord | None] = [None, None]
+    errors: list[BaseException] = []
+
+    def write(index: int) -> None:
+        try:
+            with factory() as session:
+                results[index] = _append(LifecycleRepository(session), type=types[index])
+        except BaseException as error:  # surfaced below
+            errors.append(error)
+
+    threads = [threading.Thread(target=write, args=(index,)) for index in (0, 1)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+    engine.dispose()
+    assert not errors, errors
+    return results
+
+
+@pytest.mark.postgres
+def test_concurrent_different_facts_are_both_persisted_on_postgres(
+    postgres_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    results = _race(postgres_url, monkeypatch, ("OBSERVED", "READY_TRUE"))
+
+    ids = sorted(_id(item) for item in results)
+    assert ids == ["lifecycle:shop:Pod:uid-a:1", "lifecycle:shop:Pod:uid-a:2"]
+    for session in _session(postgres_url):
+        stored = LifecycleRepository(session).list_for("shop", "Pod", "uid-a")
+        assert sorted(item.type for item in stored) == ["OBSERVED", "READY_TRUE"]
+
+
+@pytest.mark.postgres
+def test_concurrent_same_fact_is_recorded_once_on_postgres(
+    postgres_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    results = _race(postgres_url, monkeypatch, ("READY_TRUE", "READY_TRUE"))
+
+    assert sum(item is None for item in results) == 1
+    for session in _session(postgres_url):
+        assert len(LifecycleRepository(session).list_for("shop", "Pod", "uid-a")) == 1

@@ -609,7 +609,100 @@ The 31/114 neutral selected opportunities imply a deliberately conservative sele
 - The complete per-call pre-turn states, queries, discriminator/certificate fields, outcomes, and same-turn executable candidates are preserved in ignored `.local/eval/m15/known-fact-attribution-v1/known-fact-frontiers.json` (405 MB); source prediction seal SHA-256: `738772967c017dab0a73e8b66f5a264c9085a0a80f3317bb969a9d12a1e3bd2d`.
 - `make check`: PASS — Ruff, formatting, mypy (203 files), pytest **827 passed** (one existing Starlette deprecation warning).
 - `make precommit`: PASS — Ruff, format, mypy.
+- Reproduction/audit data: the current replay seal and predictions, instrumented pre-turn snapshots, capture script, classifier script, and X1–X8 JSON are under ignored `.local/eval/m15/cross-intent-attribution-v1/`. Run `.venv/bin/python .local/eval/m15/cross-intent-attribution-v1/capture-cross-intent.py` followed by `.venv/bin/python .local/eval/m15/cross-intent-attribution-v1/classify-cross-intent.py`; the capture compares action identities to the sealed baseline before writing the instrumented audit.
 - No production behavior changed; no full frozen 25 evaluation was rerun; M15 metric definitions, scenario IDs, denominators, gates, RCA semantics, authorization, and the M14 quality floor remain unchanged.
 - Frozen measurements remain: duplicates 23/150 (15.3%), decision-relevant 36/150 (24.0%), recoveries 8, harm 0; M14 floor PASS; G15.8 FAIL at 41.6%; provider/model calls 0.
 
 **M15 remains `IN_PROGRESS`; M16 remains `NOT_STARTED`.** The next work should inspect why the intent-ranking boundary continues to choose among candidates when certified paths are present in other same-turn intent bundles, distinguishing valid gap priority from a provable conditional-value miss. Do not promote a candidate based only on raw utility or certificate presence.
+
+## 2026-09-24 — Cross-intent conditional-value attribution
+
+This CLASS 0 diagnostic checked whether intent scheduling discards a deterministically superior investigation direction before physical selection. The frozen prediction artifacts were replayed at current HEAD `fc27ec7f6ac928fe547681f99efaebb81f7905ad` using the same 25 TEST IDs, deterministic intent policy, and recorded configuration. All 150 selected action identities matched `transition-certified-v1` exactly. The instrumented replay used only `dataset.scenario(...)`; it did not load labels, invoke the grader, configure a provider client, or make provider/model calls. The replay also captured each pre-turn resolvable-gap set, normalized Findings, current hypotheses, structural alternatives, actor set, active and M14-compatible intent rankings, and each intent's best executable physical candidate.
+
+### Intent-selection pipeline as implemented
+
+At each turn the graph rebuilds the visible `Case` and `Diagnosis`, then:
+
+1. generates bounded physical candidates from resolvable gaps;
+2. admits candidates only when discriminator and prior-observation checks pass;
+3. groups all admissible candidates into semantic intent bundles;
+4. ranks candidates inside each bundle and derives the bundle value from its representative candidate;
+5. independently ranks bundles with the active key and the M14-compatible key, then each selector returns its first bundle with an executable physical candidate;
+6. during `SOURCE_DISCOVERY`, the pending namespace `incident_changes` rule may select its bounded discovery candidate;
+7. `_conservative_intent_choice` compares only the active and baseline winners; an active choice replaces baseline only when `active_choice_dominates_baseline` proves the configured improvement;
+8. exact-workload focus may refine the physical candidate inside the chosen bundle; and
+9. deterministic action validation still enforces gap, capability/target authorization, query bounds, budgets and exact discriminator matching before backend execution.
+
+There is no explicit pairwise dominance pass across every open intent today. The active path orders bundles by discrimination, certified elimination, repeat/known-evidence risks, frontier and cost. The baseline path preserves phase, blocker, leading/unresolved hypothesis, eligibility and semantic-priority ordering. Both paths preserve all admissible bundle candidates in the selection audit. The separate source-discovery override explains why 24 actual `incident_changes` selections ranked second in the ordinary baseline ordering: each was selected by the explicit discovery obligation, not because a higher-value intent was lost.
+
+### Scope and structured pre-turn value
+
+| Inventory | Count |
+| --- | ---: |
+| Scenarios / executed turns | 25 / 150 |
+| Open executable intent bundles across turns | 551 |
+| Open executable bundles per turn | mean 3.67; min 2; max 5 |
+| Resolvable gap states captured before turns | 7,133; mean 47.55; min 25; max 69 |
+| Executable candidate incidences across active intent bundles | 2,113 |
+| Pre-turn normalized Finding instances across snapshots | 2,166 |
+| Intent-bundle occurrences: recent source change | 150 |
+| Intent-bundle occurrences: dependency-error inspection | 132 |
+| Intent-bundle occurrences: actor-state inspection | 120 |
+| Intent-bundle occurrences: metric-state inspection | 115 |
+| Intent-bundle occurrences: incident-actor discovery | 30 |
+| Intent-bundle occurrences: runtime discrimination | 4 |
+
+The structured conditional-value comparison used only pre-turn state: discovery unknown slots, current viable hypothesis pairs and structural-alternative pairs encoded by positive discriminator outcomes versus their comparison sets, gap dimension/target opportunities, transition-certificate paths, actor/frontier effects, semantic fact families, repeat/known-evidence risks, and cost. It did not treat raw `expected_decision_impact` as sufficient, invent probabilities, or use the later observation result. A candidate counted as executable only after the current candidate-to-action and per-turn/per-gap budget path accepted it; counterfactual candidates are not claimed to have passed backend authorization, which remains authoritative at execution.
+
+Across active per-intent best candidates, 70 turns had at least one encoded hypothesis pair (250 pair opportunities after per-turn de-duplication); all 150 had structural-alternative pairs (14,798 per-turn de-duplicated pair opportunities). Discovery unknown slots appeared in 30 turn frontiers (90 slot/dimension opportunities). Transition-certificate paths appeared in all 150 active frontiers (152 per-turn de-duplicated certificate opportunities). These sets demonstrate available dimensions, not calibrated likelihoods or expected outcomes. Current diagnosis traces often had no more than one visible hypothesis, so the evidence surface was predominantly structural-alternative discrimination.
+
+Across 772 pairwise comparisons between distinct open intent bundles, outcome-space overlap was classified as `NONE=763`, `PARTIAL=9`, `SUBSUMED=0`, `EQUIVALENT=0`. The nine partial overlaps shared only an uncertainty dimension: three `DEPENDENCY_HEALTH` comparisons between logs and runtime discrimination in Scenario-14, and six `EVENT_SEQUENCE` comparisons between actor-state and incident discovery in Scenario-38. A separate pre-turn `known_fact_keys` comparison found an exact existing normalized-fact-key intersection in 109/772 intent pairs (114 shared keys); all 109 shared the same target, but none of those paired candidates had positive expected decision impact or a transition certificate, and none shared a gap dimension. Thus known context overlap did not create double-counted positive opportunity. History and namespace `incident_changes` belong to the same `RECENT_SOURCE_CHANGE` bundle, so they were not counted as independent intent opportunities. Bundle utilities are selected per representative candidate rather than summed across bundles; no evidence showed duplicated fact families being counted additively.
+
+### Exclusive X1–X8 turn attribution
+
+The dominance relation was intentionally conservative: an alternate had to be no worse across the selected intent's represented discovery slots, hypothesis/alternative pair sets, gap dimension/target opportunities, transition paths, actor/frontier effects, risk and cost, and strictly better on a decision-state surface. Raw impact, certificate presence alone, or an overlapping fact family could not establish dominance. The actual selected intent was classified against executable alternatives before post-turn outcomes were joined.
+
+| Class | All 150 turns | 114 neutral turns | 36 decision-changing turns |
+| --- | ---: | ---: | ---: |
+| X1 — `SELECTED_INTENT_DOMINATES` | 0 | 0 | 0 |
+| X2 — `SELECTED_INTENT_NOT_DOMINATED` | 5 | 0 | 5 |
+| X3 — `BETTER_CROSS_INTENT_AVAILABLE` | 0 | 0 | 0 |
+| X4 — `VALUE_SIGNAL_LOST_BEFORE_PHYSICAL_SELECTION` | 0 | 0 | 0 |
+| X5 — `CROSS_INTENT_EVIDENCE_OVERCOUNT` | 0 | 0 | 0 |
+| X6 — `DISCOVERY_PREREQUISITE` | 48 | 17 | 31 |
+| X7 — `REASONABLE_PROBE_REALIZED_NEUTRAL` | 97 | 97 | 0 |
+| X8 — `OTHER` | 0 | 0 | 0 |
+
+The 48 X6 selections carried truth-blind discovery slots that can reveal an actor/event/change frontier needed for later hypothesis construction or discrimination. Of these, 31 changed deterministic decision state and 17 realized a neutral result. The 97 X7 turns had no provably dominating alternative and their executed probe was neutral. Five other decision-changing turns were X2: no other intent dominated, and the remaining alternatives were incomparable. No X3 or X4 case was found, so no production change is justified. In the actual chosen selector view, the selected bundle ranked first on 126 turns; the other 24 were the explicit turn-2 namespace incident-change discovery selections.
+
+### Requested subsets and 63 selected-action opportunities
+
+| Subset | Cross-intent result |
+| --- | --- |
+| 80 `logs / DEPENDENCY_HEALTH → NO_DATA` turns | X7=80; X1–X6/X8=0. The probe was not dominated. In the active view, another intent had a transition certificate and a higher ordinal impact on all 80 turns; in the baseline view this occurred on 47/80. Those alternatives answered different gaps and did not preserve the selected candidate's represented gap/pair coverage, so certificate/impact presence alone did not prove global superiority. No better same-gap candidate was established. |
+| 23 KNOWN_FACT turns | X6=9 namespace `incident_changes` discovery; X7=14 `history` refresh; X1–X5/X8=0. This agrees with the prior K5/K2 attribution and does not establish a cross-intent error. |
+| Eight historical recovery scenarios | All eight retained `incident_events → incident_changes` on turns 1–2; both initial discovery actions changed decision state. The 48 turns across these eight scenarios classify as X6=16, X7=31, X2=1. Existing sealed grader result remains 8 recoveries; no new grading was run. |
+
+Of the 63 selected-action shadow opportunities, 48 were discovery selections and 15 were transition-certified selections. Their realized split was 32 decision-state changes and 31 neutral outcomes: X6 contributed 31 changed and 17 neutral, X7 contributed 14 neutral transition-certified history reads, and X2 contributed one changed transition-certified action. Four further decision-state changes lacked this selected-action shadow flag. The remaining neutral calls comprised 83 turns with no selected-action certificate/discovery flag. The 31 neutral shadow opportunities are reasonable probes whose outcomes could not be known before selection; they are not evidence of 31 missed scheduler overrides.
+
+| G15.8 cause under current attribution | Count / finding |
+| --- | --- |
+| Candidate-level selection defect demonstrated | 0 for the previously attributed 80 dependency probes and 23 known-fact calls |
+| Cross-intent dominance / value loss demonstrated | 0 turns (X3+X4) |
+| Reasonable selected probes with neutral realized outcomes | 114 neutral turns (31 with selected-action shadow opportunity; 83 without) |
+| Missing runtime-trace typed semantics | Physical runtime-trace candidates existed in the earlier 80/80 dependency-health frontiers, but M15 has no admitted span→typed Finding→RCA transition path; this is a future capability dependency, not proof the log action was wrong |
+| Other measured limitation | Four changed turns are absent from the current selected-action shadow-opportunity flag; the official `m14.v1` result remains authoritative |
+
+Therefore the evidence does **not** show M15 choosing a generically dominated investigation objective. The observed G15.8 gap is primarily reasonable probes with neutral source outcomes, alongside a missing runtime-telemetry semantic path whose potential effect cannot be inferred from physical candidate presence. The prior permissive candidate ceiling remains an opportunity bound, not a basis for ranking or gate passage.
+
+### Validation and disposition
+
+- Prediction-only replay: 25/25 action sequences exactly match the sealed `transition-certified-v1`; 150 tool calls; 0 model/provider calls.
+- M14 frontier: the existing 34/34 same-turn decision-relevant observation preservation remains intact; replay introduced no action-sequence divergence.
+- Recovery preservation: all eight prior recovery paths retain their first two discovery actions; the sealed result remains 8/8 recoveries, 0 harm.
+- `make check`: PASS — Ruff, formatting, mypy (203 files), pytest **827 passed** (one existing Starlette deprecation warning).
+- `make precommit`: PASS — Ruff, format, mypy.
+- No production behavior, RCA behavior, evaluation definition, metric, scenario, gate, denominator, or authorization rule changed. No new frozen evaluation or grading run was made. The current sealed measures remain 23/150 duplicates (15.3%), 36/150 decision-relevant (24.0%), 8 recoveries, 0 harm; G15.8 remains FAIL at 41.6%.
+- Full truth-blind pre-turn instrumented replay and X1–X8 detail are retained locally under ignored `.local/eval/m15/cross-intent-attribution-v1/`; no local artifacts are committed.
+
+**Disposition:** no generic cross-intent scheduling defect was demonstrated under current M15 semantics. Keep M15 `IN_PROGRESS` and M16 `NOT_STARTED`. Do not start M16, change intent/candidate ranking, add stopping behavior, or implement runtime-trace semantics from this attribution alone.

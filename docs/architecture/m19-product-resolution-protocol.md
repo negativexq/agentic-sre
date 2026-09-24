@@ -67,8 +67,8 @@ The following M19 plan rules bind this protocol:
 ## 4. Scenario Catalog
 
 DEV timelines use `T0` for the true-root action, `onset` for the engine's
-calculated onset, and a 15-minute `grace`. Root actions and actors that require
-M19-0.3 qualification remain explicit placeholders here.
+calculated onset, and a 15-minute `grace`. Root actions and actors qualified
+under M19-0.3 are recorded with their source scenario and evidence below.
 
 ### 4.1 PR-01
 
@@ -82,7 +82,23 @@ Pod B.
 unhealthy and then Ready again on the same UID. At T0, apply the qualified
 true-root action and start sustained traffic.
 
-**True root:** `TBD — M19-0.3 qualified true-root selection`.
+**True root action:**
+`EnvPatch(deployment="payment-service", values={"FAULT_PAYMENT_DELAY_MS": "10000"}, wait=True)`.
+
+**Qualified source scenario:** `payment_config_change`.
+
+**Qualified actor:** `sre-demo/Deployment/payment-service`.
+
+**Qualified causal mechanism/class:** `["SPEC_CHANGE"]`.
+
+**Qualification evidence:** Q causal hypothesis `hypothesis:07031ff119a87d11` is
+`SUPPORTED`; Q result is `CORRECT` and binding is `QUALIFIABLE`.
+
+- Frozen scenario source: `b982c40:packages/evals/live/scenarios.py`.
+- Historical G16: `docs/results/m16-positive-elimination.md`, Task 2; `.local/live-bench/m16-b982c40/g16-rows.json` (`payment_config_change`, `outcome_new=CORRECT`).
+- Qualification evidence type: M19 frozen-baseline requalification.
+- Qualification artifact: `.local/m19-requalification/b982c40/scenarios/payment_config_change.json`.
+- Requalification manifest SHA-256: `13be19826a66121a5ceb2d24115c793c174362e0dc2c8676d785bcc1158ef96b`.
 
 **R1:** `AMBIGUOUS`; `H_root` is `SUPPORTED`; `H_A` is root-ineligible by
 `TERMINATED` for uid A; `H_B` remains plausible; `STATUS_CONTINUITY` is `OPEN`.
@@ -117,7 +133,23 @@ hypothesis.
 the M19-7.1 normal-calibration value. At T0, apply a qualified payment-side
 true-root action.
 
-**True root:** `TBD — M19-0.3 qualified true-root selection`.
+**True root action:**
+`EnvPatch(deployment="payment-service", values={"FAULT_PAYMENT_DELAY_MS": "3000"}, wait=True)`.
+
+**Qualified source scenario:** `payment_config_cross_service_impact`.
+
+**Qualified actor:** `sre-demo/Deployment/payment-service`.
+
+**Qualified causal mechanism/class:** `["SPEC_CHANGE"]`.
+
+**Qualification evidence:** Q causal hypothesis `hypothesis:19b2ef9869fe364a` is
+`SUPPORTED`; Q result is `CORRECT` and binding is `QUALIFIABLE`.
+
+- Frozen scenario source: `b982c40:packages/evals/live/scenarios.py`.
+- Historical G16: `docs/results/m16-positive-elimination.md`, Task 2; `.local/live-bench/m16-b982c40/g16-rows.json` (`payment_config_cross_service_impact`, `outcome_new=CORRECT`).
+- Qualification evidence type: M19 frozen-baseline requalification.
+- Qualification artifact: `.local/m19-requalification/b982c40/scenarios/payment_config_cross_service_impact.json`.
+- Requalification manifest SHA-256: `13be19826a66121a5ceb2d24115c793c174362e0dc2c8676d785bcc1158ef96b`.
 
 **R1:** `AMBIGUOUS`; `H_cpu` is plausible and `RESOURCE_COVERAGE` is `OPEN`.
 
@@ -151,7 +183,30 @@ elimination with a true-root actor and mechanism different from PR-02.
 **Timeline:** At T−3m, lower `order` memory limits as a resource-only change.
 At T0, apply the separately qualified true-root action.
 
-**True root:** `TBD — M19-0.3 qualified true-root selection`.
+**True root action:**
+`PatchService(name="payment-service", spec={"selector": {"app": "payment-service-retired"}})`.
+
+**Qualified source scenario:** `service_selector_drift`.
+
+**Qualified actor:** `sre-demo/Service/payment-service`.
+
+**Qualified causal mechanism/class:** `["SPEC_CHANGE"]`.
+
+**Qualification evidence:** Q causal hypothesis `hypothesis:4ed1dfb085f9268e` is
+`SUPPORTED`; Q result is `CORRECT` and binding is `QUALIFIABLE`.
+
+- Frozen scenario source: `b982c40:packages/evals/live/scenarios.py`.
+- Historical G16: `docs/results/m16-positive-elimination.md`, Task 2; `.local/live-bench/m16-b982c40/g16-rows.json` (`service_selector_drift`, `outcome_new=CORRECT`).
+- Qualification evidence type: M19 frozen-baseline requalification.
+- Qualification artifact: `.local/m19-requalification/b982c40/scenarios/service_selector_drift.json`.
+- Requalification manifest SHA-256: `13be19826a66121a5ceb2d24115c793c174362e0dc2c8676d785bcc1158ef96b`.
+
+Qualification provenance note: Historical M16 G16 preserved scenario-level
+correctness but did not preserve the complete SUPPORTED-hypothesis-to-actor/
+mechanism binding required by M19-0.3. The binding used here comes from the
+separately labeled M19 frozen-baseline requalification run on exact code and
+scenario revision `b982c40`. Historical M16 G16 results are not modified or
+reinterpreted.
 
 **R1:** `AMBIGUOUS`; `H_mem` is plausible.
 

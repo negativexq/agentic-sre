@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import cast
+
+import pytest
 
 from packages.rca.demo import demo_source
 from packages.rca.engine import diagnose
@@ -16,6 +17,7 @@ from packages.rca.model import (
     FindingKind,
     FrontierStatus,
     GapDimension,
+    GapOutcomeKind,
     Hypothesis,
     HypothesisEpistemicState,
     Resolution,
@@ -23,6 +25,8 @@ from packages.rca.model import (
     StructuralAlternative,
 )
 from packages.rca.resolution import (
+    _elimination_for,
+    assess_hypothesis,
     dominates,
     hypothesis_signature,
     resolution_audit_records,
@@ -217,11 +221,19 @@ def test_contradiction_is_a_structured_resolution_reason() -> None:
             }
         }
     )
+    unrelated = _finding(
+        _entity("Pod", "late-workload"),
+        FindingKind.FAILURE_EVENT,
+        "unrelated-manifestation",
+        role=EvidenceTemporalRole.SUPPORTING,
+        seconds=120,
+        source_class="kubernetes_event",
+    )
     late = Hypothesis(
         hypothesis_id="hypothesis:late-structured",
         causal_actor=late_finding.entity,
         members=(late_finding.entity,),
-        findings=(late_finding,),
+        findings=(late_finding, unrelated),
         contradictory_findings=(late_finding,),
         causal_explanation="PATH",
     )
@@ -458,6 +470,69 @@ def test_no_signal_and_weak_candidate_are_insufficient() -> None:
     assert resolve_hypotheses((weak,)).state is Resolution.INSUFFICIENT_EVIDENCE
 
 
+def test_unlinked_hypothesis_without_positive_contradiction_is_unresolved() -> None:
+    unlinked = Hypothesis(
+        hypothesis_id="hypothesis:unlinked-no-proof",
+        causal_actor=_entity("Deployment", "unlinked"),
+        members=(_entity("Deployment", "unlinked"),),
+        causal_explanation="UNLINKED",
+    )
+
+    assessment = assess_hypothesis(unlinked)
+    trace = resolve_hypotheses((unlinked,))
+
+    assert assessment.state is HypothesisEpistemicState.UNRESOLVED
+    assert ResolutionReasonCode.NO_CAUSAL_SYMPTOM_LINK in assessment.reason_codes
+    assert assessment.hard_contradiction_findings == ()
+    assert trace.unresolved_hypotheses == (unlinked.hypothesis_id,)
+    assert trace.eliminated_hypotheses == ()
+    assert trace.eliminations == ()
+    assert trace.hypothesis_audits[0].plausible is False
+    with pytest.raises(ValueError, match="positive hard contradiction evidence"):
+        _elimination_for(unlinked, assessment)
+
+
+def test_linked_hypothesis_without_initiating_evidence_is_unresolved() -> None:
+    linked_without_initiator = _hpa("linked-missing-initiation").model_copy(
+        update={
+            "findings": tuple(
+                finding
+                for finding in _hpa("linked-missing-initiation").findings
+                if finding.temporal_role is EvidenceTemporalRole.SUPPORTING
+            ),
+            "initiating_findings": (),
+        }
+    )
+
+    assessment = assess_hypothesis(linked_without_initiator)
+
+    assert assessment.state is HypothesisEpistemicState.UNRESOLVED
+    assert ResolutionReasonCode.NO_ONSET_CAPABLE_INITIATING_EVIDENCE in assessment.reason_codes
+    trace = resolve_hypotheses((linked_without_initiator,))
+    assert trace.eliminated_hypotheses == ()
+    assert trace.unresolved_hypotheses == (linked_without_initiator.hypothesis_id,)
+
+
+def test_unlinked_hypothesis_with_aligned_initiating_evidence_stays_unresolved() -> None:
+    unlinked = _hpa("unlinked-with-initiation").model_copy(
+        update={"causal_explanation": "UNLINKED", "causal_paths": ()}
+    )
+
+    assessment = assess_hypothesis(unlinked)
+    trace = resolve_hypotheses((unlinked,))
+
+    assert assessment.state is HypothesisEpistemicState.UNRESOLVED
+    assert ResolutionReasonCode.NO_CAUSAL_SYMPTOM_LINK in assessment.reason_codes
+    assert trace.eliminated_hypotheses == ()
+    assert trace.unresolved_hypotheses == (unlinked.hypothesis_id,)
+
+
+def test_positive_aligned_hypothesis_is_supported() -> None:
+    linked = _hpa("supported-aligned")
+
+    assert assess_hypothesis(linked).state is HypothesisEpistemicState.SUPPORTED
+
+
 def test_grouped_actor_and_manifestation_is_one_resolvable_episode() -> None:
     hypothesis = _hpa("payments")
     trace = resolve_hypotheses((hypothesis,))
@@ -475,7 +550,7 @@ def test_signature_is_name_independent_and_score_independent() -> None:
     assert hypothesis_signature(left) == hypothesis_signature(right)
 
 
-def test_rename_and_irrelevant_hypothesis_do_not_change_ambiguity() -> None:
+def test_unlinked_hypothesis_remains_unresolved_despite_high_score() -> None:
     base = resolve_hypotheses((_hpa("one"), _hpa("two")))
     renamed = resolve_hypotheses((_hpa("alpha"), _hpa("omega")))
     unrelated = Hypothesis(
@@ -489,7 +564,9 @@ def test_rename_and_irrelevant_hypothesis_do_not_change_ambiguity() -> None:
 
     assert base.state is renamed.state is expanded.state is Resolution.AMBIGUOUS
     assert len(base.leading_hypothesis_ids) == len(renamed.leading_hypothesis_ids)
-    assert len(expanded.leading_hypothesis_ids) == 2
+    assert len(expanded.leading_hypothesis_ids) == 3
+    assert unrelated.hypothesis_id in expanded.unresolved_hypotheses
+    assert unrelated.hypothesis_id not in expanded.eliminated_hypotheses
 
 
 def test_duplicate_evidence_does_not_change_resolution() -> None:
@@ -660,9 +737,13 @@ def test_unresolvable_metric_gap_is_not_presented_as_support() -> None:
         outcome.kind.value != "SUPPORTS" or outcome.hypothesis_ids
         for outcome in pressure_gap.discriminating_outcomes
     )
+    assert all(
+        outcome.kind is not GapOutcomeKind.CONTRADICTS
+        for outcome in pressure_gap.discriminating_outcomes
+    )
 
 
-def test_resolution_audit_explains_structurally_similar_eliminated_pairs() -> None:
+def test_missing_linkage_stays_unresolved_in_resolution_audit() -> None:
     good = _hpa("good")
     weak_base = _hpa("weak-one").model_copy(
         update={
@@ -684,15 +765,12 @@ def test_resolution_audit_explains_structurally_similar_eliminated_pairs() -> No
         update={"resolution": trace.state, "resolution_trace": trace}
     )
 
-    assert trace.state is Resolution.RESOLVED
+    assert trace.state is Resolution.AMBIGUOUS
+    assert set(trace.unresolved_hypotheses) == {weak_base.hypothesis_id, weak_other.hypothesis_id}
+    assert trace.eliminated_hypotheses == ()
     records = resolution_audit_records(diagnosis)
 
-    assert len(records) == 1
-    assert records[0]["classification"] == "ONLY_ONE_PLAUSIBLE"
-    selected = cast(dict[str, object], records[0]["selected"])
-    comparison_pair = cast(list[dict[str, object]], records[0]["comparison_pair"])
-    assert selected["hypothesis_id"] == good.hypothesis_id
-    assert all(not item["plausible"] for item in comparison_pair)
+    assert records == []
 
 
 def test_legacy_diagnosis_documents_backfill_resolution_without_losing_root_cause() -> None:

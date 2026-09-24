@@ -188,13 +188,13 @@ def assess_hypothesis(
             if certainty is TemporalContradictionCertainty.DEFINITELY_LATE
         )
 
-    if ResolutionReasonCode.NO_CAUSAL_SYMPTOM_LINK in reasons:
-        state = HypothesisEpistemicState.CONTRADICTED
-    elif hard_findings:
+    if hard_findings:
         state = HypothesisEpistemicState.CONTRADICTED
     elif hypothesis.contradictory_findings:
         state = HypothesisEpistemicState.UNRESOLVED
-    elif _has_aligned_initiating(hypothesis):
+    elif hypothesis.causal_explanation in {"PATH", "DIRECT"} and _has_aligned_initiating(
+        hypothesis
+    ):
         state = HypothesisEpistemicState.SUPPORTED
     else:
         state = HypothesisEpistemicState.UNRESOLVED
@@ -269,24 +269,25 @@ def _elimination_for(
     hypothesis: Hypothesis,
     assessment: HypothesisAssessment,
 ) -> ResolutionElimination:
-    reasons = assessment.reason_codes
-    code = (
-        ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION
-        if assessment.hard_contradiction_findings
-        else ResolutionReasonCode.NO_CAUSAL_SYMPTOM_LINK
-        if ResolutionReasonCode.NO_CAUSAL_SYMPTOM_LINK in reasons
-        else ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION
+    if (
+        assessment.state is not HypothesisEpistemicState.CONTRADICTED
+        or not assessment.hard_contradiction_findings
+    ):
+        raise ValueError("contradiction elimination requires positive hard contradiction evidence")
+    evidence_ids = tuple(
+        sorted(
+            {
+                evidence_id
+                for finding in assessment.hard_contradiction_findings
+                for evidence_id in finding.evidence_ids
+            }
+        )
     )
-    details = {
-        ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION: "contains explicit temporal contradiction",
-        ResolutionReasonCode.NO_CAUSAL_SYMPTOM_LINK: "does not causally reach an alerting symptom",
-        ResolutionReasonCode.NO_ONSET_CAPABLE_INITIATING_EVIDENCE: "has no onset-capable initiating evidence",
-    }
     return ResolutionElimination(
         hypothesis_id=hypothesis.hypothesis_id,
-        code=code,
-        evidence_ids=_evidence_ids(hypothesis),
-        detail=details[code],
+        code=ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION,
+        evidence_ids=evidence_ids,
+        detail="contains explicit temporal contradiction",
     )
 
 
@@ -295,8 +296,8 @@ def _legacy_elimination_reason(item: ResolutionElimination) -> str:
         return f"{item.hypothesis_id}: contradictory evidence"
     if item.code is ResolutionReasonCode.ROOT_CAUSE_INELIGIBLE_PROPAGATED_EFFECT:
         return f"{item.hypothesis_id}: root-cause ineligible propagated effect"
-    return (
-        f"{item.hypothesis_id}: lacks onset-capable initiating evidence or causal symptom linkage"
+    raise ValueError(
+        f"non-eliminative reason code cannot be emitted as an elimination: {item.code}"
     )
 
 

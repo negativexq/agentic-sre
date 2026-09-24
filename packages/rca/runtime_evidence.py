@@ -6,15 +6,16 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from packages.rca.model import TraceSpanObservation, TraceSpanStatus
+from packages.rca.model import RuntimeTraceCallFact, TraceSpanObservation, TraceSpanStatus
 from packages.rca.runtime_graph import (
     CanonicalTraceIndex,
     RuntimeEdgeEvidence,
     RuntimeSpanKind,
+    canonicalize_trace_spans,
     classify_runtime_pair,
     normalize_runtime_span_kind,
 )
@@ -337,6 +338,67 @@ def classify_runtime_span_outcome(
         error_type=error_type,
         basis=tuple(basis),
     )
+
+
+def _duration_seconds(span: TraceSpanObservation) -> float | None:
+    if span.end_at is None or span.end_at < span.start_at:
+        return None
+    return (span.end_at - span.start_at).total_seconds()
+
+
+def derive_runtime_trace_call_facts(
+    spans: Sequence[TraceSpanObservation],
+) -> tuple[RuntimeTraceCallFact, ...]:
+    """Expose bounded direct cross-service span direction and typed outcomes."""
+    index = canonicalize_trace_spans(spans)
+    facts: list[RuntimeTraceCallFact] = []
+    for child in sorted(
+        index.spans.values(),
+        key=lambda item: (item.start_at, item.trace_id, item.span_id),
+    ):
+        if child.parent_span_id is None:
+            continue
+        parent_key = (child.trace_id, child.parent_span_id)
+        if parent_key in index.conflicting_keys:
+            continue
+        parent = index.spans.get(parent_key)
+        if parent is None:
+            continue
+        relation = classify_runtime_pair(parent, child)
+        if relation is None:
+            continue
+        caller = classify_runtime_span_outcome(parent)
+        callee = classify_runtime_span_outcome(child)
+        direction = cast(
+            Literal["CLIENT_SERVER_SPANS", "PRODUCER_CONSUMER_SPANS", "DIRECT_PARENT_CHILD"],
+            {
+                RuntimeEdgeEvidence.PAIRED_CLIENT_SERVER: "CLIENT_SERVER_SPANS",
+                RuntimeEdgeEvidence.PAIRED_PRODUCER_CONSUMER: "PRODUCER_CONSUMER_SPANS",
+                RuntimeEdgeEvidence.CROSS_SERVICE_PARENT: "DIRECT_PARENT_CHILD",
+            }[relation],
+        )
+        facts.append(
+            RuntimeTraceCallFact(
+                trace_id=child.trace_id,
+                caller_span_id=parent.span_id,
+                callee_span_id=child.span_id,
+                caller_service=parent.service.strip(),
+                callee_service=child.service.strip(),
+                direction_basis=direction,
+                caller_start_at=parent.start_at,
+                caller_end_at=parent.end_at,
+                caller_duration_seconds=_duration_seconds(parent),
+                caller_status=parent.status,
+                caller_outcome=caller.state.value,
+                callee_start_at=child.start_at,
+                callee_end_at=child.end_at,
+                callee_duration_seconds=_duration_seconds(child),
+                callee_status=child.status,
+                callee_outcome=callee.state.value,
+                evidence_ids=(parent.evidence_id, child.evidence_id),
+            )
+        )
+    return tuple(facts)
 
 
 def trace_kubernetes_binding(
@@ -829,6 +891,7 @@ __all__ = [
     "RuntimeSpanOutcome",
     "classify_runtime_span_outcome",
     "derive_runtime_evidence",
+    "derive_runtime_trace_call_facts",
     "normalize_grpc_status",
     "trace_kubernetes_binding",
 ]

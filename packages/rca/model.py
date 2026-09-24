@@ -159,6 +159,47 @@ class TraceSpanObservation(BaseModel):
     evidence_id: str = Field(min_length=1)
 
 
+class RuntimeTraceCallFact(BaseModel):
+    """Typed parent-to-child service observation derived from bounded spans."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    trace_id: str = Field(min_length=1)
+    caller_span_id: str = Field(min_length=1)
+    callee_span_id: str = Field(min_length=1)
+    caller_service: str = Field(min_length=1)
+    callee_service: str = Field(min_length=1)
+    direction_basis: Literal[
+        "CLIENT_SERVER_SPANS", "PRODUCER_CONSUMER_SPANS", "DIRECT_PARENT_CHILD"
+    ]
+    caller_start_at: datetime
+    caller_end_at: datetime | None = None
+    caller_duration_seconds: float | None = Field(default=None, ge=0)
+    caller_status: TraceSpanStatus
+    caller_outcome: Literal["SUCCESS", "NON_OK", "ERROR", "UNKNOWN"]
+    callee_start_at: datetime
+    callee_end_at: datetime | None = None
+    callee_duration_seconds: float | None = Field(default=None, ge=0)
+    callee_status: TraceSpanStatus
+    callee_outcome: Literal["SUCCESS", "NON_OK", "ERROR", "UNKNOWN"]
+    evidence_ids: tuple[str, ...] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def _valid_call_fact(self) -> RuntimeTraceCallFact:
+        if self.caller_service == self.callee_service:
+            raise ValueError("runtime trace call fact must cross services")
+        for start, end, duration in (
+            (self.caller_start_at, self.caller_end_at, self.caller_duration_seconds),
+            (self.callee_start_at, self.callee_end_at, self.callee_duration_seconds),
+        ):
+            if end is None:
+                if duration is not None:
+                    raise ValueError("trace duration requires an end timestamp")
+            elif end < start:
+                raise ValueError("trace span end must not precede start")
+        return self
+
+
 class ClusterEvent(BaseModel):
     """One Kubernetes event about an involved object."""
 
@@ -1095,6 +1136,7 @@ __all__ = [
     "ObjectVersion",
     "Remediation",
     "ResourcePressure",
+    "RuntimeTraceCallFact",
     "TrafficObservation",
     "Symptoms",
     "PredicateStatus",

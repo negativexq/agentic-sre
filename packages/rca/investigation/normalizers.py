@@ -14,7 +14,9 @@ from pydantic import BaseModel
 from packages.rca.engine import Case
 from packages.rca.model import (
     ClusterEvent,
+    EntityRef,
     Finding,
+    FindingKind,
     GapOutcomeKind,
     InformationGap,
     InvestigationObservation,
@@ -22,8 +24,15 @@ from packages.rca.model import (
     ObjectVersion,
     ResourcePressure,
     RuntimeObservationState,
+    TraceSpanObservation,
     TrafficObservation,
 )
+from packages.rca.runtime_evidence import (
+    RuntimeOutcomeState,
+    derive_runtime_trace_call_facts,
+    trace_kubernetes_binding,
+)
+from packages.rca.runtime_graph import canonicalize_trace_spans
 from packages.rca.signals import (
     autoscaling_findings,
     change_findings,
@@ -210,6 +219,80 @@ def _log_findings(case: Case, payload: dict[str, Any]) -> tuple[Finding, ...]:
     return tuple(dependency_findings(records, case.topology, case.context.symptom_entities))
 
 
+def _trace_findings(
+    observation: InvestigationObservation, gap: InformationGap, payload: dict[str, Any]
+) -> tuple[Finding, ...]:
+    raw = payload.get("traces")
+    if not isinstance(raw, list):
+        return ()
+    spans: list[TraceSpanObservation] = []
+    for item in raw[:32]:
+        if not isinstance(item, dict):
+            continue
+        try:
+            spans.append(TraceSpanObservation.model_validate(item))
+        except ValueError:
+            continue
+    if not spans:
+        return ()
+    index = canonicalize_trace_spans(spans)
+    findings: list[Finding] = []
+    for fact in derive_runtime_trace_call_facts(spans):
+        if fact.direction_basis != "CLIENT_SERVER_SPANS" or fact.callee_outcome not in {
+            RuntimeOutcomeState.NON_OK,
+            RuntimeOutcomeState.ERROR,
+        }:
+            continue
+        callee = index.spans.get((fact.trace_id, fact.callee_span_id))
+        caller = index.spans.get((fact.trace_id, fact.caller_span_id))
+        if callee is None or caller is None:
+            continue
+        binding = trace_kubernetes_binding(callee)
+        if binding is not None and binding.pod is not None:
+            entity = EntityRef(namespace=binding.namespace, kind="Pod", name=binding.pod)
+        elif binding is not None and binding.deployment is not None:
+            entity = EntityRef(
+                namespace=binding.namespace, kind="Deployment", name=binding.deployment
+            )
+        else:
+            namespace = callee.semantic_attributes.get(
+                "k8s.namespace.name", observation.target.namespace
+            )
+            entity = EntityRef(namespace=namespace, kind="Service", name=fact.callee_service)
+        caller_namespace = caller.semantic_attributes.get(
+            "k8s.namespace.name", observation.target.namespace
+        )
+        caller_ref = EntityRef(namespace=caller_namespace, kind="Service", name=fact.caller_service)
+        findings.append(
+            Finding(
+                kind=FindingKind.DEPENDENCY_ERRORS,
+                entity=entity,
+                at=fact.callee_start_at,
+                summary=(
+                    f"Observed a non-success trace span for {fact.callee_service} called by "
+                    f"{fact.caller_service}"
+                ),
+                evidence_ids=fact.evidence_ids,
+                related=(caller_ref,),
+                details={
+                    "caller": caller_ref.canonical,
+                    "callee": entity.canonical,
+                    "trace_id": fact.trace_id,
+                    "caller_span_id": fact.caller_span_id,
+                    "callee_span_id": fact.callee_span_id,
+                    "direction_basis": fact.direction_basis,
+                    "caller_outcome": fact.caller_outcome,
+                    "callee_outcome": fact.callee_outcome,
+                    "caller_duration_seconds": fact.caller_duration_seconds,
+                    "callee_duration_seconds": fact.callee_duration_seconds,
+                    "fact_family": "runtime_dependency_non_success",
+                    "gap_dimension": gap.dimension.value,
+                },
+            )
+        )
+    return tuple(findings)
+
+
 def normalize_observation(
     observation: InvestigationObservation,
     *,
@@ -229,6 +312,14 @@ def normalize_observation(
         findings.extend(_metric_findings(case, payload))
     elif observation.capability == "logs":
         findings.extend(_log_findings(case, payload))
+    elif observation.capability == "runtime_traces":
+        runtime_context = observation.runtime
+        if (
+            runtime_context is not None
+            and runtime_context.pillar.value == "TEMPO"
+            and gap.dimension.value in {"DEPENDENCY_HEALTH", "FAILURE_ONSET"}
+        ):
+            findings.extend(_trace_findings(observation, gap, payload))
     runtime = observation.runtime
     if runtime is not None and runtime.pillar.value == "LOKI":
         runtime = runtime.model_copy(

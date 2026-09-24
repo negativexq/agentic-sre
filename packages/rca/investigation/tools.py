@@ -31,6 +31,11 @@ from packages.rca.model import (
     RuntimeQueryDescriptor,
     TrafficObservation,
 )
+from packages.rca.runtime_evidence import (
+    RuntimeOutcomeState,
+    classify_runtime_span_outcome,
+    derive_runtime_trace_call_facts,
+)
 from packages.rca.signals import resource_findings, traffic_findings
 
 
@@ -259,6 +264,77 @@ def _loki_runtime_context(
             requested_start=start,
             requested_end=end,
             effective_start=start,
+            effective_end=effective_end,
+            limit=min(requested.limit, 32),
+        ),
+        source_observation_ids=source_ids,
+    )
+
+
+def _tempo_runtime_context(
+    *,
+    backend: InvestigationBackend | None,
+    case: Case,
+    target: EntityRef,
+    requested: InvestigationQuery,
+    source_ids: tuple[str, ...],
+    spans: tuple[Any, ...],
+) -> RuntimeObservationContext | None:
+    current: object | None = backend
+    seen: set[int] = set()
+    configured = False
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if getattr(current, "tempo", None) is not None:
+            configured = True
+            break
+        current = getattr(current, "base", None)
+    if not configured or requested.start is None or requested.end is None:
+        return None
+    effective_end = requested.end
+    cutoff = case.source.observation_cutoff()
+    if cutoff is not None:
+        effective_end = min(effective_end, cutoff)
+    if effective_end < requested.start:
+        return None
+    descriptor_material = json.dumps(
+        {
+            "capability": "runtime_traces",
+            "target": target.canonical,
+            "requested_start": requested.start.isoformat(),
+            "requested_end": requested.end.isoformat(),
+            "effective_start": requested.start.isoformat(),
+            "effective_end": effective_end.isoformat(),
+            "limit": min(requested.limit, 32),
+            "template": "tempo.target_traceql.v1",
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    if not spans:
+        state = RuntimeObservationState.NO_DATA
+    else:
+        outcomes = tuple(classify_runtime_span_outcome(span).state for span in spans)
+        if any(
+            outcome in {RuntimeOutcomeState.NON_OK, RuntimeOutcomeState.ERROR}
+            for outcome in outcomes
+        ):
+            state = RuntimeObservationState.OBSERVED_ABNORMAL
+        elif all(outcome is RuntimeOutcomeState.SUCCESS for outcome in outcomes):
+            state = RuntimeObservationState.OBSERVED_NORMAL
+        else:
+            state = RuntimeObservationState.UNKNOWN
+    return RuntimeObservationContext(
+        pillar=RuntimeEvidencePillar.TEMPO,
+        capability="runtime_traces",
+        state=state,
+        query=RuntimeQueryDescriptor(
+            descriptor_id=f"sha256:{sha256(descriptor_material.encode()).hexdigest()}",
+            template_id="tempo.target_traceql.v1",
+            target=target,
+            requested_start=requested.start,
+            requested_end=requested.end,
+            effective_start=requested.start,
             effective_end=effective_end,
             limit=min(requested.limit, 32),
         ),
@@ -681,12 +757,27 @@ class RuntimeTracesTool(_BaseTool):
             )
         else:
             spans = self.backend.query_traces(target, requested)
+        refs = tuple(span.evidence_id for span in spans)
+        runtime = _tempo_runtime_context(
+            backend=self.backend,
+            case=case,
+            target=target,
+            requested=requested,
+            source_ids=refs,
+            spans=spans,
+        )
         return self._observation(
             gap,
             target,
-            {"traces": [span.model_dump(mode="json") for span in spans]},
-            refs=tuple(span.evidence_id for span in spans),
+            {
+                "traces": [span.model_dump(mode="json") for span in spans],
+                "trace_call_facts": [
+                    fact.model_dump(mode="json") for fact in derive_runtime_trace_call_facts(spans)
+                ],
+            },
+            refs=refs,
             observed_at=max((span.start_at for span in spans), default=None),
+            runtime=runtime,
         )
 
 

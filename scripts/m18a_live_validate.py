@@ -33,8 +33,10 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.trace import SpanKind, Status, StatusCode
 
 from packages.rca.engine import build_case
+from packages.rca.investigation.actions import validate_action
 from packages.rca.investigation.normalizers import normalize_observation
 from packages.rca.investigation.prometheus import PrometheusConfig, PrometheusMetricsReader
+from packages.rca.investigation.state import InvestigationConfig
 from packages.rca.investigation.tempo import TempoConfig, TempoTraceReader
 from packages.rca.investigation.tools import default_tools
 from packages.rca.live import KubernetesClusterReader, LiveSource, LokiLogReader
@@ -45,6 +47,7 @@ from packages.rca.model import (
     GapDimension,
     GapResolvability,
     InformationGap,
+    InvestigationAction,
     InvestigationQuery,
 )
 
@@ -136,6 +139,7 @@ def _observation_summary(observation: Any, normalized: Any) -> dict[str, Any]:
         raise RuntimeError(f"{observation.capability} exceeded the M18A query bound")
     return {
         "observation_id": observation.observation_id,
+        "authorization_result": "AUTHORIZED",
         "pillar": context.pillar.value,
         "capability": context.capability,
         "target": query.target.canonical,
@@ -209,7 +213,25 @@ def _execute(
 ) -> tuple[Any, Any]:
     gap = _gap(capability, dimension, target)
     case = build_case(source)
-    tool = cast(Any, default_tools(source.investigation_backend())[capability])
+    tools = default_tools(source.investigation_backend())
+    action = InvestigationAction(
+        action="inspect",
+        gap_id=gap.gap_id,
+        capability=capability,
+        target=target,
+        query=InvestigationQuery(start=start, end=end, limit=limit),
+    )
+    validation = validate_action(
+        action,
+        gaps=(gap,),
+        tools=tools,
+        attempted_actions=(),
+        tool_calls=0,
+        config=InvestigationConfig(),
+    )
+    if not validation.valid:
+        raise RuntimeError(f"live {capability} fixture action was rejected: {validation.reason}")
+    tool = cast(Any, tools[capability])
     observation = tool.execute_query(
         case,
         gap,

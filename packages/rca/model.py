@@ -422,8 +422,49 @@ class ResolutionReasonCode(StrEnum):
     ROOT_CAUSE_INELIGIBLE_PROPAGATED_EFFECT = "ROOT_CAUSE_INELIGIBLE_PROPAGATED_EFFECT"
 
 
+class EliminationConsequence(StrEnum):
+    """Which epistemic consequence an elimination applies (m16.v1 §3)."""
+
+    CONTRADICTION = "CONTRADICTION"
+    ROOT_INELIGIBILITY = "ROOT_INELIGIBILITY"
+
+
+class EliminationPrecondition(BaseModel):
+    """One deterministic precondition a rule evaluated, with its result."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    passed: bool
+    detail: str = ""
+
+
+class EliminationTimeBasis(BaseModel):
+    """The time fact one piece of eliminating evidence contributed.
+
+    Point evidence carries ``causal_time``; object changes carry the bounded
+    observation interval ``[interval_start, interval_end]`` instead of an
+    inferred exact change time.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    evidence_ids: tuple[str, ...] = ()
+    onset: datetime | None = None
+    boundary: datetime | None = None
+    causal_time: datetime | None = None
+    interval_start: datetime | None = None
+    interval_end: datetime | None = None
+    certainty: str = ""
+
+
 class ResolutionElimination(BaseModel):
-    """A mechanically inspectable reason a hypothesis was not plausible."""
+    """A mechanically inspectable reason a hypothesis was not plausible.
+
+    The audit fields (rule, consequence, targets, time basis, preconditions)
+    satisfy the m16.v1 §11 audit contract; they default to empty so records
+    persisted before the contract still load.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -431,6 +472,20 @@ class ResolutionElimination(BaseModel):
     code: ResolutionReasonCode
     evidence_ids: tuple[str, ...] = ()
     detail: str = ""
+    rule_id: str = ""
+    rule_version: str = ""
+    consequence: EliminationConsequence | None = None
+    targets: tuple[str, ...] = ()
+    mechanism: str = ""
+    observation_ids: tuple[str, ...] = ()
+    time_basis: tuple[EliminationTimeBasis, ...] = ()
+    coverage_basis: str = ""
+    preconditions: tuple[EliminationPrecondition, ...] = ()
+
+    @property
+    def rule(self) -> str:
+        """The versioned rule reference, e.g. ``m16.temporal-contradiction.v1``."""
+        return f"{self.rule_id}.{self.rule_version}" if self.rule_id else ""
 
 
 class ResolutionDiscriminator(BaseModel):

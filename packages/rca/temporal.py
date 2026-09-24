@@ -28,7 +28,7 @@ OBJECT_CHANGE_KINDS = frozenset(
 )
 
 
-def _parse_time(value: object) -> datetime | None:
+def parse_time(value: object) -> datetime | None:
     if isinstance(value, datetime):
         return value
     if isinstance(value, str):
@@ -42,7 +42,7 @@ def _parse_time(value: object) -> datetime | None:
 def causal_time(finding: Finding) -> datetime | None:
     """Return the existing shared causal-time precedence used by verification."""
     raw = finding.details.get("initiating_at") or finding.details.get("schedule_active_from")
-    return _parse_time(raw) or finding.at
+    return parse_time(raw) or finding.at
 
 
 def temporal_contradiction_certainty(
@@ -63,7 +63,7 @@ def temporal_contradiction_certainty(
         finding.details.get("initiating_at") or finding.details.get("schedule_active_from")
     ):
         current = finding.at
-        previous = _parse_time(finding.details.get("previous_observed_at"))
+        previous = parse_time(finding.details.get("previous_observed_at"))
         if current is None or previous is None:
             return TemporalContradictionCertainty.UNKNOWN
         if current <= boundary:

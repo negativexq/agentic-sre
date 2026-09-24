@@ -12,9 +12,13 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 
+from packages.rca.causal_roles import HypothesisCausalRole
 from packages.rca.model import (
     Diagnosis,
     DominanceRelation,
+    EliminationConsequence,
+    EliminationPrecondition,
+    EliminationTimeBasis,
     EvidenceTemporalRole,
     Finding,
     FindingKind,
@@ -36,7 +40,10 @@ from packages.rca.root_cause_eligibility import (
     RootCauseEligibilityState,
 )
 from packages.rca.temporal import (
+    OBJECT_CHANGE_KINDS,
     TemporalContradictionCertainty,
+    causal_time,
+    parse_time,
     temporal_contradiction_certainty,
 )
 
@@ -265,29 +272,83 @@ def dominates(
     return stronger_initiating > weaker_initiating
 
 
+TEMPORAL_CONTRADICTION_RULE = ("m16.temporal-contradiction", "v1")
+PROPAGATED_EFFECT_RULE = ("m16.root-eligibility-propagated-effect", "v1")
+
+
+def _time_basis(finding: Finding, grace: timedelta) -> EliminationTimeBasis:
+    """Expose exactly the time fact the temporal contradiction rule used."""
+    onset = finding.incident_onset
+    boundary = onset + grace if onset is not None else None
+    certainty = temporal_contradiction_certainty(finding, grace).value
+    interval = finding.kind in OBJECT_CHANGE_KINDS and not (
+        finding.details.get("initiating_at") or finding.details.get("schedule_active_from")
+    )
+    if interval:
+        return EliminationTimeBasis(
+            evidence_ids=finding.evidence_ids,
+            onset=onset,
+            boundary=boundary,
+            interval_start=parse_time(finding.details.get("previous_observed_at")),
+            interval_end=finding.at,
+            certainty=certainty,
+        )
+    return EliminationTimeBasis(
+        evidence_ids=finding.evidence_ids,
+        onset=onset,
+        boundary=boundary,
+        causal_time=causal_time(finding),
+        certainty=certainty,
+    )
+
+
 def _elimination_for(
     hypothesis: Hypothesis,
     assessment: HypothesisAssessment,
+    onset_grace: timedelta | None = None,
 ) -> ResolutionElimination:
+    grace = onset_grace or RankingConfig().verification_onset_grace
     if (
         assessment.state is not HypothesisEpistemicState.CONTRADICTED
         or not assessment.hard_contradiction_findings
     ):
         raise ValueError("contradiction elimination requires positive hard contradiction evidence")
+    hard = assessment.hard_contradiction_findings
     evidence_ids = tuple(
-        sorted(
-            {
-                evidence_id
-                for finding in assessment.hard_contradiction_findings
-                for evidence_id in finding.evidence_ids
-            }
-        )
+        sorted({evidence_id for finding in hard for evidence_id in finding.evidence_ids})
     )
+    minutes = int(grace.total_seconds() // 60)
+    rule_id, rule_version = TEMPORAL_CONTRADICTION_RULE
     return ResolutionElimination(
         hypothesis_id=hypothesis.hypothesis_id,
         code=ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION,
         evidence_ids=evidence_ids,
-        detail="contains explicit temporal contradiction",
+        detail=(
+            f"{len(hard)} contradictory finding(s) are observed strictly after incident onset "
+            f"plus the {minutes}-minute grace, so they cannot have initiated it"
+        ),
+        rule_id=rule_id,
+        rule_version=rule_version,
+        consequence=EliminationConsequence.CONTRADICTION,
+        targets=(hypothesis.causal_actor.canonical,),
+        mechanism="INITIATING_TIMING",
+        time_basis=tuple(_time_basis(finding, grace) for finding in hard),
+        preconditions=(
+            EliminationPrecondition(
+                name="positive_contradictory_finding",
+                passed=all(finding in hypothesis.contradictory_findings for finding in hard),
+                detail="every eliminating finding is a positive contradictory observation",
+            ),
+            EliminationPrecondition(
+                name="definitely_late_beyond_onset_grace",
+                passed=all(
+                    temporal_contradiction_certainty(finding, grace)
+                    is TemporalContradictionCertainty.DEFINITELY_LATE
+                    for finding in hard
+                ),
+                detail=f"lower time bound after onset + {minutes} min",
+            ),
+        ),
     )
 
 
@@ -308,13 +369,45 @@ def _root_cause_eligibility_elimination(
     evidence_ids = tuple(
         dict.fromkeys((*eligibility.propagation_evidence_ids, *eligibility.initiating_evidence_ids))
     )
+    rule_id, rule_version = PROPAGATED_EFFECT_RULE
     return ResolutionElimination(
         hypothesis_id=hypothesis.hypothesis_id,
         code=ResolutionReasonCode.ROOT_CAUSE_INELIGIBLE_PROPAGATED_EFFECT,
-        evidence_ids=evidence_ids[:12],
+        evidence_ids=evidence_ids,
         detail=(
             "verified incoming runtime non-success propagation establishes this actor as a "
             "propagated effect, and the hypothesis episode has no source-capable initiating evidence"
+        ),
+        rule_id=rule_id,
+        rule_version=rule_version,
+        consequence=EliminationConsequence.ROOT_INELIGIBILITY,
+        targets=(eligibility.causal_actor.canonical,),
+        mechanism="RUNTIME_PROPAGATION",
+        observation_ids=eligibility.propagation_evidence_ids,
+        coverage_basis=(
+            f"{eligibility.verified_incoming_edges} verified incoming edge(s) over "
+            f"{eligibility.verified_incoming_pairs} caller/callee pair(s)"
+        ),
+        preconditions=(
+            EliminationPrecondition(
+                name="propagated_or_manifestation_role",
+                passed=eligibility.causal_role
+                in {HypothesisCausalRole.PROPAGATED_EFFECT, HypothesisCausalRole.MANIFESTATION},
+                detail=f"causal role {eligibility.causal_role.value}",
+            ),
+            EliminationPrecondition(
+                name="verified_incoming_propagation",
+                passed=eligibility.verified_incoming_edges > 0,
+                detail=f"{eligibility.verified_incoming_edges} verified incoming edge(s)",
+            ),
+            EliminationPrecondition(
+                name="no_episode_source_capable_initiating_evidence",
+                passed=eligibility.episode_source_capable_initiating_findings == 0,
+                detail=(
+                    f"{eligibility.episode_source_capable_initiating_findings} "
+                    "source-capable initiating finding(s) in the episode"
+                ),
+            ),
         ),
     )
 
@@ -521,7 +614,7 @@ def resolve_hypotheses(
         hypothesis for hypothesis in unresolved_all if hypothesis not in eligibility_excluded
     )
     contradiction_eliminations = tuple(
-        _elimination_for(hypothesis, assessments[hypothesis.hypothesis_id])
+        _elimination_for(hypothesis, assessments[hypothesis.hypothesis_id], onset_grace)
         for hypothesis in contradicted[:_MAX_TRACE_ITEMS]
     )
     eligibility_elimination_items: list[ResolutionElimination] = []

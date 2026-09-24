@@ -35,6 +35,15 @@ class EntityRef(BaseModel):
         return self.canonical
 
 
+class EntityInstanceRef(BaseModel):
+    """An exact runtime instance of a logical Kubernetes entity."""
+
+    model_config = ConfigDict(frozen=True)
+
+    entity: EntityRef
+    uid: str = Field(min_length=1)
+
+
 class Alert(BaseModel):
     """One firing alert occurrence."""
 
@@ -80,6 +89,7 @@ class ObjectVersion(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     entity: EntityRef
+    uid: str | None = None
     observed_at: datetime
     body: dict[str, Any]
     evidence_id: str
@@ -225,6 +235,7 @@ class ClusterEvent(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     entity: EntityRef
+    involved_uid: str | None = None
     reason: str
     type: str = "Normal"
     message: str = ""
@@ -330,6 +341,7 @@ class Finding(BaseModel):
 
     kind: FindingKind
     entity: EntityRef
+    entity_instance: EntityInstanceRef | None = None
     at: datetime | None
     summary: str
     evidence_ids: tuple[str, ...] = ()
@@ -338,6 +350,12 @@ class Finding(BaseModel):
     temporal_role: EvidenceTemporalRole = EvidenceTemporalRole.AMBIGUOUS
     incident_onset: datetime | None = None
     onset_delta_seconds: float | None = None
+
+    @model_validator(mode="after")
+    def _entity_instance_matches_entity(self) -> Finding:
+        if self.entity_instance is not None and self.entity_instance.entity != self.entity:
+            raise ValueError("entity_instance.entity must match entity")
+        return self
 
 
 class Symptoms(BaseModel):
@@ -1182,6 +1200,7 @@ __all__ = [
     "Diagnosis",
     "Edge",
     "EntityRef",
+    "EntityInstanceRef",
     "Finding",
     "FindingKind",
     "InvestigationStep",

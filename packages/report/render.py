@@ -132,6 +132,23 @@ def to_markdown(snapshot: ReportSnapshot) -> str:
             lines.append(f"- `{alternative.actor}` ({state}) — {alternative.note}")
         lines.append("")
 
+    if snapshot.eliminations:
+        lines.append("## Why not the others")
+        lines.append("")
+        for item in snapshot.eliminations:
+            lines.append(f"### `{item.actor}` — {item.reason_code}")
+            lines.append("")
+            lines.append(f"- **Rule:** {item.rule or '—'} ({item.consequence or '—'})")
+            lines.append(f"- **Mechanism tested:** {item.mechanism or '—'}")
+            lines.append(f"- **Why:** {item.detail}")
+            if item.coverage_basis:
+                lines.append(f"- **Coverage:** {item.coverage_basis}")
+            for check in item.preconditions:
+                mark = "pass" if check.passed else "FAIL"
+                lines.append(f"- **Precondition** `{check.name}`: {mark} — {check.detail}")
+            lines.append(f"- **Evidence:** {', '.join(f'`{ref}`' for ref in item.evidence_ids)}")
+            lines.append("")
+
     lines.append("## Evidence")
     lines.append("")
     lines.extend(_findings_table(snapshot.evidence))
@@ -346,6 +363,16 @@ def to_pdf(snapshot: ReportSnapshot) -> bytes:
             pdf.body(f"{alternative.actor} ({state})")
             if alternative.note:
                 pdf.body(f"    {alternative.note}")
+
+    if snapshot.eliminations:
+        pdf.h2("Why not the others")
+        for item in snapshot.eliminations:
+            pdf.kv(item.actor, item.reason_code)
+            pdf.body(f"    Rule {item.rule or '—'} ({item.consequence or '—'}), {item.mechanism}")
+            pdf.body(f"    {item.detail}")
+            for check in item.preconditions:
+                pdf.body(f"    {check.name}: {'pass' if check.passed else 'FAIL'}")
+            pdf.body(f"    Evidence: {', '.join(item.evidence_ids)}")
 
     if snapshot.lifecycle:
         pdf.h2("Lifecycle")

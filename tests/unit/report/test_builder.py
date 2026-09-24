@@ -159,7 +159,7 @@ def test_builder_projects_recorded_investigation_without_recomputing_it() -> Non
 
     report = _build(Resolution.RESOLVED, investigation)
 
-    assert report.report_version == "2.0"
+    assert report.report_version == "2.1"
     assert report.investigation_summary is not None
     assert report.investigation_summary.initial_resolution == "AMBIGUOUS"
     assert report.investigation_summary.stop_reason == "RESOLVED"

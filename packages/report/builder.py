@@ -13,6 +13,7 @@ from packages.rca.model import (
     Hypothesis,
     InvestigationActionAudit,
     InvestigationResult,
+    ResolutionElimination,
     ResolutionTrace,
 )
 from packages.rca.report import LifecyclePhase
@@ -21,6 +22,8 @@ from packages.report.model import (
     ReportAgentContribution,
     ReportAgentSafetyAudit,
     ReportAlternative,
+    ReportElimination,
+    ReportEliminationCheck,
     ReportFinding,
     ReportHop,
     ReportInvestigationGap,
@@ -62,6 +65,25 @@ def _hypothesis_alt(hypothesis: Hypothesis, states: dict[str, str]) -> ReportAlt
         epistemic_state=states.get(hypothesis.hypothesis_id, "UNRESOLVED"),
         score=hypothesis.score,
         note=hypothesis.reasons[0] if hypothesis.reasons else "",
+    )
+
+
+def _elimination(item: ResolutionElimination) -> ReportElimination:
+    return ReportElimination(
+        hypothesis_id=item.hypothesis_id,
+        actor=item.targets[0] if item.targets else item.hypothesis_id,
+        reason_code=item.code.value,
+        rule=item.rule,
+        consequence=item.consequence.value if item.consequence else None,
+        mechanism=item.mechanism,
+        detail=item.detail,
+        evidence_ids=item.evidence_ids,
+        observation_ids=item.observation_ids,
+        coverage_basis=item.coverage_basis,
+        preconditions=tuple(
+            ReportEliminationCheck(name=check.name, passed=check.passed, detail=check.detail)
+            for check in item.preconditions
+        ),
     )
 
 
@@ -345,6 +367,12 @@ def build_report(
         ),
         evidence=tuple(_finding(f) for f in diagnosis.evidence),
         alternatives=alternatives,
+        eliminations=tuple(
+            _elimination(item)
+            for item in (
+                diagnosis.resolution_trace.eliminations if diagnosis.resolution_trace else ()
+            )
+        ),
         lifecycle=tuple(
             ReportLifecyclePhase(
                 name=phase.name,

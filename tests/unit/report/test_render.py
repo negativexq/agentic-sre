@@ -14,15 +14,17 @@ from packages.rca.model import (
     FindingKind,
     Hypothesis,
     Resolution,
+    ResolutionTrace,
     Symptoms,
 )
 from packages.rca.report import LifecyclePhase
+from packages.rca.resolution import resolve_hypotheses
 from packages.report import ReportSnapshot, build_report, to_markdown, to_pdf
 
 T0 = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
 
 
-def _snapshot(resolution: Resolution) -> ReportSnapshot:
+def _snapshot(resolution: Resolution, trace: ResolutionTrace | None = None) -> ReportSnapshot:
     actor = EntityRef(kind="Deployment", name="payment-service", namespace="sre-demo")
     symptom = EntityRef(kind="Deployment", name="order-service", namespace="sre-demo")
     finding = Finding(
@@ -52,6 +54,7 @@ def _snapshot(resolution: Resolution) -> ReportSnapshot:
         hypothesis=Hypothesis(
             hypothesis_id="h1", causal_actor=actor, initiating_findings=(finding,)
         ),
+        resolution_trace=trace,
     )
     return build_report(
         incident_id="i1",
@@ -91,3 +94,36 @@ def test_pdf_is_a_real_pdf_document() -> None:
     assert pdf.startswith(b"%PDF-")
     assert pdf.rstrip().endswith(b"%%EOF")
     assert len(pdf) > 1000
+
+
+def test_eliminated_alternatives_show_rule_evidence_and_preconditions() -> None:
+    late_actor = EntityRef(kind="Deployment", name="late", namespace="sre-demo")
+    late = Finding(
+        kind=FindingKind.IMAGE_CHANGE,
+        entity=late_actor,
+        at=T0 + timedelta(hours=2),
+        incident_onset=T0,
+        onset_delta_seconds=7200,
+        temporal_role=EvidenceTemporalRole.CONSEQUENCE,
+        summary="late image change",
+        evidence_ids=("late-change",),
+        details={"previous_observed_at": (T0 + timedelta(hours=1)).isoformat()},
+    )
+    contradicted = Hypothesis(
+        hypothesis_id="h-late",
+        causal_actor=late_actor,
+        findings=(late,),
+        contradictory_findings=(late,),
+        causal_explanation="PATH",
+    )
+    snapshot = _snapshot(Resolution.RESOLVED, trace=resolve_hypotheses((contradicted,)))
+
+    (item,) = snapshot.eliminations
+    assert item.actor == "sre-demo/Deployment/late"
+    assert item.rule == "m16.temporal-contradiction.v1"
+    markdown = to_markdown(snapshot)
+    assert "## Why not the others" in markdown
+    assert "EXPLICIT_TEMPORAL_CONTRADICTION" in markdown
+    assert "`late-change`" in markdown
+    assert "definitely_late_beyond_onset_grace`: pass" in markdown
+    assert to_pdf(snapshot).startswith(b"%PDF-")

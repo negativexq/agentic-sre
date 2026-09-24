@@ -13,7 +13,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-REPORT_VERSION = "2.0"
+REPORT_VERSION = "2.1"
 
 
 class ReportModel(BaseModel):
@@ -43,6 +43,28 @@ class ReportAlternative(ReportModel):
     epistemic_state: str | None
     score: float | None
     note: str
+
+
+class ReportEliminationCheck(ReportModel):
+    name: str
+    passed: bool
+    detail: str
+
+
+class ReportElimination(ReportModel):
+    """Why an alternative was excluded, copied from the rule's audit record."""
+
+    hypothesis_id: str
+    actor: str
+    reason_code: str
+    rule: str
+    consequence: str | None
+    mechanism: str
+    detail: str
+    evidence_ids: tuple[str, ...] = ()
+    observation_ids: tuple[str, ...] = ()
+    coverage_basis: str = ""
+    preconditions: tuple[ReportEliminationCheck, ...] = ()
 
 
 class ReportLifecyclePhase(ReportModel):
@@ -161,6 +183,7 @@ class ReportSnapshot(ReportModel):
     contradictory_findings: tuple[ReportFinding, ...] = ()
     evidence: tuple[ReportFinding, ...] = ()
     alternatives: tuple[ReportAlternative, ...] = ()
+    eliminations: tuple[ReportElimination, ...] = ()
     lifecycle: tuple[ReportLifecyclePhase, ...] = ()
 
     evidence_count: int = 0

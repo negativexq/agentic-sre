@@ -392,7 +392,7 @@ def test_report_create_fetch_and_immutability(
     report = created.json()
     assert report["diagnosis_run_id"]
     assert report["root_actor"] == "sre-demo/Deployment/payment-service"
-    assert report["report_version"] == "2.0"
+    assert report["report_version"] == "2.1"
 
     fetched = client.get(f"/api/v1/console/reports/{report['report_id']}").json()
     assert fetched == report  # the stored snapshot is returned verbatim

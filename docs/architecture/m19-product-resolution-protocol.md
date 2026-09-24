@@ -405,6 +405,10 @@ Use the complete R2 evidence and disable only the target rule through an
 evaluation-only configuration, included in `config_digest` and unavailable in
 production. The resulting diagnosis must not be `RESOLVED`.
 
+T2 bir novelty gate'idir, causal necessity gate'i değildir; causal necessity T5/T6 ile test edilir.
+
+T5/T6 hedef kural ve kanıtın final resolution için necessary contributor olduğunu kanıtlar; tek başına sufficient olduğunu iddia etmez.
+
 ### T7 — Truth blindness
 
 Before code freeze, the agent did not have access to HOLDOUT contents. During

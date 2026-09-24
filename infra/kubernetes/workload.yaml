@@ -44,6 +44,17 @@ spec:
           envFrom:
             - configMapRef:
                 name: workload-config
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: k8s.namespace.name=$(POD_NAMESPACE),k8s.pod.name=$(POD_NAME),k8s.deployment.name=order-service
           resources:
             requests:
               cpu: 100m
@@ -96,6 +107,17 @@ spec:
           envFrom:
             - configMapRef:
                 name: workload-config
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: k8s.namespace.name=$(POD_NAMESPACE),k8s.pod.name=$(POD_NAME),k8s.deployment.name=payment-service
           resources:
             requests:
               cpu: 100m
@@ -146,6 +168,17 @@ spec:
           envFrom:
             - configMapRef:
                 name: workload-config
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: k8s.namespace.name=$(POD_NAMESPACE),k8s.pod.name=$(POD_NAME),k8s.deployment.name=order-worker
           resources:
             requests:
               cpu: 100m

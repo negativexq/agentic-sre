@@ -6,15 +6,20 @@ logs, traces, dependencies, and topology, then rebuilds hypotheses and makes
 the final root-cause judgment deterministically. An LLM is optional; it never
 owns the diagnosis.
 
+```text
+Alert → evidence → hypotheses → bounded investigation → deterministic judgment
+```
+
 [![CI](https://github.com/negativexq/agentic-sre/actions/workflows/checks.yml/badge.svg)](https://github.com/negativexq/agentic-sre/actions/workflows/checks.yml)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ### At a glance
 
-- **[84% exact root-cause accuracy](evals/results/v1.1.2/README.md)** — 26/31 against ITBench-Lite ground truth, over every scenario whose published label is matchable.
-- **[25/25 on the live suite at `da6f0e6`](evals/results/live-suite-2026-09-24.md)** — current-HEAD Kind run: 16/16 root-cause actors, 9/9 abstentions, and 0 fabrications (a separate in-house measurement, not combined with ITBench-Lite).
-- **0 model calls** — the measured benchmark path is fully deterministic.
+- **Blind TEST25 holdout: [17/22 scoreable = 77.3%](evals/results/v1.1.2/README.md); 0 model calls.** This is the primary ITBench-Lite accuracy measurement.
+- **DEV + holdout combined: 26/31 = 83.9%.** Four unmatchable published labels are excluded from the denominator.
+- **Live suite: 25/25 expected outcomes** — 16/16 correct root-cause actors, 9/9 correct abstentions, and 0 fabricated `RESOLVED` diagnoses. Actor identification and epistemic resolution are separate: `RESOLVED` 0, `AMBIGUOUS` 14, `INSUFFICIENT_EVIDENCE` 11. See the [live-suite report](evals/results/live-suite-2026-09-24.md) and [M16 validation](docs/results/m16-positive-elimination.md).
+- **0 model calls** — in both reported measurements; deterministic judgment remains authoritative.
 - **Bounded investigation** — the frozen TEST25 run used six validated physical reads per incident, one read at a time.
 - **Evidence-backed RCA** — observations become normalized Findings before they can change a diagnosis.
 - **Read-only by design** — the RCA investigator cannot mutate the cluster or execute remediation. The live benchmark harness separately stages and restores test faults.
@@ -34,8 +39,8 @@ excluded from the accuracy denominator and reported separately.
 | Evaluation | Exact root-cause accuracy | Raw | Model calls |
 | --- | ---: | ---: | ---: |
 | DEV10 development split | 9/9 (100%) | 9/10 | 0 |
-| **Blind TEST25 holdout** | **[17/22 (77.3%)](evals/results/v1.1.2/README.md)** | 17/25 | **0** |
-| **Combined 35 scenarios** | **26/31 (83.9%)** | 26/35 | **0** |
+| **Blind TEST25 holdout (primary)** | **[17/22 (77.3%)](evals/results/v1.1.2/README.md)** | 17/25 | **0** |
+| DEV + holdout combined | 26/31 (83.9%) | 26/35 | 0 |
 
 Confidence against ground truth on the 31 scoreable scenarios: `VERIFIED`
 predictions were 13/16 correct and `LIKELY` predictions 13/19.
@@ -63,27 +68,22 @@ the diagnosis the control plane actually stored.
 | --- | ---: | ---: |
 | DEV | 19 | 19 |
 | **HOLDOUT** | **6** | **6** |
-| **Total** | **25** | **[25/25 (100%) at `da6f0e6`](evals/results/live-suite-2026-09-24.md)** |
+| **Total expected outcomes** | **25** | **25/25** |
 
-The latest live re-anchor ran the official 25-scenario suite on a fresh Kind
-cluster against exact commit `da6f0e671775e3ddba9374d3b2fd46e678478a56`:
-16/16 root-cause actors, 9/9 abstentions, 25/25 expected outcomes, and no
-`RESOLVED` abstention. Persisted diagnoses for all 25 run incident IDs reported
-`mode=deterministic` and `model_calls=0`. Its resolution distribution is 0
-`RESOLVED`, 14 `AMBIGUOUS`, and 11 `INSUFFICIENT_EVIDENCE`.
+The published 2026-09-24 live-suite re-anchor evaluated
+`da6f0e671775e3ddba9374d3b2fd46e678478a56`. The frozen 25-scenario protocol was
+later rerun during M16 validation at `b982c40`, preserving the same 25/25
+expected outcomes and resolution distribution. Across that result, 16/16
+root-cause actors and 9/9 abstentions were correct, with 0 fabricated
+`RESOLVED` diagnoses. The resolution distribution was `RESOLVED`: 0,
+`AMBIGUOUS`: 14, `INSUFFICIENT_EVIDENCE`: 11. Correct actor identification and
+final epistemic resolution are distinct; the suite records the former even
+when available evidence supports only an unresolved diagnosis. The result has
+0 model calls. G16.7 remains historically `NOT MET`.
 
-The [2026-09-23 report](evals/results/live-suite-2026-09-23.md) is historical
-evidence for commit `9e8add2`, not current `HEAD`. Its statements that the run
-re-anchored current `HEAD` and that `packages/rca/` had not changed describe only
-the code history at that earlier checkpoint. The fresh 2026-09-24 run matches
-the historical outcomes and resolution distribution; its report records
-ephemeral Pod-name and live-evidence differences, plus a Loki lookback-bound
-limitation. The two reports are kept separate and neither rewrites the other.
-
-This is a **separate** in-house measurement — its labels have no external
-validity, so it is never combined with the ITBench-Lite number above. The
-[methodology](docs/benchmarks/live-suite.md) documents what the single-node
-platform can and cannot stage, and `make live-bench` reproduces the run.
+This separate in-house measurement uses labels with no external validity and
+is not combined with ITBench-Lite. See the [methodology](docs/benchmarks/live-suite.md)
+for scope and `make live-bench` to reproduce the protocol.
 
 ## What is Agentic SRE?
 
@@ -183,7 +183,6 @@ engine understands these Kubernetes incident classes and signals:
 - Runtime traces and captured Loki observations when those sources are present.
 - Network policy changes, resource pressure, quota/LimitRange behavior, and
   traffic changes when the corresponding observation data is available.
-- Chaos Mesh faults and their targeted workloads.
 - Ownership, selectors, configuration references, service dependencies, HPA
   relationships, and other topology needed to build a causal path.
 
@@ -291,9 +290,8 @@ there" — with the model-call count shown alongside (zero on the deterministic
 path). The [timeline design](docs/diagnosis-timeline.md) documents the per-run
 events behind it.
 
-> The console (M0–M12) is built strictly on top of the engine: the RCA scoring
-> and resolution algorithm is unchanged, so the measured performance above still
-> holds.
+> The console presents persisted incident state and the engine's diagnosis. It
+> does not make causal claims or change the RCA logic measured above.
 
 ## Architecture and trust boundaries
 
@@ -336,11 +334,12 @@ healthy workload
   → persisted observations and RCA
   → proposed rollback
   → A → B → A object journal
-  → stable resolved diagnosis replay
+  → stable diagnosis from persisted state
 ```
 
-This validates the incident path, observation persistence, replay, and safety
-boundary. The broader [live scenario suite](docs/benchmarks/live-suite.md) —
+This validates the incident path, observation persistence, and safety boundary.
+It does not establish exact replay of the complete live evidence universe. The
+broader [live scenario suite](docs/benchmarks/live-suite.md) —
 25 staged faults, graded end to end — is summarised under
 [Measured root-cause performance](#measured-root-cause-performance) above.
 
@@ -363,19 +362,19 @@ bounded prediction agreed with the FULL_SOURCE deterministic diagnosis on
 21/25 TEST25 scenarios; that agreement measures information loss under a
 bounded read budget, not correctness.
 
-The [public benchmark report](evals/results/v1.1.2/README.md) records the
-commit, dataset identity, prediction artifact hash, frozen configuration, and
-aggregate results. Historical runs remain available under
-[`evals/results/`](evals/results/) for reproducibility; they are not the main
-product claim.
+The [benchmark report](evals/results/v1.1.2/README.md) records the commit,
+dataset identity, prediction artifact hash, frozen configuration, denominator,
+and aggregate results. The [live-suite report](evals/results/live-suite-2026-09-24.md),
+[M16 result](docs/results/m16-positive-elimination.md), and
+[methodology](docs/benchmarks/live-suite.md) provide live-run provenance and
+protocol details.
 
 ## FAQ
 
 ### What is Agentic SRE?
 
-Agentic SRE is a Kubernetes root-cause analysis engine for automated incident
-investigation. It combines deterministic causal reasoning with bounded,
-read-only evidence acquisition and produces an auditable diagnosis.
+It is a Kubernetes incident investigator that gathers bounded read-only
+evidence and produces an auditable, deterministic diagnosis.
 
 ### How does Agentic SRE perform root-cause analysis?
 
@@ -386,17 +385,15 @@ the hypotheses are rebuilt before deterministic verification and resolution.
 
 ### Does Agentic SRE require an LLM?
 
-No. The default and measured benchmark path is deterministic and used zero
-model calls. An optional LLM policy can choose among bounded semantic
-observation choices, but the model cannot create evidence or own the final
-root-cause judgment.
+No. The measured path used zero model calls. An optional policy may choose a
+legal bounded observation, but the model cannot create evidence or judge the
+root cause.
 
 ### What telemetry can Agentic SRE investigate?
 
-It can use Kubernetes object history and Events, Alertmanager incident context,
-captured Loki logs, runtime traces, Prometheus-derived signals, and configured
-snapshot observations. Actual coverage depends on which sources were captured;
-the system does not pretend that an unavailable query surface contains data.
+It can use Kubernetes object history and Events, Alertmanager context, captured
+Loki logs, traces, Prometheus signals, and configured snapshots. Coverage
+depends on the sources available for an incident.
 
 ### Can Agentic SRE modify my Kubernetes cluster?
 
@@ -437,6 +434,10 @@ telemetry impose real limits.
 - Some diagnoses depend on the configured read APIs and their authentication;
   built-in read endpoints are unauthenticated by default.
 - The supported deployment is single-process/single-replica rather than HA.
+- Exact run-level replay of the complete live evidence universe is not
+  guaranteed: current cluster state and some runtime provider reads still use
+  live observation paths, and the exact base-evidence manifest plus provider
+  read tape is not persisted.
 - The system is evidence-driven RCA, not formal causal inference.
 - There is no autonomous remediation, arbitrary shell execution, or cluster write
   tool.

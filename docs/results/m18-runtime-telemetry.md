@@ -89,11 +89,11 @@ contract, but they are not counted as a live resource proof.
 - `make precommit` — PASS.
 - `make rbac-check` — PASS; the agent reader can list/watch approved resources,
   cannot read Secrets, patch Deployments or delete Pods.
-- Source-only regression: the Task 6 truth-blind replay matched the sealed M15
-  action audit for 25 scenarios / 150 actions with runtime telemetry
-  unavailable. A follow-up regression test verifies an empty source-only
-  snapshot does not advertise `runtime_traces`; `demo_source` retains its
-  original action sequence.
+- Source-only compatibility (historical Task 6 note): the initial replay used a
+  runtime-unavailable wrapper and was not the official M15 `SnapshotSource`
+  oracle. The later forensic correction and exact official replay are recorded
+  below. In the historical M15 source contract, trace method availability is
+  independent of whether the bounded query returns records.
 
 ### M18A hard gates
 
@@ -125,3 +125,113 @@ contract, but they are not counted as a live resource proof.
 
 M18A is COMPLETE with G18A.1–G18A.12 PASS. M18 remains IN_PROGRESS because
 M16, M17 and M18B have not started. M15's historical G15.8 FAIL is unchanged.
+
+## Post-completion compatibility and evidence hardening
+
+This correction preserves the historical result above and records a later
+forensic replay against the official M15 runner. It does not rewrite the sealed
+M15 artifact or change M15 metrics.
+
+| Field | Value |
+|---|---|
+| Audit starting HEAD | `e5490316840596745ed237d83b9acb72964746bb` |
+| First compatibility-fix evaluated HEAD | `01ab64d49c0b8c55d1f15d9ec91a91286a165941` |
+| Final hardening evaluated HEAD | `98509546b5488fb0d5f51db720e64ccb34c6dad7` |
+| M15 artifact | `.local/eval/m15/transition-certified-v1` (unchanged) |
+| Official runner | `packages/evals/itbench/investigation_benchmark.py::predict_investigations`, invoked with `investigation-eval --split test --confirm-test` |
+| Source / policy | `SnapshotSource(dataset.scenario(...))` / deterministic intent policy; no wrapper |
+| Configuration | Same 25 TEST IDs, `m14.v1`, six turns and eight tool calls |
+| Contract | `m18a.v1` unchanged; no amendment required |
+| API usage | CLASS 0; provider/model calls 0 |
+
+### Compatibility finding and correction
+
+The clean official `bb66849e9ee6157239003a2de4565d3bf7749813` replay matched the
+sealed M15 action identities at 150/150, validating the official oracle. The
+unwrapped official replay at clean `e5490316840596745ed237d83b9acb72964746bb`
+matched 147/150. The first bad commit was `8c09b47` (`feat(investigation):
+route typed runtime evidence by information gap`), which also matched 147/150.
+`b7090f8` matched 150/150.
+
+At `8c09b47`, three selected identities diverged:
+
+| Scenario / turn | M15 action | M18A action | Difference |
+|---|---|---|---|
+| Scenario-6 / 5 | `events`, Pod `otel-collector-564d9c7987-cw2q8`, `FAILURE_ONSET`, gap `gap:failure_onset:8836c4fc725c1b92e47d` | Same event read, gap `gap:failure_onset:0a655e20db4942d31d64` | Added an authorized `runtime_traces` query for the same Pod to the gap; authorization-set hashing changed the gap ID. |
+| Scenario-33 / 6 | `events`, Pod `cart-5b597c6db5-pkzkh`, `FAILURE_ONSET`, gap `gap:failure_onset:d8c009a929c3df88ad4d` | Same event read, gap `gap:failure_onset:15a45affcc792fddf9ab` | Added authorized `runtime_traces` queries for the three event targets; authorization-set hashing changed the selected gap ID. |
+| Scenario-14 / 6 | `events`, Pod `otel-collector-564d9c7987-dbhm6`, `FAILURE_ONSET`, gap `gap:failure_onset:e8c47c584055fd55e483`, window `15:39:23.959248–18:05:33.401783Z` | `runtime_traces`, same Pod, `DEPENDENCY_HEALTH`, gap `gap:dependency_health:71770429031ccb13461e`, window `17:09:23.959248–18:05:33.401783Z` | New trace authorization changed the gap frontier and selected capability/query. |
+
+Thus the measured first drift was the M18A gap expansion in `8c09b47`, not
+planner ranking and not `857fcf7`. The earlier Task 6 statement that “runtime
+telemetry unavailable” had matched 150/150 relied on an explicit
+`supports(runtime_traces)=False` wrapper. That wrapper did not model the
+historical `SnapshotSource` source-backed contract and is not the compatibility
+oracle. The official no-wrapper replay is authoritative.
+
+Commit `857fcf7` used `bool(source.trace_observations())` as runtime capability
+availability. This conflated an available legacy source reader with its
+current query result. It is **REPLACED** by two explicit layers:
+
+- Legacy source-backed capabilities use an explicit source `supports()`
+  declaration when present, or the historical source-method contract when no
+  declaration exists. For M15 `SnapshotSource`, `trace_observations()` exists
+  even when the query returns no spans; an authorized empty read remains
+  available and returns `NO_DATA`.
+- Typed M18A runtime gap expansions require an explicit configured typed
+  provider capability (`supports_typed_runtime`). Live Tempo, Prometheus and
+  Loki support depends on the corresponding reader being configured, not on
+  whether the next query returns evidence. A configured provider with no
+  matching data remains available and the observation reports `NO_DATA`.
+
+The new contract gates M18A-specific Pod `FAILURE_ONSET` traces, controller
+`FAILURE_ONSET` traces and Pod `METRIC_BASELINE` resource-pressure routes on
+typed provider configuration. It preserves the legacy M15
+`DEPENDENCY_HEALTH` source-backed trace frontier. No evidence-presence check,
+gap hash weakening, identity normalization, or planner ranking change was
+used.
+
+The compatibility fix at `01ab64d` restored exact action identity. The final
+hardening replay at `98509546b5488fb0d5f51db720e64ccb34c6dad7` again matched the
+sealed artifact at 25/25 scenarios and 150/150 ordered actions using full
+`gap_id`, capability, canonical target and query identity. There was no action
+count or ordering drift. Prediction remained truth-blind; the prediction
+manifest reports a clean tree, zero provider/model calls and 150 tool calls.
+The sealed artifact and scenario IDs were not modified.
+
+### Post-completion evidence hardening (H0.1–H0.5)
+
+The parked H1–H5 work was restored and committed separately from the source
+capability fix. The frozen contract remains `m18a.v1`.
+
+| Finding | Classification | Hardening result |
+|---|---|---|
+| H0.1 Tempo completeness | `CONFIRMED_CONTRACT_DEFECT` | Tempo search diagnostics now reach runtime state classification. With the existing `BEST_EFFORT`/`TRUNCATED` search semantics, successful spans without errors remain `UNKNOWN`; explicit error spans can remain `OBSERVED_ABNORMAL`; an empty successful read remains `NO_DATA`. No Tempo `OBSERVED_NORMAL` is claimed without provable completeness. |
+| H0.2 Traffic coverage | `CONFIRMED_CONTRACT_DEFECT` | Traffic `OBSERVED_NORMAL` now requires real samples spanning the cutoff-clipped effective interval with bounded step coverage. Partial windows remain `UNKNOWN`; a positive 1.5× increase may remain `OBSERVED_ABNORMAL` and normalize to `TRAFFIC_INCREASE`. |
+| H0.3 Finding identity | `CONFIRMED_IDENTITY_DEFECT` | Acquisition-only provenance is excluded from semantic Finding identity while provenance remains persisted. Same semantic fact across query windows/descriptors does not become a new Finding; distinct event times, peers, kinds or semantic evidence remain distinct. |
+| H0.4 hypothesis attribution | `CONFIRMED_AUDIT_DEFECT` | Runtime affected-hypothesis IDs derive from normalized Finding actors/typed relationships (`entity`, `related`, caller/callee/service), not only the query target. This changes attribution only; it adds no RCA transition. |
+| H0.5 descriptor limit | `CONFIRMED_CONTRACT_DEFECT` | Runtime limits over 32 are rejected before backend execution; descriptor identity records the effective bounded limit. Legacy non-runtime queries remain unchanged. |
+
+### Validation after hardening
+
+- Focused `tests/unit/rca` suite: 578 passed.
+- `make check`: PASS — Ruff, format, mypy (207 source files), and 868 pytest
+  tests passed; one existing Starlette deprecation warning.
+- `make precommit`: PASS.
+- `make rbac-check`: PASS; no authorization change.
+- Official sealed M15 replay after compatibility repair and after H1–H5:
+  25 scenarios, 150 actions, 150/150 full identity, zero action-count or order
+  drift.
+- `make m18a-live-validate`: PASS against the existing Kind services. Prometheus
+  bounded traffic produced `OBSERVED_NORMAL` on sufficient sampled coverage and
+  `OBSERVED_ABNORMAL` with `TRAFFIC_INCREASE` on the positive increase; the
+  resource-pressure probe remained `NO_DATA`. Loki produced a typed
+  `DEPENDENCY_ERRORS` Finding. Tempo produced typed caller/callee evidence and
+  a `DEPENDENCY_ERRORS` Finding with an explicit abnormal trace. The new live
+  output is local/ignored at `.local/m18a/live-validation.json`.
+- Live safety: Kubernetes writes 0; application data writes 0; Secret access 0;
+  out-of-policy execution 0; autonomous remediation 0; three explicit fixture
+  telemetry records; provider/model calls 0.
+
+M18A remained historically COMPLETE. This pass restored official M15
+source-backed compatibility and tightened implementation conformance to the
+already-frozen `m18a.v1` contract. It introduced no M16 elimination semantics.

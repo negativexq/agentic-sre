@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from datetime import UTC, datetime, timedelta
 from email.message import Message
@@ -372,6 +373,19 @@ def test_parser_duplicate_and_malformed_records_fail_closed() -> None:
         parse_tempo_trace_json(
             {"resourceSpans": [{"resource": {"attributes": []}, "scopeSpans": [{"spans": [raw]}]}]}
         )
+
+
+def test_parser_accepts_tempo_v2_trace_envelope() -> None:
+    raw = _raw_span("3" * 16)
+    raw["traceId"] = base64.b64encode(bytes.fromhex(TRACE_ID)).decode("ascii")
+    raw["spanId"] = base64.b64encode(bytes.fromhex("3" * 16)).decode("ascii")
+    payload = {"trace": _trace_payload([raw])}
+
+    spans = parse_tempo_trace_json(payload)
+
+    assert len(spans) == 1
+    assert spans[0].evidence_id == f"tempo:{TRACE_ID}:3333333333333333"
+    assert spans[0].semantic_attributes["k8s.deployment.name"] == "payment"
 
 
 def test_response_limits_and_search_payload_is_not_evidence() -> None:

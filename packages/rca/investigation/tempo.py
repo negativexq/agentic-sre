@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import os
 import re
@@ -235,7 +237,17 @@ def _string_id(value: object, field_name: str, *, trace: bool = False) -> str:
         raise TempoProtocolError(f"Tempo span is missing {field_name}")
     normalized = value.lower()
     if not re.fullmatch(r"[0-9a-f]+", normalized):
-        raise TempoProtocolError(f"Tempo span has an invalid {field_name}")
+        # Tempo V2's OTLP JSON endpoint emits trace/span IDs as base64, while
+        # other compatible backends return their hex encoding. Normalize both
+        # representations to lowercase hex before applying the same bounds.
+        try:
+            decoded = base64.b64decode(value, validate=True)
+        except (binascii.Error, ValueError) as error:
+            raise TempoProtocolError(f"Tempo span has an invalid {field_name}") from error
+        expected_bytes = 16 if trace else 8
+        if len(decoded) != expected_bytes:
+            raise TempoProtocolError(f"Tempo span has an invalid {field_name}")
+        normalized = decoded.hex()
     if trace and not _TRACE_ID_RE.fullmatch(normalized):
         raise TempoProtocolError("Tempo span has an invalid traceId")
     return normalized
@@ -357,7 +369,12 @@ def _parse_span(
 def parse_tempo_trace_json(payload: Mapping[str, object]) -> tuple[TraceSpanObservation, ...]:
     """Parse one OTLP-compatible Tempo V2 trace response."""
     spans: dict[tuple[str, str], TraceSpanObservation] = {}
-    resource_spans_value = payload.get("resourceSpans", [])
+    # Tempo's V2 endpoint wraps OTLP trace data under ``trace``. Accept the
+    # unwrapped OTLP form too, which remains useful for fixtures and compatible
+    # backends.
+    trace_value = payload.get("trace")
+    trace_payload = _mapping(trace_value, "trace") if trace_value is not None else payload
+    resource_spans_value = trace_payload.get("resourceSpans", [])
     for resource_span_raw in _list(resource_spans_value, "resourceSpans"):
         resource_span = _mapping(resource_span_raw, "resourceSpans item")
         resource = _mapping(resource_span.get("resource", {}), "resource")

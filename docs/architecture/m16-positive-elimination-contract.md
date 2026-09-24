@@ -337,3 +337,40 @@ This alone establishes neither B as root nor A as non-root.
 Before M16 production implementation, the `NO_CAUSAL_SYMPTOM_LINK` discrepancy in §5 must be corrected or qualified with positive evidence so absence of a derived link cannot set `CONTRADICTED`. The repair must preserve truthful abstention and the existing thresholds. Task 2 must add regression coverage for unlinked/missing topology and for any genuinely positive no-link evidence if such a rule is claimed.
 
 If implementation discovers a material conflict between this contract and the audited code/data semantics, stop and report `CONTRACT_AMENDMENT_REQUIRED` with the clause, contrary evidence, minimal proposed amendment, and gate impact. Do not silently weaken this contract, M18A, authorization, safety, or evaluation gates. Only a reviewed, separately recorded amendment may change `m16.v1`.
+
+## 17. Amendment A1 — ended pre-onset manifestation episodes (`m16.v1-a1`)
+
+Status: **FROZEN** (owner-approved 2026-09-24). This amendment adds exactly one root-ineligibility rule. Sections 1–16 are unchanged and remain binding; where this section is silent, they govern.
+
+### Contrary evidence that required it (§16)
+
+On the 25-scenario live suite at `da6f0e6`, all 14 `AMBIGUOUS` diagnoses have exactly one `SUPPORTED` hypothesis and 96 `UNRESOLVED` alternatives. 93 of the 96 are Pod hypotheses that contain only `FAILURE_EVENT`/`CONTAINER_FAILURE` Findings (readiness `Unhealthy`, `BackOff`), and all of their 100 Findings are timestamped before incident onset. Under §4 they cannot be excluded, so G16.7 is unreachable on that population. A truth-blind CLASS 0 replay of ITBench TEST25 at `45677c4` (`docs/results/m16-positive-elimination.md`, "Task 2 — G16.7 structural replay") shows the complementary picture: 23/25 final diagnoses have no `SUPPORTED` hypothesis at all, so this rule cannot create a `RESOLVED` result there.
+
+### Rule `m16.ended-manifestation-episode.v1`
+
+Reason code `MANIFESTATION_EPISODE_ENDED_BEFORE_ONSET`; consequence `ROOT_INELIGIBILITY` (§3), same machinery and audit contract (§11) as `ROOT_CAUSE_INELIGIBLE_PROPAGATED_EFFECT`. The hypothesis is excluded from root-cause competition for this incident episode; its epistemic state is not changed to `CONTRADICTED`.
+
+All preconditions must pass, each recorded with its deterministic result:
+
+1. **Pod actor.** The hypothesis' causal actor is a Pod.
+2. **Manifestation-only.** The hypothesis has no initiating Findings, zero episode source-capable initiating Findings, and every Finding is a `FAILURE_EVENT` or `CONTAINER_FAILURE` on the causal actor itself. Any other Finding kind or entity makes the rule inapplicable.
+3. **Timed manifestations.** Every Finding has a known time; `FAILURE_EVENT` uses the latest observed occurrence (`last_at`, else `first_at`). A missing timestamp makes the rule inapplicable.
+4. **Positive episode end E**, exactly one of:
+   - **TERMINATED** — an object-journal `DELETED` version of the exact Pod (same namespace/name and `metadata.uid`) whose `observed_at` is at or before incident onset. The deletion happened no later than `observed_at`. Synthetic tombstones derived at diagnosis time from absence in a listing (`cluster:missing`) never qualify.
+   - **RECOVERED** — a status observation of the exact Pod (same uid) taken at time S with S ≥ onset + grace (§7 grace), showing condition `Ready=True` with `lastTransitionTime` R where R ≤ onset. Because `lastTransitionTime` changes on every Ready transition, the Pod was continuously Ready on [R, S], which covers [onset, onset + grace]. E = R.
+5. **No overlap.** Every Finding time is strictly before E.
+
+Neutral cases, which never trigger the rule: no journal or status record, `NO_DATA`/`UNKNOWN`, a status observation taken before onset + grace, `Ready` unknown or false, a uid mismatch, an untimed Finding, or any Finding at or after E. Missing evidence never ends an episode.
+
+Audit fields: `rule_id=m16.ended-manifestation-episode`, `rule_version=v1`, `consequence=ROOT_INELIGIBILITY`, `mechanism=EPISODE_TIMING`, `targets=(pod canonical,)`, `evidence_ids` = manifestation evidence plus the tombstone/status evidence id, `time_basis` with onset, boundary, E and S, and the five preconditions.
+
+### Scope limits and residual risk
+
+- The rule only removes manifestation-only alternatives. It never makes any hypothesis `SUPPORTED`, never adds dominance, and never selects an actor. A `RESOLVED` outcome still requires the unchanged §4/resolution conditions for the remaining hypotheses.
+- Residual risk: a Pod whose failures ended before onset could still have caused latent damage that surfaces later. A hypothesis carrying only manifestation evidence has no positive causal premise for that mechanism, so this is accepted and must be monitored by G16.9.
+- Not scenario-keyed. No names, namespaces, labels, harness knowledge or ground truth may enter the rule.
+- Harness cleanup that removes stale events is not G16.7 evidence (§13).
+
+### Observation prerequisite
+
+The object journal deliberately hashes desired state only (status is excluded), so the Pod status at diagnosis time is not retained as a version. RECOVERED therefore requires the observation layer to expose a typed, read-only status observation per Pod (observed-at, uid, Ready condition, evidence id). This is observation-plane data, not a change to the journal's version semantics.

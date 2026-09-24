@@ -101,3 +101,31 @@ M16 Task 1: COMPLETE.
 M16 prerequisite — Repair missing-proof vs contradiction semantics: COMPLETE.  
 M16 Task 2: NOT_STARTED.  
 No `m16.v1` amendment was required. No M16 positive-elimination behavior was implemented.
+
+## Task 2 — G16.7 structural replay (TEST25)
+
+Date: 2026-09-24. Evaluated HEAD `45677c473d940cbc90d146018cf1ce86ee857679` (clean tree). CLASS 0: `SnapshotSource`, `DeterministicIntentPolicy`, the frozen 25 TEST scenario IDs and the M15 transition-certified investigation config. 150 tool calls, 0 provider calls. Predictions were sealed before any analysis, and no ground truth was read. The stored diagnosis truncates alternative bodies, so the investigations were re-run in-process and the full hypothesis set passed to the final `resolve_hypotheses` call was captured. All 25 captured traces equal the sealed predictions.
+
+Question: is TEST25 ambiguity caused by pre-onset, manifestation-only hypotheses, as on the live suite?
+
+| Final state | Scenarios | `SUPPORTED` hypotheses |
+|---|---:|---|
+| `INSUFFICIENT_EVIDENCE` | 23 | 0 in every scenario |
+| `AMBIGUOUS` | 2 | Scenario-14: 1; Scenario-38: 4 |
+
+There are 306 `UNRESOLVED` alternatives across the 25 scenarios:
+
+| Class | Count |
+|---|---:|
+| Other evidence, overlaps onset or untimed | 174 |
+| Manifestation-only (`FAILURE_EVENT`/`CONTAINER_FAILURE`), all Findings before onset | 89 |
+| Other evidence, all Findings before onset | 33 |
+| Manifestation-only, overlaps onset | 10 |
+
+The dominant alternative shape is `OBJECT_CREATED`-only (177), then `CONTAINER_FAILURE` (59) and `FAILURE_EVENT` (38).
+
+Answer: **no, not on TEST25.** TEST25 is blocked by the absence of any supported hypothesis, not by leftover alternatives. Even if every pre-onset manifestation-only alternative were excluded, no scenario could transition to `RESOLVED`. Scenario-14 would keep 13 other blocking alternatives and Scenario-38 would keep 6 plus its 4 supported peers. On the live suite the answer is **yes**: 93/96 blocking alternatives are pre-onset manifestation-only Pods.
+
+Gate consequence: the narrow rule in contract §17 (`m16.v1-a1`) targets the live population, where G16.7 can be earned. On TEST25 it can produce no new `RESOLVED` result, so it carries no G16.9 wrong-actor risk there. It does not help TEST25's `INSUFFICIENT_EVIDENCE` outcomes, which need positive supporting evidence, not elimination.
+
+Local artifacts (not committed): `.local/eval/m16/g167-structural-replay-45677c4/` (sealed predictions), `g167-full-hypotheses.json`, `g167-attribution.json` and the capture/attribution scripts.

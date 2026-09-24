@@ -32,7 +32,7 @@ def test_demo_text_output_names_the_cause(capsys: pytest.CaptureFixture[str]) ->
     out = capsys.readouterr().out
     assert "Root cause   shop/Deployment/payment" in out
     assert "Causal path" in out
-    assert "Proposed remediation (not executed)" in out
+    assert "Possible remediation (hypothesis-specific; not executed)" in out
     assert "Causal hypothesis" in out
     assert "Actor          shop/Deployment/payment" in out
     assert "Initiating evidence" in out
@@ -143,7 +143,7 @@ def test_hypothesis_report_reads_stored_diagnoses_without_ground_truth(
     assert (
         report["grouping"]["hypothesis_count"] == diagnosis.hypothesis_diagnostics.hypothesis_count
     )
-    assert report["resolution"]["resolved"] == 1
+    assert report["resolution"]["resolved"] == 0
     assert report["selection_changes"] == "not inferable from one run"
 
 

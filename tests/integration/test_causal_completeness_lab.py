@@ -79,14 +79,16 @@ def _change(
     )
 
 
-def test_complete_successful_journey_uses_real_rca_objects() -> None:
+def test_unlinked_alternative_keeps_real_cause_in_leading_ambiguity() -> None:
     source = demo_source()
     audit = build_blind_audit(source, _catalog(source))
     case = build_case(source)
     diagnosis = diagnose_case(case)
     assert diagnosis.hypothesis is not None
-    assert audit.resolution == "RESOLVED"
-    assert audit.selected_actor == "shop/Deployment/payment"
+    # The payment change is evidence-backed, but the unlinked recorder change
+    # has no positive contradiction evidence. It must remain unresolved rather
+    # than being removed from competition by missing linkage.
+    assert audit.resolution == "AMBIGUOUS"
     assert any(item.entity == "shop/Deployment/payment" for item in audit.candidates)
     assert any(item.causal_actor == "shop/Deployment/payment" for item in audit.hypotheses)
     assert (
@@ -101,7 +103,7 @@ def test_complete_successful_journey_uses_real_rca_objects() -> None:
             leading_matches=(diagnosis.hypothesis.hypothesis_id,),
             resolution=diagnosis.resolution.value,
         )
-        == "UNIQUELY_RESOLVED"
+        == "LEADING_AMBIGUOUS"
     )
 
 

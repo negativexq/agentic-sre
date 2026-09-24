@@ -535,4 +535,81 @@ Focused audit test: one candidate is deliberately focused from a two-candidate i
 
 ### Next diagnostic
 
-The remaining 34 decision-neutral calls are not yet fully classified against their complete same-turn frontiers. In particular, 14 `history` / `CHANGE_TIMING` reads returned one already-known reference with no new Finding, while 9 `incident_changes` / `CHANGE_TIMING` reads returned 44–45 already-known references and no normalized Finding. Attribute those groups from pre-turn candidate and fact-family state before changing ranking or normalization. M15 remains IN_PROGRESS; do not start M16.
+The 23 known-fact calls and the 114-call G15.8 capability reachability analysis are closed in the 2026-09-24 section below. The analysis found no justified production change in those 23 calls. M15 remains `IN_PROGRESS`; do not start M16 or run GPT-6 Luna.
+
+## 2026-09-24 — Conditional value and G15.8 reachability
+
+This is a truth-blind analysis of the sealed `.local/eval/m15/transition-certified-v1` prediction/action-audit artifacts at evaluated HEAD `c355e93e0970a2c6efc665cd1527b309e1367c23`. No labels were opened during candidate reconstruction. The independent pre-turn replay for the 23 known-fact actions matched the sealed action sequences on all 25 scenarios (`selection_sequence_mismatches=0`). No production selection or RCA behavior changed, so the frozen 25-case run was not rerun.
+
+### Known-fact call classification
+
+The complete same-turn audit contains 1,594 executable candidate rows across the 114 decision-neutral turns (5–26 candidates per turn; median 13). Each selected known-fact action was compared to candidates and state from its own exact pre-turn.
+
+| Primary class | Count | Detail |
+| --- | ---: | --- |
+| K1 — `DOMINATED_BY_FRESH_ALTERNATIVE` | 0 | No selected known-fact read lacked positive conditional value while a strictly better same-gap certified candidate existed. |
+| K2 — `REASONABLE_REFRESH` | 14 | All `history` / `CHANGE_TIMING` reads. Each selected candidate had two transition certificates, a bounded onset-window query, and no same-target change Finding in the pre-turn case. One already-known raw ref did not establish that all other object-version outcomes were represented. |
+| K3 — `SEMANTIC_IDENTITY_TOO_COARSE` | 0 | No evidence showed a distinct normalized fact was collapsed into an already represented semantic fact. |
+| K4 — `SEMANTIC_IDENTITY_TOO_WEAK` | 0 | The number of returned refs alone did not prove that all meaningful outcome families were represented before the query. |
+| K5 — `DISCOVERY_VALUE_JUSTIFIED` | 9 | All namespace `incident_changes` reads. Their pre-turn discovery gap had no known facts or gap evidence refs, and explicitly asked whether an unobserved initiating object change could be found. |
+| K6 — `FRONTIER_LIMITATION` | 0 | No frontier omission was needed to explain the selected reads. |
+| K7 — `OTHER` | 0 | Not needed. |
+
+The 14 K2 actions were `Scenario-9` turns 5–6; `Scenario-22` turns 5–6; `Scenario-25` turn 6; `Scenario-31` turns 5–6; `Scenario-35` turns 5–6; `Scenario-38` turns 4–6; `Scenario-80` turn 6; and `Scenario-83` turn 6. Each targeted a different Deployment/ConfigMap and each had zero same-target normalized Findings in its pre-turn case. The selected history transition certificates name the trusted path `normalizers._history_findings → signals.change_findings`, fresh object-change outcome families, and existing structural-alternative actor-frontier promotion. A query that returns one known ref can still expose a different version, value, or time relation; the planner had no pre-turn basis to assume the actual one-ref result exhausted that space.
+
+| KNOWN_FACT subset | Calls by turn | Targets | Selection strategy |
+| --- | --- | --- | --- |
+| `history` / `CHANGE_TIMING` (K2) | t4:1, t5:5, t6:8 | frontend-proxy:4; kube-root-ca.crt:4; ad:3; fraud-detection:1; otel-collector:1; recommendation:1 | BASELINE_FALLBACK:12; ACTIVE_DOMINATES_BASELINE:2 (Scenario-9 t5/t6) |
+| `incident_changes` / `CHANGE_TIMING` (K5) | t2:9 | Namespace `otel-demo`:9 | BASELINE_FALLBACK:9 |
+
+The 9 K5 actions were the first namespace-scoped `incident_changes` reads at turn 2 in `Scenario-18`, `Scenario-19`, `Scenario-22`, `Scenario-25`, `Scenario-31`, `Scenario-35`, `Scenario-80`, `Scenario-81`, and `Scenario-83`. Their `DISCOVERY_DISCRIMINATION` carried unknown slots `initiating_object` and `change_timing`, with expected fact families `incident_change` and `object_change_timing`. The later 44–45 known refs are post-selection observations and cannot be used to deny the pre-turn discovery value. New typed `ObjectVersion` refs enter the evidence store; the subsequent deterministic rebuild reads the overlay object history and can apply `change_findings`. No same-gap alternative with a stronger certified path was present. Refs alone are not equivalent to a complete semantic change fact set.
+
+The result for all 23 calls is therefore: **K1=0, K2=14, K3=0, K4=0, K5=9, K6=0, K7=0.** No generic production change is justified by this attribution. Known-fact selections changed: **0**. The task did not find a loss of normalized change evidence: the actual calls produced no fresh refs/Findings, but their pre-turn outcome spaces were not provably exhausted.
+
+### Capability-specific outcome paths
+
+| Capability / gap | Existing bounded outcome path | Conditional value in these calls |
+| --- | --- | --- |
+| `history` / `CHANGE_TIMING` | `ObjectVersion[]` → `_history_findings` → `change_findings` → deterministic case rebuild / frontier promotion | Fresh versions can create any of the certified change Finding families; same target/kind alone is not a semantic duplicate. |
+| `incident_changes` / discovery `CHANGE_TIMING` | `ObjectVersion[]` refs are added to the evidence store; deterministic rebuild reads the overlay `object_history()` and runs existing `change_findings` | Namespace-wide unknown actor/change slots remain discoverable until the bounded outcome frontier is exhausted. A previously represented ref does not prove the namespace scope is exhausted. |
+| `logs` / `DEPENDENCY_HEALTH` | `_log_findings` → `dependency_findings` → `DEPENDENCY_ERRORS` → existing hypothesis/resolution rebuild | A typed new log fact can affect the case; current transition-certificate table does not issue a log certificate for this gap. The 80 realized `NO_DATA` outcomes remain neutral and were not predictable pre-turn. |
+| `runtime_traces` / `DEPENDENCY_HEALTH` | Tool returns spans; `normalize_observation` has no span-to-Finding branch | Physical candidate exists in the 80/80 dependency-health turns from the earlier audit, but no current typed transition path is available. This is a capability dependency, not proof that the selected log probe was wrong. |
+
+`NO_DATA`, `NO_MATCH`, and `UNKNOWN` remain neutral. They neither establish health nor contradict or eliminate a hypothesis.
+
+### Exclusive reachability classes for 114 neutral calls
+
+The primary classification gives precedence to a different executable same-turn alternative with an existing transition certificate. Each candidate row comes from a ranked, bounded intent bundle; the audit’s physical candidate construction had already required that `candidate_to_action` produce an executable bounded representative. The classification does **not** claim that an alternative is more relevant than the selected gap or that it should automatically win.
+
+| Reachability class | Calls | Finding |
+| --- | ---: | --- |
+| R1 — `REPLACEABLE_WITH_CERTIFIED_DECISION_PATH` | **114** | Every neutral turn had at least one distinct legal same-turn candidate with a pre-turn `InvestigationTransitionCertificate`; 838 such alternative rows were present (median 6 per turn). These are capability upper-bound opportunities, not proof that a candidate is a better choice. |
+| R2 — `REPLACEABLE_WITH_DISCOVERY_PATH` | 0 primary | R1 already applies to each turn. Nine turns additionally had a discovery alternative. |
+| R3 — `REASONABLE_PROBE_BUT_REALIZED_NEUTRAL` | 0 primary | R1 takes precedence; independently, 31 selected neutral actions themselves carried either a transition certificate (14) or a truth-blind discovery discriminator (17). |
+| R4 — `NO_CURRENT_DECISION_PATH` | 0 | A certified alternative was available in the audited legal frontier. |
+| R5 — `EPISTEMICALLY_EXHAUSTED` | 0 | No frontier was proven exhausted; all selected turns had nonzero frontier coverage and no same-semantic prior `NO_DATA` repeat. |
+| R6 — `CURRENT_CAPABILITY_GAP` | 0 primary | R1 applies to all turns. Separately, 80 dependency-health turns had a physical runtime-trace candidate with no typed normalization/transition route. |
+
+The selected-action shadow metric `Certified Expected Decision Opportunity` is defined for this report as: at selection time, the chosen action carries either an explicit `InvestigationTransitionCertificate` or a bounded `DISCOVERY_DISCRIMINATION` with unknown slots and informative fact families/outcomes. It is **not** the official decision-relevant metric and does not count as a gate pass.
+
+| Shadow metric | Calls |
+| --- | ---: |
+| Selected actions with transition certificate | 15/150 |
+| Selected actions with bounded discovery discriminator | 48/150 |
+| Union: selected actions with certified expected decision opportunity | **63/150 (42.0%)** |
+| Of those, observed decision-state change | 32 |
+| Of those, realized neutral | 31 (14 transition-certified history reads + 17 discovery reads) |
+| Actual decision-state changes without this shadow certificate/discovery flag | 4 |
+
+The 31/114 neutral selected opportunities imply a deliberately conservative selected-action potential ceiling of `(36 actual decision-relevant calls + 31 neutral certified opportunities) / 150 = 67/150 = 44.7%`, above the unchanged 41.6% threshold. The complete-frontier permissive ceiling is `(36 + 114) / 150 = 100%`, since every neutral turn also had a different certified candidate available. These are capability ceilings only: they do not predict outcomes, establish that every candidate would produce new evidence, or prove that all opportunities are jointly realizable under shared budgets. They show that G15.8 is **not proven capability-bounded** under current M15 semantics; a planner/intent-choice problem remains possible and M15 stays IN_PROGRESS. Neither ceiling changes the official 36/150 = 24.0% result or G15.8 FAIL.
+
+### Validation and current gates
+
+- Truth-blind known-fact replay: 23 target calls; all 25 action sequences matched; no labels read; 0 provider calls.
+- The complete per-call pre-turn states, queries, discriminator/certificate fields, outcomes, and same-turn executable candidates are preserved in ignored `.local/eval/m15/known-fact-attribution-v1/known-fact-frontiers.json` (405 MB); source prediction seal SHA-256: `738772967c017dab0a73e8b66f5a264c9085a0a80f3317bb969a9d12a1e3bd2d`.
+- `make check`: PASS — Ruff, formatting, mypy (203 files), pytest **827 passed** (one existing Starlette deprecation warning).
+- `make precommit`: PASS — Ruff, format, mypy.
+- No production behavior changed; no full frozen 25 evaluation was rerun; M15 metric definitions, scenario IDs, denominators, gates, RCA semantics, authorization, and the M14 quality floor remain unchanged.
+- Frozen measurements remain: duplicates 23/150 (15.3%), decision-relevant 36/150 (24.0%), recoveries 8, harm 0; M14 floor PASS; G15.8 FAIL at 41.6%; provider/model calls 0.
+
+**M15 remains `IN_PROGRESS`; M16 remains `NOT_STARTED`.** The next work should inspect why the intent-ranking boundary continues to choose among candidates when certified paths are present in other same-turn intent bundles, distinguishing valid gap priority from a provable conditional-value miss. Do not promote a candidate based only on raw utility or certificate presence.

@@ -527,6 +527,31 @@ def event_version_key(identity: str, body: dict[str, Any]) -> str:
     return f"{identity}|{hashlib.sha256(encoded.encode()).hexdigest()}"
 
 
+def _body_with_persisted_uid(
+    body: dict[str, Any], parent_key: str, uid: str | None
+) -> dict[str, Any]:
+    """Expose the UID column through the existing body-based read contract."""
+    result = dict(body)
+    parent = body.get(parent_key)
+    if isinstance(parent, dict):
+        nested = dict(parent)
+    elif uid is not None:
+        nested = {}
+    else:
+        return result
+    if uid is None:
+        nested.pop("uid", None)
+    else:
+        nested["uid"] = uid
+    result[parent_key] = nested
+    return result
+
+
+def _nested_uid(body: dict[str, Any], parent_key: str) -> str | None:
+    uid = child(body, parent_key).get("uid")
+    return uid if isinstance(uid, str) else None
+
+
 class EventRepository:
     """Append-only journal of observed Kubernetes events.
 
@@ -565,6 +590,7 @@ class EventRepository:
                 namespace=namespace,
                 involved_kind=kind,
                 involved_name=name,
+                involved_uid=_nested_uid(body, "involvedObject"),
                 dedup_key=key,
                 event_at=event_at,
                 observed_at=observed_at,
@@ -595,7 +621,9 @@ class EventRepository:
             )
             .order_by(EventVersionRow.observed_at, EventVersionRow.version_id)
         ).all()
-        return [dict(row.body) for row in rows]
+        return [
+            _body_with_persisted_uid(row.body, "involvedObject", row.involved_uid) for row in rows
+        ]
 
     def analysis_view(
         self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
@@ -620,7 +648,10 @@ class EventRepository:
         for row in rows:
             identity = event_identity(row.body, row.namespace)
             latest[identity] = row
-        return [dict(row.body) for row in sorted(latest.values(), key=lambda item: item.version_id)]
+        return [
+            _body_with_persisted_uid(row.body, "involvedObject", row.involved_uid)
+            for row in sorted(latest.values(), key=lambda item: item.version_id)
+        ]
 
     def history(
         self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
@@ -687,6 +718,7 @@ class ObjectVersionRepository:
                 namespace=namespace,
                 kind=kind,
                 name=name,
+                uid=_nested_uid(body, "metadata"),
                 observed_at=observed_at,
                 content_hash=digest,
                 body=body,
@@ -707,6 +739,7 @@ class ObjectVersionRepository:
                 namespace=latest.namespace,
                 kind=latest.kind,
                 name=latest.name,
+                uid=latest.uid,
                 observed_at=observed_at,
                 content_hash=latest.content_hash,
                 body=latest.body,
@@ -756,7 +789,10 @@ class ObjectVersionRepository:
             JournalEntry(
                 object_key=row.object_key,
                 observed_at=row.observed_at,
-                body=row.body,
+                # JournalEntry is the existing storage-to-source contract; project
+                # the first-class UID column into its body for the live model mapper.
+                # The stored JSON body is not used as the UID source of truth.
+                body=_body_with_persisted_uid(row.body, "metadata", row.uid),
                 version_id=row.version_id,
                 lifecycle=Lifecycle(row.lifecycle),
             )

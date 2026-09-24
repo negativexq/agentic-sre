@@ -325,6 +325,9 @@ def events_from_bodies(bodies: Sequence[Mapping[str, Any]]) -> list[ClusterEvent
                 entity=EntityRef(
                     kind=kind, name=name, namespace=str(involved.get("namespace") or CLUSTER_SCOPE)
                 ),
+                involved_uid=(
+                    involved.get("uid") if isinstance(involved.get("uid"), str) else None
+                ),
                 reason=str(body.get("reason") or ""),
                 type=str(body.get("type") or "Normal"),
                 message=str(body.get("message") or "")[:500],
@@ -438,7 +441,14 @@ class LiveSource:
         hashes: dict[EntityRef, str] = {}
         live: set[EntityRef] = set()
 
-        def add(body: dict[str, Any], at: datetime, evidence: str, lifecycle: Lifecycle) -> None:
+        def add(
+            body: dict[str, Any],
+            at: datetime,
+            evidence: str,
+            lifecycle: Lifecycle,
+            *,
+            uid: str | None = None,
+        ) -> None:
             entity = _entity(body)
             if entity is None:
                 return
@@ -450,6 +460,7 @@ class LiveSource:
             history.setdefault(entity, []).append(
                 ObjectVersion(
                     entity=entity,
+                    uid=uid,
                     observed_at=at,
                     body=body,
                     evidence_id=evidence,
@@ -458,7 +469,14 @@ class LiveSource:
             )
 
         for entry in self.journal:
-            add(entry.body, entry.observed_at, f"journal:{entry.version_id}", entry.lifecycle)
+            persisted_uid = child(entry.body, "metadata").get("uid")
+            add(
+                entry.body,
+                entry.observed_at,
+                f"journal:{entry.version_id}",
+                entry.lifecycle,
+                uid=persisted_uid if isinstance(persisted_uid, str) else None,
+            )
         for body in self.current_objects:
             entity = _entity(body)
             if entity is not None:

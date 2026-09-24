@@ -37,6 +37,9 @@ from packages.rca.model import (
     VerificationTrace,
 )
 from packages.rca.ranking import RankingConfig
+from packages.rca.resource_mechanism import RULE_ID as RESOURCE_RULE_ID
+from packages.rca.resource_mechanism import RULE_VERSION as RESOURCE_RULE_VERSION
+from packages.rca.resource_mechanism import MechanismMismatch
 from packages.rca.root_cause_eligibility import (
     HypothesisRootCauseEligibility,
     RootCauseEligibilities,
@@ -278,6 +281,7 @@ def dominates(
 TEMPORAL_CONTRADICTION_RULE = ("m16.temporal-contradiction", "v1")
 PROPAGATED_EFFECT_RULE = ("m16.root-eligibility-propagated-effect", "v1")
 EPISODE_END_RULE = (EPISODE_END_RULE_ID, EPISODE_END_RULE_VERSION)
+RESOURCE_PRESSURE_RULE = (RESOURCE_RULE_ID, RESOURCE_RULE_VERSION)
 
 
 def _time_basis(finding: Finding, grace: timedelta) -> EliminationTimeBasis:
@@ -361,6 +365,8 @@ def _legacy_elimination_reason(item: ResolutionElimination) -> str:
         return f"{item.hypothesis_id}: contradictory evidence"
     if item.code is ResolutionReasonCode.ROOT_CAUSE_INELIGIBLE_PROPAGATED_EFFECT:
         return f"{item.hypothesis_id}: root-cause ineligible propagated effect"
+    if item.code is ResolutionReasonCode.OBSERVED_NORMAL_MECHANISM_MISMATCH:
+        return f"{item.hypothesis_id}: required mechanism observed normal"
     if item.code is ResolutionReasonCode.MANIFESTATION_EPISODE_ENDED_BEFORE_ONSET:
         return f"{item.hypothesis_id}: manifestation episode ended before onset"
     raise ValueError(
@@ -415,6 +421,45 @@ def _root_cause_eligibility_elimination(
                 ),
             ),
         ),
+    )
+
+
+def _mechanism_elimination(mismatch: MechanismMismatch) -> ResolutionElimination:
+    lowered = ", ".join(f"{container}.{resource}" for container, resource in mismatch.lowered)
+    return ResolutionElimination(
+        hypothesis_id=mismatch.hypothesis_id,
+        code=ResolutionReasonCode.OBSERVED_NORMAL_MECHANISM_MISMATCH,
+        evidence_ids=(
+            *mismatch.change_evidence_ids,
+            *(item.evidence_id for item in mismatch.coverage),
+        ),
+        detail=(
+            f"the change only lowered limits ({lowered}), which requires resource pressure; "
+            "every Pod of the new template measured below the pressure threshold across the "
+            "incident window"
+        ),
+        rule_id=RESOURCE_PRESSURE_RULE[0],
+        rule_version=RESOURCE_PRESSURE_RULE[1],
+        consequence=EliminationConsequence.CONTRADICTION,
+        targets=(mismatch.actor.canonical, *(pod.canonical for pod in mismatch.pods)),
+        mechanism="RESOURCE_PRESSURE",
+        observation_ids=tuple(item.evidence_id for item in mismatch.coverage),
+        time_basis=tuple(
+            EliminationTimeBasis(
+                evidence_ids=(item.evidence_id,),
+                onset=mismatch.onset,
+                boundary=mismatch.boundary,
+                interval_start=item.window_start,
+                interval_end=item.window_end,
+                certainty=f"OBSERVED_NORMAL peak={item.peak:.3f}",
+            )
+            for item in mismatch.coverage
+        ),
+        coverage_basis=(
+            f"{len(mismatch.coverage)}/{len(mismatch.pods) * len(mismatch.lowered)} "
+            "pod x resource series observed normal"
+        ),
+        preconditions=mismatch.preconditions,
     )
 
 
@@ -590,8 +635,49 @@ def resolve_hypotheses(
     verification_traces: Mapping[str, VerificationTrace] | None = None,
     onset_grace: timedelta | None = None,
     root_cause_eligibilities: RootCauseEligibilities | None = None,
+    mechanism_mismatches: Mapping[str, MechanismMismatch] | None = None,
 ) -> ResolutionTrace:
-    """Resolve distinguishability without treating missing proof as contradiction."""
+    """Resolve distinguishability without treating missing proof as contradiction.
+
+    ``mechanism_mismatches`` are hypotheses whose required mechanism was
+    positively contradicted by a frozen rule; they are contradicted, not merely
+    root-ineligible, and their audits say so.
+    """
+    mismatches = dict(mechanism_mismatches or {})
+    trace = _resolve(
+        hypotheses,
+        verification_traces=verification_traces,
+        onset_grace=onset_grace,
+        root_cause_eligibilities=root_cause_eligibilities,
+        mismatches=mismatches,
+    )
+    if not mismatches:
+        return trace
+    return trace.model_copy(
+        update={
+            "hypothesis_audits": tuple(
+                audit.model_copy(
+                    update={
+                        "epistemic_state": HypothesisEpistemicState.CONTRADICTED,
+                        "plausible": False,
+                    }
+                )
+                if audit.hypothesis_id in mismatches
+                else audit
+                for audit in trace.hypothesis_audits
+            )
+        }
+    )
+
+
+def _resolve(
+    hypotheses: Sequence[Hypothesis],
+    *,
+    verification_traces: Mapping[str, VerificationTrace] | None,
+    onset_grace: timedelta | None,
+    root_cause_eligibilities: RootCauseEligibilities | None,
+    mismatches: Mapping[str, MechanismMismatch],
+) -> ResolutionTrace:
     considered = tuple(sorted(h.hypothesis_id for h in hypotheses))
     audits = _audit_items(hypotheses, verification_traces, onset_grace=onset_grace)
     if not hypotheses:
@@ -640,6 +726,13 @@ def resolve_hypotheses(
             key=lambda item: item.hypothesis_id,
         )
     )
+    mismatched = tuple(
+        hypothesis
+        for hypothesis in (*supported_all, *unresolved_all)
+        if hypothesis.hypothesis_id in mismatches
+    )
+    supported_all = tuple(item for item in supported_all if item not in mismatched)
+    unresolved_all = tuple(item for item in unresolved_all if item not in mismatched)
     eligibility_excluded = tuple(
         hypothesis
         for hypothesis in (*supported_all, *unresolved_all)
@@ -662,7 +755,7 @@ def resolve_hypotheses(
     contradiction_eliminations = tuple(
         _elimination_for(hypothesis, assessments[hypothesis.hypothesis_id], onset_grace)
         for hypothesis in contradicted[:_MAX_TRACE_ITEMS]
-    )
+    ) + tuple(_mechanism_elimination(mismatches[item.hypothesis_id]) for item in mismatched)
     eligibility_elimination_items: list[ResolutionElimination] = []
     if root_cause_eligibilities is not None:
         for hypothesis in eligibility_excluded:
@@ -681,7 +774,7 @@ def resolve_hypotheses(
     eliminations = contradiction_eliminations + eligibility_eliminations
     legacy_reasons = tuple(_legacy_elimination_reason(item) for item in eliminations)
     signatures = tuple(hypothesis_signature(hypothesis) for hypothesis in supported)
-    eliminated_ids = {hypothesis.hypothesis_id for hypothesis in contradicted}
+    eliminated_ids = {hypothesis.hypothesis_id for hypothesis in (*contradicted, *mismatched)}
     eliminated_ids.update(item.hypothesis_id for item in eligibility_excluded)
     base = dict(
         considered_hypotheses=considered,
@@ -755,7 +848,11 @@ def resolve_hypotheses(
     contradictions = tuple(
         item
         for item in eliminations
-        if item.code is ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION
+        if item.code
+        in {
+            ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION,
+            ResolutionReasonCode.OBSERVED_NORMAL_MECHANISM_MISMATCH,
+        }
     )
 
     if unresolved:
@@ -802,7 +899,10 @@ def resolve_hypotheses(
             discriminator = _discriminator(
                 "VALID_CONTRADICTION",
                 selected,
-                detail="all competing hypotheses were excluded by explicit temporal contradiction",
+                detail=(
+                    "all competing hypotheses were excluded by positive contradiction: "
+                    + ", ".join(sorted({item.code.value for item in contradictions}))
+                ),
             )
             basis = "VALID_CONTRADICTION"
         else:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import logging
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -26,6 +27,7 @@ from packages.rca.model import (
     Alert,
     ClusterEvent,
     EntityRef,
+    InvestigationQuery,
     JournalEntry,
     Lifecycle,
     LogRecord,
@@ -36,6 +38,11 @@ from packages.rca.model import (
     TrafficObservation,
 )
 from packages.rca.pod_status import ordered, pod_status_from_body, pod_status_from_history
+
+_log = logging.getLogger(__name__)
+# Resource reads start this long before the requested time so a baseline exists.
+RESOURCE_BASELINE_LEAD = timedelta(minutes=5)
+PROMETHEUS_MAX_QUERY_SPAN = timedelta(hours=1)
 
 # (API group client attribute, list method, kind). Secrets are deliberately not read.
 _NAMESPACED_LISTS: tuple[tuple[str, str, str], ...] = (
@@ -481,8 +488,30 @@ class LiveSource:
     def resource_pressure(
         self, pods: Sequence[EntityRef], since: datetime
     ) -> Sequence[ResourcePressure]:
-        # The live stack does not scrape cAdvisor yet; container status still covers OOM kills.
-        return []
+        """Bounded per-Pod reads from ``since`` minus the baseline gap up to the cutoff.
+
+        Each read stays within the one-hour query bound. A failed read yields
+        nothing for that Pod, which the RCA treats as missing, never as normal.
+        """
+        if self.prometheus_reader is None:
+            return []
+        start = since - RESOURCE_BASELINE_LEAD
+        end = min(self.observed_at, start + PROMETHEUS_MAX_QUERY_SPAN)
+        if end <= start:
+            return []
+        records: list[ResourcePressure] = []
+        for pod in pods:
+            if pod.kind != "Pod":
+                continue
+            try:
+                records.extend(
+                    self.prometheus_reader.query_resource_pressure(
+                        pod, InvestigationQuery(start=start, end=end, limit=16)
+                    )
+                )
+            except Exception as exc:  # backend failure is missing data, not health
+                _log.warning("resource read for %s failed (%s)", pod.canonical, type(exc).__name__)
+        return records
 
     def traffic_observations(self) -> Sequence[TrafficObservation]:
         # The live stack does not yet expose a bounded request-rate reader.

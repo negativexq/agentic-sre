@@ -416,6 +416,13 @@ Reason code `OBSERVED_NORMAL_MECHANISM_MISMATCH`; consequence `CONTRADICTION` (t
 
 If any precondition fails or is unknown, the rule does not apply and the hypothesis keeps its prior state. The audit records mechanism `RESOURCE_PRESSURE`, targets (actor + bound Pods), the per-Pod time basis, coverage (`n/n pods × resources observed normal`), the query descriptor ids as `observation_ids`, and every precondition result.
 
+### Implementation clarifications (2026-09-24, recorded with the v1 implementation)
+
+Both clarifications only narrow where the rule applies:
+
+- **Per-Pod coverage start.** A bound Pod created inside the coverage window cannot have samples from before it existed. Its coverage starts at `max(window start, metadata.creationTimestamp)` and must still reach `onset + grace`. A Pod whose creation time is unknown makes the rule inapplicable.
+- **Binding in v1.** Only `Deployment` actors are bound: Pods are owned by a ReplicaSet whose template containers equal the post-change containers. `StatefulSet`/`DaemonSet` Pods are not positively bindable in v1, so the rule is inapplicable for them.
+
 ### Scope limits
 
 - Normal resources contradict only the resource-limit mechanism. They say nothing about any other hypothesis, actor or mechanism (§6).

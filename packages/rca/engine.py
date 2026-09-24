@@ -55,6 +55,7 @@ from packages.rca.ranking import (
 )
 from packages.rca.remediation import propose
 from packages.rca.resolution import hypothesis_signature, resolve_hypotheses
+from packages.rca.resource_mechanism import MechanismMismatch, assess_resource_mechanisms
 from packages.rca.root_cause_eligibility import (
     RootCauseEligibilities,
     derive_root_cause_eligibilities,
@@ -110,6 +111,7 @@ class Case:
     )
     structural_alternatives: list[StructuralAlternative] = field(default_factory=list)
     steps: list[InvestigationStep] = field(default_factory=list)
+    mechanism_mismatches: dict[str, MechanismMismatch] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -238,6 +240,14 @@ def build_case(
             grace=config.ranking.verification_onset_grace,
         )
     )
+    mechanism_mismatches = assess_resource_mechanisms(
+        hypotheses,
+        history=history,
+        findings=findings,
+        read_pressure=source.resource_pressure,
+        onset=symptoms.onset,
+        grace=config.ranking.verification_onset_grace,
+    )
     structural_alternatives = (
         list(derive_structural_frontier(context))
         if getattr(source, "initial_observation_bounded", False)
@@ -296,6 +306,7 @@ def build_case(
         structural_alternatives=structural_alternatives,
         hypothesis_diagnostics=grouping.diagnostics,
         steps=steps,
+        mechanism_mismatches=mechanism_mismatches,
     )
 
 
@@ -372,6 +383,7 @@ def diagnose_case(
             (),
             onset_grace=config.ranking.verification_onset_grace,
             root_cause_eligibilities=case.root_cause_eligibilities,
+            mechanism_mismatches=case.mechanism_mismatches,
         )
         information_gaps = derive_information_gaps(
             (),
@@ -424,6 +436,7 @@ def diagnose_case(
         verification_traces=verification_traces,
         onset_grace=config.ranking.verification_onset_grace,
         root_cause_eligibilities=case.root_cause_eligibilities,
+        mechanism_mismatches=case.mechanism_mismatches,
     )
     information_gaps = derive_information_gaps(
         case.hypotheses,
@@ -473,13 +486,11 @@ def diagnose_case(
     ranked_top_ineligible = not case.root_cause_eligibilities.is_root_cause_selectable(
         case.hypotheses[0].hypothesis_id
     )
-    if (
-        resolution_trace.state is Resolution.RESOLVED
-        and resolution_trace.decision_basis == "ROOT_CAUSE_ELIGIBILITY"
-    ):
+    if resolution_trace.state is Resolution.RESOLVED:
+        # The reported root cause is the resolved leader, whatever the rank order.
         leader_ids = resolution_trace.leading_hypothesis_ids
         if len(leader_ids) != 1:
-            raise ValueError("ROOT_CAUSE_ELIGIBILITY resolution requires one leader")
+            raise ValueError("RESOLVED resolution requires one leader")
         selected = next(
             hypothesis
             for hypothesis in selectable_hypotheses

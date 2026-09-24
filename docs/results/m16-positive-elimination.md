@@ -129,3 +129,11 @@ Answer: **no, not on TEST25.** TEST25 is blocked by the absence of any supported
 Gate consequence: the narrow rule in contract §17 (`m16.v1-a1`) targets the live population, where G16.7 can be earned. On TEST25 it can produce no new `RESOLVED` result, so it carries no G16.9 wrong-actor risk there. It does not help TEST25's `INSUFFICIENT_EVIDENCE` outcomes, which need positive supporting evidence, not elimination.
 
 Local artifacts (not committed): `.local/eval/m16/g167-structural-replay-45677c4/` (sealed predictions), `g167-full-hypotheses.json`, `g167-attribution.json` and the capture/attribution scripts.
+
+## Task 2 — Rule `m16.ended-manifestation-episode.v1` (A1) on TEST25
+
+Implementation `8a3022b`. The replay was re-run under the same CLASS 0 protocol at clean `8a3022b` and compared with the sealed `45677c4` predictions.
+
+- Final resolution and leading actor: 25/25 unchanged. G16.10 on this set: 0 regressions. No new `RESOLVED` result, so there is no G16.9 exposure here, as the structural replay predicted.
+- Investigation actions: 150/150 identical `(capability, target, gap_id)`.
+- New ended-episode exclusions: 8 alternatives in 4 scenarios (102, 105, 20, 24), all `RECOVERED`. Each is a `kube-system` control-plane Pod (`kube-apiserver-*`, `kube-controller-manager-*`) whose failure events precede continuous readiness that covers onset + grace. A post-seal grader check found none of the 8 actors in the ground truth.

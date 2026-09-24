@@ -149,6 +149,35 @@ data:
         metrics_path: /metrics
         static_configs:
           - targets: [order-service.sre-demo.svc.cluster.local:8000]
+      # Container resource usage from each kubelet's cAdvisor endpoint. Only the
+      # families the bounded resource_pressure reader queries are kept.
+      - job_name: kubelet-cadvisor
+        scheme: https
+        metrics_path: /metrics/cadvisor
+        authorization:
+          credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          # Kind kubelets serve self-signed certificates.
+          insecure_skip_verify: true
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_node_address_InternalIP]
+            target_label: __address__
+            replacement: ${1}:10250
+          - source_labels: [__meta_kubernetes_node_name]
+            target_label: node
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            regex: container_memory_working_set_bytes|container_cpu_cfs_throttled_periods_total|container_cpu_cfs_periods_total
+            action: keep
+          - source_labels: [namespace]
+            regex: sre-demo
+            action: keep
+      - job_name: kube-state-metrics
+        static_configs:
+          - targets: [kube-state-metrics.observability.svc.cluster.local:8080]
   rules.yml: |
     groups:
       - name: agentic-sre-live
@@ -255,6 +284,7 @@ spec:
       labels:
         app: prometheus
     spec:
+      serviceAccountName: prometheus
       containers:
         - name: prometheus
           image: prom/prometheus:v3.5.0
@@ -687,3 +717,119 @@ spec:
   ports:
     - port: 3000
       targetPort: 3000
+---
+# Prometheus identity. Read-only: node discovery and kubelet metrics only.
+# The RCA control plane's own RBAC (tools-rbac.yaml) is unchanged.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: agentic-sre-prometheus
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [nodes/metrics]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: agentic-sre-prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: agentic-sre-prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: observability
+---
+# kube-state-metrics scoped to Pods in the workload namespace: it supplies the
+# container limits that turn cAdvisor usage into a use-of-limit ratio.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-state-metrics
+  namespace: observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kube-state-metrics
+  namespace: sre-demo
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kube-state-metrics
+  namespace: sre-demo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kube-state-metrics
+subjects:
+  - kind: ServiceAccount
+    name: kube-state-metrics
+    namespace: observability
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-state-metrics
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kube-state-metrics
+  template:
+    metadata:
+      labels:
+        app: kube-state-metrics
+    spec:
+      serviceAccountName: kube-state-metrics
+      containers:
+        - name: kube-state-metrics
+          image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.16.0
+          args:
+            - --resources=pods
+            - --namespaces=sre-demo
+            - --metric-allowlist=kube_pod_container_resource_limits,kube_pod_container_status_last_terminated_reason,kube_pod_container_status_restarts_total
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-state-metrics
+  namespace: observability
+spec:
+  selector:
+    app: kube-state-metrics
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

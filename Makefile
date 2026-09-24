@@ -131,7 +131,7 @@ deploy: build-images
 	for name in order-service payment-service order-worker control-plane; do \
 		kubectl rollout status deployment/$$name -n $(NAMESPACE) --timeout=180s || exit 1; \
 	done
-	for name in otel-collector prometheus loki tempo alertmanager grafana; do \
+	for name in otel-collector prometheus kube-state-metrics loki tempo alertmanager grafana; do \
 		kubectl rollout status deployment/$$name -n observability --timeout=180s || exit 1; \
 	done
 

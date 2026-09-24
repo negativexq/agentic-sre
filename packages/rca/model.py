@@ -483,7 +483,9 @@ class EliminationTimeBasis(BaseModel):
 
     Point evidence carries ``causal_time``; object changes carry the bounded
     observation interval ``[interval_start, interval_end]`` instead of an
-    inferred exact change time.
+    inferred exact change time. ``target`` names the exact instance the entry
+    is about as ``namespace/Pod/name@uid``; it is empty on records that predate
+    instance binding.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -495,6 +497,7 @@ class EliminationTimeBasis(BaseModel):
     interval_start: datetime | None = None
     interval_end: datetime | None = None
     certainty: str = ""
+    target: str = ""
 
 
 class ResolutionElimination(BaseModel):

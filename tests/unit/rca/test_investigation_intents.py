@@ -154,6 +154,52 @@ def test_source_discovery_excludes_structural_runtime_traces() -> None:
     }
 
 
+def test_unlinked_source_capable_evidence_does_not_end_source_discovery() -> None:
+    case = _case()
+    actor = _entity("ConfigMap", "candidate-config")
+    finding = Finding(
+        kind=FindingKind.OBJECT_CREATED,
+        entity=actor,
+        at=ONSET - timedelta(minutes=5),
+        summary="configuration object created",
+        evidence_ids=("object:1",),
+        temporal_role=EvidenceTemporalRole.INITIATING,
+    )
+    hypothesis = Hypothesis(
+        hypothesis_id="h-unlinked-source",
+        causal_actor=actor,
+        findings=(finding,),
+        initiating_findings=(finding,),
+        causal_explanation="UNLINKED",
+    )
+    case.hypotheses = [hypothesis]
+    diagnosis = _diagnosis(
+        case,
+        (),
+        hypothesis=hypothesis,
+        alternative_hypotheses=(hypothesis,),
+        resolution_trace=ResolutionTrace(
+            state=Resolution.INSUFFICIENT_EVIDENCE,
+            unresolved_hypotheses=(hypothesis.hypothesis_id,),
+        ),
+    )
+
+    assert derive_investigation_phase(case, diagnosis) is InvestigationPhase.SOURCE_DISCOVERY
+
+    linked_hypothesis = hypothesis.model_copy(update={"causal_explanation": "DIRECT"})
+    case.hypotheses = [linked_hypothesis]
+    linked_diagnosis = diagnosis.model_copy(
+        update={
+            "hypothesis": linked_hypothesis,
+            "alternative_hypotheses": (linked_hypothesis,),
+        }
+    )
+    assert (
+        derive_investigation_phase(case, linked_diagnosis)
+        is not InvestigationPhase.SOURCE_DISCOVERY
+    )
+
+
 def test_attempted_physical_reads_are_removed_without_killing_bundle() -> None:
     case = _case()
     first = _candidate("first", "logs", GapDimension.LOG_ERROR_PATTERN)
@@ -243,6 +289,7 @@ def test_runtime_discrimination_requires_real_relevant_hypothesis() -> None:
         causal_actor=actor,
         findings=(finding,),
         initiating_findings=(finding,),
+        causal_explanation="DIRECT",
     )
     case.hypotheses = [hypothesis]
     trace_candidate = _candidate(

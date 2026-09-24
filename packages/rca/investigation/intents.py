@@ -248,7 +248,9 @@ def _has_source_hypothesis(case: Case, diagnosis: Diagnosis) -> bool:
     else:
         hypotheses = tuple(case.hypotheses)
     return any(
-        bool(episode_source_capable_initiating_findings(hypothesis)) for hypothesis in hypotheses
+        hypothesis.causal_explanation in {"PATH", "DIRECT"}
+        and bool(episode_source_capable_initiating_findings(hypothesis))
+        for hypothesis in hypotheses
     )
 
 

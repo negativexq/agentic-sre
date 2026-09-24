@@ -1,4 +1,4 @@
-.PHONY: install lock lint typecheck test check demo serve-local \
+.PHONY: install lock lint typecheck test test-pg check demo serve-local \
 	itbench-setup itbench-index eval-dev eval-test benchmark-qualify \
 	images cluster-up build-images deploy load status ui inject-bad-rollout recover rbac-check \
 	cluster-down precommit offline-demo e2e-kind e2e-kind-clean m18a-live-validate release-check \
@@ -30,6 +30,23 @@ test:
 	$(PY) -m pytest
 
 check: lint typecheck test
+
+# Opt-in PostgreSQL integration tests on a throwaway container.
+PG_TEST_IMAGE ?= postgres:16-alpine
+PG_TEST_CONTAINER := agentic-sre-test-pg
+PG_TEST_PORT ?= 55432
+
+test-pg:
+	@docker rm -f $(PG_TEST_CONTAINER) >/dev/null 2>&1 || true
+	@trap 'docker rm -f $(PG_TEST_CONTAINER) >/dev/null 2>&1' EXIT; \
+	docker run -d --rm --name $(PG_TEST_CONTAINER) -e POSTGRES_PASSWORD=postgres \
+		-p 127.0.0.1:$(PG_TEST_PORT):5432 $(PG_TEST_IMAGE) >/dev/null; \
+	for _ in $$(seq 1 60); do \
+		docker exec $(PG_TEST_CONTAINER) pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1 && break; \
+		sleep 1; \
+	done; \
+	TEST_POSTGRES_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:$(PG_TEST_PORT)/postgres \
+		$(PY) -m pytest -m postgres
 
 precommit:
 	MYPY_CACHE_DIR=/tmp/agentic-sre-mypy-cache $(PY) -m pre_commit run --all-files

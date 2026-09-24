@@ -114,6 +114,9 @@ class ResourcePressure(BaseModel):
     peak: float
     at: datetime | None
     evidence_id: str
+    sample_count: int = Field(default=0, ge=0)
+    sample_start: datetime | None = None
+    sample_end: datetime | None = None
 
 
 class TrafficObservation(BaseModel):
@@ -799,6 +802,27 @@ class InvestigationObservation(BaseModel):
     evidence_refs: tuple[str, ...] = ()
     source_class: str = "investigation"
     error: str | None = None
+
+    @model_validator(mode="after")
+    def _runtime_context_matches_observation(self) -> InvestigationObservation:
+        if self.runtime is None:
+            return self
+        if self.runtime.capability != self.capability:
+            raise ValueError("runtime context capability must match the observation")
+        if self.runtime.query.target != self.target:
+            raise ValueError("runtime query target must match the observation")
+        if self.runtime.source_observation_ids != self.evidence_refs:
+            raise ValueError("runtime source observation IDs must match observation evidence refs")
+        if self.runtime.state is RuntimeObservationState.NO_DATA:
+            if (
+                self.outcome is not GapOutcomeKind.NO_DATA
+                or self.evidence_refs
+                or any(bool(value) for value in self.payload.values())
+            ):
+                raise ValueError("NO_DATA runtime observations must not contain data or evidence")
+        elif self.outcome is GapOutcomeKind.NO_DATA:
+            raise ValueError("nonempty runtime observation states cannot use NO_DATA outcome")
+        return self
 
 
 class InvestigationLedgerEntry(BaseModel):

@@ -12,6 +12,7 @@ from packages.rca.engine import Case
 from packages.rca.information_gap import CAPABILITIES
 from packages.rca.investigation.environment import (
     InvestigationBackend,
+    PrometheusInvestigationBackend,
     _default_query,
     _query_trace_observations,
 )
@@ -22,7 +23,14 @@ from packages.rca.model import (
     InformationGap,
     InvestigationObservation,
     InvestigationQuery,
+    ResourcePressure,
+    RuntimeEvidencePillar,
+    RuntimeObservationContext,
+    RuntimeObservationState,
+    RuntimeQueryDescriptor,
+    TrafficObservation,
 )
+from packages.rca.signals import resource_findings, traffic_findings
 
 
 def _safe_payload(value: Any, *, list_limit: int = 32) -> Any:
@@ -48,6 +56,7 @@ def make_observation(
     source_class: str = "observation_source",
     error: str | None = None,
     record_limit: int = 32,
+    runtime: RuntimeObservationContext | None = None,
 ) -> InvestigationObservation:
     bounded = _safe_payload(dict(payload), list_limit=record_limit)
     material = json.dumps(
@@ -74,6 +83,7 @@ def make_observation(
         observed_at=observed_at,
         outcome=outcome,
         payload=bounded,
+        runtime=runtime,
         evidence_refs=tuple(dict.fromkeys(evidence_refs))[:record_limit],
         source_class=source_class,
         error=error,
@@ -111,6 +121,7 @@ class _BaseTool:
         refs: tuple[str, ...] = (),
         observed_at: datetime | None = None,
         record_limit: int = 32,
+        runtime: RuntimeObservationContext | None = None,
     ) -> InvestigationObservation:
         return make_observation(
             gap=gap,
@@ -120,7 +131,123 @@ class _BaseTool:
             evidence_refs=refs,
             observed_at=observed_at,
             record_limit=record_limit,
+            runtime=runtime,
         )
+
+
+def _has_prometheus_backend(backend: InvestigationBackend | None) -> bool:
+    """Check the composed backend chain without probing a telemetry endpoint."""
+    current: object | None = backend
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, PrometheusInvestigationBackend):
+            return True
+        current = getattr(current, "base", None)
+    return False
+
+
+def _prometheus_runtime_context(
+    *,
+    backend: InvestigationBackend | None,
+    case: Case,
+    capability: str,
+    target: EntityRef,
+    requested: InvestigationQuery,
+    source_ids: tuple[str, ...],
+    state: RuntimeObservationState,
+) -> RuntimeObservationContext | None:
+    if not _has_prometheus_backend(backend):
+        return None
+    template_id = {
+        "resource_pressure": "prometheus.resource_pressure.v1",
+        "traffic": "prometheus.http_request_rate.v1",
+    }.get(capability)
+    if template_id is None or requested.start is None or requested.end is None:
+        return None
+    effective_end = requested.end
+    cutoff = case.source.observation_cutoff()
+    if cutoff is not None:
+        effective_end = min(effective_end, cutoff)
+    if effective_end < requested.start:
+        return None
+    query_identity = json.dumps(
+        {
+            "capability": capability,
+            "target": target.canonical,
+            "requested_start": requested.start.isoformat(),
+            "requested_end": requested.end.isoformat(),
+            "effective_end": effective_end.isoformat(),
+            "limit": requested.limit,
+            "template": template_id,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return RuntimeObservationContext(
+        pillar=RuntimeEvidencePillar.PROMETHEUS,
+        capability=capability,
+        state=state,
+        query=RuntimeQueryDescriptor(
+            descriptor_id=f"sha256:{sha256(query_identity.encode()).hexdigest()}",
+            template_id=template_id,
+            target=target,
+            requested_start=requested.start,
+            requested_end=requested.end,
+            effective_start=requested.start,
+            effective_end=effective_end,
+            limit=min(requested.limit, 32),
+        ),
+        source_observation_ids=source_ids,
+    )
+
+
+def _resource_observation_state(
+    records: tuple[ResourcePressure, ...],
+    query: InvestigationQuery,
+    cutoff: datetime | None,
+) -> RuntimeObservationState:
+    if not records:
+        return RuntimeObservationState.NO_DATA
+    if resource_findings(records):
+        return RuntimeObservationState.OBSERVED_ABNORMAL
+    if query.start is None or query.end is None:
+        return RuntimeObservationState.UNKNOWN
+    effective_end = min(query.end, cutoff) if cutoff is not None else query.end
+    if effective_end < query.start:
+        return RuntimeObservationState.UNKNOWN
+    # Prometheus resource queries use a fixed 15-second step. Require real
+    # samples to cover both edges before declaring a negative result normal.
+    step = timedelta(seconds=15)
+    complete = all(
+        item.sample_count >= 2
+        and item.baseline is not None
+        and item.sample_start is not None
+        and item.sample_end is not None
+        and item.sample_start <= query.start + step
+        and item.sample_end >= effective_end - step
+        for item in records
+    )
+    return RuntimeObservationState.OBSERVED_NORMAL if complete else RuntimeObservationState.UNKNOWN
+
+
+def _traffic_observation_state(
+    records: tuple[TrafficObservation, ...], case: Case
+) -> RuntimeObservationState:
+    if not records:
+        return RuntimeObservationState.NO_DATA
+    onset = case.symptoms.onset
+    if onset is None:
+        return RuntimeObservationState.UNKNOWN
+    before = sorted((item for item in records if item.at < onset), key=lambda item: item.at)
+    after = tuple(item for item in records if item.at >= onset)
+    if not before or not after or before[-1].value <= 0:
+        return RuntimeObservationState.UNKNOWN
+    return (
+        RuntimeObservationState.OBSERVED_ABNORMAL
+        if traffic_findings(records, onset, case.context.window_end)
+        else RuntimeObservationState.OBSERVED_NORMAL
+    )
 
 
 class DescribeTool(_BaseTool):
@@ -397,12 +524,24 @@ class ResourcePressureTool(_BaseTool):
             return self.execute(case, gap, target)
         requested = _default_query(query, onset=case.symptoms.onset)
         records = self.backend.query_resource_pressure(target, requested)
+        record_refs = tuple(item.evidence_id for item in records)
         return self._observation(
             gap,
             target,
             {"resource_pressure": [item.model_dump(mode="json") for item in records]},
-            refs=tuple(item.evidence_id for item in records),
+            refs=record_refs,
             observed_at=max((item.at for item in records if item.at), default=None),
+            runtime=_prometheus_runtime_context(
+                backend=self.backend,
+                case=case,
+                capability=self.name,
+                target=target,
+                requested=requested,
+                source_ids=record_refs,
+                state=_resource_observation_state(
+                    records, requested, case.source.observation_cutoff()
+                ),
+            ),
         )
 
 
@@ -430,11 +569,21 @@ class TrafficTool(_BaseTool):
             return self.execute(case, gap, target)
         requested = _default_query(query, onset=case.symptoms.onset)
         records = self.backend.query_traffic(target, requested)
+        record_refs = tuple(item.evidence_id for item in records)
         return self._observation(
             gap,
             target,
             {"traffic": [item.model_dump(mode="json") for item in records]},
-            refs=tuple(item.evidence_id for item in records),
+            refs=record_refs,
+            runtime=_prometheus_runtime_context(
+                backend=self.backend,
+                case=case,
+                capability=self.name,
+                target=target,
+                requested=requested,
+                source_ids=record_refs,
+                state=_traffic_observation_state(records, case),
+            ),
             observed_at=max((item.at for item in records), default=None),
         )
 

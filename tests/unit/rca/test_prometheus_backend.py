@@ -24,6 +24,7 @@ from packages.rca.investigation.graph import (
     _Runtime,
     build_investigation_state,
 )
+from packages.rca.investigation.normalizers import normalize_observation
 from packages.rca.investigation.policy import ScriptedInvestigationPolicy
 from packages.rca.investigation.prometheus import (
     PrometheusConfig,
@@ -44,8 +45,10 @@ from packages.rca.model import (
     GapResolvability,
     InformationGap,
     InvestigationAction,
+    InvestigationObservation,
     InvestigationQuery,
     ObjectVersion,
+    RuntimeObservationState,
 )
 from packages.rca.source import InMemorySource
 
@@ -587,3 +590,66 @@ def test_provider_evidence_is_not_thresholded_and_no_data_is_safe() -> None:
 
     no_data = _Transport(lambda url, headers: _Response(_success([])))
     assert _reader(no_data).query_traffic(_entity("Service"), _query()) == ()
+
+
+def test_resource_runtime_status_distinguishes_no_data_normal_and_abnormal() -> None:
+    pod = _entity()
+    source = InMemorySource(
+        name="resource-runtime-state",
+        alert_items=[Alert(name="PodPressure", service="payment-service", starts_at=T0)],
+    )
+    case = build_case(source)
+    gap = _gap("resource_pressure", GapDimension.RESOURCE_PRESSURE, pod)
+    query = InvestigationQuery(start=T0 - timedelta(seconds=15), end=T0, limit=32)
+
+    def observe(
+        values: list[list[object]], read_query: InvestigationQuery = query
+    ) -> InvestigationObservation:
+        transport = _Transport(
+            lambda url, headers: _Response(_success([_series(values)]) if values else _success([]))
+        )
+        reader = _reader(transport)
+        backend = PrometheusInvestigationBackend(
+            base=SourceInvestigationBackend(source),
+            prometheus=reader,
+            observation_cutoff=T0 + timedelta(minutes=5),
+        )
+        return ResourcePressureTool(backend).execute_query(case, gap, pod, read_query)
+
+    normal = observe([_sample(T0 - timedelta(seconds=15), "0.30"), _sample(T0, "0.40")])
+    assert normal.runtime is not None
+    assert normal.runtime.state is RuntimeObservationState.OBSERVED_NORMAL
+    assert normal.runtime.query.template_id == "prometheus.resource_pressure.v1"
+    assert normal.runtime.query.target == pod
+    assert len(normal.runtime.source_observation_ids) == 2
+    assert all(item["sample_count"] == 2 for item in normal.payload["resource_pressure"])
+    assert all(item["sample_start"] for item in normal.payload["resource_pressure"])
+    assert normalize_observation(normal, case=case, gap=gap).findings == ()
+
+    abnormal = observe([_sample(T0 - timedelta(seconds=15), "0.20"), _sample(T0, "0.95")])
+    assert abnormal.runtime is not None
+    assert abnormal.runtime.state is RuntimeObservationState.OBSERVED_ABNORMAL
+    normalized = normalize_observation(abnormal, case=case, gap=gap)
+    assert any(finding.kind is FindingKind.RESOURCE_PRESSURE for finding in normalized.findings)
+    pressure_finding = next(
+        finding for finding in normalized.findings if finding.kind is FindingKind.RESOURCE_PRESSURE
+    )
+    assert pressure_finding.details["runtime_pillar"] == "PROMETHEUS"
+    assert pressure_finding.details["runtime_target"] == pod.canonical
+    assert pressure_finding.details["runtime_query_descriptor_id"].startswith("sha256:")
+    assert pressure_finding.details["runtime_normalization_rule_id"] == (
+        "prometheus.resource_pressure_threshold.v1"
+    )
+
+    partial = observe(
+        [_sample(T0 - timedelta(seconds=15), "0.30"), _sample(T0, "0.40")],
+        _query(),
+    )
+    assert partial.runtime is not None
+    assert partial.runtime.state is RuntimeObservationState.UNKNOWN
+
+    no_data = observe([])
+    assert no_data.runtime is not None
+    assert no_data.runtime.state is RuntimeObservationState.NO_DATA
+    assert no_data.runtime.source_observation_ids == ()
+    assert normalize_observation(no_data, case=case, gap=gap).findings == ()

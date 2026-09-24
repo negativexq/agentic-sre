@@ -63,6 +63,7 @@ def test_runtime_outcome_states_are_distinct_and_round_trip() -> None:
         RuntimeObservationState.OBSERVED_ABNORMAL,
     )
     for state in states:
+        runtime = _context(state)
         observation = InvestigationObservation(
             observation_id=f"runtime:{state.value}",
             gap_id="gap:resource",
@@ -71,7 +72,8 @@ def test_runtime_outcome_states_are_distinct_and_round_trip() -> None:
             outcome=GapOutcomeKind.NO_DATA
             if state is RuntimeObservationState.NO_DATA
             else GapOutcomeKind.UNKNOWN,
-            runtime=_context(state),
+            runtime=runtime,
+            evidence_refs=runtime.source_observation_ids,
         )
         restored = InvestigationObservation.model_validate(observation.model_dump(mode="json"))
         assert restored.runtime is not None
@@ -115,6 +117,30 @@ def test_runtime_context_rejects_pillar_mismatch_and_rca_authority_fields() -> N
         )
 
 
+def test_runtime_context_cannot_mislabel_data_as_no_data_or_change_target() -> None:
+    context = _context(RuntimeObservationState.NO_DATA)
+    with pytest.raises(ValidationError, match="must not contain data"):
+        InvestigationObservation(
+            observation_id="runtime:mislabelled",
+            gap_id="gap:resource",
+            capability="resource_pressure",
+            target=context.query.target,
+            outcome=GapOutcomeKind.NO_DATA,
+            payload={"samples": [1]},
+            runtime=context,
+        )
+
+    with pytest.raises(ValidationError, match="target must match"):
+        InvestigationObservation(
+            observation_id="runtime:wrong-target",
+            gap_id="gap:resource",
+            capability="resource_pressure",
+            target=EntityRef(namespace="shop", kind="Pod", name="other"),
+            outcome=GapOutcomeKind.NO_DATA,
+            runtime=context,
+        )
+
+
 def test_runtime_metadata_alone_cannot_create_findings_or_change_rca() -> None:
     case = build_case(InMemorySource(name="runtime-context-only"))
     findings_before = case.findings
@@ -147,6 +173,7 @@ def test_runtime_metadata_alone_cannot_create_findings_or_change_rca() -> None:
             ),
             source_observation_ids=("tempo:trace:span",),
         ),
+        evidence_refs=("tempo:trace:span",),
     )
 
     normalized = normalize_observation(observation, case=case, gap=gap)

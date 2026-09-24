@@ -50,6 +50,30 @@ def _with_provenance(
             "investigation_capability": observation.capability,
         }
     )
+    runtime = observation.runtime
+    if runtime is not None:
+        rule_by_capability = {
+            "resource_pressure": "prometheus.resource_pressure_threshold.v1",
+            "traffic": "prometheus.traffic_increase_baseline.v1",
+            "logs": "loki.dependency_error_pattern.v1",
+            "runtime_traces": "tempo.trace_observation.v1",
+        }
+        details.update(
+            {
+                "runtime_pillar": runtime.pillar.value,
+                "runtime_capability": runtime.capability,
+                "runtime_target": runtime.query.target.canonical,
+                "runtime_requested_start": runtime.query.requested_start.isoformat(),
+                "runtime_requested_end": runtime.query.requested_end.isoformat(),
+                "runtime_effective_start": runtime.query.effective_start.isoformat(),
+                "runtime_effective_end": runtime.query.effective_end.isoformat(),
+                "runtime_query_descriptor_id": runtime.query.descriptor_id,
+                "runtime_query_template_id": runtime.query.template_id,
+                "runtime_source_observation_ids": runtime.source_observation_ids,
+                "runtime_observation_state": runtime.state.value,
+                "runtime_normalization_rule_id": rule_by_capability[runtime.capability],
+            }
+        )
     return finding.model_copy(update={"details": details})
 
 

@@ -382,6 +382,9 @@ class PrometheusMetricsReader:
                         peak=peak,
                         at=at,
                         evidence_id=evidence_id,
+                        sample_count=len(samples),
+                        sample_start=samples[0].at,
+                        sample_end=samples[-1].at,
                     )
                 )
         ordered = sorted(

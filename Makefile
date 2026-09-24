@@ -1,7 +1,7 @@
 .PHONY: install lock lint typecheck test check demo serve-local \
 	itbench-setup itbench-index eval-dev eval-test benchmark-qualify \
 	images cluster-up build-images deploy load status ui inject-bad-rollout recover rbac-check \
-	cluster-down precommit offline-demo e2e-kind e2e-kind-clean release-check \
+	cluster-down precommit offline-demo e2e-kind e2e-kind-clean m18a-live-validate release-check \
 	verify-release-provenance
 
 PY := .venv/bin/python
@@ -197,6 +197,10 @@ cluster-down:
 
 e2e-kind:
 	$(PY) scripts/kind_e2e.py
+
+# Bounded CLASS 0 evidence-path proof against an already deployed Kind stack.
+m18a-live-validate:
+	$(PY) scripts/m18a_live_validate.py --out .local/m18a/live-validation.json
 
 e2e-kind-clean:
 	kind delete cluster --name agentic-sre

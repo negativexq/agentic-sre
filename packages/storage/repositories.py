@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -32,15 +33,18 @@ from packages.contracts import (
 from packages.rca.json_access import child, object_content_hash
 from packages.rca.model import CLUSTER_SCOPE, JournalEntry, Lifecycle, LogRecord
 from packages.storage.models import (
+    LIFECYCLE_OBSERVATION_TYPES,
     AlertRow,
     ChangeRecordRow,
     DiagnosisRow,
     EmailDeliveryRow,
+    EntityInstanceRow,
     EventVersionRow,
     EvidenceRow,
     IncidentEventRow,
     IncidentRow,
     InvestigationRunRow,
+    LifecycleObservationRow,
     LogObservationRow,
     ObjectVersionRow,
     ReportRow,
@@ -808,6 +812,198 @@ def _timestamp(value: Any) -> datetime | None:
     except ValueError:
         return None
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+@dataclass(frozen=True)
+class LifecycleRecord:
+    """One persisted lifecycle observation of one exact instance."""
+
+    evidence_id: str
+    instance_uid: str
+    namespace: str
+    kind: str
+    name: str
+    type: str
+    source_at: datetime | None
+    observed_at: datetime
+    ingested_at: datetime
+    source: str
+    payload: dict[str, Any]
+
+
+def _lifecycle_record(row: LifecycleObservationRow) -> LifecycleRecord:
+    return LifecycleRecord(
+        evidence_id=row.evidence_id,
+        instance_uid=row.instance_uid,
+        namespace=row.namespace,
+        kind=row.kind,
+        name=row.name,
+        type=row.type,
+        source_at=row.source_at,
+        observed_at=row.observed_at,
+        ingested_at=row.ingested_at,
+        source=row.source,
+        payload=dict(row.payload),
+    )
+
+
+class LifecycleRepository:
+    """Append-only ledger of lifecycle observations (authoritative evidence).
+
+    Rows are only ever inserted: there is deliberately no update or delete.
+    Writers must be serialized, like the object journal.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def _next_sequence(self, namespace: str, kind: str, uid: str) -> int:
+        prefix = f"lifecycle:{namespace}:{kind}:{uid}:"
+        ids = self._session.scalars(
+            select(LifecycleObservationRow.evidence_id).where(
+                LifecycleObservationRow.evidence_id.startswith(prefix, autoescape=True)
+            )
+        ).all()
+        used = [int(item[len(prefix) :]) for item in ids if item[len(prefix) :].isdigit()]
+        return max(used, default=0) + 1
+
+    def _exists(self, uid: str, type_: str, observed_at: datetime, source: str) -> bool:
+        return (
+            self._session.scalar(
+                select(LifecycleObservationRow.observation_id).where(
+                    LifecycleObservationRow.instance_uid == uid,
+                    LifecycleObservationRow.type == type_,
+                    LifecycleObservationRow.observed_at == observed_at,
+                    LifecycleObservationRow.source == source,
+                )
+            )
+            is not None
+        )
+
+    def append(
+        self,
+        *,
+        namespace: str,
+        kind: str,
+        name: str,
+        instance_uid: str,
+        type: str,
+        observed_at: datetime,
+        source: str,
+        payload: dict[str, Any],
+        source_at: datetime | None = None,
+        ingested_at: datetime | None = None,
+    ) -> LifecycleRecord | None:
+        """Insert one observation; ``None`` when the same fact is already recorded."""
+        if type not in LIFECYCLE_OBSERVATION_TYPES:
+            raise ValueError(f"unknown lifecycle observation type: {type}")
+        if not instance_uid:
+            raise ValueError("lifecycle observations need the exact instance uid")
+        if self._exists(instance_uid, type, observed_at, source):
+            return None
+        sequence = self._next_sequence(namespace, kind, instance_uid)
+        row = LifecycleObservationRow(
+            evidence_id=f"lifecycle:{namespace}:{kind}:{instance_uid}:{sequence}",
+            instance_uid=instance_uid,
+            namespace=namespace,
+            kind=kind,
+            name=name,
+            type=type,
+            source_at=source_at,
+            observed_at=observed_at,
+            ingested_at=ingested_at or datetime.now(UTC),
+            source=source,
+            payload=payload,
+        )
+        self._session.add(row)
+        try:
+            self._session.commit()
+        except IntegrityError:
+            self._session.rollback()
+            if self._exists(instance_uid, type, observed_at, source):
+                return None
+            raise
+        return _lifecycle_record(row)
+
+    def list_for(self, namespace: str, kind: str, uid: str) -> list[LifecycleRecord]:
+        """Every observation of one exact instance, oldest first."""
+        rows = self._session.scalars(
+            select(LifecycleObservationRow)
+            .where(
+                LifecycleObservationRow.namespace == namespace,
+                LifecycleObservationRow.kind == kind,
+                LifecycleObservationRow.instance_uid == uid,
+            )
+            .order_by(LifecycleObservationRow.observed_at, LifecycleObservationRow.observation_id)
+        ).all()
+        return [_lifecycle_record(row) for row in rows]
+
+    def list_window(
+        self, namespaces: set[str], starts_at: datetime, ends_at: datetime
+    ) -> list[LifecycleRecord]:
+        """Observations in these namespaces observed within ``[starts_at, ends_at]``."""
+        rows = self._session.scalars(
+            select(LifecycleObservationRow)
+            .where(
+                LifecycleObservationRow.namespace.in_(namespaces),
+                LifecycleObservationRow.observed_at >= starts_at,
+                LifecycleObservationRow.observed_at <= ends_at,
+            )
+            .order_by(LifecycleObservationRow.observed_at, LifecycleObservationRow.observation_id)
+        ).all()
+        return [_lifecycle_record(row) for row in rows]
+
+
+class EntityInstanceRepository:
+    """Materialized index of exact instances; updated in place, never evidence."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def upsert(
+        self,
+        *,
+        namespace: str,
+        kind: str,
+        name: str,
+        uid: str,
+        observed_at: datetime,
+        owner_kind: str | None = None,
+        owner_name: str | None = None,
+        owner_uid: str | None = None,
+        created_at: datetime | None = None,
+        deleted: bool = False,
+    ) -> None:
+        """Record a sighting (or the deletion) of one exact instance."""
+        if not uid:
+            raise ValueError("entity instances need the exact uid")
+        row = self._session.scalars(
+            select(EntityInstanceRow).where(
+                EntityInstanceRow.namespace == namespace,
+                EntityInstanceRow.kind == kind,
+                EntityInstanceRow.uid == uid,
+            )
+        ).first()
+        if row is None:
+            row = EntityInstanceRow(
+                namespace=namespace,
+                kind=kind,
+                name=name,
+                uid=uid,
+                first_observed_at=observed_at,
+                last_observed_at=observed_at,
+            )
+            self._session.add(row)
+        else:
+            row.first_observed_at = min(row.first_observed_at, observed_at)
+            row.last_observed_at = max(row.last_observed_at, observed_at)
+        row.owner_kind = owner_kind if owner_kind is not None else row.owner_kind
+        row.owner_name = owner_name if owner_name is not None else row.owner_name
+        row.owner_uid = owner_uid if owner_uid is not None else row.owner_uid
+        row.created_at = created_at if created_at is not None else row.created_at
+        if deleted and row.deleted_observed_at is None:
+            row.deleted_observed_at = observed_at
+        self._session.commit()
 
 
 class DiagnosisRepository:

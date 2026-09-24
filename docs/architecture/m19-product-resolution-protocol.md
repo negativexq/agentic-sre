@@ -1,22 +1,27 @@
 # M19 Product Resolution Protocol
 
+Status: **ACTIVE**
+
 ## 1. Purpose
 
-This protocol defines the pre-registered product-resolution scenarios and
-evidence rules for M19. It describes how a diagnosis may move from `AMBIGUOUS`
-to `RESOLVED` when qualifying positive evidence is captured, persisted, and
-evaluated by the deterministic RCA rules. Scenario outcomes are evaluated at
-diagnosis revisions and against the evidence available to each revision.
+This protocol describes the active M19 DEV validation scenarios and evidence
+rules. It describes how a diagnosis may move from `AMBIGUOUS` to `RESOLVED`
+when qualifying positive evidence is captured, persisted, and evaluated by the
+deterministic RCA rules. Scenario outcomes are evaluated at diagnosis revisions
+and against the evidence available to each revision.
 
 This document transcribes the M19 plan's existing semantics. It does not select
 the true-root mechanisms; those remain subject to M19-0.3 qualification.
 
+DEV scenarios are project-authored validation scenarios; their results are not
+reported as blind, pre-registered, or as evidence of generalization.
+
 ## 2. Scope
 
-The protocol covers six DEV scenarios: PR-01, PR-01N, PR-02, PR-02N, PR-03,
-and PR-03N; the R1, R_early, and R2 revision timeline; evidence membership and
-replay; decisive evidence; T1–T7 and N0–N3; global product safety; and the blind
-HOLDOUT procedure. HOLDOUT scenario and expectation contents are not included.
+The protocol covers the active DEV scenarios PR-01, PR-01N, PR-02, PR-02N,
+PR-03, and PR-03N; the R1, R_early, and R2 revision timeline; evidence
+membership and replay; decisive evidence; T1–T4 and N0–N3; global product
+safety; and replay-level T5/T6 ablation checks.
 
 The M19 product objective is read-only observation, continuous evidence
 collection, evidence continuity, exact entity-instance identity, diagnosis
@@ -30,10 +35,9 @@ validation, topology history, and capability/degraded mode are outside scope.
 The following M19 plan rules bind this protocol:
 
 1. **Truth blindness.** The prediction path must not use scenario IDs,
-   expectations, sealed root actors, scenario-specific namespace/name
-   constants, HOLDOUT parameters, or grader labels. Scenario-keyed prediction
-   logic is prohibited.
-2. **Frozen M16 rules.** A1 (`m16.ended-manifestation-episode`, version `v1`)
+   expectations, protocol root actors, or scenario-specific namespace/name
+   constants. Scenario- or expectation-keyed production logic is prohibited.
+2. **M16 rules.** A1 (`m16.ended-manifestation-episode`, version `v1`)
    and A2 (`m16.resource-pressure`, version `v1`) retain their thresholds and
    positive-elimination semantics. They may be narrowed, not broadened. A
    required broadening triggers `CONTRACT_AMENDMENT_REQUIRED` and a stop.
@@ -48,21 +52,17 @@ The following M19 plan rules bind this protocol:
 5. **Append-only authoritative evidence.** Product paths do not update, delete,
    or truncate authoritative evidence. Materialized indexes are not temporal
    evidence and cannot supply RCA or replay history.
-6. **Frozen legacy suite.** The existing 25 scenario IDs, expectations, labels,
-   and `Tier` values do not change. The legacy runner retains its truncate
-   behavior and is marked `legacy`.
+6. **Legacy suite.** The existing 25 scenario IDs, expectations, labels, and
+   `Tier` values do not change. The legacy runner retains its truncate behavior
+   and is marked `legacy`.
 7. **Contract conflict.** A material conflict with a frozen contract is
    reported as `CONTRACT_AMENDMENT_REQUIRED`, including the clause, current
    behavior, counter-evidence, minimal amendment proposal, and affected gate;
    work stops.
-8. **HOLDOUT isolation.** HOLDOUT parameters and expectations remain hidden
-   from the agent until Phase 8. This protocol carries only their SHA-256
-   values. After code freeze, the owner mounts the scenario file read-only for
-   the runner and the expectation file read-only for the separate grader.
-9. **Review acceptance.** After protocol seal, scope may be reopened only for a
-   frozen-contract conflict, a gate that cannot be mechanically proven, or
-   implementation impossibility. Feature, UX, refactor, and result-improvement
-   suggestions do not enter M19.
+8. **Scope discipline.** M19 admits work only for a frozen-contract conflict,
+   a gate that cannot be mechanically proven, implementation impossibility,
+   or a fix required for a working product. New features, UX, extra experiments,
+   benchmark-result improvements, and unrelated refactors do not enter M19.
 
 ## 4. Scenario Catalog
 
@@ -106,9 +106,9 @@ true-root action and start sustained traffic.
 **R_early:** `H_B` has not been eliminated.
 
 **R2:** `H_B` is root-ineligible by `RECOVERED` for uid B; resolution is
-`RESOLVED`; the leader is the sealed actor selected under M19-0.3.
+`RESOLVED`; the leader is the protocol root actor selected under M19-0.3.
 
-**Proof:** T1–T7 and N0.
+**Proof:** T1–T4 and N0.
 
 ### 4.2 PR-01N
 
@@ -156,10 +156,10 @@ true-root action.
 **R_early:** `H_cpu` is not contradicted.
 
 **R2:** With complete normal coverage, `H_cpu` is `CONTRADICTED` under
-`m16.resource-pressure` version `v1`; resolution is `RESOLVED`, with the sealed
-true-root actor as leader.
+`m16.resource-pressure` version `v1`; resolution is `RESOLVED`, with the
+protocol root actor as leader.
 
-**Proof:** T1–T7 and N0.
+**Proof:** T1–T4 and N0.
 
 ### 4.4 PR-02N
 
@@ -213,10 +213,10 @@ reinterpreted.
 **R_early:** `H_mem` is not contradicted.
 
 **R2:** With complete normal memory coverage and peak below 0.9, `H_mem` is
-`CONTRADICTED`; resolution is `RESOLVED`, with the sealed true-root actor as
+`CONTRADICTED`; resolution is `RESOLVED`, with the protocol root actor as
 leader.
 
-**Proof:** T1–T7 and N0.
+**Proof:** T1–T4 and N0.
 
 ### 4.6 PR-03N
 
@@ -230,26 +230,6 @@ pressure. Other scenario timing follows the PR-03 revision sequence.
 **R1 / R_early / R2:** The candidate is not contradicted by A2 normality.
 
 **Proof:** N3.
-
-### 4.7 HOLDOUT Scenarios
-
-The following are placeholders only. Scenario parameters, root actors, and
-expectations are withheld.
-
-#### PR-01H
-
-Scenario file SHA-256: TBD (M19-0.6)
-Expectation file SHA-256: TBD (M19-0.6)
-
-#### PR-02H
-
-Scenario file SHA-256: TBD (M19-0.6)
-Expectation file SHA-256: TBD (M19-0.6)
-
-#### PR-03H
-
-Scenario file SHA-256: TBD (M19-0.6)
-Expectation file SHA-256: TBD (M19-0.6)
 
 ## 5. Diagnosis Revision Timeline
 
@@ -367,7 +347,7 @@ provider-tape evidence and normalized investigation evidence.
 ## 8. Positive Transition Proofs
 
 These predicates apply to each positive DEV scenario's target hypothesis
-`H_x` and qualified sealed actor.
+`H_x` and qualified protocol root actor.
 
 ### T1 — Genuine ambiguity
 
@@ -386,33 +366,32 @@ preconditions pass; targets are exact; and the UID/resource binding is valid.
 
 ### T4 — Correct resolution
 
-R2 is `RESOLVED`, and its leader is the sealed actor at the exact
+R2 is `RESOLVED`, and its leader is the protocol root actor at the exact
 `namespace/Kind/name` identity.
 
-### T5 — Evidence ablation
+### T5 — Evidence ablation (replay fixture check)
 
-This is a resolver-level ablation using the R2 manifest, R2 tape, and normalized
-investigation Findings. The planner does not run and no new provider call is
-made. Replay supplies the recorded responses while evidence records whose IDs
-are in `D` are filtered. If one Finding contains both `D` and non-`D` evidence
+This deterministic offline replay ablation is tested on replay fixtures by
+M19-7.P and is not part of live DEV scenario acceptance. It uses the complete
+recorded R2 manifest, tape, and normalized investigation Findings. The planner
+does not run and no new provider call is made. Replay supplies the recorded
+responses while evidence records whose IDs are in `D` are filtered, then
+reruns `diagnose_case`. If one Finding contains both `D` and non-`D` evidence
 and cannot be safely filtered, the result is `ABLATION_AMBIGUOUS` and the proof
-fails. Re-run `diagnose_case`. `H_x` must no longer be eliminated by the target
-result, and the resulting diagnosis must not be `RESOLVED`.
+fails. `H_x` must no longer be eliminated by the target result, and the
+resulting diagnosis must not be `RESOLVED`.
 
-### T6 — Rule ablation
+### T6 — Rule ablation (replay fixture check)
 
-Use the complete R2 evidence and disable only the target rule through an
+This deterministic offline replay ablation is tested on replay fixtures by
+M19-7.P and is not part of live DEV scenario acceptance. It uses the complete
+recorded R2 evidence and disables only the target rule through an
 evaluation-only configuration, included in `config_digest` and unavailable in
-production. The resulting diagnosis must not be `RESOLVED`.
+production. The ablated diagnosis must not be `RESOLVED`.
 
 T2 bir novelty gate'idir, causal necessity gate'i değildir; causal necessity T5/T6 ile test edilir.
 
 T5/T6 hedef kural ve kanıtın final resolution için necessary contributor olduğunu kanıtlar; tek başına sufficient olduğunu iddia etmez.
-
-### T7 — Truth blindness
-
-Before code freeze, the agent did not have access to HOLDOUT contents. During
-prediction, the prediction process could not see the expectation file.
 
 ## 9. Negative Proofs
 
@@ -486,42 +465,23 @@ evaluation-only configuration that disables only the target rule. This
 configuration contributes to `config_digest` and is not available in
 production. The ablated diagnosis must not be `RESOLVED`.
 
-## 14. Blind HOLDOUT Procedure
+## 14. Review Acceptance Policy
 
-HOLDOUT scenario parameters and expectations are hidden from the agent until
-Phase 8. Before then, this protocol carries only their SHA-256 values. The
-placeholders above remain until M19-0.6 supplies the hashes; no HOLDOUT
-plaintext belongs in this document or the repository.
-
-After code freeze, the owner mounts the scenario file and expectation file
-read-only outside the repository and agent workspace. The runner reads the
-scenario file only. The prediction process cannot see the expectation file; a
-separate grader evaluates the artifact against that file. Each HOLDOUT scenario
-is run once, with retries only for the infrastructure failures and within the
-M19 retry limit.
-
-If HOLDOUT fails, the same revealed set is not rerun after code changes. The
-gate is reported as failed; a new attempt requires a protocol amendment and a
-new sealed HOLDOUT.
-
-## 15. Review Acceptance Policy
-
-After protocol seal, M19 scope may be reopened only for:
+M19 scope admits work only for:
 
 1. a conflict with a frozen contract;
-2. a gate that cannot be mechanically proven; or
-3. implementation impossibility.
+2. a gate that cannot be mechanically proven;
+3. implementation impossibility; or
+4. a fix required for a working product.
 
-Feature, UX, refactor, or benchmark-result improvement requests do not enter
-M19.
+New features, UX, extra experiments, benchmark-result improvements, and
+unrelated refactors do not enter M19.
 
-## 16. Protocol Amendment Procedure
+## 15. Protocol Amendment Procedure
 
-For a material conflict with a frozen contract, report
+For a material conflict with a frozen M16/M18 contract, report
 `CONTRACT_AMENDMENT_REQUIRED` with the affected clause, current behavior,
-counter-evidence, minimal amendment proposal, and affected gate, then stop work.
-Protocol scope may be reopened only under the review acceptance conditions in
-§15. A HOLDOUT failure requires a protocol amendment and a new sealed HOLDOUT
-before a new attempt.
+counter-evidence, minimal amendment proposal, and affected gate, then stop
+work. Scope discipline remains as stated in §14.
 
 Not specified beyond the binding M19 review/STOP rules.

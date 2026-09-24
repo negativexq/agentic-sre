@@ -100,6 +100,15 @@ def test_exact_kubernetes_target_matching_and_no_service_fallback() -> None:
     assert not _trace_matches_target(service_only, deployment)
 
 
+def test_source_backend_does_not_advertise_empty_source_only_trace_capability() -> None:
+    source = InMemorySource(name="source-only-no-traces")
+    backend = SourceInvestigationBackend(source)
+    assert not backend.supports("runtime_traces")
+
+    source.trace_items.append(_span("seed"))
+    assert backend.supports("runtime_traces")
+
+
 @pytest.mark.parametrize(
     "kind", ("Service", "ConfigMap", "NetworkPolicy", "HorizontalPodAutoscaler")
 )

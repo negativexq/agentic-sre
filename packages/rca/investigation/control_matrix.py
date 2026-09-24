@@ -736,6 +736,7 @@ _NORMALIZER_FINDING_KINDS_BY_CAPABILITY: dict[str, frozenset[FindingKind]] = {
     ),
     "events": frozenset({FindingKind.FAILURE_EVENT, FindingKind.AUTOSCALING_FAILURE}),
     "logs": frozenset({FindingKind.DEPENDENCY_ERRORS}),
+    "runtime_traces": frozenset({FindingKind.DEPENDENCY_ERRORS}),
     "resource_pressure": frozenset({FindingKind.RESOURCE_PRESSURE}),
     "traffic": frozenset({FindingKind.TRAFFIC_INCREASE}),
 }

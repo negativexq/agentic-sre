@@ -21,9 +21,13 @@ from packages.rca.model import (
     Diagnosis,
     EntityRef,
     GapDimension,
+    GapOutcome,
+    GapOutcomeKind,
     GapResolvability,
     InformationGap,
     LogRecord,
+    Resolution,
+    ResolutionTrace,
     ResourcePressure,
     TraceSpanObservation,
     TrafficObservation,
@@ -217,6 +221,45 @@ def test_defensive_non_temporal_capabilities_produce_no_candidate() -> None:
         )
         == ()
     )
+
+
+def test_runtime_trace_gap_creates_one_bounded_discriminated_candidate() -> None:
+    case = _case(cutoff=ONSET + timedelta(minutes=20))
+    target = _entity("Deployment", "payment")
+    gap = _gap("gap-runtime", GapDimension.DEPENDENCY_HEALTH, "runtime_traces", target)
+    gap = gap.model_copy(
+        update={
+            "hypothesis_ids": ("h-runtime", "h-peer"),
+            "discriminating_outcomes": (
+                GapOutcome(kind=GapOutcomeKind.SUPPORTS, hypothesis_ids=("h-runtime",)),
+                GapOutcome(kind=GapOutcomeKind.UNKNOWN, hypothesis_ids=("h-peer",)),
+            ),
+        }
+    )
+    diagnosis = _diagnosis(case, (gap,)).model_copy(
+        update={
+            "resolution_trace": ResolutionTrace(
+                state=Resolution.AMBIGUOUS,
+                plausible_hypotheses=("h-runtime", "h-peer"),
+            )
+        }
+    )
+
+    candidates = build_observation_candidates(
+        case=case,
+        diagnosis=diagnosis,
+        engine_config=EngineConfig(),
+    )
+
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate.capability == "runtime_traces"
+    assert candidate.target == target
+    assert candidate.query.start == ONSET - timedelta(minutes=30)
+    assert candidate.query.end == ONSET + timedelta(minutes=20)
+    assert candidate.query.limit <= 32
+    assert len(candidate.discriminators) == 1
+    assert candidate.discriminators[0].comparison_hypothesis_ids == ("h-peer",)
 
 
 def test_explicit_provider_windows_match_legacy_default_execution() -> None:

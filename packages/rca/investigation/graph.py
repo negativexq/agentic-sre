@@ -1914,7 +1914,22 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         }
     native_records = records_from_observation(observation)
     normalized_findings: tuple[Finding, ...]
-    if native_records:
+    tempo_typed_observation = (
+        observation.runtime is not None
+        and observation.runtime.pillar.value == "TEMPO"
+        and observation.capability == "runtime_traces"
+    )
+    if native_records and tempo_typed_observation:
+        normalized_result = normalize_observation(
+            observation,
+            case=rt.case_for(
+                state.get("acquired_evidence_refs", ()), state["investigation_findings"]
+            ),
+            gap=gap,
+        )
+        normalized_observation = normalized_result.observation
+        normalized_findings = normalized_result.findings
+    elif native_records:
         normalized_observation = observation
         if not state.get("pending_new_evidence_refs", ()):
             legacy_result = normalize_observation(

@@ -237,7 +237,10 @@ def test_builtin_normalizer_capability_map_is_exact() -> None:
         assert _capabilities_for_finding_kind(kind) == ("history",)
     for kind in (FindingKind.FAILURE_EVENT, FindingKind.AUTOSCALING_FAILURE):
         assert _capabilities_for_finding_kind(kind) == ("events",)
-    assert _capabilities_for_finding_kind(FindingKind.DEPENDENCY_ERRORS) == ("logs",)
+    assert _capabilities_for_finding_kind(FindingKind.DEPENDENCY_ERRORS) == (
+        "logs",
+        "runtime_traces",
+    )
     assert _capabilities_for_finding_kind(FindingKind.RESOURCE_PRESSURE) == ("resource_pressure",)
     assert _capabilities_for_finding_kind(FindingKind.TRAFFIC_INCREASE) == ("traffic",)
     for kind in (

@@ -1,10 +1,21 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 from packages.rca.engine import Case, build_case
 from packages.rca.investigation.environment import SourceInvestigationBackend, initial_view
+from packages.rca.investigation.evidence import InMemoryEvidenceStore
+from packages.rca.investigation.graph import (
+    _check_novelty,
+    _normalize,
+    _rebuild,
+    _Runtime,
+    build_investigation_state,
+)
 from packages.rca.investigation.normalizers import normalize_observation
+from packages.rca.investigation.policy import ScriptedInvestigationPolicy
+from packages.rca.investigation.state import InvestigationConfig, InvestigationState
 from packages.rca.investigation.tools import RuntimeTracesTool
 from packages.rca.model import (
     AuthorizedQuery,
@@ -169,3 +180,96 @@ def test_runtime_trace_call_facts_require_explicit_parent_child_direction() -> N
     assert facts[0].callee_service == "payment"
     assert facts[0].direction_basis == "CLIENT_SERVER_SPANS"
     assert facts[0].evidence_ids == (root.evidence_id, child.evidence_id)
+
+
+def test_tempo_finding_enters_existing_investigation_rebuild() -> None:
+    spans = (
+        _span("caller", service="frontend", start=0),
+        _span(
+            "callee",
+            service="payment",
+            parent="caller",
+            status=TraceSpanStatus.ERROR,
+            start=1,
+            deployment="payment",
+        ),
+    )
+    target = EntityRef(kind="Deployment", name="payment", namespace="shop")
+    source = InMemorySource(name="tempo-rebuild", cutoff=T0 + timedelta(seconds=60))
+    base = initial_view(source)
+    case = build_case(base)
+    gap = _gap(target)
+    backend = _TempoBackend(source, spans)
+    observation = RuntimeTracesTool(backend).execute_query(
+        case,
+        gap,
+        target,
+        InvestigationQuery(
+            start=T0 - timedelta(seconds=10), end=T0 + timedelta(seconds=10), limit=12
+        ),
+    )
+    state = build_investigation_state(base, initial_case=case)
+    state["current_diagnosis"] = state["current_diagnosis"].model_copy(
+        update={"information_gaps": (gap,)}
+    )
+    state["pending_observation"] = observation
+    runtime = _Runtime(
+        source=base,
+        policy=ScriptedInvestigationPolicy([]),
+        tools=None,
+        config=InvestigationConfig(),
+        initial_case=case,
+        rebuild_case=None,
+        backend=backend,
+        evidence_store=InMemoryEvidenceStore(),
+    )
+
+    acquired = _check_novelty(state, runtime)
+    after_acquisition = cast(InvestigationState, {**state, **acquired})
+    normalized = _normalize(after_acquisition, runtime)
+    after_normalization = cast(InvestigationState, {**after_acquisition, **normalized})
+    rebuilt = _rebuild(after_normalization, runtime)
+    rebuilt_diagnosis = rebuilt["current_diagnosis"]
+    runtime_case = runtime.case_for(
+        after_normalization["acquired_evidence_refs"],
+        rebuilt["investigation_findings"],
+    )
+
+    assert len(normalized["pending_findings"]) == 1
+    assert normalized["pending_findings"][0].kind is FindingKind.DEPENDENCY_ERRORS
+    assert any(
+        finding.kind is FindingKind.DEPENDENCY_ERRORS
+        and finding.details.get("runtime_pillar") == "TEMPO"
+        for finding in rebuilt_diagnosis.evidence
+    )
+    assert runtime_case.runtime_graph.edges
+    assert runtime_case.runtime_propagation.boundaries
+
+
+def test_runtime_traces_without_tempo_adapter_keep_source_only_normalization() -> None:
+    spans = (
+        _span("caller", service="frontend", start=0),
+        _span(
+            "callee",
+            service="payment",
+            parent="caller",
+            status=TraceSpanStatus.ERROR,
+            start=1,
+            deployment="payment",
+        ),
+    )
+    target = EntityRef(kind="Deployment", name="payment", namespace="shop")
+    source = InMemorySource(name="tempo-source-only", trace_items=list(spans))
+    case = build_case(initial_view(source))
+    gap = _gap(target)
+    observation = RuntimeTracesTool(SourceInvestigationBackend(source)).execute_query(
+        case,
+        gap,
+        target,
+        InvestigationQuery(
+            start=T0 - timedelta(seconds=10), end=T0 + timedelta(seconds=10), limit=12
+        ),
+    )
+
+    assert observation.runtime is None
+    assert normalize_observation(observation, case=case, gap=gap).findings == ()

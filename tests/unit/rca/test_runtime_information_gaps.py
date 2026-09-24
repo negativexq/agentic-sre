@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from packages.rca.causal_roles import HypothesisCausalRoles
 from packages.rca.frontier import apply_frontier_progress, covered_frontier_dimensions
@@ -98,6 +99,61 @@ def test_pod_contract_has_events_pressure_and_traces_but_no_traffic() -> None:
         "runtime_traces",
     }
     assert all(target == actor for _capability, target in pairs)
+
+
+def test_failure_onset_contract_admits_bounded_runtime_traces_for_pod() -> None:
+    actor = _entity("Pod", "payment-0")
+    hypothesis = Hypothesis(hypothesis_id="h-pod-onset", causal_actor=actor, members=(actor,))
+
+    gaps = derive_information_gaps(
+        (hypothesis,),
+        _unresolved_trace(hypothesis.hypothesis_id),
+        InMemorySource(name="pod-onset-gap"),
+        runtime_context=_context(),
+    )
+
+    onset_gap = next(gap for gap in gaps if gap.dimension is GapDimension.FAILURE_ONSET)
+    assert ("runtime_traces", actor) in {
+        (query.capability, query.target) for query in onset_gap.authorized_queries
+    }
+
+
+def test_failure_onset_source_only_contract_excludes_unavailable_runtime_traces() -> None:
+    class RuntimeUnavailableSource:
+        def __init__(self, source: InMemorySource) -> None:
+            self.source = source
+
+        def supports(self, capability: str) -> bool:
+            if capability == "runtime_traces":
+                return False
+            methods = {
+                "history": "object_history",
+                "events": "events",
+                "incident_events": "events",
+                "incident_changes": "object_history",
+                "logs": "error_logs",
+                "resource_pressure": "resource_pressure",
+                "traffic": "traffic_observations",
+            }
+            method = methods.get(capability)
+            return method is not None and callable(getattr(self.source, method, None))
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self.source, name)
+
+    actor = _entity("Pod", "payment-0")
+    hypothesis = Hypothesis(hypothesis_id="h-pod-onset", causal_actor=actor, members=(actor,))
+    source = RuntimeUnavailableSource(InMemorySource(name="source-only-pod-onset"))
+
+    gaps = derive_information_gaps(
+        (hypothesis,),
+        _unresolved_trace(hypothesis.hypothesis_id),
+        source,
+        runtime_context=_context(),
+    )
+
+    onset_gap = next(gap for gap in gaps if gap.dimension is GapDimension.FAILURE_ONSET)
+    assert tuple(query.capability for query in onset_gap.authorized_queries) == ("events",)
 
 
 def test_service_contract_is_logs_and_traffic_only() -> None:

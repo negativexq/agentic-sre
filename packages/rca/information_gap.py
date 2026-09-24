@@ -594,7 +594,8 @@ def _actor_local_contract(
                 ("history",)
                 if dimension in {GapDimension.CHANGE_TIMING, GapDimension.CONFIG_DIFFERENCE}
                 else ("runtime_traces",)
-                if kind in _TRACE_TARGET_KINDS and dimension is GapDimension.DEPENDENCY_HEALTH
+                if kind in _TRACE_TARGET_KINDS
+                and dimension in {GapDimension.DEPENDENCY_HEALTH, GapDimension.FAILURE_ONSET}
                 else ()
             )
             for kind in _WORKLOAD_CONTROLLER_KINDS
@@ -618,9 +619,10 @@ def _actor_local_contract(
             else "events",
         ),
         "Pod": {
-            GapDimension.FAILURE_ONSET: ("events",),
             GapDimension.RESOURCE_PRESSURE: ("resource_pressure",),
+            GapDimension.METRIC_BASELINE: ("resource_pressure",),
             GapDimension.DEPENDENCY_HEALTH: ("runtime_traces",),
+            GapDimension.FAILURE_ONSET: ("events", "runtime_traces"),
         }.get(dimension, ()),
         "Service": {
             GapDimension.DEPENDENCY_HEALTH: ("logs",),

@@ -8,6 +8,9 @@ from urllib.error import URLError
 from uuid import uuid4
 
 import pytest
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from prometheus_client import CollectorRegistry, generate_latest
 from starlette.testclient import TestClient
 from starlette.types import Receive, Scope, Send
@@ -170,3 +173,22 @@ def test_failed_dependency_calls_log_the_real_error() -> None:
     (record,) = [item for item in capture.records if item.levelno == logging.ERROR]
     assert record.getMessage().startswith("dependency.request error: payment-service URLError")
     assert "refused" in record.getMessage().lower()
+
+
+def test_probe_and_scrape_requests_create_no_server_spans() -> None:
+    runtime = create_runtime("span-test-service", registry=CollectorRegistry())
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    runtime.tracer = provider.get_tracer("test")
+
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        del scope, receive
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    client = TestClient(TelemetryMiddleware(app, runtime))
+    for path in ("/health", "/metrics", "/metrics/", "/payments"):
+        client.get(path)
+
+    assert [span.name for span in exporter.get_finished_spans()] == ["GET /payments"]

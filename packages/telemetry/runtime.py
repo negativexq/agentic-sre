@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import time
+from contextlib import AbstractContextManager, nullcontext
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -258,6 +259,11 @@ def create_runtime(
     )
 
 
+# Kubelet probes and Prometheus scrapes are not requests anyone investigates;
+# tracing them would crowd real request traces out of bounded trace searches.
+_UNTRACED_PATHS = frozenset({"/health", "/metrics", "/metrics/"})
+
+
 class TelemetryMiddleware:
     """Create server spans, expose correlation headers, and record HTTP signals."""
 
@@ -295,9 +301,14 @@ class TelemetryMiddleware:
                 message = {**message, "headers": response_headers}
             await send(message)
 
-        with self.runtime.tracer.start_as_current_span(
-            f"{method} {path}", context=parent_context, kind=SpanKind.SERVER
-        ) as span:
+        span_context: AbstractContextManager[trace.Span] = (
+            nullcontext(trace.INVALID_SPAN)
+            if path in _UNTRACED_PATHS
+            else self.runtime.tracer.start_as_current_span(
+                f"{method} {path}", context=parent_context, kind=SpanKind.SERVER
+            )
+        )
+        with span_context as span:
             span.set_attribute("http.request.method", method)
             span.set_attribute("url.path", path)
             span.set_attribute("http.request.header.x_request_id", request_id)

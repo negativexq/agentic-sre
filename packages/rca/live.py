@@ -236,7 +236,7 @@ class LokiLogReader:
             or ends_at.tzinfo is None
             or ends_at.utcoffset() is None
             or ends_at < starts_at
-            or ends_at - starts_at > timedelta(hours=1)
+            or ends_at - starts_at > LOKI_MAX_QUERY_SPAN
         ):
             raise ValueError("Loki query requires an ordered timezone-aware window <= 3600 seconds")
         # Preserve the existing incident-capture limit for legacy callers;
@@ -548,6 +548,109 @@ class LiveSource:
         ][:limit]
 
 
+LOKI_MAX_QUERY_SPAN = timedelta(hours=1)
+LOG_CAPTURE_MAX_SLICES = 3
+LOG_CAPTURE_MAX_RECORDS = 500
+
+
+def bounded_slices(
+    starts_at: datetime, ends_at: datetime, span: timedelta = LOKI_MAX_QUERY_SPAN
+) -> tuple[tuple[datetime, datetime], ...]:
+    """Split ``[starts_at, ends_at)`` into contiguous slices of at most ``span``, newest first.
+
+    Loki's ``query_range`` returns entries with ``start <= ts < end``, so
+    contiguous slices partition the window without overlap. An empty window
+    yields no slice.
+    """
+    if ends_at < starts_at:
+        raise ValueError("capture window must be ordered")
+    if span <= timedelta(0):
+        raise ValueError("slice span must be positive")
+    slices: list[tuple[datetime, datetime]] = []
+    end = ends_at
+    while end > starts_at:
+        start = max(starts_at, end - span)
+        slices.append((start, end))
+        end = start
+    return tuple(slices)
+
+
+@dataclass(frozen=True)
+class LogSliceFailure:
+    """One bounded capture slice whose read failed, with the error that caused it."""
+
+    starts_at: datetime
+    ends_at: datetime
+    error_type: str
+    error: str
+
+
+@dataclass(frozen=True)
+class LogCapture:
+    """The outcome of capturing incident error logs through bounded reads."""
+
+    records: tuple[LogRecord, ...]
+    queried: tuple[tuple[datetime, datetime], ...]
+    failed: tuple[LogSliceFailure, ...]
+    skipped: tuple[tuple[datetime, datetime], ...]
+
+    @property
+    def succeeded(self) -> bool:
+        """At least one bounded read returned (possibly empty) data."""
+        return len(self.queried) > len(self.failed)
+
+
+def capture_error_logs(
+    reader: LogReader,
+    services: Sequence[str],
+    starts_at: datetime,
+    ends_at: datetime,
+    *,
+    max_slices: int = LOG_CAPTURE_MAX_SLICES,
+    max_records: int = LOG_CAPTURE_MAX_RECORDS,
+) -> LogCapture:
+    """Capture an incident window as several bounded reads instead of one wide one.
+
+    The incident history (two hours before the first alert, through now) is
+    wider than a single bounded Loki read allows, so it is read as contiguous
+    slices of at most one hour, newest first — the same recency a single
+    backward query had. Reading stops at ``max_records`` or ``max_slices``;
+    anything not read is reported in ``skipped`` rather than dropped silently,
+    and earlier captures persisted for the incident still cover older slices.
+    A failed slice is recorded with its error and does not discard the others.
+    """
+    if ends_at <= starts_at:
+        # Nothing to read (or a skewed window); logs never fail a diagnosis.
+        return LogCapture(records=(), queried=(), failed=(), skipped=())
+    slices = bounded_slices(starts_at, ends_at)
+    records: list[LogRecord] = []
+    seen: set[tuple[str, datetime | None, str, str, str]] = set()
+    queried: list[tuple[datetime, datetime]] = []
+    failed: list[LogSliceFailure] = []
+    skipped: tuple[tuple[datetime, datetime], ...] = ()
+    for index, (start, end) in enumerate(slices):
+        if index >= max_slices or len(records) >= max_records:
+            skipped = slices[index:]
+            break
+        queried.append((start, end))
+        try:
+            batch = reader.error_logs(services, start, end)
+        except Exception as error:  # noqa: BLE001 - one failed slice must not drop the rest
+            failed.append(LogSliceFailure(start, end, type(error).__name__, str(error)[:200]))
+            continue
+        for record in sorted(batch, key=lambda item: item.at or start, reverse=True):
+            key = (record.service, record.at, record.severity, record.message, record.evidence_id)
+            if key not in seen:
+                seen.add(key)
+                records.append(record)
+    return LogCapture(
+        records=tuple(records[:max_records]),
+        queried=tuple(queried),
+        failed=tuple(failed),
+        skipped=skipped,
+    )
+
+
 def incident_window(alerts: Sequence[Alert], ends_at: datetime) -> tuple[datetime, datetime]:
     """Journal lookback of two hours before the first alert, through ``ends_at``.
 
@@ -560,12 +663,19 @@ def incident_window(alerts: Sequence[Alert], ends_at: datetime) -> tuple[datetim
 
 
 __all__ = [
+    "LOG_CAPTURE_MAX_RECORDS",
+    "LOG_CAPTURE_MAX_SLICES",
+    "LOKI_MAX_QUERY_SPAN",
     "ChangeWatcher",
     "ClusterReader",
     "KubernetesClusterReader",
     "LiveSource",
+    "LogCapture",
     "LogReader",
+    "LogSliceFailure",
     "LokiLogReader",
+    "bounded_slices",
+    "capture_error_logs",
     "events_from_bodies",
     "incident_window",
 ]

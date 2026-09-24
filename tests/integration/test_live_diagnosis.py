@@ -213,17 +213,29 @@ class AdvancingClock:
 class FakeLogs:
     def __init__(self, records: list[LogRecord]) -> None:
         self.records = records
-        self.calls = 0
+        self.windows: list[tuple[datetime, datetime]] = []
         self.unavailable = False
+
+    @property
+    def calls(self) -> int:
+        return len(self.windows)
 
     def error_logs(
         self, services: Sequence[str], starts_at: datetime, ends_at: datetime
     ) -> list[LogRecord]:
-        del services, starts_at, ends_at
-        self.calls += 1
+        del services
+        self.windows.append((starts_at, ends_at))
         if self.unavailable:
             raise RuntimeError("Loki unavailable")
         return copy.deepcopy(self.records)
+
+
+def _assert_bounded_contiguous_capture(windows: list[tuple[datetime, datetime]]) -> None:
+    """One capture: <=1h reads, newest first, each ending where the next begins."""
+    assert windows
+    assert all(end - start <= timedelta(hours=1) for start, end in windows)
+    for newer, older in zip(windows, windows[1:], strict=False):
+        assert older[1] == newer[0]
 
 
 @pytest.fixture
@@ -619,10 +631,17 @@ def test_open_diagnosis_persists_and_deduplicates_log_observations(setup: Any) -
     )
     clock.now = T0 + timedelta(minutes=13)
     service.run(incident_id)
+    per_capture = logs.calls
     service.run(incident_id)
     with factory() as session:
         rows = session.query(LogObservationRow).all()
-    assert logs.calls == 2
+    # Two diagnoses, each capturing the >1h incident history as the same set
+    # of contiguous <=1h reads (never one wider read).
+    assert per_capture >= 2
+    assert logs.calls == 2 * per_capture
+    assert logs.windows[:per_capture] == logs.windows[per_capture:]
+    _assert_bounded_contiguous_capture(logs.windows[:per_capture])
+    assert logs.windows[0][1] - logs.windows[per_capture - 1][0] > timedelta(hours=1)
     assert len(rows) == 1
     assert rows[0].message == "payment timeout"
 
@@ -648,6 +667,7 @@ def test_resolved_replay_uses_persisted_logs_when_loki_is_unavailable(
     )
     clock.now = T0 + timedelta(minutes=13)
     service.run(incident_id)
+    open_capture_calls = logs.calls
     resolved_at = T0 + timedelta(minutes=15)
     with factory() as session:
         row = session.get(IncidentRow, incident_id)
@@ -668,7 +688,9 @@ def test_resolved_replay_uses_persisted_logs_when_loki_is_unavailable(
     logs.unavailable = True
     clock.now = T0 + timedelta(minutes=30)
     diagnosis = service.run(incident_id)
-    assert logs.calls == 1
+    # The resolved replay reads no logs; only the earlier open capture did.
+    assert open_capture_calls >= 1
+    assert logs.calls == open_capture_calls
     assert all(item.summary != "post-resolution timeout" for item in diagnosis.evidence)
     with factory() as session:
         rows = session.query(LogObservationRow).all()
@@ -707,6 +729,63 @@ def test_resolved_before_any_log_capture_has_no_historical_log_claim(setup: Any)
     assert all(item.summary != "never captured before resolution" for item in diagnosis.evidence)
     with factory() as session:
         assert session.query(LogObservationRow).count() == 0
+
+
+def test_real_bounded_loki_reader_captures_the_two_hour_incident_history(
+    setup: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Regression: the >1h incident window reached Loki as one read and was rejected.
+
+    The real reader keeps its <=1h bound; the capture must read the incident
+    history as contiguous bounded slices, and the in-window error line must be
+    persisted instead of the whole capture being skipped.
+    """
+    from urllib.parse import parse_qs, urlparse
+
+    factory, cluster, clock, incident_id = setup
+    line_at = T0 + timedelta(minutes=12)
+    requested: list[tuple[int, int]] = []
+
+    def opener(request: Any, timeout: float) -> io.BytesIO:
+        del timeout
+        query = parse_qs(urlparse(request.full_url).query)
+        start, end = int(query["start"][0]), int(query["end"][0])
+        requested.append((start, end))
+        at = int(line_at.timestamp() * 1e9)
+        values = [[str(at), "payment timeout"]] if start <= at < end else []
+        payload = {
+            "data": {
+                "result": [
+                    {
+                        "stream": {"service_name": "order-service", "level": "error"},
+                        "values": values,
+                    }
+                ]
+            }
+        }
+        return io.BytesIO(json.dumps(payload).encode())
+
+    service = DiagnosisService(
+        session_factory=factory,
+        namespaces=("sre-demo",),
+        reader=cluster,
+        log_reader=LokiLogReader("http://loki:3100", opener=opener),
+        clock=clock,
+    )
+    clock.now = T0 + timedelta(minutes=13)
+    with caplog.at_level("WARNING"):
+        service.run(incident_id)
+
+    hour_ns = int(timedelta(hours=1).total_seconds() * 1e9)
+    assert len(requested) >= 2
+    assert all(0 <= end - start <= hour_ns for start, end in requested)
+    for newer, older in zip(requested, requested[1:], strict=False):
+        assert older[1] == newer[0]
+    assert requested[0][1] - requested[-1][0] > hour_ns
+    assert not [r for r in caplog.records if "log capture" in r.getMessage()]
+    with factory() as session:
+        rows = session.query(LogObservationRow).all()
+    assert [row.message for row in rows] == ["payment timeout"]
 
 
 def test_loki_reader_parses_streams_and_bounds_query() -> None:

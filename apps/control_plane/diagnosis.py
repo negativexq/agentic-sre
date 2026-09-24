@@ -29,6 +29,7 @@ from packages.rca.live import (
     LogReader,
     LokiLogReader,
     ObjectSnapshot,
+    capture_error_logs,
     incident_window,
 )
 from packages.rca.llm import LLMClient
@@ -280,19 +281,37 @@ class DiagnosisService:
             )
         if self.log_reader is not None and not resolved:
             fetched_logs: list[LogRecord] = []
-            try:
-                services = sorted(
-                    {
-                        str(body.get("metadata", {}).get("name"))
-                        for body in current
-                        if body.get("kind") in {"Deployment", "StatefulSet", "DaemonSet"}
-                    }
-                    | {alert.service for alert in alerts if alert.service}
+            services = sorted(
+                {
+                    str(body.get("metadata", {}).get("name"))
+                    for body in current
+                    if body.get("kind") in {"Deployment", "StatefulSet", "DaemonSet"}
+                }
+                | {alert.service for alert in alerts if alert.service}
+            )
+            # The incident history is wider than one bounded Loki read, so it
+            # is captured as several <=1h reads rather than one rejected read.
+            capture = capture_error_logs(self.log_reader, services, starts_at, ends_at)
+            for failure in capture.failed:
+                logger.warning(
+                    "log capture slice [%s, %s) failed (%s: %s); continuing with the rest",
+                    failure.starts_at.isoformat(),
+                    failure.ends_at.isoformat(),
+                    failure.error_type,
+                    failure.error,
                 )
-                fetched_logs = self.log_reader.error_logs(services, starts_at, ends_at)
-            except Exception:
-                logger.warning("log backend unavailable; diagnosing without logs", exc_info=True)
+            if capture.skipped:
+                logger.info(
+                    "log capture read the newest %d of %d bounded slices; older slices "
+                    "rely on earlier persisted captures",
+                    len(capture.queried),
+                    len(capture.queried) + len(capture.skipped),
+                )
+            if not capture.succeeded:
+                if capture.queried:
+                    logger.warning("every log capture slice failed; diagnosing without new logs")
             else:
+                fetched_logs = list(capture.records)
                 # Loki records are queried for the cycle's bounded window. The
                 # collection itself may finish a little later, so extend the
                 # open diagnosis boundary to the end of that intentional

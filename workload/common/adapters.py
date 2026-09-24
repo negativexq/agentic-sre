@@ -93,6 +93,12 @@ class HttpPaymentGateway:
             with span_context:
                 with urlopen(http_request, timeout=self._timeout_seconds) as response:
                     return PaymentResponse.model_validate_json(response.read())
+        except Exception as exc:
+            if self._runtime is not None:
+                self._runtime.logger.error(
+                    f"dependency.request error: payment-service {type(exc).__name__}: {exc}"
+                )
+            raise
         finally:
             if self._runtime is not None:
                 self._runtime.record_dependency(

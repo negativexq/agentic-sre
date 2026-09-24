@@ -1,11 +1,21 @@
 """Telemetry correlation tests across service and Kafka boundaries."""
 
+import logging
 import re
+import socket
 from pathlib import Path
+from urllib.error import URLError
+from uuid import uuid4
 
+import pytest
 from prometheus_client import CollectorRegistry, generate_latest
+from starlette.testclient import TestClient
+from starlette.types import Receive, Scope, Send
+from workload.common.adapters import HttpPaymentGateway
+from workload.common.contracts import PaymentRequest
 
 from packages.telemetry import TelemetryContext, WorkloadMetrics, create_runtime, structured_log
+from packages.telemetry.runtime import TelemetryMiddleware, TelemetryRuntime
 
 
 def test_context_round_trips_through_kafka_style_headers() -> None:
@@ -107,3 +117,56 @@ def test_configuration_latency_alert_has_distinct_bounded_signal() -> None:
     assert not re.search(
         r"- alert: PaymentServiceLatencyCritical\n\s+expr: [^\n]+\n\s+for:", manifest
     )
+
+
+class _Capture(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+def _captured(runtime: TelemetryRuntime) -> _Capture:
+    capture = _Capture()
+    runtime.logger.addHandler(capture)
+    return capture
+
+
+def test_failed_requests_are_logged_as_errors_with_their_status() -> None:
+    runtime = create_runtime("log-test-service", registry=CollectorRegistry())
+    capture = _captured(runtime)
+
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        del receive
+        status = 503 if scope["path"] == "/fail" else 200
+        await send({"type": "http.response.start", "status": status, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    client = TestClient(TelemetryMiddleware(app, runtime))
+    client.get("/ok")
+    client.post("/fail")
+
+    levels = [(record.levelno, record.getMessage()) for record in capture.records]
+    assert levels == [
+        (logging.INFO, "http.request"),
+        (logging.ERROR, "http.request error: POST /fail returned 503"),
+    ]
+
+
+def test_failed_dependency_calls_log_the_real_error() -> None:
+    runtime = create_runtime("log-test-caller", registry=CollectorRegistry())
+    capture = _captured(runtime)
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    gateway = HttpPaymentGateway(f"http://127.0.0.1:{port}", timeout_seconds=1, runtime=runtime)
+    request = PaymentRequest(order_id=uuid4(), amount_cents=100, currency="USD")
+
+    with pytest.raises(URLError):
+        gateway.charge(request)
+
+    (record,) = [item for item in capture.records if item.levelno == logging.ERROR]
+    assert record.getMessage().startswith("dependency.request error: payment-service URLError")
+    assert "refused" in record.getMessage().lower()

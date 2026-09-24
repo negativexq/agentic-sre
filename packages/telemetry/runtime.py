@@ -313,10 +313,18 @@ class TelemetryMiddleware:
                 self.runtime.prometheus_metrics.http_duration.labels(
                     self.runtime.service_name, path
                 ).observe(duration)
-                self.runtime.logger.info(
-                    "http.request",
-                    extra={"request_id": request_id},
-                )
+                if status_code >= 500:
+                    # Failed requests carry their status in the log body so a log
+                    # backend can find them without parsing structured fields.
+                    self.runtime.logger.error(
+                        f"http.request error: {method} {path} returned {status_code}",
+                        extra={"request_id": request_id},
+                    )
+                else:
+                    self.runtime.logger.info(
+                        "http.request",
+                        extra={"request_id": request_id},
+                    )
 
 
 def _traceparent_header() -> bytes:

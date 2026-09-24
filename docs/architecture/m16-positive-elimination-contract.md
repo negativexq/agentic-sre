@@ -374,3 +374,50 @@ Audit fields: `rule_id=m16.ended-manifestation-episode`, `rule_version=v1`, `con
 ### Observation prerequisite
 
 The object journal deliberately hashes desired state only (status is excluded), so the Pod status at diagnosis time is not retained as a version. RECOVERED therefore requires the observation layer to expose a typed, read-only status observation per Pod (observed-at, uid, Ready condition, evidence id). This is observation-plane data, not a change to the journal's version semantics.
+
+## 18. Amendment A2 — resource-pressure mechanism mismatch (`m16.v1-a2`)
+
+Status: **FROZEN** (owner-approved direction 2026-09-24). This amendment adds one mechanism-mismatch rule under §6 and §8. It promotes `OBSERVED_NORMAL_MECHANISM_MISMATCH` from a proposed name (§11) to an authorized code for this rule only. Sections 1–17 remain binding.
+
+### Which hypothesis requires resource pressure
+
+`RESOURCE_PRESSURE` is a manifestation kind in the hypothesis builder, never an initiating premise. A hypothesis *requires* the resource mechanism only when its initiating premise is a resource-limit reduction:
+
+- R1. The causal actor is a workload (`Deployment`, `StatefulSet`, `DaemonSet`), and every initiating Finding of the hypothesis is a `SPEC_CHANGE` on that actor.
+- R2. The complete diff between the two journal versions referenced by each such Finding's evidence ids (recomputed from the versions, not from the truncated `changed_paths`) touches only `.spec.template.spec.containers[*].resources.*` (restart annotations excepted).
+- R3. At least one container `limits.memory` or `limits.cpu` value decreased or was newly set. The tested mechanism set M is the resources that were lowered or newly limited. Changes that only raise limits or change requests do not qualify, and neither does a change that also touches images, env, probes, commands or any other field.
+
+Any other hypothesis is outside this rule. Its resource observations remain evidence only.
+
+### Metrics, binding and thresholds
+
+- Memory: `max by (container) (container_memory_working_set_bytes) / kube_pod_container_resource_limits{resource="memory"}` (cAdvisor + kube-state-metrics), exactly the existing M18A `prometheus.resource` template. Pressure threshold 0.9 of the limit.
+- CPU: `rate(container_cpu_cfs_throttled_periods_total) / rate(container_cpu_cfs_periods_total)`, the existing template. Pressure threshold 0.25.
+- The thresholds are the existing `PRESSURE_THRESHOLD` values; this amendment does not change them. `OBSERVED_NORMAL` is the existing M18A classification: usable samples, peak below threshold, at least two samples, and both window edges covered within one 15-second step.
+- Binding: the exact Pods of the actor that run the changed template. That means Pods owned by the ReplicaSet whose pod-template matches the post-change template, per object history, and that existed during the coverage window. The exact container names in the diff are also required. A Pod set that cannot be determined positively makes the rule inapplicable.
+
+### Coverage window
+
+`[max(T_change, onset − 5 min), onset + grace]`, where `T_change` is the Finding's observed change time and grace is the §7 grace. Each read stays within the one-hour bounded-query contract. Every bound Pod must be covered for every resource in M.
+
+### When `OBSERVED_NORMAL` is counter-evidence
+
+It is counter-evidence only when it is produced for an exact bound Pod and container, for a resource in M, over an interval that covers the coverage window, with its query descriptor and source observation ids retained. `NO_DATA`, `UNKNOWN`, a partial window or a proxy metric are neutral.
+
+### Rule `m16.resource-pressure.v1`
+
+Reason code `OBSERVED_NORMAL_MECHANISM_MISMATCH`; consequence `CONTRADICTION` (the required mechanism premise is positively contradicted). It applies only when all of these hold:
+
+1. R1–R3 identify the required mechanism set M.
+2. The bound Pod set is non-empty and positively determined.
+3. Every (Pod, container, resource ∈ M) has `OBSERVED_NORMAL` over the full coverage window.
+4. No positive pressure evidence exists anywhere in the bound set: no `RESOURCE_PRESSURE` Finding, no `OOMKilled` container termination and no `Evicted` event in the window.
+5. The hypothesis has no other initiating premise (already implied by R1).
+
+If any precondition fails or is unknown, the rule does not apply and the hypothesis keeps its prior state. The audit records mechanism `RESOURCE_PRESSURE`, targets (actor + bound Pods), the per-Pod time basis, coverage (`n/n pods × resources observed normal`), the query descriptor ids as `observation_ids`, and every precondition result.
+
+### Scope limits
+
+- Normal resources contradict only the resource-limit mechanism. They say nothing about any other hypothesis, actor or mechanism (§6).
+- The rule never supports another hypothesis and never selects an actor. `RESOLVED` still requires the unchanged resolution rules.
+- Live demonstration requires the observation plane to scrape cAdvisor and kube-state-metrics. Until then every live resource read is `NO_DATA` and the rule is inert (§10).

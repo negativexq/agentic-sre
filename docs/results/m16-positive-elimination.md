@@ -137,3 +137,27 @@ Implementation `8a3022b`. The replay was re-run under the same CLASS 0 protocol 
 - Final resolution and leading actor: 25/25 unchanged. G16.10 on this set: 0 regressions. No new `RESOLVED` result, so there is no G16.9 exposure here, as the structural replay predicted.
 - Investigation actions: 150/150 identical `(capability, target, gap_id)`.
 - New ended-episode exclusions: 8 alternatives in 4 scenarios (102, 105, 20, 24), all `RECOVERED`. Each is a `kube-system` control-plane Pod (`kube-apiserver-*`, `kube-controller-manager-*`) whose failure events precede continuous readiness that covers onset + grace. A post-seal grader check found none of the 8 actors in the ground truth.
+
+## Task 2 — G16 live validation at `b982c40`
+
+The protocol matched the baseline (`da6f0e6`): a fresh Kind cluster (`cluster-down/up`, `deploy`, `rbac-check` PASS), then the 25 frozen scenarios with unchanged labels. Output is in `.local/live-bench/m16-b982c40/`. Model calls: 0.
+
+| Gate | Result |
+|---|---|
+| Outcomes | 25/25 CORRECT (16 root, 9 abstain), 0 fabricated. Identical to the baseline. |
+| Resolution distribution | 14 AMBIGUOUS / 11 INSUFFICIENT_EVIDENCE. Identical to the baseline. |
+| G16.7 AMBIGUOUS→RESOLVED | **0. NOT MET.** |
+| G16.8 false RESOLVED on abstain | 0 |
+| G16.9 wrong RESOLVED actor | 0 (no RESOLVED result) |
+| G16.10 previously-correct regressions | 0 |
+| New-rule eliminations | 13 `MANIFESTATION_EPISODE_ENDED_BEFORE_ONSET` (all TERMINATED); 0 `OBSERVED_NORMAL_MECHANISM_MISMATCH` (no scenario has a resource-only limit change) |
+
+### Why G16.7 is 0
+
+The graded (first) diagnoses of the 14 AMBIGUOUS incidents store full bodies for all 198 remaining unresolved alternatives (`ambiguous_hypotheses`). 197 of them are Pod hypotheses that are manifestation-only and entirely pre-onset (186 are readiness `Unhealthy`). By owner: payment-service 105, order-service 78, control-plane 14. The count grows through the run, from 5 to 24 per incident. Three facts explain it:
+
+1. **The harness truncates the journal.** `truncate_change_journal` (`packages/evals/live/actions.py`) empties `object_versions`/`event_versions`/`change_records` before every scenario. Kubernetes Events live about an hour in the cluster, so earlier scenarios' Pod failure events are journaled again after each truncation. Those Pods' deletion tombstones, which are the positive TERMINATED evidence §17 accepts, are destroyed. The 13 exclusions that did happen are Pods deleted after the truncation.
+2. **The first diagnosis comes too early for RECOVERED.** The graded diagnosis runs about a minute after onset, and RECOVERED needs a status observation at onset + 15 min. Still-running Pods, such as the control-plane Pod with its own startup readiness failures (present in all 14 incidents), cannot be excluded.
+3. **Scenarios are about 75 s apart.** Earlier scenarios' manifestations genuinely sit minutes before each onset.
+
+The cluster keeps kubelet `Killing` events ("Stopping container …", timestamped) for the replaced Pods, which is positive termination evidence the rule does not currently accept. Using it, changing the harness journal policy, or grading a later diagnosis would each change the frozen rule or the evaluation protocol. That decision is recorded as open for the owner. No gate is relabeled.

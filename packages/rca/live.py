@@ -501,6 +501,16 @@ class LiveSource:
             return self.prometheus_reader is not None
         return capability in {"history", "events", "logs"}
 
+    def supports_typed_runtime(self, capability: str) -> bool:
+        """Report configured typed providers independently of query results."""
+        if capability == "runtime_traces":
+            return self.tempo_reader is not None
+        if capability in {"resource_pressure", "traffic"}:
+            return self.prometheus_reader is not None
+        if capability == "logs":
+            return self.loki_reader is not None
+        return False
+
     def investigation_backend(self) -> InvestigationBackend:
         base: InvestigationBackend = SourceInvestigationBackend(self)
         if self.prometheus_reader is not None:

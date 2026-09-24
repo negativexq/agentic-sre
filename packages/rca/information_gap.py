@@ -490,6 +490,19 @@ def _available_names(dimension: GapDimension, source: ObservationSource | None) 
     return frozenset(item.name for item in _available_capabilities(dimension, (), source))
 
 
+def _typed_runtime_provider_available(source: ObservationSource | None, capability: str) -> bool:
+    """Check explicit provider configuration, never whether incident data exists."""
+    current = source
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        supports_typed_runtime = getattr(current, "supports_typed_runtime", None)
+        if callable(supports_typed_runtime):
+            return bool(supports_typed_runtime(capability))
+        current = getattr(current, "full_source", None) or getattr(current, "base", None)
+    return False
+
+
 def _query(
     capability: str,
     target: EntityRef,
@@ -588,14 +601,19 @@ def _actor_local_contract(
     alternative_id: str | None = None,
 ) -> tuple[AuthorizedQuery, ...]:
     """Return only exact actor-local capabilities for one causal predicate."""
+    typed_tempo = _typed_runtime_provider_available(source, "runtime_traces")
+    typed_prometheus = _typed_runtime_provider_available(source, "resource_pressure")
     capability_by_kind: dict[str, tuple[str, ...]] = {
         **{
             kind: (
                 ("history",)
                 if dimension in {GapDimension.CHANGE_TIMING, GapDimension.CONFIG_DIFFERENCE}
                 else ("runtime_traces",)
+                if kind in _TRACE_TARGET_KINDS and dimension is GapDimension.DEPENDENCY_HEALTH
+                else ("runtime_traces",)
                 if kind in _TRACE_TARGET_KINDS
-                and dimension in {GapDimension.DEPENDENCY_HEALTH, GapDimension.FAILURE_ONSET}
+                and dimension is GapDimension.FAILURE_ONSET
+                and typed_tempo
                 else ()
             )
             for kind in _WORKLOAD_CONTROLLER_KINDS
@@ -620,9 +638,11 @@ def _actor_local_contract(
         ),
         "Pod": {
             GapDimension.RESOURCE_PRESSURE: ("resource_pressure",),
-            GapDimension.METRIC_BASELINE: ("resource_pressure",),
+            GapDimension.METRIC_BASELINE: ("resource_pressure",) if typed_prometheus else (),
             GapDimension.DEPENDENCY_HEALTH: ("runtime_traces",),
-            GapDimension.FAILURE_ONSET: ("events", "runtime_traces"),
+            GapDimension.FAILURE_ONSET: (
+                ("events", "runtime_traces") if typed_tempo else ("events",)
+            ),
         }.get(dimension, ()),
         "Service": {
             GapDimension.DEPENDENCY_HEALTH: ("logs",),

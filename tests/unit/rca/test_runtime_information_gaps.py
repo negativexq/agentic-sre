@@ -7,6 +7,7 @@ from packages.rca.causal_roles import HypothesisCausalRoles
 from packages.rca.frontier import apply_frontier_progress, covered_frontier_dimensions
 from packages.rca.information_gap import (
     InformationGapContext,
+    _actor_local_contract,
     _capability_allows_target,
     derive_information_gaps,
 )
@@ -101,7 +102,7 @@ def test_pod_contract_has_events_pressure_and_traces_but_no_traffic() -> None:
     assert all(target == actor for _capability, target in pairs)
 
 
-def test_failure_onset_contract_admits_bounded_runtime_traces_for_pod() -> None:
+def test_legacy_failure_onset_contract_preserves_events_only() -> None:
     actor = _entity("Pod", "payment-0")
     hypothesis = Hypothesis(hypothesis_id="h-pod-onset", causal_actor=actor, members=(actor,))
 
@@ -113,12 +114,51 @@ def test_failure_onset_contract_admits_bounded_runtime_traces_for_pod() -> None:
     )
 
     onset_gap = next(gap for gap in gaps if gap.dimension is GapDimension.FAILURE_ONSET)
-    assert ("runtime_traces", actor) in {
-        (query.capability, query.target) for query in onset_gap.authorized_queries
+    assert {query.capability for query in onset_gap.authorized_queries} == {"events"}
+
+
+def test_typed_tempo_provider_adds_failure_onset_trace_route() -> None:
+    class TypedTempoSource:
+        def __init__(self) -> None:
+            self.source = InMemorySource(name="typed-tempo-source")
+
+        def supports(self, capability: str) -> bool:
+            if capability == "runtime_traces":
+                return True
+            methods = {
+                "history": "object_history",
+                "events": "events",
+                "incident_events": "events",
+                "incident_changes": "object_history",
+                "logs": "error_logs",
+                "resource_pressure": "resource_pressure",
+                "traffic": "traffic_observations",
+            }
+            method = methods.get(capability)
+            return method is not None and callable(getattr(self.source, method, None))
+
+        def supports_typed_runtime(self, capability: str) -> bool:
+            return capability == "runtime_traces"
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self.source, name)
+
+    actor = _entity("Pod", "payment-0")
+    hypothesis = Hypothesis(hypothesis_id="h-typed-pod-onset", causal_actor=actor, members=(actor,))
+    gaps = derive_information_gaps(
+        (hypothesis,),
+        _unresolved_trace(hypothesis.hypothesis_id),
+        TypedTempoSource(),
+        runtime_context=_context(),
+    )
+    onset_gap = next(gap for gap in gaps if gap.dimension is GapDimension.FAILURE_ONSET)
+    assert {query.capability for query in onset_gap.authorized_queries} == {
+        "events",
+        "runtime_traces",
     }
 
 
-def test_failure_onset_source_only_contract_excludes_unavailable_runtime_traces() -> None:
+def test_source_only_failure_onset_excludes_unconfigured_runtime_traces() -> None:
     class RuntimeUnavailableSource:
         def __init__(self, source: InMemorySource) -> None:
             self.source = source
@@ -142,18 +182,53 @@ def test_failure_onset_source_only_contract_excludes_unavailable_runtime_traces(
             return getattr(self.source, name)
 
     actor = _entity("Pod", "payment-0")
-    hypothesis = Hypothesis(hypothesis_id="h-pod-onset", causal_actor=actor, members=(actor,))
-    source = RuntimeUnavailableSource(InMemorySource(name="source-only-pod-onset"))
-
+    hypothesis = Hypothesis(
+        hypothesis_id="h-pod-onset-unavailable", causal_actor=actor, members=(actor,)
+    )
     gaps = derive_information_gaps(
         (hypothesis,),
         _unresolved_trace(hypothesis.hypothesis_id),
-        source,
+        RuntimeUnavailableSource(InMemorySource(name="unavailable-tempo-source")),
         runtime_context=_context(),
     )
-
     onset_gap = next(gap for gap in gaps if gap.dimension is GapDimension.FAILURE_ONSET)
     assert tuple(query.capability for query in onset_gap.authorized_queries) == ("events",)
+
+
+def test_typed_prometheus_provider_adds_pod_metric_baseline_route() -> None:
+    class TypedPrometheusSource:
+        def __init__(self) -> None:
+            self.source = InMemorySource(name="typed-prometheus-source")
+
+        def supports(self, capability: str) -> bool:
+            return capability == "resource_pressure" or callable(
+                getattr(
+                    self.source,
+                    {
+                        "history": "object_history",
+                        "events": "events",
+                        "incident_events": "events",
+                        "incident_changes": "object_history",
+                        "logs": "error_logs",
+                        "traffic": "traffic_observations",
+                    }.get(capability, ""),
+                    None,
+                )
+            )
+
+        def supports_typed_runtime(self, capability: str) -> bool:
+            return capability == "resource_pressure"
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self.source, name)
+
+    actor = _entity("Pod", "payment-0")
+    queries = _actor_local_contract(
+        actor,
+        GapDimension.METRIC_BASELINE,
+        TypedPrometheusSource(),
+    )
+    assert {(query.capability, query.target) for query in queries} == {("resource_pressure", actor)}
 
 
 def test_service_contract_is_logs_and_traffic_only() -> None:

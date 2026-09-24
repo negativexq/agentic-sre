@@ -413,7 +413,7 @@ def test_source_supports_contract_and_snapshot_fallback() -> None:
     fallback = SourceInvestigationBackend(snapshot_like)
     assert fallback.supports("resource_pressure")
     assert fallback.supports("traffic")
-    assert not fallback.supports("runtime_traces")
+    assert fallback.supports("runtime_traces")
 
 
 def _gap(capability: str, dimension: GapDimension, target: EntityRef) -> InformationGap:

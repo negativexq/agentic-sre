@@ -100,13 +100,18 @@ def test_exact_kubernetes_target_matching_and_no_service_fallback() -> None:
     assert not _trace_matches_target(service_only, deployment)
 
 
-def test_source_backend_does_not_advertise_empty_source_only_trace_capability() -> None:
+def test_legacy_source_trace_capability_is_independent_of_current_evidence() -> None:
     source = InMemorySource(name="source-only-no-traces")
     backend = SourceInvestigationBackend(source)
-    assert not backend.supports("runtime_traces")
+    target = _entity("Pod", "payment-0")
+    query = InvestigationQuery(start=T0 - timedelta(minutes=1), end=T0 + timedelta(minutes=1))
+
+    assert backend.supports("runtime_traces")
+    assert backend.query_traces(target, query) == ()
 
     source.trace_items.append(_span("seed"))
     assert backend.supports("runtime_traces")
+    assert backend.query_traces(target, query)
 
 
 @pytest.mark.parametrize(

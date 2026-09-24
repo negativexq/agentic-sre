@@ -213,11 +213,6 @@ class SourceInvestigationBackend:
             return bool(
                 source_supports(capability) or (alias is not None and source_supports(alias))
             )
-        if capability == "runtime_traces":
-            # ObservationSource defines this method for every source, including
-            # source-only snapshots that have no trace backend. Do not turn an
-            # empty default tuple into an advertised telemetry capability.
-            return bool(self.source.trace_observations())
         methods = {
             "history": "object_history",
             "events": "events",

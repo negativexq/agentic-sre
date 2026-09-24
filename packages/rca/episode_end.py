@@ -55,6 +55,7 @@ class InstanceEpisodeEnd:
     observed_at: datetime
     last_manifestation_at: datetime
     end_evidence_id: str
+    decisive_evidence_ids: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -112,8 +113,12 @@ def _terminated(
     versions: Sequence[ObjectVersion],
     statuses: Sequence[PodStatusObservation],
     onset: datetime,
-) -> tuple[datetime, datetime, str] | None:
-    """(end, observed_at, evidence) when this exact Pod instance was deleted by onset."""
+) -> tuple[datetime, datetime, str, tuple[str, ...]] | None:
+    """(end, observed_at, evidence, decisive) when this exact instance was deleted by onset.
+
+    ``decisive`` is every qualifying deletion record of the instance: the
+    trailing real tombstones at or before onset.
+    """
     own = [version for version in versions if _version_uid(version) == uid]
     if not own:
         return None
@@ -133,7 +138,16 @@ def _terminated(
         status.uid in (uid, None) and status.observed_at > last.observed_at for status in statuses
     ):
         return None
-    return last.observed_at, last.observed_at, last.evidence_id
+    decisive: list[str] = []
+    for version in reversed(own):
+        if (
+            version.lifecycle is not Lifecycle.DELETED
+            or version.evidence_id in _SYNTHETIC_TOMBSTONES
+            or version.observed_at > onset
+        ):
+            break
+        decisive.append(version.evidence_id)
+    return last.observed_at, last.observed_at, last.evidence_id, tuple(reversed(decisive))
 
 
 def _recovered(
@@ -141,8 +155,12 @@ def _recovered(
     statuses: Sequence[PodStatusObservation],
     onset: datetime,
     boundary: datetime,
-) -> tuple[datetime, datetime, str] | None:
-    """(ready_since, observed_at, evidence) for this instance's readiness across onset."""
+) -> tuple[datetime, datetime, str, tuple[str, ...]] | None:
+    """(ready_since, observed_at, evidence, decisive) for readiness across onset.
+
+    ``decisive`` is every covering observation of the instance, not only the
+    latest one; continuity makes them all agree on ``ready_since``.
+    """
     own = [status for status in statuses if status.uid == uid]
     covering = [
         status
@@ -163,7 +181,10 @@ def _recovered(
         if since <= status.observed_at <= latest.observed_at:
             if status.ready is not True or status.ready_since != since:
                 return None
-    return since, latest.observed_at, latest.evidence_id
+    decisive = tuple(
+        status.evidence_id for status in sorted(covering, key=lambda status: status.observed_at)
+    )
+    return since, latest.observed_at, latest.evidence_id, decisive
 
 
 def assess_ended_episode(
@@ -209,7 +230,7 @@ def assess_ended_episode(
             end = _recovered(uid, statuses, onset, boundary)
         if end is None:
             return None
-        ended_at, observed_at, evidence_id = end
+        ended_at, observed_at, evidence_id, decisive = end
         last_manifestation = max(groups[uid])
         if not last_manifestation < ended_at:
             return None
@@ -222,6 +243,7 @@ def assess_ended_episode(
                 observed_at=observed_at,
                 last_manifestation_at=last_manifestation,
                 end_evidence_id=evidence_id,
+                decisive_evidence_ids=decisive,
             )
         )
     manifestation_ids = tuple(

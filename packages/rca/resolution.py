@@ -444,6 +444,7 @@ def _mechanism_elimination(mismatch: MechanismMismatch) -> ResolutionElimination
         targets=(mismatch.actor.canonical, *(pod.canonical for pod in mismatch.pods)),
         mechanism="RESOURCE_PRESSURE",
         observation_ids=tuple(item.evidence_id for item in mismatch.coverage),
+        decisive_evidence_ids=tuple(dict.fromkeys(item.evidence_id for item in mismatch.coverage)),
         time_basis=tuple(
             EliminationTimeBasis(
                 evidence_ids=(item.evidence_id,),
@@ -498,6 +499,11 @@ def _ended_episode_elimination(ended: EndedEpisode) -> ResolutionElimination:
             for item in ended.instances
         ),
         preconditions=ended.preconditions,
+        decisive_evidence_ids=tuple(
+            dict.fromkeys(
+                evidence for item in ended.instances for evidence in item.decisive_evidence_ids
+            )
+        ),
     )
 
 

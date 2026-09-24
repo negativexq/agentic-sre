@@ -523,6 +523,9 @@ class ResolutionElimination(BaseModel):
     time_basis: tuple[EliminationTimeBasis, ...] = ()
     coverage_basis: str = ""
     preconditions: tuple[EliminationPrecondition, ...] = ()
+    # Every record that satisfied the deciding precondition, not only the one
+    # quoted in the time basis. Empty for rules that do not record it.
+    decisive_evidence_ids: tuple[str, ...] = ()
 
     @property
     def rule(self) -> str:

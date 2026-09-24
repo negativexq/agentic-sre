@@ -15,6 +15,8 @@ from packages.rca.model import (
     InvestigationQuery,
 )
 
+_RUNTIME_CAPABILITIES = frozenset({"resource_pressure", "traffic", "logs", "runtime_traces"})
+
 
 @dataclass(frozen=True)
 class ActionValidation:
@@ -108,6 +110,12 @@ def validate_action(
     if action.query is not None and action.query.start and action.query.end:
         if action.query.start > action.query.end:
             return ActionValidation(False, "query start must not be after query end")
+    if (
+        action.capability in _RUNTIME_CAPABILITIES
+        and action.query is not None
+        and action.query.limit > 32
+    ):
+        return ActionValidation(False, "runtime evidence limit must be at most 32")
     if action.capability == "runtime_traces" and action.query is not None:
         if action.query.reasons or action.query.contains:
             return ActionValidation(

@@ -31,6 +31,7 @@ from packages.rca.investigation.tempo import (
     TempoProtocolError,
     TempoResponseTooLarge,
     TempoSearchCompleteness,
+    TempoTraceBatch,
     TempoTraceReader,
     _compile_target_traceql,
     _TempoHttpResponse,
@@ -467,7 +468,8 @@ def test_tempo_backend_reuses_a2_one_hop_selection_and_live_support_is_optional(
         observation_cutoff=T0 + timedelta(minutes=1),
     )
     selected = tempo_backend.query_traces(_entity(), _query())
-    assert tuple(span.span_id for span in selected) == (
+    assert isinstance(selected, TempoTraceBatch)
+    assert tuple(span.span_id for span in selected.spans) == (
         "1111111111111111",
         "2222222222222222",
         "3333333333333333",

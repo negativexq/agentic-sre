@@ -4,6 +4,7 @@ import json
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from email.message import Message
+from hashlib import sha256
 from typing import TypedDict, cast
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlsplit
@@ -428,6 +429,27 @@ def _gap(capability: str, dimension: GapDimension, target: EntityRef) -> Informa
     )
 
 
+def _traffic_runtime_observation(
+    values: list[list[object]], query: InvestigationQuery, *, cutoff: datetime
+) -> InvestigationObservation:
+    service = _entity("Service", "payment-service")
+    source = InMemorySource(
+        name="traffic-coverage-helper",
+        alert_items=[Alert(name="RequestErrorRate", service=service.name, starts_at=T0)],
+        cutoff=cutoff,
+    )
+    case = build_case(initial_view(source))
+    gap = _gap("traffic", GapDimension.METRIC_CHANGE, service)
+    response: list[dict[str, object]] = [{"metric": {}, "values": values}] if values else []
+    transport = _Transport(lambda url, headers: _Response(_success(response)))
+    backend = PrometheusInvestigationBackend(
+        base=SourceInvestigationBackend(source),
+        prometheus=_reader(transport),
+        observation_cutoff=cutoff,
+    )
+    return TrafficTool(backend).execute_query(case, gap, service, query)
+
+
 class _Acquisition(TypedDict):
     acquired_evidence_refs: tuple[str, ...]
     pending_new_evidence_refs: tuple[str, ...]
@@ -653,3 +675,170 @@ def test_resource_runtime_status_distinguishes_no_data_normal_and_abnormal() -> 
     assert no_data.runtime.state is RuntimeObservationState.NO_DATA
     assert no_data.runtime.source_observation_ids == ()
     assert normalize_observation(no_data, case=case, gap=gap).findings == ()
+
+
+def test_partial_traffic_window_cannot_be_observed_normal() -> None:
+    service = _entity("Service", "payment-service")
+    source = InMemorySource(
+        name="traffic-partial-coverage",
+        alert_items=[Alert(name="RequestErrorRate", service=service.name, starts_at=T0)],
+    )
+    case = build_case(initial_view(source))
+    gap = _gap("traffic", GapDimension.METRIC_CHANGE, service)
+    query = _query(start=T0 - timedelta(minutes=5), end=T0 + timedelta(minutes=5))
+    transport = _Transport(
+        lambda url, headers: _Response(
+            _success(
+                [
+                    {
+                        "metric": {},
+                        "values": [
+                            _sample(T0 - timedelta(seconds=1), "10"),
+                            _sample(T0, "10"),
+                            _sample(T0 + timedelta(seconds=1), "10"),
+                        ],
+                    }
+                ]
+            )
+        )
+    )
+    backend = PrometheusInvestigationBackend(
+        base=SourceInvestigationBackend(source),
+        prometheus=_reader(transport),
+        observation_cutoff=T0 + timedelta(minutes=10),
+    )
+
+    observation = TrafficTool(backend).execute_query(case, gap, service, query)
+
+    assert observation.runtime is not None
+    assert observation.runtime.state is RuntimeObservationState.UNKNOWN
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        [_sample(T0 - timedelta(minutes=5), "10")],
+        [_sample(T0 + timedelta(minutes=5), "10")],
+    ],
+    ids=("only-before", "only-after"),
+)
+def test_traffic_single_sided_samples_are_unknown(values: list[list[object]]) -> None:
+    observation = _traffic_runtime_observation(
+        values,
+        _query(start=T0 - timedelta(minutes=5), end=T0 + timedelta(minutes=5)),
+        cutoff=T0 + timedelta(minutes=5),
+    )
+    assert observation.runtime is not None
+    assert observation.runtime.state is RuntimeObservationState.UNKNOWN
+
+
+def test_sufficient_steady_traffic_coverage_is_observed_normal() -> None:
+    start = T0 - timedelta(minutes=5)
+    values = [_sample(start + timedelta(seconds=20 * index), "10") for index in range(31)]
+    observation = _traffic_runtime_observation(
+        values,
+        _query(start=start, end=T0 + timedelta(minutes=5)),
+        cutoff=T0 + timedelta(minutes=5),
+    )
+    assert observation.runtime is not None
+    assert observation.runtime.state is RuntimeObservationState.OBSERVED_NORMAL
+
+
+def test_partial_traffic_with_positive_increase_remains_observed_abnormal() -> None:
+    observation = _traffic_runtime_observation(
+        [
+            _sample(T0 - timedelta(seconds=1), "10"),
+            _sample(T0 + timedelta(seconds=1), "15"),
+        ],
+        _query(start=T0 - timedelta(minutes=5), end=T0 + timedelta(minutes=5)),
+        cutoff=T0 + timedelta(minutes=5),
+    )
+    assert observation.runtime is not None
+    assert observation.runtime.state is RuntimeObservationState.OBSERVED_ABNORMAL
+    normalized = normalize_observation(
+        observation,
+        case=build_case(
+            initial_view(
+                InMemorySource(
+                    name="partial-traffic-abnormal",
+                    alert_items=[
+                        Alert(name="RequestErrorRate", service="payment-service", starts_at=T0)
+                    ],
+                    cutoff=T0 + timedelta(minutes=5),
+                )
+            )
+        ),
+        gap=_gap(
+            "traffic",
+            GapDimension.METRIC_CHANGE,
+            _entity("Service", "payment-service"),
+        ),
+    )
+    assert any(item.kind is FindingKind.TRAFFIC_INCREASE for item in normalized.findings)
+
+
+def test_traffic_coverage_uses_cutoff_clipped_effective_interval() -> None:
+    start = T0 - timedelta(seconds=120)
+    cutoff = T0 + timedelta(seconds=60)
+    query = _query(start=start, end=T0 + timedelta(seconds=180))
+    values = [_sample(start + timedelta(seconds=15 * index), "10") for index in range(13)]
+    observation = _traffic_runtime_observation(values, query, cutoff=cutoff)
+
+    assert observation.runtime is not None
+    assert observation.runtime.state is RuntimeObservationState.OBSERVED_NORMAL
+    assert observation.runtime.query.requested_end == query.end
+    assert observation.runtime.query.effective_end == cutoff
+
+
+def test_traffic_descriptor_hash_uses_the_effective_limit() -> None:
+    service = _entity("Service", "payment-service")
+    source = InMemorySource(
+        name="traffic-descriptor-limit",
+        alert_items=[Alert(name="RequestErrorRate", service=service.name, starts_at=T0)],
+    )
+    case = build_case(initial_view(source))
+    gap = _gap("traffic", GapDimension.METRIC_CHANGE, service)
+    query = _query(start=T0 - timedelta(minutes=5), end=T0 + timedelta(minutes=5), limit=64)
+    transport = _Transport(
+        lambda url, headers: _Response(
+            _success(
+                [
+                    {
+                        "metric": {},
+                        "values": [
+                            _sample(T0 - timedelta(minutes=5), "10"),
+                            _sample(T0, "10"),
+                            _sample(T0 + timedelta(minutes=5), "10"),
+                        ],
+                    }
+                ]
+            )
+        )
+    )
+    backend = PrometheusInvestigationBackend(
+        base=SourceInvestigationBackend(source),
+        prometheus=_reader(transport),
+        observation_cutoff=T0 + timedelta(minutes=10),
+    )
+
+    observation = TrafficTool(backend).execute_query(case, gap, service, query)
+
+    assert observation.runtime is not None
+    descriptor = observation.runtime.query
+    assert query.start is not None
+    assert query.end is not None
+    effective_material = json.dumps(
+        {
+            "capability": "traffic",
+            "target": service.canonical,
+            "requested_start": query.start.isoformat(),
+            "requested_end": query.end.isoformat(),
+            "effective_end": query.end.isoformat(),
+            "limit": descriptor.limit,
+            "template": "prometheus.http_request_rate.v1",
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    assert descriptor.limit == 32
+    assert descriptor.descriptor_id == f"sha256:{sha256(effective_material.encode()).hexdigest()}"

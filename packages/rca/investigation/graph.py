@@ -57,6 +57,7 @@ from packages.rca.investigation.intents import (
 from packages.rca.investigation.normalizers import (
     deduplicate_findings,
     finding_identity,
+    hypothesis_ids_for_findings,
     new_investigation_findings,
     normalize_observation,
 )
@@ -2084,19 +2085,20 @@ def _rebuild(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     updated_observations = state["observations"]
     if ledger and (derived_ids or native_records):
         latest = ledger[-1]
-        hypothesis_ids = tuple(
-            sorted(
-                hypothesis.hypothesis_id
-                for hypothesis in case.hypotheses
-                if latest.target == hypothesis.causal_actor or latest.target in hypothesis.members
-            )
-        )
         returned_refs = set(latest.returned_evidence_refs)
-        aligned_existing_finding = any(
-            returned_refs.intersection(finding.evidence_ids)
-            and (finding.entity == latest.target or latest.target in finding.related)
-            for finding in case.findings
+        observation_findings = tuple(
+            finding for finding in case.findings if returned_refs.intersection(finding.evidence_ids)
         )
+        hypothesis_ids = hypothesis_ids_for_findings(
+            case.hypotheses,
+            observation_findings,
+            legacy_target=(
+                latest.target
+                if native_observation is None or native_observation.runtime is None
+                else None
+            ),
+        )
+        aligned_existing_finding = bool(observation_findings and hypothesis_ids)
         outcome = (
             GapOutcomeKind.SUPPORTS
             if (derived_ids or aligned_existing_finding) and hypothesis_ids

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -11,6 +12,7 @@ from packages.rca.model import (
     EntityRef,
     GapDimension,
     GapOutcomeKind,
+    Hypothesis,
     InformationGap,
     InvestigationObservation,
     RuntimeEvidencePillar,
@@ -143,6 +145,11 @@ def test_runtime_context_cannot_mislabel_data_as_no_data_or_change_target() -> N
 
 def test_runtime_metadata_alone_cannot_create_findings_or_change_rca() -> None:
     case = build_case(InMemorySource(name="runtime-context-only"))
+    target = EntityRef(namespace="shop", kind="Deployment", name="checkout")
+    case = replace(
+        case,
+        hypotheses=[Hypothesis(hypothesis_id="h-query-target", causal_actor=target)],
+    )
     findings_before = case.findings
     hypotheses_before = case.hypotheses
     candidates_before = case.candidates
@@ -155,7 +162,7 @@ def test_runtime_metadata_alone_cannot_create_findings_or_change_rca() -> None:
         observation_id="runtime:metadata-only",
         gap_id=gap.gap_id,
         capability="runtime_traces",
-        target=EntityRef(namespace="shop", kind="Deployment", name="checkout"),
+        target=target,
         outcome=GapOutcomeKind.UNKNOWN,
         runtime=RuntimeObservationContext(
             pillar=RuntimeEvidencePillar.TEMPO,
@@ -164,7 +171,7 @@ def test_runtime_metadata_alone_cannot_create_findings_or_change_rca() -> None:
             query=RuntimeQueryDescriptor(
                 descriptor_id="tempo:query:1",
                 template_id="tempo.target_traces.v1",
-                target=EntityRef(namespace="shop", kind="Deployment", name="checkout"),
+                target=target,
                 requested_start=T0 - timedelta(minutes=5),
                 requested_end=T0,
                 effective_start=T0 - timedelta(minutes=5),
@@ -180,6 +187,34 @@ def test_runtime_metadata_alone_cannot_create_findings_or_change_rca() -> None:
 
     assert normalized.findings == ()
     assert normalized.observation.outcome is GapOutcomeKind.UNKNOWN
+    assert normalized.observation.hypothesis_ids == ()
     assert case.findings == findings_before
     assert case.hypotheses == hypotheses_before
     assert case.candidates == candidates_before
+
+
+def test_no_data_never_attributes_a_hypothesis() -> None:
+    target = _query().target
+    case = build_case(InMemorySource(name="runtime-no-data-attribution"))
+    case = replace(
+        case,
+        hypotheses=[Hypothesis(hypothesis_id="h-target", causal_actor=target)],
+    )
+    gap = InformationGap(
+        gap_id="gap:no-data",
+        dimension=GapDimension.RESOURCE_PRESSURE,
+        missing_fact="resource observation",
+    )
+    observation = InvestigationObservation(
+        observation_id="runtime:no-data",
+        gap_id=gap.gap_id,
+        capability="resource_pressure",
+        target=target,
+        outcome=GapOutcomeKind.NO_DATA,
+        runtime=_context(RuntimeObservationState.NO_DATA),
+    )
+
+    normalized = normalize_observation(observation, case=case, gap=gap)
+
+    assert normalized.findings == ()
+    assert normalized.observation.hypothesis_ids == ()

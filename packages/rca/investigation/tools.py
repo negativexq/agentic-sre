@@ -17,7 +17,9 @@ from packages.rca.investigation.environment import (
     _default_query,
     _query_trace_observations,
 )
+from packages.rca.investigation.prometheus import _traffic_query_step_seconds
 from packages.rca.investigation.state import InvestigationTool
+from packages.rca.investigation.tempo import TempoSearchDiagnostics, TempoTraceBatch
 from packages.rca.model import (
     EntityRef,
     GapOutcomeKind,
@@ -196,7 +198,7 @@ def _prometheus_runtime_context(
             "requested_start": requested.start.isoformat(),
             "requested_end": requested.end.isoformat(),
             "effective_end": effective_end.isoformat(),
-            "limit": requested.limit,
+            "limit": min(requested.limit, 32),
             "template": template_id,
         },
         sort_keys=True,
@@ -279,6 +281,7 @@ def _tempo_runtime_context(
     requested: InvestigationQuery,
     source_ids: tuple[str, ...],
     spans: tuple[Any, ...],
+    diagnostics: TempoSearchDiagnostics | None,
 ) -> RuntimeObservationContext | None:
     current: object | None = backend
     seen: set[int] = set()
@@ -321,7 +324,25 @@ def _tempo_runtime_context(
         ):
             state = RuntimeObservationState.OBSERVED_ABNORMAL
         elif all(outcome is RuntimeOutcomeState.SUCCESS for outcome in outcomes):
-            state = RuntimeObservationState.OBSERVED_NORMAL
+            # Neither BEST_EFFORT nor TRUNCATED proves full negative coverage.
+            # Also fail closed on inconsistent diagnostics if a future reader
+            # adds another completeness status.
+            complete = (
+                diagnostics is not None
+                and diagnostics.completeness.value not in {"BEST_EFFORT", "TRUNCATED"}
+                and not diagnostics.search_limit_reached
+                and not diagnostics.missing_trace_ids
+                and not (
+                    diagnostics.completed_jobs is not None
+                    and diagnostics.total_jobs is not None
+                    and diagnostics.completed_jobs != diagnostics.total_jobs
+                )
+            )
+            state = (
+                RuntimeObservationState.OBSERVED_NORMAL
+                if complete
+                else RuntimeObservationState.UNKNOWN
+            )
         else:
             state = RuntimeObservationState.UNKNOWN
     return RuntimeObservationContext(
@@ -372,7 +393,10 @@ def _resource_observation_state(
 
 
 def _traffic_observation_state(
-    records: tuple[TrafficObservation, ...], case: Case
+    records: tuple[TrafficObservation, ...],
+    case: Case,
+    query: InvestigationQuery,
+    cutoff: datetime | None,
 ) -> RuntimeObservationState:
     if not records:
         return RuntimeObservationState.NO_DATA
@@ -383,10 +407,23 @@ def _traffic_observation_state(
     after = tuple(item for item in records if item.at >= onset)
     if not before or not after or before[-1].value <= 0:
         return RuntimeObservationState.UNKNOWN
+    if traffic_findings(records, onset, case.context.window_end):
+        return RuntimeObservationState.OBSERVED_ABNORMAL
+    if query.start is None or query.end is None:
+        return RuntimeObservationState.UNKNOWN
+    effective_end = min(query.end, cutoff) if cutoff is not None else query.end
+    if effective_end < query.start:
+        return RuntimeObservationState.UNKNOWN
+    step = timedelta(seconds=_traffic_query_step_seconds(query.start, effective_end, query.limit))
+    ordered = sorted(item.at for item in records)
+    covered_edges = ordered[0] <= query.start + step and ordered[-1] >= effective_end - step
+    covered_interior = all(
+        right - left <= step * 2 for left, right in zip(ordered, ordered[1:], strict=False)
+    )
     return (
-        RuntimeObservationState.OBSERVED_ABNORMAL
-        if traffic_findings(records, onset, case.context.window_end)
-        else RuntimeObservationState.OBSERVED_NORMAL
+        RuntimeObservationState.OBSERVED_NORMAL
+        if len(ordered) >= 2 and covered_edges and covered_interior
+        else RuntimeObservationState.UNKNOWN
     )
 
 
@@ -717,6 +754,10 @@ class TrafficTool(_BaseTool):
             return self.execute(case, gap, target)
         requested = _default_query(query, onset=case.symptoms.onset)
         records = self.backend.query_traffic(target, requested)
+        cutoff = case.source.observation_cutoff()
+        effective_query = requested
+        if requested.end is not None and cutoff is not None and requested.end > cutoff:
+            effective_query = requested.model_copy(update={"end": cutoff})
         record_refs = tuple(item.evidence_id for item in records)
         return self._observation(
             gap,
@@ -730,7 +771,7 @@ class TrafficTool(_BaseTool):
                 target=target,
                 requested=requested,
                 source_ids=record_refs,
-                state=_traffic_observation_state(records, case),
+                state=_traffic_observation_state(records, case, effective_query, cutoff),
             ),
             observed_at=max((item.at for item in records), default=None),
         )
@@ -756,7 +797,15 @@ class RuntimeTracesTool(_BaseTool):
                 case.source.observation_cutoff(),
             )
         else:
-            spans = self.backend.query_traces(target, requested)
+            trace_result = self.backend.query_traces(target, requested)
+            if isinstance(trace_result, TempoTraceBatch):
+                spans = trace_result.spans
+                diagnostics = trace_result.diagnostics
+            else:
+                spans = trace_result
+                diagnostics = None
+        if self.backend is None:
+            diagnostics = None
         refs = tuple(span.evidence_id for span in spans)
         runtime = _tempo_runtime_context(
             backend=self.backend,
@@ -765,16 +814,26 @@ class RuntimeTracesTool(_BaseTool):
             requested=requested,
             source_ids=refs,
             spans=spans,
+            diagnostics=diagnostics,
         )
+        payload: dict[str, Any] = {
+            "traces": [span.model_dump(mode="json") for span in spans],
+            "trace_call_facts": [
+                fact.model_dump(mode="json") for fact in derive_runtime_trace_call_facts(spans)
+            ],
+        }
+        if diagnostics is not None and spans:
+            payload["trace_search_diagnostics"] = {
+                "completeness": diagnostics.completeness.value,
+                "search_limit_reached": diagnostics.search_limit_reached,
+                "completed_jobs": diagnostics.completed_jobs,
+                "total_jobs": diagnostics.total_jobs,
+                "missing_trace_ids": diagnostics.missing_trace_ids,
+            }
         return self._observation(
             gap,
             target,
-            {
-                "traces": [span.model_dump(mode="json") for span in spans],
-                "trace_call_facts": [
-                    fact.model_dump(mode="json") for fact in derive_runtime_trace_call_facts(spans)
-                ],
-            },
+            payload,
             refs=refs,
             observed_at=max((span.start_at for span in spans), default=None),
             runtime=runtime,

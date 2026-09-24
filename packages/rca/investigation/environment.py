@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Protocol, cast
 
 from packages.rca.investigation.prometheus import PrometheusMetricsReader
-from packages.rca.investigation.tempo import TempoTraceReader
+from packages.rca.investigation.tempo import TempoTraceBatch, TempoTraceReader
 from packages.rca.model import (
     Alert,
     ClusterEvent,
@@ -181,7 +181,7 @@ class InvestigationBackend(Protocol):
 
     def query_traces(
         self, target: EntityRef, query: InvestigationQuery
-    ) -> tuple[TraceSpanObservation, ...]: ...
+    ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch: ...
 
     def supports(self, capability: str) -> bool: ...
 
@@ -465,9 +465,12 @@ class TempoInvestigationBackend:
 
     def query_traces(
         self, target: EntityRef, query: InvestigationQuery
-    ) -> tuple[TraceSpanObservation, ...]:
+    ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch:
         batch = self.tempo.query(target, query)
-        return _select_runtime_trace_context(batch.spans, target, query, self.observation_cutoff)
+        selected = _select_runtime_trace_context(
+            batch.spans, target, query, self.observation_cutoff
+        )
+        return TempoTraceBatch(spans=selected, diagnostics=batch.diagnostics)
 
     def supports(self, capability: str) -> bool:
         if capability == "runtime_traces":
@@ -558,7 +561,7 @@ class LokiInvestigationBackend:
 
     def query_traces(
         self, target: EntityRef, query: InvestigationQuery
-    ) -> tuple[TraceSpanObservation, ...]:
+    ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch:
         return self.base.query_traces(target, query)
 
     def supports(self, capability: str) -> bool:
@@ -607,7 +610,7 @@ class PrometheusInvestigationBackend:
 
     def query_traces(
         self, target: EntityRef, query: InvestigationQuery
-    ) -> tuple[TraceSpanObservation, ...]:
+    ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch:
         return self.base.query_traces(target, query)
 
     def query_resource_pressure(

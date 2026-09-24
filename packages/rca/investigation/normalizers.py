@@ -18,6 +18,7 @@ from packages.rca.model import (
     Finding,
     FindingKind,
     GapOutcomeKind,
+    Hypothesis,
     InformationGap,
     InvestigationObservation,
     LogRecord,
@@ -87,8 +88,27 @@ def _with_provenance(
     return finding.model_copy(update={"details": details})
 
 
-_ACQUISITION_DETAIL_KEYS = frozenset(
-    {"observation_id", "investigation_gap_id", "investigation_capability"}
+# Acquisition provenance explains how a semantic fact was obtained; it must
+# remain on persisted Findings but must not alter the identity of that fact.
+# The normalization rule is deliberately retained in semantic identity because
+# it defines how the observed fields were interpreted.
+ACQUISITION_PROVENANCE_DETAIL_KEYS = frozenset(
+    {
+        "observation_id",
+        "investigation_gap_id",
+        "investigation_capability",
+        "runtime_pillar",
+        "runtime_capability",
+        "runtime_target",
+        "runtime_requested_start",
+        "runtime_requested_end",
+        "runtime_effective_start",
+        "runtime_effective_end",
+        "runtime_query_descriptor_id",
+        "runtime_query_template_id",
+        "runtime_source_observation_ids",
+        "runtime_observation_state",
+    }
 )
 
 
@@ -115,7 +135,9 @@ def _semantic_value(value: Any) -> Any:
 def finding_identity(finding: Finding) -> tuple[Any, ...]:
     """Return the semantic identity used for investigation Finding deduplication."""
     semantic_details = {
-        key: value for key, value in finding.details.items() if key not in _ACQUISITION_DETAIL_KEYS
+        key: value
+        for key, value in finding.details.items()
+        if key not in ACQUISITION_PROVENANCE_DETAIL_KEYS
     }
     return (
         finding.kind.value,
@@ -293,6 +315,48 @@ def _trace_findings(
     return tuple(findings)
 
 
+def _finding_actor_refs(findings: Iterable[Finding]) -> set[EntityRef]:
+    """Return typed actors explicitly named by normalized Finding semantics."""
+    actors: set[EntityRef] = set()
+    for finding in findings:
+        actors.add(finding.entity)
+        actors.update(finding.related)
+        for key in ("caller", "callee", "service"):
+            value = finding.details.get(key)
+            if not isinstance(value, str):
+                continue
+            try:
+                actors.add(EntityRef.parse(value))
+            except ValueError:
+                continue
+    return actors
+
+
+def hypothesis_ids_for_findings(
+    hypotheses: Iterable[Hypothesis],
+    findings: Iterable[Finding],
+    *,
+    legacy_target: EntityRef | None = None,
+) -> tuple[str, ...]:
+    """Attribute typed runtime evidence by actors, retaining legacy source behavior."""
+    actors = _finding_actor_refs(findings)
+    if legacy_target is not None:
+        return tuple(
+            sorted(
+                hypothesis.hypothesis_id
+                for hypothesis in hypotheses
+                if legacy_target == hypothesis.causal_actor or legacy_target in hypothesis.members
+            )
+        )
+    return tuple(
+        sorted(
+            hypothesis.hypothesis_id
+            for hypothesis in hypotheses
+            if hypothesis.causal_actor in actors or bool(set(hypothesis.members) & actors)
+        )
+    )
+
+
 def normalize_observation(
     observation: InvestigationObservation,
     *,
@@ -331,13 +395,10 @@ def normalize_observation(
         )
     provenance_observation = observation.model_copy(update={"runtime": runtime})
     normalized = tuple(_with_provenance(item, provenance_observation, gap) for item in findings)
-    hypothesis_ids = tuple(
-        sorted(
-            hypothesis.hypothesis_id
-            for hypothesis in case.hypotheses
-            if observation.target == hypothesis.causal_actor
-            or observation.target in hypothesis.members
-        )
+    hypothesis_ids = hypothesis_ids_for_findings(
+        case.hypotheses,
+        normalized,
+        legacy_target=observation.target if observation.runtime is None else None,
     )
     interpreted = observation.model_copy(
         update={
@@ -383,6 +444,7 @@ __all__ = [
     "NormalizedObservation",
     "deduplicate_findings",
     "finding_identity",
+    "hypothesis_ids_for_findings",
     "new_investigation_findings",
     "normalize_observation",
 ]

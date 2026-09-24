@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from urllib.request import Request
 
@@ -22,6 +23,7 @@ from packages.rca.model import (
     FindingKind,
     GapDimension,
     GapOutcomeKind,
+    Hypothesis,
     InformationGap,
     InvestigationQuery,
     LogRecord,
@@ -123,6 +125,49 @@ def test_loki_runtime_path_normalizes_dependency_finding_with_provenance() -> No
     assert isinstance(reader, _Loki)
     assert reader.calls[0][3] == 32
     assert reader.calls[0][1:] == (T0, T0 + timedelta(minutes=10), 32)
+
+    another_window = LogsTool(backend).execute_query(
+        case,
+        gap,
+        caller,
+        InvestigationQuery(
+            start=T0 + timedelta(seconds=30), end=T0 + timedelta(minutes=10), limit=32
+        ),
+    )
+    assert another_window.runtime is not None
+    assert another_window.runtime.query.descriptor_id != observation.runtime.query.descriptor_id
+
+
+def test_loki_hypothesis_attribution_uses_normalized_dependency_actors() -> None:
+    records = (
+        LogRecord(
+            service="caller",
+            at=T0 + timedelta(minutes=1),
+            severity="ERROR",
+            message="backend-c connection refused",
+            evidence_id="loki:caller:attribution",
+        ),
+    )
+    case, gap, caller, backend = _fixture(records)
+    observation = LogsTool(backend).execute_query(case, gap, caller, _query())
+    first = normalize_observation(observation, case=case, gap=gap)
+    assert len(first.findings) == 1
+    finding = first.findings[0]
+    caller_actor = EntityRef.parse(finding.details["caller"])
+    dependency_actor = finding.entity
+    unrelated_target = EntityRef(namespace="shop", kind="Deployment", name="different-query")
+    case = replace(
+        case,
+        hypotheses=[
+            Hypothesis(hypothesis_id="h-query-only", causal_actor=unrelated_target),
+            Hypothesis(hypothesis_id="h-caller", causal_actor=caller_actor),
+            Hypothesis(hypothesis_id="h-dependency", causal_actor=dependency_actor),
+        ],
+    )
+
+    normalized = normalize_observation(observation, case=case, gap=gap)
+
+    assert normalized.observation.hypothesis_ids == ("h-caller", "h-dependency")
 
 
 def test_loki_no_data_and_unrecognized_text_remain_neutral() -> None:

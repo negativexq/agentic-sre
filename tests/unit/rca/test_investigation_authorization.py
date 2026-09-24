@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -41,6 +42,10 @@ from packages.rca.model import (
     InvestigationObservation,
     InvestigationQuery,
     Resolution,
+    RuntimeEvidencePillar,
+    RuntimeObservationContext,
+    RuntimeObservationState,
+    RuntimeQueryDescriptor,
     StructuralAlternative,
     Symptoms,
 )
@@ -508,3 +513,193 @@ def test_new_frontier_and_observation_state_round_trip_as_plain_data() -> None:
     for key in ("attempted_observations", "frontier_queried_dimensions"):
         restored = serde.loads_typed(serde.dumps_typed(state[key]))
         assert _frozen(restored) == _frozen(state[key])
+
+
+def test_runtime_acquisition_provenance_does_not_change_semantic_finding_identity() -> None:
+    semantic = _identity_finding(
+        kind=FindingKind.DEPENDENCY_ERRORS,
+        entity=_ref("Service", "redis"),
+        details={
+            "fact_family": "runtime_dependency_non_success",
+            "caller": _ref("Service", "checkout").canonical,
+            "callee": _ref("Service", "redis").canonical,
+            "runtime_pillar": "TEMPO",
+            "runtime_capability": "runtime_traces",
+            "runtime_target": _ref("Deployment", "checkout").canonical,
+            "runtime_requested_start": "2026-01-01T00:00:00+00:00",
+            "runtime_requested_end": "2026-01-01T00:01:00+00:00",
+            "runtime_effective_start": "2026-01-01T00:00:00+00:00",
+            "runtime_effective_end": "2026-01-01T00:01:00+00:00",
+            "runtime_query_descriptor_id": "sha256:window-a",
+            "runtime_query_template_id": "tempo.target_traceql.v1",
+            "runtime_source_observation_ids": ("tempo:span:1",),
+            "runtime_observation_state": "OBSERVED_ABNORMAL",
+            "runtime_normalization_rule_id": "tempo.trace_observation.v1",
+        },
+        evidence_ids=("tempo:span:1",),
+    )
+    another_window = semantic.model_copy(
+        update={
+            "details": {
+                **semantic.details,
+                "runtime_requested_start": "2026-01-01T00:00:30+00:00",
+                "runtime_query_descriptor_id": "sha256:window-b",
+                "runtime_source_observation_ids": ("tempo:span:1",),
+            }
+        }
+    )
+
+    assert finding_identity(semantic) == finding_identity(another_window)
+    assert (
+        semantic.details["runtime_query_descriptor_id"]
+        != another_window.details["runtime_query_descriptor_id"]
+    )
+    assert new_investigation_findings((semantic,), (another_window,)) == ()
+
+
+def test_runtime_hypothesis_attribution_uses_finding_actors_not_only_query_target() -> None:
+    caller = _ref("Service", "checkout")
+    dependency = _ref("Service", "redis")
+    query_target = _ref("Deployment", "checkout")
+    case = build_case(InMemorySource(name="semantic-attribution"))
+    case = replace(
+        case,
+        hypotheses=[
+            Hypothesis(hypothesis_id="h-query-target", causal_actor=query_target),
+            Hypothesis(hypothesis_id="h-caller", causal_actor=caller),
+            Hypothesis(hypothesis_id="h-dependency", causal_actor=dependency),
+        ],
+    )
+    gap = InformationGap(
+        gap_id="gap:dependency-health",
+        dimension=GapDimension.DEPENDENCY_HEALTH,
+        missing_fact="dependency failure state",
+    )
+    finding = Finding(
+        kind=FindingKind.DEPENDENCY_ERRORS,
+        entity=dependency,
+        related=(caller,),
+        at=datetime(2026, 1, 1, tzinfo=UTC),
+        summary="checkout observed a redis connection refusal",
+        evidence_ids=("loki:dependency-error",),
+    )
+    observation = InvestigationObservation(
+        observation_id="loki:checkout-read",
+        gap_id=gap.gap_id,
+        capability="logs",
+        target=query_target,
+        payload={"findings": [finding.model_dump(mode="json")]},
+        evidence_refs=finding.evidence_ids,
+        runtime=RuntimeObservationContext(
+            pillar=RuntimeEvidencePillar.LOKI,
+            capability="logs",
+            state=RuntimeObservationState.UNKNOWN,
+            query=RuntimeQueryDescriptor(
+                descriptor_id="sha256:test-runtime-attribution",
+                template_id="loki.error_logs.v1",
+                target=query_target,
+                requested_start=datetime(2026, 1, 1, tzinfo=UTC),
+                requested_end=datetime(2026, 1, 1, 0, 1, tzinfo=UTC),
+                effective_start=datetime(2026, 1, 1, tzinfo=UTC),
+                effective_end=datetime(2026, 1, 1, 0, 1, tzinfo=UTC),
+                limit=32,
+            ),
+            source_observation_ids=finding.evidence_ids,
+        ),
+    )
+
+    hypotheses_before = tuple(case.hypotheses)
+    normalized = normalize_observation(observation, case=case, gap=gap)
+
+    assert normalized.observation.hypothesis_ids == ("h-caller", "h-dependency")
+    assert tuple(case.hypotheses) == hypotheses_before
+
+
+def test_runtime_action_over_limit_is_rejected_before_execution() -> None:
+    target = _ref("Service", "checkout")
+    gap = _gap(
+        "gap:traffic-limit",
+        (AuthorizedQuery(capability="traffic", target=target),),
+        dimension=GapDimension.METRIC_CHANGE,
+    )
+    action = InvestigationAction(
+        action="inspect",
+        gap_id=gap.gap_id,
+        capability="traffic",
+        target=target,
+        query=InvestigationQuery(
+            start=datetime(2026, 1, 1, tzinfo=UTC),
+            end=datetime(2026, 1, 1, 0, 1, tzinfo=UTC),
+            limit=64,
+        ),
+    )
+
+    validation = validate_action(
+        action,
+        gaps=(gap,),
+        tools={"traffic": _tool("traffic")},
+        attempted_actions=(),
+        attempted_observations=(),
+        tool_calls=0,
+        config=InvestigationConfig(),
+    )
+
+    assert not validation.valid
+    assert "limit" in validation.reason
+
+
+def test_all_runtime_capabilities_enforce_the_descriptor_limit_at_action_boundary() -> None:
+    target_by_capability = {
+        "resource_pressure": _ref("Pod", "checkout-0"),
+        "traffic": _ref("Service", "checkout"),
+        "logs": _ref("Deployment", "checkout"),
+        "runtime_traces": _ref("Deployment", "checkout"),
+    }
+    dimension_by_capability = {
+        "resource_pressure": GapDimension.RESOURCE_PRESSURE,
+        "traffic": GapDimension.METRIC_CHANGE,
+        "logs": GapDimension.DEPENDENCY_HEALTH,
+        "runtime_traces": GapDimension.FAILURE_ONSET,
+    }
+    query_start = datetime(2026, 1, 1, tzinfo=UTC)
+    query_end = datetime(2026, 1, 1, 0, 1, tzinfo=UTC)
+
+    for capability, target in target_by_capability.items():
+        gap = _gap(
+            f"gap:{capability}",
+            (AuthorizedQuery(capability=capability, target=target),),
+            dimension=dimension_by_capability[capability],
+        )
+        accepted = validate_action(
+            InvestigationAction(
+                action="inspect",
+                gap_id=gap.gap_id,
+                capability=capability,
+                target=target,
+                query=InvestigationQuery(start=query_start, end=query_end, limit=32),
+            ),
+            gaps=(gap,),
+            tools={capability: _tool(capability)},
+            attempted_actions=(),
+            attempted_observations=(),
+            tool_calls=0,
+            config=InvestigationConfig(),
+        )
+        rejected = validate_action(
+            InvestigationAction(
+                action="inspect",
+                gap_id=gap.gap_id,
+                capability=capability,
+                target=target,
+                query=InvestigationQuery(start=query_start, end=query_end, limit=33),
+            ),
+            gaps=(gap,),
+            tools={capability: _tool(capability)},
+            attempted_actions=(),
+            attempted_observations=(),
+            tool_calls=0,
+            config=InvestigationConfig(),
+        )
+        assert accepted.valid
+        assert not rejected.valid
+        assert "limit" in rejected.reason

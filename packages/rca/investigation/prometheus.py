@@ -147,6 +147,16 @@ def _epoch_seconds(value: datetime) -> int:
     return int(value.astimezone(UTC).timestamp())
 
 
+def _traffic_query_step_seconds(start: datetime, end: datetime, limit: int) -> int:
+    """Return the exact fixed-step interval used by the bounded traffic query."""
+    point_budget = max(2, min(limit, 32))
+    duration_seconds = int((end - start).total_seconds())
+    return max(
+        _MIN_QUERY_STEP_SECONDS,
+        math.ceil(duration_seconds / (point_budget - 1)),
+    )
+
+
 def _resource_memory_query(target: EntityRef) -> str:
     namespace = _escape_prometheus_label_value(target.namespace)
     pod = _escape_prometheus_label_value(target.name)
@@ -396,12 +406,7 @@ class PrometheusMetricsReader:
         self, target: EntityRef, query: InvestigationQuery
     ) -> tuple[TrafficObservation, ...]:
         start, end = _validate_query(query)
-        point_budget = max(2, min(query.limit, 32))
-        duration_seconds = int((end - start).total_seconds())
-        step_seconds = max(
-            _MIN_QUERY_STEP_SECONDS,
-            math.ceil(duration_seconds / (point_budget - 1)),
-        )
+        step_seconds = _traffic_query_step_seconds(start, end, query.limit)
         series_items = self._query_range(
             _traffic_query(target), start=start, end=end, step_seconds=step_seconds
         )

@@ -4,7 +4,17 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, Uuid
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    Uuid,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
@@ -184,6 +194,89 @@ class ObjectVersionRow(Base):
     lifecycle: Mapped[str] = mapped_column(
         String(16), nullable=False, default="UPDATED", server_default="UPDATED"
     )
+
+
+LIFECYCLE_OBSERVATION_TYPES = (
+    "OBSERVED",
+    "READY_TRUE",
+    "READY_FALSE",
+    "CONTAINER_STARTED",
+    "CONTAINER_TERMINATED",
+    "OOM_KILLED",
+    "EVICTED",
+    "DELETION_REQUESTED",
+    "DELETED",
+    "STATUS_SNAPSHOT",
+)
+
+
+class EntityInstanceRow(Base):
+    """Materialized index of exact Kubernetes object instances, keyed by UID.
+
+    Maintained by the collector and updated in place; it is an index, not
+    evidence. RCA and replay must not read its time fields as temporal facts.
+    """
+
+    __tablename__ = "entity_instances"
+    __table_args__ = (
+        UniqueConstraint("namespace", "kind", "uid", name="uq_entity_instance_uid"),
+        Index("ix_entity_instances_namespace_kind_name", "namespace", "kind", "name"),
+    )
+
+    instance_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    namespace: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    uid: Mapped[str] = mapped_column(String(64), nullable=False)
+    owner_kind: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    owner_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    owner_uid: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # metadata.creationTimestamp as reported by the API server.
+    created_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    first_observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    last_observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    deleted_observed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+
+class LifecycleObservationRow(Base):
+    """One append-only lifecycle fact about one exact instance (authoritative evidence).
+
+    ``source_at`` is when the source says it happened (e.g. a condition's
+    lastTransitionTime) and may be unknown; ``observed_at`` is when the
+    collector saw it; ``ingested_at`` is when the row was written.
+    """
+
+    __tablename__ = "lifecycle_observations"
+    __table_args__ = (
+        UniqueConstraint(
+            "instance_uid", "type", "observed_at", "source", name="uq_lifecycle_observation_fact"
+        ),
+        CheckConstraint(
+            "type IN (" + ", ".join(f"'{item}'" for item in LIFECYCLE_OBSERVATION_TYPES) + ")",
+            name="ck_lifecycle_observation_type",
+        ),
+        Index(
+            "ix_lifecycle_observations_instance",
+            "namespace",
+            "kind",
+            "instance_uid",
+        ),
+        Index("ix_lifecycle_observations_namespace_observed", "namespace", "observed_at"),
+    )
+
+    observation_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # lifecycle:<namespace>:<kind>:<uid>:<seq>
+    evidence_id: Mapped[str] = mapped_column(String(512), nullable=False, unique=True)
+    instance_uid: Mapped[str] = mapped_column(String(64), nullable=False)
+    namespace: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    type: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    ingested_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 
 class DiagnosisRow(Base):

@@ -513,6 +513,94 @@ class InvestigationQuery(BaseModel):
     limit: int = Field(default=32, ge=1, le=64)
 
 
+class RuntimeEvidencePillar(StrEnum):
+    """Trusted backend family that produced one runtime observation."""
+
+    PROMETHEUS = "PROMETHEUS"
+    LOKI = "LOKI"
+    TEMPO = "TEMPO"
+
+
+class RuntimeObservationState(StrEnum):
+    """Epistemic state of a bounded runtime read; empty is never normal."""
+
+    UNKNOWN = "UNKNOWN"
+    NO_DATA = "NO_DATA"
+    OBSERVED_NORMAL = "OBSERVED_NORMAL"
+    OBSERVED_ABNORMAL = "OBSERVED_ABNORMAL"
+
+
+class RuntimeQueryDescriptor(BaseModel):
+    """Native-query-free identity and bounds for a trusted semantic query."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    descriptor_id: str = Field(min_length=1, max_length=128)
+    template_id: str = Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_.-]*$")
+    target: EntityRef
+    requested_start: datetime
+    requested_end: datetime
+    effective_start: datetime
+    effective_end: datetime
+    limit: int = Field(ge=1, le=32)
+
+    @model_validator(mode="after")
+    def _bounded_window(self) -> RuntimeQueryDescriptor:
+        times = (
+            self.requested_start,
+            self.requested_end,
+            self.effective_start,
+            self.effective_end,
+        )
+        if any(value.tzinfo is None or value.utcoffset() is None for value in times):
+            raise ValueError("runtime query descriptor timestamps must be timezone-aware")
+        if self.requested_end < self.requested_start:
+            raise ValueError("requested runtime query end must not precede start")
+        if self.effective_end < self.effective_start:
+            raise ValueError("effective runtime query end must not precede start")
+        if self.effective_start < self.requested_start or self.effective_end > self.requested_end:
+            raise ValueError("effective runtime query window must be inside the requested window")
+        if (self.requested_end - self.requested_start).total_seconds() > 3600:
+            raise ValueError("runtime query descriptor window must be at most 3600 seconds")
+        if (self.effective_end - self.effective_start).total_seconds() > 3600:
+            raise ValueError("effective runtime query window must be at most 3600 seconds")
+        return self
+
+
+class RuntimeObservationContext(BaseModel):
+    """Typed runtime pillar, outcome, query identity, and source provenance."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    pillar: RuntimeEvidencePillar
+    capability: str = Field(min_length=1, max_length=32)
+    state: RuntimeObservationState
+    query: RuntimeQueryDescriptor
+    source_observation_ids: tuple[str, ...] = Field(default=(), max_length=64)
+
+    @model_validator(mode="after")
+    def _capability_matches_pillar(self) -> RuntimeObservationContext:
+        expected = {
+            "PROMETHEUS": {"resource_pressure", "traffic"},
+            "LOKI": {"logs"},
+            "TEMPO": {"runtime_traces"},
+        }[self.pillar.value]
+        if self.capability not in expected:
+            raise ValueError("runtime capability does not belong to the declared pillar")
+        if (
+            self.state
+            in {
+                RuntimeObservationState.OBSERVED_NORMAL,
+                RuntimeObservationState.OBSERVED_ABNORMAL,
+            }
+            and not self.source_observation_ids
+        ):
+            raise ValueError("observed runtime states require source observation IDs")
+        if self.state is RuntimeObservationState.NO_DATA and self.source_observation_ids:
+            raise ValueError("NO_DATA runtime observations cannot claim source observation IDs")
+        return self
+
+
 class AuthorizedQuery(BaseModel):
     """One exact capability/target pair allowed for an information gap."""
 
@@ -707,6 +795,7 @@ class InvestigationObservation(BaseModel):
     outcome: GapOutcomeKind = GapOutcomeKind.UNKNOWN
     hypothesis_ids: tuple[str, ...] = ()
     payload: dict[str, Any] = Field(default_factory=dict)
+    runtime: RuntimeObservationContext | None = None
     evidence_refs: tuple[str, ...] = ()
     source_class: str = "investigation"
     error: str | None = None
@@ -958,6 +1047,10 @@ __all__ = [
     "InvestigationAction",
     "InvestigationLedgerEntry",
     "InvestigationQuery",
+    "RuntimeEvidencePillar",
+    "RuntimeObservationState",
+    "RuntimeQueryDescriptor",
+    "RuntimeObservationContext",
     "AuthorizedQuery",
     "InvestigationActionStatus",
     "InvestigationStopReason",

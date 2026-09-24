@@ -12,6 +12,7 @@ from packages.rca.engine import Case
 from packages.rca.information_gap import CAPABILITIES
 from packages.rca.investigation.environment import (
     InvestigationBackend,
+    LokiInvestigationBackend,
     PrometheusInvestigationBackend,
     _default_query,
     _query_trace_observations,
@@ -147,6 +148,18 @@ def _has_prometheus_backend(backend: InvestigationBackend | None) -> bool:
     return False
 
 
+def _has_loki_backend(backend: InvestigationBackend | None) -> bool:
+    """Check composed adapters without probing a telemetry endpoint."""
+    current: object | None = backend
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, LokiInvestigationBackend):
+            return True
+        current = getattr(current, "base", None)
+    return False
+
+
 def _prometheus_runtime_context(
     *,
     backend: InvestigationBackend | None,
@@ -195,6 +208,57 @@ def _prometheus_runtime_context(
             requested_start=requested.start,
             requested_end=requested.end,
             effective_start=requested.start,
+            effective_end=effective_end,
+            limit=min(requested.limit, 32),
+        ),
+        source_observation_ids=source_ids,
+    )
+
+
+def _loki_runtime_context(
+    *,
+    backend: InvestigationBackend | None,
+    case: Case,
+    target: EntityRef,
+    requested: InvestigationQuery,
+    source_ids: tuple[str, ...],
+) -> RuntimeObservationContext | None:
+    if not _has_loki_backend(backend):
+        return None
+    start, end = requested.start, requested.end
+    if start is None or end is None:
+        return None
+    effective_end = end
+    cutoff = case.source.observation_cutoff()
+    if cutoff is not None:
+        effective_end = min(end, cutoff)
+    if effective_end < start:
+        return None
+    descriptor_material = json.dumps(
+        {
+            "capability": "logs",
+            "target": target.canonical,
+            "requested_start": start.isoformat(),
+            "requested_end": end.isoformat(),
+            "effective_start": start.isoformat(),
+            "effective_end": effective_end.isoformat(),
+            "limit": min(requested.limit, 32),
+            "template": "loki.error_logs.v1",
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return RuntimeObservationContext(
+        pillar=RuntimeEvidencePillar.LOKI,
+        capability="logs",
+        state=(RuntimeObservationState.UNKNOWN if source_ids else RuntimeObservationState.NO_DATA),
+        query=RuntimeQueryDescriptor(
+            descriptor_id=f"sha256:{sha256(descriptor_material.encode()).hexdigest()}",
+            template_id="loki.error_logs.v1",
+            target=target,
+            requested_start=start,
+            requested_end=end,
+            effective_start=start,
             effective_end=effective_end,
             limit=min(requested.limit, 32),
         ),
@@ -491,12 +555,20 @@ class LogsTool(_BaseTool):
             return self.execute(case, gap, target)
         requested = _default_query(query, onset=case.symptoms.onset)
         records = self.backend.query_logs(target, requested)
+        refs = tuple(record.evidence_id for record in records)
         return self._observation(
             gap,
             target,
             {"logs": [record.model_dump(mode="json") for record in records]},
-            refs=tuple(record.evidence_id for record in records),
+            refs=refs,
             observed_at=max((record.at for record in records if record.at), default=None),
+            runtime=_loki_runtime_context(
+                backend=self.backend,
+                case=case,
+                target=target,
+                requested=requested,
+                source_ids=refs,
+            ),
         )
 
 

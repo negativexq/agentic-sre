@@ -21,6 +21,7 @@ from packages.rca.model import (
     LogRecord,
     ObjectVersion,
     ResourcePressure,
+    RuntimeObservationState,
     TrafficObservation,
 )
 from packages.rca.signals import (
@@ -228,7 +229,17 @@ def normalize_observation(
         findings.extend(_metric_findings(case, payload))
     elif observation.capability == "logs":
         findings.extend(_log_findings(case, payload))
-    normalized = tuple(_with_provenance(item, observation, gap) for item in findings)
+    runtime = observation.runtime
+    if runtime is not None and runtime.pillar.value == "LOKI":
+        runtime = runtime.model_copy(
+            update={
+                "state": RuntimeObservationState.OBSERVED_ABNORMAL
+                if findings
+                else RuntimeObservationState.UNKNOWN
+            }
+        )
+    provenance_observation = observation.model_copy(update={"runtime": runtime})
+    normalized = tuple(_with_provenance(item, provenance_observation, gap) for item in findings)
     hypothesis_ids = tuple(
         sorted(
             hypothesis.hypothesis_id
@@ -243,6 +254,7 @@ def normalize_observation(
             "outcome": (
                 GapOutcomeKind.SUPPORTS if normalized and hypothesis_ids else GapOutcomeKind.UNKNOWN
             ),
+            "runtime": runtime,
         }
     )
     return NormalizedObservation(observation=interpreted, findings=normalized)

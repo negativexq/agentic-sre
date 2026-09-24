@@ -333,6 +333,7 @@ class DiagnosisService:
             current_is_live=not resolved,
             tempo_reader=self.tempo_reader,
             prometheus_reader=self.prometheus_reader,
+            loki_reader=self.log_reader if isinstance(self.log_reader, LokiLogReader) else None,
         )
         bounded_policy = self.bounded_policy_factory()
         investigation_result = None

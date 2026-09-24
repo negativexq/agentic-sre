@@ -211,9 +211,39 @@ class LokiLogReader:
     limit: int = 500
     opener: Callable[..., Any] = urlopen
 
+    def __post_init__(self) -> None:
+        if isinstance(self.timeout_seconds, bool) or not isinstance(
+            self.timeout_seconds, (int, float)
+        ):
+            raise ValueError("Loki timeout must be numeric")
+        if not 0.1 <= float(self.timeout_seconds) <= 30.0:
+            raise ValueError("Loki timeout must be between 0.1 and 30 seconds")
+        self.timeout_seconds = float(self.timeout_seconds)
+        if isinstance(self.limit, bool) or self.limit < 1:
+            raise ValueError("Loki result limit must be positive")
+
     def error_logs(
-        self, services: Sequence[str], starts_at: datetime, ends_at: datetime
+        self,
+        services: Sequence[str],
+        starts_at: datetime,
+        ends_at: datetime,
+        *,
+        limit: int | None = None,
     ) -> list[LogRecord]:
+        if (
+            starts_at.tzinfo is None
+            or starts_at.utcoffset() is None
+            or ends_at.tzinfo is None
+            or ends_at.utcoffset() is None
+            or ends_at < starts_at
+            or ends_at - starts_at > timedelta(hours=1)
+        ):
+            raise ValueError("Loki query requires an ordered timezone-aware window <= 3600 seconds")
+        # Preserve the existing incident-capture limit for legacy callers;
+        # investigation queries explicitly pass their stricter <=32 bound.
+        result_limit = self.limit if limit is None else min(self.limit, limit, 32)
+        if result_limit < 1:
+            raise ValueError("Loki result limit must be positive")
         names = sorted({name for name in services if re.fullmatch(r"[a-z0-9][a-z0-9.-]*", name)})
         if not names:
             return []
@@ -222,7 +252,7 @@ class LokiLogReader:
             "query": f'{{service_name=~"{selector}"}} |~ "{_LOG_ERRORS}"',
             "start": str(int(starts_at.timestamp() * 1e9)),
             "end": str(int(ends_at.timestamp() * 1e9)),
-            "limit": str(self.limit),
+            "limit": str(result_limit),
         }
         request = Request(
             f"{self.base_url.rstrip('/')}/loki/api/v1/query_range?{urlencode(params)}",
@@ -248,7 +278,7 @@ class LokiLogReader:
                         evidence_id=f"loki:{service}:{entry[0]}:{index}",
                     )
                 )
-        return records
+        return records[:result_limit]
 
 
 def _entity(body: Mapping[str, Any]) -> EntityRef | None:
@@ -382,6 +412,7 @@ class LiveSource:
     current_is_live: bool = True
     tempo_reader: TempoTraceReader | None = None
     prometheus_reader: PrometheusMetricsReader | None = None
+    loki_reader: LokiLogReader | None = None
 
     def incident_id(self) -> str:
         return self.incident
@@ -482,6 +513,15 @@ class LiveSource:
             base = TempoInvestigationBackend(
                 base=base,
                 tempo=self.tempo_reader,
+                observation_cutoff=self.observation_cutoff(),
+            )
+        if self.loki_reader is not None:
+            from packages.rca.investigation.environment import LokiInvestigationBackend
+
+            base = LokiInvestigationBackend(
+                base=base,
+                loki=self.loki_reader,
+                source=self,
                 observation_cutoff=self.observation_cutoff(),
             )
         return base

@@ -186,6 +186,19 @@ class InvestigationBackend(Protocol):
     def supports(self, capability: str) -> bool: ...
 
 
+class LokiReader(Protocol):
+    """Trusted Loki reader contract; query language remains inside the adapter."""
+
+    def error_logs(
+        self,
+        services: Sequence[str],
+        starts_at: datetime,
+        ends_at: datetime,
+        *,
+        limit: int | None = None,
+    ) -> list[LogRecord]: ...
+
+
 @dataclass(frozen=True)
 class SourceInvestigationBackend:
     """Adapter that exposes raw source records without exposing them to seed RCA."""
@@ -462,6 +475,96 @@ class TempoInvestigationBackend:
         return self.base.supports(capability)
 
 
+def _log_services_for_target(source: ObservationSource, target: EntityRef) -> set[str]:
+    latest = {
+        entity: versions[-1] for entity, versions in source.object_history().items() if versions
+    }
+    topology = Topology(derive_edges(latest, source.events()), latest)
+    return {target.name, target.canonical, *topology.service_names(target)}
+
+
+@dataclass(frozen=True)
+class LokiInvestigationBackend:
+    """Existing bounded investigation reads plus the trusted Loki reader."""
+
+    base: InvestigationBackend
+    loki: LokiReader
+    source: ObservationSource
+    observation_cutoff: datetime | None
+
+    def query_history(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[ObjectVersion, ...]:
+        return self.base.query_history(target, query)
+
+    def query_events(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[ClusterEvent, ...]:
+        return self.base.query_events(target, query)
+
+    def query_incident_events(
+        self, namespace: EntityRef, query: InvestigationQuery
+    ) -> tuple[ClusterEvent, ...]:
+        return self.base.query_incident_events(namespace, query)
+
+    def query_incident_changes(
+        self, namespace: EntityRef, query: InvestigationQuery
+    ) -> tuple[ObjectVersion, ...]:
+        return self.base.query_incident_changes(namespace, query)
+
+    def query_logs(self, target: EntityRef, query: InvestigationQuery) -> tuple[LogRecord, ...]:
+        start, end = query.start, query.end
+        if start is None or end is None:
+            raise ValueError("Loki investigation queries require start and end")
+        if (
+            start.tzinfo is None
+            or start.utcoffset() is None
+            or end.tzinfo is None
+            or end.utcoffset() is None
+            or end < start
+            or end - start > timedelta(hours=1)
+        ):
+            raise ValueError("Loki query window must be ordered, timezone-aware, and <= 3600s")
+        if self.observation_cutoff is not None:
+            if start > self.observation_cutoff:
+                return ()
+            end = min(end, self.observation_cutoff)
+        limit = min(query.limit, 32)
+        records = self.loki.error_logs(
+            sorted(_log_services_for_target(self.source, target)),
+            start,
+            end,
+            limit=limit,
+        )
+        return tuple(
+            item
+            for item in records
+            if _in_window(item.at, query.model_copy(update={"end": end}), self.observation_cutoff)
+            and (
+                not query.contains
+                or any(term.casefold() in item.message.casefold() for term in query.contains)
+            )
+        )[:limit]
+
+    def query_resource_pressure(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[ResourcePressure, ...]:
+        return self.base.query_resource_pressure(target, query)
+
+    def query_traffic(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[TrafficObservation, ...]:
+        return self.base.query_traffic(target, query)
+
+    def query_traces(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[TraceSpanObservation, ...]:
+        return self.base.query_traces(target, query)
+
+    def supports(self, capability: str) -> bool:
+        return True if capability == "logs" else self.base.supports(capability)
+
+
 @dataclass(frozen=True)
 class PrometheusInvestigationBackend:
     """Existing investigation reads plus active Prometheus metric reads."""
@@ -733,6 +836,7 @@ __all__ = [
     "InitialAccessLedger",
     "InitialObservationView",
     "InvestigationBackend",
+    "LokiInvestigationBackend",
     "PrometheusInvestigationBackend",
     "SeedPolicy",
     "SourceInvestigationBackend",

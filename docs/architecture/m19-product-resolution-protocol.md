@@ -10,8 +10,8 @@ when qualifying positive evidence is captured, persisted, and evaluated by the
 deterministic RCA rules. Scenario outcomes are evaluated at diagnosis revisions
 and against the evidence available to each revision.
 
-This document transcribes the M19 plan's existing semantics. It does not select
-the true-root mechanisms; those remain subject to M19-0.3 qualification.
+This document transcribes the M19 plan's existing semantics. True-root
+selections are recorded in §4 under M19-0.3.
 
 DEV scenarios are project-authored validation scenarios; their results are not
 reported as blind, pre-registered, or as evidence of generalization.
@@ -35,8 +35,9 @@ validation, topology history, and capability/degraded mode are outside scope.
 The following M19 plan rules bind this protocol:
 
 1. **Truth blindness.** The prediction path must not use scenario IDs,
-   expectations, protocol root actors, or scenario-specific namespace/name
-   constants. Scenario- or expectation-keyed production logic is prohibited.
+   expectations, protocol root actors, scenario-specific namespace/name
+   constants, or grader labels. Scenario- or expectation-keyed production
+   logic is prohibited.
 2. **M16 rules.** A1 (`m16.ended-manifestation-episode`, version `v1`)
    and A2 (`m16.resource-pressure`, version `v1`) retain their thresholds and
    positive-elimination semantics. They may be narrowed, not broadened. A

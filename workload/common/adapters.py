@@ -4,9 +4,11 @@ from collections.abc import Callable
 from contextlib import nullcontext
 from time import perf_counter
 from typing import Any, Protocol
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from opentelemetry import propagate
+from opentelemetry import propagate, trace
+from opentelemetry.trace import SpanKind, Status, StatusCode
 
 from workload.common.contracts import (
     EventTopic,
@@ -75,24 +77,36 @@ class HttpPaymentGateway:
 
     def charge(self, request: PaymentRequest) -> PaymentResponse:
         body = request.model_dump_json().encode("utf-8")
-        headers = {"Content-Type": "application/json"}
-        propagate.inject(headers)
-        http_request = Request(
-            f"{self._base_url}/payments",
-            data=body,
-            headers=headers,
-            method="POST",
-        )
+        # A CLIENT span whose context is injected into the request, so the
+        # payment-service SERVER span is its direct child in the trace.
         span_context = (
-            self._runtime.tracer.start_as_current_span("HTTP payment-service")
+            self._runtime.tracer.start_as_current_span(
+                "POST payment-service /payments", kind=SpanKind.CLIENT
+            )
             if self._runtime is not None
-            else nullcontext()
+            else nullcontext(trace.INVALID_SPAN)
         )
         started = perf_counter()
         try:
-            with span_context:
-                with urlopen(http_request, timeout=self._timeout_seconds) as response:
-                    return PaymentResponse.model_validate_json(response.read())
+            with span_context as span:
+                headers = {"Content-Type": "application/json"}
+                propagate.inject(headers)
+                http_request = Request(
+                    f"{self._base_url}/payments",
+                    data=body,
+                    headers=headers,
+                    method="POST",
+                )
+                span.set_attribute("http.request.method", "POST")
+                span.set_attribute("server.address", "payment-service")
+                try:
+                    with urlopen(http_request, timeout=self._timeout_seconds) as response:
+                        span.set_attribute("http.response.status_code", response.status)
+                        return PaymentResponse.model_validate_json(response.read())
+                except HTTPError as exc:
+                    span.set_attribute("http.response.status_code", exc.code)
+                    span.set_status(Status(StatusCode.ERROR, f"HTTP {exc.code}"))
+                    raise
         except Exception as exc:
             if self._runtime is not None:
                 self._runtime.logger.error(

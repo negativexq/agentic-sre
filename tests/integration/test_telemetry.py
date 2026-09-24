@@ -3,6 +3,8 @@
 import logging
 import re
 import socket
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.error import URLError
 from uuid import uuid4
@@ -11,6 +13,7 @@ import pytest
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from opentelemetry.trace import SpanKind, StatusCode
 from prometheus_client import CollectorRegistry, generate_latest
 from starlette.testclient import TestClient
 from starlette.types import Receive, Scope, Send
@@ -192,3 +195,41 @@ def test_probe_and_scrape_requests_create_no_server_spans() -> None:
         client.get(path)
 
     assert [span.name for span in exporter.get_finished_spans()] == ["GET /payments"]
+
+
+def test_payment_calls_are_client_spans_that_parent_the_server_span() -> None:
+    runtime = create_runtime("order-service", registry=CollectorRegistry())
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    runtime.tracer = provider.get_tracer("test")
+    seen: list[str] = []
+
+    class _Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802 - http.server hook
+            seen.append(self.headers.get("traceparent", ""))
+            self.send_response(503)
+            self.end_headers()
+
+        def log_message(self, format: str, *args: object) -> None:
+            del format, args
+
+    server = HTTPServer(("127.0.0.1", 0), _Handler)
+    thread = threading.Thread(target=server.handle_request)
+    thread.start()
+    gateway = HttpPaymentGateway(
+        f"http://127.0.0.1:{server.server_address[1]}", timeout_seconds=2, runtime=runtime
+    )
+    with pytest.raises(URLError):
+        gateway.charge(PaymentRequest(order_id=uuid4(), amount_cents=100, currency="USD"))
+    thread.join()
+    server.server_close()
+
+    (span,) = exporter.get_finished_spans()
+    assert span.kind is SpanKind.CLIENT
+    assert span.attributes is not None
+    assert span.attributes["http.response.status_code"] == 503
+    assert span.status.status_code is StatusCode.ERROR
+    # The propagated parent is the CLIENT span itself.
+    (traceparent,) = seen
+    assert traceparent.startswith(f"00-{span.context.trace_id:032x}-{span.context.span_id:016x}-")

@@ -732,10 +732,19 @@ class ObjectVersionRepository:
         self._session.commit()
         return True
 
-    def latest_uid(self, key: str) -> str | None:
-        """The persisted UID of the object's latest journal version (tombstones included)."""
-        latest = self._latest(key)
-        return latest.uid if latest is not None else None
+    def tombstones_missing_deletion(self, namespaces: set[str]) -> list[TombstoneRef]:
+        """Pod journal tombstones whose exact UID has no DELETED lifecycle row yet."""
+        recorded = (
+            select(LifecycleObservationRow.observation_id)
+            .where(
+                LifecycleObservationRow.type == "DELETED",
+                LifecycleObservationRow.namespace == ObjectVersionRow.namespace,
+                LifecycleObservationRow.kind == ObjectVersionRow.kind,
+                LifecycleObservationRow.instance_uid == ObjectVersionRow.uid,
+            )
+            .exists()
+        )
+        return _tombstones(self._session, namespaces, "Pod", recorded)
 
     def tombstone(self, key: str, observed_at: datetime) -> bool:
         """Record that a live object is gone; its last body is kept as the tombstone body."""
@@ -850,6 +859,41 @@ def _lifecycle_record(row: LifecycleObservationRow) -> LifecycleRecord:
         source=row.source,
         payload=dict(row.payload),
     )
+
+
+@dataclass(frozen=True)
+class TombstoneRef:
+    """A persisted journal tombstone of one exact instance, as the journal recorded it."""
+
+    namespace: str
+    kind: str
+    name: str
+    uid: str
+    observed_at: datetime
+
+
+def _tombstones(
+    session: Session, namespaces: set[str], kind: str | None, exclude: Any
+) -> list[TombstoneRef]:
+    """Earliest real journal tombstone per exact instance that ``exclude`` does not cover."""
+    query = select(ObjectVersionRow).where(
+        ObjectVersionRow.lifecycle == Lifecycle.DELETED.value,
+        ObjectVersionRow.uid.is_not(None),
+        ObjectVersionRow.namespace.in_(namespaces),
+        ~exclude,
+    )
+    if kind is not None:
+        query = query.where(ObjectVersionRow.kind == kind)
+    found: dict[tuple[str, str, str], TombstoneRef] = {}
+    for row in session.scalars(
+        query.order_by(ObjectVersionRow.observed_at, ObjectVersionRow.version_id)
+    ):
+        assert row.uid is not None
+        found.setdefault(
+            (row.namespace, row.kind, row.uid),
+            TombstoneRef(row.namespace, row.kind, row.name, row.uid, row.observed_at),
+        )
+    return list(found.values())
 
 
 # Concurrent writers of one instance may race for the same sequence number.
@@ -989,6 +1033,20 @@ class EntityInstanceRepository:
 
     def __init__(self, session: Session) -> None:
         self._session = session
+
+    def tombstones_unmarked(self, namespaces: set[str]) -> list[TombstoneRef]:
+        """Journal tombstones whose exact instance is not yet marked deleted in the index."""
+        marked = (
+            select(EntityInstanceRow.instance_id)
+            .where(
+                EntityInstanceRow.namespace == ObjectVersionRow.namespace,
+                EntityInstanceRow.kind == ObjectVersionRow.kind,
+                EntityInstanceRow.uid == ObjectVersionRow.uid,
+                EntityInstanceRow.deleted_observed_at.is_not(None),
+            )
+            .exists()
+        )
+        return _tombstones(self._session, namespaces, None, marked)
 
     def upsert(
         self,

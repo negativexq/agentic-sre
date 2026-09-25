@@ -61,17 +61,27 @@ _LIFECYCLE_SOURCE = "collector"
 _TOMBSTONE_SOURCE = "journal-tombstone"
 
 
-def _previous_pod_body(records: list[LifecycleRecord], uid: str) -> dict[str, Any] | None:
-    """What the ledger last recorded for this instance, in the classifier's body shape.
+def _checkpoint(records: list[LifecycleRecord]) -> int | None:
+    """Index of the latest STATUS_SNAPSHOT: the last state whose transitions all persisted."""
+    for index in range(len(records) - 1, -1, -1):
+        if records[index].type == "STATUS_SNAPSHOT":
+            return index
+    return None
 
-    Every recorded row carries the full status projection of its observation,
-    and a changed projection is always recorded, so the latest row is the last
-    observed state. Eviction is not part of the projection, so it is restored
-    from the ledger's own EVICTED fact.
+
+def _previous_pod_body(records: list[LifecycleRecord], uid: str) -> dict[str, Any] | None:
+    """The instance's checkpointed state, in the classifier's body shape.
+
+    A STATUS_SNAPSHOT is written only after every transition drafted in its
+    cycle was persisted, so it is the last state the ledger fully explains; a
+    transition that failed to persist is drafted again from it next cycle.
+    Eviction is not part of the projection, so it is restored from the
+    ledger's own EVICTED fact.
     """
-    if not records:
+    checkpoint = _checkpoint(records)
+    if checkpoint is None:
         return None
-    last = records[-1].payload
+    last = records[checkpoint].payload
     status: dict[str, Any] = {
         "conditions": [last["ready"]] if last.get("ready") else [],
         "containerStatuses": last.get("containerStatuses") or [],
@@ -123,29 +133,56 @@ class _InstanceIndexer:
             created_at=_time(metadata.get("creationTimestamp")),
         )
 
-    def deleted(self, key: str, uid: str | None, observed_at: datetime) -> None:
-        """Mark the exact instance behind a journal tombstone as deleted."""
-        namespace, _, rest = key.partition("/")
-        kind, _, name = rest.partition("/")
-        if not uid or namespace not in self.namespaces:
-            return
-        self.index.upsert(
-            namespace=namespace,
-            kind=kind,
-            name=name,
-            uid=uid,
-            observed_at=observed_at,
-            deleted=True,
-        )
+    def reconcile_deletions(self) -> int:
+        """Mark every journal-tombstoned instance the index does not show as deleted yet."""
+        repaired = 0
+        for tombstone in self.index.tombstones_unmarked(set(self.namespaces)):
+            self.index.upsert(
+                namespace=tombstone.namespace,
+                kind=tombstone.kind,
+                name=tombstone.name,
+                uid=tombstone.uid,
+                observed_at=tombstone.observed_at,
+                deleted=True,
+            )
+            repaired += 1
+        return repaired
 
 
 @dataclass
 class _PodLifecycleRecorder:
-    """Appends each observed Pod's lifecycle facts to the ledger during one cycle."""
+    """Appends each observed Pod's lifecycle facts to the ledger during one cycle.
+
+    A failed write is logged and counted, and the instance's STATUS_SNAPSHOT
+    checkpoint is not advanced, so the next cycle drafts the missing facts
+    again. Deletions come only from persisted journal tombstones.
+    """
 
     ledger: LifecycleRepository
+    journal: ObjectVersionRepository
     namespaces: frozenset[str]
     snapshot_interval: timedelta
+    reset: Callable[[], None]
+    failures: int = 0
+    repairs: int = 0
+
+    def _append(self, **values: Any) -> bool:
+        try:
+            self.ledger.append(**values)
+        except Exception as error:
+            self.reset()
+            self.failures += 1
+            logger.warning(
+                "lifecycle observation was not recorded; it will be retried",
+                extra={
+                    "lifecycle_type": values.get("type"),
+                    "instance_uid": values.get("instance_uid"),
+                    "error_type": type(error).__name__,
+                },
+                exc_info=True,
+            )
+            return False
+        return True
 
     def observe(self, body: dict[str, Any], observed_at: datetime) -> None:
         metadata = body.get("metadata") or {}
@@ -154,8 +191,18 @@ class _PodLifecycleRecorder:
         if body.get("kind") != "Pod" or namespace not in self.namespaces or not uid:
             return
         records = self.ledger.list_for(namespace, "Pod", uid)
+        checkpoint = _checkpoint(records)
+        since = records[checkpoint + 1 :] if checkpoint is not None else records
+        complete = True
         for draft in classify(_previous_pod_body(records, uid), body, observed_at):
-            self.ledger.append(
+            if any(
+                record.type == draft.type
+                and record.source_at == draft.source_at
+                and record.payload.get("containers") == draft.payload.get("containers")
+                for record in since
+            ):
+                continue  # drafted and persisted before the checkpoint failed to advance
+            complete &= self._append(
                 namespace=draft.namespace,
                 kind=draft.kind,
                 name=draft.name,
@@ -166,15 +213,16 @@ class _PodLifecycleRecorder:
                 payload=draft.payload,
                 source_at=draft.source_at,
             )
+        if not complete:
+            return  # keep the checkpoint where the ledger still explains the state
         payload = status_payload(body)
-        snapshots = [record for record in records if record.type == "STATUS_SNAPSHOT"]
-        last = snapshots[-1] if snapshots else None
+        last = records[checkpoint] if checkpoint is not None else None
         if (
             last is None
             or last.payload != payload
             or observed_at - last.observed_at >= self.snapshot_interval
         ):
-            self.ledger.append(
+            self._append(
                 namespace=namespace,
                 kind="Pod",
                 name=str(metadata.get("name") or ""),
@@ -185,23 +233,25 @@ class _PodLifecycleRecorder:
                 payload=payload,
             )
 
-    def deleted(self, key: str, uid: str | None, observed_at: datetime) -> None:
-        """A journal tombstone was written for ``key``: record DELETED for its exact UID."""
-        namespace, _, rest = key.partition("/")
-        kind, _, name = rest.partition("/")
-        if kind != "Pod" or namespace not in self.namespaces or not uid:
-            return
-        records = self.ledger.list_for(namespace, "Pod", uid)
-        self.ledger.append(
-            namespace=namespace,
-            kind="Pod",
-            name=name,
-            instance_uid=uid,
-            type="DELETED",
-            observed_at=observed_at,
-            source=_TOMBSTONE_SOURCE,
-            payload=records[-1].payload if records else {},
-        )
+    def reconcile_deletions(self) -> None:
+        """Record DELETED for every Pod journal tombstone the ledger does not reflect yet.
+
+        The tombstone is the evidence: its own namespace, name, UID and
+        observation time are used, never the time of this repair.
+        """
+        for tombstone in self.journal.tombstones_missing_deletion(set(self.namespaces)):
+            records = self.ledger.list_for(tombstone.namespace, "Pod", tombstone.uid)
+            if self._append(
+                namespace=tombstone.namespace,
+                kind="Pod",
+                name=tombstone.name,
+                instance_uid=tombstone.uid,
+                type="DELETED",
+                observed_at=tombstone.observed_at,
+                source=_TOMBSTONE_SOURCE,
+                payload=records[-1].payload if records else {},
+            ):
+                self.repairs += 1
 
 
 @dataclass(frozen=True)
@@ -215,6 +265,10 @@ class SnapshotResult:
     event_bodies: tuple[dict[str, Any], ...] = ()
     failed_scopes: tuple[ListingFailure, ...] = ()
     event_listing_failed: bool = False
+    # Lifecycle ledger/index writes that failed this cycle (retried next cycle)
+    # and deletions completed from persisted journal tombstones.
+    lifecycle_write_failures: int = 0
+    lifecycle_repairs: int = 0
 
 
 @dataclass
@@ -247,6 +301,9 @@ class DiagnosisService:
     status_snapshot_interval: timedelta = timedelta(seconds=30)
     # Evidence retention; None (the default) keeps everything.
     retention_policy: RetentionPolicy | None = None
+    # Cumulative lifecycle/index write failures and tombstone-based repairs.
+    lifecycle_write_failures: int = field(default=0, init=False)
+    lifecycle_repairs: int = field(default=0, init=False)
 
     @property
     def last_snapshot_result(self) -> SnapshotResult | None:
@@ -269,38 +326,56 @@ class DiagnosisService:
             repository = ObjectVersionRepository(session)
             lifecycle = _PodLifecycleRecorder(
                 LifecycleRepository(session),
+                repository,
                 frozenset(self.namespaces),
                 self.status_snapshot_interval,
+                session.rollback,
             )
             indexer = _InstanceIndexer(
                 EntityInstanceRepository(session), frozenset(self.namespaces)
             )
+            failures = 0
+            index_repairs = 0
+
+            def best_effort(write: Callable[[], None]) -> None:
+                # Lifecycle facts and the index are written after the journal: a
+                # failure is logged and counted, never fatal to the journal cycle,
+                # and the next cycle drafts or reconciles what is missing.
+                nonlocal failures
+                try:
+                    write()
+                except Exception:
+                    session.rollback()
+                    failures += 1
+                    logger.warning(
+                        "lifecycle/index write failed; it will be retried next cycle",
+                        exc_info=True,
+                    )
 
             def record(body: dict[str, Any], observed_at: datetime) -> bool:
                 stored = repository.record(body, observed_at)
-                self._record_lifecycle(lambda: lifecycle.observe(body, observed_at))
-                self._record_lifecycle(lambda: indexer.observe(body, observed_at))
+                best_effort(lambda: lifecycle.observe(body, observed_at))
+                best_effort(lambda: indexer.observe(body, observed_at))
                 return stored
 
-            def tombstone(key: str, observed_at: datetime) -> bool:
-                # Only the journal's own tombstone (written for a completely
-                # listed scope) ends an instance; absence alone never does.
-                written = repository.tombstone(key, observed_at)
-                if written:
-                    uid = repository.latest_uid(key)
-                    self._record_lifecycle(lambda: lifecycle.deleted(key, uid, observed_at))
-                    self._record_lifecycle(lambda: indexer.deleted(key, uid, observed_at))
-                return written
+            def repair_index() -> None:
+                nonlocal index_repairs
+                index_repairs = indexer.reconcile_deletions()
 
             watcher = ChangeWatcher(
                 self.reader,
                 journal_namespaces,
                 record,
                 lambda: repository.live_keys(set(journal_namespaces)),
-                tombstone,
+                repository.tombstone,
                 self.clock,
             )
             object_snapshot: ObjectSnapshot = watcher.snapshot_result()
+            # Only persisted journal tombstones (written for a completely listed
+            # scope) end an instance; this also repairs deletions a failed write
+            # or a restart left out. Listing absence alone never does.
+            best_effort(lifecycle.reconcile_deletions)
+            best_effort(repair_index)
             event_observed_at = self.clock()
             events = EventRepository(session)
             event_listing_failed = False
@@ -318,6 +393,10 @@ class DiagnosisService:
             stored = object_snapshot.stored_versions + sum(
                 events.record(body, event_observed_at) for body in event_bodies
             )
+            cycle_failures = failures + lifecycle.failures
+            cycle_repairs = lifecycle.repairs + index_repairs
+            self.lifecycle_write_failures += cycle_failures
+            self.lifecycle_repairs += cycle_repairs
             result = SnapshotResult(
                 stored_versions=stored,
                 started_at=object_snapshot.started_at,
@@ -326,6 +405,8 @@ class DiagnosisService:
                 event_bodies=tuple(event_bodies),
                 failed_scopes=object_snapshot.listing.failed_scopes,
                 event_listing_failed=event_listing_failed,
+                lifecycle_write_failures=cycle_failures,
+                lifecycle_repairs=cycle_repairs,
             )
             self._last_snapshot_result = result
             if result.failed_scopes:
@@ -349,15 +430,6 @@ class DiagnosisService:
                 logger.info("retention removed %s", result)
         except Exception:
             logger.warning("retention pass failed", exc_info=True)
-
-    @staticmethod
-    def _record_lifecycle(write: Callable[[], None]) -> None:
-        """Lifecycle facts and the instance index are written after the journal: a
-        failure is logged, never fatal to the journal cycle."""
-        try:
-            write()
-        except Exception:
-            logger.warning("lifecycle observation was not recorded", exc_info=True)
 
     def watch(self, stop: threading.Event, interval_seconds: float) -> None:
         """Snapshot the cluster until ``stop`` is set; errors are logged and retried."""

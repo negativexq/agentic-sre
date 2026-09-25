@@ -296,10 +296,24 @@ class LifecycleObservationRow(Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 
+def _one_of(column: str, values: tuple[str, ...], name: str) -> CheckConstraint:
+    return CheckConstraint(
+        f"{column} IN (" + ", ".join(f"'{item}'" for item in values) + ")", name=name
+    )
+
+
+# Why a diagnosis revision was produced; LEGACY marks rows stored before revisions.
+DIAGNOSIS_TRIGGERS = ("INITIAL", "MANUAL", "EVIDENCE_DEADLINE", "LEGACY")
+
+
 class DiagnosisRow(Base):
     """A stored diagnosis for an incident; the latest one is shown."""
 
     __tablename__ = "diagnoses"
+    __table_args__ = (
+        UniqueConstraint("incident_id", "revision_number", name="uq_diagnosis_incident_revision"),
+        _one_of('"trigger"', DIAGNOSIS_TRIGGERS, "ck_diagnosis_trigger"),
+    )
 
     diagnosis_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     incident_id: Mapped[UUID] = mapped_column(
@@ -313,6 +327,21 @@ class DiagnosisRow(Base):
     # timeline events. Nullable for diagnoses stored before this existed.
     run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     document: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    # Revision metadata (0022). Nullable until the revision writer (M19-4.2)
+    # sets them; legacy rows carry a backfilled number and trigger LEGACY only.
+    revision_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    previous_diagnosis_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("diagnoses.diagnosis_id", name="fk_diagnoses_previous_diagnosis_id"),
+        nullable=True,
+    )
+    trigger: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    window_end: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    manifest_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    tape_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    epistemic_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    engine_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    config_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 class InvestigationRunRow(Base):
@@ -396,12 +425,6 @@ class LogObservationRow(Base):
 
 CALLER_CLASSES = ("CAPTURE", "ENGINE", "INVESTIGATION")
 READ_STATUSES = ("SUCCESS", "ERROR")
-
-
-def _one_of(column: str, values: tuple[str, ...], name: str) -> CheckConstraint:
-    return CheckConstraint(
-        f"{column} IN (" + ", ".join(f"'{item}'" for item in values) + ")", name=name
-    )
 
 
 class SnapshotCycleRow(Base):

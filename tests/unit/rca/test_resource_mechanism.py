@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
+from provider_test_helpers import provider_session_factory
 
 from packages.rca.live import PROMETHEUS_MAX_QUERY_SPAN, LiveSource
 from packages.rca.model import (
@@ -316,7 +317,7 @@ def test_live_resource_reads_are_bounded_and_failures_are_missing_data(
         event_bodies=[],
         observed_at=ONSET + timedelta(minutes=cutoff_minutes),
         provider_adapter=ProviderAdapter(
-            "test-run", "ENGINE", lambda: None, ProviderReaders(prometheus=prometheus)
+            "test-run", "ENGINE", provider_session_factory(), ProviderReaders(prometheus=prometheus)
         ),
     )
     other = EntityRef(namespace=NS, kind="Pod", name="payment-new-b")

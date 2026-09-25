@@ -269,7 +269,7 @@ def test_rca_sees_only_manifest_members(
     assert not any(e.startswith("change") for e in history_ids | event_ids)
 
 
-def test_a_default_deterministic_run_persists_its_boundary_and_no_tape(
+def test_a_default_deterministic_run_persists_boundary_and_capture_tape(
     setup: Any,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -277,11 +277,30 @@ def test_a_default_deterministic_run_persists_its_boundary_and_no_tape(
     (payload,) = [p for p in _boundary_events(factory, incident_id) if p["run_id"] == run_id]
     assert datetime.fromisoformat(payload["window_end"]).tzinfo is not None
     with factory() as session:
-        # No bounded investigation ran, so no investigation artifact; and the
-        # provider tape belongs to M19-3.8/3.9, not to this task.
+        # No bounded investigation ran, so no investigation artifact. CAPTURE
+        # provider reads are durably taped before their results are consumed.
         assert session.scalar(select(func.count()).select_from(InvestigationRunRow)) == 0
-        assert session.scalar(select(func.count()).select_from(InvestigationReadRow)) == 0
-        assert set(session.scalars(select(LogObservationRow.source_read_id))) == {None}
+        capture_reads = list(
+            session.scalars(
+                select(InvestigationReadRow).where(
+                    InvestigationReadRow.run_id == run_id,
+                    InvestigationReadRow.caller_class == "CAPTURE",
+                )
+            )
+        )
+        assert capture_reads
+        assert all(row.status == "SUCCESS" for row in capture_reads)
+        assert all(row.run_id == run_id for row in capture_reads)
+        read_ids = {row.read_id for row in capture_reads}
+        new_logs = list(
+            session.scalars(
+                select(LogObservationRow).where(
+                    LogObservationRow.evidence_id == "loki:payment-service:1:0"
+                )
+            )
+        )
+        assert new_logs
+        assert all(log.source_read_id in read_ids for log in new_logs)
 
 
 def test_manifest_rows_are_append_only(

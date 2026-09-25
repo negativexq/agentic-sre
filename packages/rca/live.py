@@ -38,7 +38,7 @@ from packages.rca.model import (
     snapshot_evidence_id,
 )
 from packages.rca.pod_status import LifecycleStatusRecord, pod_status_from_lifecycle
-from packages.rca.provider_adapter import ProviderAdapter
+from packages.rca.provider_adapter import ProviderAdapter, ProviderReadPersistenceError
 
 _log = logging.getLogger(__name__)
 # Resource reads start this long before the requested time so a baseline exists.
@@ -676,6 +676,7 @@ class LogCapture:
     """The outcome of capturing incident error logs through bounded reads."""
 
     records: tuple[LogRecord, ...]
+    source_read_ids: tuple[int | None, ...]
     queried: tuple[tuple[datetime, datetime], ...]
     failed: tuple[LogSliceFailure, ...]
     skipped: tuple[tuple[datetime, datetime], ...]
@@ -707,9 +708,10 @@ def capture_error_logs(
     """
     if ends_at <= starts_at:
         # Nothing to read (or a skewed window); logs never fail a diagnosis.
-        return LogCapture(records=(), queried=(), failed=(), skipped=())
+        return LogCapture(records=(), source_read_ids=(), queried=(), failed=(), skipped=())
     slices = bounded_slices(starts_at, ends_at)
     records: list[LogRecord] = []
+    source_read_ids: list[int | None] = []
     seen: set[tuple[str, datetime | None, str, str, str]] = set()
     queried: list[tuple[datetime, datetime]] = []
     failed: list[LogSliceFailure] = []
@@ -720,7 +722,15 @@ def capture_error_logs(
             break
         queried.append((start, end))
         try:
-            batch = reader.error_logs(services, start, end)
+            read_with_id = getattr(reader, "error_logs_with_read_id", None)
+            if callable(read_with_id):
+                batch, read_id = read_with_id(services, start, end)
+            else:
+                batch, read_id = reader.error_logs(services, start, end), None
+        except ProviderReadPersistenceError:
+            # A successful provider response whose tape commit failed must not
+            # be treated like an ignorable provider slice failure.
+            raise
         except Exception as error:  # noqa: BLE001 - one failed slice must not drop the rest
             failed.append(LogSliceFailure(start, end, type(error).__name__, str(error)[:200]))
             continue
@@ -729,8 +739,10 @@ def capture_error_logs(
             if key not in seen:
                 seen.add(key)
                 records.append(record)
+                source_read_ids.append(read_id)
     return LogCapture(
         records=tuple(records[:max_records]),
+        source_read_ids=tuple(source_read_ids[:max_records]),
         queried=tuple(queried),
         failed=tuple(failed),
         skipped=skipped,

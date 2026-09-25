@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import ast
-from collections.abc import Callable
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from provider_test_helpers import provider_session_factory
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from packages.rca.investigation.tempo import (
     TempoSearchCompleteness,
@@ -27,6 +30,7 @@ from packages.rca.provider_adapter import (
     ProviderReaders,
     provider_query_key,
 )
+from packages.storage.models import InvestigationReadRow
 
 T0 = datetime(2026, 9, 25, 12, 0, tzinfo=UTC)
 TARGET = EntityRef(namespace="sre-demo", kind="Pod", name="worker")
@@ -60,7 +64,7 @@ class _Loki:
 
     def error_logs(
         self,
-        services: tuple[str, ...] | list[str],
+        services: Sequence[str],
         starts_at: datetime,
         ends_at: datetime,
         *,
@@ -90,7 +94,7 @@ def _adapter(
     return ProviderAdapter(
         run_id="run-1",
         caller_class=caller_class,
-        session_factory=lambda: None,
+        session_factory=provider_session_factory(),
         readers=ProviderReaders(
             prometheus=prometheus,  # type: ignore[arg-type]
             loki=loki,  # type: ignore[arg-type]
@@ -163,12 +167,170 @@ def test_tempo_delegates_once_and_returns_the_same_batch() -> None:
     assert reader.calls == [(TARGET, QUERY)]
 
 
-def test_adapter_carries_each_frozen_caller_class_without_using_storage() -> None:
+def test_adapter_carries_each_frozen_caller_class() -> None:
     for caller_class in ("CAPTURE", "ENGINE", "INVESTIGATION"):
         adapter = _adapter(caller_class=caller_class)
         assert adapter.run_id == "run-1"
         assert adapter.caller_class == caller_class
-        assert adapter.session_factory() is None
+        assert callable(adapter.session_factory)
+
+
+def test_successful_call_persists_a_complete_normalized_success_envelope() -> None:
+    reader = _Prometheus()
+    pressure = ResourcePressure(
+        pod=TARGET,
+        container="app",
+        resource="cpu",
+        baseline=0.1,
+        peak=0.8,
+        at=T0,
+        evidence_id="pressure-success",
+    )
+    result = (pressure,)
+    reader.pressure_results.append(result)
+    adapter = _adapter(caller_class="ENGINE", prometheus=reader)
+
+    assert adapter.query_resource_pressure(TARGET, QUERY) is result
+    with adapter.session_factory() as session:
+        row = session.scalar(select(InvestigationReadRow))
+    assert row is not None
+    assert row.run_id == "run-1"
+    assert row.sequence == 1
+    assert row.caller_class == "ENGINE"
+    assert row.capability == "resource_pressure"
+    assert row.query_key == provider_query_key(
+        {
+            "provider": "prometheus",
+            "operation": "resource_pressure",
+            "target": TARGET.canonical,
+            "query": QUERY.model_dump(mode="json"),
+        }
+    )
+    assert row.query_descriptor == {
+        "provider": "prometheus",
+        "operation": "resource_pressure",
+        "target": TARGET.canonical,
+        "query": QUERY.model_dump(mode="json"),
+    }
+    assert row.started_at is not None and row.finished_at is not None
+    assert row.committed_at is not None
+    assert row.started_at <= row.finished_at <= row.committed_at
+    assert row.status == "SUCCESS"
+    assert row.observation == [pressure.model_dump(mode="json")]
+    assert row.evidence_ids == ["pressure-success"]
+    assert row.error_type is None and row.error_message is None
+
+
+def test_each_frozen_caller_class_is_persisted_without_inference() -> None:
+    factory = provider_session_factory()
+    pressure = ResourcePressure(
+        pod=TARGET,
+        container="app",
+        resource="cpu",
+        baseline=0.1,
+        peak=0.8,
+        at=T0,
+        evidence_id="pressure",
+    )
+    prom = _Prometheus()
+    prom.pressure_results.extend(((pressure,), (pressure,)))
+    loki = _Loki(
+        [LogRecord(service="worker", at=T0, severity="ERROR", message="x", evidence_id="log")]
+    )
+    base = ProviderAdapter(
+        "caller-run",
+        "ENGINE",
+        factory,
+        ProviderReaders(prometheus=prom, loki=loki),
+    )
+
+    base.for_caller("ENGINE").query_resource_pressure(TARGET, QUERY)
+    base.for_caller("INVESTIGATION").query_resource_pressure(TARGET, QUERY)
+    base.for_caller("CAPTURE").query_loki(["worker"], T0, T0)
+
+    with factory() as session:
+        rows = list(
+            session.scalars(select(InvestigationReadRow).order_by(InvestigationReadRow.sequence))
+        )
+    assert [(row.caller_class, row.capability) for row in rows] == [
+        ("ENGINE", "resource_pressure"),
+        ("INVESTIGATION", "resource_pressure"),
+        ("CAPTURE", "loki_logs"),
+    ]
+
+
+def test_sequence_counters_are_isolated_by_run_id() -> None:
+    factory = provider_session_factory()
+    result = (
+        ResourcePressure(
+            pod=TARGET,
+            container="app",
+            resource="cpu",
+            baseline=0.1,
+            peak=0.8,
+            at=T0,
+            evidence_id="pressure",
+        ),
+    )
+    first_reader = _Prometheus()
+    first_reader.pressure_results.extend((result, result))
+    second_reader = _Prometheus()
+    second_reader.pressure_results.append(result)
+    ProviderAdapter(
+        "run-a", "ENGINE", factory, ProviderReaders(prometheus=first_reader)
+    ).query_resource_pressure(TARGET, QUERY)
+    ProviderAdapter(
+        "run-a", "ENGINE", factory, ProviderReaders(prometheus=first_reader)
+    ).query_resource_pressure(TARGET, QUERY)
+    ProviderAdapter(
+        "run-b", "ENGINE", factory, ProviderReaders(prometheus=second_reader)
+    ).query_resource_pressure(TARGET, QUERY)
+
+    with factory() as session:
+        rows = list(
+            session.scalars(
+                select(InvestigationReadRow).order_by(
+                    InvestigationReadRow.run_id, InvestigationReadRow.sequence
+                )
+            )
+        )
+    assert [(row.run_id, row.sequence) for row in rows] == [
+        ("run-a", 1),
+        ("run-a", 2),
+        ("run-b", 1),
+    ]
+
+
+def test_persistence_failure_prevents_successful_result_from_escaping() -> None:
+    reader = _Prometheus()
+    successful_result = (
+        ResourcePressure(
+            pod=TARGET,
+            container="app",
+            resource="cpu",
+            baseline=0.1,
+            peak=0.8,
+            at=T0,
+            evidence_id="must-not-escape",
+        ),
+    )
+    reader.pressure_results.append(successful_result)
+
+    def failing_session_factory() -> Session:
+        raise RuntimeError("storage unavailable")
+
+    adapter = ProviderAdapter(
+        "run-failure",
+        "ENGINE",
+        failing_session_factory,
+        ProviderReaders(prometheus=reader),
+    )
+    consumed: list[object] = []
+
+    with pytest.raises(RuntimeError, match="could not be persisted"):
+        consumed.append(adapter.query_resource_pressure(TARGET, QUERY))
+    assert len(reader.pressure_calls) == 1
+    assert consumed == []
 
 
 def test_query_key_precedence_uses_descriptor_then_observation_identity() -> None:
@@ -199,9 +361,7 @@ def test_canonical_query_fallback_is_stable_and_sensitive_to_descriptor_changes(
     assert first_key != provider_query_key(changed)
 
 
-def test_repeated_identical_reads_are_not_deduplicated(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_repeated_identical_reads_are_not_deduplicated() -> None:
     reader = _Prometheus()
     first = (
         ResourcePressure(
@@ -227,22 +387,20 @@ def test_repeated_identical_reads_are_not_deduplicated(
     )
     reader.pressure_results.extend((first, second))
     adapter = _adapter(caller_class="ENGINE", prometheus=reader)
-    query_keys: list[str] = []
-    original_call = ProviderAdapter._provider_call
-
-    def recording_call(self: ProviderAdapter, query_key: str, call: Callable[[], object]) -> object:
-        query_keys.append(query_key)
-        return original_call(self, query_key, call)
-
-    monkeypatch.setattr(ProviderAdapter, "_provider_call", recording_call)
-
     response_a = adapter.query_resource_pressure(TARGET, QUERY)
     response_b = adapter.query_resource_pressure(TARGET, QUERY)
 
     assert len(reader.pressure_calls) == 2
     assert response_a is first and response_b is second
     assert response_a != response_b
-    assert len(query_keys) == 2 and query_keys[0] == query_keys[1]
+    with adapter.session_factory() as session:
+        rows = list(
+            session.scalars(select(InvestigationReadRow).order_by(InvestigationReadRow.sequence))
+        )
+    assert [row.sequence for row in rows] == [1, 2]
+    assert rows[0].query_key == rows[1].query_key
+    assert rows[0].evidence_ids == ["pressure-1"]
+    assert rows[1].evidence_ids == ["pressure-2"]
 
 
 def test_production_reader_names_are_confined_to_the_provider_boundary() -> None:

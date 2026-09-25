@@ -29,6 +29,7 @@ from packages.storage.models import (
     Base,
     EntityInstanceRow,
     IncidentRow,
+    InvestigationReadRow,
     LifecycleObservationRow,
     ObjectVersionRow,
 )
@@ -40,6 +41,7 @@ EVIDENCE_TABLES = {
     "alerts": "AlertRow",
     "change_records": "ChangeRecordRow",
     "event_versions": "EventVersionRow",
+    "investigation_reads": "InvestigationReadRow",
     "lifecycle_observations": "LifecycleObservationRow",
     "log_observations": "LogObservationRow",
     "object_versions": "ObjectVersionRow",
@@ -146,6 +148,10 @@ def test_product_code_mutates_evidence_only_through_listed_exceptions() -> None:
     [
         ('execute("UPDATE event_versions SET body = 1")', ("UPDATE", "event_versions")),
         (
+            "execute(\"UPDATE investigation_reads SET status = 'ERROR'\")",
+            ("UPDATE", "investigation_reads"),
+        ),
+        (
             'text("DELETE FROM lifecycle_observations WHERE 1")',
             ("DELETE", "lifecycle_observations"),
         ),
@@ -156,6 +162,7 @@ def test_product_code_mutates_evidence_only_through_listed_exceptions() -> None:
             ("UPDATE", "object_versions"),
         ),
         ("session.execute(delete(LogObservationRow.__table__))", ("DELETE", "log_observations")),
+        ("session.execute(delete(InvestigationReadRow))", ("DELETE", "investigation_reads")),
         ("session.execute(sa.delete(ChangeRecordRow))", ("DELETE", "change_records")),
     ],
 )
@@ -214,6 +221,26 @@ def _journal_row(session: Session) -> ObjectVersionRow:
     return row
 
 
+def _investigation_read(session: Session) -> InvestigationReadRow:
+    row = InvestigationReadRow(
+        run_id="run-guard",
+        sequence=1,
+        caller_class="ENGINE",
+        capability="resource_pressure",
+        query_key="query",
+        query_descriptor={"provider": "prometheus"},
+        started_at=AT,
+        finished_at=AT,
+        committed_at=AT,
+        status="SUCCESS",
+        observation=[],
+        evidence_ids=[],
+    )
+    session.add(row)
+    session.commit()
+    return row
+
+
 def test_attribute_change_on_evidence_fails_at_flush(session: Session) -> None:
     row = _journal_row(session)
     row.body = {"kind": "Pod", "tampered": True}
@@ -240,6 +267,20 @@ def test_deleting_evidence_through_the_session_fails_at_flush(session: Session) 
     )
     session.commit()
     row = session.scalar(select(LifecycleObservationRow))
+    session.delete(row)
+    with pytest.raises(AuthoritativeEvidenceMutation, match="cannot be deleted"):
+        session.flush()
+
+
+def test_investigation_read_attribute_change_fails_at_flush(session: Session) -> None:
+    row = _investigation_read(session)
+    row.observation = [{"tampered": True}]
+    with pytest.raises(AuthoritativeEvidenceMutation, match="cannot be updated"):
+        session.flush()
+
+
+def test_investigation_read_delete_fails_at_flush(session: Session) -> None:
+    row = _investigation_read(session)
     session.delete(row)
     with pytest.raises(AuthoritativeEvidenceMutation, match="cannot be deleted"):
         session.flush()

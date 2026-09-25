@@ -1,20 +1,20 @@
-"""Single pass-through boundary for Prometheus, Loki, and Tempo reads.
-
-This layer assigns stable query identities and caller classes. M19-3.9 will add
-the durable read envelope at ``_provider_call``; until then provider responses
-are returned immediately with their existing types and error behavior.
-"""
+"""Single durable boundary for Prometheus, Loki, and Tempo reads."""
 
 from __future__ import annotations
 
 import json
 import os
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, fields, is_dataclass
+from datetime import UTC, datetime
+from enum import Enum
 from hashlib import sha256
-from typing import TYPE_CHECKING, Literal, Protocol, TypeVar
+from typing import Any, Literal, Protocol, TypeVar, cast
 
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from packages.rca.investigation.tempo import TempoTraceBatch
 from packages.rca.model import (
     EntityRef,
     InvestigationQuery,
@@ -24,11 +24,12 @@ from packages.rca.model import (
     TrafficObservation,
 )
 
-if TYPE_CHECKING:
-    from packages.rca.investigation.tempo import TempoTraceBatch
-
 ProviderCallerClass = Literal["CAPTURE", "ENGINE", "INVESTIGATION"]
 _T = TypeVar("_T")
+
+
+class ProviderReadPersistenceError(RuntimeError):
+    """A provider succeeded but its successful response could not be taped."""
 
 
 class PrometheusReader(Protocol):
@@ -130,13 +131,58 @@ def provider_query_key(
     return sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _json_value(value: Any) -> Any:
+    """Normalize known response values into deterministic JSON primitives."""
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Enum):
+        return value.value
+    if is_dataclass(value) and not isinstance(value, type):
+        return {item.name: _json_value(getattr(value, item.name)) for item in fields(value)}
+    if isinstance(value, Mapping):
+        if not all(isinstance(key, str) for key in value):
+            raise TypeError("provider observation mapping keys must be strings")
+        return {key: _json_value(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_json_value(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise TypeError(f"unsupported provider observation value: {type(value).__name__}")
+
+
+def _evidence_ids(value: Any) -> list[str]:
+    found: list[str] = []
+
+    def visit(item: Any) -> None:
+        if isinstance(item, BaseModel):
+            evidence_id = getattr(item, "evidence_id", None)
+            if isinstance(evidence_id, str) and evidence_id not in found:
+                found.append(evidence_id)
+            for name in type(item).model_fields:
+                visit(getattr(item, name))
+        elif is_dataclass(item) and not isinstance(item, type):
+            for field in fields(item):
+                visit(getattr(item, field.name))
+        elif isinstance(item, Mapping):
+            for nested in item.values():
+                visit(nested)
+        elif isinstance(item, (tuple, list)):
+            for nested in item:
+                visit(nested)
+
+    visit(value)
+    return found
+
+
 @dataclass(frozen=True)
 class ProviderAdapter:
     """Pass-through provider boundary with run and caller identity."""
 
     run_id: str
     caller_class: ProviderCallerClass
-    session_factory: Callable[[], object]
+    session_factory: Callable[[], Session]
     readers: ProviderReaders
 
     def for_caller(self, caller_class: ProviderCallerClass) -> ProviderAdapter:
@@ -163,17 +209,26 @@ class ProviderAdapter:
         reader = self.readers.prometheus
         if reader is None:
             raise RuntimeError("Prometheus reader is not configured")
+        descriptor = {
+            "provider": "prometheus",
+            "operation": "resource_pressure",
+            "target": target.canonical,
+            "query": query.model_dump(mode="json"),
+        }
         query_key = provider_query_key(
-            {
-                "provider": "prometheus",
-                "operation": "resource_pressure",
-                "target": target.canonical,
-                "query": query.model_dump(mode="json"),
-            },
+            descriptor,
             descriptor_id=descriptor_id,
             observation_identity=observation_identity,
         )
-        return self._provider_call(query_key, lambda: reader.query_resource_pressure(target, query))
+        return cast(
+            tuple[ResourcePressure, ...],
+            self._provider_call(
+                capability="resource_pressure",
+                query_key=query_key,
+                descriptor=descriptor,
+                call=lambda: reader.query_resource_pressure(target, query),
+            ),
+        )
 
     def query_traffic(
         self,
@@ -186,17 +241,26 @@ class ProviderAdapter:
         reader = self.readers.prometheus
         if reader is None:
             raise RuntimeError("Prometheus reader is not configured")
+        descriptor = {
+            "provider": "prometheus",
+            "operation": "traffic",
+            "target": target.canonical,
+            "query": query.model_dump(mode="json"),
+        }
         query_key = provider_query_key(
-            {
-                "provider": "prometheus",
-                "operation": "traffic",
-                "target": target.canonical,
-                "query": query.model_dump(mode="json"),
-            },
+            descriptor,
             descriptor_id=descriptor_id,
             observation_identity=observation_identity,
         )
-        return self._provider_call(query_key, lambda: reader.query_traffic(target, query))
+        return cast(
+            tuple[TrafficObservation, ...],
+            self._provider_call(
+                capability="traffic",
+                query_key=query_key,
+                descriptor=descriptor,
+                call=lambda: reader.query_traffic(target, query),
+            ),
+        )
 
     def query_tempo(
         self,
@@ -209,17 +273,26 @@ class ProviderAdapter:
         reader = self.readers.tempo
         if reader is None:
             raise RuntimeError("Tempo reader is not configured")
+        descriptor = {
+            "provider": "tempo",
+            "operation": "query",
+            "target": target.canonical,
+            "query": query.model_dump(mode="json"),
+        }
         query_key = provider_query_key(
-            {
-                "provider": "tempo",
-                "operation": "query",
-                "target": target.canonical,
-                "query": query.model_dump(mode="json"),
-            },
+            descriptor,
             descriptor_id=descriptor_id,
             observation_identity=observation_identity,
         )
-        return self._provider_call(query_key, lambda: reader.query(target, query))
+        return cast(
+            tuple[TraceSpanObservation, ...] | TempoTraceBatch,
+            self._provider_call(
+                capability="tempo_traces",
+                query_key=query_key,
+                descriptor=descriptor,
+                call=lambda: reader.query(target, query),
+            ),
+        )
 
     def query_loki(
         self,
@@ -231,29 +304,63 @@ class ProviderAdapter:
         descriptor_id: str | None = None,
         observation_identity: str | None = None,
     ) -> list[LogRecord]:
+        records, _read_id = self.query_loki_with_read_id(
+            services,
+            starts_at,
+            ends_at,
+            limit=limit,
+            descriptor_id=descriptor_id,
+            observation_identity=observation_identity,
+        )
+        return records
+
+    def query_loki_with_read_id(
+        self,
+        services: Sequence[str],
+        starts_at: datetime,
+        ends_at: datetime,
+        *,
+        limit: int | None = None,
+        descriptor_id: str | None = None,
+        observation_identity: str | None = None,
+    ) -> tuple[list[LogRecord], int]:
+        """Return capture records with the read row committed before return."""
         reader = self.readers.loki
         if reader is None:
             raise RuntimeError("Loki reader is not configured")
+        descriptor = {
+            "provider": "loki",
+            "operation": "error_logs",
+            "services": sorted(services),
+            "starts_at": starts_at.isoformat(),
+            "ends_at": ends_at.isoformat(),
+            "limit": limit,
+        }
         query_key = provider_query_key(
-            {
-                "provider": "loki",
-                "operation": "error_logs",
-                "services": sorted(services),
-                "starts_at": starts_at.isoformat(),
-                "ends_at": ends_at.isoformat(),
-                "limit": limit,
-            },
+            descriptor,
             descriptor_id=descriptor_id,
             observation_identity=observation_identity,
         )
         if limit is None:
-            return self._provider_call(
-                query_key, lambda: reader.error_logs(services, starts_at, ends_at)
-            )
-        return self._provider_call(
-            query_key,
-            lambda: reader.error_logs(services, starts_at, ends_at, limit=limit),
+
+            def call() -> list[LogRecord]:
+                return reader.error_logs(services, starts_at, ends_at)
+        else:
+
+            def call() -> list[LogRecord]:
+                return reader.error_logs(services, starts_at, ends_at, limit=limit)
+
+        records, read_id = cast(
+            tuple[list[LogRecord], int],
+            self._provider_call(
+                capability="loki_logs",
+                query_key=query_key,
+                descriptor=descriptor,
+                call=call,
+                include_read_id=True,
+            ),
         )
+        return records, read_id
 
     def error_logs(
         self,
@@ -266,16 +373,57 @@ class ProviderAdapter:
         """LogReader-compatible capture method routed through this adapter."""
         return self.query_loki(services, starts_at, ends_at, limit=limit)
 
-    def _provider_call(self, query_key: str, call: Callable[[], _T]) -> _T:
-        # M19-3.9 adds the persisted read envelope here. In M19-3.8 the key is
-        # derived, but repeated calls are still invoked independently.
-        del query_key
-        return call()
+    def error_logs_with_read_id(
+        self,
+        services: Sequence[str],
+        starts_at: datetime,
+        ends_at: datetime,
+        *,
+        limit: int | None = None,
+    ) -> tuple[list[LogRecord], int]:
+        return self.query_loki_with_read_id(services, starts_at, ends_at, limit=limit)
+
+    def _provider_call(
+        self,
+        *,
+        capability: str,
+        query_key: str,
+        descriptor: dict[str, Any],
+        call: Callable[[], _T],
+        include_read_id: bool = False,
+    ) -> _T | tuple[_T, int]:
+        started_at = datetime.now(UTC)
+        result = call()
+        observation = _json_value(result)
+        finished_at = datetime.now(UTC)
+        from packages.storage.repositories import InvestigationReadRepository
+
+        try:
+            with self.session_factory() as session:
+                read_id = InvestigationReadRepository(session).append_success(
+                    run_id=self.run_id,
+                    caller_class=self.caller_class,
+                    capability=capability,
+                    query_key=query_key,
+                    query_descriptor=descriptor,
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    observation=observation,
+                    evidence_ids=_evidence_ids(result),
+                )
+        except Exception as error:
+            raise ProviderReadPersistenceError(
+                f"successful {capability} read could not be persisted"
+            ) from error
+        if include_read_id:
+            return result, read_id
+        return result
 
 
 __all__ = [
     "ProviderAdapter",
     "ProviderCallerClass",
     "ProviderReaders",
+    "ProviderReadPersistenceError",
     "provider_query_key",
 ]

@@ -588,7 +588,10 @@ class DiagnosisService:
             return
         with self.session_factory() as session:
             LogObservationRepository(session).record(
-                incident_id, list(capture.records), self.clock()
+                incident_id,
+                list(capture.records),
+                self.clock(),
+                source_read_ids=capture.source_read_ids,
             )
 
     def _diagnose(

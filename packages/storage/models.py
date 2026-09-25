@@ -12,6 +12,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     Uuid,
 )
@@ -473,7 +474,7 @@ class InvestigationReadRow(Base):
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     caller_class: Mapped[str] = mapped_column(String(16), nullable=False)
     capability: Mapped[str] = mapped_column(String(64), nullable=False)
-    query_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    query_key: Mapped[str] = mapped_column(Text(), nullable=False)
     query_descriptor: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     started_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     finished_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)

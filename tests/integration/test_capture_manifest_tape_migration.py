@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -12,12 +12,14 @@ from alembic import command
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy import String, Text, create_engine, inspect, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from packages.contracts import Incident, IncidentSeverity, IncidentSource, IncidentStatus
+from packages.rca.investigation.actions import observation_identity
+from packages.rca.model import EntityRef, InvestigationQuery
 from packages.storage.models import (
     InvestigationReadRow,
     LogObservationRow,
@@ -95,6 +97,13 @@ def _assert_schema_and_constraints(engine: Engine) -> None:
         assert {c["name"] for c in inspector.get_columns(table)} == set(
             model.__table__.columns.keys()
         ) - LATER_COLUMNS.get(table, set())
+    query_key = next(
+        column
+        for column in inspector.get_columns("investigation_reads")
+        if column["name"] == "query_key"
+    )
+    assert isinstance(query_key["type"], String) and not isinstance(query_key["type"], Text)
+    assert query_key["type"].length == 255  # historical 0019 schema
     assert {
         tuple(item["column_names"])
         for item in inspector.get_unique_constraints("investigation_reads")
@@ -228,6 +237,39 @@ def _run(url: str) -> None:
 
         command.upgrade(config, TARGET)
         _assert_schema_and_constraints(engine)
+
+        # M19-3.9 widens the identity without changing the historical 0019
+        # assertion above. Downgrade changes only the type, never values.
+        command.upgrade(config, "head")
+        query_key = next(
+            column
+            for column in inspect(engine).get_columns("investigation_reads")
+            if column["name"] == "query_key"
+        )
+        assert isinstance(query_key["type"], Text)
+        command.downgrade(config, "0020_manifest_payload")
+        query_key = next(
+            column
+            for column in inspect(engine).get_columns("investigation_reads")
+            if column["name"] == "query_key"
+        )
+        assert isinstance(query_key["type"], String) and query_key["type"].length == 255
+        command.upgrade(config, "head")
+        target = EntityRef(namespace="n" * 63, kind="Pod", name="p" * 253)
+        query = InvestigationQuery(start=AT, end=AT + timedelta(hours=1), limit=32)
+        long_query_key = observation_identity("runtime_traces", target, query)
+        assert len(long_query_key) == 419
+        with Session(engine) as session:
+            session.add(_read(99, query_key=long_query_key))
+            session.commit()
+        with Session(engine) as session:
+            stored_query_key = session.scalar(
+                select(InvestigationReadRow.query_key).where(InvestigationReadRow.sequence == 99)
+            )
+        assert stored_query_key == long_query_key
+        assert len(stored_query_key) == len(long_query_key)
+        with engine.begin() as connection:
+            connection.execute(text("DELETE FROM investigation_reads WHERE sequence = 99"))
 
         with engine.begin() as connection:
             connection.execute(text("DELETE FROM log_observations"))

@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request
 
 import pytest
+from provider_test_helpers import provider_session_factory
 
 from packages.rca.engine import build_case
 from packages.rca.investigation.environment import (
@@ -62,7 +63,7 @@ def _provider_adapter(
     return ProviderAdapter(
         "test-run",
         caller_class,
-        lambda: None,
+        provider_session_factory(),
         ProviderReaders(tempo=tempo),  # type: ignore[arg-type]
     )
 

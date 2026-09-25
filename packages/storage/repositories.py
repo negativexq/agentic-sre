@@ -50,6 +50,7 @@ from packages.storage.models import (
     EvidenceRow,
     IncidentEventRow,
     IncidentRow,
+    InvestigationReadRow,
     InvestigationRunRow,
     LifecycleObservationRow,
     LogObservationRow,
@@ -432,10 +433,13 @@ class LogObservationRepository:
         observed_at: datetime,
         *,
         source_system: str = "loki",
+        source_read_ids: Sequence[int | None] | None = None,
     ) -> int:
         """Persist new records and return the number added."""
+        if source_read_ids is not None and len(source_read_ids) != len(records):
+            raise ValueError("source_read_ids must align one-for-one with records")
         stored = 0
-        for record in records:
+        for index, record in enumerate(records):
             dedup_key = self._dedup_key(record)
             exists = self._session.scalar(
                 select(LogObservationRow.observation_id).where(
@@ -456,6 +460,9 @@ class LogObservationRepository:
                     evidence_id=record.evidence_id[:512],
                     dedup_key=dedup_key,
                     source_system=source_system,
+                    source_read_id=(
+                        source_read_ids[index] if source_read_ids is not None else None
+                    ),
                 )
             )
             stored += 1
@@ -517,6 +524,87 @@ class LogObservationRepository:
             .order_by(LogObservationRow.observed_at, LogObservationRow.observation_id)
         ).all()
         return list(rows)
+
+
+class InvestigationReadRepository:
+    """Append one complete successful provider-read envelope and commit it."""
+
+    _APPEND_ATTEMPTS = 5
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def _next_sequence(self, run_id: str) -> int:
+        latest = self._session.scalar(
+            select(InvestigationReadRow.sequence)
+            .where(InvestigationReadRow.run_id == run_id)
+            .order_by(desc(InvestigationReadRow.sequence))
+            .limit(1)
+        )
+        return (latest or 0) + 1
+
+    def append_success(
+        self,
+        *,
+        run_id: str,
+        caller_class: str,
+        capability: str,
+        query_key: str,
+        query_descriptor: dict[str, Any],
+        started_at: datetime,
+        finished_at: datetime,
+        observation: Any,
+        evidence_ids: Sequence[str],
+    ) -> int:
+        """Insert and commit one SUCCESS row; sequence is serialized per run."""
+        for attempt in range(self._APPEND_ATTEMPTS):
+            if self._session.get_bind().dialect.name == "postgresql":
+                # Transaction-scoped lock serializes max+1 allocation for this
+                # run. hashtext collisions only serialize unrelated runs.
+                self._session.execute(select(func.pg_advisory_xact_lock(func.hashtext(run_id))))
+            sequence = self._next_sequence(run_id)
+            row = InvestigationReadRow(
+                run_id=run_id,
+                sequence=sequence,
+                caller_class=caller_class,
+                capability=capability,
+                query_key=query_key,
+                query_descriptor=query_descriptor,
+                started_at=started_at,
+                finished_at=finished_at,
+                committed_at=datetime.now(UTC),
+                status="SUCCESS",
+                observation=observation,
+                evidence_ids=list(evidence_ids),
+                error_type=None,
+                error_message=None,
+            )
+            self._session.add(row)
+            try:
+                self._session.flush()
+                read_id = row.read_id
+                assert read_id is not None
+                self._session.commit()
+            except IntegrityError:
+                self._session.rollback()
+                if attempt + 1 == self._APPEND_ATTEMPTS:
+                    raise
+                # Retry only a run-sequence collision. Other integrity errors
+                # are real persistence failures and must reach the caller.
+                collision = self._session.scalar(
+                    select(InvestigationReadRow.read_id).where(
+                        InvestigationReadRow.run_id == run_id,
+                        InvestigationReadRow.sequence == sequence,
+                    )
+                )
+                if collision is None:
+                    raise
+                continue
+            return read_id
+        raise RuntimeError(
+            f"could not allocate an investigation-read sequence for {run_id} "
+            f"after {self._APPEND_ATTEMPTS} attempts"
+        )
 
 
 def _log_record(row: LogObservationRow) -> LogRecord:

@@ -31,6 +31,8 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.trace import SpanKind, Status, StatusCode
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from packages.rca.engine import build_case
 from packages.rca.investigation.actions import validate_action
@@ -49,6 +51,7 @@ from packages.rca.model import (
     InvestigationQuery,
 )
 from packages.rca.provider_adapter import ProviderAdapter, ProviderReaders
+from packages.storage.models import Base
 
 PORT_FORWARDS = (
     ("observability", "svc/prometheus", 19090, 9090),
@@ -178,6 +181,9 @@ def _live_source(
     alert_service: str,
     scoped_objects: list[dict[str, Any]] | None = None,
 ) -> LiveSource:
+    tape_engine = create_engine("sqlite://")
+    Base.metadata.create_all(tape_engine)
+    tape_session_factory = sessionmaker(tape_engine)
     return LiveSource(
         incident="m18a-live-validation",
         alert_items=[
@@ -195,7 +201,7 @@ def _live_source(
         provider_adapter=ProviderAdapter(
             "m18a-live-validation",
             "ENGINE",
-            lambda: None,
+            tape_session_factory,
             ProviderReaders.from_urls(
                 prometheus_url=f"http://127.0.0.1:{prom_port}",
                 loki_url=f"http://127.0.0.1:{loki_port}",

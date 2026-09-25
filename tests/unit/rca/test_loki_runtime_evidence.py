@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from urllib.request import Request
 
 import pytest
+from provider_test_helpers import provider_session_factory
 from rca_builders import alert, microservice
 
 from packages.rca.engine import Case, build_case
@@ -82,7 +83,10 @@ def _fixture(
     backend = LokiInvestigationBackend(
         base=SourceInvestigationBackend(source),
         provider_adapter=ProviderAdapter(
-            "test-run", "INVESTIGATION", lambda: None, ProviderReaders(loki=_Loki(records))
+            "test-run",
+            "INVESTIGATION",
+            provider_session_factory(),
+            ProviderReaders(loki=_Loki(records)),
         ),
         source=source,
         observation_cutoff=source.observation_cutoff(),

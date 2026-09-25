@@ -4,6 +4,8 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
+from provider_test_helpers import provider_session_factory
+
 from packages.rca.engine import Case, build_case
 from packages.rca.investigation.environment import (
     SourceInvestigationBackend,
@@ -53,7 +55,7 @@ def _provider_adapter(tempo: object) -> ProviderAdapter:
     return ProviderAdapter(
         "test-run",
         "INVESTIGATION",
-        lambda: None,
+        provider_session_factory(),
         ProviderReaders(tempo=tempo),  # type: ignore[arg-type]
     )
 

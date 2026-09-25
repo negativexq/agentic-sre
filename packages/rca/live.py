@@ -36,6 +36,8 @@ from packages.rca.model import (
     ResourcePressure,
     TraceSpanObservation,
     TrafficObservation,
+    object_key,
+    snapshot_evidence_id,
 )
 from packages.rca.pod_status import LifecycleStatusRecord, pod_status_from_lifecycle
 
@@ -430,6 +432,10 @@ class LiveSource:
     # Persisted lifecycle ledger rows for the incident window: the only source
     # of Pod status evidence.
     lifecycle_records: Sequence[LifecycleStatusRecord] = ()
+    # The persisted snapshot cycle ``current_objects`` was loaded from. Current
+    # objects are evidence only as members of a persisted cycle.
+    snapshot_cycle_id: int | None = None
+    snapshot_observed_at: datetime | None = None
 
     def incident_id(self) -> str:
         return self.incident
@@ -442,9 +448,16 @@ class LiveSource:
         return self.alert_items
 
     def object_history(self) -> Mapping[EntityRef, Sequence[ObjectVersion]]:
+        """Journal versions plus the run's persisted snapshot cycle.
+
+        Snapshot objects enter as UPDATED versions with their persisted
+        ``snapshot:<cycle>:<key>`` ids when their content differs from the
+        journal. Absence from the snapshot never produces a deletion; only a
+        persisted journal tombstone does. A resolved incident's frozen window
+        (``current_is_live=False``) uses the journal alone.
+        """
         history: dict[EntityRef, list[ObjectVersion]] = {}
         hashes: dict[EntityRef, str] = {}
-        live: set[EntityRef] = set()
 
         def add(
             body: dict[str, Any],
@@ -482,24 +495,20 @@ class LiveSource:
                 entry.lifecycle,
                 uid=persisted_uid if isinstance(persisted_uid, str) else None,
             )
-        for body in self.current_objects:
-            entity = _entity(body)
-            if entity is not None:
-                live.add(entity)
-            add(body, self.observed_at, "cluster:current", Lifecycle.UPDATED)
-        # An object the journal still shows live but the cluster no longer has is deleted.
-        if self.current_is_live:
-            for entity, versions in history.items():
-                if entity not in live and versions[-1].lifecycle is not Lifecycle.DELETED:
-                    versions.append(
-                        ObjectVersion(
-                            entity=entity,
-                            observed_at=self.observed_at,
-                            body=versions[-1].body,
-                            evidence_id="cluster:missing",
-                            lifecycle=Lifecycle.DELETED,
-                        )
-                    )
+        if self.current_is_live and self.snapshot_cycle_id is not None:
+            at = self.snapshot_observed_at or self.observed_at
+            for body in self.current_objects:
+                key = object_key(body)
+                if key is None:
+                    continue
+                uid = child(body, "metadata").get("uid")
+                add(
+                    body,
+                    at,
+                    snapshot_evidence_id(self.snapshot_cycle_id, key),
+                    Lifecycle.UPDATED,
+                    uid=uid if isinstance(uid, str) else None,
+                )
         return history
 
     def events(self) -> Sequence[ClusterEvent]:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -14,10 +14,16 @@ from sqlalchemy.orm import Session, sessionmaker
 from test_live_diagnosis import setup  # noqa: F401 - pytest fixture
 
 from apps.control_plane.diagnosis import DiagnosisService
-from packages.rca.live import ListingFailure, ListingScope, ObjectListing
+from packages.rca.live import ListingFailure, ListingScope, LiveSource, ObjectListing
+from packages.rca.model import EntityRef, ObjectVersion
 from packages.storage.database import create_session_factory
 from packages.storage.evidence_guard import AuthoritativeEvidenceMutation
-from packages.storage.models import Base, SnapshotCycleObjectRow, SnapshotCycleRow
+from packages.storage.models import (
+    Base,
+    ObjectVersionRow,
+    SnapshotCycleObjectRow,
+    SnapshotCycleRow,
+)
 from packages.storage.repositories import DiagnosisRepository
 
 T0 = datetime(2026, 9, 25, 12, 0, tzinfo=UTC)
@@ -142,3 +148,40 @@ def test_diagnosis_capture_persists_its_cycle_under_its_run(
         listed = session.scalar(select(func.count()).select_from(SnapshotCycleObjectRow))
     assert [cycle.run_id for cycle in cycles] == [run_id]
     assert listed == len(cluster.objects)
+
+
+def test_diagnosis_object_history_resolves_to_persisted_rows(
+    setup: Any,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    factory, cluster, clock, incident_id = setup
+    seen: list[Mapping[EntityRef, Sequence[ObjectVersion]]] = []
+    original = LiveSource.object_history
+
+    def spy(self: LiveSource) -> Mapping[EntityRef, Sequence[ObjectVersion]]:
+        result = original(self)
+        seen.append(result)
+        return result
+
+    monkeypatch.setattr(LiveSource, "object_history", spy)
+    service = DiagnosisService(
+        session_factory=factory, namespaces=("sre-demo",), reader=cluster, clock=clock
+    )
+    service.snapshot_result()
+    clock.now = T0 + timedelta(minutes=5)
+    cluster.objects[0]["spec"] = {"replicas": 3}  # desired state changes before the capture
+    clock.now = T0 + timedelta(minutes=30)
+    service.run(incident_id)
+
+    with factory() as session:
+        journal_ids = {
+            f"journal:{version_id}"
+            for version_id in session.scalars(select(ObjectVersionRow.version_id))
+        }
+        snapshot_ids = set(session.scalars(select(SnapshotCycleObjectRow.evidence_id)))
+    ids = {
+        version.evidence_id for history in seen for items in history.values() for version in items
+    }
+    assert seen and ids
+    assert ids <= journal_ids | snapshot_ids
+    assert not any(item.startswith("cluster:") for item in ids)

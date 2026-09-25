@@ -31,7 +31,14 @@ from packages.contracts import (
     TimeWindow,
 )
 from packages.rca.json_access import child, object_content_hash
-from packages.rca.model import CLUSTER_SCOPE, JournalEntry, Lifecycle, LogRecord
+from packages.rca.model import (
+    CLUSTER_SCOPE,
+    JournalEntry,
+    Lifecycle,
+    LogRecord,
+    object_key,
+    snapshot_evidence_id,
+)
 from packages.storage.models import (
     LIFECYCLE_OBSERVATION_TYPES,
     AlertRow,
@@ -666,6 +673,16 @@ class EventRepository:
         return self.analysis_view(namespaces=namespaces, starts_at=starts_at, ends_at=ends_at)
 
 
+@dataclass(frozen=True)
+class PersistedSnapshotCycle:
+    """One snapshot cycle as persisted: the only form RCA receives it in."""
+
+    cycle_id: int
+    observed_at: datetime
+    completed_at: datetime
+    objects: tuple[dict[str, Any], ...]
+
+
 class SnapshotCycleRepository:
     """Diagnosis capture cycles and the exact bodies they listed (authoritative evidence).
 
@@ -703,15 +720,11 @@ class SnapshotCycleRepository:
         self._session.flush()
         seen: set[str] = set()
         for body in objects:
-            metadata = child(body, "metadata")
-            kind, name = body.get("kind"), metadata.get("name")
-            if not isinstance(kind, str) or not isinstance(name, str):
-                continue
-            namespace = str(metadata.get("namespace") or CLUSTER_SCOPE)
-            key = f"{namespace}/{kind}/{name}"
-            if key in seen:
+            key = object_key(body)
+            if key is None or key in seen:
                 continue  # one body per object and cycle
             seen.add(key)
+            namespace, kind, name = key.split("/", 2)
             self._session.add(
                 SnapshotCycleObjectRow(
                     cycle_id=cycle.cycle_id,
@@ -721,11 +734,28 @@ class SnapshotCycleRepository:
                     name=name,
                     uid=_nested_uid(body, "metadata"),
                     body=body,
-                    evidence_id=f"snapshot:{cycle.cycle_id}:{key}",
+                    evidence_id=snapshot_evidence_id(cycle.cycle_id, key),
                 )
             )
         self._session.commit()
         return cycle.cycle_id
+
+    def load(self, cycle_id: int) -> PersistedSnapshotCycle:
+        """A persisted cycle and its objects exactly as stored, in key order."""
+        cycle = self._session.get(SnapshotCycleRow, cycle_id)
+        if cycle is None:
+            raise LookupError(f"snapshot cycle {cycle_id} was not found")
+        rows = self._session.scalars(
+            select(SnapshotCycleObjectRow)
+            .where(SnapshotCycleObjectRow.cycle_id == cycle_id)
+            .order_by(SnapshotCycleObjectRow.object_key)
+        ).all()
+        return PersistedSnapshotCycle(
+            cycle_id=cycle.cycle_id,
+            observed_at=cycle.observed_at,
+            completed_at=cycle.completed_at,
+            objects=tuple(dict(row.body) for row in rows),
+        )
 
 
 class ObjectVersionRepository:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal
@@ -9,6 +10,21 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 CLUSTER_SCOPE = "_cluster"
+
+
+def object_key(body: Mapping[str, Any]) -> str | None:
+    """``namespace/Kind/name`` of an object body, as the journal keys it."""
+    metadata = body.get("metadata")
+    metadata = metadata if isinstance(metadata, Mapping) else {}
+    kind, name = body.get("kind"), metadata.get("name")
+    if not isinstance(kind, str) or not isinstance(name, str):
+        return None
+    return f"{metadata.get('namespace') or CLUSTER_SCOPE}/{kind}/{name}"
+
+
+def snapshot_evidence_id(cycle_id: int, key: str) -> str:
+    """Evidence id of one object in a persisted snapshot cycle."""
+    return f"snapshot:{cycle_id}:{key}"
 
 
 class EntityRef(BaseModel):
@@ -1254,4 +1270,6 @@ __all__ = [
     "GapOutcome",
     "ToolCapability",
     "InformationGap",
+    "object_key",
+    "snapshot_evidence_id",
 ]

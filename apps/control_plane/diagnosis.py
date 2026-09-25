@@ -551,14 +551,22 @@ class DiagnosisService:
         resolved = incident.status in _TERMINAL_STATUSES
         window_end = incident.updated_at if resolved else self.clock()
         current: list[dict[str, Any]] = []
+        snapshot_cycle_id: int | None = None
+        snapshot_observed_at: datetime | None = None
         if self.reader is not None:
             if not resolved:
                 # The current object view is the same listing that was
                 # journaled. Do not perform a second, later read whose data
-                # would fall outside the advertised diagnosis cutoff.
+                # would fall outside the advertised diagnosis cutoff. RCA sees
+                # the cycle only as it was persisted, never the in-memory listing.
                 cycle = self.snapshot_result(run_id=run_id)
                 window_end = cycle.completed_at
-                current = list(cycle.objects)
+                assert cycle.cycle_id is not None
+                with self.session_factory() as session:
+                    persisted = SnapshotCycleRepository(session).load(cycle.cycle_id)
+                current = list(persisted.objects)
+                snapshot_cycle_id = persisted.cycle_id
+                snapshot_observed_at = persisted.observed_at
             else:
                 # Keep the shared journal current for later incidents, but do
                 # not use this live cycle as evidence for the frozen episode.
@@ -663,6 +671,8 @@ class DiagnosisService:
             prometheus_reader=self.prometheus_reader,
             loki_reader=self.log_reader if isinstance(self.log_reader, LokiLogReader) else None,
             lifecycle_records=lifecycle_records,
+            snapshot_cycle_id=snapshot_cycle_id,
+            snapshot_observed_at=snapshot_observed_at,
         )
         bounded_policy = self.bounded_policy_factory()
         investigation_result = None

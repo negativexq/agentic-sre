@@ -2,6 +2,9 @@
 
 from packages.rca.model import JournalEntry
 from packages.storage.database import create_database_engine, create_session_factory, session_scope
+
+# Imported for its side effect: every ORM Session refuses to mutate evidence rows.
+from packages.storage.evidence_guard import AuthoritativeEvidenceMutation
 from packages.storage.repositories import (
     AlertRepository,
     ChangeRecordRepository,
@@ -20,6 +23,7 @@ from packages.storage.repositories import (
 
 __all__ = [
     "AlertRepository",
+    "AuthoritativeEvidenceMutation",
     "ChangeRecordRepository",
     "DiagnosisRepository",
     "EmailDeliveryRepository",

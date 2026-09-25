@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -58,7 +58,13 @@ def test_object_uid_write_and_column_authoritative_read_round_trip(tmp_path: Pat
         assert row.uid == "uid-object-A"
 
         # Deliberately diverge the JSON copy to prove reads use the UID column.
-        row.body = _object_body(uid="uid-body-conflict")
+        # Evidence rows are append-only for ORM sessions, so the corruption is
+        # written below the ORM, as a Core statement.
+        session.execute(
+            update(ObjectVersionRow)
+            .where(ObjectVersionRow.version_id == row.version_id)
+            .values(body=_object_body(uid="uid-body-conflict"))
+        )
         session.commit()
         journal = repository.history(
             namespaces={"sre-demo"}, starts_at=T0, ends_at=T0 + timedelta(minutes=1)
@@ -119,7 +125,12 @@ def test_event_involved_uid_write_and_column_authoritative_read_round_trip(
         assert row.body["metadata"]["uid"] == "uid-event-X"
 
         # The event object's UID is distinct from its involved object's UID.
-        row.body = _event_body(involved_uid="uid-body-conflict")
+        # Written as a Core statement: ORM sessions cannot mutate evidence rows.
+        session.execute(
+            update(EventVersionRow)
+            .where(EventVersionRow.version_id == row.version_id)
+            .values(body=_event_body(involved_uid="uid-body-conflict"))
+        )
         session.commit()
         bodies = repository.analysis_view(
             namespaces={"sre-demo"}, starts_at=T0, ends_at=T0 + timedelta(minutes=1)

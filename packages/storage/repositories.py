@@ -1556,6 +1556,34 @@ class DiagnosisRepository:
         ).first()
         return dict(row.document) if row is not None else None
 
+    def list_revisions(self, incident_id: object) -> list[DiagnosisRow]:
+        """Return persisted revisions for one incident in authoritative number order."""
+        return list(
+            self._session.scalars(
+                select(DiagnosisRow)
+                .where(DiagnosisRow.incident_id == incident_id)
+                .order_by(DiagnosisRow.revision_number.asc())
+            ).all()
+        )
+
+    def get_revision(self, incident_id: object, revision_number: int) -> DiagnosisRow | None:
+        """Load a revision by its incident-scoped revision number."""
+        return self._session.scalars(
+            select(DiagnosisRow).where(
+                DiagnosisRow.incident_id == incident_id,
+                DiagnosisRow.revision_number == revision_number,
+            )
+        ).first()
+
+    def get_revision_by_id(self, incident_id: object, diagnosis_id: int) -> DiagnosisRow | None:
+        """Load a previous-link target only when it belongs to the same incident."""
+        return self._session.scalars(
+            select(DiagnosisRow).where(
+                DiagnosisRow.incident_id == incident_id,
+                DiagnosisRow.diagnosis_id == diagnosis_id,
+            )
+        ).first()
+
     def latest_created_at(self, incident_id: object) -> datetime | None:
         """When the latest diagnosis was stored, for lifecycle timing."""
         return self._session.scalars(

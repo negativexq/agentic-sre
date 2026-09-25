@@ -5,10 +5,11 @@ import os
 import threading
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
@@ -27,8 +28,11 @@ from apps.control_plane.console.dto import SystemConnector, SystemStatus
 from apps.control_plane.console.email_delivery import EmailDelivery, email_delivery_from_env
 from apps.control_plane.diagnosis import DiagnosisService, service_from_environment
 from apps.control_plane.schemas import (
+    DiagnosisRevisionDetail,
+    DiagnosisRevisionSummary,
     ErrorDetail,
     ErrorResponse,
+    RevisionDiffResponse,
 )
 from apps.control_plane.timeline import diagnosis_phases, newer_run_note
 from packages.contracts import (
@@ -48,6 +52,7 @@ from packages.rca.report import (
     diagnosis_pending_html,
     incidents_html,
 )
+from packages.rca.revision_diff import PersistedDiagnosisRevision, diff_revisions
 from packages.storage import (
     AlertRepository,
     ChangeRecordRepository,
@@ -327,9 +332,11 @@ def create_app(
         "/api/v1/incidents/{incident_id}/diagnosis",
         dependencies=[Depends(require_api_token)],
     )
-    def create_diagnosis(incident_id: UUID) -> dict[str, Any]:
+    def create_diagnosis(
+        incident_id: UUID, trigger: Literal["MANUAL"] = "MANUAL"
+    ) -> dict[str, Any]:
         """Diagnose the incident now and store the result."""
-        return diagnoser.run(incident_id, "MANUAL").model_dump(mode="json")
+        return diagnoser.run(incident_id, trigger).model_dump(mode="json")
 
     @app.get("/api/v1/incidents/{incident_id}/diagnosis")
     def get_diagnosis(
@@ -342,6 +349,94 @@ def create_app(
         if document is None:
             return _error(request, "DIAGNOSIS_NOT_FOUND", "No diagnosis yet.", 404)
         return document
+
+    @app.get(
+        "/api/v1/incidents/{incident_id}/diagnoses",
+        response_model=list[DiagnosisRevisionSummary],
+    )
+    def list_diagnoses(
+        incident_id: UUID,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> list[DiagnosisRevisionSummary]:
+        """Return persisted revision metadata in revision-number order."""
+        rows = DiagnosisRepository(session).list_revisions(incident_id)
+        return [
+            DiagnosisRevisionSummary(
+                diagnosis_id=row.diagnosis_id,
+                revision_number=row.revision_number,
+                previous_diagnosis_id=row.previous_diagnosis_id,
+                trigger=row.trigger,
+                created_at=row.created_at,
+                run_id=row.run_id,
+                window_end=row.window_end,
+                manifest_digest=row.manifest_digest,
+                tape_digest=row.tape_digest,
+                epistemic_digest=row.epistemic_digest,
+                engine_version=row.engine_version,
+                config_digest=row.config_digest,
+                root_cause=row.root_cause,
+                confidence=row.confidence,
+                mode=row.mode,
+                resolution=row.document.get("resolution"),
+            )
+            for row in rows
+        ]
+
+    @app.get(
+        "/api/v1/incidents/{incident_id}/diagnoses/{revision_number}",
+        response_model=DiagnosisRevisionDetail,
+        responses={404: {"model": ErrorResponse}},
+    )
+    def get_diagnosis_revision(
+        incident_id: UUID,
+        revision_number: int,
+        request: Request,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> DiagnosisRevisionDetail | JSONResponse:
+        """Return one persisted revision and its linked predecessor diff."""
+        repository = DiagnosisRepository(session)
+        current = repository.get_revision(incident_id, revision_number)
+        if current is None:
+            return _error(request, "DIAGNOSIS_NOT_FOUND", "No diagnosis yet.", 404)
+
+        revision_diff: RevisionDiffResponse | None = None
+        if current.previous_diagnosis_id is not None:
+            previous = repository.get_revision_by_id(incident_id, current.previous_diagnosis_id)
+            if previous is None:
+                raise RuntimeError(
+                    "diagnosis revision previous_diagnosis_id does not resolve within incident"
+                )
+            computed = diff_revisions(
+                PersistedDiagnosisRevision(previous.document, previous.manifest_digest),
+                PersistedDiagnosisRevision(current.document, current.manifest_digest),
+            )
+            diff_document = asdict(computed)
+            diff_document["resolution_transition"]["changed"] = (
+                computed.resolution_transition.changed
+            )
+            revision_diff = RevisionDiffResponse.model_validate(diff_document)
+
+        summary = DiagnosisRevisionSummary(
+            diagnosis_id=current.diagnosis_id,
+            revision_number=current.revision_number,
+            previous_diagnosis_id=current.previous_diagnosis_id,
+            trigger=current.trigger,
+            created_at=current.created_at,
+            run_id=current.run_id,
+            window_end=current.window_end,
+            manifest_digest=current.manifest_digest,
+            tape_digest=current.tape_digest,
+            epistemic_digest=current.epistemic_digest,
+            engine_version=current.engine_version,
+            config_digest=current.config_digest,
+            root_cause=current.root_cause,
+            confidence=current.confidence,
+            mode=current.mode,
+            resolution=current.document.get("resolution"),
+        )
+        return DiagnosisRevisionDetail(
+            **summary.model_dump(), diagnosis=dict(current.document), diff=revision_diff
+        )
 
     @app.post("/api/v1/cluster/snapshot", dependencies=[Depends(require_api_token)])
     def snapshot_cluster() -> dict[str, int]:

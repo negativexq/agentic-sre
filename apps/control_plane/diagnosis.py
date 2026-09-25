@@ -46,7 +46,11 @@ from packages.storage import (
     LogObservationRepository,
     ObjectVersionRepository,
 )
-from packages.storage.repositories import LifecycleRecord, LifecycleRepository
+from packages.storage.repositories import (
+    EntityInstanceRepository,
+    LifecycleRecord,
+    LifecycleRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +82,60 @@ def _previous_pod_body(records: list[LifecycleRecord], uid: str) -> dict[str, An
         "metadata": {"uid": uid, "deletionTimestamp": last.get("deletionTimestamp")},
         "status": status,
     }
+
+
+def _time(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+@dataclass
+class _InstanceIndexer:
+    """Keeps the materialized exact-instance index current; it is never evidence."""
+
+    index: EntityInstanceRepository
+    namespaces: frozenset[str]
+
+    def observe(self, body: dict[str, Any], observed_at: datetime) -> None:
+        metadata = body.get("metadata") or {}
+        uid, namespace, kind = metadata.get("uid"), metadata.get("namespace"), body.get("kind")
+        if not uid or namespace not in self.namespaces or not isinstance(kind, str):
+            return
+        owners = [item for item in metadata.get("ownerReferences") or [] if isinstance(item, dict)]
+        owner = next(
+            (item for item in owners if item.get("controller")), owners[0] if owners else {}
+        )
+        self.index.upsert(
+            namespace=namespace,
+            kind=kind,
+            name=str(metadata.get("name") or ""),
+            uid=uid,
+            observed_at=observed_at,
+            owner_kind=owner.get("kind"),
+            owner_name=owner.get("name"),
+            owner_uid=owner.get("uid"),
+            created_at=_time(metadata.get("creationTimestamp")),
+        )
+
+    def deleted(self, key: str, uid: str | None, observed_at: datetime) -> None:
+        """Mark the exact instance behind a journal tombstone as deleted."""
+        namespace, _, rest = key.partition("/")
+        kind, _, name = rest.partition("/")
+        if not uid or namespace not in self.namespaces:
+            return
+        self.index.upsert(
+            namespace=namespace,
+            kind=kind,
+            name=name,
+            uid=uid,
+            observed_at=observed_at,
+            deleted=True,
+        )
 
 
 @dataclass
@@ -211,10 +269,14 @@ class DiagnosisService:
                 frozenset(self.namespaces),
                 self.status_snapshot_interval,
             )
+            indexer = _InstanceIndexer(
+                EntityInstanceRepository(session), frozenset(self.namespaces)
+            )
 
             def record(body: dict[str, Any], observed_at: datetime) -> bool:
                 stored = repository.record(body, observed_at)
                 self._record_lifecycle(lambda: lifecycle.observe(body, observed_at))
+                self._record_lifecycle(lambda: indexer.observe(body, observed_at))
                 return stored
 
             def tombstone(key: str, observed_at: datetime) -> bool:
@@ -224,6 +286,7 @@ class DiagnosisService:
                 if written:
                     uid = repository.latest_uid(key)
                     self._record_lifecycle(lambda: lifecycle.deleted(key, uid, observed_at))
+                    self._record_lifecycle(lambda: indexer.deleted(key, uid, observed_at))
                 return written
 
             watcher = ChangeWatcher(
@@ -274,7 +337,8 @@ class DiagnosisService:
 
     @staticmethod
     def _record_lifecycle(write: Callable[[], None]) -> None:
-        """Lifecycle facts are extra evidence: a failure is logged, never fatal to the journal."""
+        """Lifecycle facts and the instance index are written after the journal: a
+        failure is logged, never fatal to the journal cycle."""
         try:
             write()
         except Exception:

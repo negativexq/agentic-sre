@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+from hashlib import sha256
 from typing import Any
 
 # Canonical source types (M19-3.1 inventory), in manifest order.
@@ -56,9 +57,23 @@ def ordered_entries(entries: Iterable[ManifestEntry]) -> tuple[ManifestEntry, ..
     )
 
 
+def manifest_membership_digest(membership: Iterable[tuple[str, str]]) -> str:
+    """Hash only the canonical ``source_type:source_id`` membership pairs."""
+    canonical = "\n".join(
+        sorted(f"{source_type}:{source_id}" for source_type, source_id in membership)
+    )
+    return sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def event_evidence_id(version_id: int) -> str:
     """RCA evidence id of one persisted Kubernetes Event version (``event_versions`` PK)."""
     return f"event:{version_id}"
 
 
-__all__ = ["SOURCE_TYPES", "ManifestEntry", "event_evidence_id", "ordered_entries"]
+__all__ = [
+    "SOURCE_TYPES",
+    "ManifestEntry",
+    "event_evidence_id",
+    "manifest_membership_digest",
+    "ordered_entries",
+]

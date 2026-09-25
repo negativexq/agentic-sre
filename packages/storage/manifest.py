@@ -22,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from packages.contracts import IncidentEvent, IncidentEventType
-from packages.rca.manifest import ManifestEntry, ordered_entries
+from packages.rca.manifest import ManifestEntry, manifest_membership_digest, ordered_entries
 from packages.rca.model import JournalEntry, LogRecord
 from packages.storage.models import (
     AlertRow,
@@ -205,6 +205,12 @@ def load_manifest(session: Session, run_id: str) -> tuple[ManifestEntry, ...]:
     return tuple(ManifestEntry(row.source_type, row.source_id, row.payload) for row in rows)
 
 
+def load_manifest_digest(session: Session, run_id: str) -> str:
+    """Reload a run's persisted membership and compute its canonical digest."""
+    entries = load_manifest(session, run_id)
+    return manifest_membership_digest((entry.source_type, entry.source_id) for entry in entries)
+
+
 def load_members(session: Session, entries: Sequence[ManifestEntry]) -> ManifestMembers:
     """Load exactly the manifest's members; nothing is queried by time window."""
     ids: dict[str, list[str]] = {}
@@ -252,6 +258,7 @@ __all__ = [
     "ManifestRequest",
     "build_manifest",
     "load_manifest",
+    "load_manifest_digest",
     "load_members",
     "select_members",
 ]

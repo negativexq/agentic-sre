@@ -28,7 +28,9 @@ from packages.contracts import (
     IncidentStatus,
 )
 from packages.rca.engine import diagnose
+from packages.rca.investigation.graph import trajectory_replay_contract
 from packages.rca.investigation.policy import ScriptedInvestigationPolicy
+from packages.rca.investigation.state import InvestigationConfig
 from packages.rca.live import ListingFailure, ListingScope, LokiLogReader, ObjectListing
 from packages.rca.model import (
     Confidence,
@@ -40,6 +42,7 @@ from packages.rca.model import (
     InvestigationExecutionStatus,
     InvestigationLedgerEntry,
     InvestigationObservation,
+    InvestigationPolicyKind,
     InvestigationResult,
     InvestigationStopReason,
     LogRecord,
@@ -528,7 +531,6 @@ def test_bounded_investigation_result_survives_session_restart(
     factory, cluster, clock, incident_id = setup
 
     def completed_investigation(source: Any, *, policy: Any) -> InvestigationResult:
-        del policy
         diagnosis = diagnose(source)
         observation = InvestigationObservation(
             observation_id="obs-1",
@@ -568,7 +570,7 @@ def test_bounded_investigation_result_survives_session_restart(
             decision_state_changed=False,
             progress_classification="NO_PROGRESS",
         )
-        return InvestigationResult(
+        result = InvestigationResult(
             diagnosis=diagnosis,
             initial_diagnosis=diagnosis,
             initial_resolution=diagnosis.resolution,
@@ -580,6 +582,14 @@ def test_bounded_investigation_result_survives_session_restart(
             observations=(observation,),
             ledger=(entry,),
             action_audits=(audit,),
+        )
+        # The production call passes no config, so its effective config is the default.
+        return result.model_copy(
+            update={
+                "replay_contract": trajectory_replay_contract(
+                    result, policy=policy, config=InvestigationConfig()
+                )
+            }
         )
 
     monkeypatch.setattr(
@@ -603,8 +613,10 @@ def test_bounded_investigation_result_survives_session_restart(
     assert artifact is not None
     assert artifact["diagnosis_run_id"] == run_id
     assert artifact["incident_id"] == str(incident_id)
-    assert artifact["artifact_version"] == "1.0"
+    assert artifact["artifact_version"] == "1.1"
     result = InvestigationResult.model_validate(artifact["document"])
+    assert result.replay_contract is not None
+    assert result.replay_contract.policy_kind is InvestigationPolicyKind.ACTION
     assert result.stop_reason is InvestigationStopReason.NO_PROGRESS
     assert result.initial_diagnosis is not None
     assert result.observations[0].observation_id == "obs-1"

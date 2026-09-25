@@ -53,11 +53,11 @@ from packages.storage.repositories import (
     SnapshotCycleRepository,
 )
 from packages.storage.retention import RetentionPolicy, apply_retention, policy_from_environment
+from packages.storage.trajectory import TRAJECTORY_ARTIFACT_VERSION, trajectory_document
 
 logger = logging.getLogger(__name__)
 
 _TERMINAL_STATUSES = frozenset({"RESOLVED", "CLOSED", "FAILED"})
-_INVESTIGATION_ARTIFACT_VERSION = "1.0"
 _LIFECYCLE_SOURCE = "collector"
 _TOMBSTONE_SOURCE = "journal-tombstone"
 
@@ -696,9 +696,9 @@ class DiagnosisService:
                 InvestigationRunRepository(session).save(
                     diagnosis_run_id=run_id,
                     incident_id=incident_id,
-                    artifact_version=_INVESTIGATION_ARTIFACT_VERSION,
+                    artifact_version=TRAJECTORY_ARTIFACT_VERSION,
                     created_at=self.clock(),
-                    document=investigation_result.model_dump(mode="json"),
+                    document=trajectory_document(investigation_result),
                     commit=False,
                 )
             session.commit()

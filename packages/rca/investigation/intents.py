@@ -32,6 +32,7 @@ from packages.rca.model import (
     InvestigationAction,
     InvestigationActionAudit,
     InvestigationLedgerEntry,
+    InvestigationPolicyKind,
 )
 from packages.rca.root_cause_eligibility import (
     RootCauseEligibilityState,
@@ -783,6 +784,7 @@ class DeterministicIntentPolicy:
 
     counts_as_model: bool = False
     uses_intent_selector: bool = True
+    semantic_kind: InvestigationPolicyKind = InvestigationPolicyKind.INTENT_SELECTOR
 
     def choose_action(self, _context: object) -> InvestigationAction:
         return InvestigationAction(action="stop", rationale="intent selector path required")

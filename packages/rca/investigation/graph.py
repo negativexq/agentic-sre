@@ -43,7 +43,6 @@ from packages.rca.investigation.evidence import (
 )
 from packages.rca.investigation.focus import exact_workload_dependency_candidates
 from packages.rca.investigation.intents import (
-    DeterministicIntentPolicy,
     SelectedObservationIntent,
     build_intent_menu,
     build_observation_bundles,
@@ -61,9 +60,7 @@ from packages.rca.investigation.normalizers import (
     new_investigation_findings,
     normalize_observation,
 )
-from packages.rca.investigation.policy import LLMIntentPolicy
 from packages.rca.investigation.selection import (
-    DeterministicObservationPolicy,
     ScoredObservationCandidate,
     active_choice_dominates_baseline,
     candidate_to_action,
@@ -76,11 +73,14 @@ from packages.rca.investigation.selection import (
 )
 from packages.rca.investigation.state import (
     CaseRebuilder,
+    IntentTiebreakPolicy,
     InvestigationConfig,
     InvestigationPolicy,
     InvestigationPolicyContext,
     InvestigationState,
     InvestigationTool,
+    investigation_config_document,
+    policy_kind,
 )
 from packages.rca.investigation.tools import default_tools, make_observation
 from packages.rca.llm import LLMError
@@ -102,13 +102,23 @@ from packages.rca.model import (
     InvestigationGapState,
     InvestigationHypothesisState,
     InvestigationLedgerEntry,
+    InvestigationPolicyKind,
     InvestigationResult,
     InvestigationStep,
     InvestigationStopReason,
     Resolution,
+    TrajectoryReplayContract,
+    TrajectoryTerminal,
 )
 from packages.rca.provider_adapter import ProviderReadPersistenceError
 from packages.rca.source import ObservationSource
+
+_SELECTOR_KINDS = frozenset(
+    {InvestigationPolicyKind.OBSERVATION_SELECTOR, InvestigationPolicyKind.INTENT_SELECTOR}
+)
+_INTENT_KINDS = frozenset(
+    {InvestigationPolicyKind.INTENT_SELECTOR, InvestigationPolicyKind.INTENT_TIEBREAK}
+)
 
 
 def _engine_config(config: InvestigationConfig) -> EngineConfig:
@@ -621,7 +631,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     selected_intent = None
     selector_mode = "ACTIVE_RANKING"
     selector_reason = "existing active selector path"
-    if isinstance(rt.policy, DeterministicIntentPolicy):
+    if policy_kind(rt.policy) is InvestigationPolicyKind.INTENT_SELECTOR:
         baseline_intent = select_observation_intent_candidate(
             case=case,
             diagnosis=diagnosis,
@@ -675,7 +685,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             baseline=baseline_intent,
             active=active_intent,
         )
-    elif isinstance(rt.policy, LLMIntentPolicy):
+    elif policy_kind(rt.policy) is InvestigationPolicyKind.INTENT_TIEBREAK:
         baseline_intent = select_observation_intent_candidate(
             case=case,
             diagnosis=diagnosis,
@@ -722,7 +732,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                         f"candidate={obligated.physical.candidate.candidate_id}",
                     ),
                 }
-    if isinstance(rt.policy, LLMIntentPolicy):
+    if policy_kind(rt.policy) is InvestigationPolicyKind.INTENT_TIEBREAK:
         candidates = build_observation_candidates(
             case=case, diagnosis=diagnosis, engine_config=rt.engine_config
         )
@@ -767,7 +777,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         if len(menu) > 1:
             before = _policy_calls(rt.policy)
             try:
-                returned_id = rt.policy.choose_intent(
+                returned_id = cast(IntentTiebreakPolicy, rt.policy).choose_intent(
                     menu, tuple(state.get("intent_history", ())[-6:])
                 )
                 if returned_id in {item.intent_id for item in menu}:
@@ -855,10 +865,10 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             "model_calls": model_calls,
             "trace_steps": _with_step(state, "select_action", detail),
         }
-    if isinstance(rt.policy, (DeterministicObservationPolicy, DeterministicIntentPolicy)):
+    if policy_kind(rt.policy) in _SELECTOR_KINDS:
         selection_pool: tuple[ObservationCandidate, ...] = ()
         focus_applied = False
-        if isinstance(rt.policy, DeterministicIntentPolicy):
+        if policy_kind(rt.policy) is InvestigationPolicyKind.INTENT_SELECTOR:
             selected = selected_intent.physical if selected_intent is not None else None
             if selected_intent is not None:
                 candidates = build_observation_candidates(
@@ -979,7 +989,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                 f"marginal-coverage={len(exploration_coverage_atoms(selected.candidate, diagnosis) - covered_atoms)}; "
                 f"candidate={selected.candidate.candidate_id}"
             )
-            if isinstance(rt.policy, DeterministicIntentPolicy):
+            if policy_kind(rt.policy) is InvestigationPolicyKind.INTENT_SELECTOR:
                 baseline_id = (
                     baseline_intent.physical.candidate.candidate_id
                     if baseline_intent is not None
@@ -1021,19 +1031,25 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             ),
             "pending_selection_candidates": selection_trace,
             "pending_selection_strategy": (
-                selector_mode if isinstance(rt.policy, DeterministicIntentPolicy) else None
+                selector_mode
+                if policy_kind(rt.policy) is InvestigationPolicyKind.INTENT_SELECTOR
+                else None
             ),
             "pending_selection_reason": (
-                selector_reason if isinstance(rt.policy, DeterministicIntentPolicy) else None
+                selector_reason
+                if policy_kind(rt.policy) is InvestigationPolicyKind.INTENT_SELECTOR
+                else None
             ),
             "pending_baseline_candidate_id": (
                 baseline_intent.physical.candidate.candidate_id
-                if isinstance(rt.policy, DeterministicIntentPolicy) and baseline_intent is not None
+                if policy_kind(rt.policy) is InvestigationPolicyKind.INTENT_SELECTOR
+                and baseline_intent is not None
                 else None
             ),
             "pending_active_candidate_id": (
                 active_intent.physical.candidate.candidate_id
-                if isinstance(rt.policy, DeterministicIntentPolicy) and active_intent is not None
+                if policy_kind(rt.policy) is InvestigationPolicyKind.INTENT_SELECTOR
+                and active_intent is not None
                 else None
             ),
             "stop_reason": None,
@@ -1066,7 +1082,8 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         is not None
     )
     if not candidate_actions and (
-        isinstance(rt.policy, LLMIntentPolicy) or getattr(rt.policy, "counts_as_model", False)
+        policy_kind(rt.policy) is InvestigationPolicyKind.INTENT_TIEBREAK
+        or getattr(rt.policy, "counts_as_model", False)
     ):
         return {
             "stop_reason": InvestigationStopReason.NO_RESOLVABLE_GAP,
@@ -1847,7 +1864,7 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     candidate_atoms: tuple[tuple[str, str], ...] = ()
     action = state.get("pending_action")
     if (
-        isinstance(rt.policy, (DeterministicIntentPolicy, LLMIntentPolicy))
+        policy_kind(rt.policy) in _INTENT_KINDS
         and observation.error is None
         and action is not None
         and action.capability is not None
@@ -1885,7 +1902,7 @@ def _normalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         ),
         error=(
             observation.error
-            if isinstance(rt.policy, (DeterministicIntentPolicy, LLMIntentPolicy))
+            if policy_kind(rt.policy) in _INTENT_KINDS
             and action is not None
             and action.capability is not None
             else "disabled"
@@ -2427,8 +2444,30 @@ def investigate_diagnosis(
     result = graph.invoke(state, config={"configurable": {"thread_id": thread}})
     final = result.get("final_result")
     if isinstance(final, InvestigationResult):
-        return final
+        return final.model_copy(
+            update={
+                "replay_contract": trajectory_replay_contract(
+                    final, policy=policy, config=config or InvestigationConfig()
+                )
+            }
+        )
     raise RuntimeError("investigation graph terminated without a result")
+
+
+def trajectory_replay_contract(
+    result: InvestigationResult, *, policy: InvestigationPolicy, config: InvestigationConfig
+) -> TrajectoryReplayContract:
+    """What a trajectory replay needs beyond the audits: policy family, config, terminal."""
+    return TrajectoryReplayContract(
+        policy_kind=policy_kind(policy),
+        counts_as_model=bool(getattr(policy, "counts_as_model", False)),
+        config=investigation_config_document(config),
+        terminal=TrajectoryTerminal(
+            stop_reason=result.stop_reason,
+            turns=result.turns,
+            audited_turns=len(result.action_audits),
+        ),
+    )
 
 
 def build_investigation_state(

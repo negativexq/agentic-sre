@@ -1195,6 +1195,53 @@ class Diagnosis(BaseModel):
         return value
 
 
+class InvestigationPolicyKind(StrEnum):
+    """The control-flow family an investigation policy selects the graph path by.
+
+    ACTION: the graph asks the policy for each action (``choose_action``).
+    INTENT_TIEBREAK: the graph ranks intents and the policy only breaks a tie
+    between equally relevant ones (``choose_intent``).
+    OBSERVATION_SELECTOR / INTENT_SELECTOR: the graph-bound deterministic
+    candidate / intent selector chooses; the policy is a marker.
+    """
+
+    ACTION = "ACTION"
+    INTENT_TIEBREAK = "INTENT_TIEBREAK"
+    OBSERVATION_SELECTOR = "OBSERVATION_SELECTOR"
+    INTENT_SELECTOR = "INTENT_SELECTOR"
+
+
+class TrajectoryTerminal(BaseModel):
+    """How the recorded investigation ended.
+
+    ``turns`` counts policy turns; ``audited_turns`` counts turns that left an
+    action audit. A terminal turn without an audit (model failure, a stop
+    decided during selection) makes ``turns == audited_turns + 1``.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    stop_reason: InvestigationStopReason
+    turns: int = Field(ge=0)
+    audited_turns: int = Field(ge=0)
+
+
+class TrajectoryReplayContract(BaseModel):
+    """Execution semantics a recorded trajectory needs to be replayed (artifact 1.1).
+
+    Run boundary metadata (window end, snapshot cycle, provider capabilities,
+    manifest) stays in the run's ``EVIDENCE_GATHERED`` event, never here.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    policy_kind: InvestigationPolicyKind
+    counts_as_model: bool
+    # The effective ``InvestigationConfig``, serialized field by field.
+    config: dict[str, Any]
+    terminal: TrajectoryTerminal
+
+
 class InvestigationResult(BaseModel):
     """Serializable result of one bounded evidence-acquisition run."""
 
@@ -1218,6 +1265,8 @@ class InvestigationResult(BaseModel):
     action_audits: tuple[InvestigationActionAudit, ...] = ()
     new_evidence_refs: tuple[str, ...] = ()
     resolved_during_investigation: bool = False
+    # Present from artifact 1.1; absent in 1.0 artifacts, which stay readable.
+    replay_contract: TrajectoryReplayContract | None = None
 
 
 __all__ = [
@@ -1251,6 +1300,9 @@ __all__ = [
     "InvestigationStopReason",
     "InvestigationObservation",
     "InvestigationResult",
+    "InvestigationPolicyKind",
+    "TrajectoryReplayContract",
+    "TrajectoryTerminal",
     "Hypothesis",
     "StructuralAlternative",
     "HypothesisDiagnostics",

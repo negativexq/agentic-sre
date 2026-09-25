@@ -13,7 +13,12 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from packages.rca.investigation.intents import IntentMenuItem
 from packages.rca.investigation.state import InvestigationPolicyContext
 from packages.rca.llm import LLMClient, LLMOutputError
-from packages.rca.model import EntityRef, InvestigationAction, InvestigationQuery
+from packages.rca.model import (
+    EntityRef,
+    InvestigationAction,
+    InvestigationPolicyKind,
+    InvestigationQuery,
+)
 
 
 class InvestigationTargetWire(BaseModel):
@@ -246,6 +251,7 @@ class ScriptedInvestigationPolicy:
     actions: list[InvestigationAction | dict[str, Any]]
     index: int = 0
     counts_as_model: bool = False
+    semantic_kind: InvestigationPolicyKind = InvestigationPolicyKind.ACTION
 
     def choose_action(self, context: InvestigationPolicyContext) -> InvestigationAction:
         del context
@@ -264,6 +270,7 @@ class LLMInvestigationPolicy:
 
     client: LLMClient
     counts_as_model: bool = True
+    semantic_kind: InvestigationPolicyKind = InvestigationPolicyKind.ACTION
     prompts: list[str] = field(default_factory=list)
 
     def _complete(self, prompt: str) -> InvestigationAction:
@@ -304,6 +311,7 @@ class LLMIntentPolicy:
 
     client: LLMClient
     counts_as_model: bool = True
+    semantic_kind: InvestigationPolicyKind = InvestigationPolicyKind.INTENT_TIEBREAK
     prompts: list[str] = field(default_factory=list)
 
     def _complete(self, prompt: str) -> str:

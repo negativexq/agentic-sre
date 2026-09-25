@@ -43,6 +43,10 @@ MODELS = {
     "log_observations": LogObservationRow,
 }
 AT = datetime(2026, 9, 25, 12, 0, tzinfo=UTC)
+# Columns later migrations add to these tables; this test verifies revision 0019.
+LATER_COLUMNS = {
+    "run_evidence_manifest": {"payload"},
+}
 
 
 def _config(url: str) -> Config:
@@ -90,7 +94,7 @@ def _assert_schema_and_constraints(engine: Engine) -> None:
     for table, model in MODELS.items():
         assert {c["name"] for c in inspector.get_columns(table)} == set(
             model.__table__.columns.keys()
-        )
+        ) - LATER_COLUMNS.get(table, set())
     assert {
         tuple(item["column_names"])
         for item in inspector.get_unique_constraints("investigation_reads")

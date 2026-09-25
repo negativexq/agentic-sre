@@ -233,10 +233,6 @@ class AlertRepository:
         """Return alerts attached to an incident in stable start order."""
         return self._alerts(AlertRow.incident_id == incident_id)
 
-    def by_ids(self, alert_ids: Sequence[object]) -> list[Alert]:
-        """Exactly these alerts, in stable start order."""
-        return self._alerts(AlertRow.alert_id.in_(alert_ids)) if alert_ids else []
-
     def _alerts(self, condition: Any) -> list[Alert]:
         rows = self._session.scalars(
             select(AlertRow).where(condition).order_by(AlertRow.starts_at, AlertRow.alert_id)

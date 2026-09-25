@@ -75,6 +75,17 @@ def _rca_alert(item: ContractAlert) -> Alert:
     )
 
 
+def _rca_alert_from_payload(payload: dict[str, Any]) -> Alert:
+    """An RCA alert built from the content the run's manifest froze."""
+    return Alert(
+        name=payload["alert_name"],
+        service=payload["service"],
+        namespace=payload["namespace"],
+        starts_at=datetime.fromisoformat(payload["starts_at"]),
+        labels={**payload["labels"], "service_name": payload["service"]},
+    )
+
+
 def _checkpoint(records: list[LifecycleRecord]) -> int | None:
     """Index of the latest STATUS_SNAPSHOT: the last state whose transitions all persisted."""
     for index in range(len(records) - 1, -1, -1):
@@ -643,7 +654,7 @@ class DiagnosisService:
             members = load_members(session, entries)
         source = LiveSource(
             incident=str(incident_id),
-            alert_items=[_rca_alert(item) for item in members.alerts],
+            alert_items=[_rca_alert_from_payload(item) for item in members.alerts],
             journal=list(members.journal),
             current_objects=list(members.snapshot.objects) if members.snapshot else [],
             event_bodies=[body for _, body in members.events],

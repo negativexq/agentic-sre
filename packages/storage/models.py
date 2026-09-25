@@ -449,6 +449,9 @@ class RunEvidenceManifestRow(Base):
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     source_type: Mapped[str] = mapped_column(String(32), nullable=False)
     source_id: Mapped[str] = mapped_column(String(600), nullable=False)
+    # Content frozen at manifest time for sources whose rows can still change
+    # (alerts are updated on resolve); NULL for append-only sources.
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
 
 class InvestigationReadRow(Base):

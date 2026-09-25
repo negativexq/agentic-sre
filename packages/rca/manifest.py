@@ -7,8 +7,9 @@ the same membership are written in the same sequence.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field
+from typing import Any
 
 # Canonical source types (M19-3.1 inventory), in manifest order.
 SOURCE_TYPES = (
@@ -24,10 +25,15 @@ SOURCE_TYPES = (
 
 @dataclass(frozen=True)
 class ManifestEntry:
-    """One exact persisted source: ``source_id`` is the row's persistent id."""
+    """One exact persisted source: ``source_id`` is the row's persistent id.
+
+    ``payload`` freezes a source's content at manifest time when its row can
+    still change (alerts). It is not part of the entry's identity.
+    """
 
     source_type: str
     source_id: str
+    payload: Mapping[str, Any] | None = field(default=None, compare=False, hash=False)
 
     def __post_init__(self) -> None:
         if self.source_type not in SOURCE_TYPES:

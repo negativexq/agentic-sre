@@ -27,6 +27,7 @@ from packages.contracts import (
 from packages.rca.live import LiveSource
 from packages.rca.manifest import SOURCE_TYPES
 from packages.rca.model import LogRecord
+from packages.rca.provider_adapter import ProviderReaders
 from packages.storage.database import create_session_factory
 from packages.storage.evidence_guard import AuthoritativeEvidenceMutation
 from packages.storage.manifest import ManifestRequest, build_manifest, load_manifest
@@ -131,7 +132,7 @@ def _run(
         session_factory=factory,
         namespaces=("sre-demo",),
         reader=cluster,
-        log_reader=logs,
+        provider_readers=ProviderReaders(loki=logs),
         clock=clock,
     )
     seen = Seen(monkeypatch)

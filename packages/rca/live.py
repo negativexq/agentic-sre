@@ -19,8 +19,6 @@ from packages.rca.investigation.environment import (
     SourceInvestigationBackend,
     TempoInvestigationBackend,
 )
-from packages.rca.investigation.prometheus import PrometheusMetricsReader
-from packages.rca.investigation.tempo import TempoTraceReader
 from packages.rca.json_access import child, object_content_hash
 from packages.rca.model import (
     CLUSTER_SCOPE,
@@ -40,6 +38,7 @@ from packages.rca.model import (
     snapshot_evidence_id,
 )
 from packages.rca.pod_status import LifecycleStatusRecord, pod_status_from_lifecycle
+from packages.rca.provider_adapter import ProviderAdapter
 
 _log = logging.getLogger(__name__)
 # Resource reads start this long before the requested time so a baseline exists.
@@ -439,9 +438,7 @@ class LiveSource:
     # whose window is frozen): an empty, non-live list must not be read as
     # "the cluster has none of these objects any more".
     current_is_live: bool = True
-    tempo_reader: TempoTraceReader | None = None
-    prometheus_reader: PrometheusMetricsReader | None = None
-    loki_reader: LokiLogReader | None = None
+    provider_adapter: ProviderAdapter | None = None
     # Persisted lifecycle ledger rows for the incident window: the only source
     # of Pod status evidence.
     lifecycle_records: Sequence[LifecycleStatusRecord] = ()
@@ -540,7 +537,7 @@ class LiveSource:
         Each read stays within the one-hour query bound. A failed read yields
         nothing for that Pod, which the RCA treats as missing, never as normal.
         """
-        if self.prometheus_reader is None:
+        if self.provider_adapter is None or not self.provider_adapter.supports("resource_pressure"):
             return []
         start = since - RESOURCE_BASELINE_LEAD
         end = min(self.observed_at, start + PROMETHEUS_MAX_QUERY_SPAN)
@@ -552,7 +549,7 @@ class LiveSource:
                 continue
             try:
                 records.extend(
-                    self.prometheus_reader.query_resource_pressure(
+                    self.provider_adapter.query_resource_pressure(
                         pod, InvestigationQuery(start=start, end=end, limit=16)
                     )
                 )
@@ -582,41 +579,44 @@ class LiveSource:
         if capability == "incident_changes":
             return self.supports("history")
         if capability == "runtime_traces":
-            return self.tempo_reader is not None
+            return self.provider_adapter is not None and self.provider_adapter.supports(capability)
         if capability in {"resource_pressure", "traffic"}:
-            return self.prometheus_reader is not None
+            return self.provider_adapter is not None and self.provider_adapter.supports(capability)
         return capability in {"history", "events", "logs"}
 
     def supports_typed_runtime(self, capability: str) -> bool:
         """Report configured typed providers independently of query results."""
         if capability == "runtime_traces":
-            return self.tempo_reader is not None
+            return self.provider_adapter is not None and self.provider_adapter.supports(capability)
         if capability in {"resource_pressure", "traffic"}:
-            return self.prometheus_reader is not None
+            return self.provider_adapter is not None and self.provider_adapter.supports(capability)
         if capability == "logs":
-            return self.loki_reader is not None
+            return self.provider_adapter is not None and self.provider_adapter.supports(capability)
         return False
 
     def investigation_backend(self) -> InvestigationBackend:
         base: InvestigationBackend = SourceInvestigationBackend(self)
-        if self.prometheus_reader is not None:
+        if self.provider_adapter is None:
+            return base
+        investigation_adapter = self.provider_adapter.for_caller("INVESTIGATION")
+        if investigation_adapter.supports("resource_pressure"):
             base = PrometheusInvestigationBackend(
                 base=base,
-                prometheus=self.prometheus_reader,
+                provider_adapter=investigation_adapter,
                 observation_cutoff=self.observation_cutoff(),
             )
-        if self.tempo_reader is not None:
+        if investigation_adapter.supports("runtime_traces"):
             base = TempoInvestigationBackend(
                 base=base,
-                tempo=self.tempo_reader,
+                provider_adapter=investigation_adapter,
                 observation_cutoff=self.observation_cutoff(),
             )
-        if self.loki_reader is not None:
+        if investigation_adapter.supports("logs"):
             from packages.rca.investigation.environment import LokiInvestigationBackend
 
             base = LokiInvestigationBackend(
                 base=base,
-                loki=self.loki_reader,
+                provider_adapter=investigation_adapter,
                 source=self,
                 observation_cutoff=self.observation_cutoff(),
             )

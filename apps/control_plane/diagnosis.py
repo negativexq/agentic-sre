@@ -18,9 +18,7 @@ from packages.contracts import Incident, IncidentEvent, IncidentEventType
 from packages.rca.engine import Investigator, diagnose
 from packages.rca.investigation.graph import investigate_diagnosis
 from packages.rca.investigation.policy import LLMInvestigationPolicy
-from packages.rca.investigation.prometheus import PrometheusConfig, PrometheusMetricsReader
 from packages.rca.investigation.state import InvestigationPolicy
-from packages.rca.investigation.tempo import TempoConfig, TempoTraceReader
 from packages.rca.lifecycle import classify, status_payload
 from packages.rca.live import (
     ChangeWatcher,
@@ -28,8 +26,6 @@ from packages.rca.live import (
     KubernetesClusterReader,
     ListingFailure,
     LiveSource,
-    LogReader,
-    LokiLogReader,
     ObjectSnapshot,
     capture_error_logs,
     incident_window,
@@ -37,6 +33,7 @@ from packages.rca.live import (
 from packages.rca.llm import LLMClient
 from packages.rca.manifest import event_evidence_id
 from packages.rca.model import Alert, Diagnosis
+from packages.rca.provider_adapter import ProviderAdapter, ProviderReaders
 from packages.storage import (
     AlertRepository,
     DiagnosisRepository,
@@ -306,10 +303,10 @@ class DiagnosisService:
     namespaces: tuple[str, ...]
     evidence_namespaces: tuple[str, ...] = ("chaos-mesh",)
     reader: ClusterReader | None = None
-    log_reader: LogReader | None = None
     investigator_factory: Callable[[], Investigator | None] = lambda: None
     bounded_policy_factory: Callable[[], InvestigationPolicy | None] = lambda: None
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
+    provider_readers: ProviderReaders = field(default_factory=ProviderReaders)
     # Serializes ChangeWatcher.snapshot() runs: the periodic watch() loop and a
     # run()-triggered snapshot can otherwise race on the same read-then-write
     # (latest version, then insert) in ObjectVersionRepository.
@@ -322,8 +319,6 @@ class DiagnosisService:
     # lock (e.g. a Postgres advisory lock) instead, or a single writer process.
     _snapshot_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     _last_snapshot_result: SnapshotResult | None = field(default=None, init=False, repr=False)
-    tempo_reader: TempoTraceReader | None = None
-    prometheus_reader: PrometheusMetricsReader | None = None
     # A STATUS_SNAPSHOT with unchanged content is written at most this often.
     status_snapshot_interval: timedelta = timedelta(seconds=30)
     # Evidence retention; None (the default) keeps everything.
@@ -553,10 +548,13 @@ class DiagnosisService:
             raise
 
     def _capture_logs(
-        self, incident_id: UUID, alerts: list[Alert], listed: tuple[dict[str, Any], ...]
+        self,
+        incident_id: UUID,
+        alerts: list[Alert],
+        listed: tuple[dict[str, Any], ...],
+        provider_adapter: ProviderAdapter,
     ) -> None:
         """Bulk Loki capture for an open incident, persisted before the manifest is taken."""
-        assert self.log_reader is not None
         services = sorted(
             {
                 str(body.get("metadata", {}).get("name"))
@@ -568,7 +566,7 @@ class DiagnosisService:
         # The incident history is wider than one bounded Loki read, so it is
         # captured as several <=1h reads rather than one rejected read.
         starts_at, ends_at = incident_window(alerts, self.clock())
-        capture = capture_error_logs(self.log_reader, services, starts_at, ends_at)
+        capture = capture_error_logs(provider_adapter, services, starts_at, ends_at)
         for failure in capture.failed:
             logger.warning(
                 "log capture slice [%s, %s) failed (%s: %s); continuing with the rest",
@@ -606,6 +604,9 @@ class DiagnosisService:
         # captured (objects, Events, lifecycle, then logs), committed, and its
         # single epistemic boundary is the moment that capture finished.
         resolved = incident.status in _TERMINAL_STATUSES
+        capture_adapter = ProviderAdapter(
+            run_id, "CAPTURE", self.session_factory, self.provider_readers
+        )
         window_end = incident.updated_at if resolved else self.clock()
         snapshot_cycle_id: int | None = None
         listed: tuple[dict[str, Any], ...] = ()
@@ -628,8 +629,8 @@ class DiagnosisService:
                 snapshot_cycle_id = cycle.cycle_id
                 with self.session_factory() as session:
                     listed = SnapshotCycleRepository(session).load(snapshot_cycle_id).objects
-            if self.log_reader is not None:
-                self._capture_logs(incident_id, alerts, listed)
+            if capture_adapter.supports("logs"):
+                self._capture_logs(incident_id, alerts, listed, capture_adapter)
             window_end = self.clock()
         starts_at, ends_at = incident_window(alerts, window_end)
         # The manifest and the run's boundary event commit together; RCA then
@@ -662,9 +663,7 @@ class DiagnosisService:
             error_items=list(members.logs),
             observed_at=window_end,
             current_is_live=not resolved,
-            tempo_reader=self.tempo_reader,
-            prometheus_reader=self.prometheus_reader,
-            loki_reader=self.log_reader if isinstance(self.log_reader, LokiLogReader) else None,
+            provider_adapter=capture_adapter.for_caller("ENGINE"),
             lifecycle_records=members.lifecycle,
             snapshot_cycle_id=members.snapshot.cycle_id if members.snapshot else None,
             snapshot_observed_at=members.snapshot.observed_at if members.snapshot else None,
@@ -742,14 +741,7 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
         if os.getenv("SRE_CLUSTER_ACCESS") == "true"
         else None
     )
-    loki = os.getenv("SRE_LOKI_URL")
-    log_reader = LokiLogReader(loki) if loki else None
-    tempo_config = TempoConfig.from_environment()
-    tempo_reader = TempoTraceReader(tempo_config) if tempo_config is not None else None
-    prometheus_config = PrometheusConfig.from_environment()
-    prometheus_reader = (
-        PrometheusMetricsReader(prometheus_config) if prometheus_config is not None else None
-    )
+    provider_readers = ProviderReaders.from_environment()
 
     # Built once and reused: OpenAIClient owns the call-budget counter, so a
     # fresh client per incident would reset SRE_LLM_MAX_CALLS every time.
@@ -782,9 +774,7 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
         namespaces=namespaces,
         evidence_namespaces=evidence_namespaces,
         reader=reader,
-        log_reader=log_reader,
-        tempo_reader=tempo_reader,
-        prometheus_reader=prometheus_reader,
+        provider_readers=provider_readers,
         investigator_factory=investigator,
         bounded_policy_factory=bounded_policy,
         status_snapshot_interval=timedelta(

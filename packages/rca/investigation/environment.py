@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Protocol, cast
 
-from packages.rca.investigation.prometheus import PrometheusMetricsReader
-from packages.rca.investigation.tempo import TempoTraceBatch, TempoTraceReader
+from packages.rca.investigation.actions import observation_identity
+from packages.rca.investigation.tempo import TempoTraceBatch
 from packages.rca.model import (
     Alert,
     ClusterEvent,
@@ -22,6 +22,7 @@ from packages.rca.model import (
     TrafficObservation,
 )
 from packages.rca.pod_status import pod_status_from_history
+from packages.rca.provider_adapter import ProviderAdapter
 from packages.rca.signals import (
     _HPA_FAILURE_REASONS,
     _LIMIT_MESSAGE,
@@ -186,19 +187,6 @@ class InvestigationBackend(Protocol):
     ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch: ...
 
     def supports(self, capability: str) -> bool: ...
-
-
-class LokiReader(Protocol):
-    """Trusted Loki reader contract; query language remains inside the adapter."""
-
-    def error_logs(
-        self,
-        services: Sequence[str],
-        starts_at: datetime,
-        ends_at: datetime,
-        *,
-        limit: int | None = None,
-    ) -> list[LogRecord]: ...
 
 
 @dataclass(frozen=True)
@@ -429,7 +417,7 @@ class TempoInvestigationBackend:
     """Existing investigation reads plus an active Tempo trace provider."""
 
     base: InvestigationBackend
-    tempo: TempoTraceReader
+    provider_adapter: ProviderAdapter
     observation_cutoff: datetime | None
 
     def query_history(
@@ -468,7 +456,13 @@ class TempoInvestigationBackend:
     def query_traces(
         self, target: EntityRef, query: InvestigationQuery
     ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch:
-        batch = self.tempo.query(target, query)
+        batch = self.provider_adapter.query_tempo(
+            target,
+            query,
+            observation_identity=observation_identity("runtime_traces", target, query),
+        )
+        if isinstance(batch, tuple):
+            return _select_runtime_trace_context(batch, target, query, self.observation_cutoff)
         selected = _select_runtime_trace_context(
             batch.spans, target, query, self.observation_cutoff
         )
@@ -493,7 +487,7 @@ class LokiInvestigationBackend:
     """Existing bounded investigation reads plus the trusted Loki reader."""
 
     base: InvestigationBackend
-    loki: LokiReader
+    provider_adapter: ProviderAdapter
     source: ObservationSource
     observation_cutoff: datetime | None
 
@@ -535,11 +529,12 @@ class LokiInvestigationBackend:
                 return ()
             end = min(end, self.observation_cutoff)
         limit = min(query.limit, 32)
-        records = self.loki.error_logs(
+        records = self.provider_adapter.query_loki(
             sorted(_log_services_for_target(self.source, target)),
             start,
             end,
             limit=limit,
+            observation_identity=observation_identity("logs", target, query),
         )
         return tuple(
             item
@@ -575,7 +570,7 @@ class PrometheusInvestigationBackend:
     """Existing investigation reads plus active Prometheus metric reads."""
 
     base: InvestigationBackend
-    prometheus: PrometheusMetricsReader
+    provider_adapter: ProviderAdapter
     observation_cutoff: datetime | None
 
     def _effective_query(self, query: InvestigationQuery) -> InvestigationQuery | None:
@@ -621,7 +616,11 @@ class PrometheusInvestigationBackend:
         effective = self._effective_query(query)
         if effective is None:
             return ()
-        return self.prometheus.query_resource_pressure(target, effective)
+        return self.provider_adapter.query_resource_pressure(
+            target,
+            effective,
+            observation_identity=observation_identity("resource_pressure", target, query),
+        )
 
     def query_traffic(
         self, target: EntityRef, query: InvestigationQuery
@@ -629,7 +628,11 @@ class PrometheusInvestigationBackend:
         effective = self._effective_query(query)
         if effective is None:
             return ()
-        return self.prometheus.query_traffic(target, effective)
+        return self.provider_adapter.query_traffic(
+            target,
+            effective,
+            observation_identity=observation_identity("traffic", target, query),
+        )
 
     def supports(self, capability: str) -> bool:
         if capability in {"resource_pressure", "traffic"}:

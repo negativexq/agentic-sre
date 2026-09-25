@@ -44,6 +44,7 @@ from packages.rca.model import (
     InvestigationStopReason,
     LogRecord,
 )
+from packages.rca.provider_adapter import ProviderReaders
 from packages.storage.database import create_session_factory
 from packages.storage.models import AlertRow, Base, IncidentRow, LogObservationRow
 from packages.storage.repositories import (
@@ -221,9 +222,14 @@ class FakeLogs:
         return len(self.windows)
 
     def error_logs(
-        self, services: Sequence[str], starts_at: datetime, ends_at: datetime
+        self,
+        services: Sequence[str],
+        starts_at: datetime,
+        ends_at: datetime,
+        *,
+        limit: int | None = None,
     ) -> list[LogRecord]:
-        del services
+        del services, limit
         self.windows.append((starts_at, ends_at))
         if self.unavailable:
             raise RuntimeError("Loki unavailable")
@@ -626,7 +632,7 @@ def test_open_diagnosis_persists_and_deduplicates_log_observations(setup: Any) -
         session_factory=factory,
         namespaces=("sre-demo",),
         reader=cluster,
-        log_reader=logs,
+        provider_readers=ProviderReaders(loki=logs),
         clock=clock,
     )
     clock.now = T0 + timedelta(minutes=13)
@@ -662,7 +668,7 @@ def test_resolved_replay_uses_persisted_logs_when_loki_is_unavailable(
         session_factory=factory,
         namespaces=("sre-demo",),
         reader=cluster,
-        log_reader=logs,
+        provider_readers=ProviderReaders(loki=logs),
         clock=clock,
     )
     clock.now = T0 + timedelta(minutes=13)
@@ -721,7 +727,7 @@ def test_resolved_before_any_log_capture_has_no_historical_log_claim(setup: Any)
         session_factory=factory,
         namespaces=("sre-demo",),
         reader=cluster,
-        log_reader=logs,
+        provider_readers=ProviderReaders(loki=logs),
         clock=clock,
     )
     diagnosis = service.run(incident_id)
@@ -769,7 +775,7 @@ def test_real_bounded_loki_reader_captures_the_two_hour_incident_history(
         session_factory=factory,
         namespaces=("sre-demo",),
         reader=cluster,
-        log_reader=LokiLogReader("http://loki:3100", opener=opener),
+        provider_readers=ProviderReaders(loki=LokiLogReader("http://loki:3100", opener=opener)),
         clock=clock,
     )
     clock.now = T0 + timedelta(minutes=13)

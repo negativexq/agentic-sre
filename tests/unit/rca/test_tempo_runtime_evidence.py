@@ -42,10 +42,20 @@ from packages.rca.model import (
     TraceSpanObservation,
     TraceSpanStatus,
 )
+from packages.rca.provider_adapter import ProviderAdapter, ProviderReaders
 from packages.rca.runtime_evidence import derive_runtime_trace_call_facts
 from packages.rca.source import InMemorySource
 
 T0 = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
+
+
+def _provider_adapter(tempo: object) -> ProviderAdapter:
+    return ProviderAdapter(
+        "test-run",
+        "INVESTIGATION",
+        lambda: None,
+        ProviderReaders(tempo=tempo),  # type: ignore[arg-type]
+    )
 
 
 class _TempoBackend(SourceInvestigationBackend):
@@ -258,7 +268,7 @@ def test_tempo_incomplete_successful_batch_cannot_be_observed_normal() -> None:
     gap = _gap(target)
     backend = TempoInvestigationBackend(
         base=SourceInvestigationBackend(source),
-        tempo=_IncompleteReader(),  # type: ignore[arg-type]
+        provider_adapter=_provider_adapter(_IncompleteReader()),
         observation_cutoff=source.observation_cutoff(),
     )
     observation = RuntimeTracesTool(backend).execute_query(
@@ -307,7 +317,7 @@ def test_tempo_success_with_missing_trace_fetch_remains_unknown() -> None:
     gap = _gap(target)
     backend = TempoInvestigationBackend(
         base=SourceInvestigationBackend(source),
-        tempo=_MissingFetchReader(),  # type: ignore[arg-type]
+        provider_adapter=_provider_adapter(_MissingFetchReader()),
         observation_cutoff=source.observation_cutoff(),
     )
     observation = RuntimeTracesTool(backend).execute_query(
@@ -355,7 +365,7 @@ def test_tempo_explicit_error_remains_abnormal_when_search_is_incomplete() -> No
     gap = _gap(target)
     backend = TempoInvestigationBackend(
         base=SourceInvestigationBackend(source),
-        tempo=_IncompleteReader(),  # type: ignore[arg-type]
+        provider_adapter=_provider_adapter(_IncompleteReader()),
         observation_cutoff=source.observation_cutoff(),
     )
     observation = RuntimeTracesTool(backend).execute_query(

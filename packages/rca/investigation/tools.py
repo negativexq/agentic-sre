@@ -288,7 +288,12 @@ def _tempo_runtime_context(
     configured = False
     while current is not None and id(current) not in seen:
         seen.add(id(current))
-        if getattr(current, "tempo", None) is not None:
+        provider_adapter = getattr(current, "provider_adapter", None)
+        if getattr(current, "tempo", None) is not None or (
+            provider_adapter is not None
+            and callable(getattr(provider_adapter, "supports", None))
+            and provider_adapter.supports("runtime_traces")
+        ):
             configured = True
             break
         current = getattr(current, "base", None)

@@ -25,7 +25,9 @@ from packages.rca.model import (
     Resolution,
     ResolutionReasonCode,
     ResourcePressure,
+    TrafficObservation,
 )
+from packages.rca.provider_adapter import ProviderAdapter, ProviderReaders
 from packages.rca.resolution import RESOURCE_PRESSURE_RULE, resolve_hypotheses
 from packages.rca.resource_mechanism import assess_resource_mechanism
 
@@ -294,6 +296,12 @@ class _Prometheus:
             raise ConnectionError("prometheus down")
         return (_normal(target),)
 
+    def query_traffic(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[TrafficObservation, ...]:
+        del target, query
+        return ()
+
 
 @pytest.mark.parametrize("cutoff_minutes", [20, 180])
 def test_live_resource_reads_are_bounded_and_failures_are_missing_data(
@@ -307,7 +315,9 @@ def test_live_resource_reads_are_bounded_and_failures_are_missing_data(
         current_objects=[],
         event_bodies=[],
         observed_at=ONSET + timedelta(minutes=cutoff_minutes),
-        prometheus_reader=prometheus,  # type: ignore[arg-type]
+        provider_adapter=ProviderAdapter(
+            "test-run", "ENGINE", lambda: None, ProviderReaders(prometheus=prometheus)
+        ),
     )
     other = EntityRef(namespace=NS, kind="Pod", name="payment-new-b")
 

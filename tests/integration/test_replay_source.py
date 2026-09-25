@@ -377,6 +377,7 @@ def test_snapshot_cycle_of_another_run_fails(
             journal_namespaces=frozenset({"sre-demo"}),
             snapshot_cycle_id=cycle_id,
             listed_objects=0,
+            provider_capabilities=(),
         ),
         timestamp=WINDOW_END,
     )
@@ -507,14 +508,10 @@ def test_provider_backed_reads_are_not_fabricated(
     factory, _, run_id, _ = run
     replay = _replay(factory, run_id)
     pod = EntityRef(kind="Pod", name=POD["metadata"]["name"], namespace="sre-demo")
+    # The capture ran with Loki only; support is answered, reads are not replayed.
+    assert replay.provider_capabilities == ("logs",)
     with pytest.raises(ProviderReplayNotConfigured):
         replay.resource_pressure([pod], T0)
-    for capability in ("resource_pressure", "traffic", "runtime_traces"):
-        with pytest.raises(ProviderReplayNotConfigured):
-            replay.supports(capability)
-    for capability in ("resource_pressure", "logs", "runtime_traces"):
-        with pytest.raises(ProviderReplayNotConfigured):
-            replay.supports_typed_runtime(capability)
     with pytest.raises(ProviderReplayNotConfigured):
         replay.investigation_backend()
     assert replay.supports("history") and replay.supports("events") and replay.supports("logs")

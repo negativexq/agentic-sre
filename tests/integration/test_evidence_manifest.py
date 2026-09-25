@@ -366,6 +366,7 @@ def _request(incident: Incident, run_id: str = "run-1") -> ManifestRequest:
         journal_namespaces=frozenset({"sre-demo"}),
         snapshot_cycle_id=None,
         listed_objects=0,
+        provider_capabilities=(),
     )
 
 

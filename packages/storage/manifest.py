@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from packages.contracts import IncidentEvent, IncidentEventType
 from packages.rca.manifest import ManifestEntry, manifest_membership_digest, ordered_entries
 from packages.rca.model import JournalEntry, LogRecord
+from packages.rca.provider_adapter import PROVIDER_CAPABILITIES
 from packages.storage.models import (
     AlertRow,
     ChangeRecordRow,
@@ -67,6 +68,16 @@ class ManifestRequest:
     journal_namespaces: frozenset[str]
     snapshot_cycle_id: int | None
     listed_objects: int
+    # The run's configured provider capability contract (``ProviderAdapter.capabilities``).
+    provider_capabilities: tuple[str, ...]
+
+
+def canonical_provider_capabilities(names: Sequence[str]) -> list[str]:
+    """Sorted unique capability names; an unknown name is an error, never dropped."""
+    unknown = sorted(set(names) - set(PROVIDER_CAPABILITIES))
+    if unknown:
+        raise ValueError(f"unknown provider capabilities: {unknown}")
+    return sorted(set(names))
 
 
 @dataclass(frozen=True)
@@ -189,6 +200,9 @@ def build_manifest(
                     "journal": counts["OBJECT_VERSION"],
                     "events": counts["EVENT_VERSION"],
                     "logs": counts["LOG"],
+                    "provider_capabilities": canonical_provider_capabilities(
+                        request.provider_capabilities
+                    ),
                 },
             ),
             commit=False,
@@ -220,6 +234,14 @@ class ReplayDataError(LookupError):
     """
 
 
+class ReplayProviderCapabilitiesMissing(ReplayDataError):
+    """The run's boundary predates M19-3.14a and never recorded its provider capabilities.
+
+    Such a run is not replayable: which providers it could read is part of its
+    epistemic environment, and it is never inferred from the tape.
+    """
+
+
 @dataclass(frozen=True)
 class RunBoundary:
     """A run's persisted ``EVIDENCE_GATHERED`` boundary, exactly as written."""
@@ -228,6 +250,7 @@ class RunBoundary:
     incident_id: UUID
     window_end: datetime
     snapshot_cycle_id: int | None
+    provider_capabilities: tuple[str, ...]
 
 
 def load_run_boundary(session: Session, run_id: str) -> RunBoundary:
@@ -258,7 +281,22 @@ def load_run_boundary(session: Session, run_id: str) -> RunBoundary:
     cycle_id = payload["snapshot_cycle_id"]
     if cycle_id is not None and (not isinstance(cycle_id, int) or isinstance(cycle_id, bool)):
         raise ReplayDataError(f"run {run_id} boundary snapshot_cycle_id is {cycle_id!r}")
-    return RunBoundary(run_id, rows[0].incident_id, window_end, cycle_id)
+    if "provider_capabilities" not in payload:
+        raise ReplayProviderCapabilitiesMissing(
+            f"run {run_id} boundary has no provider_capabilities; it is not replayable"
+        )
+    capabilities = payload["provider_capabilities"]
+    if not isinstance(capabilities, list) or not all(isinstance(c, str) for c in capabilities):
+        raise ReplayDataError(f"run {run_id} provider_capabilities is {capabilities!r}")
+    try:
+        canonical = canonical_provider_capabilities(capabilities)
+    except ValueError as error:
+        raise ReplayDataError(f"run {run_id} boundary: {error}") from error
+    if canonical != capabilities:
+        raise ReplayDataError(
+            f"run {run_id} provider_capabilities {capabilities!r} are not sorted and unique"
+        )
+    return RunBoundary(run_id, rows[0].incident_id, window_end, cycle_id, tuple(canonical))
 
 
 def load_replay_run(session: Session, run_id: str) -> tuple[RunBoundary, ManifestMembers]:
@@ -345,10 +383,12 @@ __all__ = [
     "ManifestAlertPayloadMissing",
     "ManifestMembers",
     "ReplayDataError",
+    "ReplayProviderCapabilitiesMissing",
     "RunBoundary",
     "alert_payload",
     "ManifestRequest",
     "build_manifest",
+    "canonical_provider_capabilities",
     "load_manifest",
     "load_manifest_digest",
     "load_members",

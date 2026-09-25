@@ -640,6 +640,7 @@ class DiagnosisService:
                 journal_namespaces=frozenset((*self.namespaces, *self.evidence_namespaces)),
                 snapshot_cycle_id=snapshot_cycle_id,
                 listed_objects=len(listed),
+                provider_capabilities=capture_adapter.capabilities(),
             ),
             timestamp=self.clock(),
         )

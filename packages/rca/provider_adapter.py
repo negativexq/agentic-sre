@@ -27,6 +27,8 @@ from packages.rca.model import (
 )
 
 ProviderCallerClass = Literal["CAPTURE", "ENGINE", "INVESTIGATION"]
+# Every capability name `ProviderAdapter.supports` can report, in canonical order.
+PROVIDER_CAPABILITIES = ("logs", "resource_pressure", "runtime_traces", "traffic")
 _T = TypeVar("_T")
 
 
@@ -206,6 +208,10 @@ class ProviderAdapter:
         if capability == "logs":
             return self.readers.loki is not None
         return False
+
+    def capabilities(self) -> tuple[str, ...]:
+        """The configured capability contract: sorted, unique ``supports`` names."""
+        return tuple(name for name in PROVIDER_CAPABILITIES if self.supports(name))
 
     def query_resource_pressure(
         self,
@@ -457,6 +463,7 @@ class ProviderAdapter:
 
 
 __all__ = [
+    "PROVIDER_CAPABILITIES",
     "ProviderAdapter",
     "ProviderCallerClass",
     "ProviderReaders",

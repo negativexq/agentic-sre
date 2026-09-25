@@ -27,14 +27,16 @@ from packages.rca.model import (
     TraceSpanObservation,
     TrafficObservation,
 )
+from packages.rca.provider_adapter import PROVIDER_CAPABILITIES
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session, sessionmaker
 
     from packages.rca.investigation.environment import InvestigationBackend
 
-# Capabilities answered from persisted base evidence (``LiveSource.supports``).
-_BASE_CAPABILITIES = frozenset({"history", "events", "logs", "incident_events", "incident_changes"})
+# ``LiveSource.supports`` names answered by the provider adapter; "logs" is
+# answered from persisted base logs there, so it is not one of them.
+_PROVIDER_BACKED = frozenset({"resource_pressure", "runtime_traces", "traffic"})
 
 
 class ProviderReplayNotConfigured(RuntimeError):
@@ -50,6 +52,8 @@ class ReplaySource:
     snapshot_cycle_id: int | None
     manifest: tuple[ManifestEntry, ...]
     snapshot_objects: tuple[dict[str, Any], ...]
+    # The live run's configured provider capabilities, as its boundary froze them.
+    provider_capabilities: tuple[str, ...]
     _base: LiveSource
 
     @classmethod
@@ -83,6 +87,7 @@ class ReplaySource:
             snapshot_cycle_id=boundary.snapshot_cycle_id,
             manifest=manifest,
             snapshot_objects=snapshot.objects if snapshot else (),
+            provider_capabilities=boundary.provider_capabilities,
             _base=base,
         )
 
@@ -124,12 +129,14 @@ class ReplaySource:
         raise ProviderReplayNotConfigured("resource_pressure needs provider tape replay")
 
     def supports(self, capability: str) -> bool:
-        if capability in _BASE_CAPABILITIES:
-            return self._base.supports(capability)
-        raise ProviderReplayNotConfigured(f"{capability} support needs provider tape replay")
+        """``LiveSource.supports`` with the frozen capability set in place of readers."""
+        if capability in _PROVIDER_BACKED:
+            return capability in self.provider_capabilities
+        return self._base.supports(capability)
 
     def supports_typed_runtime(self, capability: str) -> bool:
-        raise ProviderReplayNotConfigured(f"typed {capability} needs provider tape replay")
+        """``LiveSource.supports_typed_runtime`` answered from the frozen capability set."""
+        return capability in PROVIDER_CAPABILITIES and capability in self.provider_capabilities
 
     def investigation_backend(self) -> InvestigationBackend:
         raise ProviderReplayNotConfigured("investigation reads need provider tape replay")

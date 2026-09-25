@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 from packages.rca.json_access import child, mapping
 from packages.rca.model import EntityRef, ObjectVersion, PodStatusObservation
@@ -62,14 +62,70 @@ def pod_status_from_history(
     )
 
 
+class LifecycleStatusRecord(Protocol):
+    """The fields of one persisted lifecycle ledger row that status reading needs."""
+
+    @property
+    def evidence_id(self) -> str: ...
+    @property
+    def instance_uid(self) -> str: ...
+    @property
+    def namespace(self) -> str: ...
+    @property
+    def name(self) -> str: ...
+    @property
+    def type(self) -> str: ...
+    @property
+    def observed_at(self) -> datetime: ...
+    @property
+    def payload(self) -> Mapping[str, Any]: ...
+
+
+_STATUS_TYPES = frozenset({"STATUS_SNAPSHOT", "READY_TRUE", "READY_FALSE"})
+
+
+def pod_status_from_lifecycle(
+    records: Iterable[LifecycleStatusRecord],
+) -> tuple[PodStatusObservation, ...]:
+    """Status observations read only from persisted lifecycle rows.
+
+    Readiness and ``ready_since`` come from the row's own recorded Ready
+    condition; the exact instance and time come from the row. Nothing is
+    completed from any other source.
+    """
+    observations: list[PodStatusObservation] = []
+    for record in records:
+        if record.type not in _STATUS_TYPES:
+            continue
+        condition = mapping(record.payload.get("ready"))
+        status = condition.get("status")
+        observations.append(
+            PodStatusObservation(
+                pod=EntityRef(namespace=record.namespace, kind="Pod", name=record.name),
+                uid=record.instance_uid,
+                observed_at=record.observed_at,
+                ready=True if status == "True" else False if status == "False" else None,
+                ready_since=_time(condition.get("lastTransitionTime")),
+                evidence_id=record.evidence_id,
+            )
+        )
+    return ordered(observations)
+
+
 def ordered(observations: Iterable[PodStatusObservation]) -> tuple[PodStatusObservation, ...]:
     """Deduplicate and order by pod then observation time.
 
-    Evidence ids alone are not unique (``cluster:current`` names a listing, not
+    Evidence ids alone are not unique (a listing-wide id names a listing, not
     one object), so the pod and time are part of the key.
     """
     unique = {(item.pod, item.observed_at, item.evidence_id): item for item in observations}
     return tuple(sorted(unique.values(), key=lambda item: (item.pod.canonical, item.observed_at)))
 
 
-__all__ = ["ordered", "pod_status_from_body", "pod_status_from_history"]
+__all__ = [
+    "LifecycleStatusRecord",
+    "ordered",
+    "pod_status_from_body",
+    "pod_status_from_history",
+    "pod_status_from_lifecycle",
+]

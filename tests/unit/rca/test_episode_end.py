@@ -25,6 +25,7 @@ from packages.rca.model import (
 )
 from packages.rca.resolution import EPISODE_END_RULE, resolve_hypotheses
 from packages.rca.root_cause_eligibility import RootCauseEligibilities
+from packages.storage.repositories import LifecycleRecord
 
 ONSET = datetime(2026, 9, 24, 12, 0, tzinfo=UTC)
 GRACE = timedelta(minutes=15)
@@ -251,47 +252,87 @@ def test_ended_alternative_never_makes_an_unsupported_incident_resolved() -> Non
     assert trace.state is Resolution.INSUFFICIENT_EVIDENCE
 
 
-def test_live_source_keeps_the_current_pod_status_that_the_journal_drops() -> None:
+def _ledger_row(
+    sequence: int, type_: str, minutes: float, status: str, since: str
+) -> LifecycleRecord:
+    return LifecycleRecord(
+        evidence_id=f"lifecycle:shop:Pod:u1:{sequence}",
+        instance_uid="u1",
+        namespace="shop",
+        kind="Pod",
+        name=POD.name,
+        type=type_,
+        source_at=None,
+        observed_at=ONSET + timedelta(minutes=minutes),
+        ingested_at=ONSET + timedelta(minutes=minutes),
+        source="collector",
+        payload={
+            "ready": {"type": "Ready", "status": status, "lastTransitionTime": since},
+            "containerStatuses": [],
+            "deletionTimestamp": None,
+        },
+    )
+
+
+def test_live_source_reads_pod_status_only_from_the_lifecycle_ledger() -> None:
     body: dict[str, Any] = {
         "kind": "Pod",
         "metadata": {"name": POD.name, "namespace": "shop", "uid": "u1"},
         "spec": {"containers": [{"name": "app", "image": "app:1"}]},
     }
-    journal_body = {
-        **body,
-        "status": {"conditions": [{"type": "Ready", "status": "False"}]},
-    }
-    current_body = {
-        **body,
-        "status": {
-            "conditions": [
-                {"type": "Ready", "status": "True", "lastTransitionTime": "2026-09-24T11:55:00Z"}
-            ]
-        },
-    }
-    source = LiveSource(
-        incident="i1",
-        alert_items=[],
-        journal=[
-            JournalEntry(
-                object_key="shop/Pod/worker-abc",
-                observed_at=ONSET - timedelta(minutes=30),
-                body=journal_body,
-                version_id=1,
-                lifecycle=Lifecycle.CREATED,
-            )
-        ],
-        current_objects=[current_body],
-        event_bodies=[],
-        observed_at=ONSET + timedelta(minutes=20),
+    ledger = (
+        _ledger_row(1, "READY_FALSE", -30, "False", "2026-09-24T11:30:00Z"),
+        _ledger_row(2, "STATUS_SNAPSHOT", 20, "True", "2026-09-24T11:55:00Z"),
     )
 
-    # Same desired state: the history keeps only the journal version ...
-    assert len(source.object_history()[POD]) == 1
-    # ... while the current listing's status is still observed.
-    statuses = source.pod_status_observations()
+    def source(journal_status: str, current_status: str) -> LiveSource:
+        return LiveSource(
+            incident="i1",
+            alert_items=[],
+            journal=[
+                JournalEntry(
+                    object_key="shop/Pod/worker-abc",
+                    observed_at=ONSET - timedelta(minutes=30),
+                    body={
+                        **body,
+                        "status": {"conditions": [{"type": "Ready", "status": journal_status}]},
+                    },
+                    version_id=1,
+                    lifecycle=Lifecycle.CREATED,
+                )
+            ],
+            current_objects=[
+                {
+                    **body,
+                    "status": {
+                        "conditions": [
+                            {
+                                "type": "Ready",
+                                "status": current_status,
+                                "lastTransitionTime": "2026-09-24T11:59:00Z",
+                            }
+                        ]
+                    },
+                }
+            ],
+            event_bodies=[],
+            observed_at=ONSET + timedelta(minutes=20),
+            lifecycle_records=ledger,
+        )
+
+    statuses = source("False", "True").pod_status_observations()
     assert [(item.ready, item.evidence_id) for item in statuses] == [
-        (False, "journal:1"),
-        (True, "cluster:current"),
+        (False, "lifecycle:shop:Pod:u1:1"),
+        (True, "lifecycle:shop:Pod:u1:2"),
     ]
+    assert {item.uid for item in statuses} == {"u1"}
+    # ready_since is the ledger's recorded lastTransitionTime, not the listing's.
     assert statuses[-1].ready_since == ONSET - timedelta(minutes=5)
+    # Journal and current-listing status never reach the status stream.
+    assert source("True", "False").pod_status_observations() == statuses
+    assert (
+        LiveSource(
+            incident="i1", alert_items=[], journal=[], current_objects=[body], event_bodies=[]
+        ).pod_status_observations()
+        == ()
+    )

@@ -516,6 +516,12 @@ class DiagnosisService:
                 logs = LogObservationRepository(session).list_for_incident(
                     incident_id=incident_id, starts_at=starts_at, ends_at=ends_at
                 )
+        # Pod status evidence is exactly the persisted lifecycle rows inside the
+        # incident window; nothing outside it is added as "current" state.
+        with self.session_factory() as session:
+            lifecycle_records = LifecycleRepository(session).list_window(
+                set(self.namespaces), starts_at, ends_at
+            )
         self._emit(
             incident_id,
             correlation_id,
@@ -540,6 +546,7 @@ class DiagnosisService:
             tempo_reader=self.tempo_reader,
             prometheus_reader=self.prometheus_reader,
             loki_reader=self.log_reader if isinstance(self.log_reader, LokiLogReader) else None,
+            lifecycle_records=lifecycle_records,
         )
         bounded_policy = self.bounded_policy_factory()
         investigation_result = None

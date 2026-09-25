@@ -295,10 +295,15 @@ class OverlayObservationSource:
         )
 
     def pod_status_observations(self) -> tuple[PodStatusObservation, ...]:
+        # Base status comes from the base source's own authoritative stream;
+        # only Pod versions acquired during investigation add status here.
+        acquired: dict[EntityRef, list[ObjectVersion]] = {}
+        for version in self._acquired(ObjectVersion):
+            acquired.setdefault(version.entity, []).append(version)
         return ordered(
             (
                 *self.base.pod_status_observations(),
-                *pod_status_from_history(self.object_history()),
+                *pod_status_from_history(acquired),
             )
         )
 

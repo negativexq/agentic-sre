@@ -37,7 +37,7 @@ from packages.rca.model import (
     TraceSpanObservation,
     TrafficObservation,
 )
-from packages.rca.pod_status import ordered, pod_status_from_body, pod_status_from_history
+from packages.rca.pod_status import LifecycleStatusRecord, pod_status_from_lifecycle
 
 _log = logging.getLogger(__name__)
 # Resource reads start this long before the requested time so a baseline exists.
@@ -425,6 +425,9 @@ class LiveSource:
     tempo_reader: TempoTraceReader | None = None
     prometheus_reader: PrometheusMetricsReader | None = None
     loki_reader: LokiLogReader | None = None
+    # Persisted lifecycle ledger rows for the incident window: the only source
+    # of Pod status evidence.
+    lifecycle_records: Sequence[LifecycleStatusRecord] = ()
 
     def incident_id(self) -> str:
         return self.incident
@@ -540,20 +543,12 @@ class LiveSource:
         return []
 
     def pod_status_observations(self) -> Sequence[PodStatusObservation]:
-        """Journal-time status plus the current listing's status.
+        """Pod status exactly as the lifecycle ledger recorded it.
 
-        The current listing is kept here even when its desired state matches
-        the journal, which is exactly when ``object_history`` drops it.
+        Neither journal bodies nor the current listing are read for status:
+        every observation is one persisted STATUS_SNAPSHOT or READY_* row.
         """
-        current: list[PodStatusObservation] = []
-        if self.current_is_live:
-            for body in self.current_objects:
-                entity = _entity(body)
-                if entity is not None and entity.kind == "Pod":
-                    current.append(
-                        pod_status_from_body(entity, body, self.observed_at, "cluster:current")
-                    )
-        return ordered((*pod_status_from_history(self.object_history()), *current))
+        return pod_status_from_lifecycle(self.lifecycle_records)
 
     def supports(self, capability: str) -> bool:
         if capability == "incident_events":

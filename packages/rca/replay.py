@@ -16,10 +16,12 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from packages.rca.epistemic_digest import diagnosis_epistemic_digest
 from packages.rca.investigation.graph import investigate_diagnosis
+from packages.rca.investigation.intents import DeterministicIntentPolicy
 from packages.rca.investigation.policy import (
     ReplayTrajectoryDivergence,
     ScriptedInvestigationPolicy,
 )
+from packages.rca.investigation.selection import DeterministicObservationPolicy
 from packages.rca.investigation.tempo import (
     TempoSearchCompleteness,
     TempoSearchDiagnostics,
@@ -31,6 +33,7 @@ from packages.rca.model import (
     Alert,
     ClusterEvent,
     EntityRef,
+    InvestigationPolicyKind,
     InvestigationQuery,
     InvestigationResult,
     LogRecord,
@@ -194,6 +197,17 @@ class ReplayProviderAdapter:
         """Sequence of the next row replay expects, ``None`` once the tape is consumed."""
         position = self._cursor.position
         return self._rows[position].sequence if position < len(self._rows) else None
+
+    @property
+    def recorded_query_keys(self) -> tuple[str, ...]:
+        """Query keys of the recorded RCA-stage reads (after the CAPTURE prefix), in order."""
+        return tuple(row.query_key for row in self._rows[_capture_prefix(self._rows) :])
+
+    @property
+    def consumed_query_keys(self) -> tuple[str, ...]:
+        """Query keys replay has served so far, in order."""
+        start = _capture_prefix(self._rows)
+        return tuple(row.query_key for row in self._rows[start : self._cursor.position])
 
     def supports(self, capability: str) -> bool:
         return capability in self.provider_capabilities
@@ -556,13 +570,96 @@ def replay_trajectory(run_id: str, *, session_factory: sessionmaker[Session]) ->
     return TrajectoryReplay(diagnosis_epistemic_digest(result.diagnosis), result, source, policy)
 
 
+_SELECTORS: dict[InvestigationPolicyKind, Callable[[], Any]] = {
+    InvestigationPolicyKind.OBSERVATION_SELECTOR: DeterministicObservationPolicy,
+    InvestigationPolicyKind.INTENT_SELECTOR: DeterministicIntentPolicy,
+}
+
+
+@dataclass(frozen=True)
+class SelectorReplay:
+    """One completed selector replay: its digest and the sequences it matched."""
+
+    digest: str
+    result: InvestigationResult
+    source: ReplaySource
+    policy: Any
+    recorded_query_keys: tuple[str, ...]
+    replayed_query_keys: tuple[str, ...]
+
+
+def replay_selector(run_id: str, *, session_factory: sessionmaker[Session]) -> SelectorReplay:
+    """Re-run the run's deterministic selector over its frozen evidence and tape.
+
+    Nothing recorded chooses an action: the recorded selector family runs again
+    with the recorded config. It must select the recorded actions, read exactly
+    the recorded query-key sequence and end at the recorded terminal.
+    """
+    from packages.storage.trajectory import load_trajectory
+
+    with session_factory() as session:
+        recorded = load_trajectory(session, run_id)
+    contract = recorded.contract
+    selector = _SELECTORS.get(contract.policy_kind)
+    if selector is None:
+        raise ReplayModeUnsupported(
+            f"run {run_id} was recorded by a {contract.policy_kind.value} policy; "
+            "selector replay needs a deterministic selector trajectory"
+        )
+    source = ReplaySource.from_run(run_id, session_factory=session_factory)
+    policy = selector()
+    result = investigate_diagnosis(
+        source,
+        policy=policy,
+        config=recorded.config,
+        started_at=source.window_end,
+        recorded_terminal=contract.terminal,
+    )
+    recorded_actions = [audit.action for audit in recorded.result.action_audits]
+    replayed_actions = [audit.action for audit in result.action_audits]
+    if replayed_actions != recorded_actions:
+        raise ReplayTrajectoryDivergence(
+            f"run {run_id}: the selector chose {len(replayed_actions)} action(s) that differ "
+            f"from the {len(recorded_actions)} recorded"
+        )
+    if (result.stop_reason, result.turns) != (
+        contract.terminal.stop_reason,
+        contract.terminal.turns,
+    ):
+        raise ReplayTrajectoryDivergence(
+            f"run {run_id}: selector replay ended {result.stop_reason.value} after "
+            f"{result.turns} turn(s); recorded {contract.terminal.stop_reason.value} "
+            f"after {contract.terminal.turns}"
+        )
+    adapter = source.provider_adapter
+    if adapter.consumed_query_keys != adapter.recorded_query_keys:
+        raise ReplayTrajectoryDivergence(
+            f"run {run_id}: recorded provider reads from sequence {adapter.next_sequence} "
+            "were never selected"
+        )
+    return SelectorReplay(
+        diagnosis_epistemic_digest(result.diagnosis),
+        result,
+        source,
+        policy,
+        adapter.recorded_query_keys,
+        adapter.consumed_query_keys,
+    )
+
+
 def replay_run(
     run_id: str, mode: str = "trajectory", *, session_factory: sessionmaker[Session]
 ) -> str:
-    """Replay one recorded run offline and return its epistemic digest."""
-    if mode != "trajectory":
-        raise ReplayModeUnsupported(f"replay mode {mode!r} is not supported")
-    return replay_trajectory(run_id, session_factory=session_factory).digest
+    """Replay one recorded run offline and return its epistemic digest.
+
+    ``trajectory`` plays the recorded actions; ``selector`` re-runs the recorded
+    deterministic selector and checks it chooses the same reads.
+    """
+    if mode == "trajectory":
+        return replay_trajectory(run_id, session_factory=session_factory).digest
+    if mode == "selector":
+        return replay_selector(run_id, session_factory=session_factory).digest
+    raise ReplayModeUnsupported(f"replay mode {mode!r} is not supported")
 
 
 __all__ = [
@@ -571,7 +668,9 @@ __all__ = [
     "ReplayProviderAdapter",
     "ReplaySource",
     "ReplayTrajectoryDivergence",
+    "SelectorReplay",
     "TrajectoryReplay",
     "replay_run",
+    "replay_selector",
     "replay_trajectory",
 ]

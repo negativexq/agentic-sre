@@ -215,6 +215,7 @@ class _Runtime:
         rebuild_case: Callable[..., Case] | None,
         backend: InvestigationBackend | None,
         evidence_store: InMemoryEvidenceStore | None,
+        recorded_terminal: TrajectoryTerminal | None = None,
     ) -> None:
         self.base_source = source
         self.policy = policy
@@ -243,6 +244,9 @@ class _Runtime:
             if isinstance(policy, ScriptedInvestigationPolicy) and policy.plays_trajectory
             else None
         )
+        # Selector replay: the selector really chooses, but a recorded wall-time
+        # stop is reproduced at its recorded turn instead of reading the clock.
+        self.recorded_terminal = recorded_terminal
         access_ledger = getattr(source, "access_ledger", None)
         if callable(access_ledger):
             ledger = access_ledger()
@@ -605,6 +609,11 @@ def _wall_time_exhausted(state: InvestigationState, rt: _Runtime) -> bool:
     """Live: real elapsed time. Playback: only the recorded terminal, never the clock."""
     if rt.playback is not None:
         return rt.playback.terminal_due(InvestigationStopReason.WALL_TIME_EXHAUSTED)
+    if rt.recorded_terminal is not None:
+        return (
+            rt.recorded_terminal.stop_reason is InvestigationStopReason.WALL_TIME_EXHAUSTED
+            and state["turns"] == rt.recorded_terminal.turns
+        )
     elapsed = (datetime.now(UTC) - state["started_at"]).total_seconds()
     return elapsed >= rt.config.max_wall_time_seconds
 
@@ -2392,6 +2401,7 @@ def build_investigation_graph(
     checkpointer: Any | None = None,
     interrupt_before: tuple[str, ...] = (),
     interrupt_after: tuple[str, ...] = (),
+    recorded_terminal: TrajectoryTerminal | None = None,
 ) -> Any:
     """Build the bounded graph; live dependencies are bound to nodes, not state.
 
@@ -2407,6 +2417,7 @@ def build_investigation_graph(
         rebuild_case=rebuild_case,
         backend=backend,
         evidence_store=evidence_store,
+        recorded_terminal=recorded_terminal,
     )
 
     def bind(node: Callable[[InvestigationState, _Runtime], dict[str, Any]]) -> Any:
@@ -2474,10 +2485,12 @@ def investigate_diagnosis(
     rebuild_case: Callable[..., Case] | None = None,
     evidence_store: InMemoryEvidenceStore | None = None,
     started_at: datetime | None = None,
+    recorded_terminal: TrajectoryTerminal | None = None,
 ) -> InvestigationResult:
     """Run one isolated bounded investigation and return deterministic output.
 
-    ``started_at`` defaults to now; a replay passes its persisted time.
+    ``started_at`` defaults to now; a replay passes its persisted time, and a
+    selector replay passes the recorded terminal so no wall clock is read.
     """
     initial_source = initial_view(source)
     case = initial_case or build_case(
@@ -2493,6 +2506,7 @@ def investigate_diagnosis(
         backend=investigation_backend(source),
         evidence_store=evidence_store,
         checkpointer=checkpointer,
+        recorded_terminal=recorded_terminal,
     )
     state = build_investigation_state(
         initial_source,

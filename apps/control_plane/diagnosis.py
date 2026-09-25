@@ -51,6 +51,7 @@ from packages.storage.repositories import (
     LifecycleRecord,
     LifecycleRepository,
 )
+from packages.storage.retention import RetentionPolicy, apply_retention, policy_from_environment
 
 logger = logging.getLogger(__name__)
 
@@ -244,6 +245,8 @@ class DiagnosisService:
     prometheus_reader: PrometheusMetricsReader | None = None
     # A STATUS_SNAPSHOT with unchanged content is written at most this often.
     status_snapshot_interval: timedelta = timedelta(seconds=30)
+    # Evidence retention; None (the default) keeps everything.
+    retention_policy: RetentionPolicy | None = None
 
     @property
     def last_snapshot_result(self) -> SnapshotResult | None:
@@ -335,6 +338,18 @@ class DiagnosisService:
                 )
             return result
 
+    def apply_retention(self) -> None:
+        """One retention pass when a policy is configured; failures are logged."""
+        if self.retention_policy is None:
+            return
+        try:
+            with self._snapshot_lock, self.session_factory() as session:
+                result = apply_retention(session, self.retention_policy, self.clock())
+            if result.events_deleted or result.lifecycle_deleted or result.objects_deleted:
+                logger.info("retention removed %s", result)
+        except Exception:
+            logger.warning("retention pass failed", exc_info=True)
+
     @staticmethod
     def _record_lifecycle(write: Callable[[], None]) -> None:
         """Lifecycle facts and the instance index are written after the journal: a
@@ -353,6 +368,7 @@ class DiagnosisService:
                     logger.info("object journal stored %d changed object(s)", stored)
             except Exception:
                 logger.warning("cluster snapshot failed", exc_info=True)
+            self.apply_retention()
             stop.wait(interval_seconds)
 
     def _emit(
@@ -669,6 +685,7 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
         status_snapshot_interval=timedelta(
             seconds=float(os.getenv("SRE_STATUS_SNAPSHOT_INTERVAL_SECONDS", "30"))
         ),
+        retention_policy=policy_from_environment(),
     )
 
 

@@ -7,7 +7,7 @@ import os
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -20,6 +20,7 @@ from packages.rca.investigation.policy import LLMInvestigationPolicy
 from packages.rca.investigation.prometheus import PrometheusConfig, PrometheusMetricsReader
 from packages.rca.investigation.state import InvestigationPolicy
 from packages.rca.investigation.tempo import TempoConfig, TempoTraceReader
+from packages.rca.lifecycle import classify, status_payload
 from packages.rca.live import (
     ChangeWatcher,
     ClusterReader,
@@ -45,11 +46,103 @@ from packages.storage import (
     LogObservationRepository,
     ObjectVersionRepository,
 )
+from packages.storage.repositories import LifecycleRecord, LifecycleRepository
 
 logger = logging.getLogger(__name__)
 
 _TERMINAL_STATUSES = frozenset({"RESOLVED", "CLOSED", "FAILED"})
 _INVESTIGATION_ARTIFACT_VERSION = "1.0"
+_LIFECYCLE_SOURCE = "collector"
+_TOMBSTONE_SOURCE = "journal-tombstone"
+
+
+def _previous_pod_body(records: list[LifecycleRecord], uid: str) -> dict[str, Any] | None:
+    """What the ledger last recorded for this instance, in the classifier's body shape.
+
+    Every recorded row carries the full status projection of its observation,
+    and a changed projection is always recorded, so the latest row is the last
+    observed state. Eviction is not part of the projection, so it is restored
+    from the ledger's own EVICTED fact.
+    """
+    if not records:
+        return None
+    last = records[-1].payload
+    status: dict[str, Any] = {
+        "conditions": [last["ready"]] if last.get("ready") else [],
+        "containerStatuses": last.get("containerStatuses") or [],
+    }
+    if any(record.type == "EVICTED" for record in records):
+        status["reason"] = "Evicted"
+    return {
+        "kind": "Pod",
+        "metadata": {"uid": uid, "deletionTimestamp": last.get("deletionTimestamp")},
+        "status": status,
+    }
+
+
+@dataclass
+class _PodLifecycleRecorder:
+    """Appends each observed Pod's lifecycle facts to the ledger during one cycle."""
+
+    ledger: LifecycleRepository
+    namespaces: frozenset[str]
+    snapshot_interval: timedelta
+
+    def observe(self, body: dict[str, Any], observed_at: datetime) -> None:
+        metadata = body.get("metadata") or {}
+        uid = metadata.get("uid")
+        namespace = metadata.get("namespace")
+        if body.get("kind") != "Pod" or namespace not in self.namespaces or not uid:
+            return
+        records = self.ledger.list_for(namespace, "Pod", uid)
+        for draft in classify(_previous_pod_body(records, uid), body, observed_at):
+            self.ledger.append(
+                namespace=draft.namespace,
+                kind=draft.kind,
+                name=draft.name,
+                instance_uid=draft.instance_uid,
+                type=draft.type,
+                observed_at=draft.observed_at,
+                source=_LIFECYCLE_SOURCE,
+                payload=draft.payload,
+                source_at=draft.source_at,
+            )
+        payload = status_payload(body)
+        snapshots = [record for record in records if record.type == "STATUS_SNAPSHOT"]
+        last = snapshots[-1] if snapshots else None
+        if (
+            last is None
+            or last.payload != payload
+            or observed_at - last.observed_at >= self.snapshot_interval
+        ):
+            self.ledger.append(
+                namespace=namespace,
+                kind="Pod",
+                name=str(metadata.get("name") or ""),
+                instance_uid=uid,
+                type="STATUS_SNAPSHOT",
+                observed_at=observed_at,
+                source=_LIFECYCLE_SOURCE,
+                payload=payload,
+            )
+
+    def deleted(self, key: str, uid: str | None, observed_at: datetime) -> None:
+        """A journal tombstone was written for ``key``: record DELETED for its exact UID."""
+        namespace, _, rest = key.partition("/")
+        kind, _, name = rest.partition("/")
+        if kind != "Pod" or namespace not in self.namespaces or not uid:
+            return
+        records = self.ledger.list_for(namespace, "Pod", uid)
+        self.ledger.append(
+            namespace=namespace,
+            kind="Pod",
+            name=name,
+            instance_uid=uid,
+            type="DELETED",
+            observed_at=observed_at,
+            source=_TOMBSTONE_SOURCE,
+            payload=records[-1].payload if records else {},
+        )
 
 
 @dataclass(frozen=True)
@@ -91,6 +184,8 @@ class DiagnosisService:
     _last_snapshot_result: SnapshotResult | None = field(default=None, init=False, repr=False)
     tempo_reader: TempoTraceReader | None = None
     prometheus_reader: PrometheusMetricsReader | None = None
+    # A STATUS_SNAPSHOT with unchanged content is written at most this often.
+    status_snapshot_interval: timedelta = timedelta(seconds=30)
 
     @property
     def last_snapshot_result(self) -> SnapshotResult | None:
@@ -111,12 +206,32 @@ class DiagnosisService:
         journal_namespaces = tuple(dict.fromkeys((*self.namespaces, *self.evidence_namespaces)))
         with self._snapshot_lock, self.session_factory() as session:
             repository = ObjectVersionRepository(session)
+            lifecycle = _PodLifecycleRecorder(
+                LifecycleRepository(session),
+                frozenset(self.namespaces),
+                self.status_snapshot_interval,
+            )
+
+            def record(body: dict[str, Any], observed_at: datetime) -> bool:
+                stored = repository.record(body, observed_at)
+                self._record_lifecycle(lambda: lifecycle.observe(body, observed_at))
+                return stored
+
+            def tombstone(key: str, observed_at: datetime) -> bool:
+                # Only the journal's own tombstone (written for a completely
+                # listed scope) ends an instance; absence alone never does.
+                written = repository.tombstone(key, observed_at)
+                if written:
+                    uid = repository.latest_uid(key)
+                    self._record_lifecycle(lambda: lifecycle.deleted(key, uid, observed_at))
+                return written
+
             watcher = ChangeWatcher(
                 self.reader,
                 journal_namespaces,
-                repository.record,
+                record,
                 lambda: repository.live_keys(set(journal_namespaces)),
-                repository.tombstone,
+                tombstone,
                 self.clock,
             )
             object_snapshot: ObjectSnapshot = watcher.snapshot_result()
@@ -156,6 +271,14 @@ class DiagnosisService:
                     ),
                 )
             return result
+
+    @staticmethod
+    def _record_lifecycle(write: Callable[[], None]) -> None:
+        """Lifecycle facts are extra evidence: a failure is logged, never fatal to the journal."""
+        try:
+            write()
+        except Exception:
+            logger.warning("lifecycle observation was not recorded", exc_info=True)
 
     def watch(self, stop: threading.Event, interval_seconds: float) -> None:
         """Snapshot the cluster until ``stop`` is set; errors are logged and retried."""
@@ -472,6 +595,9 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
         prometheus_reader=prometheus_reader,
         investigator_factory=investigator,
         bounded_policy_factory=bounded_policy,
+        status_snapshot_interval=timedelta(
+            seconds=float(os.getenv("SRE_STATUS_SNAPSHOT_INTERVAL_SECONDS", "30"))
+        ),
     )
 
 

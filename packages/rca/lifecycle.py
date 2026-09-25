@@ -62,7 +62,7 @@ def _containers(body: Mapping[str, Any] | None) -> dict[str, dict[str, Any]]:
     }
 
 
-def _payload(body: Mapping[str, Any]) -> dict[str, Any]:
+def status_payload(body: Mapping[str, Any]) -> dict[str, Any]:
     """Only the Ready condition, container restart/state facts and deletionTimestamp."""
     ready = _ready(body)
     return {
@@ -102,7 +102,7 @@ def classify(
         return []
     if _uid(previous_body) != uid:
         previous_body = None
-    payload = _payload(current_body)
+    payload = status_payload(current_body)
 
     def draft(
         type_: str, source_at: datetime | None, extra: dict[str, Any] | None = None
@@ -175,4 +175,4 @@ def classify(
     return drafts
 
 
-__all__ = ["LifecycleObservationDraft", "classify"]
+__all__ = ["LifecycleObservationDraft", "classify", "status_payload"]

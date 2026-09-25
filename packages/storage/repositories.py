@@ -732,6 +732,11 @@ class ObjectVersionRepository:
         self._session.commit()
         return True
 
+    def latest_uid(self, key: str) -> str | None:
+        """The persisted UID of the object's latest journal version (tombstones included)."""
+        latest = self._latest(key)
+        return latest.uid if latest is not None else None
+
     def tombstone(self, key: str, observed_at: datetime) -> bool:
         """Record that a live object is gone; its last body is kept as the tombstone body."""
         latest = self._latest(key)

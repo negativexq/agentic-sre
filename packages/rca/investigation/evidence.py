@@ -16,6 +16,7 @@ from packages.rca.model import (
     LogRecord,
     ObjectVersion,
     PodStatusObservation,
+    ProviderReadFailure,
     ResourcePressure,
     TraceSpanObservation,
     TrafficObservation,
@@ -263,17 +264,21 @@ class OverlayObservationSource:
 
     def resource_pressure(
         self, pods: Sequence[EntityRef], since: datetime
-    ) -> tuple[ResourcePressure, ...]:
+    ) -> tuple[ResourcePressure, ...] | ProviderReadFailure:
         acquired = tuple(
             record
             for record in self._acquired(ResourcePressure)
             if record.pod in pods and record.at is not None and record.at >= since
         )
-        return self._merge_records(
-            self.base.resource_pressure(pods, since),
+        base = self.base.resource_pressure(pods, since)
+        if isinstance(base, ProviderReadFailure):
+            return base
+        merged = self._merge_records(
+            base,
             acquired,
             key=lambda item: (*_time_key(item.at), item.evidence_id),
         )
+        return merged
 
     def traffic_observations(self) -> tuple[TrafficObservation, ...]:
         return self._merge_records(

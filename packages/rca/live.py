@@ -31,6 +31,7 @@ from packages.rca.model import (
     LogRecord,
     ObjectVersion,
     PodStatusObservation,
+    ProviderReadFailure,
     ResourcePressure,
     TraceSpanObservation,
     TrafficObservation,
@@ -81,7 +82,7 @@ class ClusterReader(Protocol):
 class LogReader(Protocol):
     def error_logs(
         self, services: Sequence[str], starts_at: datetime, ends_at: datetime
-    ) -> list[LogRecord]: ...
+    ) -> list[LogRecord] | ProviderReadFailure: ...
 
 
 @dataclass(frozen=True)
@@ -531,11 +532,11 @@ class LiveSource:
 
     def resource_pressure(
         self, pods: Sequence[EntityRef], since: datetime
-    ) -> Sequence[ResourcePressure]:
+    ) -> Sequence[ResourcePressure] | ProviderReadFailure:
         """Bounded per-Pod reads from ``since`` minus the baseline gap up to the cutoff.
 
-        Each read stays within the one-hour query bound. A failed read yields
-        nothing for that Pod, which the RCA treats as missing, never as normal.
+        Each read stays within the one-hour query bound. Failures stay explicit
+        so partial/absent provider data cannot be read as normal evidence.
         """
         if self.provider_adapter is None or not self.provider_adapter.supports("resource_pressure"):
             return []
@@ -544,18 +545,18 @@ class LiveSource:
         if end <= start:
             return []
         records: list[ResourcePressure] = []
+        failures: list[ProviderReadFailure] = []
         for pod in pods:
             if pod.kind != "Pod":
                 continue
-            try:
-                records.extend(
-                    self.provider_adapter.query_resource_pressure(
-                        pod, InvestigationQuery(start=start, end=end, limit=16)
-                    )
-                )
-            except Exception as exc:  # backend failure is missing data, not health
-                _log.warning("resource read for %s failed (%s)", pod.canonical, type(exc).__name__)
-        return records
+            result = self.provider_adapter.query_resource_pressure(
+                pod, InvestigationQuery(start=start, end=end, limit=16)
+            )
+            if isinstance(result, ProviderReadFailure):
+                failures.append(result)
+            else:
+                records.extend(result)
+        return failures[0] if failures else records
 
     def traffic_observations(self) -> Sequence[TrafficObservation]:
         # The live stack does not yet expose a bounded request-rate reader.
@@ -724,9 +725,25 @@ def capture_error_logs(
         try:
             read_with_id = getattr(reader, "error_logs_with_read_id", None)
             if callable(read_with_id):
-                batch, read_id = read_with_id(services, start, end)
+                read_result = read_with_id(services, start, end)
+                if isinstance(read_result, ProviderReadFailure):
+                    failed.append(
+                        LogSliceFailure(
+                            start, end, read_result.error_type, read_result.error_message
+                        )
+                    )
+                    continue
+                batch, read_id = read_result
             else:
-                batch, read_id = reader.error_logs(services, start, end), None
+                read_result = reader.error_logs(services, start, end)
+                if isinstance(read_result, ProviderReadFailure):
+                    failed.append(
+                        LogSliceFailure(
+                            start, end, read_result.error_type, read_result.error_message
+                        )
+                    )
+                    continue
+                batch, read_id = read_result, None
         except ProviderReadPersistenceError:
             # A successful provider response whose tape commit failed must not
             # be treated like an ignorable provider slice failure.

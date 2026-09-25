@@ -107,6 +107,7 @@ from packages.rca.model import (
     InvestigationStopReason,
     Resolution,
 )
+from packages.rca.provider_adapter import ProviderReadPersistenceError
 from packages.rca.source import ObservationSource
 
 
@@ -1693,6 +1694,8 @@ def _execute_tool(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             observation = execute_query(case, gap, action.target, action.query)
         else:
             observation = tool.execute(case, gap, action.target)
+    except ProviderReadPersistenceError:
+        raise
     except Exception as error:  # semantic tools must not crash the diagnosis
         observation = make_observation(
             gap=gap,

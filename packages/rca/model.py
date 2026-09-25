@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal
@@ -10,6 +11,15 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 CLUSTER_SCOPE = "_cluster"
+
+
+@dataclass(frozen=True)
+class ProviderReadFailure:
+    """A provider read that failed; it is unavailable evidence, not an empty result."""
+
+    capability: str
+    error_type: str
+    error_message: str
 
 
 def object_key(body: Mapping[str, Any]) -> str | None:

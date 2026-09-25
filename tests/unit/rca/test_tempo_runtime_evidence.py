@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from typing import cast
 
 from provider_test_helpers import provider_session_factory
+from sqlalchemy import select
 
 from packages.rca.engine import Case, build_case
 from packages.rca.investigation.environment import (
@@ -47,6 +48,7 @@ from packages.rca.model import (
 from packages.rca.provider_adapter import ProviderAdapter, ProviderReaders
 from packages.rca.runtime_evidence import derive_runtime_trace_call_facts
 from packages.rca.source import InMemorySource
+from packages.storage.models import InvestigationReadRow
 
 T0 = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
 
@@ -553,3 +555,51 @@ def test_runtime_traces_without_tempo_adapter_keep_source_only_normalization() -
 
     assert observation.runtime is None
     assert normalize_observation(observation, case=case, gap=gap).findings == ()
+
+
+def test_tempo_provider_failure_is_error_taped_and_returns_explicit_no_data() -> None:
+    target = EntityRef(kind="Deployment", name="payment", namespace="shop")
+    source = InMemorySource(name="tempo-provider-error", cutoff=T0 + timedelta(seconds=60))
+    case = build_case(initial_view(source))
+    gap = _gap(target)
+
+    class FailingTempo:
+        def query(
+            self, target: EntityRef, query: InvestigationQuery
+        ) -> tuple[TraceSpanObservation, ...]:
+            del target, query
+            raise ConnectionError("tempo unavailable")
+
+    factory = provider_session_factory()
+    adapter = ProviderAdapter(
+        "test-run", "INVESTIGATION", factory, ProviderReaders(tempo=FailingTempo())
+    )
+    backend = TempoInvestigationBackend(
+        base=SourceInvestigationBackend(source),
+        provider_adapter=adapter,
+        observation_cutoff=source.observation_cutoff(),
+    )
+    observation = RuntimeTracesTool(backend).execute_query(
+        case,
+        gap,
+        target,
+        InvestigationQuery(
+            start=T0 - timedelta(seconds=10), end=T0 + timedelta(seconds=10), limit=12
+        ),
+    )
+
+    assert observation.outcome.value == "NO_DATA"
+    assert observation.error is not None and "ConnectionError" in observation.error
+    assert observation.payload["traces"] == []
+    assert observation.runtime is not None
+    assert observation.runtime.state is RuntimeObservationState.NO_DATA
+    assert normalize_observation(observation, case=case, gap=gap).findings == ()
+    with factory() as session:
+        row = session.scalar(select(InvestigationReadRow))
+    assert row is not None
+    assert (row.caller_class, row.capability, row.status) == (
+        "INVESTIGATION",
+        "tempo_traces",
+        "ERROR",
+    )
+    assert row.error_type == "ConnectionError"

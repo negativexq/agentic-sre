@@ -36,6 +36,7 @@ from packages.rca.model import (
     InvestigationQuery,
     Resolution,
 )
+from packages.rca.provider_adapter import ProviderReadPersistenceError
 from packages.rca.ranking import RankingConfig
 from packages.rca.signals import extract_symptoms
 from packages.rca.source import ObservationSource
@@ -359,6 +360,8 @@ def _step(
             if callable(execute_query)
             else tool.execute(case, choice.gap, choice.target)
         )
+    except ProviderReadPersistenceError:
+        raise
     except Exception as error:
         step = SearchStep(
             depth=depth,

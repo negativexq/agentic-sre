@@ -14,6 +14,7 @@ from packages.rca.model import (
     LogRecord,
     ObjectVersion,
     PodStatusObservation,
+    ProviderReadFailure,
     ResourcePressure,
     TraceSpanObservation,
     TrafficObservation,
@@ -44,7 +45,7 @@ class ObservationSource(Protocol):
 
     def resource_pressure(
         self, pods: Sequence[EntityRef], since: datetime
-    ) -> Sequence[ResourcePressure]:
+    ) -> Sequence[ResourcePressure] | ProviderReadFailure:
         """Resource use of the given pods before and after ``since``; empty without metrics."""
         ...
 
@@ -115,7 +116,7 @@ class InMemorySource:
 
     def resource_pressure(
         self, pods: Sequence[EntityRef], since: datetime
-    ) -> Sequence[ResourcePressure]:
+    ) -> Sequence[ResourcePressure] | ProviderReadFailure:
         wanted = set(pods)
         return [item for item in self.pressure_items if item.pod in wanted]
 

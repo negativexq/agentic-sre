@@ -557,6 +557,66 @@ class InvestigationReadRepository:
         evidence_ids: Sequence[str],
     ) -> int:
         """Insert and commit one SUCCESS row; sequence is serialized per run."""
+        return self._append(
+            run_id=run_id,
+            caller_class=caller_class,
+            capability=capability,
+            query_key=query_key,
+            query_descriptor=query_descriptor,
+            started_at=started_at,
+            finished_at=finished_at,
+            status="SUCCESS",
+            observation=observation,
+            evidence_ids=evidence_ids,
+            error_type=None,
+            error_message=None,
+        )
+
+    def append_error(
+        self,
+        *,
+        run_id: str,
+        caller_class: str,
+        capability: str,
+        query_key: str,
+        query_descriptor: dict[str, Any],
+        started_at: datetime,
+        finished_at: datetime,
+        error_type: str,
+        error_message: str,
+    ) -> int:
+        """Insert and commit one complete ERROR row; never mutate a prior read."""
+        return self._append(
+            run_id=run_id,
+            caller_class=caller_class,
+            capability=capability,
+            query_key=query_key,
+            query_descriptor=query_descriptor,
+            started_at=started_at,
+            finished_at=finished_at,
+            status="ERROR",
+            observation=None,
+            evidence_ids=(),
+            error_type=error_type,
+            error_message=error_message,
+        )
+
+    def _append(
+        self,
+        *,
+        run_id: str,
+        caller_class: str,
+        capability: str,
+        query_key: str,
+        query_descriptor: dict[str, Any],
+        started_at: datetime,
+        finished_at: datetime,
+        status: str,
+        observation: Any,
+        evidence_ids: Sequence[str],
+        error_type: str | None,
+        error_message: str | None,
+    ) -> int:
         for attempt in range(self._APPEND_ATTEMPTS):
             if self._session.get_bind().dialect.name == "postgresql":
                 # Transaction-scoped lock serializes max+1 allocation for this
@@ -573,11 +633,11 @@ class InvestigationReadRepository:
                 started_at=started_at,
                 finished_at=finished_at,
                 committed_at=datetime.now(UTC),
-                status="SUCCESS",
+                status=status,
                 observation=observation,
                 evidence_ids=list(evidence_ids),
-                error_type=None,
-                error_message=None,
+                error_type=error_type,
+                error_message=error_message,
             )
             self._session.add(row)
             try:

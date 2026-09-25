@@ -21,6 +21,7 @@ from packages.rca.model import (
     EntityRef,
     InvestigationQuery,
     LogRecord,
+    ProviderReadFailure,
     ResourcePressure,
     TrafficObservation,
 )
@@ -214,7 +215,12 @@ def test_successful_call_persists_a_complete_normalized_success_envelope() -> No
     }
     assert row.started_at is not None and row.finished_at is not None
     assert row.committed_at is not None
-    assert row.started_at <= row.finished_at <= row.committed_at
+    assert (
+        row.started_at is not None and row.finished_at is not None and row.committed_at is not None
+    )
+    started_at, finished_at, committed_at = row.started_at, row.finished_at, row.committed_at
+    assert started_at is not None and finished_at is not None and committed_at is not None
+    assert started_at <= finished_at <= committed_at
     assert row.status == "SUCCESS"
     assert row.observation == [pressure.model_dump(mode="json")]
     assert row.evidence_ids == ["pressure-success"]
@@ -331,6 +337,113 @@ def test_persistence_failure_prevents_successful_result_from_escaping() -> None:
         consumed.append(adapter.query_resource_pressure(TARGET, QUERY))
     assert len(reader.pressure_calls) == 1
     assert consumed == []
+
+
+def test_provider_failure_is_taped_as_error_and_distinct_from_empty_success() -> None:
+    class RaisingPrometheus(_Prometheus):
+        def query_resource_pressure(
+            self, target: EntityRef, query: InvestigationQuery
+        ) -> tuple[ResourcePressure, ...]:
+            self.pressure_calls.append((target, query))
+            raise ConnectionError("Bearer abc123 secret=sk-super-secret")
+
+    factory = provider_session_factory()
+    adapter = ProviderAdapter(
+        "error-run", "ENGINE", factory, ProviderReaders(prometheus=RaisingPrometheus())
+    )
+    long_identity = "observation-identity-" + ("x" * 398)
+    assert len(long_identity) == 419
+    result = adapter.query_resource_pressure(TARGET, QUERY, observation_identity=long_identity)
+    assert isinstance(result, ProviderReadFailure)
+    assert result.error_type == "ConnectionError"
+    assert "[REDACTED]" in result.error_message
+    assert "abc123" not in result.error_message
+    assert "sk-super-secret" not in result.error_message
+
+    empty_reader = _Prometheus()
+    empty_reader.pressure_results.append(())
+    empty = _adapter(prometheus=empty_reader).query_resource_pressure(TARGET, QUERY)
+    assert empty == ()
+    assert not isinstance(empty, ProviderReadFailure)
+    with factory() as session:
+        row = session.scalar(select(InvestigationReadRow))
+    assert row is not None
+    assert row.status == "ERROR"
+    assert row.caller_class == "ENGINE"
+    assert row.capability == "resource_pressure"
+    assert row.query_key == long_identity
+    assert row.query_descriptor["operation"] == "resource_pressure"
+    assert row.error_type == "ConnectionError"
+    assert row.error_message == result.error_message
+    assert row.evidence_ids == []
+    assert row.observation is None
+    started_at = row.started_at
+    finished_at = row.finished_at
+    committed_at = row.committed_at
+    assert started_at is not None and finished_at is not None and committed_at is not None
+    assert started_at <= finished_at <= committed_at
+
+
+def test_error_persistence_failure_does_not_return_typed_missing() -> None:
+    class RaisingPrometheus(_Prometheus):
+        def query_resource_pressure(
+            self, target: EntityRef, query: InvestigationQuery
+        ) -> tuple[ResourcePressure, ...]:
+            raise ConnectionError("provider unavailable")
+
+    def failing_factory() -> Session:
+        raise RuntimeError("storage unavailable")
+
+    adapter = ProviderAdapter(
+        "error-persist-fails",
+        "ENGINE",
+        failing_factory,
+        ProviderReaders(prometheus=RaisingPrometheus()),
+    )
+    consumed: list[object] = []
+    with pytest.raises(RuntimeError, match="failed resource_pressure read could not be persisted"):
+        consumed.append(adapter.query_resource_pressure(TARGET, QUERY))
+    assert consumed == []
+
+
+def test_repeated_provider_failures_keep_query_identity_and_advance_sequence() -> None:
+    class IntermittentPrometheus(_Prometheus):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls = 0
+
+        def query_resource_pressure(
+            self, target: EntityRef, query: InvestigationQuery
+        ) -> tuple[ResourcePressure, ...]:
+            self.calls += 1
+            if self.calls in {2, 4, 5}:
+                raise TimeoutError("timeout")
+            return ()
+
+    factory = provider_session_factory()
+    reader = IntermittentPrometheus()
+    adapter = ProviderAdapter(
+        "mixed-run", "INVESTIGATION", factory, ProviderReaders(prometheus=reader)
+    )
+    first = adapter.query_resource_pressure(TARGET, QUERY)
+    failed_a = adapter.query_resource_pressure(TARGET, QUERY, observation_identity="same-query")
+    second_success = adapter.query_resource_pressure(
+        TARGET, QUERY, observation_identity="same-query"
+    )
+    failed_b = adapter.query_resource_pressure(TARGET, QUERY, observation_identity="same-query")
+    failed_c = adapter.query_resource_pressure(TARGET, QUERY, observation_identity="same-query")
+    assert first == ()
+    assert second_success == ()
+    assert isinstance(failed_a, ProviderReadFailure)
+    assert isinstance(failed_b, ProviderReadFailure)
+    assert isinstance(failed_c, ProviderReadFailure)
+    with factory() as session:
+        rows = list(
+            session.scalars(select(InvestigationReadRow).order_by(InvestigationReadRow.sequence))
+        )
+    assert [row.sequence for row in rows] == [1, 2, 3, 4, 5]
+    assert [row.status for row in rows] == ["SUCCESS", "ERROR", "SUCCESS", "ERROR", "ERROR"]
+    assert rows[1].query_key == rows[3].query_key == rows[4].query_key == "same-query"
 
 
 def test_query_key_precedence_uses_descriptor_then_observation_identity() -> None:

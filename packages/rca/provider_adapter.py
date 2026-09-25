@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, fields, is_dataclass
 from datetime import UTC, datetime
@@ -19,6 +20,7 @@ from packages.rca.model import (
     EntityRef,
     InvestigationQuery,
     LogRecord,
+    ProviderReadFailure,
     ResourcePressure,
     TraceSpanObservation,
     TrafficObservation,
@@ -29,7 +31,7 @@ _T = TypeVar("_T")
 
 
 class ProviderReadPersistenceError(RuntimeError):
-    """A provider succeeded but its successful response could not be taped."""
+    """A provider response or failure could not be durably taped."""
 
 
 class PrometheusReader(Protocol):
@@ -176,6 +178,13 @@ def _evidence_ids(value: Any) -> list[str]:
     return found
 
 
+def _provider_error_message(error: BaseException) -> str:
+    """Reuse credential scrubbing and remove address-like object identities."""
+    from packages.rca.llm import _sanitized_message
+
+    return re.sub(r"\bat 0x[0-9a-fA-F]+\b", "at [REDACTED]", _sanitized_message(error))
+
+
 @dataclass(frozen=True)
 class ProviderAdapter:
     """Pass-through provider boundary with run and caller identity."""
@@ -205,7 +214,7 @@ class ProviderAdapter:
         *,
         descriptor_id: str | None = None,
         observation_identity: str | None = None,
-    ) -> tuple[ResourcePressure, ...]:
+    ) -> tuple[ResourcePressure, ...] | ProviderReadFailure:
         reader = self.readers.prometheus
         if reader is None:
             raise RuntimeError("Prometheus reader is not configured")
@@ -221,7 +230,7 @@ class ProviderAdapter:
             observation_identity=observation_identity,
         )
         return cast(
-            tuple[ResourcePressure, ...],
+            tuple[ResourcePressure, ...] | ProviderReadFailure,
             self._provider_call(
                 capability="resource_pressure",
                 query_key=query_key,
@@ -237,7 +246,7 @@ class ProviderAdapter:
         *,
         descriptor_id: str | None = None,
         observation_identity: str | None = None,
-    ) -> tuple[TrafficObservation, ...]:
+    ) -> tuple[TrafficObservation, ...] | ProviderReadFailure:
         reader = self.readers.prometheus
         if reader is None:
             raise RuntimeError("Prometheus reader is not configured")
@@ -253,7 +262,7 @@ class ProviderAdapter:
             observation_identity=observation_identity,
         )
         return cast(
-            tuple[TrafficObservation, ...],
+            tuple[TrafficObservation, ...] | ProviderReadFailure,
             self._provider_call(
                 capability="traffic",
                 query_key=query_key,
@@ -269,7 +278,7 @@ class ProviderAdapter:
         *,
         descriptor_id: str | None = None,
         observation_identity: str | None = None,
-    ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch:
+    ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch | ProviderReadFailure:
         reader = self.readers.tempo
         if reader is None:
             raise RuntimeError("Tempo reader is not configured")
@@ -285,7 +294,7 @@ class ProviderAdapter:
             observation_identity=observation_identity,
         )
         return cast(
-            tuple[TraceSpanObservation, ...] | TempoTraceBatch,
+            tuple[TraceSpanObservation, ...] | TempoTraceBatch | ProviderReadFailure,
             self._provider_call(
                 capability="tempo_traces",
                 query_key=query_key,
@@ -303,8 +312,8 @@ class ProviderAdapter:
         limit: int | None = None,
         descriptor_id: str | None = None,
         observation_identity: str | None = None,
-    ) -> list[LogRecord]:
-        records, _read_id = self.query_loki_with_read_id(
+    ) -> list[LogRecord] | ProviderReadFailure:
+        result = self.query_loki_with_read_id(
             services,
             starts_at,
             ends_at,
@@ -312,7 +321,7 @@ class ProviderAdapter:
             descriptor_id=descriptor_id,
             observation_identity=observation_identity,
         )
-        return records
+        return result if isinstance(result, ProviderReadFailure) else result[0]
 
     def query_loki_with_read_id(
         self,
@@ -323,7 +332,7 @@ class ProviderAdapter:
         limit: int | None = None,
         descriptor_id: str | None = None,
         observation_identity: str | None = None,
-    ) -> tuple[list[LogRecord], int]:
+    ) -> tuple[list[LogRecord], int] | ProviderReadFailure:
         """Return capture records with the read row committed before return."""
         reader = self.readers.loki
         if reader is None:
@@ -350,8 +359,8 @@ class ProviderAdapter:
             def call() -> list[LogRecord]:
                 return reader.error_logs(services, starts_at, ends_at, limit=limit)
 
-        records, read_id = cast(
-            tuple[list[LogRecord], int],
+        result = cast(
+            tuple[list[LogRecord], int] | ProviderReadFailure,
             self._provider_call(
                 capability="loki_logs",
                 query_key=query_key,
@@ -360,7 +369,7 @@ class ProviderAdapter:
                 include_read_id=True,
             ),
         )
-        return records, read_id
+        return result
 
     def error_logs(
         self,
@@ -369,7 +378,7 @@ class ProviderAdapter:
         ends_at: datetime,
         *,
         limit: int | None = None,
-    ) -> list[LogRecord]:
+    ) -> list[LogRecord] | ProviderReadFailure:
         """LogReader-compatible capture method routed through this adapter."""
         return self.query_loki(services, starts_at, ends_at, limit=limit)
 
@@ -380,7 +389,7 @@ class ProviderAdapter:
         ends_at: datetime,
         *,
         limit: int | None = None,
-    ) -> tuple[list[LogRecord], int]:
+    ) -> tuple[list[LogRecord], int] | ProviderReadFailure:
         return self.query_loki_with_read_id(services, starts_at, ends_at, limit=limit)
 
     def _provider_call(
@@ -391,9 +400,36 @@ class ProviderAdapter:
         descriptor: dict[str, Any],
         call: Callable[[], _T],
         include_read_id: bool = False,
-    ) -> _T | tuple[_T, int]:
+    ) -> _T | tuple[_T, int] | ProviderReadFailure:
         started_at = datetime.now(UTC)
-        result = call()
+        try:
+            result = call()
+        except Exception as error:
+            finished_at = datetime.now(UTC)
+            from packages.storage.repositories import InvestigationReadRepository
+
+            try:
+                with self.session_factory() as session:
+                    InvestigationReadRepository(session).append_error(
+                        run_id=self.run_id,
+                        caller_class=self.caller_class,
+                        capability=capability,
+                        query_key=query_key,
+                        query_descriptor=descriptor,
+                        started_at=started_at,
+                        finished_at=finished_at,
+                        error_type=type(error).__name__,
+                        error_message=_provider_error_message(error),
+                    )
+            except Exception as persistence_error:
+                raise ProviderReadPersistenceError(
+                    f"failed {capability} read could not be persisted"
+                ) from persistence_error
+            return ProviderReadFailure(
+                capability=capability,
+                error_type=type(error).__name__,
+                error_message=_provider_error_message(error),
+            )
         observation = _json_value(result)
         finished_at = datetime.now(UTC)
         from packages.storage.repositories import InvestigationReadRepository
@@ -425,5 +461,6 @@ __all__ = [
     "ProviderCallerClass",
     "ProviderReaders",
     "ProviderReadPersistenceError",
+    "ProviderReadFailure",
     "provider_query_key",
 ]

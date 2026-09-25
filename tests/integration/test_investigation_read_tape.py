@@ -179,6 +179,67 @@ def test_committed_tape_row_is_visible_in_an_independent_session_before_return(
         engine.dispose()
 
 
+def test_committed_error_row_is_visible_before_typed_failure_returns(postgres_url: str) -> None:
+    engine = create_engine(postgres_url)
+    Base.metadata.create_all(engine)
+
+    class FailingPrometheus:
+        def query_resource_pressure(
+            self, target: EntityRef, query: InvestigationQuery
+        ) -> tuple[ResourcePressure, ...]:
+            del target, query
+            raise ConnectionError("prometheus unavailable")
+
+        def query_traffic(self, target: EntityRef, query: InvestigationQuery) -> tuple[Any, ...]:
+            del target, query
+            return ()
+
+    factory = sessionmaker(engine)
+    observed_commit: list[str | None] = []
+
+    def observing_factory() -> Session:
+        session = factory()
+        commit = session.commit
+
+        def commit_then_check() -> None:
+            commit()
+            with Session(engine) as observer:
+                row = observer.scalar(
+                    select(InvestigationReadRow).where(
+                        InvestigationReadRow.run_id == "error-visible-run"
+                    )
+                )
+                observed_commit.append(row.status if row else None)
+
+        session.commit = commit_then_check  # type: ignore[method-assign]
+        return session
+
+    adapter = ProviderAdapter(
+        "error-visible-run",
+        "ENGINE",
+        observing_factory,
+        ProviderReaders(prometheus=FailingPrometheus()),
+    )
+    try:
+        failure = adapter.query_resource_pressure(TARGET, QUERY)
+        from packages.rca.model import ProviderReadFailure
+
+        assert isinstance(failure, ProviderReadFailure)
+        assert observed_commit == ["ERROR"]
+        with factory() as session:
+            row = session.scalar(
+                select(InvestigationReadRow).where(
+                    InvestigationReadRow.run_id == "error-visible-run"
+                )
+            )
+        assert row is not None and row.status == "ERROR"
+        assert row.sequence == 1
+        assert row.caller_class == "ENGINE"
+        assert row.query_descriptor["operation"] == "resource_pressure"
+    finally:
+        engine.dispose()
+
+
 def test_loki_capture_provenance_points_to_committed_capture_read(postgres_url: str) -> None:
     engine = create_engine(postgres_url)
     Base.metadata.create_all(engine)
@@ -262,5 +323,56 @@ def test_loki_capture_provenance_points_to_committed_capture_read(postgres_url: 
                 )
                 is None
             )
+    finally:
+        engine.dispose()
+
+
+def test_loki_capture_failure_records_error_without_fabricating_logs(postgres_url: str) -> None:
+    engine = create_engine(postgres_url)
+    Base.metadata.create_all(engine)
+
+    class FailingLoki(_Loki):
+        def error_logs(
+            self,
+            services: Sequence[str],
+            starts_at: datetime,
+            ends_at: datetime,
+            *,
+            limit: int | None = None,
+        ) -> list[LogRecord]:
+            del services, starts_at, ends_at, limit
+            raise TimeoutError("loki unavailable")
+
+    factory = sessionmaker(engine)
+    adapter = ProviderAdapter(
+        "capture-error-run", "CAPTURE", factory, ProviderReaders(loki=FailingLoki())
+    )
+    try:
+        capture = capture_error_logs(adapter, ["worker"], AT - timedelta(minutes=30), AT)
+        assert not capture.succeeded
+        assert capture.records == ()
+        assert capture.source_read_ids == ()
+        assert len(capture.failed) == 1
+        with factory() as session:
+            row = session.scalar(
+                select(InvestigationReadRow).where(
+                    InvestigationReadRow.run_id == "capture-error-run"
+                )
+            )
+        assert row is not None
+        assert (row.caller_class, row.capability, row.status) == (
+            "CAPTURE",
+            "loki_logs",
+            "ERROR",
+        )
+        assert row.error_type == "TimeoutError"
+        assert row.evidence_ids == []
+        with factory() as session:
+            logs = list(
+                session.scalars(
+                    select(LogObservationRow).where(LogObservationRow.source_read_id == row.read_id)
+                )
+            )
+        assert logs == []
     finally:
         engine.dispose()

@@ -39,6 +39,7 @@ from packages.rca.model import (
     HypothesisDiagnostics,
     InvestigationStep,
     ObjectVersion,
+    ProviderReadFailure,
     Resolution,
     StructuralAlternative,
     Symptoms,
@@ -193,21 +194,21 @@ def build_case(
         window_end=source.observation_cutoff(),
         tokens=symptom_tokens(symptoms, entities, topology),
     )
+    pressure_result = (
+        source.resource_pressure(
+            sorted(_pods(entities, topology), key=str),
+            symptoms.onset - config.pressure_baseline_gap,
+        )
+        if symptoms.onset is not None
+        else ()
+    )
+    pressure_records = () if isinstance(pressure_result, ProviderReadFailure) else pressure_result
     findings = [
         *change_findings(history),
         *policy_findings(history, topology, set(symptoms.namespaces), events),
         *autoscaling_findings(history, events, topology),
         *container_findings(history),
-        *(
-            resource_findings(
-                source.resource_pressure(
-                    sorted(_pods(entities, topology), key=str),
-                    symptoms.onset - config.pressure_baseline_gap,
-                )
-            )
-            if symptoms.onset is not None
-            else []
-        ),
+        *resource_findings(pressure_records),
         *fault_event_findings(events, topology),
         *failure_findings(events),
         *dependency_findings(list(source.error_logs()), topology, entities),

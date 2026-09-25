@@ -26,6 +26,7 @@ from packages.rca.model import (
     Hypothesis,
     Lifecycle,
     ObjectVersion,
+    ProviderReadFailure,
     ResourcePressure,
 )
 from packages.rca.signals import PRESSURE_THRESHOLD, parse_quantity
@@ -37,7 +38,10 @@ _RESTART_ANNOTATION = "kubectl.kubernetes.io/restartedAt"
 _STEP = timedelta(seconds=15)
 _BASELINE_GAP = timedelta(minutes=5)
 
-PressureReader = Callable[[Sequence[EntityRef], datetime], Sequence[ResourcePressure]]
+PressureReader = Callable[
+    [Sequence[EntityRef], datetime],
+    Sequence[ResourcePressure] | ProviderReadFailure,
+]
 
 
 @dataclass(frozen=True)
@@ -246,6 +250,8 @@ def assess_resource_mechanism(
     if _oom_or_eviction(pods, findings, history):
         return None
     records = read_pressure(pods, window_start)
+    if isinstance(records, ProviderReadFailure):
+        return None
     coverage: list[PodCoverage] = []
     for pod in pods:
         pod_start = max(window_start, _created(history[pod]) or window_start)

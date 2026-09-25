@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 from provider_test_helpers import provider_session_factory
+from sqlalchemy import select
 
 from packages.rca.live import PROMETHEUS_MAX_QUERY_SPAN, LiveSource
 from packages.rca.model import (
@@ -23,6 +24,7 @@ from packages.rca.model import (
     InvestigationQuery,
     Lifecycle,
     ObjectVersion,
+    ProviderReadFailure,
     Resolution,
     ResolutionReasonCode,
     ResourcePressure,
@@ -31,6 +33,7 @@ from packages.rca.model import (
 from packages.rca.provider_adapter import ProviderAdapter, ProviderReaders
 from packages.rca.resolution import RESOURCE_PRESSURE_RULE, resolve_hypotheses
 from packages.rca.resource_mechanism import assess_resource_mechanism
+from packages.storage.models import InvestigationReadRow
 
 ONSET = datetime(2026, 9, 24, 12, 0, tzinfo=UTC)
 GRACE = timedelta(minutes=15)
@@ -305,7 +308,7 @@ class _Prometheus:
 
 
 @pytest.mark.parametrize("cutoff_minutes", [20, 180])
-def test_live_resource_reads_are_bounded_and_failures_are_missing_data(
+def test_live_resource_reads_are_bounded_and_failures_remain_explicit_missing_data(
     cutoff_minutes: int,
 ) -> None:
     prometheus = _Prometheus(fail_for="payment-new-b")
@@ -324,9 +327,78 @@ def test_live_resource_reads_are_bounded_and_failures_are_missing_data(
 
     records = source.resource_pressure([POD, other, DEPLOY], ONSET - timedelta(minutes=5))
 
-    assert [item.pod for item in records] == [POD]
+    assert isinstance(records, ProviderReadFailure)
+    assert (records.error_type, records.error_message) == ("ConnectionError", "prometheus down")
     assert len(prometheus.windows) == 2  # the Deployment is never queried
     for start, end in prometheus.windows:
         assert start == ONSET - timedelta(minutes=10)
         assert end - start <= PROMETHEUS_MAX_QUERY_SPAN
         assert end <= source.observed_at
+
+
+def test_prometheus_failure_is_inert_for_resource_pressure_rule() -> None:
+    failure = ProviderReadFailure(
+        capability="resource_pressure",
+        error_type="ConnectionError",
+        error_message="prometheus down",
+    )
+    mismatch = assess_resource_mechanism(
+        _limit_change(),
+        history=_history(_deployment(_container("512Mi")), _deployment(_container("128Mi"))),
+        findings=(),
+        read_pressure=lambda _pods, _since: failure,
+        onset=ONSET,
+        grace=GRACE,
+    )
+    assert mismatch is None
+    trace = resolve_hypotheses([_limit_change()], mechanism_mismatches={})
+    audit = next(
+        item
+        for item in trace.hypothesis_audits
+        if item.hypothesis_id == "hypothesis:payment-limits"
+    )
+    assert audit.epistemic_state is not HypothesisEpistemicState.CONTRADICTED
+    assert trace.eliminations == ()
+
+
+def test_live_prometheus_error_tape_leaves_a2_hypothesis_unchanged() -> None:
+    factory = provider_session_factory()
+    reader = _Prometheus(fail_for=POD.name)
+    source = LiveSource(
+        incident="a2-provider-error",
+        alert_items=[],
+        journal=[],
+        current_objects=[],
+        event_bodies=[],
+        observed_at=ONSET + GRACE,
+        provider_adapter=ProviderAdapter(
+            "a2-provider-error", "ENGINE", factory, ProviderReaders(prometheus=reader)
+        ),
+    )
+    failure = source.resource_pressure([POD], ONSET - timedelta(minutes=5))
+    assert isinstance(failure, ProviderReadFailure)
+    mismatch = assess_resource_mechanism(
+        _limit_change(),
+        history=_history(_deployment(_container("512Mi")), _deployment(_container("128Mi"))),
+        findings=(),
+        read_pressure=lambda pods, since: source.resource_pressure(pods, since),
+        onset=ONSET,
+        grace=GRACE,
+    )
+    assert mismatch is None
+
+    before = resolve_hypotheses([_limit_change()])
+    after = resolve_hypotheses([_limit_change()], mechanism_mismatches={})
+    assert after.state is before.state
+    assert after.eliminations == before.eliminations == ()
+    before_audit = before.hypothesis_audits[0]
+    after_audit = after.hypothesis_audits[0]
+    assert after_audit.epistemic_state is before_audit.epistemic_state
+    assert after_audit.epistemic_state is not HypothesisEpistemicState.CONTRADICTED
+    with factory() as session:
+        rows = list(session.scalars(select(InvestigationReadRow)))
+    assert len(rows) == 2
+    assert all(
+        (row.caller_class, row.capability, row.status) == ("ENGINE", "resource_pressure", "ERROR")
+        for row in rows
+    )

@@ -534,6 +534,16 @@ class InvestigationReadRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
+    def list_for_run(self, run_id: str) -> list[InvestigationReadRow]:
+        """Reload exactly one run's provider tape in authoritative order."""
+        return list(
+            self._session.scalars(
+                select(InvestigationReadRow)
+                .where(InvestigationReadRow.run_id == run_id)
+                .order_by(InvestigationReadRow.sequence.asc())
+            ).all()
+        )
+
     def _next_sequence(self, run_id: str) -> int:
         latest = self._session.scalar(
             select(InvestigationReadRow.sequence)

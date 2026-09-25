@@ -59,7 +59,8 @@ from packages.rca.ranking import (
 )
 from packages.rca.remediation import propose
 from packages.rca.resolution import hypothesis_signature, resolve_hypotheses
-from packages.rca.resource_mechanism import MechanismMismatch, assess_resource_mechanisms
+from packages.rca.resource_mechanism import RULE_ID as RESOURCE_RULE_ID
+from packages.rca.resource_mechanism import MechanismMismatch, evaluate_resource_mechanisms
 from packages.rca.root_cause_eligibility import (
     RootCauseEligibilities,
     derive_root_cause_eligibilities,
@@ -250,13 +251,14 @@ def build_case(
     root_cause_eligibilities = derive_root_cause_eligibilities(
         hypotheses, hypothesis_causal_roles
     ).with_ended_episodes(episode_evaluations.ended_episodes)
-    mechanism_mismatches = assess_resource_mechanisms(
+    resource_evaluations = evaluate_resource_mechanisms(
         hypotheses,
         history=history,
         findings=findings,
         read_pressure=source.resource_pressure,
         onset=symptoms.onset,
         grace=config.ranking.verification_onset_grace,
+        evaluation_at=context.window_end,
     )
     structural_alternatives = (
         list(derive_structural_frontier(context))
@@ -316,14 +318,26 @@ def build_case(
         structural_alternatives=structural_alternatives,
         hypothesis_diagnostics=grouping.diagnostics,
         steps=steps,
-        mechanism_mismatches=mechanism_mismatches,
+        mechanism_mismatches=dict(resource_evaluations.mismatches),
         rule_preconditions={
-            (hypothesis_id, EPISODE_END_RULE_ID): results
-            for hypothesis_id, results in episode_evaluations.preconditions.items()
+            **{
+                (hypothesis_id, EPISODE_END_RULE_ID): results
+                for hypothesis_id, results in episode_evaluations.preconditions.items()
+            },
+            **{
+                (hypothesis_id, RESOURCE_RULE_ID): results
+                for hypothesis_id, results in resource_evaluations.preconditions.items()
+            },
         },
         precondition_reasons={
-            (hypothesis_id, EPISODE_END_RULE_ID): reasons
-            for hypothesis_id, reasons in episode_evaluations.reasons.items()
+            **{
+                (hypothesis_id, EPISODE_END_RULE_ID): reasons
+                for hypothesis_id, reasons in episode_evaluations.reasons.items()
+            },
+            **{
+                (hypothesis_id, RESOURCE_RULE_ID): reasons
+                for hypothesis_id, reasons in resource_evaluations.reasons.items()
+            },
         },
     )
 

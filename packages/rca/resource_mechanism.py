@@ -15,6 +15,7 @@ import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 from typing import Any
 
 from packages.rca.json_access import child, mapping
@@ -26,6 +27,8 @@ from packages.rca.model import (
     Hypothesis,
     Lifecycle,
     ObjectVersion,
+    PreconditionAuditReason,
+    PreconditionResult,
     ProviderReadFailure,
     ResourcePressure,
 )
@@ -202,16 +205,34 @@ def _oom_or_eviction(
     return False
 
 
-def assess_resource_mechanism(
+@dataclass(frozen=True)
+class _Scope:
+    """An in-scope A2 hypothesis: R1–R3 hold and the bound Pod set is known."""
+
+    actor: EntityRef
+    lowered: tuple[tuple[str, str], ...]
+    pods: tuple[EntityRef, ...]
+    onset: datetime
+    boundary: datetime
+    window_start: datetime
+    window_end: datetime
+    change_evidence_ids: tuple[str, ...]
+
+
+class _Coverage(StrEnum):
+    COMPLETE = "COMPLETE"
+    MISSING = "MISSING"
+    PARTIAL = "PARTIAL"
+    PRESSURE = "PRESSURE"
+
+
+def _scope(
     hypothesis: Hypothesis,
     *,
     history: Mapping[EntityRef, Sequence[ObjectVersion]],
-    findings: Sequence[Finding],
-    read_pressure: PressureReader,
     onset: datetime | None,
     grace: timedelta,
-) -> MechanismMismatch | None:
-    """Return the mismatch only when every precondition passes."""
+) -> _Scope | None:
     actor = hypothesis.causal_actor
     initiating = hypothesis.initiating_findings
     if onset is None or actor.kind != "Deployment" or not initiating:
@@ -240,63 +261,93 @@ def assess_resource_mechanism(
         if latest_after is None or after.observed_at > latest_after.observed_at:
             latest_after = after
     assert latest_after is not None
-    lowered = sorted(set(lowered))
     boundary = onset + grace
     window_start = max(max(change_times), onset - _BASELINE_GAP)
     window_end = boundary
     pods = _bound_pods(actor, _containers(latest_after.body), history, window_start, window_end)
     if pods is None:
         return None
-    if _oom_or_eviction(pods, findings, history):
-        return None
-    records = read_pressure(pods, window_start)
+    return _Scope(
+        actor=actor,
+        lowered=tuple(sorted(set(lowered))),
+        pods=pods,
+        onset=onset,
+        boundary=boundary,
+        window_start=window_start,
+        window_end=window_end,
+        change_evidence_ids=tuple(dict.fromkeys(e for f in initiating for e in f.evidence_ids)),
+    )
+
+
+def _measure(
+    scope: _Scope,
+    records: Sequence[ResourcePressure] | ProviderReadFailure,
+    history: Mapping[EntityRef, Sequence[ObjectVersion]],
+) -> tuple[_Coverage, tuple[PodCoverage, ...]]:
+    """Classify the current run's measurements of every required series.
+
+    Positive pressure in any required series wins over incomplete coverage;
+    otherwise any unmeasured series is MISSING only when nothing was measured.
+    """
     if isinstance(records, ProviderReadFailure):
-        return None
+        return _Coverage.MISSING, ()
     coverage: list[PodCoverage] = []
-    for pod in pods:
-        pod_start = max(window_start, _created(history[pod]) or window_start)
-        for container, resource in lowered:
+    measured = incomplete = False
+    for pod in scope.pods:
+        pod_start = max(scope.window_start, _created(history[pod]) or scope.window_start)
+        for container, resource in scope.lowered:
             matching = [
                 item
                 for item in records
                 if item.pod == pod and item.container == container and item.resource == resource
             ]
+            if any(item.peak >= PRESSURE_THRESHOLD[resource] for item in matching):
+                return _Coverage.PRESSURE, ()
+            measured = measured or bool(matching)
             if len(matching) != 1:
-                return None
+                incomplete = True
+                continue
             item = matching[0]
             if (
                 item.sample_count < 2
                 or item.sample_start is None
                 or item.sample_end is None
                 or item.sample_start > pod_start + _STEP
-                or item.sample_end < window_end - _STEP
-                or item.peak >= PRESSURE_THRESHOLD[resource]
+                or item.sample_end < scope.window_end - _STEP
             ):
-                return None
+                incomplete = True
+                continue
             coverage.append(
                 PodCoverage(
                     pod=pod,
                     container=container,
                     resource=resource,
                     window_start=pod_start,
-                    window_end=window_end,
+                    window_end=scope.window_end,
                     peak=item.peak,
                     evidence_id=item.evidence_id,
                 )
             )
-    change_ids = tuple(dict.fromkeys(e for f in initiating for e in f.evidence_ids))
-    lowered_text = ", ".join(f"{c}.{r}" for c, r in lowered)
+    if not incomplete:
+        return _Coverage.COMPLETE, tuple(coverage)
+    return (_Coverage.PARTIAL if measured else _Coverage.MISSING), ()
+
+
+def _mismatch(
+    hypothesis: Hypothesis, scope: _Scope, coverage: tuple[PodCoverage, ...]
+) -> MechanismMismatch:
+    lowered_text = ", ".join(f"{c}.{r}" for c, r in scope.lowered)
     return MechanismMismatch(
         hypothesis_id=hypothesis.hypothesis_id,
-        actor=actor,
-        lowered=tuple(lowered),
-        pods=pods,
-        onset=onset,
-        boundary=boundary,
-        window_start=window_start,
-        window_end=window_end,
-        coverage=tuple(coverage),
-        change_evidence_ids=change_ids,
+        actor=scope.actor,
+        lowered=scope.lowered,
+        pods=scope.pods,
+        onset=scope.onset,
+        boundary=scope.boundary,
+        window_start=scope.window_start,
+        window_end=scope.window_end,
+        coverage=coverage,
+        change_evidence_ids=scope.change_evidence_ids,
         preconditions=(
             EliminationPrecondition(
                 name="resource_only_limit_reduction",
@@ -306,14 +357,14 @@ def assess_resource_mechanism(
             EliminationPrecondition(
                 name="bound_pods_positively_determined",
                 passed=True,
-                detail=f"{len(pods)} Pod(s) of the post-change template",
+                detail=f"{len(scope.pods)} Pod(s) of the post-change template",
             ),
             EliminationPrecondition(
                 name="observed_normal_full_coverage",
                 passed=True,
                 detail=(
-                    f"{len(coverage)}/{len(pods) * len(lowered)} pod x resource series below "
-                    "threshold across the window"
+                    f"{len(coverage)}/{len(scope.pods) * len(scope.lowered)} pod x resource "
+                    "series below threshold across the window"
                 ),
             ),
             EliminationPrecondition(
@@ -323,6 +374,25 @@ def assess_resource_mechanism(
             ),
         ),
     )
+
+
+def assess_resource_mechanism(
+    hypothesis: Hypothesis,
+    *,
+    history: Mapping[EntityRef, Sequence[ObjectVersion]],
+    findings: Sequence[Finding],
+    read_pressure: PressureReader,
+    onset: datetime | None,
+    grace: timedelta,
+) -> MechanismMismatch | None:
+    """Return the mismatch only when every precondition passes."""
+    scope = _scope(hypothesis, history=history, onset=onset, grace=grace)
+    if scope is None or _oom_or_eviction(scope.pods, findings, history):
+        return None
+    status, coverage = _measure(scope, read_pressure(scope.pods, scope.window_start), history)
+    if status is not _Coverage.COMPLETE:
+        return None
+    return _mismatch(hypothesis, scope, coverage)
 
 
 def assess_resource_mechanisms(
@@ -349,11 +419,62 @@ def assess_resource_mechanisms(
     return result
 
 
+@dataclass(frozen=True)
+class ResourceMechanismEvaluations:
+    """A2 positive mismatches plus neutral/pending coverage audit outcomes."""
+
+    mismatches: Mapping[str, MechanismMismatch]
+    preconditions: Mapping[str, tuple[PreconditionResult, ...]]
+    reasons: Mapping[str, tuple[PreconditionAuditReason, ...]]
+
+
+def evaluate_resource_mechanisms(
+    hypotheses: Sequence[Hypothesis],
+    *,
+    history: Mapping[EntityRef, Sequence[ObjectVersion]],
+    findings: Sequence[Finding],
+    read_pressure: PressureReader,
+    onset: datetime | None,
+    grace: timedelta,
+    evaluation_at: datetime | None,
+) -> ResourceMechanismEvaluations:
+    """Evaluate A2 once per hypothesis and retain coverage maturity for audit.
+
+    ``evaluation_at`` is the frozen observation cutoff. Before the maturity
+    boundary, missing or partial normal coverage is ``PENDING(onset+grace)``;
+    at or after it, the same gap is only a neutral audit reason. Neither ever
+    contradicts, eliminates, or implies the resource was normal.
+    """
+    mismatches: dict[str, MechanismMismatch] = {}
+    preconditions: dict[str, tuple[PreconditionResult, ...]] = {}
+    reasons: dict[str, tuple[PreconditionAuditReason, ...]] = {}
+    for hypothesis in hypotheses:
+        scope = _scope(hypothesis, history=history, onset=onset, grace=grace)
+        if scope is None or _oom_or_eviction(scope.pods, findings, history):
+            continue
+        status, coverage = _measure(scope, read_pressure(scope.pods, scope.window_start), history)
+        if status is _Coverage.COMPLETE:
+            mismatches[hypothesis.hypothesis_id] = _mismatch(hypothesis, scope, coverage)
+        elif status is _Coverage.PRESSURE or evaluation_at is None:
+            continue
+        elif evaluation_at < scope.boundary:
+            preconditions[hypothesis.hypothesis_id] = (PreconditionResult.pending(scope.boundary),)
+        else:
+            reasons[hypothesis.hypothesis_id] = (
+                PreconditionAuditReason.PARTIAL_COVERAGE_AFTER_DEADLINE
+                if status is _Coverage.PARTIAL
+                else PreconditionAuditReason.NO_DATA_AFTER_DEADLINE,
+            )
+    return ResourceMechanismEvaluations(mismatches, preconditions, reasons)
+
+
 __all__ = [
     "RULE_ID",
     "RULE_VERSION",
     "MechanismMismatch",
     "PodCoverage",
+    "ResourceMechanismEvaluations",
     "assess_resource_mechanism",
     "assess_resource_mechanisms",
+    "evaluate_resource_mechanisms",
 ]

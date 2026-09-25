@@ -1,0 +1,172 @@
+"""Canonical fingerprint of an RCA's epistemic decision state.
+
+Only decision-bearing fields participate: the resolution, the root causal
+actor, each hypothesis' identity, causal actor, epistemic state and root
+eligibility, and each elimination's rule identity and evidence. Free text,
+scores, timestamps and model output never enter the digest.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from hashlib import sha256
+
+from packages.rca.model import Diagnosis, EliminationConsequence, Hypothesis
+
+
+@dataclass(frozen=True)
+class EpistemicHypothesisEntry:
+    """The exact hypothesis fields that participate in an epistemic digest."""
+
+    hypothesis_key: str | None
+    hypothesis_id: str
+    causal_actor: str | None
+    state: str | None
+    root_eligible: bool
+
+
+@dataclass(frozen=True)
+class EpistemicEliminationEntry:
+    """The exact elimination fields that participate in an epistemic digest."""
+
+    hypothesis_key: str | None
+    hypothesis_id: str
+    reason: str
+    rule_id: str
+    rule_version: str
+    evidence_ids: tuple[str, ...]
+    decisive_evidence_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class EpistemicState:
+    """The canonical decision state of one diagnosis."""
+
+    resolution: str
+    root_causal_actor: str | None
+    hypotheses: tuple[EpistemicHypothesisEntry, ...]
+    eliminations: tuple[EpistemicEliminationEntry, ...]
+
+
+def epistemic_state(diagnosis: Diagnosis) -> EpistemicState:
+    """Project a diagnosis onto its decision-bearing fields.
+
+    The hypothesis set is every hypothesis the diagnosis audits or retains.
+    Key and causal actor are ``None`` when the diagnosis retains only the
+    audit; state is ``None`` when it retains only the hypothesis. Root
+    eligibility is false exactly when a root-ineligibility elimination names
+    the hypothesis.
+    """
+    trace = diagnosis.resolution_trace
+    audits = trace.hypothesis_audits if trace is not None else ()
+    eliminations = trace.eliminations if trace is not None else ()
+    retained: dict[str, Hypothesis] = {}
+    for hypothesis in (
+        *((diagnosis.hypothesis,) if diagnosis.hypothesis is not None else ()),
+        *diagnosis.alternative_hypotheses,
+        *diagnosis.ambiguous_hypotheses,
+    ):
+        retained.setdefault(hypothesis.hypothesis_id, hypothesis)
+    states: dict[str, str] = {}
+    for audit in audits:
+        states.setdefault(audit.hypothesis_id, audit.epistemic_state.value)
+    root_ineligible = {
+        item.hypothesis_id
+        for item in eliminations
+        if item.consequence is EliminationConsequence.ROOT_INELIGIBILITY
+    }
+
+    def key_of(hypothesis_id: str) -> str | None:
+        hypothesis = retained.get(hypothesis_id)
+        if hypothesis is None:
+            return None
+        return hypothesis.hypothesis_key or None
+
+    return EpistemicState(
+        resolution=diagnosis.resolution.value,
+        root_causal_actor=(
+            diagnosis.root_cause.canonical if diagnosis.root_cause is not None else None
+        ),
+        hypotheses=tuple(
+            EpistemicHypothesisEntry(
+                hypothesis_key=key_of(hypothesis_id),
+                hypothesis_id=hypothesis_id,
+                causal_actor=(
+                    retained[hypothesis_id].causal_actor.canonical
+                    if hypothesis_id in retained
+                    else None
+                ),
+                state=states.get(hypothesis_id),
+                root_eligible=hypothesis_id not in root_ineligible,
+            )
+            for hypothesis_id in {*states, *retained}
+        ),
+        eliminations=tuple(
+            EpistemicEliminationEntry(
+                hypothesis_key=key_of(item.hypothesis_id),
+                hypothesis_id=item.hypothesis_id,
+                reason=item.code.value,
+                rule_id=item.rule_id,
+                rule_version=item.rule_version,
+                evidence_ids=item.evidence_ids,
+                decisive_evidence_ids=item.decisive_evidence_ids,
+            )
+            for item in eliminations
+        ),
+    )
+
+
+def compute_epistemic_digest(state: EpistemicState) -> str:
+    """Hash canonical JSON of an epistemic state, hypotheses ordered by ID."""
+    hypotheses = [
+        [
+            entry.hypothesis_key,
+            entry.hypothesis_id,
+            entry.causal_actor,
+            entry.state,
+            entry.root_eligible,
+        ]
+        for entry in sorted(state.hypotheses, key=lambda item: item.hypothesis_id)
+    ]
+    rows = [
+        [
+            entry.hypothesis_key,
+            entry.hypothesis_id,
+            entry.reason,
+            entry.rule_id,
+            entry.rule_version,
+            sorted(entry.evidence_ids),
+            sorted(entry.decisive_evidence_ids),
+        ]
+        for entry in state.eliminations
+    ]
+    # The key may be None, so order on the always-present fields first.
+    eliminations = sorted(rows, key=lambda row: (row[1:], row[0] or ""))
+    canonical = json.dumps(
+        {
+            "resolution": state.resolution,
+            "root_causal_actor": state.root_causal_actor,
+            "hypotheses": hypotheses,
+            "eliminations": eliminations,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def diagnosis_epistemic_digest(diagnosis: Diagnosis) -> str:
+    """Compute the epistemic digest of one diagnosis."""
+    return compute_epistemic_digest(epistemic_state(diagnosis))
+
+
+__all__ = [
+    "EpistemicEliminationEntry",
+    "EpistemicHypothesisEntry",
+    "EpistemicState",
+    "compute_epistemic_digest",
+    "diagnosis_epistemic_digest",
+    "epistemic_state",
+]

@@ -32,7 +32,14 @@ PROVIDER_CAPABILITIES = ("logs", "resource_pressure", "runtime_traces", "traffic
 _T = TypeVar("_T")
 
 
-class ProviderReadPersistenceError(RuntimeError):
+class ProviderIntegrityError(RuntimeError):
+    """A provider read could not be recorded or reproduced faithfully.
+
+    It is never degraded into missing evidence: tool wrappers re-raise it.
+    """
+
+
+class ProviderReadPersistenceError(ProviderIntegrityError):
     """A provider response or failure could not be durably taped."""
 
 
@@ -536,6 +543,7 @@ __all__ = [
     "PROVIDER_CAPABILITIES",
     "ProviderAdapter",
     "ProviderBoundary",
+    "ProviderIntegrityError",
     "ProviderCallerClass",
     "ProviderReaders",
     "ProviderReadPersistenceError",

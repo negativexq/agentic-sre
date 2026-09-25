@@ -40,7 +40,7 @@ from packages.rca.model import (
     Resolution,
     StructuralAlternative,
 )
-from packages.rca.provider_adapter import ProviderReadPersistenceError
+from packages.rca.provider_adapter import ProviderIntegrityError
 from packages.rca.source import ObservationSource
 
 _ACQUISITION_DETAIL_KEYS = frozenset(
@@ -448,7 +448,7 @@ def _execute(
                 raise TypeError("investigation tool returned an invalid observation")
             return result
         return tool.execute(case, choice.gap, choice.target)
-    except ProviderReadPersistenceError:
+    except ProviderIntegrityError:
         raise
     except Exception as error:
         return make_observation(

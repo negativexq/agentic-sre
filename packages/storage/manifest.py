@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from packages.contracts import IncidentEvent, IncidentEventType
 from packages.rca.manifest import ManifestEntry, manifest_membership_digest, ordered_entries
 from packages.rca.model import JournalEntry, LogRecord
-from packages.rca.provider_adapter import PROVIDER_CAPABILITIES
+from packages.rca.provider_adapter import PROVIDER_CAPABILITIES, ProviderIntegrityError
 from packages.storage.models import (
     AlertRow,
     ChangeRecordRow,
@@ -234,6 +234,14 @@ class ReplayDataError(LookupError):
     """
 
 
+class ReplayTapeCorrupt(ReplayDataError, ProviderIntegrityError):
+    """A recorded tape row cannot be served as its typed result.
+
+    Raised inside provider reads during replay, so it must propagate through
+    tool wrappers instead of becoming a tool-error observation.
+    """
+
+
 class ReplayProviderCapabilitiesMissing(ReplayDataError):
     """The run's boundary predates M19-3.14a and never recorded its provider capabilities.
 
@@ -384,6 +392,7 @@ __all__ = [
     "ManifestMembers",
     "ReplayDataError",
     "ReplayProviderCapabilitiesMissing",
+    "ReplayTapeCorrupt",
     "RunBoundary",
     "alert_payload",
     "ManifestRequest",

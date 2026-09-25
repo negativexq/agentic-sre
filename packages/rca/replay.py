@@ -14,6 +14,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
+from packages.rca.epistemic_digest import diagnosis_epistemic_digest
+from packages.rca.investigation.graph import investigate_diagnosis
+from packages.rca.investigation.policy import (
+    ReplayTrajectoryDivergence,
+    ScriptedInvestigationPolicy,
+)
 from packages.rca.investigation.tempo import (
     TempoSearchCompleteness,
     TempoSearchDiagnostics,
@@ -26,6 +32,7 @@ from packages.rca.model import (
     ClusterEvent,
     EntityRef,
     InvestigationQuery,
+    InvestigationResult,
     LogRecord,
     ObjectVersion,
     PodStatusObservation,
@@ -36,6 +43,7 @@ from packages.rca.model import (
 )
 from packages.rca.provider_adapter import (
     ProviderCallerClass,
+    ProviderIntegrityError,
     loki_descriptor,
     provider_query_key,
     resource_pressure_descriptor,
@@ -52,7 +60,7 @@ if TYPE_CHECKING:
 _T = TypeVar("_T")
 
 
-class ReplayDivergence(RuntimeError):
+class ReplayDivergence(ProviderIntegrityError):
     """A replayed provider request is not the next read the run recorded.
 
     It is never missing data: the replayed execution left the recorded one.
@@ -355,12 +363,12 @@ class ReplayProviderAdapter:
 
 
 def _decoded[T](run_id: str, row: _TapeRow, decode: Callable[[Any], T]) -> T:
-    from packages.storage.manifest import ReplayDataError
+    from packages.storage.manifest import ReplayTapeCorrupt
 
     try:
         return decode(row.observation)
     except (TypeError, ValueError, KeyError) as error:
-        raise ReplayDataError(
+        raise ReplayTapeCorrupt(
             f"run {run_id} tape seq {row.sequence} observation cannot be decoded: "
             f"{type(error).__name__}"
         ) from error
@@ -490,4 +498,80 @@ class ReplaySource:
         return self._base.investigation_backend()
 
 
-__all__ = ["ReplayDivergence", "ReplayProviderAdapter", "ReplaySource"]
+class ReplayModeUnsupported(ValueError):
+    """The requested replay mode is not implemented."""
+
+
+@dataclass(frozen=True)
+class TrajectoryReplay:
+    """One completed trajectory replay: its digest and the state that proves it."""
+
+    digest: str
+    result: InvestigationResult
+    source: ReplaySource
+    policy: ScriptedInvestigationPolicy
+
+
+def replay_trajectory(run_id: str, *, session_factory: sessionmaker[Session]) -> TrajectoryReplay:
+    """Replay the run's recorded trajectory over its frozen evidence and tape.
+
+    One ``ReplaySource`` (and so one provider cursor) serves the whole run. The
+    recorded audits drive every turn; the replay succeeds only if all of them
+    and every recorded non-CAPTURE read were consumed and the recorded terminal
+    was reached. Nothing is written.
+    """
+    from packages.storage.trajectory import load_trajectory
+
+    with session_factory() as session:
+        recorded = load_trajectory(session, run_id)
+    source = ReplaySource.from_run(run_id, session_factory=session_factory)
+    contract = recorded.contract
+    policy = ScriptedInvestigationPolicy.from_trajectory(
+        recorded.result.action_audits,
+        semantic_kind=contract.policy_kind,
+        counts_as_model=contract.counts_as_model,
+        terminal=contract.terminal,
+    )
+    result = investigate_diagnosis(
+        source, policy=policy, config=recorded.config, started_at=source.window_end
+    )
+    if not policy.exhausted:
+        raise ReplayTrajectoryDivergence(
+            f"run {run_id}: {len(policy.recorded_audits) - policy.index} recorded action(s) "
+            "were never replayed"
+        )
+    if (result.stop_reason, result.turns) != (
+        contract.terminal.stop_reason,
+        contract.terminal.turns,
+    ):
+        raise ReplayTrajectoryDivergence(
+            f"run {run_id}: replay ended {result.stop_reason.value} after {result.turns} turn(s); "
+            f"recorded {contract.terminal.stop_reason.value} after {contract.terminal.turns}"
+        )
+    remaining = source.provider_adapter.next_sequence
+    if remaining is not None:
+        raise ReplayTrajectoryDivergence(
+            f"run {run_id}: recorded provider reads from sequence {remaining} were never replayed"
+        )
+    return TrajectoryReplay(diagnosis_epistemic_digest(result.diagnosis), result, source, policy)
+
+
+def replay_run(
+    run_id: str, mode: str = "trajectory", *, session_factory: sessionmaker[Session]
+) -> str:
+    """Replay one recorded run offline and return its epistemic digest."""
+    if mode != "trajectory":
+        raise ReplayModeUnsupported(f"replay mode {mode!r} is not supported")
+    return replay_trajectory(run_id, session_factory=session_factory).digest
+
+
+__all__ = [
+    "ReplayDivergence",
+    "ReplayModeUnsupported",
+    "ReplayProviderAdapter",
+    "ReplaySource",
+    "ReplayTrajectoryDivergence",
+    "TrajectoryReplay",
+    "replay_run",
+    "replay_trajectory",
+]

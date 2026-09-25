@@ -60,6 +60,7 @@ from packages.rca.investigation.normalizers import (
     new_investigation_findings,
     normalize_observation,
 )
+from packages.rca.investigation.policy import ScriptedInvestigationPolicy
 from packages.rca.investigation.selection import (
     ScoredObservationCandidate,
     active_choice_dominates_baseline,
@@ -110,7 +111,7 @@ from packages.rca.model import (
     TrajectoryReplayContract,
     TrajectoryTerminal,
 )
-from packages.rca.provider_adapter import ProviderReadPersistenceError
+from packages.rca.provider_adapter import ProviderIntegrityError
 from packages.rca.source import ObservationSource
 
 _SELECTOR_KINDS = frozenset(
@@ -235,6 +236,13 @@ class _Runtime:
             if capability not in source_capabilities or self.backend.supports(capability)
         )
         self.evidence_store = evidence_store or InMemoryEvidenceStore()
+        # Trajectory playback: recorded turns replace policy/selector choices and
+        # the recorded terminal replaces wall-clock and model-call budgets.
+        self.playback: ScriptedInvestigationPolicy | None = (
+            policy
+            if isinstance(policy, ScriptedInvestigationPolicy) and policy.plays_trajectory
+            else None
+        )
         access_ledger = getattr(source, "access_ledger", None)
         if callable(access_ledger):
             ledger = access_ledger()
@@ -386,15 +394,12 @@ def _assess(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             "stop_reason": InvestigationStopReason.TURN_BUDGET_EXHAUSTED,
             "trace_steps": _with_step(state, "assess", "turn budget exhausted"),
         }
-    elapsed = (datetime.now(UTC) - state["started_at"]).total_seconds()
-    if elapsed >= rt.config.max_wall_time_seconds:
+    if _wall_time_exhausted(state, rt):
         return {
             "stop_reason": InvestigationStopReason.WALL_TIME_EXHAUSTED,
             "trace_steps": _with_step(state, "assess", "wall-time budget exhausted"),
         }
-    if state["model_calls"] >= rt.config.max_model_calls and getattr(
-        rt.policy, "counts_as_model", False
-    ):
+    if _model_budget_exhausted(state, rt):
         return {
             "stop_reason": InvestigationStopReason.MODEL_BUDGET_EXHAUSTED,
             "trace_steps": _with_step(state, "assess", "model-call budget exhausted"),
@@ -596,6 +601,57 @@ def _conservative_intent_choice(
     return baseline, "BASELINE_FALLBACK", reason
 
 
+def _wall_time_exhausted(state: InvestigationState, rt: _Runtime) -> bool:
+    """Live: real elapsed time. Playback: only the recorded terminal, never the clock."""
+    if rt.playback is not None:
+        return rt.playback.terminal_due(InvestigationStopReason.WALL_TIME_EXHAUSTED)
+    elapsed = (datetime.now(UTC) - state["started_at"]).total_seconds()
+    return elapsed >= rt.config.max_wall_time_seconds
+
+
+def _model_budget_exhausted(state: InvestigationState, rt: _Runtime) -> bool:
+    """Live: counted model calls. Playback makes none, so only the recorded terminal."""
+    if rt.playback is not None:
+        return rt.playback.terminal_due(InvestigationStopReason.MODEL_BUDGET_EXHAUSTED)
+    return state["model_calls"] >= rt.config.max_model_calls and bool(
+        getattr(rt.policy, "counts_as_model", False)
+    )
+
+
+def _play_recorded_turn(
+    state: InvestigationState, playback: ScriptedInvestigationPolicy
+) -> dict[str, Any]:
+    """Feed the next recorded turn, or the recorded audit-less terminal turn."""
+    audit = playback.next_recorded()
+    if audit is None:
+        stop = playback.terminal_turn()
+        return {
+            "stop_reason": stop,
+            "turns": state["turns"] + 1,
+            "model_calls": state["model_calls"],
+            "trace_steps": _with_step(state, "select_action", f"recorded terminal {stop.value}"),
+        }
+    action = audit.action
+    return {
+        "pending_action": action,
+        "pending_intent_id": audit.intent_id,
+        "pending_intent_kind": audit.intent_kind,
+        "pending_selection_candidates": audit.selection_candidates,
+        "pending_selection_strategy": audit.selection_strategy,
+        "pending_selection_reason": audit.selection_reason,
+        "pending_baseline_candidate_id": audit.baseline_candidate_id,
+        "pending_active_candidate_id": audit.active_candidate_id,
+        "stop_reason": None,
+        "turns": state["turns"] + 1,
+        "model_calls": state["model_calls"],
+        "trace_steps": _with_step(
+            state,
+            "select_action",
+            f"recorded {action.action} {action.capability or ''} {action.target or ''}",
+        ),
+    }
+
+
 def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     # Invalid-action retries bypass ``assess`` by design.  Re-check budgets at
     # this boundary so a malformed provider response (including its bounded
@@ -614,9 +670,7 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
                 state, "assess", "tool-call budget exhausted before action selection"
             ),
         }
-    if state["model_calls"] >= rt.config.max_model_calls and getattr(
-        rt.policy, "counts_as_model", False
-    ):
+    if _model_budget_exhausted(state, rt):
         return {
             "stop_reason": InvestigationStopReason.MODEL_BUDGET_EXHAUSTED,
             "trace_steps": _with_step(
@@ -625,6 +679,9 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         }
     diagnosis = state["current_diagnosis"]
     case = rt.case_for(state.get("acquired_evidence_refs", ()), state["investigation_findings"])
+    if rt.playback is not None:
+        # The case is still built above: its rebuild reads are part of the tape.
+        return _play_recorded_turn(state, rt.playback)
     gaps = _resolvable_gaps(diagnosis)
     baseline_intent = None
     active_intent = None
@@ -1711,7 +1768,7 @@ def _execute_tool(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
             observation = execute_query(case, gap, action.target, action.query)
         else:
             observation = tool.execute(case, gap, action.target)
-    except ProviderReadPersistenceError:
+    except ProviderIntegrityError:
         raise
     except Exception as error:  # semantic tools must not crash the diagnosis
         observation = make_observation(
@@ -2241,15 +2298,11 @@ def _check_progress(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         stop = InvestigationStopReason.NO_PROGRESS
     elif state["turns"] >= rt.config.max_turns:
         stop = InvestigationStopReason.TURN_BUDGET_EXHAUSTED
-    elif (
-        datetime.now(UTC) - state["started_at"]
-    ).total_seconds() >= rt.config.max_wall_time_seconds:
+    elif _wall_time_exhausted(state, rt):
         stop = InvestigationStopReason.WALL_TIME_EXHAUSTED
     elif state["tool_calls"] >= rt.config.max_tool_calls:
         stop = InvestigationStopReason.TOOL_BUDGET_EXHAUSTED
-    elif state["model_calls"] >= rt.config.max_model_calls and getattr(
-        rt.policy, "counts_as_model", False
-    ):
+    elif _model_budget_exhausted(state, rt):
         stop = InvestigationStopReason.MODEL_BUDGET_EXHAUSTED
     return {
         "action_audits": action_audits,
@@ -2420,8 +2473,12 @@ def investigate_diagnosis(
     initial_case: Case | None = None,
     rebuild_case: Callable[..., Case] | None = None,
     evidence_store: InMemoryEvidenceStore | None = None,
+    started_at: datetime | None = None,
 ) -> InvestigationResult:
-    """Run one isolated bounded investigation and return deterministic output."""
+    """Run one isolated bounded investigation and return deterministic output.
+
+    ``started_at`` defaults to now; a replay passes its persisted time.
+    """
     initial_source = initial_view(source)
     case = initial_case or build_case(
         initial_source, _engine_config(config or InvestigationConfig())
@@ -2438,7 +2495,11 @@ def investigate_diagnosis(
         checkpointer=checkpointer,
     )
     state = build_investigation_state(
-        initial_source, diagnosis=diagnosis, config=config, initial_case=case
+        initial_source,
+        diagnosis=diagnosis,
+        config=config,
+        initial_case=case,
+        started_at=started_at,
     )
     thread = thread_id or f"{source.incident_id()}:investigation"
     result = graph.invoke(state, config={"configurable": {"thread_id": thread}})
@@ -2476,6 +2537,7 @@ def build_investigation_state(
     diagnosis: Diagnosis | None = None,
     config: InvestigationConfig | None = None,
     initial_case: Case | None = None,
+    started_at: datetime | None = None,
 ) -> InvestigationState:
     """Build the initial checkpointable state: data only, no live dependencies."""
     effective = config or InvestigationConfig()
@@ -2484,7 +2546,7 @@ def build_investigation_state(
     initial = diagnosis or diagnose_case(case, config=engine_config)
     return {
         "incident_id": source.incident_id(),
-        "started_at": datetime.now(UTC),
+        "started_at": started_at if started_at is not None else datetime.now(UTC),
         "initial_diagnosis": initial,
         "current_diagnosis": initial,
         "observations": (),

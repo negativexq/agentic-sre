@@ -494,6 +494,82 @@ class EliminationConsequence(StrEnum):
     ROOT_INELIGIBILITY = "ROOT_INELIGIBILITY"
 
 
+class PreconditionStatus(StrEnum):
+    """Outcome of evaluating one rule precondition."""
+
+    PASS = "PASS"
+    PENDING = "PENDING"
+    DISQUALIFIED = "DISQUALIFIED"
+
+
+class PreconditionAuditReason(StrEnum):
+    """Neutral audit reasons for evidence still missing after its deadline."""
+
+    NO_DATA_AFTER_DEADLINE = "NO_DATA_AFTER_DEADLINE"
+    PARTIAL_COVERAGE_AFTER_DEADLINE = "PARTIAL_COVERAGE_AFTER_DEADLINE"
+
+
+class PreconditionResult(BaseModel):
+    """Immutable tri-state result for a rule precondition.
+
+    ``not_before`` is supplied by the evaluating rule; constructing a pending
+    result never consults a clock or schedules work.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    status: PreconditionStatus
+    not_before: datetime | None = None
+    reason: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def _validate_outcome_shape(self) -> PreconditionResult:
+        if self.status is PreconditionStatus.PASS:
+            if self.not_before is not None or self.reason is not None:
+                raise ValueError("PASS cannot include not_before or reason")
+        elif self.status is PreconditionStatus.PENDING:
+            if self.not_before is None:
+                raise ValueError("PENDING requires not_before")
+            if self.not_before.tzinfo is None or self.not_before.utcoffset() is None:
+                raise ValueError("PENDING not_before must be timezone-aware")
+            if self.reason is not None:
+                raise ValueError("PENDING cannot include a disqualification reason")
+        elif self.status is PreconditionStatus.DISQUALIFIED:
+            if self.reason is None or not self.reason.strip():
+                raise ValueError("DISQUALIFIED requires a reason")
+            if self.not_before is not None:
+                raise ValueError("DISQUALIFIED cannot include not_before")
+        return self
+
+    @classmethod
+    def passed(cls) -> PreconditionResult:
+        return cls(status=PreconditionStatus.PASS)
+
+    @classmethod
+    def pending(cls, not_before: datetime) -> PreconditionResult:
+        return cls(status=PreconditionStatus.PENDING, not_before=not_before)
+
+    @classmethod
+    def disqualified(cls, reason: str) -> PreconditionResult:
+        return cls(status=PreconditionStatus.DISQUALIFIED, reason=reason)
+
+
+class RulePreconditionAudit(BaseModel):
+    """One rule-scoped tri-state result retained without decision authority."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    rule_id: str = Field(min_length=1)
+    result: PreconditionResult | None = None
+    reason: PreconditionAuditReason | None = None
+
+    @model_validator(mode="after")
+    def _one_audit_value(self) -> RulePreconditionAudit:
+        if (self.result is None) == (self.reason is None):
+            raise ValueError("provide exactly one precondition result or audit reason")
+        return self
+
+
 class EliminationPrecondition(BaseModel):
     """One deterministic precondition a rule evaluated, with its result."""
 
@@ -598,6 +674,9 @@ class HypothesisResolutionAudit(BaseModel):
     contradictory_evidence_ids: tuple[str, ...] = ()
     onset_relation: tuple[str, ...] = ()
     causal_linkage: str = "UNLINKED"
+    # Neutral precondition metadata is intentionally outside epistemic state.
+    # Defaults preserve parsing of diagnosis documents written before M19-5.1.
+    precondition_audit: tuple[RulePreconditionAudit, ...] = ()
 
 
 class ResolutionTrace(BaseModel):

@@ -29,11 +29,15 @@ from packages.rca.model import (
     HypothesisEpistemicState,
     HypothesisResolutionAudit,
     HypothesisSignature,
+    PreconditionAuditReason,
+    PreconditionResult,
+    PreconditionStatus,
     Resolution,
     ResolutionDiscriminator,
     ResolutionElimination,
     ResolutionReasonCode,
     ResolutionTrace,
+    RulePreconditionAudit,
     VerificationTrace,
 )
 from packages.rca.ranking import RankingConfig
@@ -73,6 +77,17 @@ _CHANGE_KINDS = frozenset(
     }
 )
 _MAX_TRACE_ITEMS = 8
+
+
+def preconditions_allow_elimination(results: Sequence[PreconditionResult]) -> bool:
+    """Whether every supplied required precondition positively passed.
+
+    Pending and disqualified outcomes both stop this rule's positive path,
+    while callers retain the individual results for audit. No aggregate
+    priority is assigned between them, and legacy boolean checks are not
+    translated here.
+    """
+    return all(result.status is PreconditionStatus.PASS for result in results)
 
 
 def _temporal_label(finding: Finding) -> str:
@@ -646,6 +661,8 @@ def resolve_hypotheses(
     onset_grace: timedelta | None = None,
     root_cause_eligibilities: RootCauseEligibilities | None = None,
     mechanism_mismatches: Mapping[str, MechanismMismatch] | None = None,
+    rule_preconditions: Mapping[tuple[str, str], Sequence[PreconditionResult]] | None = None,
+    precondition_reasons: Mapping[tuple[str, str], Sequence[PreconditionAuditReason]] | None = None,
 ) -> ResolutionTrace:
     """Resolve distinguishability without treating missing proof as contradiction.
 
@@ -653,31 +670,74 @@ def resolve_hypotheses(
     positively contradicted by a frozen rule; they are contradicted, not merely
     root-ineligible, and their audits say so.
     """
-    mismatches = dict(mechanism_mismatches or {})
+    supplied_preconditions = {
+        key: tuple(results) for key, results in (rule_preconditions or {}).items()
+    }
+    supplied_reasons = {
+        key: tuple(reasons) for key, reasons in (precondition_reasons or {}).items()
+    }
+    blocked_rules = {
+        key
+        for key, results in supplied_preconditions.items()
+        if not preconditions_allow_elimination(results)
+    }
+    blocked_rules.update(key for key, reasons in supplied_reasons.items() if reasons)
+    mismatches = {
+        hypothesis_id: mismatch
+        for hypothesis_id, mismatch in (mechanism_mismatches or {}).items()
+        if (hypothesis_id, RESOURCE_RULE_ID) not in blocked_rules
+    }
+    effective_eligibilities = root_cause_eligibilities
+    if root_cause_eligibilities is not None and any(
+        rule_id == EPISODE_END_RULE_ID for _, rule_id in blocked_rules
+    ):
+        ended = {
+            hypothesis_id: result
+            for hypothesis_id, result in root_cause_eligibilities.ended_episodes.items()
+            if (hypothesis_id, EPISODE_END_RULE_ID) not in blocked_rules
+        }
+        effective_eligibilities = RootCauseEligibilities(
+            root_cause_eligibilities.assessments, ended
+        )
     trace = _resolve(
         hypotheses,
         verification_traces=verification_traces,
         onset_grace=onset_grace,
-        root_cause_eligibilities=root_cause_eligibilities,
+        root_cause_eligibilities=effective_eligibilities,
         mismatches=mismatches,
     )
-    if not mismatches:
-        return trace
-    return trace.model_copy(
-        update={
-            "hypothesis_audits": tuple(
-                audit.model_copy(
-                    update={
+    audits = tuple(
+        audit.model_copy(
+            update={
+                **(
+                    {
                         "epistemic_state": HypothesisEpistemicState.CONTRADICTED,
                         "plausible": False,
                     }
-                )
-                if audit.hypothesis_id in mismatches
-                else audit
-                for audit in trace.hypothesis_audits
-            )
-        }
+                    if audit.hypothesis_id in mismatches
+                    else {}
+                ),
+                "precondition_audit": tuple(
+                    [
+                        RulePreconditionAudit(rule_id=rule_id, result=result)
+                        for (hypothesis_id, rule_id), results in sorted(
+                            supplied_preconditions.items()
+                        )
+                        if hypothesis_id == audit.hypothesis_id
+                        for result in results
+                    ]
+                    + [
+                        RulePreconditionAudit(rule_id=rule_id, reason=reason)
+                        for (hypothesis_id, rule_id), reasons in sorted(supplied_reasons.items())
+                        if hypothesis_id == audit.hypothesis_id
+                        for reason in reasons
+                    ]
+                ),
+            }
+        )
+        for audit in trace.hypothesis_audits
     )
+    return trace.model_copy(update={"hypothesis_audits": audits})
 
 
 def _resolve(

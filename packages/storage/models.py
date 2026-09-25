@@ -23,6 +23,16 @@ class Base(DeclarativeBase):
     """Declarative metadata root."""
 
 
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+# Provenance only: when a row was written. Knowledge membership comes from
+# the evidence manifest, never from this column (M19 I4).
+def _ingested_at() -> Mapped[datetime | None]:
+    return mapped_column(UTCDateTime(), nullable=True, default=_now)
+
+
 class UTCDateTime(TypeDecorator[datetime]):
     """Timezone-aware datetime that round-trips consistently on every backend."""
 
@@ -128,6 +138,7 @@ class ChangeRecordRow(Base):
     after: Mapped[dict[str, Any]] = mapped_column("after", JSON, nullable=False)
     revision: Mapped[str] = mapped_column(String(255), nullable=False)
     source: Mapped[str] = mapped_column(String(255), nullable=False)
+    ingested_at: Mapped[datetime | None] = _ingested_at()
 
 
 class EventVersionRow(Base):
@@ -162,6 +173,7 @@ class EventVersionRow(Base):
     # first_at (or last_at, or observed_at) -- used to filter by incident window.
     event_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False, index=True)
     observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    ingested_at: Mapped[datetime | None] = _ingested_at()
     body: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 
@@ -189,6 +201,10 @@ class ObjectVersionRow(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     uid: Mapped[str | None] = mapped_column(String(64), nullable=True)
     observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False, index=True)
+    # When the source says this version came to be; unknown (NULL) unless
+    # the source states it. Never filled from observed_at.
+    source_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    ingested_at: Mapped[datetime | None] = _ingested_at()
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     body: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     lifecycle: Mapped[str] = mapped_column(
@@ -363,6 +379,7 @@ class LogObservationRow(Base):
     service: Mapped[str] = mapped_column(String(255), nullable=False)
     event_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True, index=True)
     observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False, index=True)
+    ingested_at: Mapped[datetime | None] = _ingested_at()
     severity: Mapped[str] = mapped_column(String(32), nullable=False)
     message: Mapped[str] = mapped_column(String(4000), nullable=False)
     evidence_id: Mapped[str] = mapped_column(String(512), nullable=False)

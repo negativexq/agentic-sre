@@ -31,7 +31,7 @@ from packages.rca.live import (
     incident_window,
 )
 from packages.rca.llm import LLMClient
-from packages.rca.manifest import event_evidence_id
+from packages.rca.manifest import alert_from_payload, event_evidence_id
 from packages.rca.model import Alert, Diagnosis
 from packages.rca.provider_adapter import ProviderAdapter, ProviderReaders
 from packages.storage import (
@@ -69,17 +69,6 @@ def _rca_alert(item: ContractAlert) -> Alert:
         namespace=item.namespace,
         starts_at=item.starts_at,
         labels={**item.labels, "service_name": item.service},
-    )
-
-
-def _rca_alert_from_payload(payload: dict[str, Any]) -> Alert:
-    """An RCA alert built from the content the run's manifest froze."""
-    return Alert(
-        name=payload["alert_name"],
-        service=payload["service"],
-        namespace=payload["namespace"],
-        starts_at=datetime.fromisoformat(payload["starts_at"]),
-        labels={**payload["labels"], "service_name": payload["service"]},
     )
 
 
@@ -658,7 +647,7 @@ class DiagnosisService:
             members = load_members(session, entries)
         source = LiveSource(
             incident=str(incident_id),
-            alert_items=[_rca_alert_from_payload(item) for item in members.alerts],
+            alert_items=[alert_from_payload(item) for item in members.alerts],
             journal=list(members.journal),
             current_objects=list(members.snapshot.objects) if members.snapshot else [],
             event_bodies=[body for _, body in members.events],

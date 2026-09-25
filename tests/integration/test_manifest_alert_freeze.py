@@ -14,10 +14,11 @@ from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.orm import Session, sessionmaker
 from test_live_diagnosis import T0, setup  # noqa: F401 - pytest fixture
 
-from apps.control_plane.diagnosis import DiagnosisService, _rca_alert_from_payload
+from apps.control_plane.diagnosis import DiagnosisService
 from packages.rca.engine import diagnose
 from packages.rca.live import LiveSource
 from packages.rca.manifest import ManifestEntry, event_evidence_id
+from packages.rca.manifest import alert_from_payload as _rca_alert_from_payload
 from packages.storage import manifest as manifest_module
 from packages.storage.manifest import ManifestAlertPayloadMissing, load_manifest, load_members
 from packages.storage.models import AlertRow, RunEvidenceManifestRow

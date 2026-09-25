@@ -9,8 +9,11 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 from hashlib import sha256
 from typing import Any
+
+from packages.rca.model import Alert
 
 # Canonical source types (M19-3.1 inventory), in manifest order.
 SOURCE_TYPES = (
@@ -70,9 +73,21 @@ def event_evidence_id(version_id: int) -> str:
     return f"event:{version_id}"
 
 
+def alert_from_payload(payload: Mapping[str, Any]) -> Alert:
+    """An RCA alert built from the content a run's manifest froze."""
+    return Alert(
+        name=payload["alert_name"],
+        service=payload["service"],
+        namespace=payload["namespace"],
+        starts_at=datetime.fromisoformat(payload["starts_at"]),
+        labels={**payload["labels"], "service_name": payload["service"]},
+    )
+
+
 __all__ = [
     "SOURCE_TYPES",
     "ManifestEntry",
+    "alert_from_payload",
     "event_evidence_id",
     "manifest_membership_digest",
     "ordered_entries",

@@ -27,8 +27,10 @@ from packages.rca.model import JournalEntry, LogRecord
 from packages.storage.models import (
     AlertRow,
     ChangeRecordRow,
+    IncidentEventRow,
     LifecycleObservationRow,
     RunEvidenceManifestRow,
+    SnapshotCycleRow,
 )
 from packages.storage.repositories import (
     AlertRepository,
@@ -211,6 +213,94 @@ def load_manifest_digest(session: Session, run_id: str) -> str:
     return manifest_membership_digest((entry.source_type, entry.source_id) for entry in entries)
 
 
+class ReplayDataError(LookupError):
+    """A run's persisted replay state is missing, malformed or inconsistent.
+
+    Replay never repairs it: no clock, newest cycle or current row stands in.
+    """
+
+
+@dataclass(frozen=True)
+class RunBoundary:
+    """A run's persisted ``EVIDENCE_GATHERED`` boundary, exactly as written."""
+
+    run_id: str
+    incident_id: UUID
+    window_end: datetime
+    snapshot_cycle_id: int | None
+
+
+def load_run_boundary(session: Session, run_id: str) -> RunBoundary:
+    """The run's single ``EVIDENCE_GATHERED`` event; anything else is an error."""
+    rows = [
+        row
+        for row in session.scalars(
+            select(IncidentEventRow).where(
+                IncidentEventRow.event_type == IncidentEventType.EVIDENCE_GATHERED.value
+            )
+        )
+        if row.payload.get("run_id") == run_id
+    ]
+    if len(rows) != 1:
+        raise ReplayDataError(f"run {run_id} has {len(rows)} EVIDENCE_GATHERED boundaries")
+    payload = rows[0].payload
+    raw_end = payload.get("window_end")
+    try:
+        window_end = datetime.fromisoformat(raw_end) if isinstance(raw_end, str) else None
+    except ValueError:
+        window_end = None
+    if window_end is None or window_end.utcoffset() is None:
+        raise ReplayDataError(f"run {run_id} boundary has no valid window_end: {raw_end!r}")
+    # A resolved incident's run captures no cycle and records null; an absent
+    # key or a non-integer is malformed.
+    if "snapshot_cycle_id" not in payload:
+        raise ReplayDataError(f"run {run_id} boundary has no snapshot_cycle_id")
+    cycle_id = payload["snapshot_cycle_id"]
+    if cycle_id is not None and (not isinstance(cycle_id, int) or isinstance(cycle_id, bool)):
+        raise ReplayDataError(f"run {run_id} boundary snapshot_cycle_id is {cycle_id!r}")
+    return RunBoundary(run_id, rows[0].incident_id, window_end, cycle_id)
+
+
+def load_replay_run(session: Session, run_id: str) -> tuple[RunBoundary, ManifestMembers]:
+    """A run's boundary and exactly its manifest members, checked for consistency.
+
+    The boundary's snapshot cycle must be the manifest's only SNAPSHOT_CYCLE
+    member and belong to the run; every manifest member row must still exist.
+    """
+    boundary = load_run_boundary(session, run_id)
+    entries = load_manifest(session, run_id)
+    manifest_cycles = [int(e.source_id) for e in entries if e.source_type == "SNAPSHOT_CYCLE"]
+    expected_cycles = [] if boundary.snapshot_cycle_id is None else [boundary.snapshot_cycle_id]
+    if manifest_cycles != expected_cycles:
+        raise ReplayDataError(
+            f"run {run_id} boundary snapshot cycle {boundary.snapshot_cycle_id} "
+            f"disagrees with manifest cycles {manifest_cycles}"
+        )
+    if boundary.snapshot_cycle_id is not None:
+        cycle = session.get(SnapshotCycleRow, boundary.snapshot_cycle_id)
+        if cycle is None:
+            raise ReplayDataError(f"snapshot cycle {boundary.snapshot_cycle_id} was not found")
+        if cycle.run_id != run_id:
+            raise ReplayDataError(
+                f"snapshot cycle {cycle.cycle_id} belongs to run {cycle.run_id}, not {run_id}"
+            )
+    members = load_members(session, entries)
+    wanted = Counter(entry.source_type for entry in entries)
+    loaded = {
+        "OBJECT_VERSION": len(members.journal),
+        "EVENT_VERSION": len(members.events),
+        "LIFECYCLE": len(members.lifecycle),
+        "LOG": len(members.logs),
+    }
+    for source_type, count in loaded.items():
+        if count != wanted[source_type]:
+            raise ReplayDataError(
+                f"run {run_id} manifest lists {wanted[source_type]} {source_type} "
+                f"member(s) but {count} persisted row(s) remain"
+            )
+    return boundary, members
+
+
 def load_members(session: Session, entries: Sequence[ManifestEntry]) -> ManifestMembers:
     """Load exactly the manifest's members; nothing is queried by time window."""
     ids: dict[str, list[str]] = {}
@@ -254,11 +344,15 @@ def load_members(session: Session, entries: Sequence[ManifestEntry]) -> Manifest
 __all__ = [
     "ManifestAlertPayloadMissing",
     "ManifestMembers",
+    "ReplayDataError",
+    "RunBoundary",
     "alert_payload",
     "ManifestRequest",
     "build_manifest",
     "load_manifest",
     "load_manifest_digest",
     "load_members",
+    "load_replay_run",
+    "load_run_boundary",
     "select_members",
 ]

@@ -28,6 +28,8 @@ from packages.rca.model import (
     Lifecycle,
     ObjectVersion,
     PodStatusObservation,
+    PreconditionAuditReason,
+    PreconditionResult,
 )
 from packages.rca.root_cause_eligibility import episode_source_capable_initiating_findings
 
@@ -42,6 +44,13 @@ _SYNTHETIC_TOMBSTONES = frozenset({"cluster:missing"})
 class EpisodeEndBasis(StrEnum):
     TERMINATED = "TERMINATED"
     RECOVERED = "RECOVERED"
+
+
+class EpisodeEndDisqualificationReason(StrEnum):
+    """Stable reasons why the exact-UID RECOVERED path cannot apply."""
+
+    POST_ONSET_READY_FALSE = "POST_ONSET_READY_FALSE"
+    RECOVERY_CONTINUITY_BROKEN = "RECOVERY_CONTINUITY_BROKEN"
 
 
 @dataclass(frozen=True)
@@ -98,6 +107,23 @@ class EndedEpisode:
     @property
     def end_evidence_id(self) -> str:
         return self._only().end_evidence_id
+
+
+@dataclass(frozen=True)
+class EpisodeEndPreconditionEvaluation:
+    """Non-decision audit outcomes for one in-scope A1 hypothesis."""
+
+    results: tuple[PreconditionResult, ...] = ()
+    reasons: tuple[PreconditionAuditReason, ...] = ()
+
+
+@dataclass(frozen=True)
+class EpisodeEndEvaluations:
+    """A1 positive ends plus neutral/pending precondition audit outcomes."""
+
+    ended_episodes: Mapping[str, EndedEpisode]
+    preconditions: Mapping[str, tuple[PreconditionResult, ...]]
+    reasons: Mapping[str, tuple[PreconditionAuditReason, ...]]
 
 
 def _version_uid(version: ObjectVersion) -> str | None:
@@ -185,6 +211,129 @@ def _recovered(
         status.evidence_id for status in sorted(covering, key=lambda status: status.observed_at)
     )
     return since, latest.observed_at, latest.evidence_id, decisive
+
+
+def _manifestation_groups(
+    hypothesis: Hypothesis, onset: datetime | None
+) -> tuple[EntityRef, dict[str, list[datetime]]] | None:
+    """Return exact-UID manifestations only when frozen A1 scope applies."""
+    actor = hypothesis.causal_actor
+    if onset is None or actor.kind != "Pod":
+        return None
+    findings = hypothesis.findings
+    if (
+        not findings
+        or hypothesis.initiating_findings
+        or episode_source_capable_initiating_findings(hypothesis)
+        or any(
+            finding.kind not in _MANIFESTATION_KINDS or finding.entity != actor
+            for finding in findings
+        )
+        or any(finding.at is None for finding in findings)
+    ):
+        return None
+    groups: dict[str, list[datetime]] = {}
+    for finding in findings:
+        if finding.entity_instance is None or finding.at is None:
+            return None
+        groups.setdefault(finding.entity_instance.uid, []).append(finding.at)
+    return actor, groups
+
+
+def _recovery_precondition(
+    uid: str,
+    statuses: Sequence[PodStatusObservation],
+    *,
+    onset: datetime,
+    boundary: datetime,
+    evaluation_at: datetime | None,
+    last_manifestation_at: datetime,
+) -> EpisodeEndPreconditionEvaluation:
+    """Classify only positive exact-UID facts; absence remains neutral."""
+    own = tuple(status for status in statuses if status.uid == uid)
+
+    # A real post-onset false observation is positive evidence against this
+    # recovery path. Equality is included because the continuity interval starts
+    # at onset and the existing A1 interval checks are inclusive.
+    if any(status.ready is False and status.observed_at >= onset for status in own):
+        return EpisodeEndPreconditionEvaluation(
+            results=(
+                PreconditionResult.disqualified(
+                    EpisodeEndDisqualificationReason.POST_ONSET_READY_FALSE.value
+                ),
+            )
+        )
+
+    # Ready=True with a last transition after onset positively establishes that
+    # this readiness interval did not cover onset. `ready_since` is the source
+    # ledger's lastTransitionTime, not an inferred timestamp.
+    if any(
+        status.ready is True
+        and status.ready_since is not None
+        and status.ready_since > onset
+        and status.observed_at >= onset
+        for status in own
+    ):
+        return EpisodeEndPreconditionEvaluation(
+            results=(
+                PreconditionResult.disqualified(
+                    EpisodeEndDisqualificationReason.RECOVERY_CONTINUITY_BROKEN.value
+                ),
+            )
+        )
+
+    candidates = tuple(
+        status
+        for status in own
+        if onset <= status.observed_at < boundary
+        and status.ready is True
+        and status.ready_since is not None
+        and status.ready_since <= onset
+    )
+    if candidates:
+        candidate = max(candidates, key=lambda status: status.observed_at)
+        since = candidate.ready_since
+        assert since is not None
+        # Match the existing continuity predicate over the known portion of
+        # [ready_since, latest observation]. A positive conflicting observation
+        # disqualifies; an unknown/missing status never does.
+        broken = any(
+            status.observed_at >= since
+            and status.observed_at <= candidate.observed_at
+            and (
+                status.ready is False
+                or (
+                    status.ready is True
+                    and status.ready_since is not None
+                    and status.ready_since != since
+                )
+            )
+            for status in own
+        )
+        if broken:
+            return EpisodeEndPreconditionEvaluation(
+                results=(
+                    PreconditionResult.disqualified(
+                        EpisodeEndDisqualificationReason.RECOVERY_CONTINUITY_BROKEN.value
+                    ),
+                )
+            )
+        if last_manifestation_at < since:
+            if evaluation_at is not None and evaluation_at >= boundary:
+                return EpisodeEndPreconditionEvaluation(
+                    reasons=(PreconditionAuditReason.PARTIAL_COVERAGE_AFTER_DEADLINE,)
+                )
+            return EpisodeEndPreconditionEvaluation(results=(PreconditionResult.pending(boundary),))
+        return EpisodeEndPreconditionEvaluation()
+
+    if evaluation_at is not None and evaluation_at >= boundary:
+        reason = (
+            PreconditionAuditReason.PARTIAL_COVERAGE_AFTER_DEADLINE
+            if any(status.observed_at >= onset for status in own)
+            else PreconditionAuditReason.NO_DATA_AFTER_DEADLINE
+        )
+        return EpisodeEndPreconditionEvaluation(reasons=(reason,))
+    return EpisodeEndPreconditionEvaluation()
 
 
 def assess_ended_episode(
@@ -333,12 +482,80 @@ def assess_ended_episodes(
     return ended
 
 
+def evaluate_ended_episodes(
+    hypotheses: Sequence[Hypothesis],
+    *,
+    history: Mapping[EntityRef, Sequence[ObjectVersion]],
+    pod_statuses: Sequence[PodStatusObservation],
+    onset: datetime | None,
+    grace: timedelta,
+    evaluation_at: datetime | None,
+) -> EpisodeEndEvaluations:
+    """Evaluate A1 ends and retain tri-state outcomes without decision effects.
+
+    ``evaluation_at`` is the frozen observation cutoff. At or after the
+    maturity boundary, missing/partial status is recorded as a neutral audit
+    reason rather than a perpetually pending requirement.
+    """
+    ended: dict[str, EndedEpisode] = {}
+    preconditions: dict[str, list[PreconditionResult]] = {}
+    reasons: dict[str, list[PreconditionAuditReason]] = {}
+    for hypothesis in hypotheses:
+        positive = assess_ended_episode(
+            hypothesis,
+            history=history,
+            pod_statuses=pod_statuses,
+            onset=onset,
+            grace=grace,
+        )
+        if positive is not None:
+            ended[hypothesis.hypothesis_id] = positive
+            continue
+        scoped = _manifestation_groups(hypothesis, onset)
+        if scoped is None or onset is None:
+            continue
+        actor, groups = scoped
+        statuses = tuple(status for status in pod_statuses if status.pod == actor)
+        versions = history.get(actor, ())
+        for uid, manifestation_times in sorted(groups.items()):
+            # Preserve termination and a mature recovery attempt as-is. The
+            # existing assessor may still reject them for no-overlap, but that
+            # does not turn them into a pending recovery.
+            if _terminated(uid, versions, statuses, onset) is not None:
+                continue
+            boundary = onset + grace
+            recovered = _recovered(uid, statuses, onset, boundary)
+            if recovered is not None:
+                continue
+            outcome = _recovery_precondition(
+                uid,
+                statuses,
+                onset=onset,
+                boundary=boundary,
+                evaluation_at=evaluation_at,
+                last_manifestation_at=max(manifestation_times),
+            )
+            if outcome.results:
+                preconditions.setdefault(hypothesis.hypothesis_id, []).extend(outcome.results)
+            if outcome.reasons:
+                reasons.setdefault(hypothesis.hypothesis_id, []).extend(outcome.reasons)
+    return EpisodeEndEvaluations(
+        ended_episodes=ended,
+        preconditions={key: tuple(value) for key, value in preconditions.items()},
+        reasons={key: tuple(value) for key, value in reasons.items()},
+    )
+
+
 __all__ = [
     "RULE_ID",
     "RULE_VERSION",
     "EndedEpisode",
     "EpisodeEndBasis",
+    "EpisodeEndDisqualificationReason",
+    "EpisodeEndPreconditionEvaluation",
+    "EpisodeEndEvaluations",
     "InstanceEpisodeEnd",
     "assess_ended_episode",
     "assess_ended_episodes",
+    "evaluate_ended_episodes",
 ]

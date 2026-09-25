@@ -8,7 +8,8 @@ from datetime import timedelta
 from typing import Protocol
 
 from packages.rca.causal_roles import HypothesisCausalRoles, derive_hypothesis_causal_roles
-from packages.rca.episode_end import assess_ended_episodes
+from packages.rca.episode_end import RULE_ID as EPISODE_END_RULE_ID
+from packages.rca.episode_end import evaluate_ended_episodes
 from packages.rca.frontier import (
     apply_frontier_progress,
     derive_structural_frontier,
@@ -39,6 +40,8 @@ from packages.rca.model import (
     HypothesisDiagnostics,
     InvestigationStep,
     ObjectVersion,
+    PreconditionAuditReason,
+    PreconditionResult,
     ProviderReadFailure,
     Resolution,
     StructuralAlternative,
@@ -113,6 +116,12 @@ class Case:
     structural_alternatives: list[StructuralAlternative] = field(default_factory=list)
     steps: list[InvestigationStep] = field(default_factory=list)
     mechanism_mismatches: dict[str, MechanismMismatch] = field(default_factory=dict)
+    rule_preconditions: dict[tuple[str, str], tuple[PreconditionResult, ...]] = field(
+        default_factory=dict
+    )
+    precondition_reasons: dict[tuple[str, str], tuple[PreconditionAuditReason, ...]] = field(
+        default_factory=dict
+    )
 
 
 @dataclass(frozen=True)
@@ -230,17 +239,17 @@ def build_case(
     grouping: GroupingResult = group_candidates(candidates, topology, context, config.ranking)
     hypotheses = list(grouping.hypotheses)
     hypothesis_causal_roles = derive_hypothesis_causal_roles(hypotheses, runtime_propagation)
+    episode_evaluations = evaluate_ended_episodes(
+        hypotheses,
+        history=history,
+        pod_statuses=source.pod_status_observations(),
+        onset=symptoms.onset,
+        grace=config.ranking.verification_onset_grace,
+        evaluation_at=context.window_end,
+    )
     root_cause_eligibilities = derive_root_cause_eligibilities(
         hypotheses, hypothesis_causal_roles
-    ).with_ended_episodes(
-        assess_ended_episodes(
-            hypotheses,
-            history=history,
-            pod_statuses=source.pod_status_observations(),
-            onset=symptoms.onset,
-            grace=config.ranking.verification_onset_grace,
-        )
-    )
+    ).with_ended_episodes(episode_evaluations.ended_episodes)
     mechanism_mismatches = assess_resource_mechanisms(
         hypotheses,
         history=history,
@@ -308,6 +317,14 @@ def build_case(
         hypothesis_diagnostics=grouping.diagnostics,
         steps=steps,
         mechanism_mismatches=mechanism_mismatches,
+        rule_preconditions={
+            (hypothesis_id, EPISODE_END_RULE_ID): results
+            for hypothesis_id, results in episode_evaluations.preconditions.items()
+        },
+        precondition_reasons={
+            (hypothesis_id, EPISODE_END_RULE_ID): reasons
+            for hypothesis_id, reasons in episode_evaluations.reasons.items()
+        },
     )
 
 
@@ -385,6 +402,8 @@ def diagnose_case(
             onset_grace=config.ranking.verification_onset_grace,
             root_cause_eligibilities=case.root_cause_eligibilities,
             mechanism_mismatches=case.mechanism_mismatches,
+            rule_preconditions=case.rule_preconditions,
+            precondition_reasons=case.precondition_reasons,
         )
         information_gaps = derive_information_gaps(
             (),
@@ -438,6 +457,8 @@ def diagnose_case(
         onset_grace=config.ranking.verification_onset_grace,
         root_cause_eligibilities=case.root_cause_eligibilities,
         mechanism_mismatches=case.mechanism_mismatches,
+        rule_preconditions=case.rule_preconditions,
+        precondition_reasons=case.precondition_reasons,
     )
     information_gaps = derive_information_gaps(
         case.hypotheses,

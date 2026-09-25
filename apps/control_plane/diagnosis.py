@@ -50,6 +50,7 @@ from packages.storage.repositories import (
     EntityInstanceRepository,
     LifecycleRecord,
     LifecycleRepository,
+    SnapshotCycleRepository,
 )
 from packages.storage.retention import RetentionPolicy, apply_retention, policy_from_environment
 
@@ -269,6 +270,8 @@ class SnapshotResult:
     # and deletions completed from persisted journal tombstones.
     lifecycle_write_failures: int = 0
     lifecycle_repairs: int = 0
+    # The persisted snapshot cycle, when this cycle captured evidence for a run.
+    cycle_id: int | None = None
 
 
 @dataclass
@@ -314,8 +317,13 @@ class DiagnosisService:
         """Record changed objects, deletions, and new events; how many were stored."""
         return self.snapshot_result().stored_versions
 
-    def snapshot_result(self) -> SnapshotResult:
-        """Capture one coherent object/Event cycle with an explicit boundary."""
+    def snapshot_result(self, run_id: str | None = None) -> SnapshotResult:
+        """Capture one coherent object/Event cycle with an explicit boundary.
+
+        With a ``run_id`` (a diagnosis capture) the listing is also persisted
+        as one snapshot cycle with every object's full body; watch cycles
+        without a run do not write it.
+        """
         if self.reader is None:
             now = self.clock()
             result = SnapshotResult(0, now, now)
@@ -376,6 +384,25 @@ class DiagnosisService:
             # or a restart left out. Listing absence alone never does.
             best_effort(lifecycle.reconcile_deletions)
             best_effort(repair_index)
+            cycle_id: int | None = None
+            if run_id is not None:
+                # Evidence for the run: a failure here fails the capture.
+                listing = object_snapshot.listing
+                assert object_snapshot.observed_at is not None
+                cycle_id = SnapshotCycleRepository(session).record(
+                    run_id=run_id,
+                    started_at=object_snapshot.started_at,
+                    observed_at=object_snapshot.observed_at,
+                    completed_at=object_snapshot.completed_at,
+                    completed_scopes=[
+                        (scope.namespace, scope.kind) for scope in listing.completed_scopes
+                    ],
+                    failed_scopes=[
+                        (failure.scope.namespace, failure.scope.kind, failure.error)
+                        for failure in listing.failed_scopes
+                    ],
+                    objects=listing.objects,
+                )
             event_observed_at = self.clock()
             events = EventRepository(session)
             event_listing_failed = False
@@ -407,6 +434,7 @@ class DiagnosisService:
                 event_listing_failed=event_listing_failed,
                 lifecycle_write_failures=cycle_failures,
                 lifecycle_repairs=cycle_repairs,
+                cycle_id=cycle_id,
             )
             self._last_snapshot_result = result
             if result.failed_scopes:
@@ -528,7 +556,7 @@ class DiagnosisService:
                 # The current object view is the same listing that was
                 # journaled. Do not perform a second, later read whose data
                 # would fall outside the advertised diagnosis cutoff.
-                cycle = self.snapshot_result()
+                cycle = self.snapshot_result(run_id=run_id)
                 window_end = cycle.completed_at
                 current = list(cycle.objects)
             else:

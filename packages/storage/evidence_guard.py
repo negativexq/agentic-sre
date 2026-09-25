@@ -21,6 +21,8 @@ from packages.storage.models import (
     LifecycleObservationRow,
     LogObservationRow,
     ObjectVersionRow,
+    SnapshotCycleObjectRow,
+    SnapshotCycleRow,
 )
 
 AUTHORITATIVE_ROWS: tuple[type[Any], ...] = (
@@ -29,6 +31,8 @@ AUTHORITATIVE_ROWS: tuple[type[Any], ...] = (
     LifecycleObservationRow,
     ChangeRecordRow,
     LogObservationRow,
+    SnapshotCycleRow,
+    SnapshotCycleObjectRow,
 )
 # Still updated in place by alert ingestion until M19-3.6a freezes alert
 # content in the evidence manifest; listed so the exception stays visible.

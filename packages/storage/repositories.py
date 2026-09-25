@@ -48,6 +48,8 @@ from packages.storage.models import (
     LogObservationRow,
     ObjectVersionRow,
     ReportRow,
+    SnapshotCycleObjectRow,
+    SnapshotCycleRow,
 )
 
 if TYPE_CHECKING:
@@ -662,6 +664,68 @@ class EventRepository:
     ) -> list[dict[str, Any]]:
         """Compatibility name for the deduplicated Event analysis/replay view."""
         return self.analysis_view(namespaces=namespaces, starts_at=starts_at, ends_at=ends_at)
+
+
+class SnapshotCycleRepository:
+    """Diagnosis capture cycles and the exact bodies they listed (authoritative evidence).
+
+    A cycle is written once, complete: its row and every listed object in a
+    single transaction, never inserted early and updated later.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def record(
+        self,
+        *,
+        run_id: str,
+        started_at: datetime,
+        observed_at: datetime,
+        completed_at: datetime,
+        completed_scopes: Sequence[tuple[str, str]],
+        failed_scopes: Sequence[tuple[str, str, str]],
+        objects: Sequence[dict[str, Any]],
+    ) -> int:
+        """Persist one completed cycle with full bodies; returns its ``cycle_id``."""
+        cycle = SnapshotCycleRow(
+            run_id=run_id,
+            started_at=started_at,
+            observed_at=observed_at,
+            completed_at=completed_at,
+            completed_scopes=[list(scope) for scope in sorted(completed_scopes)],
+            failed_scopes=[
+                {"namespace": namespace, "kind": kind, "error": error}
+                for namespace, kind, error in failed_scopes
+            ],
+        )
+        self._session.add(cycle)
+        self._session.flush()
+        seen: set[str] = set()
+        for body in objects:
+            metadata = child(body, "metadata")
+            kind, name = body.get("kind"), metadata.get("name")
+            if not isinstance(kind, str) or not isinstance(name, str):
+                continue
+            namespace = str(metadata.get("namespace") or CLUSTER_SCOPE)
+            key = f"{namespace}/{kind}/{name}"
+            if key in seen:
+                continue  # one body per object and cycle
+            seen.add(key)
+            self._session.add(
+                SnapshotCycleObjectRow(
+                    cycle_id=cycle.cycle_id,
+                    object_key=key,
+                    namespace=namespace,
+                    kind=kind,
+                    name=name,
+                    uid=_nested_uid(body, "metadata"),
+                    body=body,
+                    evidence_id=f"snapshot:{cycle.cycle_id}:{key}",
+                )
+            )
+        self._session.commit()
+        return cycle.cycle_id
 
 
 class ObjectVersionRepository:

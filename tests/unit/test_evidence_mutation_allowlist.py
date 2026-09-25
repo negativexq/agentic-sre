@@ -43,6 +43,8 @@ EVIDENCE_TABLES = {
     "lifecycle_observations": "LifecycleObservationRow",
     "log_observations": "LogObservationRow",
     "object_versions": "ObjectVersionRow",
+    "snapshot_cycle_objects": "SnapshotCycleObjectRow",
+    "snapshot_cycles": "SnapshotCycleRow",
 }
 ROW_TABLES = {row: table for table, row in EVIDENCE_TABLES.items()}
 

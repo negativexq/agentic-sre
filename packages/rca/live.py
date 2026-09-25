@@ -131,6 +131,8 @@ class ObjectSnapshot:
     stored_versions: int
     started_at: datetime
     completed_at: datetime
+    # When the listing was taken: the time journal versions of this cycle carry.
+    observed_at: datetime | None = None
 
 
 class KubernetesClusterReader:
@@ -400,7 +402,7 @@ class ChangeWatcher:
                 missing.add(key)
         stored += sum(self.tombstone(key, observed_at) for key in missing)
         completed_at = self.clock()
-        return ObjectSnapshot(listing, stored, started_at, completed_at)
+        return ObjectSnapshot(listing, stored, started_at, completed_at, observed_at)
 
 
 @dataclass

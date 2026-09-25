@@ -186,6 +186,7 @@ def test_alembic_migration_up_and_down(tmp_path: Path) -> None:
         "hypotheses",
         "incident_events",
         "incidents",
+        "investigation_reads",
         "investigation_runs",
         "event_versions",
         "lifecycle_observations",
@@ -196,6 +197,9 @@ def test_alembic_migration_up_and_down(tmp_path: Path) -> None:
         "policy_decisions",
         "remediation_proposals",
         "report_snapshots",
+        "run_evidence_manifest",
+        "snapshot_cycle_objects",
+        "snapshot_cycles",
         "tool_calls",
         "verification_results",
     }

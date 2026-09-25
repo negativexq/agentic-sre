@@ -385,6 +385,101 @@ class LogObservationRow(Base):
     evidence_id: Mapped[str] = mapped_column(String(512), nullable=False)
     dedup_key: Mapped[str] = mapped_column(String(64), nullable=False)
     source_system: Mapped[str] = mapped_column(String(255), nullable=False, default="loki")
+    # The provider read that captured this observation (M19-3.9 fills it).
+    source_read_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("investigation_reads.read_id", name="fk_log_observations_source_read_id"),
+        nullable=True,
+    )
+
+
+CALLER_CLASSES = ("CAPTURE", "ENGINE", "INVESTIGATION")
+READ_STATUSES = ("SUCCESS", "ERROR")
+
+
+def _one_of(column: str, values: tuple[str, ...], name: str) -> CheckConstraint:
+    return CheckConstraint(
+        f"{column} IN (" + ", ".join(f"'{item}'" for item in values) + ")", name=name
+    )
+
+
+class SnapshotCycleRow(Base):
+    """One diagnosis capture's cluster listing: when it ran and which scopes completed."""
+
+    __tablename__ = "snapshot_cycles"
+
+    cycle_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    completed_scopes: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
+    failed_scopes: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
+
+
+class SnapshotCycleObjectRow(Base):
+    """One object exactly as a snapshot cycle listed it, full body including status."""
+
+    __tablename__ = "snapshot_cycle_objects"
+
+    cycle_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("snapshot_cycles.cycle_id"), primary_key=True
+    )
+    object_key: Mapped[str] = mapped_column(String(512), primary_key=True)
+    namespace: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    uid: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    body: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    # snapshot:<cycle_id>:<object_key>
+    evidence_id: Mapped[str] = mapped_column(String(600), nullable=False, unique=True)
+
+
+class RunEvidenceManifestRow(Base):
+    """One exact source id a diagnosis run was allowed to know, in manifest order."""
+
+    __tablename__ = "run_evidence_manifest"
+    __table_args__ = (
+        UniqueConstraint("run_id", "source_type", "source_id", name="uq_manifest_run_source"),
+        UniqueConstraint("run_id", "sequence", name="uq_manifest_run_sequence"),
+    )
+
+    manifest_entry_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(600), nullable=False)
+
+
+class InvestigationReadRow(Base):
+    """One provider read of a run, in call order: the replay tape.
+
+    ``query_key`` is not unique: the same canonical query may be read several
+    times in one run. ``(run_id, sequence)`` is the order replay follows.
+    """
+
+    __tablename__ = "investigation_reads"
+    __table_args__ = (
+        UniqueConstraint("run_id", "sequence", name="uq_investigation_read_run_sequence"),
+        _one_of("caller_class", CALLER_CLASSES, "ck_investigation_read_caller_class"),
+        _one_of("status", READ_STATUSES, "ck_investigation_read_status"),
+    )
+
+    read_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    caller_class: Mapped[str] = mapped_column(String(16), nullable=False)
+    capability: Mapped[str] = mapped_column(String(64), nullable=False)
+    query_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    query_descriptor: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    finished_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    committed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    status: Mapped[str] = mapped_column(String(8), nullable=False)
+    observation: Mapped[Any] = mapped_column(JSON, nullable=True)
+    evidence_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    error_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(4000), nullable=True)
 
 
 class EvidenceRow(Base):

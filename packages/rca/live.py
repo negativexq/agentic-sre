@@ -39,7 +39,10 @@ from packages.rca.model import (
     snapshot_evidence_id,
 )
 from packages.rca.pod_status import LifecycleStatusRecord, pod_status_from_lifecycle
-from packages.rca.provider_adapter import ProviderAdapter, ProviderReadPersistenceError
+from packages.rca.provider_adapter import (
+    ProviderBoundary,
+    ProviderReadPersistenceError,
+)
 
 _log = logging.getLogger(__name__)
 # Resource reads start this long before the requested time so a baseline exists.
@@ -439,7 +442,7 @@ class LiveSource:
     # whose window is frozen): an empty, non-live list must not be read as
     # "the cluster has none of these objects any more".
     current_is_live: bool = True
-    provider_adapter: ProviderAdapter | None = None
+    provider_adapter: ProviderBoundary | None = None
     # Persisted lifecycle ledger rows for the incident window: the only source
     # of Pod status evidence.
     lifecycle_records: Sequence[LifecycleStatusRecord] = ()

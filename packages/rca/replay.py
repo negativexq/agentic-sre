@@ -1,24 +1,31 @@
 """Offline RCA source rebuilt from one run's persisted evidence alone.
 
-The run's ``EVIDENCE_GATHERED`` boundary names its window end and snapshot
-cycle, and its manifest names every row it may know. Nothing else is read: no
-cluster, no clock, no provider. Provider-backed reads are not replayed yet and
-fail explicitly instead of answering empty.
+The run's ``EVIDENCE_GATHERED`` boundary names its window end, snapshot cycle
+and provider capabilities, and its manifest names every row it may know.
+Provider reads are served strictly from the run's tape: each request must be
+the next recorded read, or replay stops with ``ReplayDivergence``. Nothing else
+is read: no cluster, no clock, no provider.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
+from packages.rca.investigation.tempo import (
+    TempoSearchCompleteness,
+    TempoSearchDiagnostics,
+    TempoTraceBatch,
+)
 from packages.rca.live import LiveSource
 from packages.rca.manifest import ManifestEntry, alert_from_payload, event_evidence_id
 from packages.rca.model import (
     Alert,
     ClusterEvent,
     EntityRef,
+    InvestigationQuery,
     LogRecord,
     ObjectVersion,
     PodStatusObservation,
@@ -27,20 +34,357 @@ from packages.rca.model import (
     TraceSpanObservation,
     TrafficObservation,
 )
-from packages.rca.provider_adapter import PROVIDER_CAPABILITIES
+from packages.rca.provider_adapter import (
+    ProviderCallerClass,
+    loki_descriptor,
+    provider_query_key,
+    resource_pressure_descriptor,
+    tempo_descriptor,
+    traffic_descriptor,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session, sessionmaker
 
     from packages.rca.investigation.environment import InvestigationBackend
 
-# ``LiveSource.supports`` names answered by the provider adapter; "logs" is
-# answered from persisted base logs there, so it is not one of them.
-_PROVIDER_BACKED = frozenset({"resource_pressure", "runtime_traces", "traffic"})
+
+_T = TypeVar("_T")
 
 
-class ProviderReplayNotConfigured(RuntimeError):
-    """A provider-backed read was asked of a replay source with no tape playback."""
+class ReplayDivergence(RuntimeError):
+    """A replayed provider request is not the next read the run recorded.
+
+    It is never missing data: the replayed execution left the recorded one.
+    """
+
+    def __init__(
+        self,
+        run_id: str,
+        reason: str,
+        *,
+        requested: tuple[str, str, str],
+        recorded: tuple[int, str, str, str] | None,
+    ) -> None:
+        self.run_id = run_id
+        self.reason = reason
+        # (caller_class, capability, query_key)
+        self.requested = requested
+        # (sequence, caller_class, capability, query_key) of the next tape row
+        self.recorded = recorded
+        next_row = (
+            f"next recorded seq {recorded[0]} {recorded[1]}/{recorded[2]} key={recorded[3]}"
+            if recorded is not None
+            else "tape exhausted"
+        )
+        super().__init__(
+            f"run {run_id}: {reason}; requested {requested[0]}/{requested[1]} "
+            f"key={requested[2]}; {next_row}"
+        )
+
+
+@dataclass(frozen=True)
+class _TapeRow:
+    sequence: int
+    read_id: int
+    caller_class: str
+    capability: str
+    query_key: str
+    descriptor: Mapping[str, Any]
+    status: str
+    observation: Any
+    error_type: str | None
+    error_message: str | None
+
+
+@dataclass
+class _Cursor:
+    position: int
+
+
+def _load_tape(session_factory: Callable[[], Session], run_id: str) -> tuple[_TapeRow, ...]:
+    """The run's tape in sequence order, checked for replayable shape.
+
+    Sequences must be exactly 1..n, and CAPTURE reads may only form the
+    leading prefix (capture -> manifest -> RCA).
+    """
+    from packages.storage.manifest import ReplayDataError
+    from packages.storage.repositories import InvestigationReadRepository
+
+    with session_factory() as session:
+        rows = tuple(
+            _TapeRow(
+                sequence=row.sequence,
+                read_id=row.read_id,
+                caller_class=row.caller_class,
+                capability=row.capability,
+                query_key=row.query_key,
+                descriptor=row.query_descriptor,
+                status=row.status,
+                observation=row.observation,
+                error_type=row.error_type,
+                error_message=row.error_message,
+            )
+            for row in InvestigationReadRepository(session).list_for_run(run_id)
+        )
+    if [row.sequence for row in rows] != list(range(1, len(rows) + 1)):
+        raise ReplayDataError(f"run {run_id} tape sequences are not contiguous from 1")
+    prefix = _capture_prefix(rows)
+    if any(row.caller_class == "CAPTURE" for row in rows[prefix:]):
+        raise ReplayDataError(f"run {run_id} tape has a CAPTURE read after RCA reads began")
+    return rows
+
+
+def _capture_prefix(rows: Sequence[_TapeRow]) -> int:
+    prefix = 0
+    while prefix < len(rows) and rows[prefix].caller_class == "CAPTURE":
+        prefix += 1
+    return prefix
+
+
+@dataclass(frozen=True)
+class ReplayProviderAdapter:
+    """``ProviderAdapter``'s interface served from one run's recorded tape.
+
+    The leading CAPTURE reads were consumed by the capture stage (their results
+    are manifest evidence), so the cursor starts after them. Every request must
+    match the next row exactly (caller class, capability, query key, canonical
+    descriptor); otherwise ``ReplayDivergence`` and the cursor does not move.
+    Nothing is written and no provider is called.
+    """
+
+    run_id: str
+    caller_class: ProviderCallerClass
+    provider_capabilities: tuple[str, ...]
+    _rows: tuple[_TapeRow, ...] = field(repr=False)
+    _cursor: _Cursor = field(repr=False)
+
+    @classmethod
+    def from_run(
+        cls,
+        run_id: str,
+        *,
+        session_factory: Callable[[], Session],
+        caller_class: ProviderCallerClass,
+    ) -> ReplayProviderAdapter:
+        """Load the run's frozen capabilities and tape; start after the CAPTURE prefix."""
+        from packages.storage.manifest import load_run_boundary
+
+        with session_factory() as session:
+            capabilities = load_run_boundary(session, run_id).provider_capabilities
+        rows = _load_tape(session_factory, run_id)
+        return cls(run_id, caller_class, capabilities, rows, _Cursor(_capture_prefix(rows)))
+
+    def for_caller(self, caller_class: ProviderCallerClass) -> ReplayProviderAdapter:
+        """Another caller class on the same tape and cursor."""
+        return ReplayProviderAdapter(
+            self.run_id, caller_class, self.provider_capabilities, self._rows, self._cursor
+        )
+
+    @property
+    def next_sequence(self) -> int | None:
+        """Sequence of the next row replay expects, ``None`` once the tape is consumed."""
+        position = self._cursor.position
+        return self._rows[position].sequence if position < len(self._rows) else None
+
+    def supports(self, capability: str) -> bool:
+        return capability in self.provider_capabilities
+
+    def capabilities(self) -> tuple[str, ...]:
+        return self.provider_capabilities
+
+    def query_resource_pressure(
+        self,
+        target: EntityRef,
+        query: InvestigationQuery,
+        *,
+        descriptor_id: str | None = None,
+        observation_identity: str | None = None,
+    ) -> tuple[ResourcePressure, ...] | ProviderReadFailure:
+        return self._replay(
+            "resource_pressure",
+            "resource_pressure",
+            resource_pressure_descriptor(target, query),
+            descriptor_id,
+            observation_identity,
+            lambda value: tuple(ResourcePressure.model_validate(item) for item in value),
+        )
+
+    def query_traffic(
+        self,
+        target: EntityRef,
+        query: InvestigationQuery,
+        *,
+        descriptor_id: str | None = None,
+        observation_identity: str | None = None,
+    ) -> tuple[TrafficObservation, ...] | ProviderReadFailure:
+        return self._replay(
+            "traffic",
+            "traffic",
+            traffic_descriptor(target, query),
+            descriptor_id,
+            observation_identity,
+            lambda value: tuple(TrafficObservation.model_validate(item) for item in value),
+        )
+
+    def query_tempo(
+        self,
+        target: EntityRef,
+        query: InvestigationQuery,
+        *,
+        descriptor_id: str | None = None,
+        observation_identity: str | None = None,
+    ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch | ProviderReadFailure:
+        return self._replay(
+            "runtime_traces",
+            "tempo_traces",
+            tempo_descriptor(target, query),
+            descriptor_id,
+            observation_identity,
+            _decode_tempo,
+        )
+
+    def query_loki(
+        self,
+        services: Sequence[str],
+        starts_at: datetime,
+        ends_at: datetime,
+        *,
+        limit: int | None = None,
+        descriptor_id: str | None = None,
+        observation_identity: str | None = None,
+    ) -> list[LogRecord] | ProviderReadFailure:
+        result = self.query_loki_with_read_id(
+            services,
+            starts_at,
+            ends_at,
+            limit=limit,
+            descriptor_id=descriptor_id,
+            observation_identity=observation_identity,
+        )
+        return result if isinstance(result, ProviderReadFailure) else result[0]
+
+    def query_loki_with_read_id(
+        self,
+        services: Sequence[str],
+        starts_at: datetime,
+        ends_at: datetime,
+        *,
+        limit: int | None = None,
+        descriptor_id: str | None = None,
+        observation_identity: str | None = None,
+    ) -> tuple[list[LogRecord], int] | ProviderReadFailure:
+        read_id: list[int] = []
+
+        def decode(value: Any) -> list[LogRecord]:
+            return [LogRecord.model_validate(item) for item in value]
+
+        records = self._replay(
+            "logs",
+            "loki_logs",
+            loki_descriptor(services, starts_at, ends_at, limit),
+            descriptor_id,
+            observation_identity,
+            decode,
+            on_match=read_id.append,
+        )
+        return records if isinstance(records, ProviderReadFailure) else (records, read_id[0])
+
+    def _replay(
+        self,
+        supports_name: str,
+        capability: str,
+        descriptor: dict[str, Any],
+        descriptor_id: str | None,
+        observation_identity: str | None,
+        decode: Callable[[Any], _T],
+        *,
+        on_match: Callable[[int], None] | None = None,
+    ) -> _T | ProviderReadFailure:
+        requested = (
+            self.caller_class,
+            capability,
+            provider_query_key(
+                descriptor, descriptor_id=descriptor_id, observation_identity=observation_identity
+            ),
+        )
+        position = self._cursor.position
+        row = self._rows[position] if position < len(self._rows) else None
+        recorded = (
+            (row.sequence, row.caller_class, row.capability, row.query_key)
+            if row is not None
+            else None
+        )
+        if not self.supports(supports_name):
+            raise ReplayDivergence(
+                self.run_id,
+                f"{supports_name} was not a provider capability of the recorded run",
+                requested=requested,
+                recorded=recorded,
+            )
+        if row is None:
+            raise ReplayDivergence(
+                self.run_id, "no recorded read remains", requested=requested, recorded=None
+            )
+        if (row.caller_class, row.capability, row.query_key) != requested:
+            raise ReplayDivergence(
+                self.run_id,
+                "request is not the next recorded read",
+                requested=requested,
+                recorded=recorded,
+            )
+        if dict(row.descriptor) != descriptor:
+            raise ReplayDivergence(
+                self.run_id,
+                "request descriptor differs from the recorded read",
+                requested=requested,
+                recorded=recorded,
+            )
+        if row.status == "ERROR":
+            result: _T | ProviderReadFailure = ProviderReadFailure(
+                capability=row.capability,
+                error_type=row.error_type or "",
+                error_message=row.error_message or "",
+            )
+        else:
+            result = _decoded(self.run_id, row, decode)
+        self._cursor.position = position + 1
+        if on_match is not None:
+            on_match(row.read_id)
+        return result
+
+
+def _decoded[T](run_id: str, row: _TapeRow, decode: Callable[[Any], T]) -> T:
+    from packages.storage.manifest import ReplayDataError
+
+    try:
+        return decode(row.observation)
+    except (TypeError, ValueError, KeyError) as error:
+        raise ReplayDataError(
+            f"run {run_id} tape seq {row.sequence} observation cannot be decoded: "
+            f"{type(error).__name__}"
+        ) from error
+
+
+def _decode_tempo(value: Any) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch:
+    """Tempo results are persisted either as a span list or as a batch mapping."""
+    if isinstance(value, list):
+        return tuple(TraceSpanObservation.model_validate(item) for item in value)
+    diagnostics = value["diagnostics"]
+    return TempoTraceBatch(
+        spans=tuple(TraceSpanObservation.model_validate(item) for item in value["spans"]),
+        diagnostics=TempoSearchDiagnostics(
+            completeness=TempoSearchCompleteness(diagnostics["completeness"]),
+            candidate_trace_ids=tuple(diagnostics["candidate_trace_ids"]),
+            search_limit_reached=diagnostics["search_limit_reached"],
+            inspected_traces=diagnostics["inspected_traces"],
+            inspected_bytes=diagnostics["inspected_bytes"],
+            completed_jobs=diagnostics["completed_jobs"],
+            total_jobs=diagnostics["total_jobs"],
+            fetched_trace_ids=tuple(diagnostics["fetched_trace_ids"]),
+            missing_trace_ids=tuple(diagnostics["missing_trace_ids"]),
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -54,6 +398,7 @@ class ReplaySource:
     snapshot_objects: tuple[dict[str, Any], ...]
     # The live run's configured provider capabilities, as its boundary froze them.
     provider_capabilities: tuple[str, ...]
+    provider_adapter: ReplayProviderAdapter
     _base: LiveSource
 
     @classmethod
@@ -65,6 +410,10 @@ class ReplaySource:
             boundary, members = load_replay_run(session, run_id)
             manifest = load_manifest(session, run_id)
         snapshot = members.snapshot
+        # The same caller the live run's engine used; investigation derives its own.
+        adapter = ReplayProviderAdapter.from_run(
+            run_id, session_factory=session_factory, caller_class="ENGINE"
+        )
         base = LiveSource(
             incident=str(boundary.incident_id),
             alert_items=[alert_from_payload(item) for item in members.alerts],
@@ -76,7 +425,7 @@ class ReplaySource:
             observed_at=boundary.window_end,
             # The live run used its snapshot exactly when it captured one.
             current_is_live=snapshot is not None,
-            provider_adapter=None,
+            provider_adapter=adapter,
             lifecycle_records=members.lifecycle,
             snapshot_cycle_id=snapshot.cycle_id if snapshot else None,
             snapshot_observed_at=snapshot.observed_at if snapshot else None,
@@ -88,6 +437,7 @@ class ReplaySource:
             manifest=manifest,
             snapshot_objects=snapshot.objects if snapshot else (),
             provider_capabilities=boundary.provider_capabilities,
+            provider_adapter=adapter,
             _base=base,
         )
 
@@ -123,23 +473,21 @@ class ReplaySource:
         # The live source answers this without any provider; replay matches it.
         return self._base.trace_observations()
 
+    # The provider-backed methods run ``LiveSource``'s own code over the tape
+    # adapter, so support checks and backend construction match the live run.
     def resource_pressure(
         self, pods: Sequence[EntityRef], since: datetime
     ) -> Sequence[ResourcePressure] | ProviderReadFailure:
-        raise ProviderReplayNotConfigured("resource_pressure needs provider tape replay")
+        return self._base.resource_pressure(pods, since)
 
     def supports(self, capability: str) -> bool:
-        """``LiveSource.supports`` with the frozen capability set in place of readers."""
-        if capability in _PROVIDER_BACKED:
-            return capability in self.provider_capabilities
         return self._base.supports(capability)
 
     def supports_typed_runtime(self, capability: str) -> bool:
-        """``LiveSource.supports_typed_runtime`` answered from the frozen capability set."""
-        return capability in PROVIDER_CAPABILITIES and capability in self.provider_capabilities
+        return self._base.supports_typed_runtime(capability)
 
     def investigation_backend(self) -> InvestigationBackend:
-        raise ProviderReplayNotConfigured("investigation reads need provider tape replay")
+        return self._base.investigation_backend()
 
 
-__all__ = ["ProviderReplayNotConfigured", "ReplaySource"]
+__all__ = ["ReplayDivergence", "ReplayProviderAdapter", "ReplaySource"]

@@ -18,10 +18,15 @@ import packages.rca.live as live_module
 import packages.rca.replay as replay_module
 import packages.storage.manifest as storage_manifest_module
 from apps.control_plane.diagnosis import DiagnosisService
+from packages.rca.investigation.environment import (
+    LokiInvestigationBackend,
+    PrometheusInvestigationBackend,
+    TempoInvestigationBackend,
+)
 from packages.rca.live import KubernetesClusterReader, LiveSource
 from packages.rca.model import EntityRef, LogRecord
 from packages.rca.provider_adapter import ProviderAdapter
-from packages.rca.replay import ProviderReplayNotConfigured, ReplaySource
+from packages.rca.replay import ReplayProviderAdapter, ReplaySource
 from packages.storage.manifest import (
     ManifestAlertPayloadMissing,
     ManifestRequest,
@@ -502,16 +507,27 @@ def test_resolved_run_without_cycle_replays_journal_only(
     assert not any(e.source_type == "SNAPSHOT_CYCLE" for e in replay.manifest)
 
 
-def test_provider_backed_reads_are_not_fabricated(
+def test_provider_backed_reads_follow_the_frozen_capabilities(
     run: tuple[Any, ...],
 ) -> None:
     factory, _, run_id, _ = run
     replay = _replay(factory, run_id)
     pod = EntityRef(kind="Pod", name=POD["metadata"]["name"], namespace="sre-demo")
-    # The capture ran with Loki only; support is answered, reads are not replayed.
+    # The capture ran with Loki only.
     assert replay.provider_capabilities == ("logs",)
-    with pytest.raises(ProviderReplayNotConfigured):
-        replay.resource_pressure([pod], T0)
-    with pytest.raises(ProviderReplayNotConfigured):
-        replay.investigation_backend()
+    # Prometheus was unsupported live, so no read happened there either: no tape row.
+    cursor_before = replay.provider_adapter.next_sequence
+    assert replay.resource_pressure([pod], T0) == []
+    assert replay.provider_adapter.next_sequence == cursor_before
+    chain: list[Any] = []
+    current: Any = replay.investigation_backend()
+    while current is not None:
+        chain.append(current)
+        current = getattr(current, "base", None)
+    kinds = {type(item) for item in chain}
+    assert LokiInvestigationBackend in kinds
+    assert PrometheusInvestigationBackend not in kinds
+    assert TempoInvestigationBackend not in kinds
+    adapters = [item.provider_adapter for item in chain if hasattr(item, "provider_adapter")]
+    assert adapters and all(isinstance(item, ReplayProviderAdapter) for item in adapters)
     assert replay.supports("history") and replay.supports("events") and replay.supports("logs")

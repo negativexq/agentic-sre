@@ -23,7 +23,7 @@ from packages.rca.model import (
     TrafficObservation,
 )
 from packages.rca.pod_status import pod_status_from_history
-from packages.rca.provider_adapter import ProviderAdapter
+from packages.rca.provider_adapter import ProviderBoundary
 from packages.rca.signals import (
     _HPA_FAILURE_REASONS,
     _LIMIT_MESSAGE,
@@ -424,7 +424,7 @@ class TempoInvestigationBackend:
     """Existing investigation reads plus an active Tempo trace provider."""
 
     base: InvestigationBackend
-    provider_adapter: ProviderAdapter
+    provider_adapter: ProviderBoundary
     observation_cutoff: datetime | None
 
     def query_history(
@@ -498,7 +498,7 @@ class LokiInvestigationBackend:
     """Existing bounded investigation reads plus the trusted Loki reader."""
 
     base: InvestigationBackend
-    provider_adapter: ProviderAdapter
+    provider_adapter: ProviderBoundary
     source: ObservationSource
     observation_cutoff: datetime | None
 
@@ -585,7 +585,7 @@ class PrometheusInvestigationBackend:
     """Existing investigation reads plus active Prometheus metric reads."""
 
     base: InvestigationBackend
-    provider_adapter: ProviderAdapter
+    provider_adapter: ProviderBoundary
     observation_cutoff: datetime | None
 
     def _effective_query(self, query: InvestigationQuery) -> InvestigationQuery | None:

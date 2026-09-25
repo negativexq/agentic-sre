@@ -130,6 +130,7 @@ def test_loki_runtime_path_normalizes_dependency_finding_with_provenance() -> No
     assert details["runtime_normalization_rule_id"] == "loki.dependency_error_pattern.v1"
     assert "LogQL" not in str(details)
 
+    assert isinstance(backend.provider_adapter, ProviderAdapter)
     reader = backend.provider_adapter.readers.loki
     assert isinstance(reader, _Loki)
     assert reader.calls[0][3] == 32
@@ -251,6 +252,7 @@ def test_loki_backend_rejects_unbounded_or_oversized_windows_before_reader_call(
             caller,
             InvestigationQuery(start=T0, end=T0 + timedelta(hours=2), limit=8),
         )
+    assert isinstance(backend.provider_adapter, ProviderAdapter)
     reader = backend.provider_adapter.readers.loki
     assert isinstance(reader, _Loki)
     assert reader.calls == []

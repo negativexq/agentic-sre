@@ -135,6 +135,50 @@ def provider_query_key(
     return sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def resource_pressure_descriptor(target: EntityRef, query: InvestigationQuery) -> dict[str, Any]:
+    """Canonical descriptor of one Prometheus resource-pressure read."""
+    return {
+        "provider": "prometheus",
+        "operation": "resource_pressure",
+        "target": target.canonical,
+        "query": query.model_dump(mode="json"),
+    }
+
+
+def traffic_descriptor(target: EntityRef, query: InvestigationQuery) -> dict[str, Any]:
+    """Canonical descriptor of one Prometheus traffic read."""
+    return {
+        "provider": "prometheus",
+        "operation": "traffic",
+        "target": target.canonical,
+        "query": query.model_dump(mode="json"),
+    }
+
+
+def tempo_descriptor(target: EntityRef, query: InvestigationQuery) -> dict[str, Any]:
+    """Canonical descriptor of one Tempo trace read."""
+    return {
+        "provider": "tempo",
+        "operation": "query",
+        "target": target.canonical,
+        "query": query.model_dump(mode="json"),
+    }
+
+
+def loki_descriptor(
+    services: Sequence[str], starts_at: datetime, ends_at: datetime, limit: int | None
+) -> dict[str, Any]:
+    """Canonical descriptor of one Loki error-log read."""
+    return {
+        "provider": "loki",
+        "operation": "error_logs",
+        "services": sorted(services),
+        "starts_at": starts_at.isoformat(),
+        "ends_at": ends_at.isoformat(),
+        "limit": limit,
+    }
+
+
 def _json_value(value: Any) -> Any:
     """Normalize known response values into deterministic JSON primitives."""
     if isinstance(value, BaseModel):
@@ -187,6 +231,54 @@ def _provider_error_message(error: BaseException) -> str:
     return re.sub(r"\bat 0x[0-9a-fA-F]+\b", "at [REDACTED]", _sanitized_message(error))
 
 
+class ProviderBoundary(Protocol):
+    """What RCA may ask a provider boundary: the live adapter or its tape replay."""
+
+    def for_caller(self, caller_class: ProviderCallerClass) -> ProviderBoundary: ...
+
+    def supports(self, capability: str) -> bool: ...
+
+    def capabilities(self) -> tuple[str, ...]: ...
+
+    def query_resource_pressure(
+        self,
+        target: EntityRef,
+        query: InvestigationQuery,
+        *,
+        descriptor_id: str | None = None,
+        observation_identity: str | None = None,
+    ) -> tuple[ResourcePressure, ...] | ProviderReadFailure: ...
+
+    def query_traffic(
+        self,
+        target: EntityRef,
+        query: InvestigationQuery,
+        *,
+        descriptor_id: str | None = None,
+        observation_identity: str | None = None,
+    ) -> tuple[TrafficObservation, ...] | ProviderReadFailure: ...
+
+    def query_tempo(
+        self,
+        target: EntityRef,
+        query: InvestigationQuery,
+        *,
+        descriptor_id: str | None = None,
+        observation_identity: str | None = None,
+    ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch | ProviderReadFailure: ...
+
+    def query_loki(
+        self,
+        services: Sequence[str],
+        starts_at: datetime,
+        ends_at: datetime,
+        *,
+        limit: int | None = None,
+        descriptor_id: str | None = None,
+        observation_identity: str | None = None,
+    ) -> list[LogRecord] | ProviderReadFailure: ...
+
+
 @dataclass(frozen=True)
 class ProviderAdapter:
     """Pass-through provider boundary with run and caller identity."""
@@ -224,12 +316,7 @@ class ProviderAdapter:
         reader = self.readers.prometheus
         if reader is None:
             raise RuntimeError("Prometheus reader is not configured")
-        descriptor = {
-            "provider": "prometheus",
-            "operation": "resource_pressure",
-            "target": target.canonical,
-            "query": query.model_dump(mode="json"),
-        }
+        descriptor = resource_pressure_descriptor(target, query)
         query_key = provider_query_key(
             descriptor,
             descriptor_id=descriptor_id,
@@ -256,12 +343,7 @@ class ProviderAdapter:
         reader = self.readers.prometheus
         if reader is None:
             raise RuntimeError("Prometheus reader is not configured")
-        descriptor = {
-            "provider": "prometheus",
-            "operation": "traffic",
-            "target": target.canonical,
-            "query": query.model_dump(mode="json"),
-        }
+        descriptor = traffic_descriptor(target, query)
         query_key = provider_query_key(
             descriptor,
             descriptor_id=descriptor_id,
@@ -288,12 +370,7 @@ class ProviderAdapter:
         reader = self.readers.tempo
         if reader is None:
             raise RuntimeError("Tempo reader is not configured")
-        descriptor = {
-            "provider": "tempo",
-            "operation": "query",
-            "target": target.canonical,
-            "query": query.model_dump(mode="json"),
-        }
+        descriptor = tempo_descriptor(target, query)
         query_key = provider_query_key(
             descriptor,
             descriptor_id=descriptor_id,
@@ -343,14 +420,7 @@ class ProviderAdapter:
         reader = self.readers.loki
         if reader is None:
             raise RuntimeError("Loki reader is not configured")
-        descriptor = {
-            "provider": "loki",
-            "operation": "error_logs",
-            "services": sorted(services),
-            "starts_at": starts_at.isoformat(),
-            "ends_at": ends_at.isoformat(),
-            "limit": limit,
-        }
+        descriptor = loki_descriptor(services, starts_at, ends_at, limit)
         query_key = provider_query_key(
             descriptor,
             descriptor_id=descriptor_id,
@@ -465,9 +535,14 @@ class ProviderAdapter:
 __all__ = [
     "PROVIDER_CAPABILITIES",
     "ProviderAdapter",
+    "ProviderBoundary",
     "ProviderCallerClass",
     "ProviderReaders",
     "ProviderReadPersistenceError",
     "ProviderReadFailure",
+    "loki_descriptor",
+    "resource_pressure_descriptor",
+    "tempo_descriptor",
+    "traffic_descriptor",
     "provider_query_key",
 ]

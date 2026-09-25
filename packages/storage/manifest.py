@@ -259,6 +259,8 @@ class RunBoundary:
     window_end: datetime
     snapshot_cycle_id: int | None
     provider_capabilities: tuple[str, ...]
+    # How many objects the run's snapshot cycle listed (0 without a cycle).
+    listed_objects: int
 
 
 def load_run_boundary(session: Session, run_id: str) -> RunBoundary:
@@ -304,7 +306,10 @@ def load_run_boundary(session: Session, run_id: str) -> RunBoundary:
         raise ReplayDataError(
             f"run {run_id} provider_capabilities {capabilities!r} are not sorted and unique"
         )
-    return RunBoundary(run_id, rows[0].incident_id, window_end, cycle_id, tuple(canonical))
+    listed = payload.get("objects")
+    if not isinstance(listed, int) or isinstance(listed, bool) or listed < 0:
+        raise ReplayDataError(f"run {run_id} boundary listed object count is {listed!r}")
+    return RunBoundary(run_id, rows[0].incident_id, window_end, cycle_id, tuple(canonical), listed)
 
 
 def load_replay_run(session: Session, run_id: str) -> tuple[RunBoundary, ManifestMembers]:
@@ -331,6 +336,13 @@ def load_replay_run(session: Session, run_id: str) -> tuple[RunBoundary, Manifes
                 f"snapshot cycle {cycle.cycle_id} belongs to run {cycle.run_id}, not {run_id}"
             )
     members = load_members(session, entries)
+    # A snapshot object row that disappeared would otherwise be silently omitted.
+    snapshot_objects = len(members.snapshot.objects) if members.snapshot is not None else 0
+    if snapshot_objects != boundary.listed_objects:
+        raise ReplayDataError(
+            f"run {run_id} boundary listed {boundary.listed_objects} snapshot object(s) "
+            f"but {snapshot_objects} persisted row(s) remain"
+        )
     wanted = Counter(entry.source_type for entry in entries)
     loaded = {
         "OBJECT_VERSION": len(members.journal),

@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from packages.contracts import Alert as ContractAlert
 from packages.contracts import Incident, IncidentEvent, IncidentEventType
 from packages.rca.engine import Investigator, diagnose
 from packages.rca.investigation.graph import investigate_diagnosis
@@ -34,7 +35,8 @@ from packages.rca.live import (
     incident_window,
 )
 from packages.rca.llm import LLMClient
-from packages.rca.model import Alert, Diagnosis, LogRecord
+from packages.rca.manifest import event_evidence_id
+from packages.rca.model import Alert, Diagnosis
 from packages.storage import (
     AlertRepository,
     DiagnosisRepository,
@@ -46,6 +48,7 @@ from packages.storage import (
     LogObservationRepository,
     ObjectVersionRepository,
 )
+from packages.storage.manifest import ManifestRequest, build_manifest, load_members
 from packages.storage.repositories import (
     EntityInstanceRepository,
     LifecycleRecord,
@@ -60,6 +63,16 @@ _TERMINAL_STATUSES = frozenset({"RESOLVED", "CLOSED", "FAILED"})
 _INVESTIGATION_ARTIFACT_VERSION = "1.0"
 _LIFECYCLE_SOURCE = "collector"
 _TOMBSTONE_SOURCE = "journal-tombstone"
+
+
+def _rca_alert(item: ContractAlert) -> Alert:
+    return Alert(
+        name=item.alert_name,
+        service=item.service,
+        namespace=item.namespace,
+        starts_at=item.starts_at,
+        labels={**item.labels, "service_name": item.service},
+    )
 
 
 def _checkpoint(records: list[LifecycleRecord]) -> int | None:
@@ -506,14 +519,7 @@ class DiagnosisService:
                 raise IncidentNotFoundError(str(incident_id))
             correlation_id = incident.correlation_id
             alerts = [
-                Alert(
-                    name=item.alert_name,
-                    service=item.service,
-                    namespace=item.namespace,
-                    starts_at=item.starts_at,
-                    labels={**item.labels, "service_name": item.service},
-                )
-                for item in AlertRepository(session).list_for_incident(incident_id)
+                _rca_alert(item) for item in AlertRepository(session).list_for_incident(incident_id)
             ]
         self._emit(
             incident_id,
@@ -535,6 +541,47 @@ class DiagnosisService:
             )
             raise
 
+    def _capture_logs(
+        self, incident_id: UUID, alerts: list[Alert], listed: tuple[dict[str, Any], ...]
+    ) -> None:
+        """Bulk Loki capture for an open incident, persisted before the manifest is taken."""
+        assert self.log_reader is not None
+        services = sorted(
+            {
+                str(body.get("metadata", {}).get("name"))
+                for body in listed
+                if body.get("kind") in {"Deployment", "StatefulSet", "DaemonSet"}
+            }
+            | {alert.service for alert in alerts if alert.service}
+        )
+        # The incident history is wider than one bounded Loki read, so it is
+        # captured as several <=1h reads rather than one rejected read.
+        starts_at, ends_at = incident_window(alerts, self.clock())
+        capture = capture_error_logs(self.log_reader, services, starts_at, ends_at)
+        for failure in capture.failed:
+            logger.warning(
+                "log capture slice [%s, %s) failed (%s: %s); continuing with the rest",
+                failure.starts_at.isoformat(),
+                failure.ends_at.isoformat(),
+                failure.error_type,
+                failure.error,
+            )
+        if capture.skipped:
+            logger.info(
+                "log capture read the newest %d of %d bounded slices; older slices "
+                "rely on earlier persisted captures",
+                len(capture.queried),
+                len(capture.queried) + len(capture.skipped),
+            )
+        if not capture.succeeded:
+            if capture.queried:
+                logger.warning("every log capture slice failed; diagnosing without new logs")
+            return
+        with self.session_factory() as session:
+            LogObservationRepository(session).record(
+                incident_id, list(capture.records), self.clock()
+            )
+
     def _diagnose(
         self,
         run_id: str,
@@ -544,30 +591,15 @@ class DiagnosisService:
         alerts: list[Alert],
     ) -> Diagnosis:
         # Once resolved, the incident's causal window is frozen at its last
-        # transition; otherwise it keeps growing to "now" so an open incident
-        # keeps picking up fresh evidence. Freezing it also stops fetching a
-        # live cluster snapshot for it, so unrelated changes made afterwards
-        # cannot show up as its "latest" object version.
+        # transition and no live capture is taken for it. An open incident is
+        # captured (objects, Events, lifecycle, then logs), committed, and its
+        # single epistemic boundary is the moment that capture finished.
         resolved = incident.status in _TERMINAL_STATUSES
         window_end = incident.updated_at if resolved else self.clock()
-        current: list[dict[str, Any]] = []
         snapshot_cycle_id: int | None = None
-        snapshot_observed_at: datetime | None = None
-        if self.reader is not None:
-            if not resolved:
-                # The current object view is the same listing that was
-                # journaled. Do not perform a second, later read whose data
-                # would fall outside the advertised diagnosis cutoff. RCA sees
-                # the cycle only as it was persisted, never the in-memory listing.
-                cycle = self.snapshot_result(run_id=run_id)
-                window_end = cycle.completed_at
-                assert cycle.cycle_id is not None
-                with self.session_factory() as session:
-                    persisted = SnapshotCycleRepository(session).load(cycle.cycle_id)
-                current = list(persisted.objects)
-                snapshot_cycle_id = persisted.cycle_id
-                snapshot_observed_at = persisted.observed_at
-            else:
+        listed: tuple[dict[str, Any], ...] = ()
+        if resolved:
+            if self.reader is not None:
                 # Keep the shared journal current for later incidents, but do
                 # not use this live cycle as evidence for the frozen episode.
                 # A reader outage must not make historical diagnosis fail.
@@ -578,101 +610,53 @@ class DiagnosisService:
                         "post-resolution journal refresh failed; using frozen evidence",
                         exc_info=True,
                     )
-        starts_at, ends_at = incident_window(alerts, window_end)
-        journal_namespaces = set(self.namespaces) | set(self.evidence_namespaces)
-        with self.session_factory() as session:
-            journal = ObjectVersionRepository(session).history(
-                namespaces=journal_namespaces, starts_at=starts_at, ends_at=ends_at
-            )
-            event_bodies = EventRepository(session).analysis_view(
-                namespaces=journal_namespaces, starts_at=starts_at, ends_at=ends_at
-            )
-            logs = LogObservationRepository(session).list_for_incident(
-                incident_id=incident_id, starts_at=starts_at, ends_at=ends_at
-            )
-        if self.log_reader is not None and not resolved:
-            fetched_logs: list[LogRecord] = []
-            services = sorted(
-                {
-                    str(body.get("metadata", {}).get("name"))
-                    for body in current
-                    if body.get("kind") in {"Deployment", "StatefulSet", "DaemonSet"}
-                }
-                | {alert.service for alert in alerts if alert.service}
-            )
-            # The incident history is wider than one bounded Loki read, so it
-            # is captured as several <=1h reads rather than one rejected read.
-            capture = capture_error_logs(self.log_reader, services, starts_at, ends_at)
-            for failure in capture.failed:
-                logger.warning(
-                    "log capture slice [%s, %s) failed (%s: %s); continuing with the rest",
-                    failure.starts_at.isoformat(),
-                    failure.ends_at.isoformat(),
-                    failure.error_type,
-                    failure.error,
-                )
-            if capture.skipped:
-                logger.info(
-                    "log capture read the newest %d of %d bounded slices; older slices "
-                    "rely on earlier persisted captures",
-                    len(capture.queried),
-                    len(capture.queried) + len(capture.skipped),
-                )
-            if not capture.succeeded:
-                if capture.queried:
-                    logger.warning("every log capture slice failed; diagnosing without new logs")
-            else:
-                fetched_logs = list(capture.records)
-                # Loki records are queried for the cycle's bounded window. The
-                # collection itself may finish a little later, so extend the
-                # open diagnosis boundary to the end of that intentional
-                # capture rather than dropping its observations on replay.
-                log_observed_at = self.clock()
+        else:
+            if self.reader is not None:
+                cycle = self.snapshot_result(run_id=run_id)
+                assert cycle.cycle_id is not None
+                snapshot_cycle_id = cycle.cycle_id
                 with self.session_factory() as session:
-                    LogObservationRepository(session).record(
-                        incident_id, fetched_logs, log_observed_at
-                    )
-                logs = _merge_logs(logs, fetched_logs)
-                window_end = max(window_end, log_observed_at)
+                    listed = SnapshotCycleRepository(session).load(snapshot_cycle_id).objects
+            if self.log_reader is not None:
+                self._capture_logs(incident_id, alerts, listed)
+            window_end = self.clock()
         starts_at, ends_at = incident_window(alerts, window_end)
-        if not resolved:
-            with self.session_factory() as session:
-                logs = LogObservationRepository(session).list_for_incident(
-                    incident_id=incident_id, starts_at=starts_at, ends_at=ends_at
-                )
-        # Pod status evidence is exactly the persisted lifecycle rows inside the
-        # incident window; nothing outside it is added as "current" state.
-        with self.session_factory() as session:
-            lifecycle_records = LifecycleRepository(session).list_window(
-                set(self.namespaces), starts_at, ends_at
-            )
-        self._emit(
-            incident_id,
-            correlation_id,
-            IncidentEventType.EVIDENCE_GATHERED,
-            {
-                "run_id": run_id,
-                "objects": len(current),
-                "journal": len(journal),
-                "events": len(event_bodies),
-                "logs": len(logs),
-            },
+        # The manifest and the run's boundary event commit together; RCA then
+        # sees exactly the manifest's members, loaded by id.
+        entries = build_manifest(
+            self.session_factory,
+            ManifestRequest(
+                run_id=run_id,
+                incident_id=incident_id,
+                correlation_id=correlation_id,
+                starts_at=starts_at,
+                ends_at=ends_at,
+                window_end=window_end,
+                namespaces=frozenset(self.namespaces),
+                journal_namespaces=frozenset((*self.namespaces, *self.evidence_namespaces)),
+                snapshot_cycle_id=snapshot_cycle_id,
+                listed_objects=len(listed),
+            ),
+            timestamp=self.clock(),
         )
+        with self.session_factory() as session:
+            members = load_members(session, entries)
         source = LiveSource(
             incident=str(incident_id),
-            alert_items=alerts,
-            journal=journal,
-            current_objects=current,
-            event_bodies=event_bodies,
-            error_items=logs,
+            alert_items=[_rca_alert(item) for item in members.alerts],
+            journal=list(members.journal),
+            current_objects=list(members.snapshot.objects) if members.snapshot else [],
+            event_bodies=[body for _, body in members.events],
+            event_evidence_ids=[event_evidence_id(version_id) for version_id, _ in members.events],
+            error_items=list(members.logs),
             observed_at=window_end,
             current_is_live=not resolved,
             tempo_reader=self.tempo_reader,
             prometheus_reader=self.prometheus_reader,
             loki_reader=self.log_reader if isinstance(self.log_reader, LokiLogReader) else None,
-            lifecycle_records=lifecycle_records,
-            snapshot_cycle_id=snapshot_cycle_id,
-            snapshot_observed_at=snapshot_observed_at,
+            lifecycle_records=members.lifecycle,
+            snapshot_cycle_id=members.snapshot.cycle_id if members.snapshot else None,
+            snapshot_observed_at=members.snapshot.observed_at if members.snapshot else None,
         )
         bounded_policy = self.bounded_policy_factory()
         investigation_result = None
@@ -800,15 +784,3 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
 
 
 __all__ = ["DiagnosisService", "service_from_environment"]
-
-
-def _merge_logs(existing: list[LogRecord], fetched: list[LogRecord]) -> list[LogRecord]:
-    """Merge replayed and newly fetched records without duplicate evidence."""
-    result: list[LogRecord] = []
-    seen: set[tuple[str, datetime | None, str, str]] = set()
-    for record in [*existing, *fetched]:
-        key = (record.service, record.at, record.severity, record.message)
-        if key not in seen:
-            seen.add(key)
-            result.append(record)
-    return result

@@ -178,7 +178,7 @@ class IncidentEventRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def append(self, event: IncidentEvent) -> IncidentEvent:
+    def append(self, event: IncidentEvent, *, commit: bool = True) -> IncidentEvent:
         """Append an event with a monotonic per-incident sequence."""
         self._session.add(
             IncidentEventRow(
@@ -191,7 +191,8 @@ class IncidentEventRepository:
                 correlation_id=event.correlation_id,
             )
         )
-        self._session.commit()
+        if commit:
+            self._session.commit()
         return event
 
     def list_for_incident(self, incident_id: object) -> list[IncidentEvent]:
@@ -220,12 +221,25 @@ class AlertRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
+    def ids_for_incident(self, incident_id: object) -> list[object]:
+        """Exact ids of the alerts attached to an incident."""
+        return list(
+            self._session.scalars(
+                select(AlertRow.alert_id).where(AlertRow.incident_id == incident_id)
+            ).all()
+        )
+
     def list_for_incident(self, incident_id: object) -> list[Alert]:
         """Return alerts attached to an incident in stable start order."""
+        return self._alerts(AlertRow.incident_id == incident_id)
+
+    def by_ids(self, alert_ids: Sequence[object]) -> list[Alert]:
+        """Exactly these alerts, in stable start order."""
+        return self._alerts(AlertRow.alert_id.in_(alert_ids)) if alert_ids else []
+
+    def _alerts(self, condition: Any) -> list[Alert]:
         rows = self._session.scalars(
-            select(AlertRow)
-            .where(AlertRow.incident_id == incident_id)
-            .order_by(AlertRow.starts_at, AlertRow.alert_id)
+            select(AlertRow).where(condition).order_by(AlertRow.starts_at, AlertRow.alert_id)
         ).all()
         return [
             Alert(
@@ -457,6 +471,38 @@ class LogObservationRepository:
         self, *, incident_id: object, starts_at: datetime, ends_at: datetime
     ) -> list[LogRecord]:
         """Return observations visible in an incident's frozen window."""
+        return [
+            _log_record(row)
+            for row in self._incident_rows(
+                incident_id=incident_id, starts_at=starts_at, ends_at=ends_at
+            )
+        ]
+
+    def incident_observation_ids(
+        self, *, incident_id: object, starts_at: datetime, ends_at: datetime
+    ) -> list[int]:
+        """Exact ids of the observations ``list_for_incident`` returns for this window."""
+        return [
+            row.observation_id
+            for row in self._incident_rows(
+                incident_id=incident_id, starts_at=starts_at, ends_at=ends_at
+            )
+        ]
+
+    def records(self, observation_ids: Sequence[int]) -> list[LogRecord]:
+        """Exactly these observations, in observation order."""
+        if not observation_ids:
+            return []
+        rows = self._session.scalars(
+            select(LogObservationRow)
+            .where(LogObservationRow.observation_id.in_(observation_ids))
+            .order_by(LogObservationRow.observed_at, LogObservationRow.observation_id)
+        ).all()
+        return [_log_record(row) for row in rows]
+
+    def _incident_rows(
+        self, *, incident_id: object, starts_at: datetime, ends_at: datetime
+    ) -> list[LogObservationRow]:
         rows = self._session.scalars(
             select(LogObservationRow)
             .where(
@@ -474,16 +520,21 @@ class LogObservationRepository:
             )
             .order_by(LogObservationRow.observed_at, LogObservationRow.observation_id)
         ).all()
-        return [
-            LogRecord(
-                service=row.service,
-                at=row.event_at,
-                severity=row.severity,
-                message=row.message,
-                evidence_id=row.evidence_id,
-            )
-            for row in rows
-        ]
+        return list(rows)
+
+
+def _log_record(row: LogObservationRow) -> LogRecord:
+    return LogRecord(
+        service=row.service,
+        at=row.event_at,
+        severity=row.severity,
+        message=row.message,
+        evidence_id=row.evidence_id,
+    )
+
+
+def _event_body(row: EventVersionRow) -> dict[str, Any]:
+    return _body_with_persisted_uid(row.body, "involvedObject", row.involved_uid)
 
 
 def event_identity(body: dict[str, Any], namespace: str) -> str:
@@ -647,6 +698,38 @@ class EventRepository:
         coalesced Kubernetes updates remain available for provenance, while
         RCA receives one state per stable Event identity at the frozen cutoff.
         """
+        return [
+            _event_body(row)
+            for row in self._analysis_rows(
+                namespaces=namespaces, starts_at=starts_at, ends_at=ends_at
+            )
+        ]
+
+    def analysis_version_ids(
+        self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
+    ) -> list[int]:
+        """Exact ids of the Event versions ``analysis_view`` returns for this window."""
+        return [
+            row.version_id
+            for row in self._analysis_rows(
+                namespaces=namespaces, starts_at=starts_at, ends_at=ends_at
+            )
+        ]
+
+    def bodies(self, version_ids: Sequence[int]) -> list[tuple[int, dict[str, Any]]]:
+        """Exactly these Event versions as ``(version_id, body)``, in version order."""
+        if not version_ids:
+            return []
+        rows = self._session.scalars(
+            select(EventVersionRow)
+            .where(EventVersionRow.version_id.in_(version_ids))
+            .order_by(EventVersionRow.version_id)
+        ).all()
+        return [(row.version_id, _event_body(row)) for row in rows]
+
+    def _analysis_rows(
+        self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
+    ) -> list[EventVersionRow]:
         rows = self._session.scalars(
             select(EventVersionRow)
             .where(
@@ -661,10 +744,7 @@ class EventRepository:
         for row in rows:
             identity = event_identity(row.body, row.namespace)
             latest[identity] = row
-        return [
-            _body_with_persisted_uid(row.body, "involvedObject", row.involved_uid)
-            for row in sorted(latest.values(), key=lambda item: item.version_id)
-        ]
+        return sorted(latest.values(), key=lambda item: item.version_id)
 
     def history(
         self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
@@ -879,6 +959,38 @@ class ObjectVersionRepository:
         self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
     ) -> list[JournalEntry]:
         """Versions in the window plus each object's last version before it, oldest first."""
+        return [
+            _journal_entry(row)
+            for row in self._history_rows(
+                namespaces=namespaces, starts_at=starts_at, ends_at=ends_at
+            )
+        ]
+
+    def history_version_ids(
+        self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
+    ) -> list[int]:
+        """Exact ids of the versions ``history`` returns for this window."""
+        return [
+            row.version_id
+            for row in self._history_rows(
+                namespaces=namespaces, starts_at=starts_at, ends_at=ends_at
+            )
+        ]
+
+    def entries(self, version_ids: Sequence[int]) -> list[JournalEntry]:
+        """Exactly these journal versions, oldest first."""
+        if not version_ids:
+            return []
+        rows = self._session.scalars(
+            select(ObjectVersionRow)
+            .where(ObjectVersionRow.version_id.in_(version_ids))
+            .order_by(ObjectVersionRow.observed_at, ObjectVersionRow.version_id)
+        ).all()
+        return [_journal_entry(row) for row in rows]
+
+    def _history_rows(
+        self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
+    ) -> list[ObjectVersionRow]:
         rows = self._session.scalars(
             select(ObjectVersionRow)
             .where(
@@ -896,20 +1008,20 @@ class ObjectVersionRepository:
                 selected.append(row)
         # Objects already deleted before the window are not part of the incident.
         before = [row for row in baseline.values() if row.lifecycle != Lifecycle.DELETED]
-        ordered = sorted([*before, *selected], key=lambda row: (row.observed_at, row.version_id))
-        return [
-            JournalEntry(
-                object_key=row.object_key,
-                observed_at=row.observed_at,
-                # JournalEntry is the existing storage-to-source contract; project
-                # the first-class UID column into its body for the live model mapper.
-                # The stored JSON body is not used as the UID source of truth.
-                body=_body_with_persisted_uid(row.body, "metadata", row.uid),
-                version_id=row.version_id,
-                lifecycle=Lifecycle(row.lifecycle),
-            )
-            for row in ordered
-        ]
+        return sorted([*before, *selected], key=lambda row: (row.observed_at, row.version_id))
+
+
+def _journal_entry(row: ObjectVersionRow) -> JournalEntry:
+    return JournalEntry(
+        object_key=row.object_key,
+        observed_at=row.observed_at,
+        # JournalEntry is the existing storage-to-source contract; project
+        # the first-class UID column into its body for the live model mapper.
+        # The stored JSON body is not used as the UID source of truth.
+        body=_body_with_persisted_uid(row.body, "metadata", row.uid),
+        version_id=row.version_id,
+        lifecycle=Lifecycle(row.lifecycle),
+    )
 
 
 def _timestamp(value: Any) -> datetime | None:

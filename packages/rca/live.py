@@ -316,7 +316,16 @@ def _time(value: Any) -> datetime | None:
     return None
 
 
-def events_from_bodies(bodies: Sequence[Mapping[str, Any]]) -> list[ClusterEvent]:
+def events_from_bodies(
+    bodies: Sequence[Mapping[str, Any]], evidence_ids: Sequence[str] | None = None
+) -> list[ClusterEvent]:
+    """Cluster Events from bodies; ``evidence_ids`` (one per body) name persisted versions.
+
+    The product path always passes the persisted ``event:<version_pk>`` ids.
+    Without them the Event's own UID, or its position, is used.
+    """
+    if evidence_ids is not None and len(evidence_ids) != len(bodies):
+        raise ValueError("one evidence id per Event body is required")
     events: list[ClusterEvent] = []
     for index, body in enumerate(bodies):
         involved = child(body, "involvedObject")
@@ -338,7 +347,11 @@ def events_from_bodies(bodies: Sequence[Mapping[str, Any]]) -> list[ClusterEvent
                 first_at=first,
                 last_at=_time(body.get("lastTimestamp")) or first,
                 count=int(body.get("count") or 1),
-                evidence_id=f"event:{child(body, 'metadata').get('uid') or index}",
+                evidence_id=(
+                    evidence_ids[index]
+                    if evidence_ids is not None
+                    else f"event:{child(body, 'metadata').get('uid') or index}"
+                ),
             )
         )
     return events
@@ -436,6 +449,8 @@ class LiveSource:
     # objects are evidence only as members of a persisted cycle.
     snapshot_cycle_id: int | None = None
     snapshot_observed_at: datetime | None = None
+    # Persisted ``event:<version_pk>`` ids, one per ``event_bodies`` item.
+    event_evidence_ids: Sequence[str] | None = None
 
     def incident_id(self) -> str:
         return self.incident
@@ -512,7 +527,7 @@ class LiveSource:
         return history
 
     def events(self) -> Sequence[ClusterEvent]:
-        return events_from_bodies(self.event_bodies)
+        return events_from_bodies(self.event_bodies, self.event_evidence_ids)
 
     def error_logs(self) -> Sequence[LogRecord]:
         return self.error_items

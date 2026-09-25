@@ -42,7 +42,7 @@ def _run(world: Any) -> tuple[sessionmaker[Session], UUID, str]:
         session_factory=factory, namespaces=("sre-demo",), reader=cluster, clock=clock
     )
     clock.now = T0 + timedelta(minutes=30)
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
     with factory() as session:
         run_id = DiagnosisRepository(session).latest_run_id(incident_id)
     assert run_id is not None

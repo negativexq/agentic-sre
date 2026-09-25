@@ -328,7 +328,7 @@ def _record(world: Any, monkeypatch: pytest.MonkeyPatch) -> Run:
     cluster.objects = [item for item in cluster.objects if item["kind"] != "ConfigMap"]
     seen = Seen(monkeypatch)
     clock.now = T0 + timedelta(minutes=30)
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
     live = seen.source
     original = snapshot_state(live)
     with factory() as session:

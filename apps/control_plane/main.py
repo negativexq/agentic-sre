@@ -329,7 +329,7 @@ def create_app(
     )
     def create_diagnosis(incident_id: UUID) -> dict[str, Any]:
         """Diagnose the incident now and store the result."""
-        return diagnoser.run(incident_id).model_dump(mode="json")
+        return diagnoser.run(incident_id, "MANUAL").model_dump(mode="json")
 
     @app.get("/api/v1/incidents/{incident_id}/diagnosis")
     def get_diagnosis(
@@ -421,7 +421,7 @@ def create_app(
         incidents = [manager.ingest(normalize_alert(alert), now=now) for alert in payload.alerts]
         if auto_diagnose:
             for incident_id in dict.fromkeys(item.incident_id for item in incidents):
-                background.add_task(diagnoser.run, incident_id)
+                background.add_task(diagnoser.run, incident_id, "INITIAL")
         return {
             "accepted": len(incidents),
             "incident_ids": [str(incident.incident_id) for incident in incidents],

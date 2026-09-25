@@ -145,7 +145,7 @@ def _run(
 
         monkeypatch.setattr(diagnosis_module, "build_manifest", wrapped)
     clock.now = T0 + timedelta(minutes=30)
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
     with factory() as session:
         run_id = DiagnosisRepository(session).latest_run_id(incident_id)
     assert run_id is not None

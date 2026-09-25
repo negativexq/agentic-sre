@@ -523,7 +523,7 @@ def _live_run(
         reader=cluster,
         provider_readers=readers,
         clock=clock,
-    ).run(incident_id)
+    ).run(incident_id, "MANUAL")
     with factory() as session:
         run_id = DiagnosisRepository(session).latest_run_id(incident_id)
     assert run_id is not None

@@ -18,6 +18,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+from apps.control_plane.diagnosis import engine_version
 from packages.contracts import (
     ChangeRecord,
     ChangeScope,
@@ -29,6 +30,9 @@ from packages.contracts import (
     IncidentSource,
     IncidentStatus,
 )
+from packages.rca.engine import EngineConfig
+from packages.rca.epistemic_digest import diagnosis_epistemic_digest
+from packages.rca.investigation.state import rca_config_digest
 from packages.rca.model import (
     CausalHop,
     Confidence,
@@ -42,6 +46,7 @@ from packages.rca.model import (
     Symptoms,
 )
 from packages.storage.database import create_session_factory
+from packages.storage.manifest import load_manifest_digest
 from packages.storage.models import AlertRow, Base, EvidenceRow
 from packages.storage.repositories import (
     ChangeRecordRepository,
@@ -49,6 +54,7 @@ from packages.storage.repositories import (
     IncidentEventRepository,
     IncidentRepository,
 )
+from packages.storage.tape import load_tape_digest
 
 _CHANGE_TYPE = {
     FindingKind.SPEC_CHANGE: ChangeType.UPDATED,
@@ -266,11 +272,22 @@ def seed(session: Session, now: datetime) -> int:
             continue
 
         run_id = str(uuid4())
-        diagnoses.save(
-            incident.incident_id,
-            _diagnosis(incident.incident_id, onset, scenario).model_dump(mode="json"),
-            created_at=onset + timedelta(seconds=24),
+        diagnosis = _diagnosis(incident.incident_id, onset, scenario)
+        created_at = onset + timedelta(seconds=24)
+        # A seeded demo revision: provenance is derived from what exists for its
+        # run id (no manifest or tape rows), never from invented values.
+        diagnoses.save_revision(
+            incident_id=incident.incident_id,
+            document=diagnosis.model_dump(mode="json"),
+            created_at=created_at,
             run_id=run_id,
+            trigger="MANUAL",
+            window_end=created_at,
+            manifest_digest=load_manifest_digest(session, run_id),
+            tape_digest=load_tape_digest(session, run_id),
+            epistemic_digest=diagnosis_epistemic_digest(diagnosis),
+            engine_version=engine_version(),
+            config_digest=rca_config_digest(EngineConfig(), None),
         )
         for event_type, offset in PHASES:
             payload: dict[str, object] = {"run_id": run_id}

@@ -78,7 +78,7 @@ def test_every_status_the_diagnosis_sees_is_a_ledger_row_in_its_window(
         session_factory=factory, namespaces=("sre-demo",), reader=cluster, clock=clock
     )
     clock.now = T0 + timedelta(minutes=30)
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
 
     assert seen
     ids = {item.evidence_id for statuses in seen for item in statuses}

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, fields, is_dataclass, replace
 from datetime import datetime, timedelta
+from hashlib import sha256
 from types import UnionType
 from typing import (
     TYPE_CHECKING,
@@ -198,6 +200,26 @@ def investigation_config_document(config: InvestigationConfig) -> dict[str, Any]
     return encoded
 
 
+RCA_CONFIG_SCHEMA = "agentic-sre.rca-config.v1"
+
+
+def rca_config_digest(engine: EngineConfig, investigation: InvestigationConfig | None) -> str:
+    """SHA-256 of a run's effective configuration envelope (M19-4.2).
+
+    ``investigation`` is the effective bounded-investigation config, or ``None``
+    when no bounded investigation ran. Default values are part of the digest.
+    """
+    envelope = {
+        "schema": RCA_CONFIG_SCHEMA,
+        "engine": _encode_config(engine),
+        "investigation": (
+            investigation_config_document(investigation) if investigation is not None else None
+        ),
+    }
+    canonical = json.dumps(envelope, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def investigation_config_from_document(document: Mapping[str, Any]) -> InvestigationConfig:
     """Rebuild the exact config ``investigation_config_document`` wrote."""
     decoded = _decode_config(InvestigationConfig, document)
@@ -252,6 +274,8 @@ __all__ = [
     "IntentTiebreakPolicy",
     "investigation_config_document",
     "policy_kind",
+    "RCA_CONFIG_SCHEMA",
+    "rca_config_digest",
     "investigation_config_from_document",
     "InvestigationPolicy",
     "InvestigationPolicyContext",

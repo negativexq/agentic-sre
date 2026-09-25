@@ -64,12 +64,14 @@ def test_diagnosis_post_is_protected_and_authorized_post_runs(
 ) -> None:
     engine, factory, incident_id, service = _app(tmp_path)
     calls = 0
+    triggers: list[str] = []
     original = service.run
 
-    def counted(incident: UUID) -> Any:
+    def counted(incident: UUID, trigger: str) -> Any:
         nonlocal calls
         calls += 1
-        return original(incident)
+        triggers.append(trigger)
+        return original(incident, trigger)
 
     service.run = counted
     monkeypatch.setenv("SRE_API_TOKEN", "boundary-token")
@@ -82,6 +84,7 @@ def test_diagnosis_post_is_protected_and_authorized_post_runs(
         )
         assert created.status_code == 200
         assert calls == 1
+        assert triggers == ["MANUAL"]  # the POST boundary resolves its own default
     with Session(engine) as session:
         assert session.scalar(select(DiagnosisRow.diagnosis_id)) is not None
     engine.dispose()

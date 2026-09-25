@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -53,6 +54,17 @@ from packages.storage.repositories import (
     IncidentRepository,
     InvestigationRunRepository,
 )
+
+# Explicit revision metadata for seeded diagnoses: test constants, not derived.
+SEEDED_REVISION: dict[str, Any] = {
+    "trigger": "MANUAL",
+    "manifest_digest": "a" * 64,
+    "tape_digest": "b" * 64,
+    "epistemic_digest": "c" * 64,
+    "engine_version": "test-engine",
+    "config_digest": "d" * 64,
+}
+
 
 T0 = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
 PHASES = [
@@ -127,11 +139,13 @@ def _seed(
 
     run_id = str(uuid4())
     diagnosis = _diagnosis(incident_id, resolution)
-    DiagnosisRepository(session).save(
-        incident_id,
-        diagnosis.model_dump(mode="json"),
+    DiagnosisRepository(session).save_revision(
+        incident_id=incident_id,
+        document=diagnosis.model_dump(mode="json"),
         created_at=T0 + timedelta(seconds=10),
         run_id=run_id,
+        window_end=T0 + timedelta(seconds=10),
+        **SEEDED_REVISION,
     )
     events = IncidentEventRepository(session)
     for event_type, offset in PHASES:
@@ -511,11 +525,13 @@ def test_report_projects_persisted_investigation_artifact() -> None:
             later_diagnosis = Diagnosis.model_validate(latest).model_copy(
                 update={"summary": "a later diagnosis with new wording"}
             )
-            DiagnosisRepository(session).save(
-                incident_id,
-                later_diagnosis.model_dump(mode="json"),
+            DiagnosisRepository(session).save_revision(
+                incident_id=incident_id,
+                document=later_diagnosis.model_dump(mode="json"),
                 created_at=T0 + timedelta(seconds=30),
                 run_id=str(uuid4()),
+                window_end=T0 + timedelta(seconds=30),
+                **SEEDED_REVISION,
             )
 
         later_report = client.post(f"/api/v1/console/incidents/{incident_id}/reports").json()

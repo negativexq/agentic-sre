@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from packages.contracts import Incident, IncidentSeverity, IncidentSource, IncidentStatus
 from packages.storage.models import UTCDateTime
-from packages.storage.repositories import DiagnosisRepository, IncidentRepository
+from packages.storage.repositories import IncidentRepository
 
 PREVIOUS = "0021_query_key_text"
 TARGET = "0022_diagnosis_revisions"
@@ -243,10 +243,10 @@ def _run(url: str) -> None:
         third = _incident(engine)
         assert _insert(engine, third, revision_number=1, trigger="INITIAL")
         assert not _insert(engine, third, revision_number=2, trigger="SOMETHING_ELSE")
-        # No permanent default: the pre-4.2 writer still stores rows, unnumbered.
-        with Session(engine) as session:
-            DiagnosisRepository(session).save(third, {"confidence": "LIKELY", "mode": "x"}, AT)
-            DiagnosisRepository(session).save(third, {"confidence": "LIKELY", "mode": "y"}, AT)
+        # No permanent default: a pre-4.2-style insert that omits the revision
+        # fields still stores rows at 0022, unnumbered (0023 closes them).
+        assert _insert(engine, third)
+        assert _insert(engine, third)
         unnumbered = _rows(engine, ("diagnosis_id", "incident_id", "revision_number", "trigger"))
         assert sum(1 for row in unnumbered.values() if row[0] == third and row[1] is None) == 2
         assert all(

@@ -89,7 +89,7 @@ def _phase_events(factory: Any, incident_id: UUID) -> list[Any]:
 
 def test_one_diagnosis_run_emits_exactly_one_of_each_phase(tmp_path: Path) -> None:
     _engine, factory, incident_id, service = _app(tmp_path)
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
     counts = Counter(event.event_type for event in _phase_events(factory, incident_id))
     # G3: exactly one START and one COMPLETE (and one of each middle phase).
     assert counts[IncidentEventType.DIAGNOSIS_STARTED] == 1
@@ -100,7 +100,7 @@ def test_one_diagnosis_run_emits_exactly_one_of_each_phase(tmp_path: Path) -> No
 
 def test_phase_timestamps_are_monotonic_within_a_run(tmp_path: Path) -> None:
     _engine, factory, incident_id, service = _app(tmp_path)
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
     events = _phase_events(factory, incident_id)
     # G4: the persisted sequence is non-decreasing in time.
     timestamps = [event.timestamp for event in events]
@@ -109,7 +109,7 @@ def test_phase_timestamps_are_monotonic_within_a_run(tmp_path: Path) -> None:
 
 def test_evidence_gathered_reports_real_source_counts(tmp_path: Path) -> None:
     _engine, factory, incident_id, service = _app(tmp_path)
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
     gathered = next(
         event
         for event in _phase_events(factory, incident_id)
@@ -125,8 +125,8 @@ def test_evidence_gathered_reports_real_source_counts(tmp_path: Path) -> None:
 
 def test_rediagnosis_appends_a_new_run_rather_than_duplicating(tmp_path: Path) -> None:
     _engine, factory, incident_id, service = _app(tmp_path)
-    service.run(incident_id)
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
+    service.run(incident_id, "MANUAL")
     events = _phase_events(factory, incident_id)
     run_ids = {str(event.payload.get("run_id")) for event in events}
     # G6: two distinct runs, each complete.
@@ -139,8 +139,8 @@ def test_rediagnosis_appends_a_new_run_rather_than_duplicating(tmp_path: Path) -
 
 def test_stored_diagnosis_carries_its_run_id_and_binds_the_timeline(tmp_path: Path) -> None:
     _engine, factory, incident_id, service = _app(tmp_path)
-    service.run(incident_id)
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
+    service.run(incident_id, "MANUAL")
     with Session(factory().bind) as session:
         repository = DiagnosisRepository(session)
         document = repository.latest(incident_id)
@@ -164,7 +164,7 @@ def test_stored_diagnosis_carries_its_run_id_and_binds_the_timeline(tmp_path: Pa
 
 def test_events_api_returns_the_timeline_in_order(tmp_path: Path) -> None:
     _engine, factory, incident_id, service = _app(tmp_path)
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
     with TestClient(create_app(factory, diagnosis_service=service)) as client:
         response = client.get(f"/api/v1/incidents/{incident_id}/events")
     assert response.status_code == 200
@@ -179,7 +179,7 @@ def test_events_api_returns_the_timeline_in_order(tmp_path: Path) -> None:
 
 def test_incident_page_shows_the_phase_timeline(tmp_path: Path) -> None:
     _engine, factory, incident_id, service = _app(tmp_path)
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
     with TestClient(create_app(factory, diagnosis_service=service)) as client:
         page = client.get(f"/incidents/{incident_id}").text
     # G8: the rendered page carries the real per-phase timeline.
@@ -259,7 +259,7 @@ def test_a_failed_run_emits_diagnosis_failed_and_reraises(tmp_path: Path, monkey
 
     monkeypatch.setattr("apps.control_plane.diagnosis.diagnose", boom)
     try:
-        service.run(incident_id)
+        service.run(incident_id, "MANUAL")
     except RuntimeError:
         pass
     else:
@@ -316,7 +316,7 @@ def test_incident_page_reports_an_unavailable_timeline(tmp_path: Path) -> None:
     from sqlalchemy import text
 
     _engine, factory, incident_id, service = _app(tmp_path)
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
     # Drop this run's pipeline timeline events, keeping the stored diagnosis.
     with Session(factory().bind) as session:
         session.execute(

@@ -46,7 +46,7 @@ def _recorded_run(world: Any) -> tuple[sessionmaker[Session], Any, str]:
         reader=cluster,
         clock=clock,
         bounded_policy_factory=lambda: ScriptedInvestigationPolicy(actions=[]),
-    ).run(incident_id)
+    ).run(incident_id, "MANUAL")
     with factory() as session:
         run_id = DiagnosisRepository(session).latest_run_id(incident_id)
     assert run_id is not None

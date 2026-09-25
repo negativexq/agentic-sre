@@ -80,7 +80,7 @@ def _record(world: Any, policy: Any, minutes: int = 30) -> Run:
         clock=clock,
         provider_readers=readers.configured(),
         bounded_policy_factory=policy,
-    ).run(incident_id)
+    ).run(incident_id, "MANUAL")
     with factory() as session:
         run_id = DiagnosisRepository(session).latest_run_id(incident_id)
         assert run_id is not None

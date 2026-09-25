@@ -8,6 +8,7 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from importlib.metadata import version as package_version
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -15,10 +16,15 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from packages.contracts import Alert as ContractAlert
 from packages.contracts import Incident, IncidentEvent, IncidentEventType
-from packages.rca.engine import Investigator, diagnose
+from packages.rca.engine import EngineConfig, Investigator, diagnose
+from packages.rca.epistemic_digest import diagnosis_epistemic_digest
 from packages.rca.investigation.graph import investigate_diagnosis
 from packages.rca.investigation.policy import LLMInvestigationPolicy
-from packages.rca.investigation.state import InvestigationPolicy
+from packages.rca.investigation.state import (
+    InvestigationConfig,
+    InvestigationPolicy,
+    rca_config_digest,
+)
 from packages.rca.lifecycle import classify, status_payload
 from packages.rca.live import (
     ChangeWatcher,
@@ -45,7 +51,12 @@ from packages.storage import (
     LogObservationRepository,
     ObjectVersionRepository,
 )
-from packages.storage.manifest import ManifestRequest, build_manifest, load_members
+from packages.storage.manifest import (
+    ManifestRequest,
+    build_manifest,
+    load_manifest_digest,
+    load_members,
+)
 from packages.storage.repositories import (
     EntityInstanceRepository,
     LifecycleRecord,
@@ -53,11 +64,22 @@ from packages.storage.repositories import (
     SnapshotCycleRepository,
 )
 from packages.storage.retention import RetentionPolicy, apply_retention, policy_from_environment
+from packages.storage.tape import load_tape_digest
 from packages.storage.trajectory import TRAJECTORY_ARTIFACT_VERSION, trajectory_document
 
 logger = logging.getLogger(__name__)
 
 _TERMINAL_STATUSES = frozenset({"RESOLVED", "CLOSED", "FAILED"})
+# LEGACY marks rows stored before revisions; a run never produces it.
+_REVISION_TRIGGERS = frozenset({"INITIAL", "MANUAL", "EVIDENCE_DEADLINE"})
+_DISTRIBUTION = "agentic-sre"
+
+
+def engine_version() -> str:
+    """The deployed package version; missing package metadata fails loudly."""
+    return package_version(_DISTRIBUTION)
+
+
 _LIFECYCLE_SOURCE = "collector"
 _TOMBSTONE_SOURCE = "journal-tombstone"
 
@@ -506,7 +528,15 @@ class DiagnosisService:
         except Exception:  # noqa: BLE001 - observability must not break diagnosis
             logger.warning("failed to record %s timeline event", event_type.value, exc_info=True)
 
-    def run(self, incident_id: UUID) -> Diagnosis:
+    def run(self, incident_id: UUID, trigger: str) -> Diagnosis:
+        """Diagnose the incident now and store the result as its next revision.
+
+        ``trigger`` is why this revision is produced: ``MANUAL`` for a direct
+        request, ``INITIAL`` from auto-diagnosis, ``EVIDENCE_DEADLINE`` from
+        the scheduler.
+        """
+        if trigger not in _REVISION_TRIGGERS:
+            raise ValueError(f"not a revision trigger: {trigger!r}")
         run_id = str(uuid4())
         with self.session_factory() as session:
             incident = IncidentRepository(session).get(incident_id)
@@ -523,7 +553,7 @@ class DiagnosisService:
             {"run_id": run_id, "alerts": [alert.name for alert in alerts]},
         )
         try:
-            return self._diagnose(run_id, incident, incident_id, correlation_id, alerts)
+            return self._diagnose(run_id, incident, incident_id, correlation_id, alerts, trigger)
         except Exception as error:
             # Any failure after the run started — gathering evidence, the engine,
             # or persisting the diagnosis — terminates this run's timeline, so the
@@ -590,6 +620,7 @@ class DiagnosisService:
         incident_id: UUID,
         correlation_id: UUID,
         alerts: list[Alert],
+        trigger: str,
     ) -> Diagnosis:
         # Once resolved, the incident's causal window is frozen at its last
         # transition and no live capture is taken for it. An open incident is
@@ -662,12 +693,21 @@ class DiagnosisService:
             snapshot_observed_at=members.snapshot.observed_at if members.snapshot else None,
         )
         bounded_policy = self.bounded_policy_factory()
+        # The effective configs are explicit so the revision can record them.
+        engine_config = EngineConfig()
+        investigation_config = (
+            InvestigationConfig(engine=engine_config) if bounded_policy is not None else None
+        )
         investigation_result = None
         if bounded_policy is not None:
-            investigation_result = investigate_diagnosis(source, policy=bounded_policy)
+            investigation_result = investigate_diagnosis(
+                source, policy=bounded_policy, config=investigation_config
+            )
             diagnosis = investigation_result.diagnosis
         else:
-            diagnosis = diagnose(source, investigator=self.investigator_factory())
+            diagnosis = diagnose(
+                source, investigator=self.investigator_factory(), config=engine_config
+            )
         leading = diagnosis.hypothesis.causal_actor.canonical if diagnosis.hypothesis else None
         self._emit(
             incident_id,
@@ -684,24 +724,38 @@ class DiagnosisService:
         # of exactly the run that produced this diagnosis rather than inferring it
         # from "latest completed event". The diagnosis stays a pure Diagnosis;
         # the bounded investigation has its own versioned run artifact.
+        # Every provider read of the run has been taped by now, so the tape
+        # digest is final; the manifest digest is reloaded from its rows.
+        created_at = self.clock()
         with self.session_factory() as session:
-            DiagnosisRepository(session).save(
-                incident_id,
-                diagnosis.model_dump(mode="json"),
-                self.clock(),
+            manifest_digest = load_manifest_digest(session, run_id)
+            tape_digest = load_tape_digest(session, run_id)
+
+            def companions(writer: Session) -> None:
+                if investigation_result is not None:
+                    InvestigationRunRepository(writer).save(
+                        diagnosis_run_id=run_id,
+                        incident_id=incident_id,
+                        artifact_version=TRAJECTORY_ARTIFACT_VERSION,
+                        created_at=created_at,
+                        document=trajectory_document(investigation_result),
+                        commit=False,
+                    )
+
+            DiagnosisRepository(session).save_revision(
+                incident_id=incident_id,
+                document=diagnosis.model_dump(mode="json"),
+                created_at=created_at,
                 run_id=run_id,
-                commit=False,
+                trigger=trigger,
+                window_end=window_end,
+                manifest_digest=manifest_digest,
+                tape_digest=tape_digest,
+                epistemic_digest=diagnosis_epistemic_digest(diagnosis),
+                engine_version=engine_version(),
+                config_digest=rca_config_digest(engine_config, investigation_config),
+                companions=companions,
             )
-            if investigation_result is not None:
-                InvestigationRunRepository(session).save(
-                    diagnosis_run_id=run_id,
-                    incident_id=incident_id,
-                    artifact_version=TRAJECTORY_ARTIFACT_VERSION,
-                    created_at=self.clock(),
-                    document=trajectory_document(investigation_result),
-                    commit=False,
-                )
-            session.commit()
         self._emit(
             incident_id,
             correlation_id,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -40,6 +40,7 @@ from packages.rca.model import (
     snapshot_evidence_id,
 )
 from packages.storage.models import (
+    DIAGNOSIS_TRIGGERS,
     LIFECYCLE_OBSERVATION_TYPES,
     AlertRow,
     ChangeRecordRow,
@@ -1454,23 +1455,66 @@ class EntityInstanceRepository:
         self._session.commit()
 
 
+# One insert plus at most three retries after a lost revision-number race.
+_REVISION_ATTEMPTS = 4
+
+
+@dataclass(frozen=True)
+class DiagnosisRevision:
+    """The identity of one written diagnosis revision."""
+
+    diagnosis_id: int
+    revision_number: int
+
+
 class DiagnosisRepository:
     """Stored diagnoses per incident."""
 
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def save(
+    def save_revision(
         self,
+        *,
         incident_id: object,
         document: dict[str, Any],
         created_at: datetime,
-        run_id: str | None = None,
-        *,
-        commit: bool = True,
-    ) -> None:
-        self._session.add(
-            DiagnosisRow(
+        run_id: str | None,
+        trigger: str,
+        window_end: datetime,
+        manifest_digest: str,
+        tape_digest: str,
+        epistemic_digest: str,
+        engine_version: str,
+        config_digest: str,
+        companions: Callable[[Session], None] | None = None,
+    ) -> DiagnosisRevision:
+        """Append the incident's next immutable revision and commit it.
+
+        One transaction per attempt: lock the incident row, read the highest
+        revision, insert the next one (and any ``companions`` rows), commit. A
+        concurrent writer that wins the same number makes the insert fail on
+        ``UNIQUE(incident_id, revision_number)``; that is retried at most three
+        times. Diagnoses are never updated.
+        """
+        if trigger not in DIAGNOSIS_TRIGGERS or trigger == "LEGACY":
+            raise ValueError(f"not a revision trigger: {trigger!r}")
+        for attempt in range(_REVISION_ATTEMPTS):
+            incident = self._session.scalars(
+                select(IncidentRow.incident_id)
+                .where(IncidentRow.incident_id == incident_id)
+                .with_for_update()
+            ).first()
+            if incident is None:
+                self._session.rollback()
+                raise IncidentNotFoundError(str(incident_id))
+            previous = self._session.execute(
+                select(DiagnosisRow.diagnosis_id, DiagnosisRow.revision_number)
+                .where(DiagnosisRow.incident_id == incident_id)
+                .order_by(desc(DiagnosisRow.revision_number))
+                .limit(1)
+            ).first()
+            row = DiagnosisRow(
                 incident_id=incident_id,
                 created_at=created_at,
                 root_cause=document.get("root_cause") and _canonical(document["root_cause"]),
@@ -1478,10 +1522,30 @@ class DiagnosisRepository:
                 mode=str(document.get("mode")),
                 run_id=run_id,
                 document=document,
+                revision_number=previous.revision_number + 1 if previous else 1,
+                previous_diagnosis_id=previous.diagnosis_id if previous else None,
+                trigger=trigger,
+                window_end=window_end,
+                manifest_digest=manifest_digest,
+                tape_digest=tape_digest,
+                epistemic_digest=epistemic_digest,
+                engine_version=engine_version,
+                config_digest=config_digest,
             )
-        )
-        if commit:
-            self._session.commit()
+            self._session.add(row)
+            if companions is not None:
+                companions(self._session)
+            try:
+                self._session.flush()
+                revision = DiagnosisRevision(row.diagnosis_id, row.revision_number)
+                self._session.commit()
+            except IntegrityError:
+                self._session.rollback()
+                if attempt + 1 == _REVISION_ATTEMPTS:
+                    raise
+                continue
+            return revision
+        raise AssertionError("unreachable")
 
     def latest(self, incident_id: object) -> dict[str, Any] | None:
         row = self._session.scalars(

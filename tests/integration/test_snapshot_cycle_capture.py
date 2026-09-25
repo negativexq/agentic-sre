@@ -140,7 +140,7 @@ def test_diagnosis_capture_persists_its_cycle_under_its_run(
     )
     service.snapshot_result()  # a watch cycle before the incident is diagnosed
     clock.now = T0 + timedelta(minutes=30)
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
 
     with factory() as session:
         cycles = session.scalars(select(SnapshotCycleRow)).all()
@@ -171,7 +171,7 @@ def test_diagnosis_object_history_resolves_to_persisted_rows(
     clock.now = T0 + timedelta(minutes=5)
     cluster.objects[0]["spec"] = {"replicas": 3}  # desired state changes before the capture
     clock.now = T0 + timedelta(minutes=30)
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
 
     with factory() as session:
         journal_ids = {

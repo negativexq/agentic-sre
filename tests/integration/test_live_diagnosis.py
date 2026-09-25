@@ -511,7 +511,7 @@ def test_deleted_object_becomes_a_verified_root_cause(setup: Any) -> None:
     del cluster.objects[1]  # order-service Deployment, the alerting component
     assert service.snapshot() == 1
     clock.now = T0 + timedelta(minutes=13)
-    diagnosis = service.run(incident_id)
+    diagnosis = service.run(incident_id, "MANUAL")
     assert diagnosis.root_cause == EntityRef.parse("sre-demo/Deployment/order-service")
     assert diagnosis.evidence[0].kind is FindingKind.OBJECT_DELETED
     assert diagnosis.confidence is Confidence.VERIFIED
@@ -520,7 +520,7 @@ def test_deleted_object_becomes_a_verified_root_cause(setup: Any) -> None:
 def test_diagnosis_without_cluster_access_is_explicit(setup: Any) -> None:
     factory, _cluster, clock, incident_id = setup
     service = DiagnosisService(session_factory=factory, namespaces=("sre-demo",), clock=clock)
-    diagnosis = service.run(incident_id)
+    diagnosis = service.run(incident_id, "MANUAL")
     assert diagnosis.root_cause is None
     assert diagnosis.summary.startswith("No change")
 
@@ -530,7 +530,9 @@ def test_bounded_investigation_result_survives_session_restart(
 ) -> None:
     factory, cluster, clock, incident_id = setup
 
-    def completed_investigation(source: Any, *, policy: Any) -> InvestigationResult:
+    def completed_investigation(
+        source: Any, *, policy: Any, config: InvestigationConfig | None = None
+    ) -> InvestigationResult:
         diagnosis = diagnose(source)
         observation = InvestigationObservation(
             observation_id="obs-1",
@@ -587,7 +589,9 @@ def test_bounded_investigation_result_survives_session_restart(
         return result.model_copy(
             update={
                 "replay_contract": trajectory_replay_contract(
-                    result, policy=policy, config=InvestigationConfig()
+                    result,
+                    policy=policy,
+                    config=config if config is not None else InvestigationConfig(),
                 )
             }
         )
@@ -602,7 +606,7 @@ def test_bounded_investigation_result_survives_session_restart(
         clock=clock,
         bounded_policy_factory=lambda: ScriptedInvestigationPolicy(actions=[]),
     )
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
 
     with factory() as session:
         diagnoses = DiagnosisRepository(session)
@@ -648,9 +652,9 @@ def test_open_diagnosis_persists_and_deduplicates_log_observations(setup: Any) -
         clock=clock,
     )
     clock.now = T0 + timedelta(minutes=13)
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
     per_capture = logs.calls
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
     with factory() as session:
         rows = session.query(LogObservationRow).all()
     # Two diagnoses, each capturing the >1h incident history as the same set
@@ -684,7 +688,7 @@ def test_resolved_replay_uses_persisted_logs_when_loki_is_unavailable(
         clock=clock,
     )
     clock.now = T0 + timedelta(minutes=13)
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
     open_capture_calls = logs.calls
     resolved_at = T0 + timedelta(minutes=15)
     with factory() as session:
@@ -705,7 +709,7 @@ def test_resolved_replay_uses_persisted_logs_when_loki_is_unavailable(
     ]
     logs.unavailable = True
     clock.now = T0 + timedelta(minutes=30)
-    diagnosis = service.run(incident_id)
+    diagnosis = service.run(incident_id, "MANUAL")
     # The resolved replay reads no logs; only the earlier open capture did.
     assert open_capture_calls >= 1
     assert logs.calls == open_capture_calls
@@ -742,7 +746,7 @@ def test_resolved_before_any_log_capture_has_no_historical_log_claim(setup: Any)
         provider_readers=ProviderReaders(loki=logs),
         clock=clock,
     )
-    diagnosis = service.run(incident_id)
+    diagnosis = service.run(incident_id, "MANUAL")
     assert logs.calls == 0
     assert all(item.summary != "never captured before resolution" for item in diagnosis.evidence)
     with factory() as session:
@@ -792,7 +796,7 @@ def test_real_bounded_loki_reader_captures_the_two_hour_incident_history(
     )
     clock.now = T0 + timedelta(minutes=13)
     with caplog.at_level("WARNING"):
-        service.run(incident_id)
+        service.run(incident_id, "MANUAL")
 
     hour_ns = int(timedelta(hours=1).total_seconds() * 1e9)
     assert len(requested) >= 2
@@ -889,7 +893,7 @@ def test_resolved_incident_window_is_frozen_at_its_resolution(setup: Any) -> Non
     # A long time after resolution, something unrelated changes.
     clock.now = T0 + timedelta(hours=3)
     cluster.objects[0] = _deployment("5000")
-    diagnosis_after_close = service.run(incident_id)
+    diagnosis_after_close = service.run(incident_id, "MANUAL")
     assert diagnosis_after_close.root_cause is None
     assert diagnosis_after_close.summary.startswith("No change")
 
@@ -953,7 +957,7 @@ def test_resolved_replay_excludes_event_state_observed_after_resolution(
         return original(source, **kwargs)
 
     monkeypatch.setattr(diagnosis_module, "diagnose", spy)
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
     assert [item.count for item in captured["events"]] == [1]
 
 
@@ -995,7 +999,7 @@ def test_open_diagnosis_includes_event_captured_by_its_own_snapshot_cycle(
         reader=cluster,
         clock=AdvancingClock(T0 + timedelta(minutes=20)),
     )
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
     assert [item.count for item in captured["events"]] == [1]
 
 
@@ -1070,10 +1074,10 @@ def test_resolved_incident_diagnosis_is_stable_across_reruns(setup: Any) -> None
         session.commit()
 
     clock.now = T0 + timedelta(minutes=20)
-    first = service.run(incident_id)
+    first = service.run(incident_id, "MANUAL")
     clock.now = T0 + timedelta(days=30)  # long after resolution, cluster drifts further
     cluster.objects[0] = _deployment("9999")
-    second = service.run(incident_id)
+    second = service.run(incident_id, "MANUAL")
     assert first == second
 
 
@@ -1107,7 +1111,7 @@ def test_events_persist_past_kubernetes_garbage_collection(setup: Any) -> None:
     # Simulate the cluster garbage collecting the event.
     cluster.events = []
     clock.now = T0 + timedelta(minutes=13)
-    diagnosis = service.run(incident_id)
+    diagnosis = service.run(incident_id, "MANUAL")
     assert diagnosis.root_cause == EntityRef.parse("sre-demo/Deployment/order-service")
     assert diagnosis.evidence[0].kind is FindingKind.FAILURE_EVENT
     assert "BackOff" in diagnosis.evidence[0].summary
@@ -1165,7 +1169,7 @@ def test_chaos_evidence_namespace_survives_resolution_and_resource_removal(setup
         row.updated_at = resolved_at
         session.commit()
     clock.now = T0 + timedelta(minutes=30)
-    service.run(incident_id)
+    service.run(incident_id, "MANUAL")
     with factory() as session:
         history = ObjectVersionRepository(session).history(
             namespaces={"chaos-mesh"}, starts_at=T0, ends_at=resolved_at
@@ -1228,7 +1232,7 @@ def test_resolved_incident_events_are_also_frozen_at_resolution(setup: Any) -> N
             "count": 1,
         }
     ]
-    diagnosis = service.run(incident_id)
+    diagnosis = service.run(incident_id, "MANUAL")
     assert diagnosis.evidence[0].kind is FindingKind.FAILURE_EVENT
     assert "BackOff" in diagnosis.evidence[0].summary
     assert "Unrelated" not in diagnosis.evidence[0].summary

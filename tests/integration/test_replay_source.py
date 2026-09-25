@@ -403,7 +403,7 @@ def test_runs_do_not_leak_into_each_other(
     clock.now = T0 + timedelta(minutes=35)
     DiagnosisService(
         session_factory=factory, namespaces=("sre-demo",), reader=cluster, clock=clock
-    ).run(incident_id)
+    ).run(incident_id, "MANUAL")
     with factory() as session:
         second_run = DiagnosisRepository(session).latest_run_id(incident_id)
     assert second_run is not None and second_run != first_run
@@ -495,7 +495,7 @@ def test_resolved_run_without_cycle_replays_journal_only(
         session.commit()
     clock.now = WINDOW_END
     DiagnosisService(session_factory=factory, namespaces=("sre-demo",), clock=clock).run(
-        incident_id
+        incident_id, "MANUAL"
     )
     with factory() as session:
         run_id = DiagnosisRepository(session).latest_run_id(incident_id)

@@ -327,15 +327,16 @@ class DiagnosisRow(Base):
     # timeline events. Nullable for diagnoses stored before this existed.
     run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     document: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    # Revision metadata (0022). Nullable until the revision writer (M19-4.2)
-    # sets them; legacy rows carry a backfilled number and trigger LEGACY only.
-    revision_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Revision metadata (0022; number and trigger required since 0023). Legacy
+    # rows carry a backfilled number and trigger LEGACY; the other provenance
+    # fields have no legacy source and stay NULL there.
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
     previous_diagnosis_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("diagnoses.diagnosis_id", name="fk_diagnoses_previous_diagnosis_id"),
         nullable=True,
     )
-    trigger: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    trigger: Mapped[str] = mapped_column(String(32), nullable=False)
     window_end: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     manifest_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
     tape_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)

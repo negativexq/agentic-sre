@@ -2,7 +2,7 @@
 	itbench-setup itbench-index eval-dev eval-test benchmark-qualify \
 	images cluster-up build-images deploy load status ui inject-bad-rollout recover rbac-check \
 	cluster-down precommit offline-demo e2e-kind e2e-kind-clean m18a-live-validate release-check \
-	verify-release-provenance
+	verify-release-provenance product-bench-dev
 
 PY := .venv/bin/python
 CLI := .venv/bin/agentic-sre
@@ -170,6 +170,13 @@ inject-bad-rollout:
 recover:
 	kubectl rollout undo deployment/payment-service -n $(NAMESPACE)
 	kubectl rollout status deployment/payment-service -n $(NAMESPACE) --timeout=120s
+
+# The product-resolution harness (M19), separate from the legacy live suite.
+# Offline until M19-6.7 adds fresh-cluster execution: lists the product scenarios.
+PRODUCT := $(PY) scripts/product_benchmark.py
+
+product-bench-dev:
+	$(PRODUCT) --list
 
 # The internal live scenario suite: real faults, the real alerting path, and a
 # graded answer. Needs a deployed cluster (make deploy). SCENARIO=<id> selects one.

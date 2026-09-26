@@ -570,6 +570,91 @@ class RulePreconditionAudit(BaseModel):
         return self
 
 
+class RequirementKind(StrEnum):
+    """What kind of evidence obligation a rule is still waiting for."""
+
+    STATUS_CONTINUITY = "STATUS_CONTINUITY"
+    RESOURCE_COVERAGE = "RESOURCE_COVERAGE"
+
+
+class RequirementAuditReason(StrEnum):
+    """Why a requirement evaluation carries no tri-state result."""
+
+    NO_DATA_AFTER_DEADLINE = "NO_DATA_AFTER_DEADLINE"
+    PARTIAL_COVERAGE_AFTER_DEADLINE = "PARTIAL_COVERAGE_AFTER_DEADLINE"
+    # The hypothesis is still present, but a frozen rule prerequisite now
+    # positively fails. Missing identity or evidence is never a scope exit.
+    SCOPE_EXITED = "SCOPE_EXITED"
+
+
+class RequirementTarget(BaseModel):
+    """One element of a requirement's target list.
+
+    ``STATUS_CONTINUITY`` targets name one exact Pod instance (``entity`` and
+    ``uid``); ``RESOURCE_COVERAGE`` targets name one lowered series of the
+    actor (``entity``, ``container`` and ``resource``).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    entity: str = Field(min_length=1)
+    uid: str | None = Field(default=None, min_length=1)
+    container: str | None = Field(default=None, min_length=1)
+    resource: str | None = Field(default=None, min_length=1)
+
+    def sort_key(self) -> tuple[str, str, str, str]:
+        return (self.entity, self.container or "", self.resource or "", self.uid or "")
+
+
+class RequirementEvaluation(BaseModel):
+    """How one revision evaluated one evidence obligation of one hypothesis.
+
+    Lifecycle provenance only: it has no decision authority and stays outside
+    the epistemic digest. Exactly one of ``result`` and ``audit_reason`` is set.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    hypothesis_id: str = Field(min_length=1)
+    hypothesis_key: str | None = Field(default=None, min_length=1)
+    rule_id: str = Field(min_length=1)
+    rule_version: str = Field(min_length=1)
+    kind: RequirementKind
+    targets: tuple[RequirementTarget, ...] = Field(min_length=1)
+    result: PreconditionResult | None = None
+    audit_reason: RequirementAuditReason | None = None
+
+    @model_validator(mode="after")
+    def _validate_shape(self) -> RequirementEvaluation:
+        if (self.result is None) == (self.audit_reason is None):
+            raise ValueError("provide exactly one requirement result or audit reason")
+        if self.kind is RequirementKind.STATUS_CONTINUITY:
+            if len(self.targets) != 1:
+                raise ValueError("STATUS_CONTINUITY names exactly one Pod instance")
+            (target,) = self.targets
+            if target.uid is None or target.container is not None or target.resource is not None:
+                raise ValueError("STATUS_CONTINUITY targets are {entity, uid}")
+        else:
+            if any(
+                item.uid is not None or item.container is None or item.resource is None
+                for item in self.targets
+            ):
+                raise ValueError("RESOURCE_COVERAGE targets are {entity, container, resource}")
+            keys = [item.sort_key() for item in self.targets]
+            if keys != sorted(set(keys)):
+                raise ValueError("RESOURCE_COVERAGE targets must be unique and sorted")
+        return self
+
+
+class HypothesisInventoryEntry(BaseModel):
+    """One hypothesis of a revision; the inventory keeps repeated keys."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    hypothesis_id: str = Field(min_length=1)
+    hypothesis_key: str | None = Field(default=None, min_length=1)
+
+
 class EliminationPrecondition(BaseModel):
     """One deterministic precondition a rule evaluated, with its result."""
 
@@ -1259,6 +1344,10 @@ class Diagnosis(BaseModel):
     information_gaps: tuple[InformationGap, ...] = ()
     structural_alternatives: tuple[StructuralAlternative, ...] = ()
     investigation_status: InvestigationStatus = InvestigationStatus.NOT_REQUIRED
+    # Requirement lifecycle provenance (M19-5.5): uncapped, outside the
+    # epistemic digest. Empty for documents written before it existed.
+    requirement_evaluations: tuple[RequirementEvaluation, ...] = ()
+    hypothesis_inventory: tuple[HypothesisInventoryEntry, ...] = ()
 
     @model_validator(mode="before")
     @classmethod

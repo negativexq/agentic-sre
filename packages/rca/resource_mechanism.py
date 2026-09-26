@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any
@@ -30,6 +30,7 @@ from packages.rca.model import (
     PreconditionAuditReason,
     PreconditionResult,
     ProviderReadFailure,
+    RequirementAuditReason,
     ResourcePressure,
 )
 from packages.rca.signals import PRESSURE_THRESHOLD, parse_quantity
@@ -419,6 +420,23 @@ def assess_resource_mechanisms(
     return result
 
 
+class ResourceCoverageDisqualificationReason(StrEnum):
+    """Stable reason a coverage requirement is no longer awaited."""
+
+    # Positive pressure evidence rules out the normality path; it is not a
+    # contradiction and changes no hypothesis state.
+    POSITIVE_PRESSURE_EVIDENCE = "POSITIVE_PRESSURE_EVIDENCE"
+
+
+@dataclass(frozen=True)
+class CoverageRequirement:
+    """Requirement-level outcome for one hypothesis's lowered series (M19-5.5)."""
+
+    series: tuple[tuple[str, str], ...]
+    result: PreconditionResult | None = None
+    audit_reason: RequirementAuditReason | None = None
+
+
 @dataclass(frozen=True)
 class ResourceMechanismEvaluations:
     """A2 positive mismatches plus neutral/pending coverage audit outcomes."""
@@ -426,6 +444,41 @@ class ResourceMechanismEvaluations:
     mismatches: Mapping[str, MechanismMismatch]
     preconditions: Mapping[str, tuple[PreconditionResult, ...]]
     reasons: Mapping[str, tuple[PreconditionAuditReason, ...]]
+    # Requirement metadata; no decision reads it.
+    requirements: Mapping[str, CoverageRequirement] = field(default_factory=dict)
+
+
+def _scope_exit_series(
+    hypothesis: Hypothesis,
+    *,
+    history: Mapping[EntityRef, Sequence[ObjectVersion]],
+    onset: datetime | None,
+) -> tuple[tuple[str, str], ...]:
+    """Lowered series of a present hypothesis whose R1–R3 now positively fail.
+
+    An unresolvable change pair or an unknown bound Pod set is missing
+    evidence, never a scope exit, and yields nothing.
+    """
+    actor = hypothesis.causal_actor
+    initiating = hypothesis.initiating_findings
+    if onset is None or actor.kind != "Deployment" or not initiating:
+        return ()
+    versions = history.get(actor, ())
+    series: set[tuple[str, str]] = set()
+    exited = False
+    for finding in initiating:
+        if finding.kind is not FindingKind.SPEC_CHANGE or finding.entity != actor:
+            exited = True
+            continue
+        pair = _change_versions(finding, versions)
+        if pair is None:
+            return ()
+        before, after = pair
+        found = _lowered_limits(before.body, after.body)
+        series.update(found)
+        if not found or _without_resources(before.body) != _without_resources(after.body):
+            exited = True
+    return tuple(sorted(series)) if exited else ()
 
 
 def evaluate_resource_mechanisms(
@@ -448,31 +501,61 @@ def evaluate_resource_mechanisms(
     mismatches: dict[str, MechanismMismatch] = {}
     preconditions: dict[str, tuple[PreconditionResult, ...]] = {}
     reasons: dict[str, tuple[PreconditionAuditReason, ...]] = {}
+    requirements: dict[str, CoverageRequirement] = {}
+    positive_pressure = PreconditionResult.disqualified(
+        ResourceCoverageDisqualificationReason.POSITIVE_PRESSURE_EVIDENCE.value
+    )
     for hypothesis in hypotheses:
+        hypothesis_id = hypothesis.hypothesis_id
         scope = _scope(hypothesis, history=history, onset=onset, grace=grace)
-        if scope is None or _oom_or_eviction(scope.pods, findings, history):
+        if scope is None:
+            exited = _scope_exit_series(hypothesis, history=history, onset=onset)
+            if exited:
+                requirements[hypothesis_id] = CoverageRequirement(
+                    exited, audit_reason=RequirementAuditReason.SCOPE_EXITED
+                )
+            continue
+        if _oom_or_eviction(scope.pods, findings, history):
+            requirements[hypothesis_id] = CoverageRequirement(
+                scope.lowered, result=positive_pressure
+            )
             continue
         status, coverage = _measure(scope, read_pressure(scope.pods, scope.window_start), history)
         if status is _Coverage.COMPLETE:
-            mismatches[hypothesis.hypothesis_id] = _mismatch(hypothesis, scope, coverage)
-        elif status is _Coverage.PRESSURE or evaluation_at is None:
+            mismatches[hypothesis_id] = _mismatch(hypothesis, scope, coverage)
+            requirements[hypothesis_id] = CoverageRequirement(
+                scope.lowered, result=PreconditionResult.passed()
+            )
+        elif status is _Coverage.PRESSURE:
+            requirements[hypothesis_id] = CoverageRequirement(
+                scope.lowered, result=positive_pressure
+            )
+        elif evaluation_at is None:
             continue
         elif evaluation_at < scope.boundary:
-            preconditions[hypothesis.hypothesis_id] = (PreconditionResult.pending(scope.boundary),)
+            pending = PreconditionResult.pending(scope.boundary)
+            preconditions[hypothesis_id] = (pending,)
+            requirements[hypothesis_id] = CoverageRequirement(scope.lowered, result=pending)
         else:
-            reasons[hypothesis.hypothesis_id] = (
+            reason = (
                 PreconditionAuditReason.PARTIAL_COVERAGE_AFTER_DEADLINE
                 if status is _Coverage.PARTIAL
-                else PreconditionAuditReason.NO_DATA_AFTER_DEADLINE,
+                else PreconditionAuditReason.NO_DATA_AFTER_DEADLINE
             )
-    return ResourceMechanismEvaluations(mismatches, preconditions, reasons)
+            reasons[hypothesis_id] = (reason,)
+            requirements[hypothesis_id] = CoverageRequirement(
+                scope.lowered, audit_reason=RequirementAuditReason(reason.value)
+            )
+    return ResourceMechanismEvaluations(mismatches, preconditions, reasons, requirements)
 
 
 __all__ = [
     "RULE_ID",
     "RULE_VERSION",
     "MechanismMismatch",
+    "CoverageRequirement",
     "PodCoverage",
+    "ResourceCoverageDisqualificationReason",
     "ResourceMechanismEvaluations",
     "assess_resource_mechanism",
     "assess_resource_mechanisms",

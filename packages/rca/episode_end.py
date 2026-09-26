@@ -15,7 +15,7 @@ never ends it. A manifestation without a UID makes the rule inapplicable.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 
@@ -30,6 +30,7 @@ from packages.rca.model import (
     PodStatusObservation,
     PreconditionAuditReason,
     PreconditionResult,
+    RequirementAuditReason,
 )
 from packages.rca.root_cause_eligibility import episode_source_capable_initiating_findings
 
@@ -118,12 +119,30 @@ class EpisodeEndPreconditionEvaluation:
 
 
 @dataclass(frozen=True)
+class InstanceRequirement:
+    """Requirement-level outcome for one exact Pod instance (M19-5.5).
+
+    Answers only "has the evidence expected about this UID matured?". A PASS
+    here does not imply an A1 elimination: another UID may still be pending,
+    or the rule may reject the ended episode for another reason.
+    """
+
+    uid: str
+    result: PreconditionResult | None = None
+    audit_reason: RequirementAuditReason | None = None
+
+
+@dataclass(frozen=True)
 class EpisodeEndEvaluations:
     """A1 positive ends plus neutral/pending precondition audit outcomes."""
 
     ended_episodes: Mapping[str, EndedEpisode]
     preconditions: Mapping[str, tuple[PreconditionResult, ...]]
     reasons: Mapping[str, tuple[PreconditionAuditReason, ...]]
+    # Per-UID requirement metadata; no decision reads it.
+    instance_requirements: Mapping[str, tuple[InstanceRequirement, ...]] = field(
+        default_factory=dict
+    )
 
 
 def _version_uid(version: ObjectVersion) -> str | None:
@@ -238,6 +257,49 @@ def _manifestation_groups(
             return None
         groups.setdefault(finding.entity_instance.uid, []).append(finding.at)
     return actor, groups
+
+
+def _scope_exit_uids(hypothesis: Hypothesis, onset: datetime | None) -> tuple[str, ...]:
+    """UIDs of a present hypothesis whose frozen A1 scope now positively fails.
+
+    Only structural prerequisites count: initiating premises, or findings that
+    are not manifestations of the actor. A missing onset, UID or timestamp is
+    missing evidence, never a scope exit.
+    """
+    actor = hypothesis.causal_actor
+    findings = hypothesis.findings
+    if onset is None or actor.kind != "Pod" or not findings:
+        return ()
+    if not (
+        hypothesis.initiating_findings
+        or episode_source_capable_initiating_findings(hypothesis)
+        or any(
+            finding.kind not in _MANIFESTATION_KINDS or finding.entity != actor
+            for finding in findings
+        )
+    ):
+        return ()
+    return tuple(
+        sorted(
+            {
+                finding.entity_instance.uid
+                for finding in findings
+                if finding.kind in _MANIFESTATION_KINDS
+                and finding.entity == actor
+                and finding.entity_instance is not None
+            }
+        )
+    )
+
+
+def _requirement(uid: str, outcome: EpisodeEndPreconditionEvaluation) -> InstanceRequirement | None:
+    if outcome.results:
+        (result,) = outcome.results
+        return InstanceRequirement(uid, result=result)
+    if outcome.reasons:
+        (reason,) = outcome.reasons
+        return InstanceRequirement(uid, audit_reason=RequirementAuditReason(reason.value))
+    return None
 
 
 def _recovery_precondition(
@@ -500,6 +562,7 @@ def evaluate_ended_episodes(
     ended: dict[str, EndedEpisode] = {}
     preconditions: dict[str, list[PreconditionResult]] = {}
     reasons: dict[str, list[PreconditionAuditReason]] = {}
+    requirements: dict[str, list[InstanceRequirement]] = {}
     for hypothesis in hypotheses:
         positive = assess_ended_episode(
             hypothesis,
@@ -510,9 +573,19 @@ def evaluate_ended_episodes(
         )
         if positive is not None:
             ended[hypothesis.hypothesis_id] = positive
+            requirements[hypothesis.hypothesis_id] = [
+                InstanceRequirement(instance.uid, result=PreconditionResult.passed())
+                for instance in positive.instances
+            ]
             continue
         scoped = _manifestation_groups(hypothesis, onset)
         if scoped is None or onset is None:
+            exited = _scope_exit_uids(hypothesis, onset)
+            if exited:
+                requirements[hypothesis.hypothesis_id] = [
+                    InstanceRequirement(uid, audit_reason=RequirementAuditReason.SCOPE_EXITED)
+                    for uid in exited
+                ]
             continue
         actor, groups = scoped
         statuses = tuple(status for status in pod_statuses if status.pod == actor)
@@ -521,11 +594,16 @@ def evaluate_ended_episodes(
             # Preserve termination and a mature recovery attempt as-is. The
             # existing assessor may still reject them for no-overlap, but that
             # does not turn them into a pending recovery.
-            if _terminated(uid, versions, statuses, onset) is not None:
-                continue
+            # The UID's own evidence obligation matured either way, so its
+            # requirement passes even when the hypothesis-level end does not.
             boundary = onset + grace
-            recovered = _recovered(uid, statuses, onset, boundary)
-            if recovered is not None:
+            if (
+                _terminated(uid, versions, statuses, onset) is not None
+                or _recovered(uid, statuses, onset, boundary) is not None
+            ):
+                requirements.setdefault(hypothesis.hypothesis_id, []).append(
+                    InstanceRequirement(uid, result=PreconditionResult.passed())
+                )
                 continue
             outcome = _recovery_precondition(
                 uid,
@@ -539,10 +617,14 @@ def evaluate_ended_episodes(
                 preconditions.setdefault(hypothesis.hypothesis_id, []).extend(outcome.results)
             if outcome.reasons:
                 reasons.setdefault(hypothesis.hypothesis_id, []).extend(outcome.reasons)
+            requirement = _requirement(uid, outcome)
+            if requirement is not None:
+                requirements.setdefault(hypothesis.hypothesis_id, []).append(requirement)
     return EpisodeEndEvaluations(
         ended_episodes=ended,
         preconditions={key: tuple(value) for key, value in preconditions.items()},
         reasons={key: tuple(value) for key, value in reasons.items()},
+        instance_requirements={key: tuple(value) for key, value in requirements.items()},
     )
 
 
@@ -555,6 +637,7 @@ __all__ = [
     "EpisodeEndPreconditionEvaluation",
     "EpisodeEndEvaluations",
     "InstanceEpisodeEnd",
+    "InstanceRequirement",
     "assess_ended_episode",
     "assess_ended_episodes",
     "evaluate_ended_episodes",

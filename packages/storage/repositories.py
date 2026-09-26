@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -33,12 +35,17 @@ from packages.contracts import (
 from packages.rca.json_access import child, object_content_hash
 from packages.rca.model import (
     CLUSTER_SCOPE,
+    Diagnosis,
     JournalEntry,
     Lifecycle,
     LogRecord,
+    PreconditionStatus,
+    RequirementAuditReason,
+    RequirementEvaluation,
     object_key,
     snapshot_evidence_id,
 )
+from packages.rca.requirements import requirement_key, requirement_targets_document
 from packages.storage.models import (
     DIAGNOSIS_TRIGGERS,
     LIFECYCLE_OBSERVATION_TYPES,
@@ -48,6 +55,7 @@ from packages.storage.models import (
     EmailDeliveryRow,
     EntityInstanceRow,
     EventVersionRow,
+    EvidenceRequirementRow,
     EvidenceRow,
     IncidentEventRow,
     IncidentRow,
@@ -1487,15 +1495,17 @@ class DiagnosisRepository:
         epistemic_digest: str,
         engine_version: str,
         config_digest: str,
-        companions: Callable[[Session], None] | None = None,
+        companions: Callable[[Session, int], None] | None = None,
     ) -> DiagnosisRevision:
         """Append the incident's next immutable revision and commit it.
 
         One transaction per attempt: lock the incident row, read the highest
-        revision, insert the next one (and any ``companions`` rows), commit. A
-        concurrent writer that wins the same number makes the insert fail on
-        ``UNIQUE(incident_id, revision_number)``; that is retried at most three
-        times. Diagnoses are never updated.
+        revision, insert and flush the next one, write any ``companions`` rows
+        with the new ``diagnosis_id``, commit. A concurrent writer that wins the
+        same number makes the insert fail on ``UNIQUE(incident_id,
+        revision_number)``; that is retried at most three times. A companion
+        failure rolls the whole revision back and is not retried. Diagnoses are
+        never updated.
         """
         if trigger not in DIAGNOSIS_TRIGGERS or trigger == "LEGACY":
             raise ValueError(f"not a revision trigger: {trigger!r}")
@@ -1533,17 +1543,21 @@ class DiagnosisRepository:
                 config_digest=config_digest,
             )
             self._session.add(row)
-            if companions is not None:
-                companions(self._session)
             try:
                 self._session.flush()
-                revision = DiagnosisRevision(row.diagnosis_id, row.revision_number)
-                self._session.commit()
             except IntegrityError:
                 self._session.rollback()
                 if attempt + 1 == _REVISION_ATTEMPTS:
                     raise
                 continue
+            revision = DiagnosisRevision(row.diagnosis_id, row.revision_number)
+            try:
+                if companions is not None:
+                    companions(self._session, row.diagnosis_id)
+                self._session.commit()
+            except BaseException:
+                self._session.rollback()
+                raise
             return revision
         raise AssertionError("unreachable")
 
@@ -1639,6 +1653,125 @@ class DiagnosisRepository:
                 "run_id": row.run_id,
             }
         return result
+
+
+@dataclass(frozen=True)
+class RequirementTransitions:
+    """What one revision did to its incident's requirements, by requirement_key."""
+
+    opened: tuple[str, ...] = ()
+    superseded: tuple[str, ...] = ()
+    satisfied: tuple[str, ...] = ()
+    unchanged: tuple[str, ...] = ()
+
+
+class EvidenceRequirementRepository:
+    """Requirement lifecycle driven by one diagnosis revision (M19-5.5).
+
+    Runs inside the revision's transaction, after the diagnosis row is
+    flushed and while the incident row is locked. Matching is by exact
+    ``requirement_key`` only; the previous OPEN row of a key:
+
+    * PASS or DISQUALIFIED → SATISFIED_BY_REVISION
+    * PENDING → SUPERSEDED_BY_REVISION and a new OPEN row for the same key
+    * deadline NO_DATA/PARTIAL → unchanged
+    * SCOPE_EXITED, or its hypothesis_key absent from the full inventory →
+      SUPERSEDED_BY_REVISION, nothing reopened
+    * hypothesis_key repeated in the inventory, or no current evaluation →
+      unchanged
+
+    A PENDING evaluation without a unique hypothesis_key creates no row.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def apply_revision(
+        self, *, incident_id: UUID, diagnosis_id: int, diagnosis: Diagnosis
+    ) -> RequirementTransitions:
+        counts = Counter(
+            entry.hypothesis_key
+            for entry in diagnosis.hypothesis_inventory
+            if entry.hypothesis_key is not None
+        )
+        current: dict[str, RequirementEvaluation] = {}
+        for evaluation in diagnosis.requirement_evaluations:
+            if evaluation.hypothesis_key is None or counts[evaluation.hypothesis_key] != 1:
+                continue  # no unique identity: never fabricated, never matched
+            key = requirement_key(incident_id, evaluation)
+            if current.setdefault(key, evaluation) != evaluation:
+                raise ValueError(f"conflicting evaluations for requirement {key}")
+        opened: list[str] = []
+        superseded: list[str] = []
+        satisfied: list[str] = []
+        unchanged: list[str] = []
+        rows = self._session.scalars(
+            select(EvidenceRequirementRow)
+            .where(
+                EvidenceRequirementRow.incident_id == incident_id,
+                EvidenceRequirementRow.status == "OPEN",
+            )
+            .order_by(EvidenceRequirementRow.requirement_id)
+            .with_for_update()
+        ).all()
+        for row in rows:
+            count = counts.get(row.hypothesis_key, 0)
+            matched = current.get(row.requirement_key) if count == 1 else None
+            if count == 0 or (
+                matched is not None and matched.audit_reason is RequirementAuditReason.SCOPE_EXITED
+            ):
+                row.status = "SUPERSEDED_BY_REVISION"
+                superseded.append(row.requirement_key)
+            elif matched is None or matched.result is None:
+                unchanged.append(row.requirement_key)
+            elif matched.result.status is PreconditionStatus.PENDING:
+                row.status = "SUPERSEDED_BY_REVISION"
+                superseded.append(row.requirement_key)
+            else:
+                row.status = "SATISFIED_BY_REVISION"
+                satisfied.append(row.requirement_key)
+        # Close before reopening: at most one OPEN row per key.
+        self._session.flush()
+        still_open = set(unchanged)
+        for key, evaluation in current.items():
+            result = evaluation.result
+            if result is None or result.status is not PreconditionStatus.PENDING:
+                continue
+            if key in still_open:
+                continue
+            assert result.not_before is not None
+            assert evaluation.hypothesis_key is not None
+            self._session.add(
+                EvidenceRequirementRow(
+                    requirement_key=key,
+                    incident_id=incident_id,
+                    diagnosis_id=diagnosis_id,
+                    hypothesis_key=evaluation.hypothesis_key,
+                    rule_id=evaluation.rule_id,
+                    rule_version=evaluation.rule_version,
+                    kind=evaluation.kind.value,
+                    targets=requirement_targets_document(evaluation),
+                    not_before=result.not_before,
+                    status="OPEN",
+                )
+            )
+            opened.append(key)
+        self._session.flush()
+        return RequirementTransitions(
+            opened=tuple(opened),
+            superseded=tuple(superseded),
+            satisfied=tuple(satisfied),
+            unchanged=tuple(unchanged),
+        )
+
+    def for_incident(self, incident_id: UUID) -> list[EvidenceRequirementRow]:
+        return list(
+            self._session.scalars(
+                select(EvidenceRequirementRow)
+                .where(EvidenceRequirementRow.incident_id == incident_id)
+                .order_by(EvidenceRequirementRow.requirement_id)
+            )
+        )
 
 
 class ReportRepository:

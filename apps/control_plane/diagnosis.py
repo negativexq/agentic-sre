@@ -44,6 +44,7 @@ from packages.storage import (
     AlertRepository,
     DiagnosisRepository,
     EventRepository,
+    EvidenceRequirementRepository,
     IncidentEventRepository,
     IncidentNotFoundError,
     IncidentRepository,
@@ -731,7 +732,14 @@ class DiagnosisService:
             manifest_digest = load_manifest_digest(session, run_id)
             tape_digest = load_tape_digest(session, run_id)
 
-            def companions(writer: Session) -> None:
+            document = diagnosis.model_dump(mode="json")
+            # Requirement rows are a pure function of the persisted revision.
+            persisted = Diagnosis.model_validate(document)
+
+            def companions(writer: Session, diagnosis_id: int) -> None:
+                EvidenceRequirementRepository(writer).apply_revision(
+                    incident_id=incident_id, diagnosis_id=diagnosis_id, diagnosis=persisted
+                )
                 if investigation_result is not None:
                     InvestigationRunRepository(writer).save(
                         diagnosis_run_id=run_id,
@@ -744,7 +752,7 @@ class DiagnosisService:
 
             DiagnosisRepository(session).save_revision(
                 incident_id=incident_id,
-                document=diagnosis.model_dump(mode="json"),
+                document=document,
                 created_at=created_at,
                 run_id=run_id,
                 trigger=trigger,

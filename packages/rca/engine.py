@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Protocol
+from typing import Any, Protocol
 
 from packages.rca.causal_roles import HypothesisCausalRoles, derive_hypothesis_causal_roles
 from packages.rca.episode_end import RULE_ID as EPISODE_END_RULE_ID
@@ -43,6 +43,7 @@ from packages.rca.model import (
     PreconditionAuditReason,
     PreconditionResult,
     ProviderReadFailure,
+    RequirementEvaluation,
     Resolution,
     StructuralAlternative,
     Symptoms,
@@ -58,6 +59,7 @@ from packages.rca.ranking import (
     verify,
 )
 from packages.rca.remediation import propose
+from packages.rca.requirements import build_requirement_evaluations, hypothesis_inventory
 from packages.rca.resolution import hypothesis_signature, resolve_hypotheses
 from packages.rca.resource_mechanism import RULE_ID as RESOURCE_RULE_ID
 from packages.rca.resource_mechanism import MechanismMismatch, evaluate_resource_mechanisms
@@ -123,6 +125,7 @@ class Case:
     precondition_reasons: dict[tuple[str, str], tuple[PreconditionAuditReason, ...]] = field(
         default_factory=dict
     )
+    requirement_evaluations: tuple[RequirementEvaluation, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -319,6 +322,11 @@ def build_case(
         hypothesis_diagnostics=grouping.diagnostics,
         steps=steps,
         mechanism_mismatches=dict(resource_evaluations.mismatches),
+        requirement_evaluations=build_requirement_evaluations(
+            hypotheses,
+            instance_requirements=episode_evaluations.instance_requirements,
+            coverage_requirements=resource_evaluations.requirements,
+        ),
         rule_preconditions={
             **{
                 (hypothesis_id, EPISODE_END_RULE_ID): results
@@ -402,6 +410,14 @@ def _accept_override(
     return top
 
 
+def _requirement_provenance(case: Case) -> dict[str, Any]:
+    """Requirement lifecycle provenance for the diagnosis; no decision reads it."""
+    return {
+        "requirement_evaluations": case.requirement_evaluations,
+        "hypothesis_inventory": hypothesis_inventory(case.hypotheses),
+    }
+
+
 def diagnose_case(
     case: Case,
     *,
@@ -451,6 +467,7 @@ def diagnose_case(
                 case.structural_alternatives,
                 bounded=bool(getattr(case.source, "initial_observation_bounded", False)),
             ),
+            **_requirement_provenance(case),
         )
     # Resolution compares immutable evidence structures.  Attach the same
     # signatures to the serialized hypotheses so API consumers can inspect the
@@ -518,6 +535,7 @@ def diagnose_case(
                 case.structural_alternatives,
                 bounded=bool(getattr(case.source, "initial_observation_bounded", False)),
             ),
+            **_requirement_provenance(case),
         )
     ranked_top_ineligible = not case.root_cause_eligibilities.is_root_cause_selectable(
         case.hypotheses[0].hypothesis_id
@@ -640,6 +658,7 @@ def diagnose_case(
             case.structural_alternatives,
             bounded=bool(getattr(case.source, "initial_observation_bounded", False)),
         ),
+        **_requirement_provenance(case),
     )
 
 

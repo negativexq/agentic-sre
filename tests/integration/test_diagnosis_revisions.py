@@ -14,7 +14,7 @@ from uuid import UUID
 import pytest
 import sqlalchemy as sa
 from alembic import command
-from sqlalchemy import create_engine, inspect, select
+from sqlalchemy import create_engine, event, inspect, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -198,11 +198,15 @@ def test_the_writer_rejects_legacy_and_unknown_incidents_and_has_no_update(
 
 def _racing_writer(
     factory: sessionmaker[Session], incident_id: UUID, times: int
-) -> Callable[[Session], None]:
-    """Commit a competing revision from another session, ``times`` times."""
+) -> Callable[..., None]:
+    """Commit a competing revision from another session, ``times`` times.
+
+    Registered on the writer session's ``before_flush``, so it runs just before
+    each insert attempt flushes.
+    """
     remaining = [times]
 
-    def companions(_: Session) -> None:
+    def before_flush(*_: Any) -> None:
         if remaining[0] == 0:
             return
         remaining[0] -= 1
@@ -225,13 +229,14 @@ def _racing_writer(
             )
             other.commit()
 
-    return companions
+    return before_flush
 
 
 def test_a_lost_number_race_is_retried_at_most_three_times(setup: Any) -> None:  # noqa: F811
     factory, _, _, incident_id = setup
     with factory() as session:
-        revision = _write(session, incident_id, companions=_racing_writer(factory, incident_id, 3))
+        event.listen(session, "before_flush", _racing_writer(factory, incident_id, 3))
+        revision = _write(session, incident_id)
     assert revision.revision_number == 4  # three competitors won 1, 2, 3
     rows = _revisions(factory, incident_id)
     assert [row.revision_number for row in rows] == [1, 2, 3, 4]
@@ -239,7 +244,8 @@ def test_a_lost_number_race_is_retried_at_most_three_times(setup: Any) -> None: 
 
     other = _incident(factory().get_bind().engine)
     with factory() as session, pytest.raises(IntegrityError):
-        _write(session, other, companions=_racing_writer(factory, other, 4))
+        event.listen(session, "before_flush", _racing_writer(factory, other, 4))
+        _write(session, other)
     assert [row.mode for row in _revisions(factory, other)] == ["race"] * 4
 
 

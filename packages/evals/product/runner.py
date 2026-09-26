@@ -95,6 +95,8 @@ class RunResult:
     status: RunStatus
     error: str | None = None
     timeline: tuple[TimelineRecord, ...] = ()
+    # The error's type name, so an expected terminal (e.g. ``NoR1``) is typed, not matched.
+    error_type: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -290,23 +292,47 @@ class ProductRunner:
         try:
             backend.clean_baseline(scenario)
         except DirtyBaseline as error:
-            return RunResult(scenario.scenario_id, RunStatus.ERROR, str(error))
+            return RunResult(
+                scenario.scenario_id,
+                RunStatus.ERROR,
+                str(error),
+                timeline=tuple(self._verified),
+                error_type=type(error).__name__,
+            )
         try:
             self._timeline(scenario)
         except (ActionVerificationError, PreHistoryIncident) as error:
-            return RunResult(scenario.scenario_id, RunStatus.ERROR, str(error))
+            return RunResult(
+                scenario.scenario_id,
+                RunStatus.ERROR,
+                str(error),
+                timeline=tuple(self._verified),
+                error_type=type(error).__name__,
+            )
         try:
             backend.await_r1(scenario)
             backend.run_r_early(scenario)
             backend.await_r2(scenario)
         except RevisionScheduleError as error:
-            return RunResult(scenario.scenario_id, RunStatus.ERROR, str(error))
+            return RunResult(
+                scenario.scenario_id,
+                RunStatus.ERROR,
+                str(error),
+                timeline=tuple(self._verified),
+                error_type=type(error).__name__,
+            )
         self._set_traffic(False)
         result = RunResult(scenario.scenario_id, RunStatus.RUN_OK, timeline=tuple(self._verified))
         try:
             backend.write_artifact(scenario, result)
         except ArtifactError as error:
-            return RunResult(scenario.scenario_id, RunStatus.ERROR, str(error))
+            return RunResult(
+                scenario.scenario_id,
+                RunStatus.ERROR,
+                str(error),
+                timeline=tuple(self._verified),
+                error_type=type(error).__name__,
+            )
         return result
 
     def _timeline(self, scenario: ProductScenario) -> None:

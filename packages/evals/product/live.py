@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import os
+import socket
 import subprocess
 import time
 import urllib.request
@@ -53,11 +55,73 @@ from packages.storage.models import (
 )
 from packages.storage.repositories import InvestigationReadRepository
 
+logger = logging.getLogger(__name__)
+
 CLUSTER = "agentic-sre-product"
 NAMESPACE = "sre-demo"
 IMAGES = ("control-plane", "migrator", "order-service", "payment-service", "order-worker")
 WORKLOAD_DEPLOYMENTS = ("order-service", "payment-service", "order-worker")
 DEPENDENCY_DEPLOYMENTS = ("postgres", "kafka", "redis")
+OBSERVABILITY_DEPLOYMENTS = (
+    "otel-collector",
+    "prometheus",
+    "kube-state-metrics",
+    "loki",
+    "tempo",
+    "alertmanager",
+    "grafana",
+)
+KAFKA_TOPICS = "/opt/kafka/bin/kafka-topics.sh"
+# Harness traffic runs outside every watched/evidence namespace: it is not evidence.
+TRAFFIC_NAMESPACE = "product-traffic"
+TRAFFIC_POD = "product-traffic"
+TRAFFIC_RATE = 2  # requests/s, one sequential worker (M19-6.12a)
+TRAFFIC_SEED = 42
+TRAFFIC_TARGET = f"http://order-service.{NAMESPACE}.svc.cluster.local:8000"
+
+
+def traffic_manifest(duration: timedelta) -> list[dict[str, Any]]:
+    """The in-cluster traffic Pod: the workload load generator against the order-service
+    Service DNS, so traffic follows Service routing (readiness, selectors)."""
+    return [
+        {"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": TRAFFIC_NAMESPACE}},
+        {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {"name": TRAFFIC_POD, "namespace": TRAFFIC_NAMESPACE},
+            "spec": {
+                "restartPolicy": "Never",
+                "containers": [
+                    {
+                        "name": "load",
+                        "image": "agentic-sre/order-service:dev",
+                        "imagePullPolicy": "IfNotPresent",
+                        "command": [
+                            "python",
+                            "-m",
+                            "workload.load_generator",
+                            "--base-url",
+                            TRAFFIC_TARGET,
+                            "--rate",
+                            str(TRAFFIC_RATE),
+                            "--duration",
+                            str(int(duration.total_seconds())),
+                            "--seed",
+                            str(TRAFFIC_SEED),
+                            "--concurrency",
+                            "1",
+                        ],  # fmt: skip
+                        "resources": {
+                            "requests": {"cpu": "20m", "memory": "64Mi"},
+                            "limits": {"cpu": "200m", "memory": "256Mi"},
+                        },
+                    }
+                ],
+            },
+        },
+    ]
+
+
 # Required on every product control plane: scheduler on, deterministic policy.
 PRODUCT_CONTROL_PLANE_ENV = {
     "SRE_REEVALUATE": "true",
@@ -118,6 +182,12 @@ def baseline_faults(service: str) -> dict[str, Any]:
 
         return FaultConfig().model_dump(mode="json")
     raise ValueError(f"{service} has no fault endpoint")
+
+
+def _listening(port: int) -> bool:
+    with socket.socket() as probe:
+        probe.settimeout(1)
+        return probe.connect_ex(("127.0.0.1", port)) == 0
 
 
 def _run(argv: Sequence[str], env: Mapping[str, str], stdin: str | None = None) -> str:
@@ -463,6 +533,11 @@ class LiveBackend:
     cluster: str = CLUSTER
     namespace: str = NAMESPACE
     port_forwards: Mapping[str, int] | None = None
+    control_plane_port: int | None = None
+    postgres_port: int | None = None
+    traffic_duration: timedelta = timedelta(hours=2)
+    port_ready: Callable[[int], bool] = lambda port: _listening(port)
+    before_teardown: Callable[[LiveBackend], None] | None = None
     control_plane_url: str | None = None
     api_token: str | None = None
     request_json: Callable[[str, Mapping[str, Any], Mapping[str, str]], Mapping[str, Any]] = (
@@ -486,6 +561,7 @@ class LiveBackend:
         self._r_early: revisions.REarly | None = None
         self._r2: int | None = None
         self._run: str | None = None
+        self._traffic = False
         self.artifact_path: Path | None = None
 
     @property
@@ -524,15 +600,19 @@ class LiveBackend:
             self._exec(
                 "kind", "load", "docker-image", f"agentic-sre/{image}:dev", "--name", self.cluster
             )
+        # The order of ``make deploy``: the workload ConfigMap exists before the
+        # migration job needs it; the workload restarts once the schema exists.
         for manifest in (
             "namespace.yaml",
             "observability.yaml",
             "tools-rbac.yaml",
+            "workload.yaml",
             "dependencies.yaml",
         ):
             self._apply(manifest)
         for deployment in DEPENDENCY_DEPLOYMENTS:
             self._rollout(deployment)
+        self._create_topic("orders.created")
         self._kubectl("-n", self.namespace, "delete", "job", "db-migration", "--ignore-not-found")
         self._apply("db-migration.yaml")
         self._kubectl(
@@ -543,11 +623,31 @@ class LiveBackend:
             "job/db-migration",
             "--timeout=180s",
         )
-        self._apply("workload.yaml")
+        self._kubectl(
+            "-n", self.namespace, "rollout", "restart",
+            *(f"deployment/{name}" for name in WORKLOAD_DEPLOYMENTS),
+        )  # fmt: skip
+
+    def _create_topic(self, topic: str) -> None:
+        kafka = ("-n", self.namespace, "exec", "deployment/kafka", "--", KAFKA_TOPICS)
+        for _ in range(60):
+            try:
+                self._kubectl(*kafka, "--list", "--bootstrap-server", "localhost:9092")
+                break
+            except subprocess.CalledProcessError:
+                self.sleep(2)
+        else:
+            raise RuntimeError("Kafka never answered a topic listing")
+        self._kubectl(
+            *kafka, "--create", "--if-not-exists", "--topic", topic,
+            "--bootstrap-server", "localhost:9092",
+        )  # fmt: skip
 
     def wait_workload_ready(self) -> None:
         for deployment in WORKLOAD_DEPLOYMENTS:
             self._rollout(deployment)
+        for deployment in OBSERVABILITY_DEPLOYMENTS:
+            self._rollout(deployment, "observability")
 
     def start_fresh_db_and_control_plane(self) -> None:
         # The cluster's Postgres has no persistent volume: storage is fresh
@@ -569,14 +669,34 @@ class LiveBackend:
                     self._env,
                 )
             )  # fmt: skip
-        if self.prometheus_port is not None:
+        for namespace, service, local, remote in (
+            (self.namespace, "control-plane", self.control_plane_port, 8000),
+            (self.namespace, "postgres", self.postgres_port, 5432),
+            ("observability", "prometheus", self.prometheus_port, 9090),
+        ):
+            if local is None:
+                continue
             self._forwards.append(
                 self.spawn(
-                    ["kubectl", "--context", self._context, "-n", "observability",
-                     "port-forward", "service/prometheus", f"{self.prometheus_port}:9090"],
+                    ["kubectl", "--context", self._context, "-n", namespace,
+                     "port-forward", f"service/{service}", f"{local}:{remote}"],
                     self._env,
                 )
             )  # fmt: skip
+        self._await_forwards()
+
+    def _await_forwards(self) -> None:
+        ports = [
+            *(self.port_forwards or {}).values(),
+            *(p for p in (self.control_plane_port, self.postgres_port, self.prometheus_port) if p),
+        ]
+        for port in ports:
+            for _ in range(60):
+                if self.port_ready(port):
+                    break
+                self.sleep(0.5)
+            else:
+                raise RuntimeError(f"port-forward on {port} never listened")
 
     def warmup(self, duration: timedelta) -> None:
         self.sleep(duration.total_seconds())
@@ -584,11 +704,9 @@ class LiveBackend:
     def clean_baseline(self, scenario: ProductScenario) -> None:
         if self._collector_started_at is None:
             raise RuntimeError("the control plane has not been started")
-        if self.control_plane_url is None:
-            raise RuntimeError("no control-plane URL for the baseline probe")
         reference_at = self.control_port.now()
         document = self.request_json(
-            f"{self.control_plane_url}/api/v1/baseline-probe",
+            f"{self._control_plane()}/api/v1/baseline-probe",
             {
                 "namespace": self.namespace,
                 "baseline_reference_at": reference_at.isoformat(),
@@ -602,9 +720,23 @@ class LiveBackend:
         return None
 
     def set_traffic(self, enabled: bool) -> None:
-        # No product traffic driver exists before T0, so off is already true.
+        # Off before any on is already true: no traffic Pod exists on a fresh cluster.
         if enabled:
-            raise StageNotImplemented("the live traffic driver arrives with M19-6.12")
+            self._exec(
+                "kubectl", "--context", self._context, "apply", "-f", "-",
+                stdin=yaml.safe_dump_all(traffic_manifest(self.traffic_duration)),
+            )  # fmt: skip
+            self._kubectl(
+                "-n", TRAFFIC_NAMESPACE, "wait", "--for=condition=Ready",
+                f"pod/{TRAFFIC_POD}", "--timeout=120s",
+            )  # fmt: skip
+            self._traffic = True
+        elif self._traffic:
+            self._kubectl(
+                "-n", TRAFFIC_NAMESPACE, "delete", "pod", TRAFFIC_POD,
+                "--ignore-not-found", "--wait=true", "--timeout=60s",
+            )  # fmt: skip
+            self._traffic = False
 
     def control(self) -> LiveClusterControl:
         return self.control_port
@@ -616,9 +748,12 @@ class LiveBackend:
         self._t0 = t0
 
     def _control_plane(self) -> str:
-        if self.control_plane_url is None:
+        url = self.control_plane_url or (
+            f"http://127.0.0.1:{self.control_plane_port}" if self.control_plane_port else None
+        )
+        if url is None:
             raise RuntimeError("no control-plane URL for the revision schedule")
-        return self.control_plane_url
+        return url
 
     def _reads(self) -> HttpControlPlaneReads:
         return HttpControlPlaneReads(self._control_plane(), self.http)
@@ -691,6 +826,11 @@ class LiveBackend:
         self.artifact_path = artifact.write_artifact(bench_root, self._run, document)
 
     def cluster_down(self) -> None:
+        if self.before_teardown is not None:
+            try:
+                self.before_teardown(self)
+            except Exception:  # evidence capture never blocks teardown
+                logger.warning("before_teardown failed", exc_info=True)
         for process in self._forwards:
             process.terminate()
         self._forwards.clear()

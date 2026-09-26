@@ -39,7 +39,6 @@ from packages.evals.product.live import (
     LiveBackend,
     LiveClusterControl,
     LiveEvidenceReader,
-    StageNotImplemented,
     baseline_faults,
     product_control_plane_manifest,
     product_environment,
@@ -569,6 +568,7 @@ def test_live_backend_starts_the_control_plane_only_after_the_workload(tmp_path:
         spawn=spawn,
         sleep=slept.append,
         port_forwards={"order-service": 18100},
+        port_ready=lambda port: True,
         control_plane_url="http://cp",
         request_json=lambda url, payload, headers: {
             "initiating_finding_count": 0,
@@ -577,7 +577,7 @@ def test_live_backend_starts_the_control_plane_only_after_the_workload(tmp_path:
             "root_eligible_manifestation_only_hypothesis_ids": [],
         },
     )
-    with pytest.raises(StageNotImplemented, match="M19-6.12"):
+    with pytest.raises(RuntimeError, match="no Prometheus URL"):
         ProductRunner(backend).run(_scenario())
     argvs = [" ".join(argv) for argv, _ in commands.calls]
     joined = "\n".join(argvs)

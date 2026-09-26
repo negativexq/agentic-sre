@@ -11,7 +11,7 @@ from test_product_actions import FakeEvidence
 from test_product_runner import ROOT, Commands, _control, _Process
 
 from packages.evals.product.actions import IncidentRecord, PatchService
-from packages.evals.product.live import LiveBackend, LiveEvidenceReader, StageNotImplemented
+from packages.evals.product.live import LiveBackend, LiveEvidenceReader
 from packages.evals.product.runner import (
     DRY_RUN_EPOCH,
     PreHistoryIncident,
@@ -178,8 +178,8 @@ def test_live_traffic_enable_is_a_later_task_and_off_is_a_no_op() -> None:
     )
     backend.set_traffic(False)
     assert commands.calls == []
-    with pytest.raises(StageNotImplemented, match="M19-6.12"):
-        backend.set_traffic(True)
+    backend.set_traffic(True)
+    assert commands.calls and commands.calls[0][1] is not None  # the traffic Pod manifest
 
 
 def test_the_guard_sees_incidents_opened_just_before_t0() -> None:

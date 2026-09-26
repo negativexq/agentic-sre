@@ -499,6 +499,7 @@ def _live(world: World, http: Http, probes: list[str], spawned: list[list[str]])
         api_token="t0ken",
         request_json=probe,
         prometheus_port=19090,
+        port_ready=lambda port: True,
         http=http,
     )
 

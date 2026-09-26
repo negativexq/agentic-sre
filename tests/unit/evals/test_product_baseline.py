@@ -12,7 +12,7 @@ from test_product_runner import ROOT, Commands, _control, _Process
 
 from packages.evals.product.actions import SetReadiness
 from packages.evals.product.baseline import DirtyBaseline, check_baseline
-from packages.evals.product.live import LiveBackend, LiveEvidenceReader, StageNotImplemented
+from packages.evals.product.live import LiveBackend, LiveEvidenceReader
 from packages.evals.product.runner import ProductRunner, RecordingBackend, RunStatus, Stage
 from packages.evals.product.spec import Expectation, Phase, ProductScenario
 from packages.storage.database import create_session_factory
@@ -115,7 +115,7 @@ def _backend(document: Mapping[str, Any], requests: list[tuple[str, Any, Any]]) 
 def test_the_live_probe_window_starts_before_the_control_plane_and_ends_at_the_check() -> None:
     requests: list[tuple[str, Any, Any]] = []
     backend = _backend(CLEAN, requests)
-    with pytest.raises(StageNotImplemented, match="M19-6.12"):
+    with pytest.raises(RuntimeError, match="no Prometheus URL"):
         ProductRunner(backend).run(
             ProductScenario(scenario_id="s", phases=(), expectation=Expectation())
         )

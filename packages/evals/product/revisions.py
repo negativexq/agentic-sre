@@ -75,6 +75,14 @@ class RevisionScheduleError(RuntimeError):
     """The revision chain or R1's provenance is not what the schedule requires."""
 
 
+class NoR1(RevisionScheduleError):
+    """No qualifying R1 within the discovery bound; ``incidents`` were seen at its end."""
+
+    def __init__(self, incidents: int) -> None:
+        self.incidents = incidents
+        super().__init__(f"no R1 within the discovery bound ({incidents} incident(s) seen)")
+
+
 @dataclass(frozen=True, slots=True)
 class ScheduleConfig:
     r1_timeout: timedelta = timedelta(minutes=10)  # after T0; harness liveness bound
@@ -209,7 +217,7 @@ def discover_r1(
                 return R1(incident.incident_id, first.diagnosis_id, onset, control.now(), proven)
         now = control.now()
         if now >= deadline:
-            raise RevisionScheduleError("no R1 within the discovery bound")
+            raise NoR1(len(incidents))
         control.wait(min(config.poll, deadline - now))
 
 
@@ -269,6 +277,7 @@ __all__ = [
     "ControlPlaneReads",
     "IncidentView",
     "ManualDiagnosis",
+    "NoR1",
     "REarly",
     "RevisionScheduleError",
     "RevisionView",

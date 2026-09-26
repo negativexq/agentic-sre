@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
+from pydantic import BaseModel
+from workload.order_service.app import OrderFaultConfig
+from workload.payment_service.app import FaultConfig as PaymentFaultConfig
 
+import packages.evals.live.actions as live_actions
 from packages.evals.live.actions import (
     ApplyFile,
     ApplyManifest,
@@ -163,6 +168,58 @@ def test_selecting_an_unknown_scenario_is_rejected() -> None:
 def test_fault_endpoints_are_enabled_in_the_deployed_workload() -> None:
     """Runtime-fault scenarios need the endpoint the manifest gates."""
     assert 'ENABLE_TEST_FAULTS: "true"' in WORKLOAD_MANIFEST.read_text()
+
+
+def _fault_posts(monkeypatch: pytest.MonkeyPatch, *actions: HttpFault) -> list[tuple[str, Any]]:
+    """Run the real ``HttpFault.apply`` path and capture what it would POST."""
+    posts: list[tuple[str, Any]] = []
+    monkeypatch.setattr(
+        live_actions, "post_json", lambda url, payload, *, context: posts.append((url, payload))
+    )
+    for action in actions:
+        action.apply(Context())
+    return posts
+
+
+BASELINE = {
+    "order-service": {
+        "delay_ms": 0,
+        "error": False,
+        "db_query_delay_ms": 0,
+        "not_ready": False,
+        "memory_ballast_mb": 0,
+    },
+    "payment-service": {
+        "delay_ms": 0,
+        "error": False,
+        "db_query_delay_ms": 0,
+        "db_hold_ms": 0,
+        "not_ready": False,
+        "memory_ballast_mb": 0,
+    },
+}
+
+
+def test_baseline_reset_clears_every_workload_fault(monkeypatch: pytest.MonkeyPatch) -> None:
+    """M19-6.3: the cleared payload resets readiness and ballast faults too."""
+    posts = _fault_posts(monkeypatch, HttpFault("order-service"), HttpFault("payment-service"))
+    assert posts == [
+        ("http://localhost:18000/__faults", BASELINE["order-service"]),
+        ("http://localhost:18001/__faults", BASELINE["payment-service"]),
+    ]
+    for _, payload in posts:
+        assert payload["not_ready"] is False
+        assert payload["memory_ballast_mb"] == 0
+    # Complete against the workload fault models: every field present, each at its default.
+    models: tuple[type[BaseModel], ...] = (OrderFaultConfig, PaymentFaultConfig)
+    for (_, payload), model in zip(posts, models, strict=True):
+        assert set(payload) == set(model.model_fields)
+        assert model.model_validate(payload) == model()
+
+
+def test_scenario_faults_override_only_their_own_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    ((_, payload),) = _fault_posts(monkeypatch, HttpFault("payment-service", {"db_hold_ms": 3500}))
+    assert payload == {**BASELINE["payment-service"], "db_hold_ms": 3500}
 
 
 # --------------------------------------------------------------------------

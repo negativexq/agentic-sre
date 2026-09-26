@@ -183,6 +183,7 @@ def accept(
 def write_evidence(
     path: Path, scenario_id: str, result: RunResult, evidence: Mapping[str, Any] | None,
     acceptance: Acceptance, timeline: Sequence[Mapping[str, Any]],
+    baseline: Mapping[str, Any] | None = None,
 ) -> None:  # fmt: skip
     """The smoke record next to the run's artifacts (create-only, like the artifact)."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -195,6 +196,8 @@ def write_evidence(
         "reasons": list(acceptance.reasons),
         "timeline": list(timeline),
         "evidence": evidence,
+        # The clean-baseline probe's ephemeral evaluation, so a dirty baseline names its cause.
+        "baseline": baseline,
     }
     with path.open("x", encoding="utf-8") as handle:
         json.dump(document, handle, indent=2, sort_keys=True, default=str)

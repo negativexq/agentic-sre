@@ -17,6 +17,7 @@ import logging
 import os
 import socket
 import subprocess
+import tempfile
 import time
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
@@ -569,6 +570,7 @@ class LiveBackend:
         self._run: str | None = None
         self._traffic = False
         self.artifact_path: Path | None = None
+        self.baseline_document: Mapping[str, Any] | None = None
 
     @property
     def _context(self) -> str:
@@ -606,16 +608,18 @@ class LiveBackend:
             self._exec(
                 "kind", "load", "docker-image", f"agentic-sre/{image}:dev", "--name", self.cluster
             )
-        # The order of ``make deploy``: the workload ConfigMap exists before the
-        # migration job needs it; the workload restarts once the schema exists.
+        # The workload's configuration exists before the migration job reads it,
+        # but its Pods start only once Kafka's topic and the schema exist: a Pod
+        # that crashed before the collector started would leave failure Events
+        # whose episode end (a tombstone) was never observed — a dirty baseline.
         for manifest in (
             "namespace.yaml",
             "observability.yaml",
             "tools-rbac.yaml",
-            "workload.yaml",
             "dependencies.yaml",
         ):
             self._apply(manifest)
+        self._apply_configuration("workload.yaml")
         for deployment in DEPENDENCY_DEPLOYMENTS:
             self._rollout(deployment)
         self._create_topic("orders.created")
@@ -629,10 +633,18 @@ class LiveBackend:
             "job/db-migration",
             "--timeout=180s",
         )
-        self._kubectl(
-            "-n", self.namespace, "rollout", "restart",
-            *(f"deployment/{name}" for name in WORKLOAD_DEPLOYMENTS),
-        )  # fmt: skip
+        self._apply("workload.yaml")
+
+    def _apply_configuration(self, manifest: str) -> None:
+        """Only the ConfigMaps and Secrets of ``manifest``."""
+        documents = yaml.safe_load_all((self.root / "infra" / "kubernetes" / manifest).read_text())
+        configuration = [
+            item for item in documents if item and item.get("kind") in ("ConfigMap", "Secret")
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / f"configuration-{manifest}"
+            path.write_text(yaml.safe_dump_all(configuration))
+            self._kubectl("apply", "-f", str(path))
 
     def _create_topic(self, topic: str) -> None:
         kafka = ("-n", self.namespace, "exec", "deployment/kafka", "--", KAFKA_TOPICS)
@@ -720,6 +732,7 @@ class LiveBackend:
             },
             {"Authorization": f"Bearer {self.api_token}"} if self.api_token else {},
         )
+        self.baseline_document = document
         check_baseline(document)
 
     def start_timeline(self, scenario: ProductScenario) -> None:

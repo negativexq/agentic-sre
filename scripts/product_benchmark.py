@@ -87,6 +87,7 @@ def _smoke(name: str, run_id: str | None) -> int:  # pragma: no cover - live Kin
     captured: dict[str, object] = {}
 
     def capture(backend: LiveBackend) -> None:
+        captured["baseline"] = backend.baseline_document
         captured["evidence"] = smoke.capture_evidence(
             factory, backend.http, prometheus, since=started, until=datetime.now(UTC)
         )
@@ -124,6 +125,7 @@ def _smoke(name: str, run_id: str | None) -> int:  # pragma: no cover - live Kin
     smoke.write_evidence(
         record, name, result, evidence if isinstance(evidence, dict) else None,
         acceptance, timeline,
+        baseline if isinstance(baseline := captured.get("baseline"), dict) else None,
     )  # fmt: skip
     verdict = "ACCEPTED" if acceptance.accepted else "NOT ACCEPTED"
     print(f"{name}: {result.status.value}/{result.error_type} {verdict} -> {record}")

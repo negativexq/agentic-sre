@@ -19,7 +19,6 @@ from packages.evals.product.live import (
     CLUSTER,
     OBSERVABILITY_DEPLOYMENTS,
     TRAFFIC_NAMESPACE,
-    WORKLOAD_DEPLOYMENTS,
     LiveBackend,
     LiveEvidenceReader,
     traffic_manifest,
@@ -74,25 +73,40 @@ def _index(argvs: list[str], needle: str) -> int:
 # --- deploy order ----------------------------------------------------------------------------
 
 
-def test_deploy_follows_make_deploy_order() -> None:
+def test_the_workload_starts_only_after_its_dependencies() -> None:
     commands = Commands()
     backend = _backend(commands)
     backend.deploy_observability_and_workload()
     backend.wait_workload_ready()
     argvs = _argvs(commands)
-    workload = _index(argvs, "workload.yaml")
+    configuration = _index(argvs, "configuration-workload.yaml")
     migration = _index(argvs, "db-migration.yaml")
     kafka_ready = _index(argvs, "rollout status deployment/kafka")
     topic = _index(argvs, "--create --if-not-exists --topic orders.created")
-    restart = _index(argvs, "rollout restart")
-    # The migration job reads the workload ConfigMap, so workload.yaml comes first.
-    assert workload < migration
-    assert kafka_ready < topic < migration < restart
-    assert all(f"deployment/{name}" in argvs[restart] for name in WORKLOAD_DEPLOYMENTS)
+    complete = _index(argvs, "--for=condition=complete")
+    workload = next(i for i, argv in enumerate(argvs) if argv.endswith("/workload.yaml"))
+    # Configuration before the migration reads it; Pods only after topic and schema.
+    assert configuration < migration
+    assert kafka_ready < topic < workload and migration < complete < workload
+    assert "rollout restart" not in "\n".join(argvs)
     for name in OBSERVABILITY_DEPLOYMENTS:
-        index = _index(argvs, f"-n observability rollout status deployment/{name}")
-        assert index > restart
+        assert _index(argvs, f"-n observability rollout status deployment/{name}") > workload
     assert all(f"kind-{CLUSTER}" in argv for argv in argvs if "kubectl" in argv)
+
+
+def test_only_configuration_is_applied_before_the_schema(tmp_path: Path) -> None:
+    applied: list[str] = []
+
+    class Reading(Commands):
+        def __call__(self, argv: Sequence[str], env: Mapping[str, str], stdin: str | None) -> str:
+            if "configuration-workload.yaml" in " ".join(argv):
+                applied.append(Path(argv[-1]).read_text())
+            return super().__call__(argv, env, stdin)
+
+    _backend(Reading())._apply_configuration("workload.yaml")
+    (text,) = applied
+    kinds = [item["kind"] for item in yaml.safe_load_all(text)]
+    assert kinds == ["ConfigMap", "Secret"]
 
 
 def test_the_topic_waits_for_kafka_and_fails_loudly() -> None:

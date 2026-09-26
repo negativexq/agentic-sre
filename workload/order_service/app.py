@@ -228,6 +228,11 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/ready")
+    def ready() -> dict[str, str]:
+        """Process readiness only; no dependency is consulted."""
+        return {"status": "ready"}
+
     return app
 
 

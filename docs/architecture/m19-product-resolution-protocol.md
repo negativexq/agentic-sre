@@ -1,11 +1,15 @@
 # M19 Product Resolution Protocol
 
-Status: **ACTIVE**
+Status: **FROZEN**
+
+M19's correctness and replay foundation was merged in PR #2. Remaining
+synthetic pressure-validation work was superseded rather than tuned to satisfy
+benchmark thresholds. New RCA capability work proceeds outside this protocol.
 
 ## 1. Purpose
 
-This protocol describes the active M19 DEV validation scenarios and evidence
-rules. It describes how a diagnosis may move from `AMBIGUOUS` to `RESOLVED`
+This protocol records the M19 DEV validation scenarios and evidence rules. It
+describes how a diagnosis may move from `AMBIGUOUS` to `RESOLVED`
 when qualifying positive evidence is captured, persisted, and evaluated by the
 deterministic RCA rules. Scenario outcomes are evaluated at diagnosis revisions
 and against the evidence available to each revision.
@@ -18,11 +22,12 @@ reported as blind, pre-registered, or as evidence of generalization.
 
 ## 2. Scope
 
-The protocol covers the active DEV scenarios PR-01, PR-01N, PR-02, PR-03,
-and PR-03N; PR-02N is superseded by the owner decision below. It also covers
-the R1, R_early, and R2 revision timeline; evidence membership and replay;
-decisive evidence; T1–T4 and N0–N3 (N2 is superseded, not passed); global
-product safety; and replay-level T5/T6 ablation checks.
+The protocol records DEV scenarios PR-01, PR-01N, PR-02, and PR-03; synthetic
+pressure cases PR-02N and PR-03N and their proofs N2 and N3 are superseded, not
+passed. It also records the R1, R_early, and R2 revision timeline; evidence
+membership and replay; decisive evidence; T1–T4 and N0–N3; global product
+safety; and replay-level T5/T6 ablation checks. This frozen document does not
+claim that every original G19.7 validation gate passed.
 
 The M19 product objective is read-only observation, continuous evidence
 collection, evidence continuity, exact entity-instance identity, diagnosis
@@ -224,18 +229,15 @@ leader.
 
 **Proof:** T1–T4 and N0.
 
-### 4.6 PR-03N
+### 4.6 PR-03N — SUPERSEDED
 
-**Purpose and candidate hypotheses:** Negative memory case with actual memory
-pressure produced by ballast using the M19-7.4 calibration. `H_mem` is the
-candidate hypothesis.
-
-**Timeline:** Apply the calibrated ballast that produces actual memory
-pressure. Other scenario timing follows the PR-03 revision sequence.
-
-**R1 / R_early / R2:** The candidate is not contradicted by A2 normality.
-
-**Proof:** N3.
+**Owner decision (2026-09-27):** The synthetic memory-ballast validation path
+is superseded. M19 will not tune artificial workload pressure to satisfy N3.
+Future resource-pressure validation should use a realistic fixed
+misconfiguration or naturally manifested pressure under a separately frozen
+post-M19 contract. N3 is not claimed PASS. This closes only the validation
+contract; A2 semantics, thresholds, `ResourcePressure`, and the workload
+ballast implementation are unchanged.
 
 ## 5. Diagnosis Revision Timeline
 
@@ -420,9 +422,10 @@ rule.
 PR-02N was not executed as a negative proof. Its synthetic CPU-pressure
 calibration was abandoned by owner decision; no N2 PASS is claimed.
 
-### N3 — PR-03N
+### N3 — PR-03N — SUPERSEDED
 
-`H_mem` is not contradicted by A2 normality.
+PR-03N was not executed as a negative proof. The synthetic memory-ballast path
+was superseded by owner decision; no N3 PASS is claimed.
 
 ## 10. Global Product Safety
 

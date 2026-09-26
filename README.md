@@ -85,6 +85,26 @@ This separate in-house measurement uses labels with no external validity and
 is not combined with ITBench-Lite. See the [methodology](docs/benchmarks/live-suite.md)
 for scope and `make live-bench` to reproduce the protocol.
 
+### M19 product-path validation
+
+A later, bounded M19 validation exercised the revision path on a fresh,
+dedicated Kind product cluster with real service traffic and a real
+`OrderErrorRateHigh` alert:
+
+```text
+R1 INITIAL = AMBIGUOUS
+→ product-created evidence requirement
+→ R_early MANUAL = AMBIGUOUS
+→ scheduler starts an EVIDENCE_DEADLINE revision
+→ persisted A1 RECOVERED evidence eliminates a competing manifestation
+→ R2 = RESOLVED
+```
+
+No synthetic diagnosis, hypothesis, or root state was injected. The scheduler
+started the deadline revision; deterministic RCA rules made the diagnosis
+decision. This is one bounded product-path validation, not a generalization or
+accuracy benchmark and not a claim that the system resolves every incident.
+
 ## What is Agentic SRE?
 
 Agentic SRE is a Kubernetes incident investigation and SRE root-cause
@@ -338,9 +358,13 @@ healthy workload
 ```
 
 This validates the incident path, observation persistence, and safety boundary.
-It does not establish exact replay of the complete live evidence universe. The
-broader [live scenario suite](docs/benchmarks/live-suite.md) —
-25 staged faults, graded end to end — is summarised under
+M19 adds persisted run evidence manifests and ordered provider-read tapes,
+persisted before results are consumed, plus an offline replay source and
+deterministic replay with manifest, tape, and epistemic digest verification.
+Replay reproduces the persisted epistemic universe; it does not make evidence
+durable beyond the database and retention lifetime. The broader
+[live scenario suite](docs/benchmarks/live-suite.md) — 25 staged faults,
+graded end to end — is summarised under
 [Measured root-cause performance](#measured-root-cause-performance) above.
 
 ## Benchmark methodology and reproducibility
@@ -434,10 +458,23 @@ telemetry impose real limits.
 - Some diagnoses depend on the configured read APIs and their authentication;
   built-in read endpoints are unauthenticated by default.
 - The supported deployment is single-process/single-replica rather than HA.
-- Exact run-level replay of the complete live evidence universe is not
-  guaranteed: current cluster state and some runtime provider reads still use
-  live observation paths, and the exact base-evidence manifest plus provider
-  read tape is not persisted.
+- Run evidence manifests and ordered provider-read tapes are persisted, and
+  offline replay verifies those persisted inputs. The local reference
+  PostgreSQL Deployment has no durable volume configured, so evidence
+  durability is not production-grade or guaranteed across the storage
+  lifecycle.
+- Retention is opt-in and can delete old Event, Lifecycle, and Object history
+  by configured horizons. It does not protect rows solely because a retained
+  run manifest references them; replay lifetime therefore depends on retaining
+  the exact persisted members.
+- Live collection interruptions can create evidence gaps. Replay can reproduce
+  only the persisted epistemic universe and cannot recover evidence that was
+  unavailable or later removed.
+- Live base RCA does not currently consume bounded traffic or trace
+  observations through `LiveSource`; some observability queries and signal
+  mappings remain demo-workload-specific.
+- General external-cluster installation packaging and durable high-availability
+  deployment are not yet complete.
 - The system is evidence-driven RCA, not formal causal inference.
 - There is no autonomous remediation, arbitrary shell execution, or cluster write
   tool.
@@ -465,5 +502,6 @@ tests                 unit, integration, and release regression coverage
 - [Operator console product contract](docs/ui/product-contract.md)
 - [Evaluation methodology](evals/README.md)
 - [Frozen benchmark report](evals/results/v1.1.2/README.md)
+- [M19 result summary](docs/results/m19-summary.md)
 - [Architecture decision records](docs/adr/)
 - [Release documentation](docs/releases/)

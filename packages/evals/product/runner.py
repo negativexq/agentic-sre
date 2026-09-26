@@ -87,6 +87,9 @@ class TimelineRecord:
     offset: timedelta
     action: ProductAction
     started_at: datetime
+    # The verified receipt (exact UIDs); internal only — never serialized.
+    receipt: ActionReceipt | None = None
+    index: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -368,11 +371,13 @@ class ProductRunner:
         self, phase: Phase, t0: datetime, control: ClusterControl, evidence: EvidenceReader
     ) -> None:
         self._wait_until(t0 + phase.offset, control)
-        for action in phase.actions:
+        for index, action in enumerate(phase.actions):
             receipt = action.apply(control)
             await_evidence(action, receipt, evidence, control, self.config)
             action.verify(evidence, receipt)
-            self._verified.append(TimelineRecord(phase.offset, action, receipt.started_at))
+            self._verified.append(
+                TimelineRecord(phase.offset, action, receipt.started_at, receipt, index)
+            )
 
 
 # --- recording (dry-run) backend ------------------------------------------------------

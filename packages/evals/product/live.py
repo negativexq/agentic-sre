@@ -558,6 +558,9 @@ class LiveBackend:
     bench_root: Path | None = None
     git: artifact.GitProvenance | None = None
     artifact_reads: LiveArtifactReader | None = None
+    # (expectation, verified timeline, accepted diagnosis ids) -> proof.Evaluation, read-only;
+    # the CLI wires the product proof collector for live runs (M19-7.P1).
+    proofs: Callable[[Any, Sequence[Any], Sequence[int]], Any] | None = None
 
     def __post_init__(self) -> None:
         self._env = product_environment(os.environ)
@@ -829,6 +832,14 @@ class LiveBackend:
         if not all(isinstance(item, str) and item for item in run_ids):
             raise artifact.ArtifactError("a revision has no run id for its provider tape")
         reads = self.artifact_reads or LiveArtifactReader(self.evidence_port._session_factory)
+        evaluation = None
+        if self.proofs is not None:
+            try:
+                evaluation = self.proofs(scenario.expectation, result.timeline, accepted)
+            except Exception as error:
+                raise artifact.ArtifactError(
+                    f"proof inputs could not be collected: {error}"
+                ) from error
         document = artifact.build_artifact(
             scenario=scenario,
             commit=commit,
@@ -840,6 +851,7 @@ class LiveBackend:
             summaries=summaries,
             requirements=reads.requirements(accepted),
             provider_tape=reads.provider_tape([str(item) for item in run_ids]),
+            evaluation=evaluation,
         )
         bench_root = self.bench_root or self.root / ".local" / "product-bench"
         self.artifact_path = artifact.write_artifact(bench_root, self._run, document)

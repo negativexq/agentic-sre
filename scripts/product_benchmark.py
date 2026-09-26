@@ -55,7 +55,7 @@ def _smoke(name: str, run_id: str | None) -> int:  # pragma: no cover - live Kin
 
     from sqlalchemy import create_engine  # noqa: PLC0415
 
-    from packages.evals.product import artifact, smoke  # noqa: PLC0415
+    from packages.evals.product import artifact, proof, proof_inputs, smoke  # noqa: PLC0415
     from packages.evals.product.live import (  # noqa: PLC0415
         LiveBackend,
         LiveClusterControl,
@@ -107,6 +107,9 @@ def _smoke(name: str, run_id: str | None) -> int:  # pragma: no cover - live Kin
         prometheus_port=PORTS["prometheus"],
         run_id=run,
         before_teardown=capture,
+        proofs=lambda expectation, timeline, ids: proof.evaluate(
+            proof_inputs.collect(expectation, timeline, ids, factory)
+        ),
     )
     result = ProductRunner(backend).run(scenario)
     evidence = captured.get("evidence")

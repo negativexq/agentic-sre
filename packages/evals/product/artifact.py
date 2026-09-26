@@ -317,9 +317,28 @@ def build_artifact(
     requirements: Mapping[int, Sequence[RequirementEntry]],
     provider_tape: ProviderTape,
     attempts: Sequence[Attempt] | None = None,
+    evaluation: Any = None,
 ) -> ProductRunArtifact:
-    """The v2 document of observed facts; derived claims are NOT_EVALUATED/null."""
+    """The v2 document of observed facts, with the proof evaluation when one ran.
+
+    Without an ``evaluation`` the derived claims are NOT_EVALUATED/null. With one
+    (``proof.Evaluation``) they are the evaluated PASS/FAIL, counters and transition.
+    """
     proof, negatives = not_evaluated(scenario)
+    safety = Safety.not_measured()
+    transition = None
+    if evaluation is not None:
+        proof = {key: ProofStatus(value) for key, value in evaluation.proof.items()}
+        negatives = {key: ProofStatus(value) for key, value in evaluation.negatives.items()}
+        safety = Safety.model_validate(dict(evaluation.safety))
+        if evaluation.transition is not None:
+            item = evaluation.transition
+            transition = Transition(
+                hypothesis_key=item.hypothesis_key,
+                rule_id=item.rule_id,
+                rule_version=item.rule_version,
+                decisive_evidence_ids=list(item.decisive_evidence_ids),
+            )
     try:
         return ProductRunArtifact(
             schema=SCHEMA,
@@ -350,10 +369,10 @@ def build_artifact(
             ],
             revisions=revision_entries(summaries, requirements),
             provider_tape=provider_tape,
-            transition=None,
+            transition=transition,
             proof=proof,
             negatives=negatives,
-            safety=Safety.not_measured(),
+            safety=safety,
             attempts=list(attempts)
             if attempts is not None
             else [Attempt(n=1, result="PASS", reason="")],

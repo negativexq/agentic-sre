@@ -422,6 +422,10 @@ class LiveClusterControl:
     def wait_for_rollout(self, deployment: str) -> None:
         self._kubectl("rollout", "status", f"deployment/{deployment}", "--timeout=180s")
 
+    def set_env(self, deployment: str, container: str, values: Mapping[str, str]) -> None:
+        pairs = [f"{name}={value}" for name, value in sorted(values.items())]
+        self._kubectl("set", "env", f"deployment/{deployment}", "-c", container, *pairs)
+
     def patch_service_selector(self, service: str, selector: Mapping[str, str]) -> None:
         # A JSON-patch replace sets exactly this selector; a merge patch would keep old keys.
         patch = [{"op": "replace", "path": "/spec/selector", "value": dict(selector)}]

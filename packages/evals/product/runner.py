@@ -27,6 +27,7 @@ from packages.evals.product.actions import (
     ClusterControl,
     DeletePodOf,
     DeletionReceipt,
+    EnvPatch,
     EvidenceReader,
     IncidentRecord,
     JournalRecord,
@@ -214,6 +215,7 @@ _SETTLED: dict[type[ProductAction], Callable[[Any, EvidenceReader, ActionReceipt
     SetReadiness: _readiness_settled,
     DeletePodOf: _deletion_settled,
     SetResources: _resources_settled,
+    EnvPatch: _resources_settled,  # the same milestone: a new controlled ReplicaSet
     PatchService: _selector_settled,
 }
 
@@ -438,6 +440,9 @@ class RecordingControl:
 
     def patch_service_selector(self, service: str, selector: Any) -> None:
         self._events.append(("patch_service_selector", service, dict(selector)))
+
+    def set_env(self, deployment: str, container: str, values: Any) -> None:
+        self._events.append(("set_env", deployment, container, dict(values)))
 
 
 class RecordingBackend:

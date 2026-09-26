@@ -23,7 +23,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from types import MappingProxyType
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 # --- persisted evidence, as the read port returns it -------------------------------
 
@@ -478,12 +478,95 @@ class PatchService(ProductAction):
             )
 
 
+@runtime_checkable
+class EnvControl(Protocol):
+    """The one extra operation ``EnvPatch`` needs; kept off ``ClusterControl`` (M19-F7)."""
+
+    def set_env(self, deployment: str, container: str, values: Mapping[str, str]) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class EnvPatch(ProductAction):
+    """Set the given environment values of one Deployment container and roll it out.
+
+    The protocol's qualified true roots (PR-01/PR-02) are env patches. Verification
+    proves exactly: the intended env values, nothing else in the desired spec
+    changed, and a new controlled ReplicaSet carrying those values rolled out.
+    """
+
+    service: str
+    values: Mapping[str, str]
+    container: str | None = None
+
+    def __post_init__(self) -> None:
+        _name(self.service, "EnvPatch.service")
+        object.__setattr__(self, "values", _frozen(self.values, "EnvPatch.values"))
+        if not self.values:
+            raise ValueError("EnvPatch needs at least one value")
+        container = self.service if self.container is None else self.container
+        object.__setattr__(self, "container", _name(container, "EnvPatch.container"))
+
+    def _target(self) -> str:
+        assert self.container is not None
+        return self.container
+
+    def _paths(self) -> dict[str, str]:
+        prefix = f".spec.template.spec.containers[{self._target()}].env"
+        return {f"{prefix}[{name}].value": value for name, value in self.values.items()}
+
+    def apply(self, control: ClusterControl) -> ActionReceipt:
+        if not isinstance(control, EnvControl):
+            raise TypeError("this cluster control cannot set a Deployment's environment")
+        started_at = control.now()
+        control.set_env(self.service, self._target(), self.values)
+        control.wait_for_rollout(self.service)
+        return ActionReceipt(started_at, control.now())
+
+    def _env(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            str(item.get("name")): item.get("value")
+            for item in _container(body, self._target()).get("env") or []
+            if isinstance(item, Mapping)
+        }
+
+    def verify(self, evidence: EvidenceReader, receipt: ActionReceipt) -> None:
+        action = "EnvPatch"
+        seen: ActionReceipt = _receipt(receipt, ActionReceipt, action)
+        wanted = self._paths()
+        baseline, since = _scoped(
+            evidence.journal("Deployment", self.service), seen.started_at, action, self.service
+        )
+        if not since:
+            raise ActionVerificationError(action, "no journal change", target=self.service)
+        for item in since:
+            extra = [path for path, _, _ in _spec_changes(baseline, item) if path not in wanted]
+            if extra:
+                raise ActionVerificationError(action, "changes beyond the env values", paths=extra)
+        env = self._env(since[-1].body)
+        missing = [name for name, value in self.values.items() if env.get(name) != value]
+        if missing:
+            raise ActionVerificationError(action, "intended env not applied", names=missing)
+        rolled = any(
+            item.lifecycle == "CREATED"
+            and item.observed_at >= seen.started_at
+            and _controller(item.body) == ("Deployment", self.service)
+            and all(self._env(item.body).get(name) == value for name, value in self.values.items())
+            for item in evidence.journal("ReplicaSet")
+        )
+        if not rolled:
+            raise ActionVerificationError(
+                action, "no new ReplicaSet with the env rolled out", target=self.service
+            )
+
+
 __all__ = [
     "ActionReceipt",
     "ActionVerificationError",
     "ClusterControl",
     "DeletePodOf",
     "DeletionReceipt",
+    "EnvControl",
+    "EnvPatch",
     "EvidenceReader",
     "IncidentRecord",
     "JournalRecord",

@@ -137,6 +137,85 @@ def _smoke(name: str, run_id: str | None) -> int:  # pragma: no cover - live Kin
     return 0 if acceptance.accepted else 1
 
 
+def _measure(args: argparse.Namespace) -> int:  # pragma: no cover - live Kind only
+    """M19-7.C: one caller-given candidate, one raw measurement on a fresh cluster."""
+    import socket  # noqa: PLC0415
+    from datetime import UTC, datetime, timedelta  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+
+    from sqlalchemy import create_engine  # noqa: PLC0415
+
+    from packages.evals.product import artifact, calibration  # noqa: PLC0415
+    from packages.evals.product.live import (  # noqa: PLC0415
+        LiveBackend,
+        LiveClusterControl,
+        LiveEvidenceReader,
+    )
+    from packages.storage.database import create_session_factory  # noqa: PLC0415
+
+    try:
+        candidate = calibration.Candidate(
+            resource=args.measure,
+            service=args.service,
+            container=args.container or args.service,
+            limit=args.limit,
+            request=args.request,
+            ballast_mb=args.ballast_mb,
+        )
+        window = calibration.Window(
+            settle=timedelta(seconds=args.settle_seconds),
+            measure=timedelta(seconds=args.window_seconds),
+        )
+    except ValueError as error:
+        print(f"invalid candidate: {error}", file=sys.stderr)
+        return 2
+    for port in PORTS.values():
+        with socket.socket() as probe:
+            if probe.connect_ex(("127.0.0.1", port)) == 0:
+                print(f"local port {port} is already in use", file=sys.stderr)
+                return 2
+    root = Path(__file__).resolve().parents[1]
+    run = args.run_id or artifact.run_id(datetime.now(UTC))
+    git = artifact.LocalGit(root)
+    engine = create_engine(
+        f"postgresql+psycopg://postgres:postgres@127.0.0.1:{PORTS['postgres']}/agentic_sre",
+        connect_args={"options": "-c default_transaction_read_only=on"},
+        pool_pre_ping=True,
+    )
+    prometheus = f"http://127.0.0.1:{PORTS['prometheus']}"
+    backend = LiveBackend(
+        root=root,
+        control_port=LiveClusterControl(
+            {
+                service: f"http://127.0.0.1:{PORTS[service]}"
+                for service in ("order-service", "payment-service")
+            }
+        ),
+        evidence_port=LiveEvidenceReader(create_session_factory(engine)),
+        port_forwards={service: PORTS[service] for service in ("order-service", "payment-service")},
+        control_plane_port=PORTS["control-plane"],
+        postgres_port=PORTS["postgres"],
+        prometheus_port=PORTS["prometheus"],
+        run_id=run,
+    )
+    record = calibration.measure(
+        backend,
+        candidate,
+        window,
+        prometheus_url=prometheus,
+        reader=calibration.product_reader(prometheus),
+        provenance={
+            "run": run,
+            "code_commit": git.head(),
+            "tracked_changes": git.tracked_changes(),
+            "cluster": backend.cluster,
+        },
+    )
+    path = calibration.write_record(root / ".local" / "product-bench", run, record)
+    print(f"{candidate.label}: raw_peak={record['raw_peak']} -> {path}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--list", action="store_true", help="print the scenarios and exit")
@@ -148,7 +227,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--smoke", help="run one live Kind smoke (M19-6.12): smoke-noop|smoke-readiness|smoke-chain"
     )
     parser.add_argument("--run-id", help="shared run id (YYYYMMDDTHHMMSSffffffZ)")
+    measure = parser.add_argument_group("calibration measurement (M19-7.C)")
+    measure.add_argument("--measure", choices=("cpu", "memory"), help="measure one candidate")
+    measure.add_argument("--service", default="order-service")
+    measure.add_argument("--container", default=None, help="defaults to the service name")
+    measure.add_argument("--limit", default=None, help="the candidate limit, e.g. 50m or 128Mi")
+    measure.add_argument("--request", default=None, help="request set with the limit")
+    measure.add_argument("--ballast-mb", type=int, default=None)
+    measure.add_argument("--settle-seconds", type=int, default=120)
+    measure.add_argument("--window-seconds", type=int, default=600)
     args = parser.parse_args(argv)
+    if args.measure:
+        return _measure(args)
     if args.smoke:
         return _smoke(args.smoke, args.run_id)
     if args.list:

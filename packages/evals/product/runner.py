@@ -7,7 +7,7 @@ same runner drives the live backend (``packages.evals.product.live``) and the
 Every scenario gets its own cluster, torn down after it: freshness comes from
 the environment lifecycle, never from clearing evidence.
 
-An ``ActionVerificationError`` makes the run ``ERROR``: the harness could not
+An ``ActionVerificationError`` or ``RevisionScheduleError`` makes the run ``ERROR``: the harness could not
 establish or verify the intended test world. It says nothing about the
 product's diagnosis. Other failures propagate after teardown.
 """
@@ -39,6 +39,7 @@ from packages.evals.product.actions import (
     SetResources,
 )
 from packages.evals.product.baseline import DirtyBaseline
+from packages.evals.product.revisions import RevisionScheduleError
 from packages.evals.product.spec import Phase, ProductScenario
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,8 @@ class ProductBackend(Protocol):
     def start_timeline(self, scenario: ProductScenario) -> None: ...
 
     def set_traffic(self, enabled: bool) -> None: ...
+
+    def at_t0(self, t0: datetime) -> None: ...
 
     def control(self) -> ClusterControl: ...
 
@@ -279,9 +282,12 @@ class ProductRunner:
             self._timeline(scenario)
         except (ActionVerificationError, PreHistoryIncident) as error:
             return RunResult(scenario.scenario_id, RunStatus.ERROR, str(error))
-        backend.await_r1(scenario)
-        backend.run_r_early(scenario)
-        backend.await_r2(scenario)
+        try:
+            backend.await_r1(scenario)
+            backend.run_r_early(scenario)
+            backend.await_r2(scenario)
+        except RevisionScheduleError as error:
+            return RunResult(scenario.scenario_id, RunStatus.ERROR, str(error))
         self._set_traffic(False)
         result = RunResult(scenario.scenario_id, RunStatus.RUN_OK)
         backend.write_artifact(scenario, result)
@@ -305,6 +311,7 @@ class ProductRunner:
         opened = sorted(item.incident_id for item in evidence.incidents() if item.created_at < t0)
         if opened:
             raise PreHistoryIncident(opened, t0)
+        backend.at_t0(t0)  # the revision schedule is measured from here
         self._set_traffic(True)
         for phase in (item for item in scenario.phases if item.offset >= timedelta(0)):
             self._phase(phase, t0, control, evidence)
@@ -426,6 +433,9 @@ class RecordingBackend:
 
     def set_traffic(self, enabled: bool) -> None:
         self.events.append(("set_traffic", enabled))
+
+    def at_t0(self, t0: datetime) -> None:
+        self.events.append(("at_t0", t0))
 
     def control(self) -> ClusterControl:
         return self._control

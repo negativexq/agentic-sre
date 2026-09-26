@@ -18,7 +18,7 @@ import subprocess
 import time
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -27,6 +27,7 @@ import yaml
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from packages.evals.product import revisions
 from packages.evals.product.actions import (
     IncidentRecord,
     JournalRecord,
@@ -34,6 +35,14 @@ from packages.evals.product.actions import (
     PodIdentity,
 )
 from packages.evals.product.baseline import check_baseline
+from packages.evals.product.revisions import (
+    AlertView,
+    IncidentView,
+    RevisionScheduleError,
+    RevisionView,
+    ScheduleConfig,
+    parse_time,
+)
 from packages.evals.product.runner import RunResult
 from packages.evals.product.spec import ProductScenario
 from packages.storage.models import IncidentRow, LifecycleObservationRow, ObjectVersionRow
@@ -137,6 +146,107 @@ def _request_json(
     if not isinstance(document, dict):
         raise RuntimeError(f"{url} did not answer a JSON object")
     return document
+
+
+Http = Callable[[str, str, Mapping[str, str]], Any]
+
+
+def _http(method: str, url: str, headers: Mapping[str, str]) -> Any:
+    """A bodiless GET or POST answering JSON."""
+    if method not in ("GET", "POST"):
+        raise ValueError(f"unsupported method {method}")
+    request = urllib.request.Request(  # noqa: S310 - fixed harness endpoints
+        url, data=b"" if method == "POST" else None, headers=dict(headers), method=method
+    )
+    with urllib.request.urlopen(request, timeout=120) as response:  # noqa: S310
+        return json.loads(response.read().decode())
+
+
+def _items(document: Any, what: str) -> list[Mapping[str, Any]]:
+    if not isinstance(document, list) or not all(isinstance(item, dict) for item in document):
+        raise RevisionScheduleError(f"{what} is not a list of objects")
+    return document
+
+
+@dataclass
+class HttpControlPlaneReads:
+    """``ControlPlaneReads`` over the control plane's GET API."""
+
+    base_url: str
+    http: Http = _http
+
+    def _get(self, path: str) -> Any:
+        return self.http("GET", f"{self.base_url}{path}", {})
+
+    def incidents(self) -> Sequence[IncidentView]:
+        return [
+            IncidentView(str(item["incident_id"]), parse_time(item.get("created_at"), "created_at"))
+            for item in _items(self._get("/api/v1/incidents"), "incidents")
+        ]
+
+    def alerts(self, incident_id: str) -> Sequence[AlertView]:
+        alerts = _items(self._get(f"/api/v1/incidents/{incident_id}/alerts"), "alerts")
+        for item in alerts:
+            if not isinstance(item.get("labels"), dict):
+                raise RevisionScheduleError("an incident alert has no labels")
+        return [
+            AlertView(dict(item["labels"]), parse_time(item.get("starts_at"), "starts_at"))
+            for item in alerts
+        ]
+
+    def revisions(self, incident_id: str) -> Sequence[RevisionView]:
+        return [
+            RevisionView(
+                int(item["diagnosis_id"]),
+                int(item["revision_number"]),
+                str(item["trigger"]),
+                None if item.get("previous_diagnosis_id") is None
+                else int(item["previous_diagnosis_id"]),
+            )
+            for item in _items(self._get(f"/api/v1/incidents/{incident_id}/diagnoses"), "diagnoses")
+        ]  # fmt: skip
+
+    def onset(self, incident_id: str, revision_number: int) -> Any:
+        detail = self._get(f"/api/v1/incidents/{incident_id}/diagnoses/{revision_number}")
+        diagnosis = detail.get("diagnosis") if isinstance(detail, dict) else None
+        symptoms = diagnosis.get("symptoms") if isinstance(diagnosis, dict) else None
+        return symptoms.get("onset") if isinstance(symptoms, dict) else None
+
+
+@dataclass
+class HttpManualDiagnosis:
+    """The one MANUAL diagnosis POST; a second call is refused."""
+
+    base_url: str
+    headers: Mapping[str, str]
+    http: Http = _http
+    _posted: bool = field(default=False, init=False)
+
+    def post_manual(self, incident_id: str) -> None:
+        if self._posted:
+            raise RevisionScheduleError("a second MANUAL diagnosis POST")
+        self._posted = True
+        self.http(
+            "POST",
+            f"{self.base_url}/api/v1/incidents/{incident_id}/diagnosis?trigger=MANUAL",
+            self.headers,
+        )
+
+
+@dataclass
+class PrometheusActivations:
+    """Prometheus ``/api/v1/alerts``: verification-only provenance, never RCA evidence."""
+
+    base_url: str
+    http: Http = _http
+
+    def active_alerts(self) -> Sequence[Mapping[str, Any]]:
+        document = self.http("GET", f"{self.base_url}/api/v1/alerts", {})
+        data = document.get("data") if isinstance(document, dict) else None
+        if not isinstance(document, dict) or document.get("status") != "success":
+            raise RevisionScheduleError("Prometheus alerts did not answer success")
+        alerts = data.get("alerts") if isinstance(data, dict) else None
+        return _items(alerts, "Prometheus alerts")
 
 
 @dataclass
@@ -302,11 +412,19 @@ class LiveBackend:
     request_json: Callable[[str, Mapping[str, Any], Mapping[str, str]], Mapping[str, Any]] = (
         lambda url, payload, headers: _request_json(url, payload, headers)
     )
+    prometheus_url: str | None = None
+    prometheus_port: int | None = None
+    schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
+    http: Http = _http
 
     def __post_init__(self) -> None:
         self._env = product_environment(os.environ)
         self._forwards: list[Any] = []
         self._collector_started_at: datetime | None = None
+        self._t0: datetime | None = None
+        self._r1: revisions.R1 | None = None
+        self._r_early: revisions.REarly | None = None
+        self._r2: int | None = None
 
     @property
     def _context(self) -> str:
@@ -388,6 +506,14 @@ class LiveBackend:
                     self._env,
                 )
             )  # fmt: skip
+        if self.prometheus_port is not None:
+            self._forwards.append(
+                self.spawn(
+                    ["kubectl", "--context", self._context, "-n", "observability",
+                     "port-forward", "service/prometheus", f"{self.prometheus_port}:9090"],
+                    self._env,
+                )
+            )  # fmt: skip
 
     def warmup(self, duration: timedelta) -> None:
         self.sleep(duration.total_seconds())
@@ -423,14 +549,51 @@ class LiveBackend:
     def evidence(self) -> LiveEvidenceReader:
         return self.evidence_port
 
+    def at_t0(self, t0: datetime) -> None:
+        self._t0 = t0
+
+    def _control_plane(self) -> str:
+        if self.control_plane_url is None:
+            raise RuntimeError("no control-plane URL for the revision schedule")
+        return self.control_plane_url
+
+    def _reads(self) -> HttpControlPlaneReads:
+        return HttpControlPlaneReads(self._control_plane(), self.http)
+
     def await_r1(self, scenario: ProductScenario) -> None:
-        raise StageNotImplemented("revision schedule arrives with M19-6.10")
+        if self._t0 is None:
+            raise RuntimeError("T0 was never set")
+        url = self.prometheus_url or (
+            f"http://127.0.0.1:{self.prometheus_port}" if self.prometheus_port else None
+        )
+        if url is None:
+            raise RuntimeError("no Prometheus URL for R1 provenance")
+        self._r1 = revisions.discover_r1(
+            self._reads(),
+            PrometheusActivations(url, self.http),
+            self.control_port,
+            t0=self._t0,
+            config=self.schedule,
+        )
 
     def run_r_early(self, scenario: ProductScenario) -> None:
-        raise StageNotImplemented("revision schedule arrives with M19-6.10")
+        if self._r1 is None:
+            raise RuntimeError("R1 was never discovered")
+        headers = {"Authorization": f"Bearer {self.api_token}"} if self.api_token else {}
+        self._r_early = revisions.run_r_early(
+            self._r1,
+            self._reads(),
+            HttpManualDiagnosis(self._control_plane(), headers, self.http),
+            self.control_port,
+            config=self.schedule,
+        )
 
     def await_r2(self, scenario: ProductScenario) -> None:
-        raise StageNotImplemented("revision schedule arrives with M19-6.10")
+        if self._r1 is None or self._r_early is None:
+            raise RuntimeError("R2 awaited before R1 and R_early")
+        self._r2 = revisions.await_r2(
+            self._r1, self._reads(), self.control_port, config=self.schedule
+        )
 
     def write_artifact(self, scenario: ProductScenario, result: RunResult) -> None:
         raise StageNotImplemented("product-run artifact arrives with M19-6.11")
@@ -445,9 +608,12 @@ class LiveBackend:
 __all__ = [
     "CLUSTER",
     "PRODUCT_CONTROL_PLANE_ENV",
+    "HttpControlPlaneReads",
+    "HttpManualDiagnosis",
     "LiveBackend",
     "LiveClusterControl",
     "LiveEvidenceReader",
+    "PrometheusActivations",
     "StageNotImplemented",
     "baseline_faults",
     "product_control_plane_manifest",

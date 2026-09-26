@@ -15,6 +15,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
@@ -343,6 +344,65 @@ class DiagnosisRow(Base):
     epistemic_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
     engine_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     config_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+# Rule evidence a diagnosis revision could not yet decide (M19-5.4).
+EVIDENCE_REQUIREMENT_KINDS = ("STATUS_CONTINUITY", "RESOURCE_COVERAGE")
+EVIDENCE_REQUIREMENT_STATUSES = (
+    "OPEN",
+    "SATISFIED_BY_REVISION",
+    "SUPERSEDED_BY_REVISION",
+    "EXPIRED",
+)
+_OPEN_REQUIREMENT = text("status = 'OPEN'")
+
+
+class EvidenceRequirementRow(Base):
+    """A pending rule requirement opened by one diagnosis revision.
+
+    Scheduler state, not authoritative evidence (M19 §1.5): ``status`` moves
+    through its lifecycle in place. At most one row per ``requirement_key`` is
+    OPEN; closed rows for the same key are kept as history. The canonical
+    formula of ``requirement_key`` and the meaning of ``targets`` are defined
+    by the requirement writer (M19-5.5), not by this schema.
+    """
+
+    __tablename__ = "evidence_requirements"
+    __table_args__ = (
+        _one_of("kind", EVIDENCE_REQUIREMENT_KINDS, "ck_evidence_requirement_kind"),
+        _one_of("status", EVIDENCE_REQUIREMENT_STATUSES, "ck_evidence_requirement_status"),
+        CheckConstraint(
+            "json_typeof(targets) = 'array'", name="ck_evidence_requirement_targets_array"
+        ).ddl_if(dialect="postgresql"),
+        CheckConstraint(
+            "json_type(targets) = 'array'", name="ck_evidence_requirement_targets_array"
+        ).ddl_if(dialect="sqlite"),
+        Index(
+            "uq_evidence_requirements_open_key",
+            "requirement_key",
+            unique=True,
+            postgresql_where=_OPEN_REQUIREMENT,
+            sqlite_where=_OPEN_REQUIREMENT,
+        ),
+    )
+
+    requirement_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    requirement_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    incident_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("incidents.incident_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    diagnosis_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("diagnoses.diagnosis_id", name="fk_evidence_requirements_diagnosis_id"),
+        nullable=False,
+    )
+    hypothesis_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    rule_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    rule_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    targets: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
+    not_before: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
 
 
 class InvestigationRunRow(Base):

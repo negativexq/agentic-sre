@@ -183,6 +183,7 @@ def test_alembic_migration_up_and_down(tmp_path: Path) -> None:
         "email_deliveries",
         "entity_instances",
         "evidence",
+        "evidence_requirements",
         "hypotheses",
         "incident_events",
         "incidents",

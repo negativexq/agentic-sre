@@ -134,6 +134,13 @@ hypothesis.
 the M19-7.1 normal-calibration value. At T0, apply a qualified payment-side
 true-root action.
 
+**CPU-normal calibration (M19-7.1, owner-frozen 2026-09-27):** `order-service`
+`requests.cpu = 100m` (unchanged), `limits.cpu = 200m`, under 2 req/s traffic
+through the order-service Service DNS. Throttle peaks observed with the product's
+A2 reader on three independent fresh product clusters: 0.0123, 0.0034, 0.0037;
+acceptance max peak 0.0123 ≤ 0.10. One further run was an infrastructure failure
+before measuring (§1.9 retry), not a measurement.
+
 **True root action:**
 `EnvPatch(deployment="payment-service", values={"FAULT_PAYMENT_DELAY_MS": "3000"}, wait=True)`.
 

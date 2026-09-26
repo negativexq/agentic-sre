@@ -8,8 +8,10 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
+from provider_test_helpers import provider_session_factory
+from sqlalchemy import select
 
-from packages.rca.live import PROMETHEUS_MAX_QUERY_SPAN, LiveSource
+from packages.rca.live import PROMETHEUS_MAX_QUERY_SPAN, RESOURCE_BASELINE_LEAD, LiveSource
 from packages.rca.model import (
     CausalHop,
     EliminationConsequence,
@@ -22,12 +24,17 @@ from packages.rca.model import (
     InvestigationQuery,
     Lifecycle,
     ObjectVersion,
+    ProviderReadFailure,
     Resolution,
     ResolutionReasonCode,
     ResourcePressure,
+    TrafficObservation,
 )
+from packages.rca.provider_adapter import ProviderAdapter, ProviderReaders, provider_query_key
 from packages.rca.resolution import RESOURCE_PRESSURE_RULE, resolve_hypotheses
 from packages.rca.resource_mechanism import assess_resource_mechanism
+from packages.storage.models import InvestigationReadRow
+from packages.storage.repositories import InvestigationReadRepository
 
 ONSET = datetime(2026, 9, 24, 12, 0, tzinfo=UTC)
 GRACE = timedelta(minutes=15)
@@ -281,9 +288,14 @@ def test_mismatch_contradicts_the_limit_hypothesis_and_resolves_to_the_other() -
 
 
 class _Prometheus:
-    def __init__(self, fail_for: str | None = None) -> None:
+    def __init__(
+        self,
+        fail_for: str | None = None,
+        records: Sequence[ResourcePressure] | None = None,
+    ) -> None:
         self.windows: list[tuple[datetime, datetime]] = []
         self.fail_for = fail_for
+        self.records = records
 
     def query_resource_pressure(
         self, target: EntityRef, query: InvestigationQuery
@@ -292,11 +304,17 @@ class _Prometheus:
         self.windows.append((query.start, query.end))
         if target.name == self.fail_for:
             raise ConnectionError("prometheus down")
-        return (_normal(target),)
+        return tuple(self.records) if self.records is not None else (_normal(target),)
+
+    def query_traffic(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[TrafficObservation, ...]:
+        del target, query
+        return ()
 
 
 @pytest.mark.parametrize("cutoff_minutes", [20, 180])
-def test_live_resource_reads_are_bounded_and_failures_are_missing_data(
+def test_live_resource_reads_are_bounded_and_failures_remain_explicit_missing_data(
     cutoff_minutes: int,
 ) -> None:
     prometheus = _Prometheus(fail_for="payment-new-b")
@@ -307,15 +325,244 @@ def test_live_resource_reads_are_bounded_and_failures_are_missing_data(
         current_objects=[],
         event_bodies=[],
         observed_at=ONSET + timedelta(minutes=cutoff_minutes),
-        prometheus_reader=prometheus,  # type: ignore[arg-type]
+        provider_adapter=ProviderAdapter(
+            "test-run", "ENGINE", provider_session_factory(), ProviderReaders(prometheus=prometheus)
+        ),
     )
     other = EntityRef(namespace=NS, kind="Pod", name="payment-new-b")
 
     records = source.resource_pressure([POD, other, DEPLOY], ONSET - timedelta(minutes=5))
 
-    assert [item.pod for item in records] == [POD]
+    assert isinstance(records, ProviderReadFailure)
+    assert (records.error_type, records.error_message) == ("ConnectionError", "prometheus down")
     assert len(prometheus.windows) == 2  # the Deployment is never queried
     for start, end in prometheus.windows:
         assert start == ONSET - timedelta(minutes=10)
         assert end - start <= PROMETHEUS_MAX_QUERY_SPAN
         assert end <= source.observed_at
+
+
+def test_prometheus_failure_is_inert_for_resource_pressure_rule() -> None:
+    failure = ProviderReadFailure(
+        capability="resource_pressure",
+        error_type="ConnectionError",
+        error_message="prometheus down",
+    )
+    mismatch = assess_resource_mechanism(
+        _limit_change(),
+        history=_history(_deployment(_container("512Mi")), _deployment(_container("128Mi"))),
+        findings=(),
+        read_pressure=lambda _pods, _since: failure,
+        onset=ONSET,
+        grace=GRACE,
+    )
+    assert mismatch is None
+    trace = resolve_hypotheses([_limit_change()], mechanism_mismatches={})
+    audit = next(
+        item
+        for item in trace.hypothesis_audits
+        if item.hypothesis_id == "hypothesis:payment-limits"
+    )
+    assert audit.epistemic_state is not HypothesisEpistemicState.CONTRADICTED
+    assert trace.eliminations == ()
+
+
+def test_live_prometheus_error_tape_leaves_a2_hypothesis_unchanged() -> None:
+    factory = provider_session_factory()
+    reader = _Prometheus(fail_for=POD.name)
+    source = LiveSource(
+        incident="a2-provider-error",
+        alert_items=[],
+        journal=[],
+        current_objects=[],
+        event_bodies=[],
+        observed_at=ONSET + GRACE,
+        provider_adapter=ProviderAdapter(
+            "a2-provider-error", "ENGINE", factory, ProviderReaders(prometheus=reader)
+        ),
+    )
+    failure = source.resource_pressure([POD], ONSET - timedelta(minutes=5))
+    assert isinstance(failure, ProviderReadFailure)
+    mismatch = assess_resource_mechanism(
+        _limit_change(),
+        history=_history(_deployment(_container("512Mi")), _deployment(_container("128Mi"))),
+        findings=(),
+        read_pressure=lambda pods, since: source.resource_pressure(pods, since),
+        onset=ONSET,
+        grace=GRACE,
+    )
+    assert mismatch is None
+
+    before = resolve_hypotheses([_limit_change()])
+    after = resolve_hypotheses([_limit_change()], mechanism_mismatches={})
+    assert after.state is before.state
+    assert after.eliminations == before.eliminations == ()
+    before_audit = before.hypothesis_audits[0]
+    after_audit = after.hypothesis_audits[0]
+    assert after_audit.epistemic_state is before_audit.epistemic_state
+    assert after_audit.epistemic_state is not HypothesisEpistemicState.CONTRADICTED
+    with factory() as session:
+        rows = list(session.scalars(select(InvestigationReadRow)))
+    assert len(rows) == 2
+    assert all(
+        (row.caller_class, row.capability, row.status) == ("ENGINE", "resource_pressure", "ERROR")
+        for row in rows
+    )
+
+
+def _source_query_descriptor(
+    source: LiveSource, pod: EntityRef, since: datetime
+) -> tuple[dict[str, Any], str]:
+    start = since - RESOURCE_BASELINE_LEAD
+    end = min(source.observed_at, start + PROMETHEUS_MAX_QUERY_SPAN)
+    query = InvestigationQuery(start=start, end=end, limit=16)
+    descriptor = {
+        "provider": "prometheus",
+        "operation": "resource_pressure",
+        "target": pod.canonical,
+        "query": query.model_dump(mode="json"),
+    }
+    return descriptor, provider_query_key(descriptor)
+
+
+def _seed_old_resource_read(
+    factory: Any,
+    *,
+    run_id: str,
+    source: LiveSource,
+    pressure: ResourcePressure,
+    since: datetime,
+) -> str:
+    descriptor, query_key = _source_query_descriptor(source, POD, since)
+    with factory() as session:
+        InvestigationReadRepository(session).append_success(
+            run_id=run_id,
+            caller_class="ENGINE",
+            capability="resource_pressure",
+            query_key=query_key,
+            query_descriptor=descriptor,
+            started_at=ONSET,
+            finished_at=ONSET,
+            observation=[pressure.model_dump(mode="json")],
+            evidence_ids=[pressure.evidence_id],
+        )
+    return query_key
+
+
+def test_a2_uses_only_current_run_for_same_query_with_different_old_value() -> None:
+    factory = provider_session_factory()
+    since = CHANGE_AT
+    current = _normal(peak=0.31, evidence_id="prometheus:current")
+    reader = _Prometheus(records=(current,))
+    source = LiveSource(
+        incident="current-run-isolation",
+        alert_items=[],
+        journal=[],
+        current_objects=[],
+        event_bodies=[],
+        observed_at=ONSET + GRACE,
+        provider_adapter=ProviderAdapter(
+            "current-run", "ENGINE", factory, ProviderReaders(prometheus=reader)
+        ),
+    )
+    old_query_key = _seed_old_resource_read(
+        factory,
+        run_id="old-run",
+        source=source,
+        pressure=_normal(peak=0.95, evidence_id="prometheus:old"),
+        since=since,
+    )
+
+    observed: list[Sequence[ResourcePressure] | ProviderReadFailure] = []
+
+    def read_current(
+        pods: Sequence[EntityRef], requested_since: datetime
+    ) -> Sequence[ResourcePressure] | ProviderReadFailure:
+        result = source.resource_pressure(pods, requested_since)
+        observed.append(result)
+        return result
+
+    mismatch = assess_resource_mechanism(
+        _limit_change(),
+        history=_history(_deployment(_container("512Mi")), _deployment(_container("128Mi"))),
+        findings=(),
+        read_pressure=read_current,
+        onset=ONSET,
+        grace=GRACE,
+    )
+
+    assert len(observed) == 1
+    assert not isinstance(observed[0], ProviderReadFailure)
+    assert len(observed[0]) == 1
+    assert observed[0][0].peak == 0.31
+    assert mismatch is not None
+    assert [coverage.peak for coverage in mismatch.coverage] == [0.31]
+    with factory() as session:
+        rows = list(
+            session.scalars(
+                select(InvestigationReadRow)
+                .where(InvestigationReadRow.capability == "resource_pressure")
+                .order_by(InvestigationReadRow.run_id)
+            )
+        )
+    assert len(rows) == 2
+    assert {row.run_id for row in rows} == {"old-run", "current-run"}
+    assert {row.query_key for row in rows} == {old_query_key}
+    assert len({row.query_key for row in rows}) == 1  # run_id does not salt query identity
+
+
+def test_current_error_does_not_fall_back_to_historical_success() -> None:
+    factory = provider_session_factory()
+    since = CHANGE_AT
+    source = LiveSource(
+        incident="current-error-isolation",
+        alert_items=[],
+        journal=[],
+        current_objects=[],
+        event_bodies=[],
+        observed_at=ONSET + GRACE,
+        provider_adapter=ProviderAdapter(
+            "current-error-run",
+            "ENGINE",
+            factory,
+            ProviderReaders(prometheus=_Prometheus(fail_for=POD.name)),
+        ),
+    )
+    old_query_key = _seed_old_resource_read(
+        factory,
+        run_id="historical-success-run",
+        source=source,
+        pressure=_normal(peak=0.31, evidence_id="prometheus:historical-success"),
+        since=since,
+    )
+
+    failure = source.resource_pressure([POD], since)
+    assert isinstance(failure, ProviderReadFailure)
+    mismatch = assess_resource_mechanism(
+        _limit_change(),
+        history=_history(_deployment(_container("512Mi")), _deployment(_container("128Mi"))),
+        findings=(),
+        read_pressure=lambda pods, requested_since: source.resource_pressure(pods, requested_since),
+        onset=ONSET,
+        grace=GRACE,
+    )
+    assert mismatch is None
+    before = resolve_hypotheses([_limit_change()])
+    after = resolve_hypotheses([_limit_change()], mechanism_mismatches={})
+    assert after.state is before.state
+    assert after.eliminations == before.eliminations == ()
+    assert after.hypothesis_audits[0].epistemic_state is before.hypothesis_audits[0].epistemic_state
+    with factory() as session:
+        rows = list(
+            session.scalars(
+                select(InvestigationReadRow)
+                .where(InvestigationReadRow.capability == "resource_pressure")
+                .order_by(InvestigationReadRow.run_id, InvestigationReadRow.sequence)
+            )
+        )
+    assert len(rows) == 3  # historical SUCCESS is retained; both current failures are taped
+    historical = [row for row in rows if row.run_id == "historical-success-run"]
+    current_rows = [row for row in rows if row.run_id == "current-error-run"]
+    assert [(row.status, row.query_key) for row in historical] == [("SUCCESS", old_query_key)]
+    assert [(row.sequence, row.status) for row in current_rows] == [(1, "ERROR"), (2, "ERROR")]
+    assert {row.query_key for row in current_rows} == {old_query_key}

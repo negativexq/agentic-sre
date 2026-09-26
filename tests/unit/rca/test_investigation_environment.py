@@ -20,6 +20,7 @@ from packages.rca.model import (
     InvestigationQuery,
     LogRecord,
     ObjectVersion,
+    ProviderReadFailure,
     Resolution,
 )
 from packages.rca.source import InMemorySource
@@ -280,6 +281,7 @@ def test_investigation_only_error_logs_are_hidden_from_seed_but_queryable() -> N
     records = investigation_backend(source).query_logs(
         _ref("Service", "api"), InvestigationQuery(start=at(-40), end=at(-20))
     )
+    assert not isinstance(records, ProviderReadFailure)
     assert tuple(item.evidence_id for item in records) == ("log:hidden-api",)
 
 

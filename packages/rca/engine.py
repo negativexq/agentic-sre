@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from datetime import timedelta
-from typing import Protocol
+from datetime import datetime, timedelta
+from typing import Any, Protocol
 
 from packages.rca.causal_roles import HypothesisCausalRoles, derive_hypothesis_causal_roles
-from packages.rca.episode_end import assess_ended_episodes
+from packages.rca.episode_end import RULE_ID as EPISODE_END_RULE_ID
+from packages.rca.episode_end import evaluate_ended_episodes
 from packages.rca.frontier import (
     apply_frontier_progress,
     derive_structural_frontier,
@@ -39,6 +40,10 @@ from packages.rca.model import (
     HypothesisDiagnostics,
     InvestigationStep,
     ObjectVersion,
+    PreconditionAuditReason,
+    PreconditionResult,
+    ProviderReadFailure,
+    RequirementEvaluation,
     Resolution,
     StructuralAlternative,
     Symptoms,
@@ -54,8 +59,10 @@ from packages.rca.ranking import (
     verify,
 )
 from packages.rca.remediation import propose
+from packages.rca.requirements import build_requirement_evaluations, hypothesis_inventory
 from packages.rca.resolution import hypothesis_signature, resolve_hypotheses
-from packages.rca.resource_mechanism import MechanismMismatch, assess_resource_mechanisms
+from packages.rca.resource_mechanism import RULE_ID as RESOURCE_RULE_ID
+from packages.rca.resource_mechanism import MechanismMismatch, evaluate_resource_mechanisms
 from packages.rca.root_cause_eligibility import (
     RootCauseEligibilities,
     derive_root_cause_eligibilities,
@@ -112,6 +119,13 @@ class Case:
     structural_alternatives: list[StructuralAlternative] = field(default_factory=list)
     steps: list[InvestigationStep] = field(default_factory=list)
     mechanism_mismatches: dict[str, MechanismMismatch] = field(default_factory=dict)
+    rule_preconditions: dict[tuple[str, str], tuple[PreconditionResult, ...]] = field(
+        default_factory=dict
+    )
+    precondition_reasons: dict[tuple[str, str], tuple[PreconditionAuditReason, ...]] = field(
+        default_factory=dict
+    )
+    requirement_evaluations: tuple[RequirementEvaluation, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -165,10 +179,19 @@ def build_case(
     source: ObservationSource,
     config: EngineConfig | None = None,
     extra_findings: Sequence[Finding] = (),
+    reference_onset: datetime | None = None,
 ) -> Case:
-    """Run every deterministic stage and return the ranked case."""
+    """Run every deterministic stage and return the ranked case.
+
+    ``reference_onset`` is only for an incident-free probe (M19-6.8): with no
+    alerts there is no onset, so it stands in for one in the existing
+    onset-relative semantics. It is refused when alerts exist, and the probe
+    never persists it.
+    """
     config = config or EngineConfig()
     alerts = list(source.alerts())
+    if reference_onset is not None and alerts:
+        raise ValueError("reference_onset is only for an incident-free probe without alerts")
     history = source.object_history()
     events = list(source.events())
     latest: dict[EntityRef, ObjectVersion] = {
@@ -180,6 +203,8 @@ def build_case(
     runtime_graph = derive_runtime_graph_from_index(trace_index)
     runtime_evidence = derive_runtime_evidence(trace_index)
     symptoms = extract_symptoms(alerts)
+    if reference_onset is not None:
+        symptoms = symptoms.model_copy(update={"onset": reference_onset})
     runtime_propagation = derive_runtime_propagation(
         trace_index,
         history=history,
@@ -193,21 +218,21 @@ def build_case(
         window_end=source.observation_cutoff(),
         tokens=symptom_tokens(symptoms, entities, topology),
     )
+    pressure_result = (
+        source.resource_pressure(
+            sorted(_pods(entities, topology), key=str),
+            symptoms.onset - config.pressure_baseline_gap,
+        )
+        if symptoms.onset is not None
+        else ()
+    )
+    pressure_records = () if isinstance(pressure_result, ProviderReadFailure) else pressure_result
     findings = [
         *change_findings(history),
         *policy_findings(history, topology, set(symptoms.namespaces), events),
         *autoscaling_findings(history, events, topology),
         *container_findings(history),
-        *(
-            resource_findings(
-                source.resource_pressure(
-                    sorted(_pods(entities, topology), key=str),
-                    symptoms.onset - config.pressure_baseline_gap,
-                )
-            )
-            if symptoms.onset is not None
-            else []
-        ),
+        *resource_findings(pressure_records),
         *fault_event_findings(events, topology),
         *failure_findings(events),
         *dependency_findings(list(source.error_logs()), topology, entities),
@@ -229,24 +254,25 @@ def build_case(
     grouping: GroupingResult = group_candidates(candidates, topology, context, config.ranking)
     hypotheses = list(grouping.hypotheses)
     hypothesis_causal_roles = derive_hypothesis_causal_roles(hypotheses, runtime_propagation)
+    episode_evaluations = evaluate_ended_episodes(
+        hypotheses,
+        history=history,
+        pod_statuses=source.pod_status_observations(),
+        onset=symptoms.onset,
+        grace=config.ranking.verification_onset_grace,
+        evaluation_at=context.window_end,
+    )
     root_cause_eligibilities = derive_root_cause_eligibilities(
         hypotheses, hypothesis_causal_roles
-    ).with_ended_episodes(
-        assess_ended_episodes(
-            hypotheses,
-            history=history,
-            pod_statuses=source.pod_status_observations(),
-            onset=symptoms.onset,
-            grace=config.ranking.verification_onset_grace,
-        )
-    )
-    mechanism_mismatches = assess_resource_mechanisms(
+    ).with_ended_episodes(episode_evaluations.ended_episodes)
+    resource_evaluations = evaluate_resource_mechanisms(
         hypotheses,
         history=history,
         findings=findings,
         read_pressure=source.resource_pressure,
         onset=symptoms.onset,
         grace=config.ranking.verification_onset_grace,
+        evaluation_at=context.window_end,
     )
     structural_alternatives = (
         list(derive_structural_frontier(context))
@@ -306,7 +332,32 @@ def build_case(
         structural_alternatives=structural_alternatives,
         hypothesis_diagnostics=grouping.diagnostics,
         steps=steps,
-        mechanism_mismatches=mechanism_mismatches,
+        mechanism_mismatches=dict(resource_evaluations.mismatches),
+        requirement_evaluations=build_requirement_evaluations(
+            hypotheses,
+            instance_requirements=episode_evaluations.instance_requirements,
+            coverage_requirements=resource_evaluations.requirements,
+        ),
+        rule_preconditions={
+            **{
+                (hypothesis_id, EPISODE_END_RULE_ID): results
+                for hypothesis_id, results in episode_evaluations.preconditions.items()
+            },
+            **{
+                (hypothesis_id, RESOURCE_RULE_ID): results
+                for hypothesis_id, results in resource_evaluations.preconditions.items()
+            },
+        },
+        precondition_reasons={
+            **{
+                (hypothesis_id, EPISODE_END_RULE_ID): reasons
+                for hypothesis_id, reasons in episode_evaluations.reasons.items()
+            },
+            **{
+                (hypothesis_id, RESOURCE_RULE_ID): reasons
+                for hypothesis_id, reasons in resource_evaluations.reasons.items()
+            },
+        },
     )
 
 
@@ -370,6 +421,14 @@ def _accept_override(
     return top
 
 
+def _requirement_provenance(case: Case) -> dict[str, Any]:
+    """Requirement lifecycle provenance for the diagnosis; no decision reads it."""
+    return {
+        "requirement_evaluations": case.requirement_evaluations,
+        "hypothesis_inventory": hypothesis_inventory(case.hypotheses),
+    }
+
+
 def diagnose_case(
     case: Case,
     *,
@@ -384,6 +443,8 @@ def diagnose_case(
             onset_grace=config.ranking.verification_onset_grace,
             root_cause_eligibilities=case.root_cause_eligibilities,
             mechanism_mismatches=case.mechanism_mismatches,
+            rule_preconditions=case.rule_preconditions,
+            precondition_reasons=case.precondition_reasons,
         )
         information_gaps = derive_information_gaps(
             (),
@@ -417,6 +478,7 @@ def diagnose_case(
                 case.structural_alternatives,
                 bounded=bool(getattr(case.source, "initial_observation_bounded", False)),
             ),
+            **_requirement_provenance(case),
         )
     # Resolution compares immutable evidence structures.  Attach the same
     # signatures to the serialized hypotheses so API consumers can inspect the
@@ -437,6 +499,8 @@ def diagnose_case(
         onset_grace=config.ranking.verification_onset_grace,
         root_cause_eligibilities=case.root_cause_eligibilities,
         mechanism_mismatches=case.mechanism_mismatches,
+        rule_preconditions=case.rule_preconditions,
+        precondition_reasons=case.precondition_reasons,
     )
     information_gaps = derive_information_gaps(
         case.hypotheses,
@@ -482,6 +546,7 @@ def diagnose_case(
                 case.structural_alternatives,
                 bounded=bool(getattr(case.source, "initial_observation_bounded", False)),
             ),
+            **_requirement_provenance(case),
         )
     ranked_top_ineligible = not case.root_cause_eligibilities.is_root_cause_selectable(
         case.hypotheses[0].hypothesis_id
@@ -604,6 +669,7 @@ def diagnose_case(
             case.structural_alternatives,
             bounded=bool(getattr(case.source, "initial_observation_bounded", False)),
         ),
+        **_requirement_provenance(case),
     )
 
 

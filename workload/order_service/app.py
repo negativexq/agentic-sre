@@ -31,6 +31,7 @@ from workload.common.contracts import (
     PaymentRequest,
     PaymentStatus,
 )
+from workload.common.faults import MemoryBallast
 from workload.common.persistence import OrderRepository
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/agentic_sre"
@@ -46,6 +47,14 @@ class OrderFaultConfig(BaseModel):
     delay_ms: int = Field(default=0, ge=0, le=30_000)
     error: bool = False
     db_query_delay_ms: int = Field(default=0, ge=0, le=5_000)
+    # Alive but not ready: /ready answers 503, /health stays 200 (M19-6.2).
+    not_ready: bool = False
+    # MiB of memory the process holds while set; 0 releases it (M19-6.2).
+    memory_ballast_mb: int = Field(default=0, ge=0)
+
+
+def _faults_enabled() -> bool:
+    return os.getenv("ENABLE_TEST_FAULTS", "false").lower() == "true"
 
 
 class OrderService:
@@ -198,8 +207,10 @@ def create_app(
     order_service = service or OrderService(
         session_factory, gateway, publisher, runtime=telemetry, fault_config=fault_config
     )
+    ballast = MemoryBallast()
 
     app = FastAPI(title="Order Service", version="0.1.1")
+    app.state.memory_ballast = ballast
     app.add_middleware(TelemetryMiddleware, runtime=telemetry)
     app.mount("/metrics", make_asgi_app(registry=registry))
 
@@ -210,11 +221,21 @@ def create_app(
     @app.post("/__faults", response_model=OrderFaultConfig)
     def set_faults(config: OrderFaultConfig) -> OrderFaultConfig:
         """Set bounded local test faults; never enabled in production mode."""
-        if os.getenv("ENABLE_TEST_FAULTS", "false").lower() != "true":
+        if not _faults_enabled():
+            ballast.resize(0)  # no deliberate ballast is kept while faults are off
             raise HTTPException(status_code=404, detail="test faults are disabled")
+        try:
+            ballast.resize(config.memory_ballast_mb)
+        except (MemoryError, OverflowError) as error:
+            # Nothing is applied: the previous faults and ballast stay in force.
+            raise HTTPException(
+                status_code=503, detail="memory ballast allocation failed"
+            ) from error
         fault_config.delay_ms = config.delay_ms
         fault_config.error = config.error
         fault_config.db_query_delay_ms = config.db_query_delay_ms
+        fault_config.not_ready = config.not_ready
+        fault_config.memory_ballast_mb = config.memory_ballast_mb
         return fault_config
 
     @app.get("/orders/{order_id}", response_model=OrderResponse)
@@ -227,6 +248,13 @@ def create_app(
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/ready")
+    def ready() -> dict[str, str]:
+        """Process readiness only; no dependency is consulted."""
+        if _faults_enabled() and fault_config.not_ready:
+            raise HTTPException(status_code=503, detail="not ready (test fault)")
+        return {"status": "ready"}
 
     return app
 

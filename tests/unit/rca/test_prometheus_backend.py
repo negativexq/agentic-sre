@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request
 
 import pytest
+from provider_test_helpers import provider_session_factory
 
 from packages.rca.engine import Case, build_case
 from packages.rca.investigation.environment import (
@@ -51,6 +52,7 @@ from packages.rca.model import (
     ObjectVersion,
     RuntimeObservationState,
 )
+from packages.rca.provider_adapter import ProviderAdapter, ProviderCallerClass, ProviderReaders
 from packages.rca.source import InMemorySource
 
 T0 = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
@@ -115,6 +117,17 @@ def _reader(transport: _Transport) -> PrometheusMetricsReader:
     return PrometheusMetricsReader(
         PrometheusConfig("https://prometheus.example.internal", tenant_id="tenant"),
         opener=transport,
+    )
+
+
+def _provider_adapter(
+    prometheus: object, caller_class: ProviderCallerClass = "INVESTIGATION"
+) -> ProviderAdapter:
+    return ProviderAdapter(
+        "test-run",
+        caller_class,
+        provider_session_factory(),
+        ProviderReaders(prometheus=prometheus),  # type: ignore[arg-type]
     )
 
 
@@ -359,7 +372,7 @@ def test_live_support_passive_invariants_and_backend_composition() -> None:
         journal=[],
         current_objects=[],
         event_bodies=[],
-        prometheus_reader=reader,
+        provider_adapter=_provider_adapter(reader, "ENGINE"),
     )
     assert configured.supports("resource_pressure")
     assert configured.supports("traffic")
@@ -381,7 +394,7 @@ def test_cutoff_clamps_and_prevents_queries_after_cutoff() -> None:
     reader = _reader(_Transport(handler))
     backend = PrometheusInvestigationBackend(
         base=SourceInvestigationBackend(InMemorySource(name="base")),
-        prometheus=reader,
+        provider_adapter=_provider_adapter(reader),
         observation_cutoff=T0,
     )
     backend.query_traffic(
@@ -444,7 +457,7 @@ def _traffic_runtime_observation(
     transport = _Transport(lambda url, headers: _Response(_success(response)))
     backend = PrometheusInvestigationBackend(
         base=SourceInvestigationBackend(source),
-        prometheus=_reader(transport),
+        provider_adapter=_provider_adapter(_reader(transport)),
         observation_cutoff=cutoff,
     )
     return TrafficTool(backend).execute_query(case, gap, service, query)
@@ -497,7 +510,7 @@ def test_resource_and_traffic_provider_graphs_rebuild_existing_findings() -> Non
     resource_reader = _reader(resource_transport)
     resource_backend = PrometheusInvestigationBackend(
         base=SourceInvestigationBackend(InMemorySource(name="resource")),
-        prometheus=resource_reader,
+        provider_adapter=_provider_adapter(resource_reader),
         observation_cutoff=T0 + timedelta(minutes=5),
     )
     resource_source = InMemorySource(
@@ -568,7 +581,7 @@ def test_resource_and_traffic_provider_graphs_rebuild_existing_findings() -> Non
     traffic_reader = _reader(traffic_transport)
     traffic_backend = PrometheusInvestigationBackend(
         base=SourceInvestigationBackend(InMemorySource(name="traffic")),
-        prometheus=traffic_reader,
+        provider_adapter=_provider_adapter(traffic_reader),
         observation_cutoff=T0 + timedelta(minutes=5),
     )
     traffic_source = InMemorySource(
@@ -633,7 +646,7 @@ def test_resource_runtime_status_distinguishes_no_data_normal_and_abnormal() -> 
         reader = _reader(transport)
         backend = PrometheusInvestigationBackend(
             base=SourceInvestigationBackend(source),
-            prometheus=reader,
+            provider_adapter=_provider_adapter(reader),
             observation_cutoff=T0 + timedelta(minutes=5),
         )
         return ResourcePressureTool(backend).execute_query(case, gap, pod, read_query)
@@ -704,7 +717,7 @@ def test_partial_traffic_window_cannot_be_observed_normal() -> None:
     )
     backend = PrometheusInvestigationBackend(
         base=SourceInvestigationBackend(source),
-        prometheus=_reader(transport),
+        provider_adapter=_provider_adapter(_reader(transport)),
         observation_cutoff=T0 + timedelta(minutes=10),
     )
 
@@ -817,7 +830,7 @@ def test_traffic_descriptor_hash_uses_the_effective_limit() -> None:
     )
     backend = PrometheusInvestigationBackend(
         base=SourceInvestigationBackend(source),
-        prometheus=_reader(transport),
+        provider_adapter=_provider_adapter(_reader(transport)),
         observation_cutoff=T0 + timedelta(minutes=10),
     )
 

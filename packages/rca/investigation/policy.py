@@ -13,7 +13,15 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from packages.rca.investigation.intents import IntentMenuItem
 from packages.rca.investigation.state import InvestigationPolicyContext
 from packages.rca.llm import LLMClient, LLMOutputError
-from packages.rca.model import EntityRef, InvestigationAction, InvestigationQuery
+from packages.rca.model import (
+    EntityRef,
+    InvestigationAction,
+    InvestigationActionAudit,
+    InvestigationPolicyKind,
+    InvestigationQuery,
+    InvestigationStopReason,
+    TrajectoryTerminal,
+)
 
 
 class InvestigationTargetWire(BaseModel):
@@ -239,16 +247,94 @@ def _brief(context: InvestigationPolicyContext) -> str:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
 
+class ReplayTrajectoryDivergence(RuntimeError):
+    """Trajectory playback left the recorded run: an unrecorded turn or unused actions."""
+
+
 @dataclass
 class ScriptedInvestigationPolicy:
-    """Deterministic policy used by tests and offline smoke runs."""
+    """Deterministic policy used by tests, offline smoke runs and trajectory playback.
+
+    With ``recorded_terminal`` set it plays one recorded trajectory: the graph
+    feeds each recorded audit's action and selection state at the select
+    boundary (for every policy kind), and reproduces the recorded terminal when
+    the audits run out. It never invents a stop and never asks a model.
+    """
 
     actions: list[InvestigationAction | dict[str, Any]]
     index: int = 0
     counts_as_model: bool = False
+    semantic_kind: InvestigationPolicyKind = InvestigationPolicyKind.ACTION
+    recorded_audits: tuple[InvestigationActionAudit, ...] = ()
+    recorded_terminal: TrajectoryTerminal | None = None
+
+    @classmethod
+    def from_trajectory(
+        cls,
+        audits: Sequence[InvestigationActionAudit],
+        *,
+        semantic_kind: InvestigationPolicyKind,
+        counts_as_model: bool,
+        terminal: TrajectoryTerminal,
+    ) -> ScriptedInvestigationPolicy:
+        """Play back exactly these recorded audits, then the recorded terminal."""
+        return cls(
+            actions=[audit.action for audit in audits],
+            counts_as_model=counts_as_model,
+            semantic_kind=semantic_kind,
+            recorded_audits=tuple(audits),
+            recorded_terminal=terminal,
+        )
+
+    @property
+    def plays_trajectory(self) -> bool:
+        return self.recorded_terminal is not None
+
+    @property
+    def consumed_actions(self) -> tuple[InvestigationAction, ...]:
+        return tuple(audit.action for audit in self.recorded_audits[: self.index])
+
+    @property
+    def exhausted(self) -> bool:
+        return self.index >= len(self.recorded_audits)
+
+    def next_recorded(self) -> InvestigationActionAudit | None:
+        """The next recorded turn, or ``None`` once every recorded audit was played."""
+        if self.exhausted:
+            return None
+        audit = self.recorded_audits[self.index]
+        self.index += 1
+        return audit
+
+    def terminal_due(self, reason: InvestigationStopReason) -> bool:
+        """Whether a checkpoint stop for ``reason`` is the recorded end of this trajectory."""
+        terminal = self.recorded_terminal
+        return (
+            terminal is not None
+            and self.exhausted
+            and terminal.stop_reason is reason
+            and terminal.turns == len(self.recorded_audits)
+        )
+
+    def terminal_turn(self) -> InvestigationStopReason:
+        """The recorded audit-less terminal turn; any other extra turn is a divergence."""
+        terminal = self.recorded_terminal
+        if (
+            terminal is None
+            or not self.exhausted
+            or terminal.turns != len(self.recorded_audits) + 1
+        ):
+            raise ReplayTrajectoryDivergence(
+                "replay requested a policy turn the recorded trajectory never took"
+            )
+        return terminal.stop_reason
 
     def choose_action(self, context: InvestigationPolicyContext) -> InvestigationAction:
         del context
+        if self.plays_trajectory:
+            raise ReplayTrajectoryDivergence(
+                "trajectory playback turns are fed at the select boundary"
+            )
         if self.index >= len(self.actions):
             return InvestigationAction(action="stop", rationale="script exhausted")
         raw = self.actions[self.index]
@@ -264,6 +350,7 @@ class LLMInvestigationPolicy:
 
     client: LLMClient
     counts_as_model: bool = True
+    semantic_kind: InvestigationPolicyKind = InvestigationPolicyKind.ACTION
     prompts: list[str] = field(default_factory=list)
 
     def _complete(self, prompt: str) -> InvestigationAction:
@@ -304,6 +391,7 @@ class LLMIntentPolicy:
 
     client: LLMClient
     counts_as_model: bool = True
+    semantic_kind: InvestigationPolicyKind = InvestigationPolicyKind.INTENT_TIEBREAK
     prompts: list[str] = field(default_factory=list)
 
     def _complete(self, prompt: str) -> str:
@@ -371,6 +459,7 @@ __all__ = [
     "IntentSelectionWire",
     "INTENT_SYSTEM_PROMPT",
     "SYSTEM_PROMPT",
+    "ReplayTrajectoryDivergence",
     "ScriptedInvestigationPolicy",
     "validate_strict_json_schema",
 ]

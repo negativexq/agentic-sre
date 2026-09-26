@@ -64,12 +64,20 @@ spec:
               memory: 512Mi
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: 8000
+            # Measured start-to-listen <= 3.3 s (M19-6.4) + 2 s margin: no probe
+            # hits the port before it listens.
+            initialDelaySeconds: 6
+            periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
           livenessProbe:
             httpGet:
               path: /health
               port: 8000
+            periodSeconds: 10
+            failureThreshold: 6
 ---
 apiVersion: v1
 kind: Service
@@ -127,12 +135,20 @@ spec:
               memory: 512Mi
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: 8000
+            # Measured start-to-listen <= 3.3 s (M19-6.4) + 2 s margin: no probe
+            # hits the port before it listens.
+            initialDelaySeconds: 6
+            periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
           livenessProbe:
             httpGet:
               path: /health
               port: 8000
+            periodSeconds: 10
+            failureThreshold: 6
 ---
 apiVersion: v1
 kind: Service

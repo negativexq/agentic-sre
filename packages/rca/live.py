@@ -19,8 +19,6 @@ from packages.rca.investigation.environment import (
     SourceInvestigationBackend,
     TempoInvestigationBackend,
 )
-from packages.rca.investigation.prometheus import PrometheusMetricsReader
-from packages.rca.investigation.tempo import TempoTraceReader
 from packages.rca.json_access import child, object_content_hash
 from packages.rca.model import (
     CLUSTER_SCOPE,
@@ -33,11 +31,18 @@ from packages.rca.model import (
     LogRecord,
     ObjectVersion,
     PodStatusObservation,
+    ProviderReadFailure,
     ResourcePressure,
     TraceSpanObservation,
     TrafficObservation,
+    object_key,
+    snapshot_evidence_id,
 )
-from packages.rca.pod_status import ordered, pod_status_from_body, pod_status_from_history
+from packages.rca.pod_status import LifecycleStatusRecord, pod_status_from_lifecycle
+from packages.rca.provider_adapter import (
+    ProviderBoundary,
+    ProviderReadPersistenceError,
+)
 
 _log = logging.getLogger(__name__)
 # Resource reads start this long before the requested time so a baseline exists.
@@ -80,7 +85,7 @@ class ClusterReader(Protocol):
 class LogReader(Protocol):
     def error_logs(
         self, services: Sequence[str], starts_at: datetime, ends_at: datetime
-    ) -> list[LogRecord]: ...
+    ) -> list[LogRecord] | ProviderReadFailure: ...
 
 
 @dataclass(frozen=True)
@@ -131,6 +136,8 @@ class ObjectSnapshot:
     stored_versions: int
     started_at: datetime
     completed_at: datetime
+    # When the listing was taken: the time journal versions of this cycle carry.
+    observed_at: datetime | None = None
 
 
 class KubernetesClusterReader:
@@ -312,7 +319,16 @@ def _time(value: Any) -> datetime | None:
     return None
 
 
-def events_from_bodies(bodies: Sequence[Mapping[str, Any]]) -> list[ClusterEvent]:
+def events_from_bodies(
+    bodies: Sequence[Mapping[str, Any]], evidence_ids: Sequence[str] | None = None
+) -> list[ClusterEvent]:
+    """Cluster Events from bodies; ``evidence_ids`` (one per body) name persisted versions.
+
+    The product path always passes the persisted ``event:<version_pk>`` ids.
+    Without them the Event's own UID, or its position, is used.
+    """
+    if evidence_ids is not None and len(evidence_ids) != len(bodies):
+        raise ValueError("one evidence id per Event body is required")
     events: list[ClusterEvent] = []
     for index, body in enumerate(bodies):
         involved = child(body, "involvedObject")
@@ -325,13 +341,20 @@ def events_from_bodies(bodies: Sequence[Mapping[str, Any]]) -> list[ClusterEvent
                 entity=EntityRef(
                     kind=kind, name=name, namespace=str(involved.get("namespace") or CLUSTER_SCOPE)
                 ),
+                involved_uid=(
+                    involved.get("uid") if isinstance(involved.get("uid"), str) else None
+                ),
                 reason=str(body.get("reason") or ""),
                 type=str(body.get("type") or "Normal"),
                 message=str(body.get("message") or "")[:500],
                 first_at=first,
                 last_at=_time(body.get("lastTimestamp")) or first,
                 count=int(body.get("count") or 1),
-                evidence_id=f"event:{child(body, 'metadata').get('uid') or index}",
+                evidence_id=(
+                    evidence_ids[index]
+                    if evidence_ids is not None
+                    else f"event:{child(body, 'metadata').get('uid') or index}"
+                ),
             )
         )
     return events
@@ -397,7 +420,7 @@ class ChangeWatcher:
                 missing.add(key)
         stored += sum(self.tombstone(key, observed_at) for key in missing)
         completed_at = self.clock()
-        return ObjectSnapshot(listing, stored, started_at, completed_at)
+        return ObjectSnapshot(listing, stored, started_at, completed_at, observed_at)
 
 
 @dataclass
@@ -419,9 +442,16 @@ class LiveSource:
     # whose window is frozen): an empty, non-live list must not be read as
     # "the cluster has none of these objects any more".
     current_is_live: bool = True
-    tempo_reader: TempoTraceReader | None = None
-    prometheus_reader: PrometheusMetricsReader | None = None
-    loki_reader: LokiLogReader | None = None
+    provider_adapter: ProviderBoundary | None = None
+    # Persisted lifecycle ledger rows for the incident window: the only source
+    # of Pod status evidence.
+    lifecycle_records: Sequence[LifecycleStatusRecord] = ()
+    # The persisted snapshot cycle ``current_objects`` was loaded from. Current
+    # objects are evidence only as members of a persisted cycle.
+    snapshot_cycle_id: int | None = None
+    snapshot_observed_at: datetime | None = None
+    # Persisted ``event:<version_pk>`` ids, one per ``event_bodies`` item.
+    event_evidence_ids: Sequence[str] | None = None
 
     def incident_id(self) -> str:
         return self.incident
@@ -434,11 +464,25 @@ class LiveSource:
         return self.alert_items
 
     def object_history(self) -> Mapping[EntityRef, Sequence[ObjectVersion]]:
+        """Journal versions plus the run's persisted snapshot cycle.
+
+        Snapshot objects enter as UPDATED versions with their persisted
+        ``snapshot:<cycle>:<key>`` ids when their content differs from the
+        journal. Absence from the snapshot never produces a deletion; only a
+        persisted journal tombstone does. A resolved incident's frozen window
+        (``current_is_live=False``) uses the journal alone.
+        """
         history: dict[EntityRef, list[ObjectVersion]] = {}
         hashes: dict[EntityRef, str] = {}
-        live: set[EntityRef] = set()
 
-        def add(body: dict[str, Any], at: datetime, evidence: str, lifecycle: Lifecycle) -> None:
+        def add(
+            body: dict[str, Any],
+            at: datetime,
+            evidence: str,
+            lifecycle: Lifecycle,
+            *,
+            uid: str | None = None,
+        ) -> None:
             entity = _entity(body)
             if entity is None:
                 return
@@ -450,6 +494,7 @@ class LiveSource:
             history.setdefault(entity, []).append(
                 ObjectVersion(
                     entity=entity,
+                    uid=uid,
                     observed_at=at,
                     body=body,
                     evidence_id=evidence,
@@ -458,60 +503,63 @@ class LiveSource:
             )
 
         for entry in self.journal:
-            add(entry.body, entry.observed_at, f"journal:{entry.version_id}", entry.lifecycle)
-        for body in self.current_objects:
-            entity = _entity(body)
-            if entity is not None:
-                live.add(entity)
-            add(body, self.observed_at, "cluster:current", Lifecycle.UPDATED)
-        # An object the journal still shows live but the cluster no longer has is deleted.
-        if self.current_is_live:
-            for entity, versions in history.items():
-                if entity not in live and versions[-1].lifecycle is not Lifecycle.DELETED:
-                    versions.append(
-                        ObjectVersion(
-                            entity=entity,
-                            observed_at=self.observed_at,
-                            body=versions[-1].body,
-                            evidence_id="cluster:missing",
-                            lifecycle=Lifecycle.DELETED,
-                        )
-                    )
+            persisted_uid = child(entry.body, "metadata").get("uid")
+            add(
+                entry.body,
+                entry.observed_at,
+                f"journal:{entry.version_id}",
+                entry.lifecycle,
+                uid=persisted_uid if isinstance(persisted_uid, str) else None,
+            )
+        if self.current_is_live and self.snapshot_cycle_id is not None:
+            at = self.snapshot_observed_at or self.observed_at
+            for body in self.current_objects:
+                key = object_key(body)
+                if key is None:
+                    continue
+                uid = child(body, "metadata").get("uid")
+                add(
+                    body,
+                    at,
+                    snapshot_evidence_id(self.snapshot_cycle_id, key),
+                    Lifecycle.UPDATED,
+                    uid=uid if isinstance(uid, str) else None,
+                )
         return history
 
     def events(self) -> Sequence[ClusterEvent]:
-        return events_from_bodies(self.event_bodies)
+        return events_from_bodies(self.event_bodies, self.event_evidence_ids)
 
     def error_logs(self) -> Sequence[LogRecord]:
         return self.error_items
 
     def resource_pressure(
         self, pods: Sequence[EntityRef], since: datetime
-    ) -> Sequence[ResourcePressure]:
+    ) -> Sequence[ResourcePressure] | ProviderReadFailure:
         """Bounded per-Pod reads from ``since`` minus the baseline gap up to the cutoff.
 
-        Each read stays within the one-hour query bound. A failed read yields
-        nothing for that Pod, which the RCA treats as missing, never as normal.
+        Each read stays within the one-hour query bound. Failures stay explicit
+        so partial/absent provider data cannot be read as normal evidence.
         """
-        if self.prometheus_reader is None:
+        if self.provider_adapter is None or not self.provider_adapter.supports("resource_pressure"):
             return []
         start = since - RESOURCE_BASELINE_LEAD
         end = min(self.observed_at, start + PROMETHEUS_MAX_QUERY_SPAN)
         if end <= start:
             return []
         records: list[ResourcePressure] = []
+        failures: list[ProviderReadFailure] = []
         for pod in pods:
             if pod.kind != "Pod":
                 continue
-            try:
-                records.extend(
-                    self.prometheus_reader.query_resource_pressure(
-                        pod, InvestigationQuery(start=start, end=end, limit=16)
-                    )
-                )
-            except Exception as exc:  # backend failure is missing data, not health
-                _log.warning("resource read for %s failed (%s)", pod.canonical, type(exc).__name__)
-        return records
+            result = self.provider_adapter.query_resource_pressure(
+                pod, InvestigationQuery(start=start, end=end, limit=16)
+            )
+            if isinstance(result, ProviderReadFailure):
+                failures.append(result)
+            else:
+                records.extend(result)
+        return failures[0] if failures else records
 
     def traffic_observations(self) -> Sequence[TrafficObservation]:
         # The live stack does not yet expose a bounded request-rate reader.
@@ -522,20 +570,12 @@ class LiveSource:
         return []
 
     def pod_status_observations(self) -> Sequence[PodStatusObservation]:
-        """Journal-time status plus the current listing's status.
+        """Pod status exactly as the lifecycle ledger recorded it.
 
-        The current listing is kept here even when its desired state matches
-        the journal, which is exactly when ``object_history`` drops it.
+        Neither journal bodies nor the current listing are read for status:
+        every observation is one persisted STATUS_SNAPSHOT or READY_* row.
         """
-        current: list[PodStatusObservation] = []
-        if self.current_is_live:
-            for body in self.current_objects:
-                entity = _entity(body)
-                if entity is not None and entity.kind == "Pod":
-                    current.append(
-                        pod_status_from_body(entity, body, self.observed_at, "cluster:current")
-                    )
-        return ordered((*pod_status_from_history(self.object_history()), *current))
+        return pod_status_from_lifecycle(self.lifecycle_records)
 
     def supports(self, capability: str) -> bool:
         if capability == "incident_events":
@@ -543,41 +583,44 @@ class LiveSource:
         if capability == "incident_changes":
             return self.supports("history")
         if capability == "runtime_traces":
-            return self.tempo_reader is not None
+            return self.provider_adapter is not None and self.provider_adapter.supports(capability)
         if capability in {"resource_pressure", "traffic"}:
-            return self.prometheus_reader is not None
+            return self.provider_adapter is not None and self.provider_adapter.supports(capability)
         return capability in {"history", "events", "logs"}
 
     def supports_typed_runtime(self, capability: str) -> bool:
         """Report configured typed providers independently of query results."""
         if capability == "runtime_traces":
-            return self.tempo_reader is not None
+            return self.provider_adapter is not None and self.provider_adapter.supports(capability)
         if capability in {"resource_pressure", "traffic"}:
-            return self.prometheus_reader is not None
+            return self.provider_adapter is not None and self.provider_adapter.supports(capability)
         if capability == "logs":
-            return self.loki_reader is not None
+            return self.provider_adapter is not None and self.provider_adapter.supports(capability)
         return False
 
     def investigation_backend(self) -> InvestigationBackend:
         base: InvestigationBackend = SourceInvestigationBackend(self)
-        if self.prometheus_reader is not None:
+        if self.provider_adapter is None:
+            return base
+        investigation_adapter = self.provider_adapter.for_caller("INVESTIGATION")
+        if investigation_adapter.supports("resource_pressure"):
             base = PrometheusInvestigationBackend(
                 base=base,
-                prometheus=self.prometheus_reader,
+                provider_adapter=investigation_adapter,
                 observation_cutoff=self.observation_cutoff(),
             )
-        if self.tempo_reader is not None:
+        if investigation_adapter.supports("runtime_traces"):
             base = TempoInvestigationBackend(
                 base=base,
-                tempo=self.tempo_reader,
+                provider_adapter=investigation_adapter,
                 observation_cutoff=self.observation_cutoff(),
             )
-        if self.loki_reader is not None:
+        if investigation_adapter.supports("logs"):
             from packages.rca.investigation.environment import LokiInvestigationBackend
 
             base = LokiInvestigationBackend(
                 base=base,
-                loki=self.loki_reader,
+                provider_adapter=investigation_adapter,
                 source=self,
                 observation_cutoff=self.observation_cutoff(),
             )
@@ -637,6 +680,7 @@ class LogCapture:
     """The outcome of capturing incident error logs through bounded reads."""
 
     records: tuple[LogRecord, ...]
+    source_read_ids: tuple[int | None, ...]
     queried: tuple[tuple[datetime, datetime], ...]
     failed: tuple[LogSliceFailure, ...]
     skipped: tuple[tuple[datetime, datetime], ...]
@@ -668,9 +712,10 @@ def capture_error_logs(
     """
     if ends_at <= starts_at:
         # Nothing to read (or a skewed window); logs never fail a diagnosis.
-        return LogCapture(records=(), queried=(), failed=(), skipped=())
+        return LogCapture(records=(), source_read_ids=(), queried=(), failed=(), skipped=())
     slices = bounded_slices(starts_at, ends_at)
     records: list[LogRecord] = []
+    source_read_ids: list[int | None] = []
     seen: set[tuple[str, datetime | None, str, str, str]] = set()
     queried: list[tuple[datetime, datetime]] = []
     failed: list[LogSliceFailure] = []
@@ -681,7 +726,31 @@ def capture_error_logs(
             break
         queried.append((start, end))
         try:
-            batch = reader.error_logs(services, start, end)
+            read_with_id = getattr(reader, "error_logs_with_read_id", None)
+            if callable(read_with_id):
+                read_result = read_with_id(services, start, end)
+                if isinstance(read_result, ProviderReadFailure):
+                    failed.append(
+                        LogSliceFailure(
+                            start, end, read_result.error_type, read_result.error_message
+                        )
+                    )
+                    continue
+                batch, read_id = read_result
+            else:
+                read_result = reader.error_logs(services, start, end)
+                if isinstance(read_result, ProviderReadFailure):
+                    failed.append(
+                        LogSliceFailure(
+                            start, end, read_result.error_type, read_result.error_message
+                        )
+                    )
+                    continue
+                batch, read_id = read_result, None
+        except ProviderReadPersistenceError:
+            # A successful provider response whose tape commit failed must not
+            # be treated like an ignorable provider slice failure.
+            raise
         except Exception as error:  # noqa: BLE001 - one failed slice must not drop the rest
             failed.append(LogSliceFailure(start, end, type(error).__name__, str(error)[:200]))
             continue
@@ -690,8 +759,10 @@ def capture_error_logs(
             if key not in seen:
                 seen.add(key)
                 records.append(record)
+                source_read_ids.append(read_id)
     return LogCapture(
         records=tuple(records[:max_records]),
+        source_read_ids=tuple(source_read_ids[:max_records]),
         queried=tuple(queried),
         failed=tuple(failed),
         skipped=skipped,

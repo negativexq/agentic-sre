@@ -13,6 +13,7 @@ from packages.rca.json_access import child, mapping
 from packages.rca.model import (
     Alert,
     ClusterEvent,
+    EntityInstanceRef,
     EntityRef,
     Finding,
     FindingKind,
@@ -552,6 +553,11 @@ _CONTAINER_WAITING = {
 _CONTAINER_TERMINATED = {"OOMKilled", "Error", "ContainerCannotRun", "DeadlineExceeded"}
 
 
+def _instance(entity: EntityRef, uid: object) -> EntityInstanceRef | None:
+    """The exact instance only when the evidence itself carries its UID."""
+    return EntityInstanceRef(entity=entity, uid=uid) if isinstance(uid, str) and uid else None
+
+
 def container_findings(history: Mapping[EntityRef, Sequence[ObjectVersion]]) -> list[Finding]:
     """Container states that explain failures: OOM kills, crash loops, bad images or config."""
     findings: list[Finding] = []
@@ -593,10 +599,12 @@ def container_findings(history: Mapping[EntityRef, Sequence[ObjectVersion]]) -> 
             continue
         first = problems[0]
         when = [t for p in problems if (t := _parse(p.get("at"))) is not None]
+        uid = child(latest.body, "metadata").get("uid")
         findings.append(
             Finding(
                 kind=FindingKind.CONTAINER_FAILURE,
                 entity=entity,
+                entity_instance=_instance(entity, uid),
                 at=min(when) if when else None,
                 summary=(
                     f"container {first['container']} {first['reason']}"
@@ -762,22 +770,27 @@ def fault_event_findings(events: Sequence[ClusterEvent], topology: Topology) -> 
 
 
 def failure_findings(events: Sequence[ClusterEvent]) -> list[Finding]:
-    """Warning events grouped per object and reason."""
-    grouped: dict[tuple[EntityRef, str], list[ClusterEvent]] = {}
+    """Warning events grouped per object instance and reason.
+
+    Events of different UIDs under one name never share a Finding; events
+    without a UID stay in their own group and carry no instance.
+    """
+    grouped: dict[tuple[EntityRef, str | None, str], list[ClusterEvent]] = {}
     for event in events:
         if event.type != "Warning" or is_chaos_kind(event.entity.kind):
             continue
         if event.entity.kind in {"PersistentVolume", "PersistentVolumeClaim", "VolumeAttachment"}:
             continue
-        grouped.setdefault((event.entity, event.reason), []).append(event)
+        grouped.setdefault((event.entity, event.involved_uid, event.reason), []).append(event)
     findings: list[Finding] = []
-    for (entity, reason), items in grouped.items():
+    for (entity, uid, reason), items in grouped.items():
         times = [t for item in items if (t := item.last_at or item.first_at) is not None]
         count = sum(item.count for item in items)
         findings.append(
             Finding(
                 kind=FindingKind.FAILURE_EVENT,
                 entity=entity,
+                entity_instance=_instance(entity, uid),
                 at=max(times) if times else None,
                 summary=f"{reason} x{count}: {items[-1].message[:160]}",
                 evidence_ids=tuple(item.evidence_id for item in items[:4]),

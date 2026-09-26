@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Sequence
+from collections import Counter
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -30,24 +33,49 @@ from packages.contracts import (
     TimeWindow,
 )
 from packages.rca.json_access import child, object_content_hash
-from packages.rca.model import CLUSTER_SCOPE, JournalEntry, Lifecycle, LogRecord
+from packages.rca.model import (
+    CLUSTER_SCOPE,
+    Diagnosis,
+    JournalEntry,
+    Lifecycle,
+    LogRecord,
+    PreconditionStatus,
+    RequirementAuditReason,
+    RequirementEvaluation,
+    Symptoms,
+    object_key,
+    snapshot_evidence_id,
+)
+from packages.rca.requirements import requirement_key, requirement_targets_document
 from packages.storage.models import (
+    DIAGNOSIS_TRIGGERS,
+    LIFECYCLE_OBSERVATION_TYPES,
     AlertRow,
     ChangeRecordRow,
     DiagnosisRow,
     EmailDeliveryRow,
+    EntityInstanceRow,
     EventVersionRow,
+    EvidenceRequirementRow,
     EvidenceRow,
     IncidentEventRow,
     IncidentRow,
+    InvestigationReadRow,
     InvestigationRunRow,
+    LifecycleObservationRow,
     LogObservationRow,
     ObjectVersionRow,
     ReportRow,
+    SnapshotCycleObjectRow,
+    SnapshotCycleRow,
 )
 
 if TYPE_CHECKING:
     from packages.incident.state_machine import TransitionResult
+
+
+class RequirementOnsetUnavailable(RuntimeError):
+    """A requirement's opening revision does not carry a readable onset."""
 
 
 class IncidentNotFoundError(LookupError):
@@ -165,7 +193,7 @@ class IncidentEventRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def append(self, event: IncidentEvent) -> IncidentEvent:
+    def append(self, event: IncidentEvent, *, commit: bool = True) -> IncidentEvent:
         """Append an event with a monotonic per-incident sequence."""
         self._session.add(
             IncidentEventRow(
@@ -178,7 +206,8 @@ class IncidentEventRepository:
                 correlation_id=event.correlation_id,
             )
         )
-        self._session.commit()
+        if commit:
+            self._session.commit()
         return event
 
     def list_for_incident(self, incident_id: object) -> list[IncidentEvent]:
@@ -207,12 +236,21 @@ class AlertRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
+    def ids_for_incident(self, incident_id: object) -> list[object]:
+        """Exact ids of the alerts attached to an incident."""
+        return list(
+            self._session.scalars(
+                select(AlertRow.alert_id).where(AlertRow.incident_id == incident_id)
+            ).all()
+        )
+
     def list_for_incident(self, incident_id: object) -> list[Alert]:
         """Return alerts attached to an incident in stable start order."""
+        return self._alerts(AlertRow.incident_id == incident_id)
+
+    def _alerts(self, condition: Any) -> list[Alert]:
         rows = self._session.scalars(
-            select(AlertRow)
-            .where(AlertRow.incident_id == incident_id)
-            .order_by(AlertRow.starts_at, AlertRow.alert_id)
+            select(AlertRow).where(condition).order_by(AlertRow.starts_at, AlertRow.alert_id)
         ).all()
         return [
             Alert(
@@ -409,10 +447,13 @@ class LogObservationRepository:
         observed_at: datetime,
         *,
         source_system: str = "loki",
+        source_read_ids: Sequence[int | None] | None = None,
     ) -> int:
         """Persist new records and return the number added."""
+        if source_read_ids is not None and len(source_read_ids) != len(records):
+            raise ValueError("source_read_ids must align one-for-one with records")
         stored = 0
-        for record in records:
+        for index, record in enumerate(records):
             dedup_key = self._dedup_key(record)
             exists = self._session.scalar(
                 select(LogObservationRow.observation_id).where(
@@ -433,6 +474,9 @@ class LogObservationRepository:
                     evidence_id=record.evidence_id[:512],
                     dedup_key=dedup_key,
                     source_system=source_system,
+                    source_read_id=(
+                        source_read_ids[index] if source_read_ids is not None else None
+                    ),
                 )
             )
             stored += 1
@@ -444,6 +488,38 @@ class LogObservationRepository:
         self, *, incident_id: object, starts_at: datetime, ends_at: datetime
     ) -> list[LogRecord]:
         """Return observations visible in an incident's frozen window."""
+        return [
+            _log_record(row)
+            for row in self._incident_rows(
+                incident_id=incident_id, starts_at=starts_at, ends_at=ends_at
+            )
+        ]
+
+    def incident_observation_ids(
+        self, *, incident_id: object, starts_at: datetime, ends_at: datetime
+    ) -> list[int]:
+        """Exact ids of the observations ``list_for_incident`` returns for this window."""
+        return [
+            row.observation_id
+            for row in self._incident_rows(
+                incident_id=incident_id, starts_at=starts_at, ends_at=ends_at
+            )
+        ]
+
+    def records(self, observation_ids: Sequence[int]) -> list[LogRecord]:
+        """Exactly these observations, in observation order."""
+        if not observation_ids:
+            return []
+        rows = self._session.scalars(
+            select(LogObservationRow)
+            .where(LogObservationRow.observation_id.in_(observation_ids))
+            .order_by(LogObservationRow.observed_at, LogObservationRow.observation_id)
+        ).all()
+        return [_log_record(row) for row in rows]
+
+    def _incident_rows(
+        self, *, incident_id: object, starts_at: datetime, ends_at: datetime
+    ) -> list[LogObservationRow]:
         rows = self._session.scalars(
             select(LogObservationRow)
             .where(
@@ -461,16 +537,172 @@ class LogObservationRepository:
             )
             .order_by(LogObservationRow.observed_at, LogObservationRow.observation_id)
         ).all()
-        return [
-            LogRecord(
-                service=row.service,
-                at=row.event_at,
-                severity=row.severity,
-                message=row.message,
-                evidence_id=row.evidence_id,
+        return list(rows)
+
+
+class InvestigationReadRepository:
+    """Append one complete successful provider-read envelope and commit it."""
+
+    _APPEND_ATTEMPTS = 5
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def list_for_run(self, run_id: str) -> list[InvestigationReadRow]:
+        """Reload exactly one run's provider tape in authoritative order."""
+        return list(
+            self._session.scalars(
+                select(InvestigationReadRow)
+                .where(InvestigationReadRow.run_id == run_id)
+                .order_by(InvestigationReadRow.sequence.asc())
+            ).all()
+        )
+
+    def _next_sequence(self, run_id: str) -> int:
+        latest = self._session.scalar(
+            select(InvestigationReadRow.sequence)
+            .where(InvestigationReadRow.run_id == run_id)
+            .order_by(desc(InvestigationReadRow.sequence))
+            .limit(1)
+        )
+        return (latest or 0) + 1
+
+    def append_success(
+        self,
+        *,
+        run_id: str,
+        caller_class: str,
+        capability: str,
+        query_key: str,
+        query_descriptor: dict[str, Any],
+        started_at: datetime,
+        finished_at: datetime,
+        observation: Any,
+        evidence_ids: Sequence[str],
+    ) -> int:
+        """Insert and commit one SUCCESS row; sequence is serialized per run."""
+        return self._append(
+            run_id=run_id,
+            caller_class=caller_class,
+            capability=capability,
+            query_key=query_key,
+            query_descriptor=query_descriptor,
+            started_at=started_at,
+            finished_at=finished_at,
+            status="SUCCESS",
+            observation=observation,
+            evidence_ids=evidence_ids,
+            error_type=None,
+            error_message=None,
+        )
+
+    def append_error(
+        self,
+        *,
+        run_id: str,
+        caller_class: str,
+        capability: str,
+        query_key: str,
+        query_descriptor: dict[str, Any],
+        started_at: datetime,
+        finished_at: datetime,
+        error_type: str,
+        error_message: str,
+    ) -> int:
+        """Insert and commit one complete ERROR row; never mutate a prior read."""
+        return self._append(
+            run_id=run_id,
+            caller_class=caller_class,
+            capability=capability,
+            query_key=query_key,
+            query_descriptor=query_descriptor,
+            started_at=started_at,
+            finished_at=finished_at,
+            status="ERROR",
+            observation=None,
+            evidence_ids=(),
+            error_type=error_type,
+            error_message=error_message,
+        )
+
+    def _append(
+        self,
+        *,
+        run_id: str,
+        caller_class: str,
+        capability: str,
+        query_key: str,
+        query_descriptor: dict[str, Any],
+        started_at: datetime,
+        finished_at: datetime,
+        status: str,
+        observation: Any,
+        evidence_ids: Sequence[str],
+        error_type: str | None,
+        error_message: str | None,
+    ) -> int:
+        for attempt in range(self._APPEND_ATTEMPTS):
+            if self._session.get_bind().dialect.name == "postgresql":
+                # Transaction-scoped lock serializes max+1 allocation for this
+                # run. hashtext collisions only serialize unrelated runs.
+                self._session.execute(select(func.pg_advisory_xact_lock(func.hashtext(run_id))))
+            sequence = self._next_sequence(run_id)
+            row = InvestigationReadRow(
+                run_id=run_id,
+                sequence=sequence,
+                caller_class=caller_class,
+                capability=capability,
+                query_key=query_key,
+                query_descriptor=query_descriptor,
+                started_at=started_at,
+                finished_at=finished_at,
+                committed_at=datetime.now(UTC),
+                status=status,
+                observation=observation,
+                evidence_ids=list(evidence_ids),
+                error_type=error_type,
+                error_message=error_message,
             )
-            for row in rows
-        ]
+            self._session.add(row)
+            try:
+                self._session.flush()
+                read_id = row.read_id
+                assert read_id is not None
+                self._session.commit()
+            except IntegrityError:
+                self._session.rollback()
+                if attempt + 1 == self._APPEND_ATTEMPTS:
+                    raise
+                # Retry only a run-sequence collision. Other integrity errors
+                # are real persistence failures and must reach the caller.
+                collision = self._session.scalar(
+                    select(InvestigationReadRow.read_id).where(
+                        InvestigationReadRow.run_id == run_id,
+                        InvestigationReadRow.sequence == sequence,
+                    )
+                )
+                if collision is None:
+                    raise
+                continue
+            return read_id
+        raise RuntimeError(
+            f"could not allocate an investigation-read sequence for {run_id} "
+            f"after {self._APPEND_ATTEMPTS} attempts"
+        )
+
+
+def _log_record(row: LogObservationRow) -> LogRecord:
+    return LogRecord(
+        service=row.service,
+        at=row.event_at,
+        severity=row.severity,
+        message=row.message,
+        evidence_id=row.evidence_id,
+    )
+
+
+def _event_body(row: EventVersionRow) -> dict[str, Any]:
+    return _body_with_persisted_uid(row.body, "involvedObject", row.involved_uid)
 
 
 def event_identity(body: dict[str, Any], namespace: str) -> str:
@@ -527,6 +759,31 @@ def event_version_key(identity: str, body: dict[str, Any]) -> str:
     return f"{identity}|{hashlib.sha256(encoded.encode()).hexdigest()}"
 
 
+def _body_with_persisted_uid(
+    body: dict[str, Any], parent_key: str, uid: str | None
+) -> dict[str, Any]:
+    """Expose the UID column through the existing body-based read contract."""
+    result = dict(body)
+    parent = body.get(parent_key)
+    if isinstance(parent, dict):
+        nested = dict(parent)
+    elif uid is not None:
+        nested = {}
+    else:
+        return result
+    if uid is None:
+        nested.pop("uid", None)
+    else:
+        nested["uid"] = uid
+    result[parent_key] = nested
+    return result
+
+
+def _nested_uid(body: dict[str, Any], parent_key: str) -> str | None:
+    uid = child(body, parent_key).get("uid")
+    return uid if isinstance(uid, str) else None
+
+
 class EventRepository:
     """Append-only journal of observed Kubernetes events.
 
@@ -565,6 +822,7 @@ class EventRepository:
                 namespace=namespace,
                 involved_kind=kind,
                 involved_name=name,
+                involved_uid=_nested_uid(body, "involvedObject"),
                 dedup_key=key,
                 event_at=event_at,
                 observed_at=observed_at,
@@ -595,7 +853,9 @@ class EventRepository:
             )
             .order_by(EventVersionRow.observed_at, EventVersionRow.version_id)
         ).all()
-        return [dict(row.body) for row in rows]
+        return [
+            _body_with_persisted_uid(row.body, "involvedObject", row.involved_uid) for row in rows
+        ]
 
     def analysis_view(
         self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
@@ -606,6 +866,38 @@ class EventRepository:
         coalesced Kubernetes updates remain available for provenance, while
         RCA receives one state per stable Event identity at the frozen cutoff.
         """
+        return [
+            _event_body(row)
+            for row in self._analysis_rows(
+                namespaces=namespaces, starts_at=starts_at, ends_at=ends_at
+            )
+        ]
+
+    def analysis_version_ids(
+        self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
+    ) -> list[int]:
+        """Exact ids of the Event versions ``analysis_view`` returns for this window."""
+        return [
+            row.version_id
+            for row in self._analysis_rows(
+                namespaces=namespaces, starts_at=starts_at, ends_at=ends_at
+            )
+        ]
+
+    def bodies(self, version_ids: Sequence[int]) -> list[tuple[int, dict[str, Any]]]:
+        """Exactly these Event versions as ``(version_id, body)``, in version order."""
+        if not version_ids:
+            return []
+        rows = self._session.scalars(
+            select(EventVersionRow)
+            .where(EventVersionRow.version_id.in_(version_ids))
+            .order_by(EventVersionRow.version_id)
+        ).all()
+        return [(row.version_id, _event_body(row)) for row in rows]
+
+    def _analysis_rows(
+        self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
+    ) -> list[EventVersionRow]:
         rows = self._session.scalars(
             select(EventVersionRow)
             .where(
@@ -620,13 +912,98 @@ class EventRepository:
         for row in rows:
             identity = event_identity(row.body, row.namespace)
             latest[identity] = row
-        return [dict(row.body) for row in sorted(latest.values(), key=lambda item: item.version_id)]
+        return sorted(latest.values(), key=lambda item: item.version_id)
 
     def history(
         self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
     ) -> list[dict[str, Any]]:
         """Compatibility name for the deduplicated Event analysis/replay view."""
         return self.analysis_view(namespaces=namespaces, starts_at=starts_at, ends_at=ends_at)
+
+
+@dataclass(frozen=True)
+class PersistedSnapshotCycle:
+    """One snapshot cycle as persisted: the only form RCA receives it in."""
+
+    cycle_id: int
+    observed_at: datetime
+    completed_at: datetime
+    objects: tuple[dict[str, Any], ...]
+
+
+class SnapshotCycleRepository:
+    """Diagnosis capture cycles and the exact bodies they listed (authoritative evidence).
+
+    A cycle is written once, complete: its row and every listed object in a
+    single transaction, never inserted early and updated later.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def record(
+        self,
+        *,
+        run_id: str,
+        started_at: datetime,
+        observed_at: datetime,
+        completed_at: datetime,
+        completed_scopes: Sequence[tuple[str, str]],
+        failed_scopes: Sequence[tuple[str, str, str]],
+        objects: Sequence[dict[str, Any]],
+    ) -> int:
+        """Persist one completed cycle with full bodies; returns its ``cycle_id``."""
+        cycle = SnapshotCycleRow(
+            run_id=run_id,
+            started_at=started_at,
+            observed_at=observed_at,
+            completed_at=completed_at,
+            completed_scopes=[list(scope) for scope in sorted(completed_scopes)],
+            failed_scopes=[
+                {"namespace": namespace, "kind": kind, "error": error}
+                for namespace, kind, error in failed_scopes
+            ],
+        )
+        self._session.add(cycle)
+        self._session.flush()
+        seen: set[str] = set()
+        for body in objects:
+            key = object_key(body)
+            if key is None or key in seen:
+                continue  # one body per object and cycle
+            seen.add(key)
+            namespace, kind, name = key.split("/", 2)
+            self._session.add(
+                SnapshotCycleObjectRow(
+                    cycle_id=cycle.cycle_id,
+                    object_key=key,
+                    namespace=namespace,
+                    kind=kind,
+                    name=name,
+                    uid=_nested_uid(body, "metadata"),
+                    body=body,
+                    evidence_id=snapshot_evidence_id(cycle.cycle_id, key),
+                )
+            )
+        self._session.commit()
+        return cycle.cycle_id
+
+    def load(self, cycle_id: int) -> PersistedSnapshotCycle:
+        """A persisted cycle and its objects exactly as stored, in key order."""
+        cycle = self._session.get(SnapshotCycleRow, cycle_id)
+        if cycle is None:
+            raise LookupError(f"snapshot cycle {cycle_id} was not found")
+        rows = self._session.scalars(
+            select(SnapshotCycleObjectRow)
+            .where(SnapshotCycleObjectRow.cycle_id == cycle_id)
+            .order_by(SnapshotCycleObjectRow.object_key)
+        ).all()
+        return PersistedSnapshotCycle(
+            cycle_id=cycle.cycle_id,
+            observed_at=cycle.observed_at,
+            completed_at=cycle.completed_at,
+            objects=tuple(dict(row.body) for row in rows),
+        )
 
 
 class ObjectVersionRepository:
@@ -687,6 +1064,7 @@ class ObjectVersionRepository:
                 namespace=namespace,
                 kind=kind,
                 name=name,
+                uid=_nested_uid(body, "metadata"),
                 observed_at=observed_at,
                 content_hash=digest,
                 body=body,
@@ -695,6 +1073,20 @@ class ObjectVersionRepository:
         )
         self._session.commit()
         return True
+
+    def tombstones_missing_deletion(self, namespaces: set[str]) -> list[TombstoneRef]:
+        """Pod journal tombstones whose exact UID has no DELETED lifecycle row yet."""
+        recorded = (
+            select(LifecycleObservationRow.observation_id)
+            .where(
+                LifecycleObservationRow.type == "DELETED",
+                LifecycleObservationRow.namespace == ObjectVersionRow.namespace,
+                LifecycleObservationRow.kind == ObjectVersionRow.kind,
+                LifecycleObservationRow.instance_uid == ObjectVersionRow.uid,
+            )
+            .exists()
+        )
+        return _tombstones(self._session, namespaces, "Pod", recorded)
 
     def tombstone(self, key: str, observed_at: datetime) -> bool:
         """Record that a live object is gone; its last body is kept as the tombstone body."""
@@ -707,6 +1099,7 @@ class ObjectVersionRepository:
                 namespace=latest.namespace,
                 kind=latest.kind,
                 name=latest.name,
+                uid=latest.uid,
                 observed_at=observed_at,
                 content_hash=latest.content_hash,
                 body=latest.body,
@@ -734,6 +1127,38 @@ class ObjectVersionRepository:
         self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
     ) -> list[JournalEntry]:
         """Versions in the window plus each object's last version before it, oldest first."""
+        return [
+            _journal_entry(row)
+            for row in self._history_rows(
+                namespaces=namespaces, starts_at=starts_at, ends_at=ends_at
+            )
+        ]
+
+    def history_version_ids(
+        self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
+    ) -> list[int]:
+        """Exact ids of the versions ``history`` returns for this window."""
+        return [
+            row.version_id
+            for row in self._history_rows(
+                namespaces=namespaces, starts_at=starts_at, ends_at=ends_at
+            )
+        ]
+
+    def entries(self, version_ids: Sequence[int]) -> list[JournalEntry]:
+        """Exactly these journal versions, oldest first."""
+        if not version_ids:
+            return []
+        rows = self._session.scalars(
+            select(ObjectVersionRow)
+            .where(ObjectVersionRow.version_id.in_(version_ids))
+            .order_by(ObjectVersionRow.observed_at, ObjectVersionRow.version_id)
+        ).all()
+        return [_journal_entry(row) for row in rows]
+
+    def _history_rows(
+        self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
+    ) -> list[ObjectVersionRow]:
         rows = self._session.scalars(
             select(ObjectVersionRow)
             .where(
@@ -751,17 +1176,20 @@ class ObjectVersionRepository:
                 selected.append(row)
         # Objects already deleted before the window are not part of the incident.
         before = [row for row in baseline.values() if row.lifecycle != Lifecycle.DELETED]
-        ordered = sorted([*before, *selected], key=lambda row: (row.observed_at, row.version_id))
-        return [
-            JournalEntry(
-                object_key=row.object_key,
-                observed_at=row.observed_at,
-                body=row.body,
-                version_id=row.version_id,
-                lifecycle=Lifecycle(row.lifecycle),
-            )
-            for row in ordered
-        ]
+        return sorted([*before, *selected], key=lambda row: (row.observed_at, row.version_id))
+
+
+def _journal_entry(row: ObjectVersionRow) -> JournalEntry:
+    return JournalEntry(
+        object_key=row.object_key,
+        observed_at=row.observed_at,
+        # JournalEntry is the existing storage-to-source contract; project
+        # the first-class UID column into its body for the live model mapper.
+        # The stored JSON body is not used as the UID source of truth.
+        body=_body_with_persisted_uid(row.body, "metadata", row.uid),
+        version_id=row.version_id,
+        lifecycle=Lifecycle(row.lifecycle),
+    )
 
 
 def _timestamp(value: Any) -> datetime | None:
@@ -774,23 +1202,334 @@ def _timestamp(value: Any) -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
+@dataclass(frozen=True)
+class LifecycleRecord:
+    """One persisted lifecycle observation of one exact instance."""
+
+    evidence_id: str
+    instance_uid: str
+    namespace: str
+    kind: str
+    name: str
+    type: str
+    source_at: datetime | None
+    observed_at: datetime
+    ingested_at: datetime
+    source: str
+    payload: dict[str, Any]
+
+
+def _lifecycle_record(row: LifecycleObservationRow) -> LifecycleRecord:
+    return LifecycleRecord(
+        evidence_id=row.evidence_id,
+        instance_uid=row.instance_uid,
+        namespace=row.namespace,
+        kind=row.kind,
+        name=row.name,
+        type=row.type,
+        source_at=row.source_at,
+        observed_at=row.observed_at,
+        ingested_at=row.ingested_at,
+        source=row.source,
+        payload=dict(row.payload),
+    )
+
+
+@dataclass(frozen=True)
+class TombstoneRef:
+    """A persisted journal tombstone of one exact instance, as the journal recorded it."""
+
+    namespace: str
+    kind: str
+    name: str
+    uid: str
+    observed_at: datetime
+
+
+def _tombstones(
+    session: Session, namespaces: set[str], kind: str | None, exclude: Any
+) -> list[TombstoneRef]:
+    """Earliest real journal tombstone per exact instance that ``exclude`` does not cover."""
+    query = select(ObjectVersionRow).where(
+        ObjectVersionRow.lifecycle == Lifecycle.DELETED.value,
+        ObjectVersionRow.uid.is_not(None),
+        ObjectVersionRow.namespace.in_(namespaces),
+        ~exclude,
+    )
+    if kind is not None:
+        query = query.where(ObjectVersionRow.kind == kind)
+    found: dict[tuple[str, str, str], TombstoneRef] = {}
+    for row in session.scalars(
+        query.order_by(ObjectVersionRow.observed_at, ObjectVersionRow.version_id)
+    ):
+        assert row.uid is not None
+        found.setdefault(
+            (row.namespace, row.kind, row.uid),
+            TombstoneRef(row.namespace, row.kind, row.name, row.uid, row.observed_at),
+        )
+    return list(found.values())
+
+
+# Concurrent writers of one instance may race for the same sequence number.
+_LIFECYCLE_APPEND_ATTEMPTS = 5
+
+
+class LifecycleRepository:
+    """Append-only ledger of lifecycle observations (authoritative evidence).
+
+    Rows are only ever inserted: there is deliberately no update or delete.
+    Concurrent writers may collide on an instance's next sequence number; the
+    loser re-reads it and retries, so a different fact is never dropped.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def _next_sequence(self, namespace: str, kind: str, uid: str) -> int:
+        prefix = f"lifecycle:{namespace}:{kind}:{uid}:"
+        ids = self._session.scalars(
+            select(LifecycleObservationRow.evidence_id).where(
+                LifecycleObservationRow.evidence_id.startswith(prefix, autoescape=True)
+            )
+        ).all()
+        used = [int(item[len(prefix) :]) for item in ids if item[len(prefix) :].isdigit()]
+        return max(used, default=0) + 1
+
+    def _evidence_id_taken(self, evidence_id: str) -> bool:
+        return (
+            self._session.scalar(
+                select(LifecycleObservationRow.observation_id).where(
+                    LifecycleObservationRow.evidence_id == evidence_id
+                )
+            )
+            is not None
+        )
+
+    def _exists(self, uid: str, type_: str, observed_at: datetime, source: str) -> bool:
+        return (
+            self._session.scalar(
+                select(LifecycleObservationRow.observation_id).where(
+                    LifecycleObservationRow.instance_uid == uid,
+                    LifecycleObservationRow.type == type_,
+                    LifecycleObservationRow.observed_at == observed_at,
+                    LifecycleObservationRow.source == source,
+                )
+            )
+            is not None
+        )
+
+    def append(
+        self,
+        *,
+        namespace: str,
+        kind: str,
+        name: str,
+        instance_uid: str,
+        type: str,
+        observed_at: datetime,
+        source: str,
+        payload: dict[str, Any],
+        source_at: datetime | None = None,
+        ingested_at: datetime | None = None,
+    ) -> LifecycleRecord | None:
+        """Insert one observation; ``None`` when the same fact is already recorded."""
+        if type not in LIFECYCLE_OBSERVATION_TYPES:
+            raise ValueError(f"unknown lifecycle observation type: {type}")
+        if not instance_uid:
+            raise ValueError("lifecycle observations need the exact instance uid")
+        for _ in range(_LIFECYCLE_APPEND_ATTEMPTS):
+            if self._exists(instance_uid, type, observed_at, source):
+                return None
+            sequence = self._next_sequence(namespace, kind, instance_uid)
+            evidence_id = f"lifecycle:{namespace}:{kind}:{instance_uid}:{sequence}"
+            row = LifecycleObservationRow(
+                evidence_id=evidence_id,
+                instance_uid=instance_uid,
+                namespace=namespace,
+                kind=kind,
+                name=name,
+                type=type,
+                source_at=source_at,
+                observed_at=observed_at,
+                ingested_at=ingested_at or datetime.now(UTC),
+                source=source,
+                payload=payload,
+            )
+            self._session.add(row)
+            try:
+                self._session.commit()
+            except IntegrityError:
+                self._session.rollback()
+                if self._exists(instance_uid, type, observed_at, source):
+                    return None
+                # Another writer took this sequence for a different fact:
+                # re-read the sequence and try again rather than lose evidence.
+                if self._evidence_id_taken(evidence_id):
+                    continue
+                raise
+            return _lifecycle_record(row)
+        raise RuntimeError(
+            f"could not allocate a lifecycle sequence for {namespace}/{kind}/{instance_uid} "
+            f"after {_LIFECYCLE_APPEND_ATTEMPTS} attempts"
+        )
+
+    def list_for(self, namespace: str, kind: str, uid: str) -> list[LifecycleRecord]:
+        """Every observation of one exact instance, oldest first."""
+        rows = self._session.scalars(
+            select(LifecycleObservationRow)
+            .where(
+                LifecycleObservationRow.namespace == namespace,
+                LifecycleObservationRow.kind == kind,
+                LifecycleObservationRow.instance_uid == uid,
+            )
+            .order_by(LifecycleObservationRow.observed_at, LifecycleObservationRow.observation_id)
+        ).all()
+        return [_lifecycle_record(row) for row in rows]
+
+    def list_window(
+        self, namespaces: set[str], starts_at: datetime, ends_at: datetime
+    ) -> list[LifecycleRecord]:
+        """Observations in these namespaces observed within ``[starts_at, ends_at]``."""
+        rows = self._session.scalars(
+            select(LifecycleObservationRow)
+            .where(
+                LifecycleObservationRow.namespace.in_(namespaces),
+                LifecycleObservationRow.observed_at >= starts_at,
+                LifecycleObservationRow.observed_at <= ends_at,
+            )
+            .order_by(LifecycleObservationRow.observed_at, LifecycleObservationRow.observation_id)
+        ).all()
+        return [_lifecycle_record(row) for row in rows]
+
+
+class EntityInstanceRepository:
+    """Materialized index of exact instances; updated in place, never evidence."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def tombstones_unmarked(self, namespaces: set[str]) -> list[TombstoneRef]:
+        """Journal tombstones whose exact instance is not yet marked deleted in the index."""
+        marked = (
+            select(EntityInstanceRow.instance_id)
+            .where(
+                EntityInstanceRow.namespace == ObjectVersionRow.namespace,
+                EntityInstanceRow.kind == ObjectVersionRow.kind,
+                EntityInstanceRow.uid == ObjectVersionRow.uid,
+                EntityInstanceRow.deleted_observed_at.is_not(None),
+            )
+            .exists()
+        )
+        return _tombstones(self._session, namespaces, None, marked)
+
+    def upsert(
+        self,
+        *,
+        namespace: str,
+        kind: str,
+        name: str,
+        uid: str,
+        observed_at: datetime,
+        owner_kind: str | None = None,
+        owner_name: str | None = None,
+        owner_uid: str | None = None,
+        created_at: datetime | None = None,
+        deleted: bool = False,
+    ) -> None:
+        """Record a sighting (or the deletion) of one exact instance."""
+        if not uid:
+            raise ValueError("entity instances need the exact uid")
+        row = self._session.scalars(
+            select(EntityInstanceRow).where(
+                EntityInstanceRow.namespace == namespace,
+                EntityInstanceRow.kind == kind,
+                EntityInstanceRow.uid == uid,
+            )
+        ).first()
+        if row is None:
+            row = EntityInstanceRow(
+                namespace=namespace,
+                kind=kind,
+                name=name,
+                uid=uid,
+                first_observed_at=observed_at,
+                last_observed_at=observed_at,
+            )
+            self._session.add(row)
+        else:
+            row.first_observed_at = min(row.first_observed_at, observed_at)
+            row.last_observed_at = max(row.last_observed_at, observed_at)
+        row.owner_kind = owner_kind if owner_kind is not None else row.owner_kind
+        row.owner_name = owner_name if owner_name is not None else row.owner_name
+        row.owner_uid = owner_uid if owner_uid is not None else row.owner_uid
+        row.created_at = created_at if created_at is not None else row.created_at
+        if deleted and row.deleted_observed_at is None:
+            row.deleted_observed_at = observed_at
+        self._session.commit()
+
+
+# One insert plus at most three retries after a lost revision-number race.
+_REVISION_ATTEMPTS = 4
+
+
+@dataclass(frozen=True)
+class DiagnosisRevision:
+    """The identity of one written diagnosis revision."""
+
+    diagnosis_id: int
+    revision_number: int
+
+
 class DiagnosisRepository:
     """Stored diagnoses per incident."""
 
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def save(
+    def save_revision(
         self,
+        *,
         incident_id: object,
         document: dict[str, Any],
         created_at: datetime,
-        run_id: str | None = None,
-        *,
-        commit: bool = True,
-    ) -> None:
-        self._session.add(
-            DiagnosisRow(
+        run_id: str | None,
+        trigger: str,
+        window_end: datetime,
+        manifest_digest: str,
+        tape_digest: str,
+        epistemic_digest: str,
+        engine_version: str,
+        config_digest: str,
+        companions: Callable[[Session, int], None] | None = None,
+    ) -> DiagnosisRevision:
+        """Append the incident's next immutable revision and commit it.
+
+        One transaction per attempt: lock the incident row, read the highest
+        revision, insert and flush the next one, write any ``companions`` rows
+        with the new ``diagnosis_id``, commit. A concurrent writer that wins the
+        same number makes the insert fail on ``UNIQUE(incident_id,
+        revision_number)``; that is retried at most three times. A companion
+        failure rolls the whole revision back and is not retried. Diagnoses are
+        never updated.
+        """
+        if trigger not in DIAGNOSIS_TRIGGERS or trigger == "LEGACY":
+            raise ValueError(f"not a revision trigger: {trigger!r}")
+        for attempt in range(_REVISION_ATTEMPTS):
+            incident = self._session.scalars(
+                select(IncidentRow.incident_id)
+                .where(IncidentRow.incident_id == incident_id)
+                .with_for_update()
+            ).first()
+            if incident is None:
+                self._session.rollback()
+                raise IncidentNotFoundError(str(incident_id))
+            previous = self._session.execute(
+                select(DiagnosisRow.diagnosis_id, DiagnosisRow.revision_number)
+                .where(DiagnosisRow.incident_id == incident_id)
+                .order_by(desc(DiagnosisRow.revision_number))
+                .limit(1)
+            ).first()
+            row = DiagnosisRow(
                 incident_id=incident_id,
                 created_at=created_at,
                 root_cause=document.get("root_cause") and _canonical(document["root_cause"]),
@@ -798,10 +1537,68 @@ class DiagnosisRepository:
                 mode=str(document.get("mode")),
                 run_id=run_id,
                 document=document,
+                revision_number=previous.revision_number + 1 if previous else 1,
+                previous_diagnosis_id=previous.diagnosis_id if previous else None,
+                trigger=trigger,
+                window_end=window_end,
+                manifest_digest=manifest_digest,
+                tape_digest=tape_digest,
+                epistemic_digest=epistemic_digest,
+                engine_version=engine_version,
+                config_digest=config_digest,
             )
+            self._session.add(row)
+            try:
+                self._session.flush()
+            except IntegrityError:
+                self._session.rollback()
+                if attempt + 1 == _REVISION_ATTEMPTS:
+                    raise
+                continue
+            revision = DiagnosisRevision(row.diagnosis_id, row.revision_number)
+            try:
+                if companions is not None:
+                    companions(self._session, row.diagnosis_id)
+                self._session.commit()
+            except BaseException:
+                self._session.rollback()
+                raise
+            return revision
+        raise AssertionError("unreachable")
+
+    def revision_count(self, incident_id: object) -> int:
+        """How many revisions the incident has, legacy ones included."""
+        return int(
+            self._session.scalar(
+                select(func.count())
+                .select_from(DiagnosisRow)
+                .where(DiagnosisRow.incident_id == incident_id)
+            )
+            or 0
         )
-        if commit:
-            self._session.commit()
+
+    def deadline_consumed(
+        self, *, incident_id: object, after_diagnosis_id: int, not_before: datetime
+    ) -> bool:
+        """Whether a later EVIDENCE_DEADLINE revision already evaluated this deadline.
+
+        Only a scheduler revision newer than the requirement's opening revision
+        whose window reaches ``not_before`` consumes it; MANUAL and INITIAL
+        revisions never do.
+        """
+        return (
+            self._session.scalars(
+                select(DiagnosisRow.diagnosis_id)
+                .where(
+                    DiagnosisRow.incident_id == incident_id,
+                    DiagnosisRow.trigger == "EVIDENCE_DEADLINE",
+                    DiagnosisRow.diagnosis_id > after_diagnosis_id,
+                    DiagnosisRow.window_end >= not_before,
+                )
+                .limit(1)
+            ).first()
+            is not None
+        )
 
     def latest(self, incident_id: object) -> dict[str, Any] | None:
         row = self._session.scalars(
@@ -811,6 +1608,34 @@ class DiagnosisRepository:
             .limit(1)
         ).first()
         return dict(row.document) if row is not None else None
+
+    def list_revisions(self, incident_id: object) -> list[DiagnosisRow]:
+        """Return persisted revisions for one incident in authoritative number order."""
+        return list(
+            self._session.scalars(
+                select(DiagnosisRow)
+                .where(DiagnosisRow.incident_id == incident_id)
+                .order_by(DiagnosisRow.revision_number.asc())
+            ).all()
+        )
+
+    def get_revision(self, incident_id: object, revision_number: int) -> DiagnosisRow | None:
+        """Load a revision by its incident-scoped revision number."""
+        return self._session.scalars(
+            select(DiagnosisRow).where(
+                DiagnosisRow.incident_id == incident_id,
+                DiagnosisRow.revision_number == revision_number,
+            )
+        ).first()
+
+    def get_revision_by_id(self, incident_id: object, diagnosis_id: int) -> DiagnosisRow | None:
+        """Load a previous-link target only when it belongs to the same incident."""
+        return self._session.scalars(
+            select(DiagnosisRow).where(
+                DiagnosisRow.incident_id == incident_id,
+                DiagnosisRow.diagnosis_id == diagnosis_id,
+            )
+        ).first()
 
     def latest_created_at(self, incident_id: object) -> datetime | None:
         """When the latest diagnosis was stored, for lifecycle timing."""
@@ -867,6 +1692,172 @@ class DiagnosisRepository:
                 "run_id": row.run_id,
             }
         return result
+
+
+@dataclass(frozen=True)
+class RequirementTransitions:
+    """What one revision did to its incident's requirements, by requirement_key."""
+
+    opened: tuple[str, ...] = ()
+    superseded: tuple[str, ...] = ()
+    satisfied: tuple[str, ...] = ()
+    unchanged: tuple[str, ...] = ()
+
+
+class EvidenceRequirementRepository:
+    """Requirement lifecycle driven by one diagnosis revision (M19-5.5).
+
+    Runs inside the revision's transaction, after the diagnosis row is
+    flushed and while the incident row is locked. Matching is by exact
+    ``requirement_key`` only; the previous OPEN row of a key:
+
+    * PASS or DISQUALIFIED → SATISFIED_BY_REVISION
+    * PENDING → SUPERSEDED_BY_REVISION and a new OPEN row for the same key
+    * deadline NO_DATA/PARTIAL → unchanged
+    * SCOPE_EXITED, or its hypothesis_key absent from the full inventory →
+      SUPERSEDED_BY_REVISION, nothing reopened
+    * hypothesis_key repeated in the inventory, or no current evaluation →
+      unchanged
+
+    A PENDING evaluation without a unique hypothesis_key creates no row.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def apply_revision(
+        self, *, incident_id: UUID, diagnosis_id: int, diagnosis: Diagnosis
+    ) -> RequirementTransitions:
+        counts = Counter(
+            entry.hypothesis_key
+            for entry in diagnosis.hypothesis_inventory
+            if entry.hypothesis_key is not None
+        )
+        current: dict[str, RequirementEvaluation] = {}
+        for evaluation in diagnosis.requirement_evaluations:
+            if evaluation.hypothesis_key is None or counts[evaluation.hypothesis_key] != 1:
+                continue  # no unique identity: never fabricated, never matched
+            key = requirement_key(incident_id, evaluation)
+            if current.setdefault(key, evaluation) != evaluation:
+                raise ValueError(f"conflicting evaluations for requirement {key}")
+        opened: list[str] = []
+        superseded: list[str] = []
+        satisfied: list[str] = []
+        unchanged: list[str] = []
+        rows = self._session.scalars(
+            select(EvidenceRequirementRow)
+            .where(
+                EvidenceRequirementRow.incident_id == incident_id,
+                EvidenceRequirementRow.status == "OPEN",
+            )
+            .order_by(EvidenceRequirementRow.requirement_id)
+            .with_for_update()
+        ).all()
+        for row in rows:
+            count = counts.get(row.hypothesis_key, 0)
+            matched = current.get(row.requirement_key) if count == 1 else None
+            if count == 0 or (
+                matched is not None and matched.audit_reason is RequirementAuditReason.SCOPE_EXITED
+            ):
+                row.status = "SUPERSEDED_BY_REVISION"
+                superseded.append(row.requirement_key)
+            elif matched is None or matched.result is None:
+                unchanged.append(row.requirement_key)
+            elif matched.result.status is PreconditionStatus.PENDING:
+                row.status = "SUPERSEDED_BY_REVISION"
+                superseded.append(row.requirement_key)
+            else:
+                row.status = "SATISFIED_BY_REVISION"
+                satisfied.append(row.requirement_key)
+        # Close before reopening: at most one OPEN row per key.
+        self._session.flush()
+        still_open = set(unchanged)
+        for key, evaluation in current.items():
+            result = evaluation.result
+            if result is None or result.status is not PreconditionStatus.PENDING:
+                continue
+            if key in still_open:
+                continue
+            assert result.not_before is not None
+            assert evaluation.hypothesis_key is not None
+            self._session.add(
+                EvidenceRequirementRow(
+                    requirement_key=key,
+                    incident_id=incident_id,
+                    diagnosis_id=diagnosis_id,
+                    hypothesis_key=evaluation.hypothesis_key,
+                    rule_id=evaluation.rule_id,
+                    rule_version=evaluation.rule_version,
+                    kind=evaluation.kind.value,
+                    targets=requirement_targets_document(evaluation),
+                    not_before=result.not_before,
+                    status="OPEN",
+                )
+            )
+            opened.append(key)
+        self._session.flush()
+        return RequirementTransitions(
+            opened=tuple(opened),
+            superseded=tuple(superseded),
+            satisfied=tuple(satisfied),
+            unchanged=tuple(unchanged),
+        )
+
+    def open_requirements(self) -> list[EvidenceRequirementRow]:
+        """Every OPEN requirement, in incident then requirement order."""
+        return list(
+            self._session.scalars(
+                select(EvidenceRequirementRow)
+                .where(EvidenceRequirementRow.status == "OPEN")
+                .order_by(EvidenceRequirementRow.incident_id, EvidenceRequirementRow.requirement_id)
+            )
+        )
+
+    def opening_onset(self, requirement: EvidenceRequirementRow) -> datetime:
+        """``symptoms.onset`` persisted in the revision that opened the requirement.
+
+        The horizon origin of the requirement. A missing or unreadable onset is
+        persisted-state corruption and raises; nothing is substituted.
+        """
+        opening = self._session.get(DiagnosisRow, requirement.diagnosis_id)
+        if opening is None or opening.incident_id != requirement.incident_id:
+            raise RequirementOnsetUnavailable(
+                f"requirement {requirement.requirement_id}: opening revision "
+                f"{requirement.diagnosis_id} is missing for its incident"
+            )
+        try:
+            onset = Symptoms.model_validate(opening.document["symptoms"]).onset
+        except (KeyError, TypeError, ValueError) as error:
+            raise RequirementOnsetUnavailable(
+                f"requirement {requirement.requirement_id}: opening revision "
+                f"{requirement.diagnosis_id} has no readable symptoms"
+            ) from error
+        if onset is None or onset.tzinfo is None:
+            raise RequirementOnsetUnavailable(
+                f"requirement {requirement.requirement_id}: opening revision "
+                f"{requirement.diagnosis_id} has no onset"
+            )
+        return onset
+
+    def expire(self, requirement_ids: Sequence[int]) -> None:
+        """Mark OPEN requirements EXPIRED; the scheduler's only requirement write."""
+        for row in self._session.scalars(
+            select(EvidenceRequirementRow).where(
+                EvidenceRequirementRow.requirement_id.in_(list(requirement_ids)),
+                EvidenceRequirementRow.status == "OPEN",
+            )
+        ):
+            row.status = "EXPIRED"
+        self._session.flush()
+
+    def for_incident(self, incident_id: UUID) -> list[EvidenceRequirementRow]:
+        return list(
+            self._session.scalars(
+                select(EvidenceRequirementRow)
+                .where(EvidenceRequirementRow.incident_id == incident_id)
+                .order_by(EvidenceRequirementRow.requirement_id)
+            )
+        )
 
 
 class ReportRepository:

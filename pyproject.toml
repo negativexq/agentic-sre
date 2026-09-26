@@ -74,3 +74,6 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 addopts = "--strict-config --strict-markers"
 testpaths = ["tests"]
+markers = [
+    "postgres: needs a real PostgreSQL at TEST_POSTGRES_URL; skipped otherwise (make test-pg)",
+]

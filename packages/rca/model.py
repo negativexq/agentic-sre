@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal
@@ -9,6 +11,30 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 CLUSTER_SCOPE = "_cluster"
+
+
+@dataclass(frozen=True)
+class ProviderReadFailure:
+    """A provider read that failed; it is unavailable evidence, not an empty result."""
+
+    capability: str
+    error_type: str
+    error_message: str
+
+
+def object_key(body: Mapping[str, Any]) -> str | None:
+    """``namespace/Kind/name`` of an object body, as the journal keys it."""
+    metadata = body.get("metadata")
+    metadata = metadata if isinstance(metadata, Mapping) else {}
+    kind, name = body.get("kind"), metadata.get("name")
+    if not isinstance(kind, str) or not isinstance(name, str):
+        return None
+    return f"{metadata.get('namespace') or CLUSTER_SCOPE}/{kind}/{name}"
+
+
+def snapshot_evidence_id(cycle_id: int, key: str) -> str:
+    """Evidence id of one object in a persisted snapshot cycle."""
+    return f"snapshot:{cycle_id}:{key}"
 
 
 class EntityRef(BaseModel):
@@ -33,6 +59,15 @@ class EntityRef(BaseModel):
 
     def __str__(self) -> str:
         return self.canonical
+
+
+class EntityInstanceRef(BaseModel):
+    """An exact runtime instance of a logical Kubernetes entity."""
+
+    model_config = ConfigDict(frozen=True)
+
+    entity: EntityRef
+    uid: str = Field(min_length=1)
 
 
 class Alert(BaseModel):
@@ -80,6 +115,7 @@ class ObjectVersion(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     entity: EntityRef
+    uid: str | None = None
     observed_at: datetime
     body: dict[str, Any]
     evidence_id: str
@@ -225,6 +261,7 @@ class ClusterEvent(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     entity: EntityRef
+    involved_uid: str | None = None
     reason: str
     type: str = "Normal"
     message: str = ""
@@ -330,6 +367,7 @@ class Finding(BaseModel):
 
     kind: FindingKind
     entity: EntityRef
+    entity_instance: EntityInstanceRef | None = None
     at: datetime | None
     summary: str
     evidence_ids: tuple[str, ...] = ()
@@ -338,6 +376,12 @@ class Finding(BaseModel):
     temporal_role: EvidenceTemporalRole = EvidenceTemporalRole.AMBIGUOUS
     incident_onset: datetime | None = None
     onset_delta_seconds: float | None = None
+
+    @model_validator(mode="after")
+    def _entity_instance_matches_entity(self) -> Finding:
+        if self.entity_instance is not None and self.entity_instance.entity != self.entity:
+            raise ValueError("entity_instance.entity must match entity")
+        return self
 
 
 class Symptoms(BaseModel):
@@ -450,6 +494,177 @@ class EliminationConsequence(StrEnum):
     ROOT_INELIGIBILITY = "ROOT_INELIGIBILITY"
 
 
+class PreconditionStatus(StrEnum):
+    """Outcome of evaluating one rule precondition."""
+
+    PASS = "PASS"
+    PENDING = "PENDING"
+    DISQUALIFIED = "DISQUALIFIED"
+
+
+class PreconditionAuditReason(StrEnum):
+    """Neutral audit reasons for evidence still missing after its deadline."""
+
+    NO_DATA_AFTER_DEADLINE = "NO_DATA_AFTER_DEADLINE"
+    PARTIAL_COVERAGE_AFTER_DEADLINE = "PARTIAL_COVERAGE_AFTER_DEADLINE"
+
+
+class PreconditionResult(BaseModel):
+    """Immutable tri-state result for a rule precondition.
+
+    ``not_before`` is supplied by the evaluating rule; constructing a pending
+    result never consults a clock or schedules work.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    status: PreconditionStatus
+    not_before: datetime | None = None
+    reason: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def _validate_outcome_shape(self) -> PreconditionResult:
+        if self.status is PreconditionStatus.PASS:
+            if self.not_before is not None or self.reason is not None:
+                raise ValueError("PASS cannot include not_before or reason")
+        elif self.status is PreconditionStatus.PENDING:
+            if self.not_before is None:
+                raise ValueError("PENDING requires not_before")
+            if self.not_before.tzinfo is None or self.not_before.utcoffset() is None:
+                raise ValueError("PENDING not_before must be timezone-aware")
+            if self.reason is not None:
+                raise ValueError("PENDING cannot include a disqualification reason")
+        elif self.status is PreconditionStatus.DISQUALIFIED:
+            if self.reason is None or not self.reason.strip():
+                raise ValueError("DISQUALIFIED requires a reason")
+            if self.not_before is not None:
+                raise ValueError("DISQUALIFIED cannot include not_before")
+        return self
+
+    @classmethod
+    def passed(cls) -> PreconditionResult:
+        return cls(status=PreconditionStatus.PASS)
+
+    @classmethod
+    def pending(cls, not_before: datetime) -> PreconditionResult:
+        return cls(status=PreconditionStatus.PENDING, not_before=not_before)
+
+    @classmethod
+    def disqualified(cls, reason: str) -> PreconditionResult:
+        return cls(status=PreconditionStatus.DISQUALIFIED, reason=reason)
+
+
+class RulePreconditionAudit(BaseModel):
+    """One rule-scoped tri-state result retained without decision authority."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    rule_id: str = Field(min_length=1)
+    result: PreconditionResult | None = None
+    reason: PreconditionAuditReason | None = None
+
+    @model_validator(mode="after")
+    def _one_audit_value(self) -> RulePreconditionAudit:
+        if (self.result is None) == (self.reason is None):
+            raise ValueError("provide exactly one precondition result or audit reason")
+        return self
+
+
+class RequirementKind(StrEnum):
+    """What kind of evidence obligation a rule is still waiting for."""
+
+    STATUS_CONTINUITY = "STATUS_CONTINUITY"
+    RESOURCE_COVERAGE = "RESOURCE_COVERAGE"
+
+
+class RequirementAuditReason(StrEnum):
+    """Why a requirement evaluation carries no tri-state result."""
+
+    NO_DATA_AFTER_DEADLINE = "NO_DATA_AFTER_DEADLINE"
+    PARTIAL_COVERAGE_AFTER_DEADLINE = "PARTIAL_COVERAGE_AFTER_DEADLINE"
+    # The hypothesis is still present, but a frozen rule prerequisite now
+    # positively fails. Missing identity or evidence is never a scope exit.
+    SCOPE_EXITED = "SCOPE_EXITED"
+
+
+class RequirementTarget(BaseModel):
+    """One element of a requirement's target list.
+
+    ``STATUS_CONTINUITY`` targets name one exact Pod instance (``entity`` and
+    ``uid``); ``RESOURCE_COVERAGE`` targets name one lowered series of the
+    actor (``entity``, ``container`` and ``resource``).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    entity: str = Field(min_length=1)
+    uid: str | None = Field(default=None, min_length=1)
+    container: str | None = Field(default=None, min_length=1)
+    resource: str | None = Field(default=None, min_length=1)
+
+    def sort_key(self) -> tuple[str, str, str, str]:
+        return (self.entity, self.container or "", self.resource or "", self.uid or "")
+
+
+class RequirementEvaluation(BaseModel):
+    """How one revision evaluated one evidence obligation of one hypothesis.
+
+    Lifecycle provenance only: it has no decision authority and stays outside
+    the epistemic digest. Exactly one of ``result`` and ``audit_reason`` is set.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    hypothesis_id: str = Field(min_length=1)
+    hypothesis_key: str | None = Field(default=None, min_length=1)
+    rule_id: str = Field(min_length=1)
+    rule_version: str = Field(min_length=1)
+    kind: RequirementKind
+    targets: tuple[RequirementTarget, ...] = Field(min_length=1)
+    result: PreconditionResult | None = None
+    audit_reason: RequirementAuditReason | None = None
+
+    @model_validator(mode="after")
+    def _validate_shape(self) -> RequirementEvaluation:
+        if (self.result is None) == (self.audit_reason is None):
+            raise ValueError("provide exactly one requirement result or audit reason")
+        if self.kind is RequirementKind.STATUS_CONTINUITY:
+            if len(self.targets) != 1:
+                raise ValueError("STATUS_CONTINUITY names exactly one Pod instance")
+            (target,) = self.targets
+            if target.uid is None or target.container is not None or target.resource is not None:
+                raise ValueError("STATUS_CONTINUITY targets are {entity, uid}")
+        else:
+            if any(
+                item.uid is not None or item.container is None or item.resource is None
+                for item in self.targets
+            ):
+                raise ValueError("RESOURCE_COVERAGE targets are {entity, container, resource}")
+            keys = [item.sort_key() for item in self.targets]
+            if keys != sorted(set(keys)):
+                raise ValueError("RESOURCE_COVERAGE targets must be unique and sorted")
+        return self
+
+
+class HypothesisInventoryEntry(BaseModel):
+    """One hypothesis of a revision; the inventory keeps repeated keys.
+
+    ``causal_actor``, ``mechanism_class`` and ``instance_uids`` record every
+    hypothesis's identity for audit and proofs (M19-7.P1); no decision reads
+    them. ``None`` means a legacy document written before they were persisted.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    hypothesis_id: str = Field(min_length=1)
+    hypothesis_key: str | None = Field(default=None, min_length=1)
+    causal_actor: EntityRef | None = None
+    # MANIFESTATION_ONLY, or the sorted exact initiating finding kinds.
+    mechanism_class: tuple[str, ...] | None = None
+    # Sorted unique UIDs of the findings that name an exact instance.
+    instance_uids: tuple[str, ...] | None = None
+
+
 class EliminationPrecondition(BaseModel):
     """One deterministic precondition a rule evaluated, with its result."""
 
@@ -465,7 +680,9 @@ class EliminationTimeBasis(BaseModel):
 
     Point evidence carries ``causal_time``; object changes carry the bounded
     observation interval ``[interval_start, interval_end]`` instead of an
-    inferred exact change time.
+    inferred exact change time. ``target`` names the exact instance the entry
+    is about as ``namespace/Pod/name@uid``; it is empty on records that predate
+    instance binding.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -477,6 +694,7 @@ class EliminationTimeBasis(BaseModel):
     interval_start: datetime | None = None
     interval_end: datetime | None = None
     certainty: str = ""
+    target: str = ""
 
 
 class ResolutionElimination(BaseModel):
@@ -502,6 +720,9 @@ class ResolutionElimination(BaseModel):
     time_basis: tuple[EliminationTimeBasis, ...] = ()
     coverage_basis: str = ""
     preconditions: tuple[EliminationPrecondition, ...] = ()
+    # Every record that satisfied the deciding precondition, not only the one
+    # quoted in the time basis. Empty for rules that do not record it.
+    decisive_evidence_ids: tuple[str, ...] = ()
 
     @property
     def rule(self) -> str:
@@ -548,6 +769,9 @@ class HypothesisResolutionAudit(BaseModel):
     contradictory_evidence_ids: tuple[str, ...] = ()
     onset_relation: tuple[str, ...] = ()
     causal_linkage: str = "UNLINKED"
+    # Neutral precondition metadata is intentionally outside epistemic state.
+    # Defaults preserve parsing of diagnosis documents written before M19-5.1.
+    precondition_audit: tuple[RulePreconditionAudit, ...] = ()
 
 
 class ResolutionTrace(BaseModel):
@@ -788,6 +1012,9 @@ class Hypothesis(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     hypothesis_id: str
+    # Revision-stable, evidence-independent matching key; empty on records
+    # that predate it. ``hypothesis_id`` stays revision-local.
+    hypothesis_key: str = ""
     causal_actor: EntityRef
     members: tuple[EntityRef, ...] = ()
     manifestations: tuple[EntityRef, ...] = ()
@@ -1127,6 +1354,10 @@ class Diagnosis(BaseModel):
     information_gaps: tuple[InformationGap, ...] = ()
     structural_alternatives: tuple[StructuralAlternative, ...] = ()
     investigation_status: InvestigationStatus = InvestigationStatus.NOT_REQUIRED
+    # Requirement lifecycle provenance (M19-5.5): uncapped, outside the
+    # epistemic digest. Empty for documents written before it existed.
+    requirement_evaluations: tuple[RequirementEvaluation, ...] = ()
+    hypothesis_inventory: tuple[HypothesisInventoryEntry, ...] = ()
 
     @model_validator(mode="before")
     @classmethod
@@ -1140,6 +1371,53 @@ class Diagnosis(BaseModel):
                 else Resolution.INSUFFICIENT_EVIDENCE.value
             )
         return value
+
+
+class InvestigationPolicyKind(StrEnum):
+    """The control-flow family an investigation policy selects the graph path by.
+
+    ACTION: the graph asks the policy for each action (``choose_action``).
+    INTENT_TIEBREAK: the graph ranks intents and the policy only breaks a tie
+    between equally relevant ones (``choose_intent``).
+    OBSERVATION_SELECTOR / INTENT_SELECTOR: the graph-bound deterministic
+    candidate / intent selector chooses; the policy is a marker.
+    """
+
+    ACTION = "ACTION"
+    INTENT_TIEBREAK = "INTENT_TIEBREAK"
+    OBSERVATION_SELECTOR = "OBSERVATION_SELECTOR"
+    INTENT_SELECTOR = "INTENT_SELECTOR"
+
+
+class TrajectoryTerminal(BaseModel):
+    """How the recorded investigation ended.
+
+    ``turns`` counts policy turns; ``audited_turns`` counts turns that left an
+    action audit. A terminal turn without an audit (model failure, a stop
+    decided during selection) makes ``turns == audited_turns + 1``.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    stop_reason: InvestigationStopReason
+    turns: int = Field(ge=0)
+    audited_turns: int = Field(ge=0)
+
+
+class TrajectoryReplayContract(BaseModel):
+    """Execution semantics a recorded trajectory needs to be replayed (artifact 1.1).
+
+    Run boundary metadata (window end, snapshot cycle, provider capabilities,
+    manifest) stays in the run's ``EVIDENCE_GATHERED`` event, never here.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    policy_kind: InvestigationPolicyKind
+    counts_as_model: bool
+    # The effective ``InvestigationConfig``, serialized field by field.
+    config: dict[str, Any]
+    terminal: TrajectoryTerminal
 
 
 class InvestigationResult(BaseModel):
@@ -1165,6 +1443,8 @@ class InvestigationResult(BaseModel):
     action_audits: tuple[InvestigationActionAudit, ...] = ()
     new_evidence_refs: tuple[str, ...] = ()
     resolved_during_investigation: bool = False
+    # Present from artifact 1.1; absent in 1.0 artifacts, which stay readable.
+    replay_contract: TrajectoryReplayContract | None = None
 
 
 __all__ = [
@@ -1182,6 +1462,7 @@ __all__ = [
     "Diagnosis",
     "Edge",
     "EntityRef",
+    "EntityInstanceRef",
     "Finding",
     "FindingKind",
     "InvestigationStep",
@@ -1197,6 +1478,9 @@ __all__ = [
     "InvestigationStopReason",
     "InvestigationObservation",
     "InvestigationResult",
+    "InvestigationPolicyKind",
+    "TrajectoryReplayContract",
+    "TrajectoryTerminal",
     "Hypothesis",
     "StructuralAlternative",
     "HypothesisDiagnostics",
@@ -1226,4 +1510,6 @@ __all__ = [
     "GapOutcome",
     "ToolCapability",
     "InformationGap",
+    "object_key",
+    "snapshot_evidence_id",
 ]

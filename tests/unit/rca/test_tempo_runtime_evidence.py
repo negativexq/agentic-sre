@@ -4,6 +4,9 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
+from provider_test_helpers import provider_session_factory
+from sqlalchemy import select
+
 from packages.rca.engine import Case, build_case
 from packages.rca.investigation.environment import (
     SourceInvestigationBackend,
@@ -42,10 +45,21 @@ from packages.rca.model import (
     TraceSpanObservation,
     TraceSpanStatus,
 )
+from packages.rca.provider_adapter import ProviderAdapter, ProviderReaders
 from packages.rca.runtime_evidence import derive_runtime_trace_call_facts
 from packages.rca.source import InMemorySource
+from packages.storage.models import InvestigationReadRow
 
 T0 = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
+
+
+def _provider_adapter(tempo: object) -> ProviderAdapter:
+    return ProviderAdapter(
+        "test-run",
+        "INVESTIGATION",
+        provider_session_factory(),
+        ProviderReaders(tempo=tempo),  # type: ignore[arg-type]
+    )
 
 
 class _TempoBackend(SourceInvestigationBackend):
@@ -258,7 +272,7 @@ def test_tempo_incomplete_successful_batch_cannot_be_observed_normal() -> None:
     gap = _gap(target)
     backend = TempoInvestigationBackend(
         base=SourceInvestigationBackend(source),
-        tempo=_IncompleteReader(),  # type: ignore[arg-type]
+        provider_adapter=_provider_adapter(_IncompleteReader()),
         observation_cutoff=source.observation_cutoff(),
     )
     observation = RuntimeTracesTool(backend).execute_query(
@@ -307,7 +321,7 @@ def test_tempo_success_with_missing_trace_fetch_remains_unknown() -> None:
     gap = _gap(target)
     backend = TempoInvestigationBackend(
         base=SourceInvestigationBackend(source),
-        tempo=_MissingFetchReader(),  # type: ignore[arg-type]
+        provider_adapter=_provider_adapter(_MissingFetchReader()),
         observation_cutoff=source.observation_cutoff(),
     )
     observation = RuntimeTracesTool(backend).execute_query(
@@ -355,7 +369,7 @@ def test_tempo_explicit_error_remains_abnormal_when_search_is_incomplete() -> No
     gap = _gap(target)
     backend = TempoInvestigationBackend(
         base=SourceInvestigationBackend(source),
-        tempo=_IncompleteReader(),  # type: ignore[arg-type]
+        provider_adapter=_provider_adapter(_IncompleteReader()),
         observation_cutoff=source.observation_cutoff(),
     )
     observation = RuntimeTracesTool(backend).execute_query(
@@ -541,3 +555,51 @@ def test_runtime_traces_without_tempo_adapter_keep_source_only_normalization() -
 
     assert observation.runtime is None
     assert normalize_observation(observation, case=case, gap=gap).findings == ()
+
+
+def test_tempo_provider_failure_is_error_taped_and_returns_explicit_no_data() -> None:
+    target = EntityRef(kind="Deployment", name="payment", namespace="shop")
+    source = InMemorySource(name="tempo-provider-error", cutoff=T0 + timedelta(seconds=60))
+    case = build_case(initial_view(source))
+    gap = _gap(target)
+
+    class FailingTempo:
+        def query(
+            self, target: EntityRef, query: InvestigationQuery
+        ) -> tuple[TraceSpanObservation, ...]:
+            del target, query
+            raise ConnectionError("tempo unavailable")
+
+    factory = provider_session_factory()
+    adapter = ProviderAdapter(
+        "test-run", "INVESTIGATION", factory, ProviderReaders(tempo=FailingTempo())
+    )
+    backend = TempoInvestigationBackend(
+        base=SourceInvestigationBackend(source),
+        provider_adapter=adapter,
+        observation_cutoff=source.observation_cutoff(),
+    )
+    observation = RuntimeTracesTool(backend).execute_query(
+        case,
+        gap,
+        target,
+        InvestigationQuery(
+            start=T0 - timedelta(seconds=10), end=T0 + timedelta(seconds=10), limit=12
+        ),
+    )
+
+    assert observation.outcome.value == "NO_DATA"
+    assert observation.error is not None and "ConnectionError" in observation.error
+    assert observation.payload["traces"] == []
+    assert observation.runtime is not None
+    assert observation.runtime.state is RuntimeObservationState.NO_DATA
+    assert normalize_observation(observation, case=case, gap=gap).findings == ()
+    with factory() as session:
+        row = session.scalar(select(InvestigationReadRow))
+    assert row is not None
+    assert (row.caller_class, row.capability, row.status) == (
+        "INVESTIGATION",
+        "tempo_traces",
+        "ERROR",
+    )
+    assert row.error_type == "ConnectionError"

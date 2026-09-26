@@ -375,6 +375,13 @@ Audit fields: `rule_id=m16.ended-manifestation-episode`, `rule_version=v1`, `con
 
 The object journal deliberately hashes desired state only (status is excluded), so the Pod status at diagnosis time is not retained as a version. RECOVERED therefore requires the observation layer to expose a typed, read-only status observation per Pod (observed-at, uid, Ready condition, evidence id). This is observation-plane data, not a change to the journal's version semantics.
 
+### Implementation clarification (m19)
+
+- A1 `TERMINATED` and `RECOVERED` are evaluated against the same exact Pod UID identified by the manifestation evidence. Instance identity is `namespace/Pod/name@uid`; matching namespace/kind/name without the UID is insufficient. A later Pod with the same name and a different UID is not continuation or recovery of the earlier manifestation instance.
+- If a manifestation Finding has no exact Pod UID, A1 is inapplicable. Missing UID produces no contradiction, elimination, `TERMINATED`, or `RECOVERED`; UID is never inferred from the name. Missing UID is not evidence of episode end or normality.
+- A Kubernetes Event with `reason=Killing`, or equivalent kubelet termination-intent/event information, is not by itself `TERMINATED` evidence and must not be interpreted as `DELETED`. `TERMINATED` requires the qualifying object-journal `DELETED` evidence for that exact UID under this section. A `Ready` observation for a later `@UID-B` does not establish `RECOVERED` for an earlier `@UID-A`, and a `Killing` event for UID-A does not establish `TERMINATED` for UID-A.
+- This is a narrowing implementation clarification, not a contract amendment. The rule identity remains `rule_id=m16.ended-manifestation-episode`, `rule_version=v1`.
+
 ## 18. Amendment A2 — resource-pressure mechanism mismatch (`m16.v1-a2`)
 
 Status: **FROZEN** (owner-approved direction 2026-09-24). This amendment adds one mechanism-mismatch rule under §6 and §8. It promotes `OBSERVED_NORMAL_MECHANISM_MISMATCH` from a proposed name (§11) to an authorized code for this rule only. Sections 1–17 remain binding.

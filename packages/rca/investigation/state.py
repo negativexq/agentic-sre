@@ -2,10 +2,22 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Protocol, TypedDict
+import json
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, fields, is_dataclass, replace
+from datetime import datetime, timedelta
+from hashlib import sha256
+from types import UnionType
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Protocol,
+    TypedDict,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from packages.rca.engine import Case, EngineConfig
 from packages.rca.model import (
@@ -20,6 +32,7 @@ from packages.rca.model import (
     InvestigationCandidateSelectionAudit,
     InvestigationLedgerEntry,
     InvestigationObservation,
+    InvestigationPolicyKind,
     InvestigationResult,
     InvestigationStep,
     InvestigationStopReason,
@@ -27,6 +40,9 @@ from packages.rca.model import (
     StructuralAlternative,
 )
 from packages.rca.source import ObservationSource
+
+if TYPE_CHECKING:
+    from packages.rca.investigation.intents import IntentMenuItem
 
 
 @dataclass(frozen=True)
@@ -161,9 +177,106 @@ class InvestigationState(TypedDict, total=False):
     last_rejection: tuple[str, str, str] | None
 
 
+def policy_kind(policy: object) -> InvestigationPolicyKind:
+    """A policy's control-flow family; a policy that declares none chooses actions."""
+    return InvestigationPolicyKind(getattr(policy, "semantic_kind", InvestigationPolicyKind.ACTION))
+
+
+class IntentTiebreakPolicy(Protocol):
+    """An ``INTENT_TIEBREAK`` policy: picks one intent id from an equally relevant menu."""
+
+    def choose_intent(
+        self,
+        menu: Sequence[IntentMenuItem],
+        history: Sequence[Mapping[str, object]] = (),
+    ) -> str: ...
+
+
+def investigation_config_document(config: InvestigationConfig) -> dict[str, Any]:
+    """The effective config as JSON: every dataclass field, the engine config resolved."""
+    effective = replace(config, engine=config.engine or EngineConfig())
+    encoded = _encode_config(effective)
+    assert isinstance(encoded, dict)
+    return encoded
+
+
+RCA_CONFIG_SCHEMA = "agentic-sre.rca-config.v1"
+
+
+def rca_config_digest(engine: EngineConfig, investigation: InvestigationConfig | None) -> str:
+    """SHA-256 of a run's effective configuration envelope (M19-4.2).
+
+    ``investigation`` is the effective bounded-investigation config, or ``None``
+    when no bounded investigation ran. Default values are part of the digest.
+    """
+    envelope = {
+        "schema": RCA_CONFIG_SCHEMA,
+        "engine": _encode_config(engine),
+        "investigation": (
+            investigation_config_document(investigation) if investigation is not None else None
+        ),
+    }
+    canonical = json.dumps(envelope, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def investigation_config_from_document(document: Mapping[str, Any]) -> InvestigationConfig:
+    """Rebuild the exact config ``investigation_config_document`` wrote."""
+    decoded = _decode_config(InvestigationConfig, document)
+    assert isinstance(decoded, InvestigationConfig)
+    return decoded
+
+
+def _encode_config(value: Any) -> Any:
+    if is_dataclass(value) and not isinstance(value, type):
+        return {item.name: _encode_config(getattr(value, item.name)) for item in fields(value)}
+    if isinstance(value, timedelta):
+        return value.total_seconds()
+    if isinstance(value, tuple):
+        return [_encode_config(item) for item in value]
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    raise TypeError(f"unsupported investigation config value: {type(value).__name__}")
+
+
+def _decode_config(kind: Any, value: Any) -> Any:
+    origin = get_origin(kind)
+    if origin in (Union, UnionType):
+        options = [item for item in get_args(kind) if item is not type(None)]
+        if value is None:
+            return None
+        if len(options) != 1:
+            raise TypeError(f"ambiguous investigation config type: {kind}")
+        return _decode_config(options[0], value)
+    if origin is tuple:
+        (item_kind, _ellipsis) = get_args(kind)
+        return tuple(_decode_config(item_kind, item) for item in value)
+    if isinstance(kind, type) and is_dataclass(kind):
+        if not isinstance(value, Mapping):
+            raise TypeError(f"{kind.__name__} config must be an object")
+        hints = get_type_hints(kind)
+        names = {item.name for item in fields(kind)}
+        if set(value) != names:
+            raise ValueError(f"{kind.__name__} config fields differ: {sorted(set(value) ^ names)}")
+        return kind(**{name: _decode_config(hints[name], value[name]) for name in names})
+    if kind is timedelta:
+        return timedelta(seconds=value)
+    if kind is float and isinstance(value, int) and not isinstance(value, bool):
+        return float(value)
+    if kind in (bool, int, float, str) and isinstance(value, kind):
+        return value
+    raise TypeError(f"investigation config value {value!r} is not a {kind}")
+
+
 __all__ = [
     "CaseRebuilder",
     "InvestigationConfig",
+    "IntentTiebreakPolicy",
+    "investigation_config_document",
+    "policy_kind",
+    "RCA_CONFIG_SCHEMA",
+    "rca_config_digest",
+    "investigation_config_from_document",
     "InvestigationPolicy",
     "InvestigationPolicyContext",
     "InvestigationState",

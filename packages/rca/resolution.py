@@ -29,11 +29,15 @@ from packages.rca.model import (
     HypothesisEpistemicState,
     HypothesisResolutionAudit,
     HypothesisSignature,
+    PreconditionAuditReason,
+    PreconditionResult,
+    PreconditionStatus,
     Resolution,
     ResolutionDiscriminator,
     ResolutionElimination,
     ResolutionReasonCode,
     ResolutionTrace,
+    RulePreconditionAudit,
     VerificationTrace,
 )
 from packages.rca.ranking import RankingConfig
@@ -73,6 +77,17 @@ _CHANGE_KINDS = frozenset(
     }
 )
 _MAX_TRACE_ITEMS = 8
+
+
+def preconditions_allow_elimination(results: Sequence[PreconditionResult]) -> bool:
+    """Whether every supplied required precondition positively passed.
+
+    Pending and disqualified outcomes both stop this rule's positive path,
+    while callers retain the individual results for audit. No aggregate
+    priority is assigned between them, and legacy boolean checks are not
+    translated here.
+    """
+    return all(result.status is PreconditionStatus.PASS for result in results)
 
 
 def _temporal_label(finding: Finding) -> str:
@@ -444,6 +459,7 @@ def _mechanism_elimination(mismatch: MechanismMismatch) -> ResolutionElimination
         targets=(mismatch.actor.canonical, *(pod.canonical for pod in mismatch.pods)),
         mechanism="RESOURCE_PRESSURE",
         observation_ids=tuple(item.evidence_id for item in mismatch.coverage),
+        decisive_evidence_ids=tuple(dict.fromkeys(item.evidence_id for item in mismatch.coverage)),
         time_basis=tuple(
             EliminationTimeBasis(
                 evidence_ids=(item.evidence_id,),
@@ -464,36 +480,45 @@ def _mechanism_elimination(mismatch: MechanismMismatch) -> ResolutionElimination
 
 
 def _ended_episode_elimination(ended: EndedEpisode) -> ResolutionElimination:
-    basis = ended.basis.value
+    bases = "/".join(sorted({item.basis.value for item in ended.instances}))
+    end_ids = tuple(dict.fromkeys(item.end_evidence_id for item in ended.instances))
     return ResolutionElimination(
         hypothesis_id=ended.hypothesis_id,
         code=ResolutionReasonCode.MANIFESTATION_EPISODE_ENDED_BEFORE_ONSET,
-        evidence_ids=(*ended.manifestation_evidence_ids, ended.end_evidence_id),
+        evidence_ids=tuple(dict.fromkeys((*ended.manifestation_evidence_ids, *end_ids))),
         detail=(
             "the actor carries only its own failure manifestations, all of which precede a "
-            f"positively observed episode end ({basis}) before incident onset"
+            f"positively observed episode end ({bases}) before incident onset"
         ),
         rule_id=EPISODE_END_RULE[0],
         rule_version=EPISODE_END_RULE[1],
         consequence=EliminationConsequence.ROOT_INELIGIBILITY,
         targets=(ended.actor.canonical,),
         mechanism="EPISODE_TIMING",
-        observation_ids=(ended.end_evidence_id,),
-        time_basis=(
+        observation_ids=end_ids,
+        time_basis=tuple(
             EliminationTimeBasis(
-                evidence_ids=(ended.end_evidence_id,),
+                evidence_ids=(item.end_evidence_id,),
                 onset=ended.onset,
                 boundary=ended.boundary,
-                interval_start=ended.ended_at,
-                interval_end=ended.observed_at,
-                certainty=basis,
-            ),
+                interval_start=item.ended_at,
+                interval_end=item.observed_at,
+                certainty=item.basis.value,
+                target=item.target,
+            )
+            for item in ended.instances
         ),
-        coverage_basis=(
-            f"last manifestation {ended.last_manifestation_at.isoformat()}; "
-            f"episode ended {ended.ended_at.isoformat()} ({basis})"
+        coverage_basis="; ".join(
+            f"{item.target}: last manifestation {item.last_manifestation_at.isoformat()}; "
+            f"episode ended {item.ended_at.isoformat()} ({item.basis.value})"
+            for item in ended.instances
         ),
         preconditions=ended.preconditions,
+        decisive_evidence_ids=tuple(
+            dict.fromkeys(
+                evidence for item in ended.instances for evidence in item.decisive_evidence_ids
+            )
+        ),
     )
 
 
@@ -636,6 +661,8 @@ def resolve_hypotheses(
     onset_grace: timedelta | None = None,
     root_cause_eligibilities: RootCauseEligibilities | None = None,
     mechanism_mismatches: Mapping[str, MechanismMismatch] | None = None,
+    rule_preconditions: Mapping[tuple[str, str], Sequence[PreconditionResult]] | None = None,
+    precondition_reasons: Mapping[tuple[str, str], Sequence[PreconditionAuditReason]] | None = None,
 ) -> ResolutionTrace:
     """Resolve distinguishability without treating missing proof as contradiction.
 
@@ -643,31 +670,74 @@ def resolve_hypotheses(
     positively contradicted by a frozen rule; they are contradicted, not merely
     root-ineligible, and their audits say so.
     """
-    mismatches = dict(mechanism_mismatches or {})
+    supplied_preconditions = {
+        key: tuple(results) for key, results in (rule_preconditions or {}).items()
+    }
+    supplied_reasons = {
+        key: tuple(reasons) for key, reasons in (precondition_reasons or {}).items()
+    }
+    blocked_rules = {
+        key
+        for key, results in supplied_preconditions.items()
+        if not preconditions_allow_elimination(results)
+    }
+    blocked_rules.update(key for key, reasons in supplied_reasons.items() if reasons)
+    mismatches = {
+        hypothesis_id: mismatch
+        for hypothesis_id, mismatch in (mechanism_mismatches or {}).items()
+        if (hypothesis_id, RESOURCE_RULE_ID) not in blocked_rules
+    }
+    effective_eligibilities = root_cause_eligibilities
+    if root_cause_eligibilities is not None and any(
+        rule_id == EPISODE_END_RULE_ID for _, rule_id in blocked_rules
+    ):
+        ended = {
+            hypothesis_id: result
+            for hypothesis_id, result in root_cause_eligibilities.ended_episodes.items()
+            if (hypothesis_id, EPISODE_END_RULE_ID) not in blocked_rules
+        }
+        effective_eligibilities = RootCauseEligibilities(
+            root_cause_eligibilities.assessments, ended
+        )
     trace = _resolve(
         hypotheses,
         verification_traces=verification_traces,
         onset_grace=onset_grace,
-        root_cause_eligibilities=root_cause_eligibilities,
+        root_cause_eligibilities=effective_eligibilities,
         mismatches=mismatches,
     )
-    if not mismatches:
-        return trace
-    return trace.model_copy(
-        update={
-            "hypothesis_audits": tuple(
-                audit.model_copy(
-                    update={
+    audits = tuple(
+        audit.model_copy(
+            update={
+                **(
+                    {
                         "epistemic_state": HypothesisEpistemicState.CONTRADICTED,
                         "plausible": False,
                     }
-                )
-                if audit.hypothesis_id in mismatches
-                else audit
-                for audit in trace.hypothesis_audits
-            )
-        }
+                    if audit.hypothesis_id in mismatches
+                    else {}
+                ),
+                "precondition_audit": tuple(
+                    [
+                        RulePreconditionAudit(rule_id=rule_id, result=result)
+                        for (hypothesis_id, rule_id), results in sorted(
+                            supplied_preconditions.items()
+                        )
+                        if hypothesis_id == audit.hypothesis_id
+                        for result in results
+                    ]
+                    + [
+                        RulePreconditionAudit(rule_id=rule_id, reason=reason)
+                        for (hypothesis_id, rule_id), reasons in sorted(supplied_reasons.items())
+                        if hypothesis_id == audit.hypothesis_id
+                        for reason in reasons
+                    ]
+                ),
+            }
+        )
+        for audit in trace.hypothesis_audits
     )
+    return trace.model_copy(update={"hypothesis_audits": audits})
 
 
 def _resolve(

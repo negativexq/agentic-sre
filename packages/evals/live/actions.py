@@ -149,6 +149,8 @@ class HttpFault:
             "delay_ms": 0,
             "error": False,
             "db_query_delay_ms": 0,
+            "not_ready": False,
+            "memory_ballast_mb": 0,
         }
         if self.service == "payment-service":
             payload["db_hold_ms"] = 0

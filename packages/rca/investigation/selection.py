@@ -23,6 +23,7 @@ from packages.rca.model import (
     InvestigationDiscriminatorKind,
     InvestigationExecutionStatus,
     InvestigationLedgerEntry,
+    InvestigationPolicyKind,
     InvestigationQuery,
     InvestigationTransitionCertificate,
 )
@@ -967,6 +968,7 @@ class DeterministicObservationPolicy:
 
     counts_as_model: bool = False
     uses_candidate_selector: bool = True
+    semantic_kind: InvestigationPolicyKind = InvestigationPolicyKind.OBSERVATION_SELECTOR
 
     def choose_action(self, _context: object) -> InvestigationAction:
         return InvestigationAction(action="stop", rationale="selector path required")

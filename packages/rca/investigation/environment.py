@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Protocol, cast
 
-from packages.rca.investigation.prometheus import PrometheusMetricsReader
-from packages.rca.investigation.tempo import TempoTraceBatch, TempoTraceReader
+from packages.rca.investigation.actions import observation_identity
+from packages.rca.investigation.tempo import TempoTraceBatch
 from packages.rca.model import (
     Alert,
     ClusterEvent,
@@ -17,11 +17,13 @@ from packages.rca.model import (
     LogRecord,
     ObjectVersion,
     PodStatusObservation,
+    ProviderReadFailure,
     ResourcePressure,
     TraceSpanObservation,
     TrafficObservation,
 )
 from packages.rca.pod_status import pod_status_from_history
+from packages.rca.provider_adapter import ProviderBoundary
 from packages.rca.signals import (
     _HPA_FAILURE_REASONS,
     _LIMIT_MESSAGE,
@@ -171,34 +173,23 @@ class InvestigationBackend(Protocol):
         self, namespace: EntityRef, query: InvestigationQuery
     ) -> tuple[ObjectVersion, ...]: ...
 
-    def query_logs(self, target: EntityRef, query: InvestigationQuery) -> tuple[LogRecord, ...]: ...
+    def query_logs(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[LogRecord, ...] | ProviderReadFailure: ...
 
     def query_resource_pressure(
         self, target: EntityRef, query: InvestigationQuery
-    ) -> tuple[ResourcePressure, ...]: ...
+    ) -> tuple[ResourcePressure, ...] | ProviderReadFailure: ...
 
     def query_traffic(
         self, target: EntityRef, query: InvestigationQuery
-    ) -> tuple[TrafficObservation, ...]: ...
+    ) -> tuple[TrafficObservation, ...] | ProviderReadFailure: ...
 
     def query_traces(
         self, target: EntityRef, query: InvestigationQuery
-    ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch: ...
+    ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch | ProviderReadFailure: ...
 
     def supports(self, capability: str) -> bool: ...
-
-
-class LokiReader(Protocol):
-    """Trusted Loki reader contract; query language remains inside the adapter."""
-
-    def error_logs(
-        self,
-        services: Sequence[str],
-        starts_at: datetime,
-        ends_at: datetime,
-        *,
-        limit: int | None = None,
-    ) -> list[LogRecord]: ...
 
 
 @dataclass(frozen=True)
@@ -302,7 +293,9 @@ class SourceInvestigationBackend:
         result.sort(key=lambda item: (item.observed_at, item.entity.canonical, item.evidence_id))
         return tuple(result[: min(query.limit, 64)])
 
-    def query_logs(self, target: EntityRef, query: InvestigationQuery) -> tuple[LogRecord, ...]:
+    def query_logs(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[LogRecord, ...] | ProviderReadFailure:
         latest = {
             entity: versions[-1]
             for entity, versions in self.source.object_history().items()
@@ -324,9 +317,11 @@ class SourceInvestigationBackend:
 
     def query_resource_pressure(
         self, target: EntityRef, query: InvestigationQuery
-    ) -> tuple[ResourcePressure, ...]:
+    ) -> tuple[ResourcePressure, ...] | ProviderReadFailure:
         since = query.start or datetime.min.replace(tzinfo=UTC)
         records = self.source.resource_pressure((target,), since)
+        if isinstance(records, ProviderReadFailure):
+            return records
         return tuple(
             item for item in records if _in_window(item.at, query, self.source.observation_cutoff())
         )[: query.limit]
@@ -429,7 +424,7 @@ class TempoInvestigationBackend:
     """Existing investigation reads plus an active Tempo trace provider."""
 
     base: InvestigationBackend
-    tempo: TempoTraceReader
+    provider_adapter: ProviderBoundary
     observation_cutoff: datetime | None
 
     def query_history(
@@ -452,23 +447,33 @@ class TempoInvestigationBackend:
     ) -> tuple[ObjectVersion, ...]:
         return self.base.query_incident_changes(namespace, query)
 
-    def query_logs(self, target: EntityRef, query: InvestigationQuery) -> tuple[LogRecord, ...]:
+    def query_logs(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[LogRecord, ...] | ProviderReadFailure:
         return self.base.query_logs(target, query)
 
     def query_resource_pressure(
         self, target: EntityRef, query: InvestigationQuery
-    ) -> tuple[ResourcePressure, ...]:
+    ) -> tuple[ResourcePressure, ...] | ProviderReadFailure:
         return self.base.query_resource_pressure(target, query)
 
     def query_traffic(
         self, target: EntityRef, query: InvestigationQuery
-    ) -> tuple[TrafficObservation, ...]:
+    ) -> tuple[TrafficObservation, ...] | ProviderReadFailure:
         return self.base.query_traffic(target, query)
 
     def query_traces(
         self, target: EntityRef, query: InvestigationQuery
-    ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch:
-        batch = self.tempo.query(target, query)
+    ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch | ProviderReadFailure:
+        batch = self.provider_adapter.query_tempo(
+            target,
+            query,
+            observation_identity=observation_identity("runtime_traces", target, query),
+        )
+        if isinstance(batch, ProviderReadFailure):
+            return batch
+        if isinstance(batch, tuple):
+            return _select_runtime_trace_context(batch, target, query, self.observation_cutoff)
         selected = _select_runtime_trace_context(
             batch.spans, target, query, self.observation_cutoff
         )
@@ -493,7 +498,7 @@ class LokiInvestigationBackend:
     """Existing bounded investigation reads plus the trusted Loki reader."""
 
     base: InvestigationBackend
-    loki: LokiReader
+    provider_adapter: ProviderBoundary
     source: ObservationSource
     observation_cutoff: datetime | None
 
@@ -517,7 +522,9 @@ class LokiInvestigationBackend:
     ) -> tuple[ObjectVersion, ...]:
         return self.base.query_incident_changes(namespace, query)
 
-    def query_logs(self, target: EntityRef, query: InvestigationQuery) -> tuple[LogRecord, ...]:
+    def query_logs(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[LogRecord, ...] | ProviderReadFailure:
         start, end = query.start, query.end
         if start is None or end is None:
             raise ValueError("Loki investigation queries require start and end")
@@ -535,12 +542,15 @@ class LokiInvestigationBackend:
                 return ()
             end = min(end, self.observation_cutoff)
         limit = min(query.limit, 32)
-        records = self.loki.error_logs(
+        records = self.provider_adapter.query_loki(
             sorted(_log_services_for_target(self.source, target)),
             start,
             end,
             limit=limit,
+            observation_identity=observation_identity("logs", target, query),
         )
+        if isinstance(records, ProviderReadFailure):
+            return records
         return tuple(
             item
             for item in records
@@ -553,17 +563,17 @@ class LokiInvestigationBackend:
 
     def query_resource_pressure(
         self, target: EntityRef, query: InvestigationQuery
-    ) -> tuple[ResourcePressure, ...]:
+    ) -> tuple[ResourcePressure, ...] | ProviderReadFailure:
         return self.base.query_resource_pressure(target, query)
 
     def query_traffic(
         self, target: EntityRef, query: InvestigationQuery
-    ) -> tuple[TrafficObservation, ...]:
+    ) -> tuple[TrafficObservation, ...] | ProviderReadFailure:
         return self.base.query_traffic(target, query)
 
     def query_traces(
         self, target: EntityRef, query: InvestigationQuery
-    ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch:
+    ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch | ProviderReadFailure:
         return self.base.query_traces(target, query)
 
     def supports(self, capability: str) -> bool:
@@ -575,7 +585,7 @@ class PrometheusInvestigationBackend:
     """Existing investigation reads plus active Prometheus metric reads."""
 
     base: InvestigationBackend
-    prometheus: PrometheusMetricsReader
+    provider_adapter: ProviderBoundary
     observation_cutoff: datetime | None
 
     def _effective_query(self, query: InvestigationQuery) -> InvestigationQuery | None:
@@ -607,29 +617,39 @@ class PrometheusInvestigationBackend:
     ) -> tuple[ObjectVersion, ...]:
         return self.base.query_incident_changes(namespace, query)
 
-    def query_logs(self, target: EntityRef, query: InvestigationQuery) -> tuple[LogRecord, ...]:
+    def query_logs(
+        self, target: EntityRef, query: InvestigationQuery
+    ) -> tuple[LogRecord, ...] | ProviderReadFailure:
         return self.base.query_logs(target, query)
 
     def query_traces(
         self, target: EntityRef, query: InvestigationQuery
-    ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch:
+    ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch | ProviderReadFailure:
         return self.base.query_traces(target, query)
 
     def query_resource_pressure(
         self, target: EntityRef, query: InvestigationQuery
-    ) -> tuple[ResourcePressure, ...]:
+    ) -> tuple[ResourcePressure, ...] | ProviderReadFailure:
         effective = self._effective_query(query)
         if effective is None:
             return ()
-        return self.prometheus.query_resource_pressure(target, effective)
+        return self.provider_adapter.query_resource_pressure(
+            target,
+            effective,
+            observation_identity=observation_identity("resource_pressure", target, query),
+        )
 
     def query_traffic(
         self, target: EntityRef, query: InvestigationQuery
-    ) -> tuple[TrafficObservation, ...]:
+    ) -> tuple[TrafficObservation, ...] | ProviderReadFailure:
         effective = self._effective_query(query)
         if effective is None:
             return ()
-        return self.prometheus.query_traffic(target, effective)
+        return self.provider_adapter.query_traffic(
+            target,
+            effective,
+            observation_identity=observation_identity("traffic", target, query),
+        )
 
     def supports(self, capability: str) -> bool:
         if capability in {"resource_pressure", "traffic"}:

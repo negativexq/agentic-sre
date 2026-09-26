@@ -233,3 +233,33 @@ def test_payment_calls_are_client_spans_that_parent_the_server_span() -> None:
     # The propagated parent is the CLIENT span itself.
     (traceparent,) = seen
     assert traceparent.startswith(f"00-{span.context.trace_id:032x}-{span.context.span_id:016x}-")
+
+
+def test_readiness_probe_answers_are_not_request_signals() -> None:
+    """M19-6.12a: a 503 from /ready is 'not ready', not a failed request (no error rate)."""
+    registry = CollectorRegistry()
+    runtime = create_runtime("probe-test-service", registry=registry)
+    capture = _captured(runtime)
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    runtime.tracer = provider.get_tracer("test")
+
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        del receive
+        await send({"type": "http.response.start", "status": 503, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    client = TestClient(TelemetryMiddleware(app, runtime))
+    client.get("/ready")
+    exposition = generate_latest(registry).decode()
+    assert 'route="/ready"' not in exposition
+    assert not capture.records
+    assert exporter.get_finished_spans() == ()
+
+    client.get("/orders")  # any other 503 is still a failed request
+    exposition = generate_latest(registry).decode()
+    assert re.search(
+        r'http_requests_total\{[^}]*route="/orders"[^}]*status="503"[^}]*\} 1\.0', exposition
+    )
+    assert [record.levelno for record in capture.records] == [logging.ERROR]

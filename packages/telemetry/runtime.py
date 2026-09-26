@@ -261,7 +261,11 @@ def create_runtime(
 
 # Kubelet probes and Prometheus scrapes are not requests anyone investigates;
 # tracing them would crowd real request traces out of bounded trace searches.
-_UNTRACED_PATHS = frozenset({"/health", "/metrics", "/metrics/"})
+_UNTRACED_PATHS = frozenset({"/health", "/ready", "/metrics", "/metrics/"})
+# A readiness probe's 503 is the process saying "not ready", not a failed request:
+# counting it would turn a readiness loss into a request error rate (and alerts).
+# Readiness itself is observed through Pod conditions, not request signals.
+_UNMEASURED_PATHS = frozenset({"/ready"})
 
 
 class TelemetryMiddleware:
@@ -317,25 +321,28 @@ class TelemetryMiddleware:
             finally:
                 duration = time.perf_counter() - started
                 span.set_attribute("http.response.status_code", status_code)
-                self.runtime.metrics.http(self.runtime.service_name, path, status_code, duration)
-                self.runtime.prometheus_metrics.http_requests.labels(
-                    self.runtime.service_name, path, str(status_code)
-                ).inc()
-                self.runtime.prometheus_metrics.http_duration.labels(
-                    self.runtime.service_name, path
-                ).observe(duration)
-                if status_code >= 500:
-                    # Failed requests carry their status in the log body so a log
-                    # backend can find them without parsing structured fields.
-                    self.runtime.logger.error(
-                        f"http.request error: {method} {path} returned {status_code}",
-                        extra={"request_id": request_id},
+                if path not in _UNMEASURED_PATHS:
+                    self.runtime.metrics.http(
+                        self.runtime.service_name, path, status_code, duration
                     )
-                else:
-                    self.runtime.logger.info(
-                        "http.request",
-                        extra={"request_id": request_id},
-                    )
+                    self.runtime.prometheus_metrics.http_requests.labels(
+                        self.runtime.service_name, path, str(status_code)
+                    ).inc()
+                    self.runtime.prometheus_metrics.http_duration.labels(
+                        self.runtime.service_name, path
+                    ).observe(duration)
+                    if status_code >= 500:
+                        # Failed requests carry their status in the log body so a log
+                        # backend can find them without parsing structured fields.
+                        self.runtime.logger.error(
+                            f"http.request error: {method} {path} returned {status_code}",
+                            extra={"request_id": request_id},
+                        )
+                    else:
+                        self.runtime.logger.info(
+                            "http.request",
+                            extra={"request_id": request_id},
+                        )
 
 
 def _traceparent_header() -> bytes:

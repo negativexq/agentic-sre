@@ -4,13 +4,35 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, UniqueConstraint, Uuid
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    Uuid,
+    text,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
 
 class Base(DeclarativeBase):
     """Declarative metadata root."""
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+# Provenance only: when a row was written. Knowledge membership comes from
+# the evidence manifest, never from this column (M19 I4).
+def _ingested_at() -> Mapped[datetime | None]:
+    return mapped_column(UTCDateTime(), nullable=True, default=_now)
 
 
 class UTCDateTime(TypeDecorator[datetime]):
@@ -118,6 +140,7 @@ class ChangeRecordRow(Base):
     after: Mapped[dict[str, Any]] = mapped_column("after", JSON, nullable=False)
     revision: Mapped[str] = mapped_column(String(255), nullable=False)
     source: Mapped[str] = mapped_column(String(255), nullable=False)
+    ingested_at: Mapped[datetime | None] = _ingested_at()
 
 
 class EventVersionRow(Base):
@@ -127,13 +150,23 @@ class EventVersionRow(Base):
     """
 
     __tablename__ = "event_versions"
-    __table_args__ = (UniqueConstraint("namespace", "dedup_key"),)
+    __table_args__ = (
+        UniqueConstraint("namespace", "dedup_key"),
+        Index(
+            "ix_event_versions_namespace_involved_kind_name_involved_uid",
+            "namespace",
+            "involved_kind",
+            "involved_name",
+            "involved_uid",
+        ),
+    )
 
     version_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     namespace: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     # involvedObject kind/name, for cheap filtering without a JSON query.
     involved_kind: Mapped[str] = mapped_column(String(255), nullable=False)
     involved_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    involved_uid: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # (uid or name)|count|lastTimestamp: identifies one observed state of one
     # Kubernetes event object; a coalesced repeat (count/lastTimestamp advance)
     # gets a new key and is stored again, matching the object journal's model
@@ -142,6 +175,7 @@ class EventVersionRow(Base):
     # first_at (or last_at, or observed_at) -- used to filter by incident window.
     event_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False, index=True)
     observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    ingested_at: Mapped[datetime | None] = _ingested_at()
     body: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 
@@ -152,13 +186,27 @@ class ObjectVersionRow(Base):
     """
 
     __tablename__ = "object_versions"
+    __table_args__ = (
+        Index(
+            "ix_object_versions_namespace_kind_name_uid",
+            "namespace",
+            "kind",
+            "name",
+            "uid",
+        ),
+    )
 
     version_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     object_key: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
     namespace: Mapped[str] = mapped_column(String(255), nullable=False)
     kind: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    uid: Mapped[str | None] = mapped_column(String(64), nullable=True)
     observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False, index=True)
+    # When the source says this version came to be; unknown (NULL) unless
+    # the source states it. Never filled from observed_at.
+    source_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    ingested_at: Mapped[datetime | None] = _ingested_at()
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     body: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     lifecycle: Mapped[str] = mapped_column(
@@ -166,10 +214,107 @@ class ObjectVersionRow(Base):
     )
 
 
+LIFECYCLE_OBSERVATION_TYPES = (
+    "OBSERVED",
+    "READY_TRUE",
+    "READY_FALSE",
+    "CONTAINER_STARTED",
+    "CONTAINER_TERMINATED",
+    "OOM_KILLED",
+    "EVICTED",
+    "DELETION_REQUESTED",
+    "DELETED",
+    "STATUS_SNAPSHOT",
+)
+
+
+class EntityInstanceRow(Base):
+    """Materialized index of exact Kubernetes object instances, keyed by UID.
+
+    Maintained by the collector and updated in place; it is an index, not
+    evidence. RCA and replay must not read its time fields as temporal facts.
+    """
+
+    __tablename__ = "entity_instances"
+    __table_args__ = (
+        UniqueConstraint("namespace", "kind", "uid", name="uq_entity_instance_uid"),
+        Index("ix_entity_instances_namespace_kind_name", "namespace", "kind", "name"),
+    )
+
+    instance_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    namespace: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    uid: Mapped[str] = mapped_column(String(64), nullable=False)
+    owner_kind: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    owner_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    owner_uid: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # metadata.creationTimestamp as reported by the API server.
+    created_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    first_observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    last_observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    deleted_observed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+
+class LifecycleObservationRow(Base):
+    """One append-only lifecycle fact about one exact instance (authoritative evidence).
+
+    ``source_at`` is when the source says it happened (e.g. a condition's
+    lastTransitionTime) and may be unknown; ``observed_at`` is when the
+    collector saw it; ``ingested_at`` is when the row was written.
+    """
+
+    __tablename__ = "lifecycle_observations"
+    __table_args__ = (
+        UniqueConstraint(
+            "instance_uid", "type", "observed_at", "source", name="uq_lifecycle_observation_fact"
+        ),
+        CheckConstraint(
+            "type IN (" + ", ".join(f"'{item}'" for item in LIFECYCLE_OBSERVATION_TYPES) + ")",
+            name="ck_lifecycle_observation_type",
+        ),
+        Index(
+            "ix_lifecycle_observations_instance",
+            "namespace",
+            "kind",
+            "instance_uid",
+        ),
+        Index("ix_lifecycle_observations_namespace_observed", "namespace", "observed_at"),
+    )
+
+    observation_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # lifecycle:<namespace>:<kind>:<uid>:<seq>
+    evidence_id: Mapped[str] = mapped_column(String(512), nullable=False, unique=True)
+    instance_uid: Mapped[str] = mapped_column(String(64), nullable=False)
+    namespace: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    type: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    ingested_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
+def _one_of(column: str, values: tuple[str, ...], name: str) -> CheckConstraint:
+    return CheckConstraint(
+        f"{column} IN (" + ", ".join(f"'{item}'" for item in values) + ")", name=name
+    )
+
+
+# Why a diagnosis revision was produced; LEGACY marks rows stored before revisions.
+DIAGNOSIS_TRIGGERS = ("INITIAL", "MANUAL", "EVIDENCE_DEADLINE", "LEGACY")
+
+
 class DiagnosisRow(Base):
     """A stored diagnosis for an incident; the latest one is shown."""
 
     __tablename__ = "diagnoses"
+    __table_args__ = (
+        UniqueConstraint("incident_id", "revision_number", name="uq_diagnosis_incident_revision"),
+        _one_of('"trigger"', DIAGNOSIS_TRIGGERS, "ck_diagnosis_trigger"),
+    )
 
     diagnosis_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     incident_id: Mapped[UUID] = mapped_column(
@@ -183,6 +328,81 @@ class DiagnosisRow(Base):
     # timeline events. Nullable for diagnoses stored before this existed.
     run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     document: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    # Revision metadata (0022; number and trigger required since 0023). Legacy
+    # rows carry a backfilled number and trigger LEGACY; the other provenance
+    # fields have no legacy source and stay NULL there.
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    previous_diagnosis_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("diagnoses.diagnosis_id", name="fk_diagnoses_previous_diagnosis_id"),
+        nullable=True,
+    )
+    trigger: Mapped[str] = mapped_column(String(32), nullable=False)
+    window_end: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    manifest_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    tape_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    epistemic_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    engine_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    config_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+# Rule evidence a diagnosis revision could not yet decide (M19-5.4).
+EVIDENCE_REQUIREMENT_KINDS = ("STATUS_CONTINUITY", "RESOURCE_COVERAGE")
+EVIDENCE_REQUIREMENT_STATUSES = (
+    "OPEN",
+    "SATISFIED_BY_REVISION",
+    "SUPERSEDED_BY_REVISION",
+    "EXPIRED",
+)
+_OPEN_REQUIREMENT = text("status = 'OPEN'")
+
+
+class EvidenceRequirementRow(Base):
+    """A pending rule requirement opened by one diagnosis revision.
+
+    Scheduler state, not authoritative evidence (M19 §1.5): ``status`` moves
+    through its lifecycle in place. At most one row per ``requirement_key`` is
+    OPEN; closed rows for the same key are kept as history. The canonical
+    formula of ``requirement_key`` and the meaning of ``targets`` are defined
+    by the requirement writer (M19-5.5), not by this schema.
+    """
+
+    __tablename__ = "evidence_requirements"
+    __table_args__ = (
+        _one_of("kind", EVIDENCE_REQUIREMENT_KINDS, "ck_evidence_requirement_kind"),
+        _one_of("status", EVIDENCE_REQUIREMENT_STATUSES, "ck_evidence_requirement_status"),
+        CheckConstraint(
+            "json_typeof(targets) = 'array'", name="ck_evidence_requirement_targets_array"
+        ).ddl_if(dialect="postgresql"),
+        CheckConstraint(
+            "json_type(targets) = 'array'", name="ck_evidence_requirement_targets_array"
+        ).ddl_if(dialect="sqlite"),
+        Index(
+            "uq_evidence_requirements_open_key",
+            "requirement_key",
+            unique=True,
+            postgresql_where=_OPEN_REQUIREMENT,
+            sqlite_where=_OPEN_REQUIREMENT,
+        ),
+    )
+
+    requirement_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    requirement_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    incident_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("incidents.incident_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    diagnosis_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("diagnoses.diagnosis_id", name="fk_evidence_requirements_diagnosis_id"),
+        nullable=False,
+    )
+    hypothesis_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    rule_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    rule_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    targets: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
+    not_before: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
 
 
 class InvestigationRunRow(Base):
@@ -250,11 +470,104 @@ class LogObservationRow(Base):
     service: Mapped[str] = mapped_column(String(255), nullable=False)
     event_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True, index=True)
     observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False, index=True)
+    ingested_at: Mapped[datetime | None] = _ingested_at()
     severity: Mapped[str] = mapped_column(String(32), nullable=False)
     message: Mapped[str] = mapped_column(String(4000), nullable=False)
     evidence_id: Mapped[str] = mapped_column(String(512), nullable=False)
     dedup_key: Mapped[str] = mapped_column(String(64), nullable=False)
     source_system: Mapped[str] = mapped_column(String(255), nullable=False, default="loki")
+    # The provider read that captured this observation (M19-3.9 fills it).
+    source_read_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("investigation_reads.read_id", name="fk_log_observations_source_read_id"),
+        nullable=True,
+    )
+
+
+CALLER_CLASSES = ("CAPTURE", "ENGINE", "INVESTIGATION")
+READ_STATUSES = ("SUCCESS", "ERROR")
+
+
+class SnapshotCycleRow(Base):
+    """One diagnosis capture's cluster listing: when it ran and which scopes completed."""
+
+    __tablename__ = "snapshot_cycles"
+
+    cycle_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    completed_scopes: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
+    failed_scopes: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
+
+
+class SnapshotCycleObjectRow(Base):
+    """One object exactly as a snapshot cycle listed it, full body including status."""
+
+    __tablename__ = "snapshot_cycle_objects"
+
+    cycle_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("snapshot_cycles.cycle_id"), primary_key=True
+    )
+    object_key: Mapped[str] = mapped_column(String(512), primary_key=True)
+    namespace: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    uid: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    body: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    # snapshot:<cycle_id>:<object_key>
+    evidence_id: Mapped[str] = mapped_column(String(600), nullable=False, unique=True)
+
+
+class RunEvidenceManifestRow(Base):
+    """One exact source id a diagnosis run was allowed to know, in manifest order."""
+
+    __tablename__ = "run_evidence_manifest"
+    __table_args__ = (
+        UniqueConstraint("run_id", "source_type", "source_id", name="uq_manifest_run_source"),
+        UniqueConstraint("run_id", "sequence", name="uq_manifest_run_sequence"),
+    )
+
+    manifest_entry_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(600), nullable=False)
+    # Content frozen at manifest time for sources whose rows can still change
+    # (alerts are updated on resolve); NULL for append-only sources.
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+
+class InvestigationReadRow(Base):
+    """One provider read of a run, in call order: the replay tape.
+
+    ``query_key`` is not unique: the same canonical query may be read several
+    times in one run. ``(run_id, sequence)`` is the order replay follows.
+    """
+
+    __tablename__ = "investigation_reads"
+    __table_args__ = (
+        UniqueConstraint("run_id", "sequence", name="uq_investigation_read_run_sequence"),
+        _one_of("caller_class", CALLER_CLASSES, "ck_investigation_read_caller_class"),
+        _one_of("status", READ_STATUSES, "ck_investigation_read_status"),
+    )
+
+    read_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    caller_class: Mapped[str] = mapped_column(String(16), nullable=False)
+    capability: Mapped[str] = mapped_column(String(64), nullable=False)
+    query_key: Mapped[str] = mapped_column(Text(), nullable=False)
+    query_descriptor: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    finished_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    committed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    status: Mapped[str] = mapped_column(String(8), nullable=False)
+    observation: Mapped[Any] = mapped_column(JSON, nullable=True)
+    evidence_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    error_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(4000), nullable=True)
 
 
 class EvidenceRow(Base):

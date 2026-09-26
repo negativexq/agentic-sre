@@ -32,6 +32,7 @@ from packages.rca.model import (
     GapResolvability,
     InformationGap,
     InvestigationQuery,
+    ProviderReadFailure,
     Resolution,
 )
 from packages.rca.source import ObservationSource
@@ -110,6 +111,7 @@ def _query_for(source: ObservationSource) -> InvestigationQuery:
 def _full_access(source: ObservationSource) -> dict[str, set[str]]:
     history = source.object_history()
     pods = tuple(entity for entity in history if entity.kind == "Pod")
+    pressure = source.resource_pressure(pods, datetime.min.replace(tzinfo=UTC))
     return {
         "initial_history_refs": {
             version.evidence_id for versions in history.values() for version in versions
@@ -118,7 +120,7 @@ def _full_access(source: ObservationSource) -> dict[str, set[str]]:
         "initial_log_refs": {record.evidence_id for record in source.error_logs()},
         "initial_metric_refs": {
             item.evidence_id
-            for item in source.resource_pressure(pods, datetime.min.replace(tzinfo=UTC))
+            for item in (() if isinstance(pressure, ProviderReadFailure) else pressure)
         },
         "initial_traffic_refs": {item.evidence_id for item in source.traffic_observations()},
     }

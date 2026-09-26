@@ -6,7 +6,9 @@ from datetime import UTC, datetime, timedelta
 from urllib.request import Request
 
 import pytest
+from provider_test_helpers import provider_session_factory
 from rca_builders import alert, microservice
+from sqlalchemy import select
 
 from packages.rca.engine import Case, build_case
 from packages.rca.investigation.environment import (
@@ -30,7 +32,9 @@ from packages.rca.model import (
     RuntimeEvidencePillar,
     RuntimeObservationState,
 )
+from packages.rca.provider_adapter import ProviderAdapter, ProviderReaders
 from packages.rca.source import InMemorySource
+from packages.storage.models import InvestigationReadRow
 
 T0 = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 
@@ -80,7 +84,12 @@ def _fixture(
     )
     backend = LokiInvestigationBackend(
         base=SourceInvestigationBackend(source),
-        loki=_Loki(records),
+        provider_adapter=ProviderAdapter(
+            "test-run",
+            "INVESTIGATION",
+            provider_session_factory(),
+            ProviderReaders(loki=_Loki(records)),
+        ),
         source=source,
         observation_cutoff=source.observation_cutoff(),
     )
@@ -121,7 +130,8 @@ def test_loki_runtime_path_normalizes_dependency_finding_with_provenance() -> No
     assert details["runtime_normalization_rule_id"] == "loki.dependency_error_pattern.v1"
     assert "LogQL" not in str(details)
 
-    reader = backend.loki
+    assert isinstance(backend.provider_adapter, ProviderAdapter)
+    reader = backend.provider_adapter.readers.loki
     assert isinstance(reader, _Loki)
     assert reader.calls[0][3] == 32
     assert reader.calls[0][1:] == (T0, T0 + timedelta(minutes=10), 32)
@@ -194,6 +204,47 @@ def test_loki_no_data_and_unrecognized_text_remain_neutral() -> None:
     assert normalized.observation.outcome is GapOutcomeKind.UNKNOWN
 
 
+def test_loki_provider_failure_is_error_taped_and_returns_no_data_not_empty_success() -> None:
+    case, gap, caller, backend = _fixture(())
+    factory = provider_session_factory()
+
+    class _FailingLoki(_Loki):
+        def error_logs(
+            self,
+            services: Sequence[str],
+            starts_at: datetime,
+            ends_at: datetime,
+            *,
+            limit: int | None = None,
+        ) -> list[LogRecord]:
+            del services, starts_at, ends_at, limit
+            raise TimeoutError("loki unavailable")
+
+    failing_backend = replace(
+        backend,
+        provider_adapter=ProviderAdapter(
+            "loki-error-run", "INVESTIGATION", factory, ProviderReaders(loki=_FailingLoki(()))
+        ),
+    )
+    observation = LogsTool(failing_backend).execute_query(case, gap, caller, _query())
+
+    assert observation.outcome is GapOutcomeKind.NO_DATA
+    assert observation.error is not None and "TimeoutError" in observation.error
+    assert observation.payload == {"logs": []}
+    assert observation.runtime is not None
+    assert observation.runtime.state is RuntimeObservationState.NO_DATA
+    assert normalize_observation(observation, case=case, gap=gap).findings == ()
+    with factory() as session:
+        row = session.scalar(select(InvestigationReadRow))
+    assert row is not None
+    assert (row.caller_class, row.capability, row.status) == (
+        "INVESTIGATION",
+        "loki_logs",
+        "ERROR",
+    )
+    assert row.error_type == "TimeoutError"
+
+
 def test_loki_backend_rejects_unbounded_or_oversized_windows_before_reader_call() -> None:
     case, gap, caller, backend = _fixture(())
     with pytest.raises(ValueError, match="<= 3600s"):
@@ -201,8 +252,10 @@ def test_loki_backend_rejects_unbounded_or_oversized_windows_before_reader_call(
             caller,
             InvestigationQuery(start=T0, end=T0 + timedelta(hours=2), limit=8),
         )
-    assert isinstance(backend.loki, _Loki)
-    assert backend.loki.calls == []
+    assert isinstance(backend.provider_adapter, ProviderAdapter)
+    reader = backend.provider_adapter.readers.loki
+    assert isinstance(reader, _Loki)
+    assert reader.calls == []
 
 
 def test_loki_reader_explicit_limit_is_capped_and_window_is_bounded() -> None:

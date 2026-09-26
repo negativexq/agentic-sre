@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -31,6 +32,17 @@ from packages.storage.repositories import (
     IncidentEventRepository,
     IncidentRepository,
 )
+
+# Explicit revision metadata for seeded diagnoses: test constants, not derived.
+SEEDED_REVISION: dict[str, Any] = {
+    "trigger": "MANUAL",
+    "manifest_digest": "a" * 64,
+    "tape_digest": "b" * 64,
+    "epistemic_digest": "c" * 64,
+    "engine_version": "test-engine",
+    "config_digest": "d" * 64,
+}
+
 
 T0 = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
 
@@ -73,11 +85,13 @@ def _seed_resolved(session: Session) -> None:
             alert_names=("OrderDependencyLatencyHigh",),
         ),
     )
-    DiagnosisRepository(session).save(
-        incident.incident_id,
-        diagnosis.model_dump(mode="json"),
+    DiagnosisRepository(session).save_revision(
+        incident_id=incident.incident_id,
+        document=diagnosis.model_dump(mode="json"),
         created_at=T0 + timedelta(seconds=24),
         run_id=str(uuid4()),
+        window_end=T0 + timedelta(seconds=24),
+        **SEEDED_REVISION,
     )
     IncidentEventRepository(session).append(
         IncidentEvent(

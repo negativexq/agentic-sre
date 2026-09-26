@@ -8,6 +8,7 @@ from packages.rca.causal_roles import HypothesisCausalRole
 from packages.rca.model import (
     CausalHop,
     EliminationConsequence,
+    EliminationTimeBasis,
     EntityRef,
     EvidenceTemporalRole,
     Finding,
@@ -207,3 +208,13 @@ def test_pre_contract_elimination_records_still_load() -> None:
         {"state": "RESOLVED", "eliminations": [legacy.model_dump(mode="json")]}
     )
     assert trace.eliminations[0].evidence_ids == ("old-change",)
+
+
+def test_time_basis_target_names_the_exact_instance_and_old_records_load() -> None:
+    legacy = EliminationTimeBasis.model_validate({"evidence_ids": ["event:old"]})
+    assert legacy.target == ""
+
+    basis = EliminationTimeBasis(target="shop/Pod/web-0@uid-a", evidence_ids=("event:a",))
+    restored = EliminationTimeBasis.model_validate(basis.model_dump(mode="json"))
+    assert restored == basis
+    assert restored.target == "shop/Pod/web-0@uid-a"

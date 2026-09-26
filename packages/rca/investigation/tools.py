@@ -26,6 +26,7 @@ from packages.rca.model import (
     InformationGap,
     InvestigationObservation,
     InvestigationQuery,
+    ProviderReadFailure,
     ResourcePressure,
     RuntimeEvidencePillar,
     RuntimeObservationContext,
@@ -65,6 +66,7 @@ def make_observation(
     error: str | None = None,
     record_limit: int = 32,
     runtime: RuntimeObservationContext | None = None,
+    outcome: GapOutcomeKind | None = None,
 ) -> InvestigationObservation:
     bounded = _safe_payload(dict(payload), list_limit=record_limit)
     material = json.dumps(
@@ -80,9 +82,10 @@ def make_observation(
     )
     observation_id = f"investigation:{capability}:{sha256(material.encode()).hexdigest()[:20]}"
     has_data = bool(payload) and any(bool(value) for value in payload.values())
-    outcome = GapOutcomeKind.UNKNOWN if has_data and error is None else GapOutcomeKind.NO_DATA
-    if error is not None:
-        outcome = GapOutcomeKind.UNKNOWN
+    if outcome is None:
+        outcome = GapOutcomeKind.UNKNOWN if has_data and error is None else GapOutcomeKind.NO_DATA
+        if error is not None:
+            outcome = GapOutcomeKind.UNKNOWN
     return InvestigationObservation(
         observation_id=observation_id,
         gap_id=gap.gap_id,
@@ -288,7 +291,12 @@ def _tempo_runtime_context(
     configured = False
     while current is not None and id(current) not in seen:
         seen.add(id(current))
-        if getattr(current, "tempo", None) is not None:
+        provider_adapter = getattr(current, "provider_adapter", None)
+        if getattr(current, "tempo", None) is not None or (
+            provider_adapter is not None
+            and callable(getattr(provider_adapter, "supports", None))
+            and provider_adapter.supports("runtime_traces")
+        ):
             configured = True
             break
         current = getattr(current, "base", None)
@@ -668,6 +676,26 @@ class LogsTool(_BaseTool):
             return self.execute(case, gap, target)
         requested = _default_query(query, onset=case.symptoms.onset)
         records = self.backend.query_logs(target, requested)
+        if isinstance(records, ProviderReadFailure):
+            runtime = _loki_runtime_context(
+                backend=self.backend,
+                case=case,
+                target=target,
+                requested=requested,
+                source_ids=(),
+            )
+            if runtime is not None:
+                runtime = runtime.model_copy(update={"state": RuntimeObservationState.NO_DATA})
+            return make_observation(
+                gap=gap,
+                capability=self.name,
+                target=target,
+                payload={"logs": []},
+                source_class="provider_error",
+                error=f"{records.error_type}: {records.error_message}",
+                runtime=runtime,
+                outcome=GapOutcomeKind.NO_DATA,
+            )
         refs = tuple(record.evidence_id for record in records)
         return self._observation(
             gap,
@@ -693,7 +721,18 @@ class ResourcePressureTool(_BaseTool):
     ) -> InvestigationObservation:
         onset = case.symptoms.onset or case.context.window_end
         since = onset - timedelta(hours=2) if onset else datetime.min.astimezone()
-        records = list(case.source.resource_pressure((target,), since))[:32]
+        pressure = case.source.resource_pressure((target,), since)
+        if isinstance(pressure, ProviderReadFailure):
+            return make_observation(
+                gap=gap,
+                capability=self.name,
+                target=target,
+                payload={"resource_pressure": []},
+                source_class="provider_error",
+                error=f"{pressure.error_type}: {pressure.error_message}",
+                outcome=GapOutcomeKind.NO_DATA,
+            )
+        records = list(pressure)[:32]
         return self._observation(
             gap,
             target,
@@ -709,6 +748,26 @@ class ResourcePressureTool(_BaseTool):
             return self.execute(case, gap, target)
         requested = _default_query(query, onset=case.symptoms.onset)
         records = self.backend.query_resource_pressure(target, requested)
+        if isinstance(records, ProviderReadFailure):
+            runtime = _prometheus_runtime_context(
+                backend=self.backend,
+                case=case,
+                capability=self.name,
+                target=target,
+                requested=requested,
+                source_ids=(),
+                state=RuntimeObservationState.NO_DATA,
+            )
+            return make_observation(
+                gap=gap,
+                capability=self.name,
+                target=target,
+                payload={"resource_pressure": []},
+                source_class="provider_error",
+                error=f"{records.error_type}: {records.error_message}",
+                runtime=runtime,
+                outcome=GapOutcomeKind.NO_DATA,
+            )
         record_refs = tuple(item.evidence_id for item in records)
         return self._observation(
             gap,
@@ -754,6 +813,26 @@ class TrafficTool(_BaseTool):
             return self.execute(case, gap, target)
         requested = _default_query(query, onset=case.symptoms.onset)
         records = self.backend.query_traffic(target, requested)
+        if isinstance(records, ProviderReadFailure):
+            runtime = _prometheus_runtime_context(
+                backend=self.backend,
+                case=case,
+                capability=self.name,
+                target=target,
+                requested=requested,
+                source_ids=(),
+                state=RuntimeObservationState.NO_DATA,
+            )
+            return make_observation(
+                gap=gap,
+                capability=self.name,
+                target=target,
+                payload={"traffic": []},
+                source_class="provider_error",
+                error=f"{records.error_type}: {records.error_message}",
+                runtime=runtime,
+                outcome=GapOutcomeKind.NO_DATA,
+            )
         cutoff = case.source.observation_cutoff()
         effective_query = requested
         if requested.end is not None and cutoff is not None and requested.end > cutoff:
@@ -798,6 +877,28 @@ class RuntimeTracesTool(_BaseTool):
             )
         else:
             trace_result = self.backend.query_traces(target, requested)
+            if isinstance(trace_result, ProviderReadFailure):
+                runtime = _tempo_runtime_context(
+                    backend=self.backend,
+                    case=case,
+                    target=target,
+                    requested=requested,
+                    source_ids=(),
+                    spans=(),
+                    diagnostics=None,
+                )
+                if runtime is not None:
+                    runtime = runtime.model_copy(update={"state": RuntimeObservationState.NO_DATA})
+                return make_observation(
+                    gap=gap,
+                    capability=self.name,
+                    target=target,
+                    payload={"traces": [], "trace_call_facts": []},
+                    source_class="provider_error",
+                    error=f"{trace_result.error_type}: {trace_result.error_message}",
+                    runtime=runtime,
+                    outcome=GapOutcomeKind.NO_DATA,
+                )
             if isinstance(trace_result, TempoTraceBatch):
                 spans = trace_result.spans
                 diagnostics = trace_result.diagnostics

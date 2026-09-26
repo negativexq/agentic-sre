@@ -31,15 +31,15 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.trace import SpanKind, Status, StatusCode
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from packages.rca.engine import build_case
 from packages.rca.investigation.actions import validate_action
 from packages.rca.investigation.normalizers import normalize_observation
-from packages.rca.investigation.prometheus import PrometheusConfig, PrometheusMetricsReader
 from packages.rca.investigation.state import InvestigationConfig
-from packages.rca.investigation.tempo import TempoConfig, TempoTraceReader
 from packages.rca.investigation.tools import default_tools
-from packages.rca.live import KubernetesClusterReader, LiveSource, LokiLogReader
+from packages.rca.live import KubernetesClusterReader, LiveSource
 from packages.rca.model import (
     Alert,
     AuthorizedQuery,
@@ -50,6 +50,8 @@ from packages.rca.model import (
     InvestigationAction,
     InvestigationQuery,
 )
+from packages.rca.provider_adapter import ProviderAdapter, ProviderReaders
+from packages.storage.models import Base
 
 PORT_FORWARDS = (
     ("observability", "svc/prometheus", 19090, 9090),
@@ -179,6 +181,9 @@ def _live_source(
     alert_service: str,
     scoped_objects: list[dict[str, Any]] | None = None,
 ) -> LiveSource:
+    tape_engine = create_engine("sqlite://")
+    Base.metadata.create_all(tape_engine)
+    tape_session_factory = sessionmaker(tape_engine)
     return LiveSource(
         incident="m18a-live-validation",
         alert_items=[
@@ -193,11 +198,16 @@ def _live_source(
         current_objects=objects if scoped_objects is None else scoped_objects,
         event_bodies=events,
         observed_at=observed_at,
-        prometheus_reader=PrometheusMetricsReader(
-            PrometheusConfig(f"http://127.0.0.1:{prom_port}")
+        provider_adapter=ProviderAdapter(
+            "m18a-live-validation",
+            "ENGINE",
+            tape_session_factory,
+            ProviderReaders.from_urls(
+                prometheus_url=f"http://127.0.0.1:{prom_port}",
+                loki_url=f"http://127.0.0.1:{loki_port}",
+                tempo_url=f"http://127.0.0.1:{tempo_port}",
+            ),
         ),
-        loki_reader=LokiLogReader(f"http://127.0.0.1:{loki_port}"),
-        tempo_reader=TempoTraceReader(TempoConfig(f"http://127.0.0.1:{tempo_port}")),
     )
 
 

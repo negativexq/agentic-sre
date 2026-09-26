@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request
 
 import pytest
+from provider_test_helpers import provider_session_factory
 
 from packages.rca.engine import build_case
 from packages.rca.investigation.environment import (
@@ -49,10 +50,22 @@ from packages.rca.model import (
     InvestigationQuery,
     TraceSpanStatus,
 )
+from packages.rca.provider_adapter import ProviderAdapter, ProviderCallerClass, ProviderReaders
 from packages.rca.source import InMemorySource
 
 T0 = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 TRACE_ID = "a" * 32
+
+
+def _provider_adapter(
+    tempo: object, caller_class: ProviderCallerClass = "INVESTIGATION"
+) -> ProviderAdapter:
+    return ProviderAdapter(
+        "test-run",
+        caller_class,
+        provider_session_factory(),
+        ProviderReaders(tempo=tempo),  # type: ignore[arg-type]
+    )
 
 
 def _entity(kind: str = "Deployment", name: str = "payment", namespace: str = "shop") -> EntityRef:
@@ -464,7 +477,7 @@ def test_tempo_backend_reuses_a2_one_hop_selection_and_live_support_is_optional(
     reader = TempoTraceReader(TempoConfig("https://tempo.example.internal"), opener)
     tempo_backend = TempoInvestigationBackend(
         base=SourceInvestigationBackend(InMemorySource(name="base")),
-        tempo=reader,
+        provider_adapter=_provider_adapter(reader),
         observation_cutoff=T0 + timedelta(minutes=1),
     )
     selected = tempo_backend.query_traces(_entity(), _query())
@@ -490,7 +503,7 @@ def test_tempo_backend_reuses_a2_one_hop_selection_and_live_support_is_optional(
         journal=[],
         current_objects=[],
         event_bodies=[],
-        tempo_reader=reader,
+        provider_adapter=_provider_adapter(reader, "ENGINE"),
     )
     assert configured.supports("runtime_traces")
     assert isinstance(configured.investigation_backend(), TempoInvestigationBackend)
@@ -559,7 +572,7 @@ def test_provider_acquisition_uses_real_graph_materialization_path() -> None:
     tempo = TempoTraceReader(TempoConfig("https://tempo.example.internal"), opener)
     backend = TempoInvestigationBackend(
         base=SourceInvestigationBackend(source),
-        tempo=tempo,
+        provider_adapter=_provider_adapter(tempo),
         observation_cutoff=T0 + timedelta(minutes=1),
     )
     state = build_investigation_state(bounded, initial_case=base_case)

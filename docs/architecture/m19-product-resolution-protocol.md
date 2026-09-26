@@ -387,8 +387,11 @@ resulting diagnosis must not be `RESOLVED`.
 This deterministic offline replay ablation is tested on replay fixtures by
 M19-7.P and is not part of live DEV scenario acceptance. It uses the complete
 recorded R2 evidence and disables only the target rule through an
-evaluation-only configuration, included in `config_digest` and unavailable in
-production. The ablated diagnosis must not be `RESOLVED`.
+evaluation-only override. The T6 rule-ablation override does not enter the
+production config; it is included in the ablation's own deterministic
+eval/replay config digest, and the product artifact `code.config_digest` does
+not change. No production `EngineConfig`, API, environment or control-plane
+surface can disable a rule. The ablated diagnosis must not be `RESOLVED`.
 
 T2 bir novelty gate'idir, causal necessity gate'i değildir; causal necessity T5/T6 ile test edilir.
 

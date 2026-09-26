@@ -43,14 +43,19 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+          # Measured start-to-listen ~3.8 s under two-cluster CPU contention
+          # (M19-6.12b) + margin: an early probe would log an Unhealthy Warning
+          # about the collector's own Pod — evidence in the watched namespace.
           readinessProbe:
             httpGet:
               path: /ready
               port: 8000
+            initialDelaySeconds: 8
           livenessProbe:
             httpGet:
               path: /health
               port: 8000
+            initialDelaySeconds: 8
 ---
 apiVersion: v1
 kind: Service

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, Protocol
 
 from packages.rca.causal_roles import HypothesisCausalRoles, derive_hypothesis_causal_roles
@@ -179,10 +179,19 @@ def build_case(
     source: ObservationSource,
     config: EngineConfig | None = None,
     extra_findings: Sequence[Finding] = (),
+    reference_onset: datetime | None = None,
 ) -> Case:
-    """Run every deterministic stage and return the ranked case."""
+    """Run every deterministic stage and return the ranked case.
+
+    ``reference_onset`` is only for an incident-free probe (M19-6.8): with no
+    alerts there is no onset, so it stands in for one in the existing
+    onset-relative semantics. It is refused when alerts exist, and the probe
+    never persists it.
+    """
     config = config or EngineConfig()
     alerts = list(source.alerts())
+    if reference_onset is not None and alerts:
+        raise ValueError("reference_onset is only for an incident-free probe without alerts")
     history = source.object_history()
     events = list(source.events())
     latest: dict[EntityRef, ObjectVersion] = {
@@ -194,6 +203,8 @@ def build_case(
     runtime_graph = derive_runtime_graph_from_index(trace_index)
     runtime_evidence = derive_runtime_evidence(trace_index)
     symptoms = extract_symptoms(alerts)
+    if reference_onset is not None:
+        symptoms = symptoms.model_copy(update={"onset": reference_onset})
     runtime_propagation = derive_runtime_propagation(
         trace_index,
         history=history,

@@ -23,11 +23,13 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from apps.control_plane.auth import require_api_token
+from apps.control_plane.baseline import evaluate_baseline
 from apps.control_plane.console import create_console_router
 from apps.control_plane.console.dto import SystemConnector, SystemStatus
 from apps.control_plane.console.email_delivery import EmailDelivery, email_delivery_from_env
 from apps.control_plane.diagnosis import DiagnosisService, service_from_environment
 from apps.control_plane.schemas import (
+    BaselineProbeRequest,
     DiagnosisRevisionDetail,
     DiagnosisRevisionSummary,
     ErrorDetail,
@@ -437,6 +439,23 @@ def create_app(
         return DiagnosisRevisionDetail(
             **summary.model_dump(), diagnosis=dict(current.document), diff=revision_diff
         )
+
+    @app.post("/api/v1/baseline-probe", dependencies=[Depends(require_api_token)])
+    def baseline_probe(request: BaselineProbeRequest) -> dict[str, Any]:
+        """Ephemeral incident-free evaluation of the persisted baseline; writes nothing."""
+        if request.namespace not in diagnoser.namespaces:
+            raise HTTPException(status_code=422, detail="namespace is not watched")
+        try:
+            evaluation = evaluate_baseline(
+                session_factory,
+                namespaces=(request.namespace,),
+                evidence_namespaces=diagnoser.evidence_namespaces,
+                collector_started_at=request.collector_started_at,
+                baseline_reference_at=request.baseline_reference_at,
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        return evaluation.document()
 
     @app.post("/api/v1/cluster/snapshot", dependencies=[Depends(require_api_token)])
     def snapshot_cluster() -> dict[str, int]:

@@ -37,6 +37,7 @@ from packages.evals.product.actions import (
     SetReadiness,
     SetResources,
 )
+from packages.evals.product.baseline import DirtyBaseline
 from packages.evals.product.spec import ProductScenario
 
 
@@ -237,7 +238,10 @@ class ProductRunner:
         # The collector starts only once the workload is already running.
         backend.start_fresh_db_and_control_plane()
         backend.warmup(self.config.warmup)
-        backend.clean_baseline(scenario)
+        try:
+            backend.clean_baseline(scenario)
+        except DirtyBaseline as error:
+            return RunResult(scenario.scenario_id, RunStatus.ERROR, str(error))
         try:
             self._timeline(scenario)
         except ActionVerificationError as error:

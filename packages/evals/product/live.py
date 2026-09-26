@@ -33,6 +33,7 @@ from packages.evals.product.actions import (
     LifecycleRecord,
     PodIdentity,
 )
+from packages.evals.product.baseline import check_baseline
 from packages.evals.product.runner import RunResult
 from packages.evals.product.spec import ProductScenario
 from packages.storage.models import IncidentRow, LifecycleObservationRow, ObjectVersionRow
@@ -120,6 +121,22 @@ def _post_json(url: str, payload: Mapping[str, Any]) -> None:
     with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310
         if response.status != 200:
             raise RuntimeError(f"{url} answered {response.status}")
+
+
+def _request_json(
+    url: str, payload: Mapping[str, Any], headers: Mapping[str, str]
+) -> Mapping[str, Any]:
+    request = urllib.request.Request(  # noqa: S310 - fixed harness endpoints
+        url,
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json", **headers},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=120) as response:  # noqa: S310
+        document = json.loads(response.read().decode())
+    if not isinstance(document, dict):
+        raise RuntimeError(f"{url} did not answer a JSON object")
+    return document
 
 
 @dataclass
@@ -280,10 +297,16 @@ class LiveBackend:
     cluster: str = CLUSTER
     namespace: str = NAMESPACE
     port_forwards: Mapping[str, int] | None = None
+    control_plane_url: str | None = None
+    api_token: str | None = None
+    request_json: Callable[[str, Mapping[str, Any], Mapping[str, str]], Mapping[str, Any]] = (
+        lambda url, payload, headers: _request_json(url, payload, headers)
+    )
 
     def __post_init__(self) -> None:
         self._env = product_environment(os.environ)
         self._forwards: list[Any] = []
+        self._collector_started_at: datetime | None = None
 
     @property
     def _context(self) -> str:
@@ -348,6 +371,8 @@ class LiveBackend:
     def start_fresh_db_and_control_plane(self) -> None:
         # The cluster's Postgres has no persistent volume: storage is fresh
         # because the cluster is. The collector starts after the workload.
+        # No evidence exists before the collector starts: the probe window opens here.
+        self._collector_started_at = self.control_port.now()
         path = self.root / "infra" / "kubernetes" / "control-plane.yaml"
         rendered = product_control_plane_manifest(list(yaml.safe_load_all(path.read_text())))
         self._exec(
@@ -368,7 +393,21 @@ class LiveBackend:
         self.sleep(duration.total_seconds())
 
     def clean_baseline(self, scenario: ProductScenario) -> None:
-        raise StageNotImplemented("clean-baseline check arrives with M19-6.8")
+        if self._collector_started_at is None:
+            raise RuntimeError("the control plane has not been started")
+        if self.control_plane_url is None:
+            raise RuntimeError("no control-plane URL for the baseline probe")
+        reference_at = self.control_port.now()
+        document = self.request_json(
+            f"{self.control_plane_url}/api/v1/baseline-probe",
+            {
+                "namespace": self.namespace,
+                "baseline_reference_at": reference_at.isoformat(),
+                "collector_started_at": self._collector_started_at.isoformat(),
+            },
+            {"Authorization": f"Bearer {self.api_token}"} if self.api_token else {},
+        )
+        check_baseline(document)
 
     def start_timeline(self, scenario: ProductScenario) -> None:
         return None

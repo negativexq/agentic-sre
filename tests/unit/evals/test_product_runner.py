@@ -567,8 +567,15 @@ def test_live_backend_starts_the_control_plane_only_after_the_workload(tmp_path:
         spawn=spawn,
         sleep=slept.append,
         port_forwards={"order-service": 18100},
+        control_plane_url="http://cp",
+        request_json=lambda url, payload, headers: {
+            "initiating_finding_count": 0,
+            "initiating_finding_ids": [],
+            "root_eligible_manifestation_only_count": 0,
+            "root_eligible_manifestation_only_hypothesis_ids": [],
+        },
     )
-    with pytest.raises(StageNotImplemented, match="M19-6.8"):
+    with pytest.raises(StageNotImplemented, match="M19-6.10"):
         ProductRunner(backend).run(_scenario())
     argvs = [" ".join(argv) for argv, _ in commands.calls]
     joined = "\n".join(argvs)

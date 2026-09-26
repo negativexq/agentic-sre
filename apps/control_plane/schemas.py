@@ -119,3 +119,13 @@ class DiagnosisRevisionDetail(DiagnosisRevisionSummary):
 
     diagnosis: dict[str, Any]
     diff: RevisionDiffResponse | None
+
+
+class BaselineProbeRequest(BaseModel):
+    """Input of the incident-free clean-baseline probe (M19-6.8)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    namespace: str = Field(min_length=1)
+    baseline_reference_at: datetime
+    collector_started_at: datetime

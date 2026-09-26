@@ -16,6 +16,7 @@ from packages.evals.product.live import LiveBackend, LiveEvidenceReader, StageNo
 from packages.evals.product.runner import ProductRunner, RecordingBackend, RunStatus, Stage
 from packages.evals.product.spec import Expectation, Phase, ProductScenario
 from packages.storage.database import create_session_factory
+from packages.storage.models import Base
 
 CLEAN = {
     "initiating_finding_count": 0,
@@ -96,10 +97,12 @@ def _backend(document: Mapping[str, Any], requests: list[tuple[str, Any, Any]]) 
     def spawn(argv: Sequence[str], env: Mapping[str, str]) -> _Process:
         return _Process()
 
+    evidence_engine = create_engine("sqlite://")
+    Base.metadata.create_all(evidence_engine)
     return LiveBackend(
         root=ROOT,
         control_port=_control(Commands(), []),
-        evidence_port=LiveEvidenceReader(create_session_factory(create_engine("sqlite://"))),
+        evidence_port=LiveEvidenceReader(create_session_factory(evidence_engine)),
         run=Commands(),
         spawn=spawn,
         sleep=lambda _: None,
@@ -112,7 +115,7 @@ def _backend(document: Mapping[str, Any], requests: list[tuple[str, Any, Any]]) 
 def test_the_live_probe_window_starts_before_the_control_plane_and_ends_at_the_check() -> None:
     requests: list[tuple[str, Any, Any]] = []
     backend = _backend(CLEAN, requests)
-    with pytest.raises(StageNotImplemented, match="M19-6.10"):
+    with pytest.raises(StageNotImplemented, match="M19-6.12"):
         ProductRunner(backend).run(
             ProductScenario(scenario_id="s", phases=(), expectation=Expectation())
         )

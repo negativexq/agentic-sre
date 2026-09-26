@@ -412,6 +412,11 @@ class LiveBackend:
     def start_timeline(self, scenario: ProductScenario) -> None:
         return None
 
+    def set_traffic(self, enabled: bool) -> None:
+        # No product traffic driver exists before T0, so off is already true.
+        if enabled:
+            raise StageNotImplemented("the live traffic driver arrives with M19-6.12")
+
     def control(self) -> LiveClusterControl:
         return self.control_port
 

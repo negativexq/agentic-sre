@@ -14,6 +14,7 @@ product's diagnosis. Other failures propagate after teardown.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -38,7 +39,9 @@ from packages.evals.product.actions import (
     SetResources,
 )
 from packages.evals.product.baseline import DirtyBaseline
-from packages.evals.product.spec import ProductScenario
+from packages.evals.product.spec import Phase, ProductScenario
+
+logger = logging.getLogger(__name__)
 
 
 class Stage(StrEnum):
@@ -56,6 +59,16 @@ class Stage(StrEnum):
     AWAIT_R2 = "AWAIT_R2"
     ARTIFACT = "ARTIFACT"
     CLUSTER_DOWN = "CLUSTER_DOWN"
+
+
+class PreHistoryIncident(RuntimeError):
+    """An incident opened before T0: the world was not quiet before the staged root."""
+
+    def __init__(self, incident_ids: Sequence[str], t0: datetime) -> None:
+        self.incident_ids = tuple(incident_ids)
+        super().__init__(
+            f"incident(s) opened before T0 {t0.isoformat()}: {list(self.incident_ids)}"
+        )
 
 
 class RunStatus(StrEnum):
@@ -97,6 +110,8 @@ class ProductBackend(Protocol):
     def clean_baseline(self, scenario: ProductScenario) -> None: ...
 
     def start_timeline(self, scenario: ProductScenario) -> None: ...
+
+    def set_traffic(self, enabled: bool) -> None: ...
 
     def control(self) -> ClusterControl: ...
 
@@ -210,6 +225,7 @@ def await_evidence(
 class ProductRunner:
     backend: ProductBackend
     config: RunnerConfig = field(default_factory=RunnerConfig)
+    _traffic_on: bool = field(default=False, init=False, repr=False)
 
     def run(self, scenario: ProductScenario) -> RunResult:
         """One scenario on one fresh cluster, torn down whatever happens after it exists."""
@@ -221,12 +237,29 @@ class ProductRunner:
             failure = error
             raise
         finally:
+            self._traffic_off_best_effort(failure)
             try:
                 self.backend.cluster_down()
             except Exception as cleanup:
                 if failure is None:
                     raise
                 failure.add_note(f"cluster_down also failed: {cleanup!r}")
+
+    def _set_traffic(self, enabled: bool) -> None:
+        self.backend.set_traffic(enabled)
+        self._traffic_on = enabled
+
+    def _traffic_off_best_effort(self, failure: BaseException | None) -> None:
+        if not self._traffic_on:
+            return
+        try:
+            self._set_traffic(False)
+        except Exception as error:
+            self._traffic_on = False
+            if failure is not None:
+                failure.add_note(f"traffic off also failed: {error!r}")
+            else:
+                logger.warning("turning traffic off failed", exc_info=True)
 
     def run_all(self, scenarios: Iterable[ProductScenario]) -> tuple[RunResult, ...]:
         return tuple(self.run(scenario) for scenario in scenarios)
@@ -244,34 +277,52 @@ class ProductRunner:
             return RunResult(scenario.scenario_id, RunStatus.ERROR, str(error))
         try:
             self._timeline(scenario)
-        except ActionVerificationError as error:
+        except (ActionVerificationError, PreHistoryIncident) as error:
             return RunResult(scenario.scenario_id, RunStatus.ERROR, str(error))
         backend.await_r1(scenario)
         backend.run_r_early(scenario)
         backend.await_r2(scenario)
+        self._set_traffic(False)
         result = RunResult(scenario.scenario_id, RunStatus.RUN_OK)
         backend.write_artifact(scenario, result)
         return result
 
     def _timeline(self, scenario: ProductScenario) -> None:
-        """Phases at their offsets from T0, earliest first; actions in phase order."""
+        """Pre-history with traffic off, the T0 guard, then T0 onwards with traffic on.
+
+        T0 is the start of the timeline minus the earliest negative offset, so
+        the first pre-history phase runs now; without pre-history T0 is now.
+        """
         backend = self.backend
         backend.start_timeline(scenario)
-        if not scenario.phases:
-            return
         control, evidence = backend.control(), backend.evidence()
-        earliest = scenario.phases[0].offset
-        # The first phase runs now; T0 is therefore now - earliest offset.
-        t0 = control.now() - earliest
-        for phase in scenario.phases:
-            due = t0 + phase.offset
-            remaining = due - control.now()
-            if remaining > timedelta(0):
-                control.wait(remaining)
-            for action in phase.actions:
-                receipt = action.apply(control)
-                await_evidence(action, receipt, evidence, control, self.config)
-                action.verify(evidence, receipt)
+        self._set_traffic(False)
+        earliest = min((phase.offset for phase in scenario.phases), default=timedelta(0))
+        t0 = control.now() - min(earliest, timedelta(0))
+        for phase in (item for item in scenario.phases if item.offset < timedelta(0)):
+            self._phase(phase, t0, control, evidence)
+        self._wait_until(t0, control)
+        opened = sorted(item.incident_id for item in evidence.incidents() if item.created_at < t0)
+        if opened:
+            raise PreHistoryIncident(opened, t0)
+        self._set_traffic(True)
+        for phase in (item for item in scenario.phases if item.offset >= timedelta(0)):
+            self._phase(phase, t0, control, evidence)
+
+    @staticmethod
+    def _wait_until(when: datetime, control: ClusterControl) -> None:
+        remaining = when - control.now()
+        if remaining > timedelta(0):
+            control.wait(remaining)
+
+    def _phase(
+        self, phase: Phase, t0: datetime, control: ClusterControl, evidence: EvidenceReader
+    ) -> None:
+        self._wait_until(t0 + phase.offset, control)
+        for action in phase.actions:
+            receipt = action.apply(control)
+            await_evidence(action, receipt, evidence, control, self.config)
+            action.verify(evidence, receipt)
 
 
 # --- recording (dry-run) backend ------------------------------------------------------
@@ -373,6 +424,9 @@ class RecordingBackend:
     def start_timeline(self, scenario: ProductScenario) -> None:
         self._stage(Stage.TIMELINE, tuple(phase.offset for phase in scenario.phases))
 
+    def set_traffic(self, enabled: bool) -> None:
+        self.events.append(("set_traffic", enabled))
+
     def control(self) -> ClusterControl:
         return self._control
 
@@ -398,6 +452,7 @@ class RecordingBackend:
 __all__ = [
     "DRY_RUN_EPOCH",
     "ProductBackend",
+    "PreHistoryIncident",
     "ProductRunner",
     "RecordingBackend",
     "RecordingControl",

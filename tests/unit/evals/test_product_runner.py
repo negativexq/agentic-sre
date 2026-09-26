@@ -552,6 +552,8 @@ def test_deleting_refuses_a_pod_whose_uid_changed() -> None:
 
 def test_live_backend_starts_the_control_plane_only_after_the_workload(tmp_path: Path) -> None:
     commands = Commands()
+    evidence_engine = create_engine("sqlite://")
+    Base.metadata.create_all(evidence_engine)
     spawned: list[list[str]] = []
     slept: list[float] = []
 
@@ -562,7 +564,7 @@ def test_live_backend_starts_the_control_plane_only_after_the_workload(tmp_path:
     backend = LiveBackend(
         root=ROOT,
         control_port=_control(Commands(), []),
-        evidence_port=LiveEvidenceReader(create_session_factory(create_engine("sqlite://"))),
+        evidence_port=LiveEvidenceReader(create_session_factory(evidence_engine)),
         run=commands,
         spawn=spawn,
         sleep=slept.append,
@@ -575,7 +577,7 @@ def test_live_backend_starts_the_control_plane_only_after_the_workload(tmp_path:
             "root_eligible_manifestation_only_hypothesis_ids": [],
         },
     )
-    with pytest.raises(StageNotImplemented, match="M19-6.10"):
+    with pytest.raises(StageNotImplemented, match="M19-6.12"):
         ProductRunner(backend).run(_scenario())
     argvs = [" ".join(argv) for argv, _ in commands.calls]
     joined = "\n".join(argvs)

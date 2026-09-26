@@ -182,6 +182,7 @@ def test_observed_facts_are_recorded_and_derived_claims_are_not_evaluated() -> N
         "missing_to_contradiction": None,
         "fabricated": None,
         "replay_divergence": None,
+        "unresolved_tape_evidence_id": None,
         "synthetic_cluster_evidence": None,
     }
     assert document["attempts"] == [{"n": 1, "result": "PASS", "reason": ""}]
@@ -310,6 +311,14 @@ def _mutated(change: Any) -> str:
     "change",
     [
         pytest.param(lambda d: d.update(extra=1), id="unknown-top-level"),
+        pytest.param(
+            lambda d: d["safety"].pop("unresolved_tape_evidence_id") and None,
+            id="unresolved-tape-counter-required",
+        ),
+        pytest.param(
+            lambda d: d["safety"].update(unresolved_tape_evidence_id=-1),
+            id="unresolved-tape-counter-non-negative",
+        ),
         pytest.param(lambda d: d.pop("transition"), id="transition-required"),
         pytest.param(lambda d: d.pop("safety"), id="safety-required"),
         pytest.param(lambda d: d.pop("proof"), id="proof-required"),
@@ -633,3 +642,15 @@ def test_live_artifact_facts_that_cannot_be_established_are_errors(
     with pytest.raises(ArtifactError, match=message):
         backend.write_artifact(_scenario(), _result())
     assert not any(tmp_path.rglob("*.json"))
+
+
+def test_the_unresolved_tape_counter_is_null_until_evaluated() -> None:
+    document = _build().document()
+    assert "unresolved_tape_evidence_id" in document["safety"]
+    assert document["safety"]["unresolved_tape_evidence_id"] is None
+    assert len(document["safety"]) == 8  # every counter of the global safety contract
+    for value in (0, 3):
+        evaluated = ProductRunArtifact.model_validate_json(
+            _mutated(lambda d, value=value: d["safety"].update(unresolved_tape_evidence_id=value))
+        )
+        assert evaluated.safety.unresolved_tape_evidence_id == value

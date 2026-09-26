@@ -143,6 +143,7 @@ class Safety(_Model):
     missing_to_contradiction: NonNegative | None
     fabricated: NonNegative | None
     replay_divergence: NonNegative | None
+    unresolved_tape_evidence_id: NonNegative | None
     synthetic_cluster_evidence: NonNegative | None
 
 

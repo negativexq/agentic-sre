@@ -14,6 +14,12 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from apps.control_plane.scheduler import (
+    ReevaluationConfig,
+    SchedulerPass,
+    reevaluation_from_environment,
+    run_scheduler_pass,
+)
 from packages.contracts import Alert as ContractAlert
 from packages.contracts import Incident, IncidentEvent, IncidentEventType
 from packages.rca.engine import EngineConfig, Investigator, diagnose
@@ -335,6 +341,8 @@ class DiagnosisService:
     status_snapshot_interval: timedelta = timedelta(seconds=30)
     # Evidence retention; None (the default) keeps everything.
     retention_policy: RetentionPolicy | None = None
+    # Deadline reevaluation (SRE_REEVALUATE); None (the default) never schedules.
+    reevaluation: ReevaluationConfig | None = None
     # Cumulative lifecycle/index write failures and tombstone-based repairs.
     lifecycle_write_failures: int = field(default=0, init=False)
     lifecycle_repairs: int = field(default=0, init=False)
@@ -490,6 +498,18 @@ class DiagnosisService:
         except Exception:
             logger.warning("retention pass failed", exc_info=True)
 
+    def reevaluate(self) -> SchedulerPass | None:
+        """One deadline-reevaluation pass when enabled; failures are logged."""
+        if self.reevaluation is None:
+            return None
+        try:
+            return run_scheduler_pass(
+                self.session_factory, self.reevaluation, now=self.clock(), run=self.run
+            )
+        except Exception:
+            logger.warning("deadline reevaluation pass failed", exc_info=True)
+            return None
+
     def watch(self, stop: threading.Event, interval_seconds: float) -> None:
         """Snapshot the cluster until ``stop`` is set; errors are logged and retried."""
         while not stop.is_set():
@@ -500,6 +520,7 @@ class DiagnosisService:
             except Exception:
                 logger.warning("cluster snapshot failed", exc_info=True)
             self.apply_retention()
+            self.reevaluate()
             stop.wait(interval_seconds)
 
     def _emit(
@@ -836,6 +857,7 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
             seconds=float(os.getenv("SRE_STATUS_SNAPSHOT_INTERVAL_SECONDS", "30"))
         ),
         retention_policy=policy_from_environment(),
+        reevaluation=reevaluation_from_environment(),
     )
 
 

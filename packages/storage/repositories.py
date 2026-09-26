@@ -42,6 +42,7 @@ from packages.rca.model import (
     PreconditionStatus,
     RequirementAuditReason,
     RequirementEvaluation,
+    Symptoms,
     object_key,
     snapshot_evidence_id,
 )
@@ -71,6 +72,10 @@ from packages.storage.models import (
 
 if TYPE_CHECKING:
     from packages.incident.state_machine import TransitionResult
+
+
+class RequirementOnsetUnavailable(RuntimeError):
+    """A requirement's opening revision does not carry a readable onset."""
 
 
 class IncidentNotFoundError(LookupError):
@@ -1561,6 +1566,40 @@ class DiagnosisRepository:
             return revision
         raise AssertionError("unreachable")
 
+    def revision_count(self, incident_id: object) -> int:
+        """How many revisions the incident has, legacy ones included."""
+        return int(
+            self._session.scalar(
+                select(func.count())
+                .select_from(DiagnosisRow)
+                .where(DiagnosisRow.incident_id == incident_id)
+            )
+            or 0
+        )
+
+    def deadline_consumed(
+        self, *, incident_id: object, after_diagnosis_id: int, not_before: datetime
+    ) -> bool:
+        """Whether a later EVIDENCE_DEADLINE revision already evaluated this deadline.
+
+        Only a scheduler revision newer than the requirement's opening revision
+        whose window reaches ``not_before`` consumes it; MANUAL and INITIAL
+        revisions never do.
+        """
+        return (
+            self._session.scalars(
+                select(DiagnosisRow.diagnosis_id)
+                .where(
+                    DiagnosisRow.incident_id == incident_id,
+                    DiagnosisRow.trigger == "EVIDENCE_DEADLINE",
+                    DiagnosisRow.diagnosis_id > after_diagnosis_id,
+                    DiagnosisRow.window_end >= not_before,
+                )
+                .limit(1)
+            ).first()
+            is not None
+        )
+
     def latest(self, incident_id: object) -> dict[str, Any] | None:
         row = self._session.scalars(
             select(DiagnosisRow)
@@ -1763,6 +1802,53 @@ class EvidenceRequirementRepository:
             satisfied=tuple(satisfied),
             unchanged=tuple(unchanged),
         )
+
+    def open_requirements(self) -> list[EvidenceRequirementRow]:
+        """Every OPEN requirement, in incident then requirement order."""
+        return list(
+            self._session.scalars(
+                select(EvidenceRequirementRow)
+                .where(EvidenceRequirementRow.status == "OPEN")
+                .order_by(EvidenceRequirementRow.incident_id, EvidenceRequirementRow.requirement_id)
+            )
+        )
+
+    def opening_onset(self, requirement: EvidenceRequirementRow) -> datetime:
+        """``symptoms.onset`` persisted in the revision that opened the requirement.
+
+        The horizon origin of the requirement. A missing or unreadable onset is
+        persisted-state corruption and raises; nothing is substituted.
+        """
+        opening = self._session.get(DiagnosisRow, requirement.diagnosis_id)
+        if opening is None or opening.incident_id != requirement.incident_id:
+            raise RequirementOnsetUnavailable(
+                f"requirement {requirement.requirement_id}: opening revision "
+                f"{requirement.diagnosis_id} is missing for its incident"
+            )
+        try:
+            onset = Symptoms.model_validate(opening.document["symptoms"]).onset
+        except (KeyError, TypeError, ValueError) as error:
+            raise RequirementOnsetUnavailable(
+                f"requirement {requirement.requirement_id}: opening revision "
+                f"{requirement.diagnosis_id} has no readable symptoms"
+            ) from error
+        if onset is None or onset.tzinfo is None:
+            raise RequirementOnsetUnavailable(
+                f"requirement {requirement.requirement_id}: opening revision "
+                f"{requirement.diagnosis_id} has no onset"
+            )
+        return onset
+
+    def expire(self, requirement_ids: Sequence[int]) -> None:
+        """Mark OPEN requirements EXPIRED; the scheduler's only requirement write."""
+        for row in self._session.scalars(
+            select(EvidenceRequirementRow).where(
+                EvidenceRequirementRow.requirement_id.in_(list(requirement_ids)),
+                EvidenceRequirementRow.status == "OPEN",
+            )
+        ):
+            row.status = "EXPIRED"
+        self._session.flush()
 
     def for_incident(self, incident_id: UUID) -> list[EvidenceRequirementRow]:
         return list(

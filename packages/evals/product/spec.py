@@ -48,6 +48,14 @@ class Phase:
 MANIFESTATION_ONLY = "MANIFESTATION_ONLY"
 
 
+class RevisionCheckpoint(StrEnum):
+    """The schedule's revisions, in order."""
+
+    R1 = "R1"
+    R_EARLY = "R_EARLY"
+    R2 = "R2"
+
+
 @dataclass(frozen=True, slots=True)
 class TimelineRef:
     """One staged action: the phase at ``offset`` and the action's index within it."""
@@ -106,6 +114,8 @@ class Expectation:
     target_rule: tuple[str, str] | None = None  # (rule_id, rule_version)
     target_consequence: str | None = None  # ROOT_INELIGIBILITY | CONTRADICTION
     root_actor: str | None = None  # namespace/Kind/name
+    # Checkpoints where RESOLVED is allowed; None = no policy (false_resolved unmeasured).
+    resolved_allowed: frozenset[RevisionCheckpoint] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.proofs, tuple) or not all(
@@ -124,6 +134,11 @@ class Expectation:
             )
         if self.root_actor is not None and self.root_actor.count("/") != 2:
             raise ValueError("Expectation.root_actor is namespace/Kind/name")
+        if self.resolved_allowed is not None and (
+            not isinstance(self.resolved_allowed, frozenset)
+            or not all(isinstance(item, RevisionCheckpoint) for item in self.resolved_allowed)
+        ):
+            raise TypeError("Expectation.resolved_allowed is a frozenset of RevisionCheckpoint")
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,6 +174,7 @@ __all__ = [
     "Phase",
     "ProductScenario",
     "ProofId",
+    "RevisionCheckpoint",
     "TargetHypothesisRef",
     "TimelineRef",
 ]

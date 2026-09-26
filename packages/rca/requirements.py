@@ -58,12 +58,35 @@ def requirement_key(incident_id: UUID, evaluation: RequirementEvaluation) -> str
     return sha256(canonical.encode("utf-8")).hexdigest()
 
 
+MANIFESTATION_ONLY = "MANIFESTATION_ONLY"
+
+
+def _mechanism_class(hypothesis: Hypothesis) -> tuple[str, ...]:
+    kinds = sorted({finding.kind.value for finding in hypothesis.initiating_findings})
+    return tuple(kinds) or (MANIFESTATION_ONLY,)
+
+
+def _instance_uids(hypothesis: Hypothesis) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            {
+                finding.entity_instance.uid
+                for finding in hypothesis.findings
+                if finding.entity_instance is not None and finding.entity_instance.uid
+            }
+        )
+    )
+
+
 def hypothesis_inventory(hypotheses: Sequence[Hypothesis]) -> tuple[HypothesisInventoryEntry, ...]:
-    """Every hypothesis of a revision, repeated keys kept, ordered by ID."""
+    """Every hypothesis of a revision, repeated keys kept, ordered by ID, with its identity."""
     return tuple(
         HypothesisInventoryEntry(
             hypothesis_id=hypothesis.hypothesis_id,
             hypothesis_key=hypothesis.hypothesis_key or None,
+            causal_actor=hypothesis.causal_actor,
+            mechanism_class=_mechanism_class(hypothesis),
+            instance_uids=_instance_uids(hypothesis),
         )
         for hypothesis in sorted(hypotheses, key=lambda item: item.hypothesis_id)
     )

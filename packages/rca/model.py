@@ -647,12 +647,22 @@ class RequirementEvaluation(BaseModel):
 
 
 class HypothesisInventoryEntry(BaseModel):
-    """One hypothesis of a revision; the inventory keeps repeated keys."""
+    """One hypothesis of a revision; the inventory keeps repeated keys.
+
+    ``causal_actor``, ``mechanism_class`` and ``instance_uids`` record every
+    hypothesis's identity for audit and proofs (M19-7.P1); no decision reads
+    them. ``None`` means a legacy document written before they were persisted.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     hypothesis_id: str = Field(min_length=1)
     hypothesis_key: str | None = Field(default=None, min_length=1)
+    causal_actor: EntityRef | None = None
+    # MANIFESTATION_ONLY, or the sorted exact initiating finding kinds.
+    mechanism_class: tuple[str, ...] | None = None
+    # Sorted unique UIDs of the findings that name an exact instance.
+    instance_uids: tuple[str, ...] | None = None
 
 
 class EliminationPrecondition(BaseModel):

@@ -21,9 +21,9 @@ from dataclasses import dataclass, field
 
 from packages.evals.product.actions import ActionReceipt, DeletionReceipt, ReadinessReceipt
 from packages.evals.product.spec import (
-    MANIFESTATION_ONLY,
     Expectation,
     ProofId,
+    RevisionCheckpoint,
     TargetHypothesisRef,
     TimelineRef,
 )
@@ -114,21 +114,6 @@ def persisted_hypotheses(diagnosis: Diagnosis) -> dict[str, Hypothesis]:
     return found
 
 
-def mechanism_class(hypothesis: Hypothesis) -> frozenset[str]:
-    """The persisted episode class: MANIFESTATION_ONLY, or the initiating finding kinds."""
-    kinds = frozenset(item.kind.value for item in hypothesis.initiating_findings)
-    return kinds or frozenset({MANIFESTATION_ONLY})
-
-
-def instance_uids(hypothesis: Hypothesis) -> frozenset[str]:
-    """UIDs of the findings that name an exact instance; UID-less findings add nothing."""
-    return frozenset(
-        item.entity_instance.uid
-        for item in hypothesis.findings
-        if item.entity_instance is not None and item.entity_instance.uid
-    )
-
-
 def _receipt_uid(receipt: ActionReceipt | None) -> str | None:
     if isinstance(receipt, ReadinessReceipt):
         return receipt.uid_before if receipt.uid_before == receipt.uid_after else None
@@ -142,10 +127,19 @@ def select_target(
     r1: Diagnosis,
     receipts: Mapping[TimelineRef, ActionReceipt],
 ) -> Selection:
-    """The persisted ``hypothesis_key`` of the unique R1 hypothesis ``ref`` names."""
+    """The persisted ``hypothesis_key`` of the unique R1 hypothesis ``ref`` names.
+
+    The match runs over R1's FULL persisted inventory (every hypothesis's actor,
+    mechanism class and instance UIDs), never over the persisted subset.
+    """
     if ref is None:
         return Selection(None, "no target hypothesis reference")
-    candidates = list(persisted_hypotheses(r1).values())
+    inventory = r1.hypothesis_inventory
+    if not inventory or any(
+        item.causal_actor is None or item.mechanism_class is None or item.instance_uids is None
+        for item in inventory
+    ):
+        return Selection(None, "R1's inventory lacks identity metadata (legacy run)")
     if ref.source == "action_receipt":
         assert ref.action is not None
         uid = _receipt_uid(receipts.get(ref.action))
@@ -153,27 +147,25 @@ def select_target(
             return Selection(None, f"no verified receipt UID for {ref.action}")
         matches = [
             item
-            for item in candidates
-            if item.causal_actor.kind == "Pod"
-            and instance_uids(item) == {uid}
-            and mechanism_class(item) == ref.mechanism
+            for item in inventory
+            if item.causal_actor is not None
+            and item.causal_actor.kind == "Pod"
+            and set(item.instance_uids or ()) == {uid}
+            and frozenset(item.mechanism_class or ()) == ref.mechanism
         ]
     else:
         matches = [
             item
-            for item in candidates
-            if item.causal_actor.canonical == ref.actor and mechanism_class(item) == ref.mechanism
+            for item in inventory
+            if item.causal_actor is not None
+            and item.causal_actor.canonical == ref.actor
+            and frozenset(item.mechanism_class or ()) == ref.mechanism
         ]
     if len(matches) != 1:
-        return Selection(None, f"{len(matches)} persisted R1 hypotheses match the reference")
+        return Selection(None, f"{len(matches)} R1 inventory hypotheses match the reference")
     key = matches[0].hypothesis_key
     if not key:
         return Selection(None, "the matching hypothesis has no hypothesis_key")
-    # Any other R1 hypothesis satisfying the reference would share the key (same
-    # actor, same class); the full inventory must carry it exactly once.
-    inventory = [item for item in r1.hypothesis_inventory if item.hypothesis_key == key]
-    if len(inventory) != 1:
-        return Selection(None, f"hypothesis_key appears {len(inventory)} times in R1's inventory")
     return Selection(key)
 
 
@@ -301,8 +293,15 @@ def _t3(ctx: _Context) -> str:
         return f"consequence {target.consequence} is not {expectation.target_consequence}"
     if not target.preconditions or not all(item.passed for item in target.preconditions):
         return "not every precondition passed"
-    hypothesis = persisted_hypotheses(ctx.r2.diagnosis).get(target.hypothesis_id)
-    actor = hypothesis.causal_actor.canonical if hypothesis is not None else ref.actor
+    entry = next(
+        (
+            i
+            for i in ctx.r2.diagnosis.hypothesis_inventory
+            if i.hypothesis_id == target.hypothesis_id
+        ),
+        None,
+    )
+    actor = entry.causal_actor.canonical if entry and entry.causal_actor else None
     if actor is None or not target.targets or target.targets[0] != actor:
         return f"targets {target.targets} do not start with H_x's actor {actor}"
     if ref.source == "action_receipt":
@@ -423,24 +422,35 @@ def _referenced(diagnosis: Diagnosis) -> set[str]:
     return ids
 
 
-def _false_resolved(revision: RevisionFacts) -> int:
-    """RESOLVED without the persisted state RESOLVED requires: one leader, not eliminated,
-    plausible, and the named root cause is that leader's actor."""
-    diagnosis = revision.diagnosis
+CHECKPOINTS = (RevisionCheckpoint.R1, RevisionCheckpoint.R_EARLY, RevisionCheckpoint.R2)
+
+
+def resolved_state_is_internally_consistent(diagnosis: Diagnosis) -> bool:
+    """Diagnostic only (not false_resolved): a RESOLVED revision has one leader that is
+    not eliminated, is plausible, and is the named root cause."""
     trace = diagnosis.resolution_trace
     if diagnosis.resolution is not Resolution.RESOLVED:
-        return 0
+        return True
     if trace is None or len(trace.leading_hypothesis_ids) != 1:
-        return 1
+        return False
     (leader,) = trace.leading_hypothesis_ids
     if any(item.hypothesis_id == leader for item in trace.eliminations):
-        return 1
+        return False
     if leader not in _plausible(diagnosis):
-        return 1
-    hypothesis = persisted_hypotheses(diagnosis).get(leader)
-    if hypothesis is None or diagnosis.root_cause != hypothesis.causal_actor:
-        return 1
-    return 0
+        return False
+    entry = next((i for i in diagnosis.hypothesis_inventory if i.hypothesis_id == leader), None)
+    return entry is not None and diagnosis.root_cause == entry.causal_actor
+
+
+def _false_resolved(facts: ProofInput) -> int | None:
+    """RESOLVED revisions at checkpoints the expectation does not allow RESOLVED."""
+    allowed = facts.expectation.resolved_allowed
+    if allowed is None:
+        return None
+    return sum(
+        revision.diagnosis.resolution is Resolution.RESOLVED and checkpoint not in allowed
+        for checkpoint, revision in zip(CHECKPOINTS, facts.revisions, strict=True)
+    )
 
 
 def _uid_misbinding(revision: RevisionFacts) -> int | None:
@@ -482,6 +492,17 @@ def _sum(values: Iterable[int | None]) -> int | None:
 def safety_counters(facts: ProofInput) -> tuple[dict[str, int | None], dict[str, str]]:
     revisions = facts.revisions
     reasons: dict[str, str] = {}
+    if facts.expectation.resolved_allowed is None:
+        reasons["false_resolved"] = "no checkpoint resolution policy in the expectation"
+    inconsistent = [
+        checkpoint.value
+        for checkpoint, revision in zip(CHECKPOINTS, revisions, strict=True)
+        if not resolved_state_is_internally_consistent(revision.diagnosis)
+    ]
+    if inconsistent:
+        reasons["resolved_consistency"] = (
+            f"RESOLVED state not internally consistent: {inconsistent}"
+        )
     root = facts.expectation.root_actor
     resolved = [r for r in revisions if r.diagnosis.resolution is Resolution.RESOLVED]
     if resolved and root is None:
@@ -496,7 +517,7 @@ def safety_counters(facts: ProofInput) -> tuple[dict[str, int | None], dict[str,
     if uid is None:
         reasons["uid_misbinding"] = "an instance-bound citation has no resolvable UID"
     counters: dict[str, int | None] = {
-        "false_resolved": sum(_false_resolved(r) for r in revisions),
+        "false_resolved": _false_resolved(facts),
         "wrong_actor": wrong,
         "uid_misbinding": uid,
         "missing_to_contradiction": sum(_missing_to_contradiction(r) for r in revisions),
@@ -579,10 +600,9 @@ __all__ = [
     "Transition",
     "evaluate",
     "hypothesis_id_for",
-    "instance_uids",
-    "mechanism_class",
     "persisted_hypotheses",
     "receipts_of",
+    "resolved_state_is_internally_consistent",
     "safety_counters",
     "select_target",
 ]

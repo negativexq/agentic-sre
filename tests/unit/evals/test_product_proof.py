@@ -30,6 +30,7 @@ from packages.evals.product.spec import (
     Expectation,
     ProductScenario,
     ProofId,
+    RevisionCheckpoint,
     TargetHypothesisRef,
     TimelineRef,
 )
@@ -57,12 +58,15 @@ from packages.rca.model import (
     RulePreconditionAudit,
     Symptoms,
 )
+from packages.rca.requirements import hypothesis_inventory
 
+R2_ONLY = frozenset({RevisionCheckpoint.R2})
 NS = "sre-demo"
 T0 = datetime(2026, 9, 26, 12, tzinfo=UTC)
 A1 = ("m16.ended-manifestation-episode", "v1")
 A2 = ("m16.resource-mechanism", "v1")
 POD_B = EntityRef(kind="Pod", name="order-service-abc-xyz", namespace=NS)
+POD_B2 = EntityRef(kind="Pod", name="order-service-abc-other", namespace=NS)
 ROOT = EntityRef(kind="Deployment", name="payment-service", namespace=NS)
 ORDER = EntityRef(kind="Deployment", name="order-service", namespace=NS)
 UID_B = "uid-b"
@@ -192,12 +196,7 @@ def diagnosis(
         ),
         hypothesis_inventory=inventory
         if inventory is not None
-        else tuple(
-            HypothesisInventoryEntry(
-                hypothesis_id=item.hypothesis_id, hypothesis_key=item.hypothesis_key
-            )
-            for item in hypotheses
-        ),
+        else hypothesis_inventory(hypotheses),
     )
 
 
@@ -271,6 +270,7 @@ def facts(state: dict[str, Any] | None = None, **overrides: Any) -> ProofInput:
         target_rule=A1,
         target_consequence="ROOT_INELIGIBILITY",
         root_actor=ROOT.canonical,
+        resolved_allowed=R2_ONLY,
     )
     revisions = tuple(
         RevisionFacts(
@@ -421,13 +421,43 @@ ROOT_H = hyp("h1-root", ROOT, "hkey:root", initiating=(spec_change("journal:5"),
                 ROOT_H,
                 hyp("h1-b", POD_B, "hkey:b", finding(POD_B, UID_B, "e")),
                 inventory=(
-                    HypothesisInventoryEntry(hypothesis_id="h1-root", hypothesis_key="hkey:root"),
-                    HypothesisInventoryEntry(hypothesis_id="h1-b", hypothesis_key="hkey:b"),
-                    HypothesisInventoryEntry(hypothesis_id="h1-z", hypothesis_key="hkey:b"),
+                    *hypothesis_inventory(
+                        (ROOT_H, hyp("h1-b", POD_B, "hkey:b", finding(POD_B, UID_B, "e")))
+                    ),
+                    # Outside the persisted subset: another Pod actor, same UID and class, other key.
+                    *hypothesis_inventory(
+                        (hyp("h1-z", POD_B2, "hkey:z", finding(POD_B2, UID_B, "g")),)
+                    ),
                 ),
             ),
             None,
-            id="key-repeated-in-full-inventory",
+            id="unpersisted-second-semantic-match-in-full-inventory",
+        ),
+        pytest.param(
+            _r1(
+                ROOT_H,
+                hyp("h1-b", POD_B, "hkey:b", finding(POD_B, UID_B, "e")),
+                inventory=(
+                    HypothesisInventoryEntry(hypothesis_id="h1-root", hypothesis_key="hkey:root"),
+                    HypothesisInventoryEntry(hypothesis_id="h1-b", hypothesis_key="hkey:b"),
+                ),
+            ),
+            None,
+            id="legacy-inventory-without-metadata",
+        ),
+        pytest.param(
+            _r1(
+                ROOT_H,
+                hyp(
+                    "h1-b",
+                    POD_B,
+                    "hkey:b",
+                    finding(POD_B, UID_B, "e"),
+                    initiating=(finding(POD_B, UID_B, "s", kind=FindingKind.SPEC_CHANGE),),
+                ),
+            ),
+            None,
+            id="same-uid-extra-mechanism",
         ),
     ],
 )
@@ -465,7 +495,7 @@ def test_a_static_actor_reference_uses_the_exact_actor_and_class() -> None:
 def test_without_a_selected_target_every_applicable_proof_fails() -> None:
     result = evaluate(facts(receipt=ReadinessReceipt(T0, T0, "uid-x", "uid-x")))
     assert set(result.proof.values()) == {FAIL} and set(result.negatives.values()) == {FAIL}
-    assert "0 persisted R1 hypotheses" in result.reasons["T1"]
+    assert "0 R1 inventory hypotheses" in result.reasons["T1"]
     assert result.transition is None
 
 
@@ -643,9 +673,7 @@ def _a2_world(r2_eliminations: tuple[ResolutionElimination, ...], proof: ProofId
                 "alternative_hypotheses": (*document.alternative_hypotheses, item),
                 "hypothesis_inventory": (
                     *document.hypothesis_inventory,
-                    HypothesisInventoryEntry(
-                        hypothesis_id=item.hypothesis_id, hypothesis_key="hkey:cpu"
-                    ),
+                    *hypothesis_inventory((item,)),
                 ),
             }
         )
@@ -683,19 +711,6 @@ def _counters(state: dict[str, Any]) -> dict[str, int | None]:
 
 
 SAFETY: list[tuple[str, str, Callable[[dict[str, Any]], Any], int | None]] = [
-    (
-        "two-leaders",
-        "false_resolved",
-        lambda s: _trace(s, "r2", leading_hypothesis_ids=("h3-root", "h3-b")),
-        1,
-    ),
-    (
-        "leader-eliminated",
-        "false_resolved",
-        lambda s: _trace(s, "r2", eliminations=(a1("h3-b"), a1("h3-root", actor=ROOT))),
-        1,
-    ),
-    ("root-cause-not-leader", "false_resolved", lambda s: _with(s, "r2", root_cause=ORDER), 1),
     ("leader-not-root-actor", "wrong_actor", lambda s: _with(s, "r2", root_cause=ORDER), 1),
     (
         "decisive-other-uid",
@@ -1052,3 +1067,163 @@ def test_a_receipt_reference_also_needs_the_exact_mechanism_set() -> None:
         action=READINESS_REF,
     )
     assert select_target(exact, r1, receipts).hypothesis_key == "hkey:b"
+
+
+# --- false_resolved: the checkpoint policy (frozen R2 amendment) ---------------------------------
+
+
+def _resolved(state: dict[str, Any], key: str, leader: str, hid_root: str) -> None:
+    """Make revision ``key`` an internally consistent RESOLVED on the payment root."""
+    del leader
+    document = state[key]
+    assert document.resolution_trace is not None
+    trace = document.resolution_trace.model_copy(
+        update={"state": Resolution.RESOLVED, "leading_hypothesis_ids": (hid_root,)}
+    )
+    state[key] = document.model_copy(
+        update={"resolution": Resolution.RESOLVED, "root_cause": ROOT, "resolution_trace": trace}
+    )
+
+
+@pytest.mark.parametrize(
+    ("key", "hid_root"),
+    [pytest.param("r1", "h1-root", id="R1"), pytest.param("early", "h2-root", id="R_early")],
+)
+def test_an_internally_consistent_early_resolution_is_a_false_resolution(
+    key: str, hid_root: str
+) -> None:
+    from packages.evals.product.proof import (
+        resolved_state_is_internally_consistent,  # noqa: PLC0415
+    )
+
+    state = world()
+    _resolved(state, key, "", hid_root)
+    assert resolved_state_is_internally_consistent(state[key])
+    assert _counters(state)["false_resolved"] == 1
+
+
+def test_r2_resolved_or_ambiguous_is_allowed_under_the_r2_policy() -> None:
+    state = world()
+    assert state["r2"].resolution is Resolution.RESOLVED
+    assert _counters(state)["false_resolved"] == 0
+    _with(state, "r2", resolution=Resolution.AMBIGUOUS)
+    assert _counters(state)["false_resolved"] == 0
+
+
+def test_without_a_policy_false_resolved_is_unmeasured() -> None:
+    state = world()
+    state["expectation"] = Expectation(
+        target_hypothesis_ref=state["ref"], root_actor=ROOT.canonical
+    )
+    counters, reasons = safety_counters(facts(state))
+    assert counters["false_resolved"] is None and "false_resolved" in reasons
+
+
+def test_a_negative_scenario_may_resolve_at_r2() -> None:
+    state = world()
+    state["expectation"] = Expectation(
+        proofs=(ProofId.N1,),
+        target_hypothesis_ref=state["ref"],
+        target_rule=A1,
+        root_actor=ROOT.canonical,
+        resolved_allowed=R2_ONLY,
+    )
+    assert state["r2"].resolution is Resolution.RESOLVED
+    assert _counters(state)["false_resolved"] == 0
+
+
+def test_internal_inconsistency_is_a_diagnostic_not_a_false_resolution() -> None:
+    state = _trace(world(), "r2", leading_hypothesis_ids=("h3-root", "h3-b"))
+    counters, reasons = safety_counters(facts(state))
+    assert counters["false_resolved"] == 0
+    assert "R2" in reasons["resolved_consistency"]
+
+
+def test_a_legacy_inventory_fails_every_evaluated_proof() -> None:
+    state = world()
+    legacy = tuple(
+        HypothesisInventoryEntry(
+            hypothesis_id=item.hypothesis_id, hypothesis_key=item.hypothesis_key
+        )
+        for item in state["r1"].hypothesis_inventory
+    )
+    _with(state, "r1", hypothesis_inventory=legacy)
+    result = evaluate(facts(state))
+    assert set(result.proof.values()) == {FAIL} and set(result.negatives.values()) == {FAIL}
+    assert "legacy" in result.reasons["T1"]
+
+
+# --- the persisted inventory metadata (product change gates) -------------------------------------
+
+
+def test_the_inventory_records_every_hypothesis_identity() -> None:
+    uid_less = finding(POD_B, None, "f")
+    entries = hypothesis_inventory(
+        (
+            hyp(
+                "h-b",
+                POD_B,
+                "hkey:b",
+                finding(POD_B, "u2", "e"),
+                finding(POD_B, "u1", "g"),
+                uid_less,
+            ),
+            hyp(
+                "h-root",
+                ROOT,
+                "hkey:root",
+                initiating=(
+                    spec_change("j"),
+                    finding(ROOT, None, "k", kind=FindingKind.IMAGE_CHANGE),
+                ),
+            ),
+        )
+    )
+    by_id = {item.hypothesis_id: item for item in entries}
+    assert by_id["h-b"].causal_actor == POD_B
+    assert by_id["h-b"].mechanism_class == (MANIFESTATION_ONLY,)
+    assert by_id["h-b"].instance_uids == ("u1", "u2")
+    assert by_id["h-root"].mechanism_class == ("IMAGE_CHANGE", "SPEC_CHANGE")
+    assert by_id["h-root"].instance_uids == ()
+
+
+def test_legacy_documents_still_load_and_the_epistemic_digest_is_unchanged() -> None:
+    from packages.rca.epistemic_digest import diagnosis_epistemic_digest  # noqa: PLC0415
+
+    document = world()["r2"]
+    raw = document.model_dump(mode="json")
+    for entry in raw["hypothesis_inventory"]:
+        for name in ("causal_actor", "mechanism_class", "instance_uids"):
+            entry.pop(name)
+    legacy = Diagnosis.model_validate(raw)
+    assert all(item.mechanism_class is None for item in legacy.hypothesis_inventory)
+    assert diagnosis_epistemic_digest(legacy) == diagnosis_epistemic_digest(document)
+
+
+def test_no_decision_path_reads_the_inventory_metadata() -> None:
+    root = Path(__file__).resolve().parents[3]
+    readers = set()
+    for directory in ("packages/rca", "apps"):
+        for path in (root / directory).rglob("*.py"):
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if isinstance(node, ast.Attribute) and node.attr in (
+                    "mechanism_class",
+                    "instance_uids",
+                ):
+                    readers.add(str(path.relative_to(root)))
+    assert readers == set()
+
+
+def test_the_rca_result_and_keys_are_unchanged_on_the_ablation_fixtures() -> None:
+    from test_product_ablation import _full, a1_source, a2_source  # noqa: PLC0415
+
+    from packages.rca.engine import EngineConfig, build_case  # noqa: PLC0415
+
+    for make in (a1_source, a2_source):
+        diagnosis = _full(make())
+        assert diagnosis.resolution is Resolution.RESOLVED
+        case = build_case(make(), EngineConfig())
+        keys = {item.hypothesis_id: item.hypothesis_key for item in case.hypotheses}
+        assert {
+            item.hypothesis_id: item.hypothesis_key for item in diagnosis.hypothesis_inventory
+        } == {hid: key or None for hid, key in keys.items()}

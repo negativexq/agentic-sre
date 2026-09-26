@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from packages.storage import create_database_engine, create_session_factory
 from packages.telemetry import TelemetryMiddleware, TelemetryRuntime, create_runtime
 from workload.common.contracts import PaymentRequest, PaymentResponse, PaymentStatus
+from workload.common.faults import MemoryBallast
 from workload.common.persistence import PaymentRepository
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/agentic_sre"
@@ -30,6 +31,10 @@ class FaultConfig(BaseModel):
     error: bool = False
     db_hold_ms: int = Field(default=0, ge=0, le=5_000)
     db_query_delay_ms: int = Field(default=0, ge=0, le=5_000)
+    # Alive but not ready: /ready answers 503, /health stays 200 (M19-6.2).
+    not_ready: bool = False
+    # MiB of memory the process holds while set; 0 releases it (M19-6.2).
+    memory_ballast_mb: int = Field(default=0, ge=0)
 
 
 class PaymentService:
@@ -123,8 +128,10 @@ def create_app(
     payment_service = service or PaymentService(
         session_factory, runtime=telemetry, fault_config=fault_config
     )
+    ballast = MemoryBallast()
 
     app = FastAPI(title="Payment Service", version="0.1.1")
+    app.state.memory_ballast = ballast
     app.add_middleware(TelemetryMiddleware, runtime=telemetry)
     app.mount("/metrics", make_asgi_app(registry=registry))
 
@@ -141,10 +148,19 @@ def create_app(
         """Set deterministic test faults; never enabled in a production deployment."""
         if not faults_enabled:
             raise HTTPException(status_code=404, detail="test faults are disabled")
+        try:
+            ballast.resize(config.memory_ballast_mb)
+        except (MemoryError, OverflowError) as error:
+            # Nothing is applied: the previous faults and ballast stay in force.
+            raise HTTPException(
+                status_code=503, detail="memory ballast allocation failed"
+            ) from error
         fault_config.delay_ms = config.delay_ms
         fault_config.error = config.error
         fault_config.db_hold_ms = config.db_hold_ms
         fault_config.db_query_delay_ms = config.db_query_delay_ms
+        fault_config.not_ready = config.not_ready
+        fault_config.memory_ballast_mb = config.memory_ballast_mb
         return fault_config
 
     @app.get("/health")
@@ -154,6 +170,8 @@ def create_app(
     @app.get("/ready")
     def ready() -> dict[str, str]:
         """Process readiness only; no dependency is consulted."""
+        if faults_enabled and fault_config.not_ready:
+            raise HTTPException(status_code=503, detail="not ready (test fault)")
         return {"status": "ready"}
 
     return app

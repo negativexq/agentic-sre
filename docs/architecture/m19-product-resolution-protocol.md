@@ -18,10 +18,11 @@ reported as blind, pre-registered, or as evidence of generalization.
 
 ## 2. Scope
 
-The protocol covers the active DEV scenarios PR-01, PR-01N, PR-02, PR-02N,
-PR-03, and PR-03N; the R1, R_early, and R2 revision timeline; evidence
-membership and replay; decisive evidence; T1–T4 and N0–N3; global product
-safety; and replay-level T5/T6 ablation checks.
+The protocol covers the active DEV scenarios PR-01, PR-01N, PR-02, PR-03,
+and PR-03N; PR-02N is superseded by the owner decision below. It also covers
+the R1, R_early, and R2 revision timeline; evidence membership and replay;
+decisive evidence; T1–T4 and N0–N3 (N2 is superseded, not passed); global
+product safety; and replay-level T5/T6 ablation checks.
 
 The M19 product objective is read-only observation, continuous evidence
 collection, evidence continuity, exact entity-instance identity, diagnosis
@@ -169,18 +170,15 @@ protocol root actor as leader.
 
 **Proof:** T1–T4 and N0.
 
-### 4.4 PR-02N
+### 4.4 PR-02N — SUPERSEDED
 
-**Purpose and candidate hypotheses:** Negative CPU case in which the CPU limit
-produces actual pressure using the M19-7.2 calibration value. `H_cpu` remains
-the candidate hypothesis.
-
-**Timeline:** Apply the calibrated pressure-producing CPU limit as the resource
-change. Other scenario timing follows the PR-02 revision sequence.
-
-**R1 / R_early / R2:** The candidate is not contradicted by A2 normality.
-
-**Proof:** N2.
+**Owner decision (2026-09-27):** Synthetic CPU-pressure calibration is
+abandoned. The frozen 100m/100m candidate measured a raw throttle peak of
+0.029289 against the ≥ 0.40 target. No CPU-burn fault, traffic increase,
+request change, or threshold tuning will be added. Future development
+prioritizes real RCA capability and real incident evidence over tuning
+synthetic pressure scenarios to meet benchmark thresholds. PR-02N is not a
+passing negative proof and is no longer an active scenario.
 
 ### 4.5 PR-03
 
@@ -417,9 +415,10 @@ rule.
 `H_B` is not root-ineligible by `RECOVERED`; its continuity precondition is
 `DISQUALIFIED`.
 
-### N2 — PR-02N
+### N2 — PR-02N — SUPERSEDED
 
-`H_cpu` is not contradicted by A2 normality.
+PR-02N was not executed as a negative proof. Its synthetic CPU-pressure
+calibration was abandoned by owner decision; no N2 PASS is claimed.
 
 ### N3 — PR-03N
 

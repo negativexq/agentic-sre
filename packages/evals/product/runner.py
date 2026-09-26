@@ -38,6 +38,7 @@ from packages.evals.product.actions import (
     SetReadiness,
     SetResources,
 )
+from packages.evals.product.artifact import ArtifactError
 from packages.evals.product.baseline import DirtyBaseline
 from packages.evals.product.revisions import RevisionScheduleError
 from packages.evals.product.spec import Phase, ProductScenario
@@ -80,10 +81,20 @@ class RunStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class TimelineRecord:
+    """A staged action whose effect was verified: requested offset, action, start."""
+
+    offset: timedelta
+    action: ProductAction
+    started_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class RunResult:
     scenario_id: str
     status: RunStatus
     error: str | None = None
+    timeline: tuple[TimelineRecord, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -229,9 +240,11 @@ class ProductRunner:
     backend: ProductBackend
     config: RunnerConfig = field(default_factory=RunnerConfig)
     _traffic_on: bool = field(default=False, init=False, repr=False)
+    _verified: list[TimelineRecord] = field(default_factory=list, init=False, repr=False)
 
     def run(self, scenario: ProductScenario) -> RunResult:
         """One scenario on one fresh cluster, torn down whatever happens after it exists."""
+        self._verified = []
         self.backend.cluster_up()
         failure: BaseException | None = None
         try:
@@ -289,8 +302,11 @@ class ProductRunner:
         except RevisionScheduleError as error:
             return RunResult(scenario.scenario_id, RunStatus.ERROR, str(error))
         self._set_traffic(False)
-        result = RunResult(scenario.scenario_id, RunStatus.RUN_OK)
-        backend.write_artifact(scenario, result)
+        result = RunResult(scenario.scenario_id, RunStatus.RUN_OK, timeline=tuple(self._verified))
+        try:
+            backend.write_artifact(scenario, result)
+        except ArtifactError as error:
+            return RunResult(scenario.scenario_id, RunStatus.ERROR, str(error))
         return result
 
     def _timeline(self, scenario: ProductScenario) -> None:
@@ -330,6 +346,7 @@ class ProductRunner:
             receipt = action.apply(control)
             await_evidence(action, receipt, evidence, control, self.config)
             action.verify(evidence, receipt)
+            self._verified.append(TimelineRecord(phase.offset, action, receipt.started_at))
 
 
 # --- recording (dry-run) backend ------------------------------------------------------
@@ -470,5 +487,6 @@ __all__ = [
     "RunStatus",
     "RunnerConfig",
     "Stage",
+    "TimelineRecord",
     "await_evidence",
 ]

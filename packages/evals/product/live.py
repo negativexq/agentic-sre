@@ -27,7 +27,7 @@ import yaml
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from packages.evals.product import revisions
+from packages.evals.product import artifact, revisions
 from packages.evals.product.actions import (
     IncidentRecord,
     JournalRecord,
@@ -45,7 +45,13 @@ from packages.evals.product.revisions import (
 )
 from packages.evals.product.runner import RunResult
 from packages.evals.product.spec import ProductScenario
-from packages.storage.models import IncidentRow, LifecycleObservationRow, ObjectVersionRow
+from packages.storage.models import (
+    EvidenceRequirementRow,
+    IncidentRow,
+    LifecycleObservationRow,
+    ObjectVersionRow,
+)
+from packages.storage.repositories import InvestigationReadRepository
 
 CLUSTER = "agentic-sre-product"
 NAMESPACE = "sre-demo"
@@ -194,6 +200,10 @@ class HttpControlPlaneReads:
             for item in alerts
         ]
 
+    def summaries(self, incident_id: str) -> list[Mapping[str, Any]]:
+        """The persisted revision summaries, as the control plane lists them."""
+        return _items(self._get(f"/api/v1/incidents/{incident_id}/diagnoses"), "diagnoses")
+
     def revisions(self, incident_id: str) -> Sequence[RevisionView]:
         return [
             RevisionView(
@@ -203,7 +213,7 @@ class HttpControlPlaneReads:
                 None if item.get("previous_diagnosis_id") is None
                 else int(item["previous_diagnosis_id"]),
             )
-            for item in _items(self._get(f"/api/v1/incidents/{incident_id}/diagnoses"), "diagnoses")
+            for item in self.summaries(incident_id)
         ]  # fmt: skip
 
     def onset(self, incident_id: str, revision_number: int) -> Any:
@@ -388,6 +398,52 @@ class LiveEvidenceReader:
             return [IncidentRecord(str(row.incident_id), row.created_at) for row in rows]
 
 
+@dataclass
+class LiveArtifactReader:
+    """Artifact facts from the run's storage (requirements, tape counts); it only selects."""
+
+    _session_factory: sessionmaker[Session]
+
+    def requirements(
+        self, diagnosis_ids: Sequence[int]
+    ) -> dict[int, list[artifact.RequirementEntry]]:
+        """Requirements each revision opened, by ``diagnosis_id``."""
+        with self._session_factory() as session:
+            rows = session.scalars(
+                select(EvidenceRequirementRow)
+                .where(EvidenceRequirementRow.diagnosis_id.in_(list(diagnosis_ids)))
+                .order_by(EvidenceRequirementRow.requirement_id)
+            ).all()
+            found: dict[int, list[artifact.RequirementEntry]] = {}
+            for row in rows:
+                found.setdefault(row.diagnosis_id, []).append(
+                    artifact.RequirementEntry(
+                        requirement_key=row.requirement_key,
+                        rule_id=row.rule_id,
+                        not_before=row.not_before,
+                    )
+                )
+            return found
+
+    def provider_tape(self, run_ids: Sequence[str]) -> artifact.ProviderTape:
+        """Read counts over the runs' persisted tapes (the rows their tape digests cover)."""
+        counts = {"CAPTURE": 0, "ENGINE": 0, "INVESTIGATION": 0}
+        errors = 0
+        with self._session_factory() as session:
+            repository = InvestigationReadRepository(session)
+            for run_id in run_ids:
+                for row in repository.list_for_run(run_id):
+                    counts[row.caller_class] += 1
+                    errors += row.status == "ERROR"
+        return artifact.ProviderTape(
+            reads=sum(counts.values()),
+            capture_reads=counts["CAPTURE"],
+            engine_reads=counts["ENGINE"],
+            investigation_reads=counts["INVESTIGATION"],
+            errors=errors,
+        )
+
+
 class StageNotImplemented(RuntimeError):
     """A lifecycle stage whose behavior belongs to a later task."""
 
@@ -416,6 +472,10 @@ class LiveBackend:
     prometheus_port: int | None = None
     schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
     http: Http = _http
+    run_id: str | None = None  # shared by one multi-scenario invocation; else per run start
+    bench_root: Path | None = None
+    git: artifact.GitProvenance | None = None
+    artifact_reads: LiveArtifactReader | None = None
 
     def __post_init__(self) -> None:
         self._env = product_environment(os.environ)
@@ -425,6 +485,8 @@ class LiveBackend:
         self._r1: revisions.R1 | None = None
         self._r_early: revisions.REarly | None = None
         self._r2: int | None = None
+        self._run: str | None = None
+        self.artifact_path: Path | None = None
 
     @property
     def _context(self) -> str:
@@ -450,6 +512,7 @@ class LiveBackend:
         )
 
     def cluster_up(self) -> None:
+        self._run = self.run_id or artifact.run_id(self.control_port.now())
         self._exec(
             "kind", "create", "cluster", "--name", self.cluster,
             "--config", str(self.root / "infra" / "kubernetes" / "kind-config.yaml"),
@@ -596,7 +659,36 @@ class LiveBackend:
         )
 
     def write_artifact(self, scenario: ProductScenario, result: RunResult) -> None:
-        raise StageNotImplemented("product-run artifact arrives with M19-6.11")
+        if self._r1 is None or self._r_early is None or self._r2 is None or self._run is None:
+            raise RuntimeError("the artifact needs R1, R_early and R2 of this run")
+        commit, protocol = artifact.provenance(self.git or artifact.LocalGit(self.root))
+        summaries = sorted(
+            self._reads().summaries(self._r1.incident_id),
+            key=lambda item: int(item["revision_number"]),
+        )
+        accepted = [self._r1.diagnosis_id, self._r_early.diagnosis_id, self._r2]
+        if [int(item["diagnosis_id"]) for item in summaries] != accepted:
+            raise artifact.ArtifactError(
+                f"the incident's revisions are not the accepted {accepted}"
+            )
+        run_ids = [item.get("run_id") for item in summaries]
+        if not all(isinstance(item, str) and item for item in run_ids):
+            raise artifact.ArtifactError("a revision has no run id for its provider tape")
+        reads = self.artifact_reads or LiveArtifactReader(self.evidence_port._session_factory)
+        document = artifact.build_artifact(
+            scenario=scenario,
+            commit=commit,
+            protocol_commit=protocol,
+            incident_id=self._r1.incident_id,
+            onset=self._r1.onset,
+            activations=self._r1.activations,
+            timeline=result.timeline,
+            summaries=summaries,
+            requirements=reads.requirements(accepted),
+            provider_tape=reads.provider_tape([str(item) for item in run_ids]),
+        )
+        bench_root = self.bench_root or self.root / ".local" / "product-bench"
+        self.artifact_path = artifact.write_artifact(bench_root, self._run, document)
 
     def cluster_down(self) -> None:
         for process in self._forwards:
@@ -610,6 +702,7 @@ __all__ = [
     "PRODUCT_CONTROL_PLANE_ENV",
     "HttpControlPlaneReads",
     "HttpManualDiagnosis",
+    "LiveArtifactReader",
     "LiveBackend",
     "LiveClusterControl",
     "LiveEvidenceReader",

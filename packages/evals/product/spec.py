@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
+from typing import Literal
 
 from packages.evals.product.actions import ProductAction
 
@@ -67,6 +68,8 @@ class ProductScenario:
     phases: tuple[Phase, ...]
     expectation: Expectation
     description: str = ""
+    # F7 DEV scenarios are "DEV"; a smoke/no-op scenario has no tier.
+    tier: Literal["DEV"] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.scenario_id, str) or not self.scenario_id.strip():
@@ -80,6 +83,8 @@ class ProductScenario:
             raise ValueError("phases must have strictly increasing offsets")
         if not isinstance(self.expectation, Expectation):
             raise TypeError("ProductScenario.expectation is an Expectation")
+        if self.tier not in ("DEV", None):
+            raise ValueError("ProductScenario.tier is 'DEV' or None")
 
 
 __all__ = ["Expectation", "Phase", "ProductScenario", "ProofId"]

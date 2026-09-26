@@ -414,3 +414,11 @@ def test_the_cli_refuses_an_unknown_smoke_before_touching_anything() -> None:
 def test_the_cli_opens_the_evidence_database_read_only() -> None:
     source = (ROOT / "scripts/product_benchmark.py").read_text()
     assert '"options": "-c default_transaction_read_only=on"' in source
+
+
+def test_a_failed_command_carries_its_output() -> None:
+    from packages.evals.product.live import _run  # noqa: PLC0415
+
+    with pytest.raises(subprocess.CalledProcessError) as raised:
+        _run([sys.executable, "-c", "import sys; sys.stderr.write('boom-detail'); sys.exit(3)"], {})
+    assert any("boom-detail" in note for note in raised.value.__notes__)

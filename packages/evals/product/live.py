@@ -191,9 +191,15 @@ def _listening(port: int) -> bool:
 
 
 def _run(argv: Sequence[str], env: Mapping[str, str], stdin: str | None = None) -> str:
-    return subprocess.run(
-        list(argv), env=dict(env), input=stdin, check=True, capture_output=True, text=True
-    ).stdout
+    try:
+        return subprocess.run(
+            list(argv), env=dict(env), input=stdin, check=True, capture_output=True, text=True
+        ).stdout
+    except subprocess.CalledProcessError as error:
+        # A failed live step must say why: keep the tail of what the command printed.
+        tail = ((error.stderr or "") + (error.stdout or ""))[-4000:]
+        error.add_note(f"output tail:\n{tail}")
+        raise
 
 
 def _post_json(url: str, payload: Mapping[str, Any]) -> None:

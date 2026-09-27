@@ -517,6 +517,30 @@ class ReplayModeUnsupported(ValueError):
     """The requested replay mode is not implemented."""
 
 
+class ReplayEngineIncompatible(ReplayModeUnsupported):
+    """The run was diagnosed by other RCA engine semantics than this replay runs."""
+
+
+def _require_replayable_engine(session: Session, run_id: str) -> None:
+    """Every replay re-runs the RCA engine, so it must be the engine the run recorded."""
+    from sqlalchemy import select
+
+    from packages.rca.engine import RCA_ENGINE_VERSION
+    from packages.storage.manifest import ReplayDataError
+    from packages.storage.models import DiagnosisRow
+
+    row = session.scalars(select(DiagnosisRow).where(DiagnosisRow.run_id == run_id)).first()
+    if row is None:
+        raise ReplayDataError(f"run {run_id} has no persisted diagnosis")
+    if row.engine_version is None:
+        raise ReplayEngineIncompatible(f"run {run_id} recorded no RCA engine version")
+    if row.engine_version != RCA_ENGINE_VERSION:
+        raise ReplayEngineIncompatible(
+            f"run {run_id} was diagnosed by RCA engine {row.engine_version}; "
+            f"this replay runs RCA engine {RCA_ENGINE_VERSION}"
+        )
+
+
 @dataclass(frozen=True)
 class TrajectoryReplay:
     """One completed trajectory replay: its digest and the state that proves it."""
@@ -539,6 +563,7 @@ def replay_trajectory(run_id: str, *, session_factory: sessionmaker[Session]) ->
 
     with session_factory() as session:
         recorded = load_trajectory(session, run_id)
+        _require_replayable_engine(session, run_id)
     source = ReplaySource.from_run(run_id, session_factory=session_factory)
     contract = recorded.contract
     policy = ScriptedInvestigationPolicy.from_trajectory(
@@ -600,6 +625,7 @@ def replay_selector(run_id: str, *, session_factory: sessionmaker[Session]) -> S
 
     with session_factory() as session:
         recorded = load_trajectory(session, run_id)
+        _require_replayable_engine(session, run_id)
     contract = recorded.contract
     selector = _SELECTORS.get(contract.policy_kind)
     if selector is None:
@@ -696,6 +722,7 @@ def replay_base(run_id: str, *, session_factory: sessionmaker[Session]) -> BaseR
         row = session.scalars(select(DiagnosisRow).where(DiagnosisRow.run_id == run_id)).first()
         if row is None:
             raise ReplayDataError(f"run {run_id} has no persisted diagnosis")
+        _require_replayable_engine(session, run_id)
         mode, calls, recorded_config = (
             row.document.get("mode"),
             row.document.get("model_calls"),
@@ -741,6 +768,7 @@ def replay_run(
 __all__ = [
     "BaseReplay",
     "ReplayDivergence",
+    "ReplayEngineIncompatible",
     "ReplayModeUnsupported",
     "ReplayProviderAdapter",
     "ReplaySource",

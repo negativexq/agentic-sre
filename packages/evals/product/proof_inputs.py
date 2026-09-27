@@ -110,16 +110,19 @@ def revision_facts(
     base, uids, synthetic = source_evidence(run_id, session_factory)
     tape = tape_evidence(run_id, session_factory)
     replayed: str | None = None
+    reason: str | None = None
     try:
         replayed = replay(run_id, session_factory)
-    except ReplayModeUnsupported:
-        status = "UNSUPPORTED"
-    except _DIVERGED:  # the replay left the recorded execution
-        status = "DIVERGED"
-    except Exception:  # a replay that could not run is never a silent match
-        status = "ERROR"
+    except ReplayModeUnsupported as error:
+        status, reason = "UNSUPPORTED", str(error)
+    except _DIVERGED as error:  # the replay left the recorded execution
+        status, reason = "DIVERGED", str(error)
+    except Exception as error:  # a replay that could not run is never a silent match
+        status, reason = "ERROR", f"{type(error).__name__}: {error}"
     else:
         status = "PASS" if replayed == digest else "DIVERGED"
+        if status == "DIVERGED":
+            reason = "replayed epistemic digest differs from the persisted one"
     return RevisionFacts(
         number=number,
         trigger=trigger,
@@ -131,6 +134,7 @@ def revision_facts(
         persisted_digest=digest,
         replay_digest=replayed,
         replay_status=status,
+        replay_reason=reason,
     )
 
 

@@ -58,6 +58,8 @@ class RevisionFacts:
     # NOT_ATTEMPTED | UNSUPPORTED | PASS | DIVERGED | ERROR (M20.1b); None: derived
     # from the digests (a missing digest is ERROR, never a silent divergence).
     replay_status: str | None = None
+    # Why a replay was not PASS (for example an RCA engine version mismatch).
+    replay_reason: str | None = None
 
     @property
     def effective_replay_status(self) -> str:
@@ -514,6 +516,13 @@ def _replay_divergence(revisions: Sequence[RevisionFacts], reasons: dict[str, st
             f"{revision.number}:{status}"
             for revision, status in zip(revisions, statuses, strict=True)
         )
+    details = [
+        f"{revision.number}: {revision.replay_reason}"
+        for revision in revisions
+        if revision.replay_reason
+    ]
+    if details:
+        reasons["replay_reason"] = "; ".join(details)
     if any(status not in ("PASS", "DIVERGED") for status in statuses):
         reasons["replay_divergence"] = "not every revision was replayed"
         return None

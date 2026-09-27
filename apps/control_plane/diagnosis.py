@@ -8,7 +8,6 @@ import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from importlib.metadata import version as package_version
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -22,7 +21,7 @@ from apps.control_plane.scheduler import (
 )
 from packages.contracts import Alert as ContractAlert
 from packages.contracts import Incident, IncidentEvent, IncidentEventType
-from packages.rca.engine import EngineConfig, Investigator, diagnose
+from packages.rca.engine import RCA_ENGINE_VERSION, EngineConfig, Investigator, diagnose
 from packages.rca.epistemic_digest import diagnosis_epistemic_digest
 from packages.rca.investigation.graph import investigate_diagnosis
 from packages.rca.investigation.intents import DeterministicIntentPolicy
@@ -82,12 +81,11 @@ logger = logging.getLogger(__name__)
 _TERMINAL_STATUSES = frozenset({"RESOLVED", "CLOSED", "FAILED"})
 # LEGACY marks rows stored before revisions; a run never produces it.
 _REVISION_TRIGGERS = frozenset({"INITIAL", "MANUAL", "EVIDENCE_DEADLINE"})
-_DISTRIBUTION = "agentic-sre"
 
 
 def engine_version() -> str:
-    """The deployed package version; missing package metadata fails loudly."""
-    return package_version(_DISTRIBUTION)
+    """The RCA engine semantics version recorded on every revision (not the package release)."""
+    return RCA_ENGINE_VERSION
 
 
 _LIFECYCLE_SOURCE = "collector"

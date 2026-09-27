@@ -145,6 +145,12 @@ class Investigator(Protocol):
     def investigate(self, case: Case) -> Choice | None: ...
 
 
+# The deterministic RCA semantics a run was diagnosed with, persisted on every
+# revision. Bump it with any change that can alter a diagnosis from the same
+# evidence; replay refuses a run recorded under another version (M20.3a).
+RCA_ENGINE_VERSION = "1.1.2"
+
+
 @dataclass(frozen=True)
 class EngineConfig:
     ranking: RankingConfig = field(default_factory=RankingConfig)
@@ -687,6 +693,7 @@ def diagnose(
 
 
 __all__ = [
+    "RCA_ENGINE_VERSION",
     "Case",
     "Choice",
     "EngineConfig",

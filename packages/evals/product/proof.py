@@ -54,7 +54,18 @@ class RevisionFacts:
     evidence_uids: Mapping[str, str] = field(default_factory=dict)  # id -> exact instance UID
     synthetic_ids: frozenset[str] = frozenset()  # evidence from synthetic sources
     persisted_digest: str | None = None
-    replay_digest: str | None = None  # None: replay failed or did not run
+    replay_digest: str | None = None  # None: replay did not produce a digest
+    # NOT_ATTEMPTED | UNSUPPORTED | PASS | DIVERGED | ERROR (M20.1b); None: derived
+    # from the digests (a missing digest is ERROR, never a silent divergence).
+    replay_status: str | None = None
+
+    @property
+    def effective_replay_status(self) -> str:
+        if self.replay_status is not None:
+            return self.replay_status
+        if self.replay_digest is None:
+            return "ERROR"
+        return "PASS" if self.replay_digest == self.persisted_digest else "DIVERGED"
 
 
 @dataclass(frozen=True, slots=True)
@@ -489,6 +500,26 @@ def _sum(values: Iterable[int | None]) -> int | None:
     return total
 
 
+REPLAY_STATUSES = frozenset({"NOT_ATTEMPTED", "UNSUPPORTED", "PASS", "DIVERGED", "ERROR"})
+
+
+def _replay_divergence(revisions: Sequence[RevisionFacts], reasons: dict[str, str]) -> int | None:
+    """Revisions whose replay actually DIVERGED; unmeasured (None) unless every one replayed."""
+    statuses = [revision.effective_replay_status for revision in revisions]
+    unknown = sorted({item for item in statuses if item not in REPLAY_STATUSES})
+    if unknown:
+        raise ValueError(f"unknown replay status(es) {unknown}")
+    if any(status != "PASS" for status in statuses):
+        reasons["replay_status"] = ", ".join(
+            f"{revision.number}:{status}"
+            for revision, status in zip(revisions, statuses, strict=True)
+        )
+    if any(status not in ("PASS", "DIVERGED") for status in statuses):
+        reasons["replay_divergence"] = "not every revision was replayed"
+        return None
+    return sum(status == "DIVERGED" for status in statuses)
+
+
 def safety_counters(facts: ProofInput) -> tuple[dict[str, int | None], dict[str, str]]:
     revisions = facts.revisions
     reasons: dict[str, str] = {}
@@ -522,9 +553,7 @@ def safety_counters(facts: ProofInput) -> tuple[dict[str, int | None], dict[str,
         "uid_misbinding": uid,
         "missing_to_contradiction": sum(_missing_to_contradiction(r) for r in revisions),
         "fabricated": sum(len(_referenced(r.diagnosis) - r.universe) for r in revisions),
-        "replay_divergence": sum(
-            r.replay_digest is None or r.replay_digest != r.persisted_digest for r in revisions
-        ),
+        "replay_divergence": _replay_divergence(revisions, reasons),
         "unresolved_tape_evidence_id": sum(
             len(
                 {
@@ -591,6 +620,7 @@ def receipts_of(timeline: Sequence[object]) -> dict[TimelineRef, ActionReceipt]:
 __all__ = [
     "FAIL",
     "PASS",
+    "REPLAY_STATUSES",
     "SAFETY_COUNTERS",
     "TAPE_PREFIXES",
     "Evaluation",

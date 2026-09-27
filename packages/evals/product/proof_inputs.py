@@ -19,16 +19,30 @@ from sqlalchemy.orm import Session, sessionmaker
 from packages.evals.product.proof import ProofInput, RevisionFacts, receipts_of
 from packages.evals.product.spec import Expectation
 from packages.rca.episode_end import _SYNTHETIC_TOMBSTONES
+from packages.rca.investigation.policy import ReplayTrajectoryDivergence
 from packages.rca.model import Diagnosis
-from packages.rca.replay import ReplaySource, replay_run
-from packages.storage.models import DiagnosisRow
+from packages.rca.replay import (
+    ReplayDivergence,
+    ReplayModeUnsupported,
+    ReplaySource,
+    ReplayUnconsumedReads,
+    replay_run,
+)
+from packages.storage.models import DiagnosisRow, InvestigationRunRow
 from packages.storage.repositories import InvestigationReadRepository
 
 Replay = Callable[[str, sessionmaker[Session]], str]
 
 
 def _replay(run_id: str, session_factory: sessionmaker[Session]) -> str:
-    return replay_run(run_id, session_factory=session_factory)
+    """Trajectory replay for a run with an investigation artifact, base replay otherwise."""
+    with session_factory() as session:
+        investigated = session.get(InvestigationRunRow, run_id) is not None
+    mode = "trajectory" if investigated else "base"
+    return replay_run(run_id, mode, session_factory=session_factory)
+
+
+_DIVERGED = (ReplayDivergence, ReplayTrajectoryDivergence, ReplayUnconsumedReads)
 
 
 def source_evidence(
@@ -95,10 +109,17 @@ def revision_facts(
         raise ValueError(f"diagnosis {diagnosis_id} has no run id")
     base, uids, synthetic = source_evidence(run_id, session_factory)
     tape = tape_evidence(run_id, session_factory)
+    replayed: str | None = None
     try:
-        replayed: str | None = replay(run_id, session_factory)
-    except Exception:  # any replay failure is a divergence, never a silent match
-        replayed = None
+        replayed = replay(run_id, session_factory)
+    except ReplayModeUnsupported:
+        status = "UNSUPPORTED"
+    except _DIVERGED:  # the replay left the recorded execution
+        status = "DIVERGED"
+    except Exception:  # a replay that could not run is never a silent match
+        status = "ERROR"
+    else:
+        status = "PASS" if replayed == digest else "DIVERGED"
     return RevisionFacts(
         number=number,
         trigger=trigger,
@@ -109,6 +130,7 @@ def revision_facts(
         synthetic_ids=frozenset(synthetic),
         persisted_digest=digest,
         replay_digest=replayed,
+        replay_status=status,
     )
 
 

@@ -32,6 +32,7 @@ from packages.rca.manifest import ManifestEntry, alert_from_payload, event_evide
 from packages.rca.model import (
     Alert,
     ClusterEvent,
+    Diagnosis,
     EntityRef,
     InvestigationPolicyKind,
     InvestigationQuery,
@@ -647,29 +648,107 @@ def replay_selector(run_id: str, *, session_factory: sessionmaker[Session]) -> S
     )
 
 
+class ReplayUnconsumedReads(RuntimeError):
+    """A base replay finished without reading every recorded ENGINE read."""
+
+
+@dataclass(frozen=True)
+class BaseReplay:
+    """A replayed normal (non-investigation) run and its epistemic digest."""
+
+    digest: str
+    diagnosis: Diagnosis
+    source: ReplaySource
+
+
+def replay_base(run_id: str, *, session_factory: sessionmaker[Session]) -> BaseReplay:
+    """Replay a run that diagnosed without investigation (M20.1b).
+
+    The live service diagnosed such a run with ``diagnose(source, config=EngineConfig())``
+    and no investigator; replay runs exactly that over the run's frozen evidence
+    and tape. It refuses a run with an investigation trajectory (replay it with
+    ``trajectory``), a non-deterministic or model-assisted diagnosis, or another
+    engine config, and it requires every recorded ENGINE read to be consumed.
+    Nothing is written; no cluster, clock or provider is read.
+    """
+    from sqlalchemy import select
+
+    from packages.rca.engine import EngineConfig, diagnose
+    from packages.rca.investigation.state import rca_config_digest
+    from packages.storage.manifest import ReplayDataError
+    from packages.storage.models import DiagnosisRow
+    from packages.storage.trajectory import ReplayTrajectoryMissing, load_trajectory
+
+    config = EngineConfig()
+    with session_factory() as session:
+        try:
+            load_trajectory(session, run_id)
+        except ReplayTrajectoryMissing:
+            pass
+        except ReplayDataError as error:
+            raise ReplayModeUnsupported(
+                f"run {run_id} has an investigation artifact; base replay does not apply"
+            ) from error
+        else:
+            raise ReplayModeUnsupported(
+                f"run {run_id} has an investigation trajectory; replay it with 'trajectory'"
+            )
+        row = session.scalars(select(DiagnosisRow).where(DiagnosisRow.run_id == run_id)).first()
+        if row is None:
+            raise ReplayDataError(f"run {run_id} has no persisted diagnosis")
+        mode, calls, recorded_config = (
+            row.document.get("mode"),
+            row.document.get("model_calls"),
+            row.config_digest,
+        )
+    if mode != "deterministic" or calls:
+        raise ReplayModeUnsupported(
+            f"run {run_id} was diagnosed in mode {mode!r} with {calls} model call(s); "
+            "base replay reproduces only deterministic runs"
+        )
+    if recorded_config is not None and recorded_config != rca_config_digest(config, None):
+        raise ReplayModeUnsupported(
+            f"run {run_id} used engine config {recorded_config}, not this replay's config"
+        )
+    source = ReplaySource.from_run(run_id, session_factory=session_factory)
+    diagnosis = diagnose(source, config=config)
+    remaining = source.provider_adapter.next_sequence
+    if remaining is not None:
+        raise ReplayUnconsumedReads(
+            f"run {run_id}: recorded provider reads from sequence {remaining} were never replayed"
+        )
+    return BaseReplay(diagnosis_epistemic_digest(diagnosis), diagnosis, source)
+
+
 def replay_run(
     run_id: str, mode: str = "trajectory", *, session_factory: sessionmaker[Session]
 ) -> str:
     """Replay one recorded run offline and return its epistemic digest.
 
     ``trajectory`` plays the recorded actions; ``selector`` re-runs the recorded
-    deterministic selector and checks it chooses the same reads.
+    deterministic selector and checks it chooses the same reads; ``base``
+    re-runs a normal (non-investigation) deterministic diagnosis.
     """
     if mode == "trajectory":
         return replay_trajectory(run_id, session_factory=session_factory).digest
     if mode == "selector":
         return replay_selector(run_id, session_factory=session_factory).digest
+    if mode == "base":
+        return replay_base(run_id, session_factory=session_factory).digest
     raise ReplayModeUnsupported(f"replay mode {mode!r} is not supported")
 
 
 __all__ = [
+    "BaseReplay",
     "ReplayDivergence",
     "ReplayModeUnsupported",
     "ReplayProviderAdapter",
     "ReplaySource",
     "ReplayTrajectoryDivergence",
+    "ReplayUnconsumedReads",
     "SelectorReplay",
     "TrajectoryReplay",
+    "replay_base",
     "replay_run",
     "replay_selector",
     "replay_trajectory",

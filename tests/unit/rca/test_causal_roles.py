@@ -12,6 +12,7 @@ from packages.rca.causal_roles import (
     runtime_binding_entities,
 )
 from packages.rca.model import (
+    EntityInstanceRef,
     EntityRef,
     EvidenceTemporalRole,
     Finding,
@@ -42,6 +43,8 @@ def _binding(
     deployment: str | None,
     pod: str | None,
     namespace: str = "shop",
+    *,
+    pod_uid: str | None = None,
 ) -> RuntimeKubernetesBinding:
     if deployment is not None and pod is not None:
         quality = RuntimeBindingQuality.NAMESPACE_DEPLOYMENT_POD
@@ -52,7 +55,7 @@ def _binding(
     else:
         quality = RuntimeBindingQuality.NAMESPACE_ONLY
     return RuntimeKubernetesBinding(
-        namespace=namespace, deployment=deployment, pod=pod, quality=quality
+        namespace=namespace, deployment=deployment, pod=pod, pod_uid=pod_uid, quality=quality
     )
 
 
@@ -63,10 +66,12 @@ def _finding(
     at: datetime | None = T0,
     temporal_role: EvidenceTemporalRole = EvidenceTemporalRole.AMBIGUOUS,
     evidence: str = "finding:1",
+    uid: str | None = None,
 ) -> Finding:
     return Finding(
         kind=kind,
         entity=entity,
+        entity_instance=EntityInstanceRef(entity=entity, uid=uid) if uid is not None else None,
         at=at,
         summary=kind.value,
         evidence_ids=(evidence,),
@@ -81,6 +86,14 @@ def _hypothesis(
     hypothesis_id: str = "h1",
 ) -> Hypothesis:
     return Hypothesis(hypothesis_id=hypothesis_id, causal_actor=actor, findings=findings)
+
+
+def _level(
+    binding: RuntimeKubernetesBinding | None,
+    level: str,
+    state: RuntimeBindingVerificationState | None,
+) -> RuntimeBindingVerificationState | None:
+    return state if binding is not None and getattr(binding, level) is not None else None
 
 
 def _edge(
@@ -102,6 +115,11 @@ def _edge(
         affected_binding=affected,
         source_binding_state=source_state,
         affected_binding_state=affected_state,
+        # Per-level states exist only for the levels the binding actually carries.
+        source_deployment_verification=_level(source, "deployment", source_state),
+        source_pod_verification=_level(source, "pod", source_state),
+        affected_deployment_verification=_level(affected, "deployment", affected_state),
+        affected_pod_verification=_level(affected, "pod", affected_state),
         source_state=RuntimeOutcomeState.ERROR,
         affected_state=RuntimeOutcomeState.NON_OK,
         source_protocol=RuntimeProtocol.GRPC,
@@ -317,10 +335,11 @@ def test_manifestation_requires_inclusive_temporal_overlap() -> None:
 def test_manifestation_without_timestamp_is_propagated_effect() -> None:
     actor = _ref("Pod", "checkout-1")
     assessment = derive_hypothesis_causal_roles(
-        (_hypothesis(actor, (_finding(actor, FindingKind.FAILURE_EVENT, at=None),)),),
+        (_hypothesis(actor, (_finding(actor, FindingKind.FAILURE_EVENT, at=None, uid="uid-1"),)),),
         _propagation(
             _edge(
-                source=_binding("payment", "payment-1"), affected=_binding("checkout", "checkout-1")
+                source=_binding("payment", "payment-1"),
+                affected=_binding("checkout", "checkout-1", pod_uid="uid-1"),
             )
         ),
     ).assessments[0]

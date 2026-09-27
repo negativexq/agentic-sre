@@ -32,6 +32,11 @@ from packages.rca.pod_status import pod_status_from_history
 from packages.rca.traces import normalize_trace_status, parse_trace_mapping, semantic_attributes
 
 _OBJECTS = "k8s_objects_raw.tsv"
+# How raw snapshot files become normalized evidence; separate from the RCA engine
+# semantics version and from the dataset revision. v2 (M20.5 P2a): exact object
+# instances (`metadata.uid`) survive time-ordered history compaction. v3 (M20.5
+# P2a-bis): events carry their `involvedObject.uid` like the live event journal.
+SOURCE_NORMALIZATION = "itbench-snapshot-source.v3"
 _EVENTS = "k8s_events_raw.tsv"
 _LOGS = "otel_logs_raw.tsv"
 _TRACES = "otel_traces_raw.tsv"
@@ -368,7 +373,7 @@ class SnapshotSource:
 
     @cached_property
     def _history(self) -> dict[EntityRef, list[ObjectVersion]]:
-        history: dict[EntityRef, list[ObjectVersion]] = {}
+        rows: list[tuple[datetime, int, EntityRef, dict[str, Any], str | None]] = []
         path = self.root / _OBJECTS
         for index, row in enumerate(iter_tsv(path)):
             try:
@@ -384,22 +389,34 @@ class SnapshotSource:
             observed = parse_time(row.get("Timestamp"))
             if ref is None or observed is None:
                 continue
+            raw_uid = metadata.get("uid")
+            uid = raw_uid if isinstance(raw_uid, str) and raw_uid else None
+            rows.append((observed, index, ref, body, uid))
+        # Compact in time order (oldest first), not file order. The original row
+        # index stays the evidence identity.
+        rows.sort(key=lambda item: (item[0], item[1]))
+        history: dict[EntityRef, list[ObjectVersion]] = {}
+        for observed, index, ref, body, uid in rows:
             versions = history.setdefault(ref, [])
             content = {k: v for k, v in body.items() if k not in {"status", "metadata"}}
             if versions:
-                last = versions[-1].body
-                if {k: v for k, v in last.items() if k not in {"status", "metadata"}} == content:
+                last = versions[-1]
+                same_content = {
+                    k: v for k, v in last.body.items() if k not in {"status", "metadata"}
+                } == content
+                # The same name and spec is not the same instance: a changed
+                # (or appearing/disappearing) UID always starts a new version.
+                if same_content and last.uid == uid:
                     continue
             versions.append(
                 ObjectVersion(
                     entity=ref,
+                    uid=uid,
                     observed_at=observed,
                     body=body,
                     evidence_id=f"{_OBJECTS}:{index}",
                 )
             )
-        for versions in history.values():
-            versions.sort(key=lambda item: item.observed_at)
         return _mark_lifecycle(history)
 
     def object_history(self) -> Mapping[EntityRef, Sequence[ObjectVersion]]:
@@ -434,9 +451,13 @@ class SnapshotSource:
             seen.add(key)
             first = parse_time(event.get("firstTimestamp")) or parse_time(event.get("eventTime"))
             last = parse_time(event.get("lastTimestamp")) or first
+            involved_uid = involved.get("uid")
             result.append(
                 ClusterEvent(
                     entity=ref,
+                    involved_uid=involved_uid
+                    if isinstance(involved_uid, str) and involved_uid
+                    else None,
                     reason=str(event.get("reason") or ""),
                     type=str(event.get("type") or "Normal"),
                     message=str(event.get("message") or "")[:500],
@@ -579,4 +600,10 @@ class SnapshotSource:
         return result
 
 
-__all__ = ["SnapshotSource", "parse_time", "parse_trace_span", "pod_pressure"]
+__all__ = [
+    "SOURCE_NORMALIZATION",
+    "SnapshotSource",
+    "parse_time",
+    "parse_trace_span",
+    "pod_pressure",
+]

@@ -93,17 +93,22 @@ def canonicalize_trace_spans(
 ) -> CanonicalTraceIndex:
     """Apply the P2G-2 duplicate/conflict semantics exactly once."""
     canonical: dict[tuple[str, str], TraceSpanObservation] = {}
-    fingerprints: dict[tuple[str, str], set[tuple[str | None, str, RuntimeSpanKind]]] = {}
+    fingerprints: dict[
+        tuple[str, str], set[tuple[str | None, str, RuntimeSpanKind, str | None]]
+    ] = {}
     conflicting: set[tuple[str, str]] = set()
     duplicate_equivalent_rows = 0
     conflicting_span_keys = 0
 
     for span in spans:
         key = (span.trace_id, span.span_id)
+        # The exact Pod instance is part of a span's identity: the same span
+        # reported with a different Pod UID is a conflict, not a duplicate.
         fingerprint = (
             span.parent_span_id,
             span.service.strip(),
             normalize_runtime_span_kind(span.span_kind),
+            span.semantic_attributes.get("k8s.pod.uid"),
         )
         known = fingerprints.setdefault(key, set())
         if fingerprint in known:

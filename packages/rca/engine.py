@@ -148,7 +148,7 @@ class Investigator(Protocol):
 # The deterministic RCA semantics a run was diagnosed with, persisted on every
 # revision. Bump it with any change that can alter a diagnosis from the same
 # evidence; replay refuses a run recorded under another version (M20.3a).
-RCA_ENGINE_VERSION = "1.2.1"
+RCA_ENGINE_VERSION = "1.2.2"
 
 
 @dataclass(frozen=True)

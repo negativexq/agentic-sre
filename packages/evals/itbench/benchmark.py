@@ -25,7 +25,7 @@ from packages.evals.itbench.contracts import (
 from packages.evals.itbench.dataset import ITBenchLiteDataset
 from packages.evals.itbench.grader import grade_root_cause_entities
 from packages.evals.itbench.io import atomic_json_write
-from packages.evals.itbench.source import SnapshotSource
+from packages.evals.itbench.source import SOURCE_NORMALIZATION, SnapshotSource
 from packages.rca.engine import EngineConfig, Investigator, diagnose
 from packages.rca.model import Confidence, Diagnosis
 
@@ -150,6 +150,7 @@ def predict(
         "created_at": datetime.now(UTC).isoformat(),
         "git_head": _git_head(),
         "git_dirty": _git_dirty(),
+        "source_normalization": SOURCE_NORMALIZATION,
         "mode": investigator.name if investigator else "deterministic",
         "model": getattr(getattr(investigator, "client", None), "model", None),
         "engine_config": json.loads(json.dumps(asdict(config), default=str)),

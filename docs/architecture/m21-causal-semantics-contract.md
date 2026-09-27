@@ -55,7 +55,14 @@ This contract does not predict how many blockers any rule will remove. The effec
 - **I9 — Exclusion is incident-scoped.** Root-ineligibility says only that the actor did not initiate *this* incident under the named rule. It never denies the observed change or failure.
 - **I10 — Domain alone never excludes.** Domain classification (§5.2) may alter which channels are applicable or which coverage obligations exist. Domain classification alone MUST NEVER produce `ROOT_INELIGIBILITY`, `CONTRADICTED`, or an elimination.
 - **I11 — No vacuous closure.** A causal-closure exclusion over an empty set of applicable channels is forbidden. Absence of an applicable channel set never proves non-causality (§4.2a).
-- **I12 — Applicability is structural.** Whether a channel is applicable depends only on structural facts about the candidate's closure (object kinds, placement and lifecycle). It never depends on observed abnormal evidence. Such evidence is a `PATH` on an applicable channel, never a reason for the channel to exist.
+- **I12 — Applicability is evidence-independent.** Channel applicability may depend only on deterministic, pre-decision structural or declarative facts:
+  - closure object kinds;
+  - placement and lifecycle;
+  - typed candidate and symptom kind (for example `TRAFFIC_INCREASE`);
+  - operator-declared actor domain (§5.2.1);
+  - declared alert or provenance class.
+
+  Applicability MUST NOT depend on whether the channel produced normal, abnormal, supporting, contradictory, missing or `NO_DATA` observations in this incident. Observed channel evidence determines `PATH` / `NO_PATH_COVERED` / `UNCOVERED` / `UNKNOWN`. It never determines whether the channel exists.
 - **I13 — Support is not elimination.** Support never excludes a rival and never carries resolution authority (§5.4).
 
 ## 4. Shared framework: influence channels and coverage
@@ -81,7 +88,7 @@ The **closure** of an initiated change on object X is X plus every object X owns
 
 ### 4.2a Channel applicability
 
-Channel applicability is distinct from channel coverage. Each catalog channel is first classified as `APPLICABLE` or `NOT_APPLICABLE` for the candidate's closure, using only the structural predicate in §4.1 (I12).
+Channel applicability is distinct from channel coverage. Each catalog channel is first classified as `APPLICABLE` or `NOT_APPLICABLE` for the candidate's closure, using only the evidence-independent structural or declarative predicate in §4.1 (I12).
 - A channel that cannot mediate the candidate's mechanism is `NOT_APPLICABLE`. It is not `UNKNOWN` and not `UNCOVERED`.
 - `NOT_APPLICABLE` channels do not participate in causal closure.
 - Applicability MUST NOT depend on observed CPU, memory, pressure, eviction, throttling, OOM or any other abnormal signal. For channel N it depends only on placement and lifecycle facts: a Pod instance was scheduled and running on a known node in the window.
@@ -369,7 +376,7 @@ Proposed v1 rules:
 - D2 requires the actor to be instrumented across the whole window and the trace reads to be complete.
 - An outgoing call to an uninstrumented dependency makes D2 `INAPPLICABLE`: the failure may come from beyond the traced boundary.
 
-**MISSING-EVIDENCE BEHAVIOR.** A rule that cannot be evaluated is `INAPPLICABLE` and records why. `NOT_FIRED` is recorded when all inputs are covered and the predicate is false. Neither changes eligibility. A hypothesis with no fired rule remains `UNRESOLVED` exactly as today.
+**MISSING-EVIDENCE BEHAVIOR.** A rule that cannot be evaluated is `INAPPLICABLE` and records why. `NOT_FIRED` is recorded when all inputs are covered and the predicate is false. Neither changes eligibility, and neither changes the hypothesis's existing epistemic state: a hypothesis already `SUPPORTED` (for example by D1) stays `SUPPORTED`. A hypothesis with no fired rule remains `UNRESOLVED` exactly as today.
 
 **FALSE-RESOLVED FAILURE MODE.**
 - A D2-supported actor is resolved while the real initiating change elsewhere was excluded by a weak rule. D2 cannot resolve by itself, so any false resolution must come from an A/B/C exclusion. For that reason, the M21 gate attributes every `RESOLVED` to the exclusions that enabled it.
@@ -379,8 +386,21 @@ Required negative controls:
 - (a) A flag-config change causing payment errors must not resolve to payment.
 - (b) An always-failing actor gives D2 `INAPPLICABLE`.
 - (c) An actor calling an uninstrumented dependency gives D2 `INAPPLICABLE`.
+- (d) **D2 digest visibility.** For a hypothesis already `SUPPORTED` by D1, D2 `NOT_FIRED` gives digest A and D2 `FIRED` gives digest B, and A ≠ B.
+- (e) **D1 migration.** The epistemic digest before the D1 audit refactor equals the digest after it, exactly.
 
-**VERSIONED RULE CANDIDATE.** `m21.support.change-onset-path.v1` and `m21.support.runtime-failure-origin.v1`, both with consequence `ROOT_SUPPORT` (a new consequence kind). Support records are persisted in the hypothesis audit. The D1 record stays outside the epistemic digest (exact-equality gate). A D2 `FIRED` outcome changes epistemic state, so it is reflected in the digest through that state.
+**VERSIONED RULE CANDIDATE.** `m21.support.change-onset-path.v1` and `m21.support.runtime-failure-origin.v1`, both with consequence `ROOT_SUPPORT` (a new consequence kind). Support records are persisted in the hypothesis audit. The D1 record stays outside the epistemic digest (exact-equality gate). D2 records are persisted **and included in the epistemic digest** as a canonical, versioned support consequence, independently of the aggregate `HypothesisEpistemicState`. The canonical shape (detail fixed by the implementation task) contains:
+- `rule_id` and `rule_version`;
+- the hypothesis key or exact actor identity;
+- `consequence = ROOT_SUPPORT`;
+- `support_kind`;
+- the decisive evidence ids.
+
+**Digest invariant.** A difference between D2 `FIRED` and D2 `NOT_FIRED`/`INAPPLICABLE` must be observable in the epistemic digest, even when the hypothesis was already `SUPPORTED` for another reason, for example D1. Otherwise replay could miss a D2 divergence.
+
+Summary:
+- D1 record: persisted audit; explicitly excluded from the epistemic digest; exact-equality migration gate.
+- D2 record: persisted; included in the epistemic digest as its own consequence.
 
 **OWNER DECISIONS (2026-09-27).**
 - **OD-D1 — APPROVED.** D2 does not participate in dominance. Dominance stays change-shape-based.
@@ -395,7 +415,7 @@ Required negative controls:
 | A — unrelated change | Conditional: `ROOT_INELIGIBILITY` only when the applicable channel set is non-empty and every applicable channel is `NO_PATH_COVERED` over the full window | No | Neutral: `INAPPLICABLE`, stays in competition | Yes: `m21.unrelated-change.v1` |
 | B — telemetry, control-plane and infrastructure actors | Role-aware, never domain alone (I10): only a declared cross-domain actor with channel O and every applicable channel covered. Control-plane and infrastructure actors never in v1. | Conditional: via D rules when the actor's domain equals the symptom domain | Neutral | Yes: `m21.incident-causal-scope.v1` plus the domain config |
 | C — async propagation | Async propagated-effect eligibility with MSG-1/MSG-2 only; MSG-3 never | May follow later (the broker as origin), not v1 | Neutral | Yes: `m21.async-propagated-effect.v1` plus normalizer preservation (M20.5) |
-| D — positive root support | No | Yes: versioned rules D1, D2; FIRED / NOT_FIRED / INAPPLICABLE; no scores | Neutral; state stays `UNRESOLVED` | Yes: D1 (audit refactor) then D2; D3 deferred |
+| D — positive root support | No | Yes: versioned rules D1, D2; FIRED / NOT_FIRED / INAPPLICABLE; no scores | Neutral; existing epistemic state remains unchanged | Yes: D1 (audit refactor) then D2; D3 deferred |
 
 ## 7. Implementation order and gate (after freeze, after M20)
 
@@ -427,3 +447,4 @@ If implementation finds that the code or data semantics conflict with a clause, 
 | Date | Amendment | Source |
 |---|---|---|
 | 2026-09-27 | Amendment 1 (owner `CONTRACT_AMENDMENT_REQUIRED`). Channel applicability separated from coverage (§4.2a). Exclusion rule restated over applicable channels with an empty-set guard (§4.3). OD-A1 replaced by structural shared-node applicability. Invariants I10–I13 added. Noisy-neighbor, vacuous-truth and applicability-is-not-evidence negative controls added. OD-A2 excludes `Secret`. OD-A4 is bounded to strict, windowed, identity-resolved, coverage-qualified neighbors. The other 10 decisions approved. D1 gate set to exact epistemic-digest equality. | Owner review of `m21.v0` |
+| 2026-09-27 | Amendment 2 (owner `CONTRACT_AMENDMENT_REQUIRED`). I12 changed from structural-only to evidence-independent structural or declarative applicability, consistent with I10, OD-A3 and OD-B1. D2 support consequences are included in the epistemic digest independently of the aggregate state (digest invariant), and a D2 digest-visibility negative control is added. The D1 migration control is restated unchanged. Decision matrix D reads "existing epistemic state remains unchanged". | Owner review of amendment 1 |

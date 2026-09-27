@@ -28,7 +28,7 @@ from packages.rca.model import (
     TraceSpanObservation,
     TrafficObservation,
 )
-from packages.rca.pod_status import pod_status_from_history
+from packages.rca.pod_status import pod_status_from_body
 from packages.rca.traces import normalize_trace_status, parse_trace_mapping, semantic_attributes
 
 _OBJECTS = "k8s_objects_raw.tsv"
@@ -36,7 +36,9 @@ _OBJECTS = "k8s_objects_raw.tsv"
 # semantics version and from the dataset revision. v2 (M20.5 P2a): exact object
 # instances (`metadata.uid`) survive time-ordered history compaction. v3 (M20.5
 # P2a-bis): events carry their `involvedObject.uid` like the live event journal.
-SOURCE_NORMALIZATION = "itbench-snapshot-source.v3"
+# v4 (M20.6): every observed Pod body yields a status observation, not only the
+# compacted versions, like the live lifecycle ledger's STATUS_SNAPSHOT heartbeat.
+SOURCE_NORMALIZATION = "itbench-snapshot-source.v4"
 _EVENTS = "k8s_events_raw.tsv"
 _LOGS = "otel_logs_raw.tsv"
 _TRACES = "otel_traces_raw.tsv"
@@ -372,7 +374,8 @@ class SnapshotSource:
         return self._alerts
 
     @cached_property
-    def _history(self) -> dict[EntityRef, list[ObjectVersion]]:
+    def _object_rows(self) -> list[tuple[datetime, int, EntityRef, dict[str, Any], str | None]]:
+        """Every parseable object row in time order; the row index is its evidence id."""
         rows: list[tuple[datetime, int, EntityRef, dict[str, Any], str | None]] = []
         path = self.root / _OBJECTS
         for index, row in enumerate(iter_tsv(path)):
@@ -392,11 +395,15 @@ class SnapshotSource:
             raw_uid = metadata.get("uid")
             uid = raw_uid if isinstance(raw_uid, str) and raw_uid else None
             rows.append((observed, index, ref, body, uid))
+        rows.sort(key=lambda item: (item[0], item[1]))
+        return rows
+
+    @cached_property
+    def _history(self) -> dict[EntityRef, list[ObjectVersion]]:
         # Compact in time order (oldest first), not file order. The original row
         # index stays the evidence identity.
-        rows.sort(key=lambda item: (item[0], item[1]))
         history: dict[EntityRef, list[ObjectVersion]] = {}
-        for observed, index, ref, body, uid in rows:
+        for observed, index, ref, body, uid in self._object_rows:
             versions = history.setdefault(ref, [])
             content = {k: v for k, v in body.items() if k not in {"status", "metadata"}}
             if versions:
@@ -577,7 +584,21 @@ class SnapshotSource:
         return [item for item in self._trace_observations if item.start_at <= cutoff]
 
     def pod_status_observations(self) -> Sequence[PodStatusObservation]:
-        return pod_status_from_history(self.object_history())
+        """What every observed Pod body's status showed at that moment.
+
+        History compaction keeps one version per unchanged desired state, so a
+        repeated observation of the same spec is no new version -- but it is still
+        a status observation (e.g. Ready continuing across an incident boundary).
+        """
+        return self._pod_statuses
+
+    @cached_property
+    def _pod_statuses(self) -> tuple[PodStatusObservation, ...]:
+        return tuple(
+            pod_status_from_body(ref, body, observed, f"{_OBJECTS}:{index}")
+            for observed, index, ref, body, _ in self._object_rows
+            if ref.kind == "Pod"
+        )
 
     def logs(self, service: str, *, limit: int = 20) -> Sequence[dict[str, Any]]:
         """Error-level log lines for one service, bounded."""

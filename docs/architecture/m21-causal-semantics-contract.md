@@ -1,7 +1,7 @@
 # M21 Causal Semantics Contract
 
 Contract version: `m21.v1`
-Status: **FROZEN** (owner, 2026-09-27, after amendments 1–2; amendment 3 recorded 2026-09-28, §9). M21 implementation starts only after the M20 live-parity tasks, in the owner-frozen order.
+Status: **FROZEN** (owner, 2026-09-27, after amendments 1–2; amendments 3–4 recorded 2026-09-28, §9). M21 implementation starts only after the M20 live-parity tasks, in the owner-frozen order.
 Baseline: `main` @ `d0caf5d0e3512930c1a8d4e0803e777a64fb2f06` (RCA code identical to the M20.1 audit)
 Scope: this contract defines the evidence that authorizes the RCA engine to treat a hypothesis as root-capable, root-supported or root-ineligible. It covers four topics: A unrelated initiated changes, B telemetry and control-plane actors, C asynchronous propagation, and D positive root support. It changes no code, test or threshold.
 
@@ -501,3 +501,66 @@ If implementation finds that the code or data semantics conflict with a clause, 
 | 2026-09-27 | Amendment 1 (owner `CONTRACT_AMENDMENT_REQUIRED`). Channel applicability separated from coverage (§4.2a). Exclusion rule restated over applicable channels with an empty-set guard (§4.3). OD-A1 replaced by structural shared-node applicability. Invariants I10–I13 added. Noisy-neighbor, vacuous-truth and applicability-is-not-evidence negative controls added. OD-A2 excludes `Secret`. OD-A4 is bounded to strict, windowed, identity-resolved, coverage-qualified neighbors. The other 10 decisions approved. D1 gate set to exact epistemic-digest equality. | Owner review of `m21.v0` |
 | 2026-09-27 | Amendment 2 (owner `CONTRACT_AMENDMENT_REQUIRED`). I12 changed from structural-only to evidence-independent structural or declarative applicability, consistent with I10, OD-A3 and OD-B1. D2 support consequences are included in the epistemic digest independently of the aggregate state (digest invariant), and a D2 digest-visibility negative control is added. The D1 migration control is restated unchanged. Decision matrix D reads "existing epistemic state remains unchanged". | Owner review of amendment 1 |
 | 2026-09-28 | Amendment 3 (owner `CONTRACT_AMENDMENT_REQUIRED`, after the M20.6 upper-bound and census measurements). §2.1 full census (111 dev; 54 was an audit-truncation bug) and the R cohort; Topic A applies to SUPPORTED initiated changes with no D1 immunity (R is a cohort, not a rule); B's v1 value measured on the TELEMETRY subset only; C5 is not a predicate and needs a semantic feasibility audit; async-class safety witness in the C gate; D2 vs D3 split; order and scoreboard restated with a real-resolver measurement after every tranche. | Owner review of the M20.6 upper-bound measurement |
+| 2026-09-28 | Amendment 4 (owner `CONTRACT_AMENDMENT_REQUIRED`). §10 incident onset: V0 and V1 rejected; V2 approved as the bounded production direction with an explicit alert-channel coverage boundary (snapshot: first alert capture time; live: latest contiguous alert-observation segment, persisted and replayed exactly); causal onset separated from reference time, with UNKNOWN when no qualified episode exists; VI rejected; L3 deferred; Scenario-31 recorded as a benchmark/evidence/ground-truth conflict with no accommodation; engine 1.3.0; committed before its read-only remeasurement. | Owner review of the onset measurements and the S31 forensic audit |
+
+## 10. Incident onset semantics and benchmark evidence conflict (amendment 4)
+
+**Status.** Onset research is closed. The qualified new-diagnostic-episode onset (V2) is the bounded production fix, with the alert-channel coverage boundary defined below. Scenario-31 remains a documented benchmark/evidence/ground-truth conflict. This section fixes a measured safety problem; it adds no causal rule.
+
+### 10.1 Findings (35 ITBench-Lite scenarios, read-only, `.local/m20-audit/m20_6b/`)
+
+| Candidate | Decision | Evidence |
+|---|---|---|
+| V0 — global `min(activeAt)` of non-background alerts | **REJECTED** | A chronic, cause-type alert sets the onset in 19/35 scenarios, and the onset precedes the evidence window in 24/35. `m16.temporal-contradiction` then eliminates the ground-truth root in 2/35 (S24, S31). |
+| V1 — suspend temporal contradiction whenever the onset is unanchored | **REJECTED** — excessive authority loss | 24/35 onsets are unanchored, so most legitimate temporal eliminations are suspended (ceiling +C5: 11 → 6). |
+| V2 — qualified new diagnostic episode | **APPROVED** as the bounded production direction | Best measured candidate. That measurement used the object channel as its boundary, which is epistemically wrong (§10.2 rule 7). Its numbers are historical comparison only and are **not** a regression target. |
+| VI — 5-minute interval `[L, U]` | **REJECTED** | U = L in 12/35; S31 is still eliminated; ceiling +C5 13 < 14. |
+| L3 — telemetry-derived onset | **DEFERRED** to live-product work | ITBench traffic is pod resource-request metrics (no request SLI) and traces are truncated; a change point is found in 4/35. |
+
+**Scenario-31: `BENCHMARK_EVIDENCE_GROUND_TRUTH_CONFLICT`.** The onset-defining `RequestErrorRate` (frontend-proxy, rule "error rate > 0") belongs to a chronic, flapping series that starts before the recorded fault. The recorded NetworkPolicy spec is `ingress: [{}]` (allow-all), and no symptom attributable to it is observable (forensic verdict UNKNOWN). No scenario-specific accommodation is made. S31 may remain a grader mismatch.
+
+### 10.2 Production contract
+
+1. Each source exposes an explicit **alert-observation coverage boundary** W (`alert_observation_start()`), specific to the alert channel.
+2. A diagnostic alert whose episode began before W is **pre-existing**: it remains a reported symptom but cannot establish incident onset.
+3. The incident **causal onset** is the earliest qualified diagnostic alert episode (non-background) that begins at or after W.
+4. If no such episode exists, the causal onset is **UNKNOWN**. No fallback alert timestamp gains causal decision authority:
+   - no onset-derived temporal contradiction;
+   - no onset-derived positive initiating authority;
+   - no onset-dependent A1 elimination.
+5. Alert names, scenario ids and ground truth never participate.
+6. W is source evidence. It is persisted with the run and replayed exactly, never recomputed.
+7. Different evidence channels may have different coverage boundaries. Object/journal coverage cannot substitute for alert coverage.
+
+**Causal onset vs reference time.** `causal_onset` (authority-bearing, may be UNKNOWN) and `observation_reference_time` (for queries, log capture and investigation windows; never authority) are separate values. A V0 timestamp must never be placed in `Symptoms.onset` with an "unanchored" flag; every onset consumer is classified as authority-bearing (reads `causal_onset`) or reference-only (reads `observation_reference_time`).
+
+**Snapshot source.** W = the earliest alert-channel snapshot **capture** time: the timestamp in the name of an alert evidence file (`alerts_at_<t>.json`, `alerts_in_alerting_state_<t>.json`, UTC), not any alert's `activeAt`/`startsAt`. With a single terminal capture, every episode active at that capture is pre-existing, and the causal onset is UNKNOWN. (`scenario.observation_start` is absent in 35/35 scenarios and is not used.)
+
+**Live source.** W = the start of the **latest contiguous alert-observation coverage segment** containing the run boundary, not the time the alert system was first installed. For example: receiver starts 10:00, heartbeat 12:00, gap 12:05–12:20, healthy again 12:20, diagnosis 14:00 → W = 12:20. Alert state during a gap is unknown. The run boundary persists at least:
+- `alert_observation_start` (W);
+- `alert_observation_end` / last heartbeat;
+- `coverage_segment_id`;
+- `coverage_status = CONTIGUOUS`.
+
+It must never be inferred from the object journal start, the snapshot start, `min(alert.starts_at)`, `incident_window()` or the current clock. Alertmanager re-sends firing alerts with their original `startsAt`, so chronic alerts that predate the segment are naturally pre-existing.
+
+**Replay and overlay.** Replay uses the persisted boundary exactly, so the same boundary gives the same onset, the same evidence and the same diagnosis digest. An investigation overlay never changes the base run's boundary.
+
+**Engine version.** `RCA_ENGINE_VERSION` 1.2.2 → 1.3.0: on the same evidence, temporal roles, epistemic states, eliminations and resolutions can change. Runs recorded under 1.2.2 replay as UNSUPPORTED under 1.3.0 and are never silently treated as equivalent.
+
+### 10.3 Measurement protocol and gate
+
+This amendment is committed **before** the read-only remeasurement. If the remeasurement does not satisfy the gate, the result is reported as FAIL; the contract is not changed to pass it. The scoreboard compares V0, old V2 (historical only) and A4-V2 over the 35 public scenarios, with S11, S24 and S31 reported separately:
+- ground-truth state (supported, unresolved, contradicted, absent);
+- correct and wrong `RESOLVED`, `AMBIGUOUS`, `INSUFFICIENT`;
+- temporal eliminations, A1 eliminations and initiating supports;
+- causal onset `ANCHORED` / `UNKNOWN`, and the pre-existing episode count.
+
+Gate:
+- new evidence-supported bad ground-truth elimination = 0;
+- engine wrong `RESOLVED` = 0;
+- S24 regression fixed;
+- no scenario-specific logic;
+- deterministic, replayable onset.
+
+Performance numbers are read after the gate, never as it.

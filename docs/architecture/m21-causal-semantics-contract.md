@@ -1,7 +1,7 @@
 # M21 Causal Semantics Contract
 
 Contract version: `m21.v1`
-Status: **FROZEN** (owner, 2026-09-27, after amendments 1–2). M21 implementation starts only after the M20 live-parity tasks, in the owner-frozen order.
+Status: **FROZEN** (owner, 2026-09-27, after amendments 1–2; amendment 3 recorded 2026-09-28, §9). M21 implementation starts only after the M20 live-parity tasks, in the owner-frozen order.
 Baseline: `main` @ `d0caf5d0e3512930c1a8d4e0803e777a64fb2f06` (RCA code identical to the M20.1 audit)
 Scope: this contract defines the evidence that authorizes the RCA engine to treat a hypothesis as root-capable, root-supported or root-ineligible. It covers four topics: A unrelated initiated changes, B telemetry and control-plane actors, C asynchronous propagation, and D positive root support. It changes no code, test or threshold.
 
@@ -41,6 +41,23 @@ Measured facts about the evidence currently available:
 - The deterministic investigation eliminates 0 alternatives in all 10 incidents.
 
 This contract does not predict how many blockers any rule will remove. The effect is measured once, at the M21 gate. A rule that turns out inert under honest coverage is an acceptable result. A rule relaxed until it fires is not.
+
+### 2.1 Full census (amendment 3)
+
+The 54 above is a measurement bug, not the product's state. The M20.1 audit counted the persisted `HypothesisResolutionAudit` list, which `_audit_items` truncates to `_MAX_TRACE_ITEMS = 8`, while the resolver decides over every hypothesis. No benchmark or forensic measurement may again count hypotheses or blockers from `resolution_trace.hypothesis_audits`; it must use `considered_hypotheses`, `unresolved_hypotheses`, the full engine structures, or a dedicated full audit output.
+
+Full census, ITBench dev split (`.local/m20-audit/m20_6/`):
+
+| Class (measurement label) | Unresolved blockers |
+|---|---|
+| C1 initiated change | 45 |
+| C2 telemetry, control-plane and infrastructure manifestation | 43 |
+| C5 traced application service | 10 |
+| C4 async or untraced actor | 9 |
+| C3 non-service object | 4 |
+| **Total** | **111** |
+
+A separate problem, not inside the 111 because it is `SUPPORTED`/plausible: an **off-symptom plausible initiated rival** (the "R cohort") in 9/10 incidents. Its support comes from recorder objects in a namespace with no incident symptom. The labels are measurement labels only and are never production predicates.
 
 ## 3. Global invariants (all topics)
 
@@ -147,6 +164,8 @@ Each topic uses the same headings: problem, current behavior, risk, proposed sem
 **RISK.** This topic carries the highest false-resolved risk in the contract. Topology derivation covers only the relations the extractor knows. An unlinked change may act through an unmodeled reference, an untraced call, a shared node, a control-plane side effect, or the observation path. Excluding it on the basis of no path found would re-introduce the m16 §5 defect in another form.
 
 **PROPOSED SEMANTIC.** An initiated change is **root-ineligible for this incident** only when its full closure has a non-empty set of applicable channels (§4.2a) and every applicable channel evaluates to `NO_PATH_COVERED` over the full window (§4.4, §4.3). The consequence is `ROOT_INELIGIBILITY`, not `CONTRADICTED`: the change happened; it is just not this incident's initiator. The rule never supports another hypothesis and never selects an actor.
+
+**AMENDMENT 3 — scope.** Topic A applies to every initiated-change hypothesis that carries an actor-aligned initiating change, **including `SUPPORTED` ones**, not only `UNRESOLVED` / `NO_CAUSAL_SYMPTOM_LINK` ones. Existing support does not prevent root-ineligibility when every applicable channel from the candidate's causal closure to the incident's symptom side is `NO_PATH_COVERED` under complete coverage. Any channel that is `PATH`, `UNKNOWN` or `UNCOVERED` keeps the candidate. The R cohort (§2.1) is the measured instance: a recorder ConfigMap with real support to recorder Pods but no covered influence on the symptom side. R is a measurement cohort name, never a separate rule; "all findings outside the symptom scope, no current path → eliminate" is rejected as too weak for I1/I2.
 
 **REQUIRED EVIDENCE.**
 - The exact change Finding with its causal time.
@@ -265,6 +284,8 @@ Domain alone never excludes, contradicts or eliminates anything (I10). It only c
 - **OD-B2 — APPROVED.** ITBench may ship one per-application domain declaration for otel-demo. It is frozen before any DEV/TEST use, identical for every scenario, and recorded in the eval config digest. Scenario-specific declarations are forbidden.
 - **OD-B3 — APPROVED.** Alert signal provenance comes from an explicit declared mapping. Where it is missing, channel O is `UNKNOWN`.
 
+**AMENDMENT 3 — v1 authority subset.** The frozen domains stay: `TELEMETRY` may carry a conditional exclusion; `CONTROL_PLANE` and `INFRASTRUCTURE` carry no v1 exclusion. Before M21-B starts, the C2 population is measured by domain (`TELEMETRY` / `CONTROL_PLANE` / `INFRASTRUCTURE` / `UNDECLARED`), and the product-value upper bound for B is computed on the `TELEMETRY` subset only. Removing all of C2 in an upper bound overstates B.
+
 ### 5.3 Topic C — Asynchronous propagation
 
 **PROBLEM.** A failure that crosses a message broker is invisible to propagation. Kafka and valkey Pods with `DEPENDENCY_ERRORS`, fraud-detection (a consumer), and producers remain unexplained (C4, 7 blockers in 3 incidents).
@@ -331,6 +352,14 @@ MSG-3 may only count as an open channel M for Topics A and B (I2). It never excl
 - **OD-C3 — APPROVED.** Broker-root semantics are outside v1.
 - **M20.5 boundary.** M20.5 only preserves provenance: span kind, messaging attributes, links, trace and span ids, timestamps and service identity. All causal interpretation belongs to M21.
 
+**AMENDMENT 3 — async-class safety witness.** Being in the async/untraced class never implies root-ineligibility: in one dev incident the ground-truth root is an async-class manifestation-only Pod. An equivalent synthetic negative control (an async-class actor that is the true root must not become root-ineligible) is part of the M21-C gate. Topic C excludes only under MSG-1/MSG-2, an upstream abnormal condition, downstream non-success, exact bindings, causal ordering and no source-capable initiating evidence in the downstream episode.
+
+**AMENDMENT 3 — C5 is not a rule.** The C5 label never becomes a production predicate; absence of propagation is not a propagated effect. Before any C5 work, a semantic feasibility audit sorts each C5 blocker into exactly one bucket:
+- exact incoming sync propagation exists → the existing m16 propagated-effect authority;
+- runtime failure origin proven → D2 `ROOT_SUPPORT` only, never rival elimination;
+- explained by another supported root → D3 territory (deferred);
+- none of the above → remains `UNRESOLVED`.
+
 ### 5.4 Topic D — Positive root support
 
 **PROBLEM.** Today the only way to `RESOLVED` is to eliminate every rival. Positive support is a single implicit predicate: a `PATH`/`DIRECT` explanation plus an actor-aligned initiating change gives `SUPPORTED`. It has no rule id, no preconditions record and no evidence scoping. Actors with real failure-origin evidence but no change (C5: payment, product-catalog, recommendation, cart, currency; C3: flagd-config) can only be `UNRESOLVED`. Separately, a manifestation actor must never be eliminated merely because it lies downstream.
@@ -359,6 +388,8 @@ Proposed v1 rules:
   - its causal time is `NOT_LATE` against onset + grace;
   - explanation `PATH` or `DIRECT`, with the path hops recorded.
   - Its introduction must leave every diagnosis's epistemic digest **exactly** equal (OD-D3). The D1 support record is therefore an audit field outside the epistemic digest. M20.1b base replay verifies the equality.
+- **AMENDMENT 3 — D1 clarification.** `causal_explanation = PATH` does not always mean a path to the incident symptom; a grouped member's path can produce it. D1 stays an exact-behavior audit refactor with no digest change, but a D1 support record gives **no immunity** against a Topic A exclusion. Tightening the D1 predicate is a D1.1 / new contract.
+- **AMENDMENT 3 — D2 vs D3.** D2 applies to traced runtime actors only; it cannot support a configuration root such as a ConfigMap. Ground-truth roots that are unsupported configuration changes need D3 (configuration-dependency semantics), which stays deferred and needs its own contract, now with a measured justification.
 - **D2 `m21.support.runtime-failure-origin.v1`** (new). The actor is the **origin** of non-success in traced requests. All of these must hold:
   - It is the callee in ≥ 1 `REMOTE_NON_SUCCESS_PROPAGATED` pair.
   - Within the same traces, all of the actor's own traced outgoing calls succeeded, or there were none and the actor is instrumented.
@@ -438,6 +469,27 @@ The M21 final gate reports these counts, before → after:
 
 It also reports the attribution of every new `RESOLVED` to the exact exclusion and support records, and the §5 negative controls. Thresholds, workloads and rules are never tuned to pass the gate. The test split runs once per tagged release.
 
+**AMENDMENT 3 — order and gate.** The order is no longer derived from blocker counts:
+
+```text
+D1
+→ channel framework (catalog, applicability, coverage)
+→ A v1, including the off-symptom SUPPORTED initiated cohort (R)
+→ B v1, contract-authorized TELEMETRY subset only
+→ MEASURE: actual correct RESOLVED and safety on the real resolver
+→ C5 semantic feasibility + D2 feasibility + MSG-1/MSG-2 availability audits
+→ C and/or D2, as the audits justify
+→ D3 as a separate contract, only if measurement justifies it
+```
+
+The resolver outcome is measured after every value tranche. The frozen scoreboard, reported at every M21 step:
+- false `RESOLVED` = 0;
+- ground-truth root incorrectly eliminated = 0;
+- replay = PASS;
+- correct `RESOLVED` = N, remaining `AMBIGUOUS` = 10 − N (dev split);
+- C1, C2 and C5 blockers (full census, §2.1);
+- leader-is-ground-truth as a secondary diagnostic only.
+
 ## 8. Amendment rule
 
 If implementation finds that the code or data semantics conflict with a clause, it stops with `CONTRACT_AMENDMENT_REQUIRED`. The report names the clause, the contrary evidence, the minimal proposed amendment and the gate impact. Only an owner-approved, recorded amendment may change `m21.v1`.
@@ -448,3 +500,4 @@ If implementation finds that the code or data semantics conflict with a clause, 
 |---|---|---|
 | 2026-09-27 | Amendment 1 (owner `CONTRACT_AMENDMENT_REQUIRED`). Channel applicability separated from coverage (§4.2a). Exclusion rule restated over applicable channels with an empty-set guard (§4.3). OD-A1 replaced by structural shared-node applicability. Invariants I10–I13 added. Noisy-neighbor, vacuous-truth and applicability-is-not-evidence negative controls added. OD-A2 excludes `Secret`. OD-A4 is bounded to strict, windowed, identity-resolved, coverage-qualified neighbors. The other 10 decisions approved. D1 gate set to exact epistemic-digest equality. | Owner review of `m21.v0` |
 | 2026-09-27 | Amendment 2 (owner `CONTRACT_AMENDMENT_REQUIRED`). I12 changed from structural-only to evidence-independent structural or declarative applicability, consistent with I10, OD-A3 and OD-B1. D2 support consequences are included in the epistemic digest independently of the aggregate state (digest invariant), and a D2 digest-visibility negative control is added. The D1 migration control is restated unchanged. Decision matrix D reads "existing epistemic state remains unchanged". | Owner review of amendment 1 |
+| 2026-09-28 | Amendment 3 (owner `CONTRACT_AMENDMENT_REQUIRED`, after the M20.6 upper-bound and census measurements). §2.1 full census (111 dev; 54 was an audit-truncation bug) and the R cohort; Topic A applies to SUPPORTED initiated changes with no D1 immunity (R is a cohort, not a rule); B's v1 value measured on the TELEMETRY subset only; C5 is not a predicate and needs a semantic feasibility audit; async-class safety witness in the C gate; D2 vs D3 split; order and scoreboard restated with a real-resolver measurement after every tranche. | Owner review of the M20.6 upper-bound measurement |

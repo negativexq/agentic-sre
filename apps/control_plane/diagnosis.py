@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from importlib.metadata import version as package_version
@@ -25,8 +25,11 @@ from packages.contracts import Incident, IncidentEvent, IncidentEventType
 from packages.rca.engine import EngineConfig, Investigator, diagnose
 from packages.rca.epistemic_digest import diagnosis_epistemic_digest
 from packages.rca.investigation.graph import investigate_diagnosis
+from packages.rca.investigation.intents import DeterministicIntentPolicy
 from packages.rca.investigation.policy import LLMInvestigationPolicy
+from packages.rca.investigation.selection import DeterministicObservationPolicy
 from packages.rca.investigation.state import (
+    SEED_FULL_SOURCE,
     InvestigationConfig,
     InvestigationPolicy,
     rca_config_digest,
@@ -323,6 +326,9 @@ class DiagnosisService:
     reader: ClusterReader | None = None
     investigator_factory: Callable[[], Investigator | None] = lambda: None
     bounded_policy_factory: Callable[[], InvestigationPolicy | None] = lambda: None
+    # The product always seeds from the full source; only replay-mechanics
+    # tests that need a non-trivial trajectory pick the bounded benchmark seed.
+    investigation_seed_mode: str = SEED_FULL_SOURCE
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
     provider_readers: ProviderReaders = field(default_factory=ProviderReaders)
     # Serializes ChangeWatcher.snapshot() runs: the periodic watch() loop and a
@@ -717,8 +723,11 @@ class DiagnosisService:
         bounded_policy = self.bounded_policy_factory()
         # The effective configs are explicit so the revision can record them.
         engine_config = EngineConfig()
+        # A product investigation starts from the same source diagnose() reads.
         investigation_config = (
-            InvestigationConfig(engine=engine_config) if bounded_policy is not None else None
+            InvestigationConfig(engine=engine_config, seed_mode=self.investigation_seed_mode)
+            if bounded_policy is not None
+            else None
         )
         investigation_result = None
         if bounded_policy is not None:
@@ -800,8 +809,43 @@ class DiagnosisService:
         return diagnosis
 
 
+INVESTIGATION_POLICIES = ("deterministic_intent", "deterministic_observation", "llm")
+
+
+class InvestigationConfigurationError(ValueError):
+    """The investigation environment variables do not describe one valid policy."""
+
+
+def investigation_policy_from_environment(environ: Mapping[str, str]) -> str | None:
+    """The configured investigation policy name, or ``None`` when investigation is off.
+
+    Policy selection is separate from model availability: ``SRE_LLM_ENABLED``
+    never selects the LLM policy by itself, and choosing ``llm`` without it is
+    an error rather than a silent deterministic fallback.
+    """
+    enabled = environ.get("SRE_INVESTIGATION_ENABLED", "").strip().casefold() or "true"
+    if enabled not in {"true", "false"}:
+        raise InvestigationConfigurationError(
+            f"SRE_INVESTIGATION_ENABLED must be 'true' or 'false', not {enabled!r}"
+        )
+    if enabled == "false":
+        return None
+    policy = environ.get("SRE_INVESTIGATION_POLICY", "").strip() or "deterministic_intent"
+    if policy not in INVESTIGATION_POLICIES:
+        raise InvestigationConfigurationError(
+            f"SRE_INVESTIGATION_POLICY must be one of {', '.join(INVESTIGATION_POLICIES)}, "
+            f"not {policy!r}"
+        )
+    if policy == "llm" and environ.get("SRE_LLM_ENABLED", "").casefold() != "true":
+        raise InvestigationConfigurationError(
+            "SRE_INVESTIGATION_POLICY=llm requires SRE_LLM_ENABLED=true"
+        )
+    return policy
+
+
 def service_from_environment(session_factory: sessionmaker[Session]) -> DiagnosisService:
     """Configure cluster access from environment variables; offline by default."""
+    investigation_policy = investigation_policy_from_environment(os.environ)
     namespaces = tuple(
         item.strip()
         for item in os.getenv("SRE_WATCH_NAMESPACES", "sre-demo").split(",")
@@ -837,8 +881,12 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
 
     def bounded_policy() -> InvestigationPolicy | None:
         nonlocal llm_client
-        if os.getenv("SRE_LLM_ENABLED", "").casefold() != "true":
+        if investigation_policy is None:
             return None
+        if investigation_policy == "deterministic_intent":
+            return DeterministicIntentPolicy()
+        if investigation_policy == "deterministic_observation":
+            return DeterministicObservationPolicy()
         if llm_client is None:
             from packages.rca.llm import OpenAIClient
 
@@ -861,4 +909,10 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
     )
 
 
-__all__ = ["DiagnosisService", "service_from_environment"]
+__all__ = [
+    "INVESTIGATION_POLICIES",
+    "DiagnosisService",
+    "InvestigationConfigurationError",
+    "investigation_policy_from_environment",
+    "service_from_environment",
+]

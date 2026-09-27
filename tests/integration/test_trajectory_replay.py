@@ -21,7 +21,7 @@ from packages.rca.epistemic_digest import diagnosis_epistemic_digest
 from packages.rca.investigation.intents import DeterministicIntentPolicy
 from packages.rca.investigation.policy import LLMIntentPolicy, LLMInvestigationPolicy
 from packages.rca.investigation.selection import DeterministicObservationPolicy
-from packages.rca.investigation.state import InvestigationPolicyContext
+from packages.rca.investigation.state import SEED_BOUNDED_INITIAL_VIEW, InvestigationPolicyContext
 from packages.rca.live import KubernetesClusterReader
 from packages.rca.llm import OpenAIClient
 from packages.rca.model import InvestigationAction, InvestigationResult
@@ -138,6 +138,8 @@ def _record(world: Any, readers: Readers, minutes: int = 30) -> Recorded:
         clock=clock,
         provider_readers=readers.configured(),
         bounded_policy_factory=ProviderFirstPolicy,
+        # A non-trivial recorded trajectory exists only on the bounded benchmark seed.
+        investigation_seed_mode=SEED_BOUNDED_INITIAL_VIEW,
     ).run(incident_id, "MANUAL")
     with factory() as session:
         run_id = DiagnosisRepository(session).latest_run_id(incident_id)

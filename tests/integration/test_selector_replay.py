@@ -30,6 +30,7 @@ from packages.rca.epistemic_digest import diagnosis_epistemic_digest
 from packages.rca.investigation.intents import DeterministicIntentPolicy
 from packages.rca.investigation.policy import ScriptedInvestigationPolicy
 from packages.rca.investigation.selection import DeterministicObservationPolicy
+from packages.rca.investigation.state import SEED_BOUNDED_INITIAL_VIEW
 from packages.rca.model import InvestigationPolicyKind, InvestigationResult
 from packages.rca.replay import (
     ReplayDivergence,
@@ -80,6 +81,8 @@ def _record(world: Any, policy: Any, minutes: int = 30) -> Run:
         clock=clock,
         provider_readers=readers.configured(),
         bounded_policy_factory=policy,
+        # A non-trivial recorded trajectory exists only on the bounded benchmark seed.
+        investigation_seed_mode=SEED_BOUNDED_INITIAL_VIEW,
     ).run(incident_id, "MANUAL")
     with factory() as session:
         run_id = DiagnosisRepository(session).latest_run_id(incident_id)

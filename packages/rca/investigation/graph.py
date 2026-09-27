@@ -73,6 +73,7 @@ from packages.rca.investigation.selection import (
     utility_sort_key,
 )
 from packages.rca.investigation.state import (
+    SEED_FULL_SOURCE,
     CaseRebuilder,
     IntentTiebreakPolicy,
     InvestigationConfig,
@@ -2492,7 +2493,12 @@ def investigate_diagnosis(
     ``started_at`` defaults to now; a replay passes its persisted time, and a
     selector replay passes the recorded terminal so no wall clock is read.
     """
-    initial_source = initial_view(source)
+    effective_config = config or InvestigationConfig()
+    # The product starts from exactly the source a plain diagnose() reads; only
+    # the partial-observability benchmarks start from the bounded initial view.
+    initial_source = (
+        source if effective_config.seed_mode == SEED_FULL_SOURCE else initial_view(source)
+    )
     case = initial_case or build_case(
         initial_source, _engine_config(config or InvestigationConfig())
     )
@@ -2522,7 +2528,7 @@ def investigate_diagnosis(
         return final.model_copy(
             update={
                 "replay_contract": trajectory_replay_contract(
-                    final, policy=policy, config=config or InvestigationConfig()
+                    final, policy=policy, config=effective_config
                 )
             }
         )

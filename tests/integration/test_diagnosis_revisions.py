@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 import threading
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as package_version
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -32,9 +32,8 @@ from test_diagnosis_revision_migration import (
 )
 from test_live_diagnosis import T0, setup  # noqa: F401 - pytest fixture
 
-import apps.control_plane.diagnosis as diagnosis_module
 from apps.control_plane.diagnosis import DiagnosisService
-from packages.rca.engine import EngineConfig
+from packages.rca.engine import RCA_ENGINE_VERSION, EngineConfig
 from packages.rca.epistemic_digest import diagnosis_epistemic_digest
 from packages.rca.investigation.policy import ScriptedInvestigationPolicy
 from packages.rca.investigation.state import (
@@ -121,7 +120,7 @@ def test_each_run_appends_the_next_revision_with_source_derived_provenance(
             assert row.tape_digest == load_tape_digest(session, row.run_id)
         assert row.window_end == _window_end(factory, row.run_id)
         assert row.epistemic_digest == diagnosis_epistemic_digest(diagnosis)
-        assert row.engine_version == package_version("agentic-sre")
+        assert row.engine_version == RCA_ENGINE_VERSION
         assert row.config_digest == config_digest
     assert expected_config[0] != expected_config[1]
 
@@ -137,19 +136,20 @@ def test_run_requires_an_explicit_revision_trigger(setup: Any) -> None:  # noqa:
     assert _revisions(factory, incident_id) == []
 
 
-def test_missing_package_metadata_fails_without_writing_a_revision(
+def test_the_revision_engine_version_does_not_depend_on_package_metadata(
     setup: Any,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """The recorded engine version is the RCA semantics token, not the package release (M20.3a)."""
     factory, _, _, incident_id = setup
 
     def missing(name: str) -> str:
         raise PackageNotFoundError(name)
 
-    monkeypatch.setattr(diagnosis_module, "package_version", missing)
-    with pytest.raises(PackageNotFoundError):
-        _service(setup).run(incident_id, "MANUAL")
-    assert _revisions(factory, incident_id) == []
+    monkeypatch.setattr(importlib.metadata, "version", missing)
+    _service(setup).run(incident_id, "MANUAL")
+    (row,) = _revisions(factory, incident_id)
+    assert row.engine_version == RCA_ENGINE_VERSION
 
 
 def _write(session: Session, incident_id: UUID, **overrides: Any) -> DiagnosisRevision:

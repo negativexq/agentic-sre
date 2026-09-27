@@ -26,7 +26,7 @@ from packages.evals.itbench.contracts import (
 )
 from packages.evals.itbench.grader import grade_root_cause_entities
 from packages.evals.itbench.io import atomic_json_write
-from packages.evals.itbench.source import SnapshotSource
+from packages.evals.itbench.source import SOURCE_NORMALIZATION, SnapshotSource
 from packages.rca.investigation.graph import investigate_diagnosis
 from packages.rca.investigation.intents import DeterministicIntentPolicy
 from packages.rca.investigation.policy import LLMIntentPolicy, LLMInvestigationPolicy
@@ -225,6 +225,7 @@ def predict_investigations(
         "created_at": datetime.now(UTC).isoformat(),
         "git_head": _git_head(),
         "git_dirty": _git_dirty(),
+        "source_normalization": SOURCE_NORMALIZATION,
         "mode": (
             "deterministic-intent-policy" if model_client is None else f"llm-{llm_selection}-policy"
         ),

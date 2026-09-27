@@ -32,6 +32,10 @@ from packages.rca.pod_status import pod_status_from_history
 from packages.rca.traces import normalize_trace_status, parse_trace_mapping, semantic_attributes
 
 _OBJECTS = "k8s_objects_raw.tsv"
+# How raw snapshot files become normalized evidence; separate from the RCA engine
+# semantics version and from the dataset revision. v2 (M20.5 P2a): exact object
+# instances (`metadata.uid`) survive time-ordered history compaction.
+SOURCE_NORMALIZATION = "itbench-snapshot-source.v2"
 _EVENTS = "k8s_events_raw.tsv"
 _LOGS = "otel_logs_raw.tsv"
 _TRACES = "otel_traces_raw.tsv"
@@ -591,4 +595,10 @@ class SnapshotSource:
         return result
 
 
-__all__ = ["SnapshotSource", "parse_time", "parse_trace_span", "pod_pressure"]
+__all__ = [
+    "SOURCE_NORMALIZATION",
+    "SnapshotSource",
+    "parse_time",
+    "parse_trace_span",
+    "pod_pressure",
+]

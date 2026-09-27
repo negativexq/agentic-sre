@@ -26,6 +26,7 @@ from packages.rca.investigation.policy import (
 )
 from packages.rca.investigation.selection import DeterministicObservationPolicy
 from packages.rca.investigation.state import (
+    SEED_FULL_SOURCE,
     InvestigationConfig,
     investigation_config_document,
     investigation_config_from_document,
@@ -94,6 +95,7 @@ def _every_field_changed() -> InvestigationConfig:
         max_no_progress_rounds=9,
         max_wall_time_seconds=12.5,
         engine=engine,
+        seed_mode=SEED_FULL_SOURCE,
     )
 
 

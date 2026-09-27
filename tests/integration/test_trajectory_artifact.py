@@ -14,7 +14,7 @@ from test_live_diagnosis import T0, setup  # noqa: F401 - pytest fixture
 from apps.control_plane.diagnosis import DiagnosisService
 from packages.rca.engine import EngineConfig
 from packages.rca.investigation.policy import ScriptedInvestigationPolicy
-from packages.rca.investigation.state import InvestigationConfig
+from packages.rca.investigation.state import SEED_FULL_SOURCE, InvestigationConfig
 from packages.rca.model import InvestigationPolicyKind, InvestigationResult
 from packages.storage.models import IncidentEventRow, InvestigationRunRow
 from packages.storage.repositories import DiagnosisRepository, InvestigationRunRepository
@@ -86,7 +86,7 @@ def test_a_live_run_writes_a_loadable_1_1_trajectory(setup: Any) -> None:  # noq
     contract = recorded.contract
     assert contract.policy_kind is InvestigationPolicyKind.ACTION
     assert contract.counts_as_model is False
-    assert recorded.config == InvestigationConfig(engine=EngineConfig())
+    assert recorded.config == InvestigationConfig(engine=EngineConfig(), seed_mode=SEED_FULL_SOURCE)
     assert contract.terminal.stop_reason is recorded.result.stop_reason
     assert contract.terminal.audited_turns == len(recorded.result.action_audits)
     # Boundary metadata stays exactly where it was.

@@ -37,7 +37,11 @@ from apps.control_plane.diagnosis import DiagnosisService
 from packages.rca.engine import EngineConfig
 from packages.rca.epistemic_digest import diagnosis_epistemic_digest
 from packages.rca.investigation.policy import ScriptedInvestigationPolicy
-from packages.rca.investigation.state import InvestigationConfig, rca_config_digest
+from packages.rca.investigation.state import (
+    SEED_FULL_SOURCE,
+    InvestigationConfig,
+    rca_config_digest,
+)
 from packages.storage.database import create_session_factory
 from packages.storage.manifest import load_manifest_digest
 from packages.storage.models import DiagnosisRow, IncidentEventRow
@@ -107,7 +111,7 @@ def test_each_run_appends_the_next_revision_with_source_derived_provenance(
     engine = EngineConfig()
     expected_config = [
         rca_config_digest(engine, None),
-        rca_config_digest(engine, InvestigationConfig(engine=engine)),
+        rca_config_digest(engine, InvestigationConfig(engine=engine, seed_mode=SEED_FULL_SOURCE)),
     ]
     for row, diagnosis, config_digest in zip(rows, (first, second), expected_config, strict=True):
         assert all(getattr(row, name) is not None for name in METADATA)

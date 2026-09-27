@@ -45,9 +45,19 @@ if TYPE_CHECKING:
     from packages.rca.investigation.intents import IntentMenuItem
 
 
+SEED_BOUNDED_INITIAL_VIEW = "BOUNDED_INITIAL_VIEW"
+SEED_FULL_SOURCE = "FULL_SOURCE"
+SEED_MODES = frozenset({SEED_BOUNDED_INITIAL_VIEW, SEED_FULL_SOURCE})
+
+
 @dataclass(frozen=True)
 class InvestigationConfig:
-    """Operational limits for one investigation run."""
+    """Operational limits for one investigation run.
+
+    ``seed_mode`` selects what the investigation starts from: the bounded
+    initial view of the partial-observability benchmarks (the default), or the
+    full source a plain ``diagnose()`` reads (the product).
+    """
 
     max_turns: int = 6
     max_model_calls: int = 6
@@ -57,6 +67,7 @@ class InvestigationConfig:
     max_no_progress_rounds: int = 2
     max_wall_time_seconds: float = 120.0
     engine: EngineConfig | None = None
+    seed_mode: str = SEED_BOUNDED_INITIAL_VIEW
 
     def __post_init__(self) -> None:
         if (
@@ -73,6 +84,8 @@ class InvestigationConfig:
             raise ValueError("investigation retry budgets cannot be negative")
         if self.max_wall_time_seconds <= 0:
             raise ValueError("max_wall_time_seconds must be positive")
+        if self.seed_mode not in SEED_MODES:
+            raise ValueError(f"unknown investigation seed_mode: {self.seed_mode!r}")
 
 
 @dataclass(frozen=True)
@@ -221,7 +234,14 @@ def rca_config_digest(engine: EngineConfig, investigation: InvestigationConfig |
 
 
 def investigation_config_from_document(document: Mapping[str, Any]) -> InvestigationConfig:
-    """Rebuild the exact config ``investigation_config_document`` wrote."""
+    """Rebuild the exact config ``investigation_config_document`` wrote.
+
+    Configs recorded before ``seed_mode`` existed always ran on the bounded
+    initial view, so only that one missing field is backfilled; any other
+    missing or extra field stays malformed.
+    """
+    if "seed_mode" not in document:
+        document = {**document, "seed_mode": SEED_BOUNDED_INITIAL_VIEW}
     decoded = _decode_config(InvestigationConfig, document)
     assert isinstance(decoded, InvestigationConfig)
     return decoded
@@ -275,6 +295,9 @@ __all__ = [
     "investigation_config_document",
     "policy_kind",
     "RCA_CONFIG_SCHEMA",
+    "SEED_BOUNDED_INITIAL_VIEW",
+    "SEED_FULL_SOURCE",
+    "SEED_MODES",
     "rca_config_digest",
     "investigation_config_from_document",
     "InvestigationPolicy",

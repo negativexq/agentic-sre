@@ -229,7 +229,11 @@ thread ID allows a run to resume without losing observations or budgets.
   `OBJECT_DELETED` tombstone; optional fault-injection findings may be missing.
 - Remediation is text; no code path applies it.
 - Live model calls need `SRE_LLM_ENABLED=true` and `SRE_LLM_MAX_CALLS`; tests
-  use scripted models.
+  use scripted models. `SRE_LLM_ENABLED` only makes a model available: the
+  bounded investigation uses a model only when `SRE_INVESTIGATION_POLICY=llm`.
+- The product investigation starts from the full evidence a plain diagnosis
+  reads (`seed_mode=FULL_SOURCE`, recorded in the trajectory and the config
+  digest); the bounded initial view is kept for the discovery benchmarks.
 - Benchmark prediction never reads ground truth; grading refuses unsealed or
   modified predictions.
 - `seal.json` protects only the prediction manifest and prediction files.
@@ -298,5 +302,7 @@ dedicated single writer.
 | `SRE_WATCH_INTERVAL_SECONDS` | `0` | Journal snapshot interval; `0` disables the watcher |
 | `SRE_AUTO_DIAGNOSE` | off | Diagnose incidents as alerts arrive |
 | `SRE_LOKI_URL` | unset | Read error logs for dependency findings |
-| `SRE_LLM_ENABLED`, `SRE_LLM_MAX_CALLS`, `SRE_LLM_MODEL` | off, 0, `gpt-5.6-luna` | Optional LLM investigator |
+| `SRE_INVESTIGATION_ENABLED` | on | Run the bounded LangGraph investigation after the base diagnosis; `false` keeps the direct diagnosis path |
+| `SRE_INVESTIGATION_POLICY` | `deterministic_intent` | `deterministic_intent`, `deterministic_observation`, or `llm` (requires `SRE_LLM_ENABLED=true`); any other value is a startup error |
+| `SRE_LLM_ENABLED`, `SRE_LLM_MAX_CALLS`, `SRE_LLM_MODEL` | off, 0, `gpt-5.6-luna` | Model availability for the optional LLM investigator and the `llm` investigation policy |
 | `SRE_API_TOKEN` | unset | Require `Authorization: Bearer <token>` on every write endpoint (`POST /api/v1/changes`, `.../diagnosis`, `.../cluster/snapshot`, `.../webhooks/alertmanager`); unset keeps them open, as the offline demo and kind walkthrough expect. Read endpoints remain unauthenticated in the built-in deployment but may expose operationally sensitive data. |

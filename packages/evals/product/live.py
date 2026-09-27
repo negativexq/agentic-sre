@@ -129,6 +129,8 @@ PRODUCT_CONTROL_PLANE_ENV = {
     "SRE_AUTO_DIAGNOSE": "true",
     "SRE_WATCH_INTERVAL_SECONDS": "15",
     "SRE_LLM_ENABLED": "false",
+    "SRE_INVESTIGATION_ENABLED": "true",
+    "SRE_INVESTIGATION_POLICY": "deterministic_intent",
 }
 
 Run = Callable[[Sequence[str], Mapping[str, str], str | None], str]

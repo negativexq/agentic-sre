@@ -735,7 +735,7 @@ SAFETY: list[tuple[str, str, Callable[[dict[str, Any]], Any], int | None]] = [
     ),
     ("cited-outside-universe", "fabricated", lambda s: s.update(u1=s["u1"] - {"event:1"}), 1),
     ("replay-differs", "replay_divergence", lambda s: s.update(replayed=("d", "x", "d")), 1),
-    ("replay-failed", "replay_divergence", lambda s: s.update(replayed=(None, "d", None)), 2),
+    ("replay-failed", "replay_divergence", lambda s: s.update(replayed=(None, "d", None)), None),
     (
         "tape-id-not-on-tape",
         "unresolved_tape_evidence_id",
@@ -1227,3 +1227,42 @@ def test_the_rca_result_and_keys_are_unchanged_on_the_ablation_fixtures() -> Non
         assert {
             item.hypothesis_id: item.hypothesis_key for item in diagnosis.hypothesis_inventory
         } == {hid: key or None for hid, key in keys.items()}
+
+
+# --- replay status (M20.1b) ---------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("statuses", "expected"),
+    [
+        pytest.param(("PASS", "PASS", "PASS"), 0, id="all-pass"),
+        pytest.param(("PASS", "DIVERGED", "PASS"), 1, id="one-diverged"),
+        pytest.param(("PASS", "ERROR", "PASS"), None, id="error-is-unmeasured"),
+        pytest.param(("UNSUPPORTED", "PASS", "PASS"), None, id="unsupported-is-unmeasured"),
+        pytest.param(("PASS", "PASS", "NOT_ATTEMPTED"), None, id="not-attempted-is-unmeasured"),
+    ],
+)
+def test_replay_divergence_counts_only_actual_divergence(
+    statuses: tuple[str, str, str], expected: int | None
+) -> None:
+    base = facts()
+    marked = replace(
+        base,
+        revisions=tuple(
+            replace(revision, replay_status=status)
+            for revision, status in zip(base.revisions, statuses, strict=True)
+        ),
+    )
+    counters, reasons = safety_counters(marked)
+    assert counters["replay_divergence"] == expected
+    if expected is None:
+        assert "replay_divergence" in reasons and "replay_status" in reasons
+
+
+def test_an_unknown_replay_status_is_refused() -> None:
+    base = facts()
+    marked = replace(
+        base, revisions=(replace(base.revisions[0], replay_status="MAYBE"), *base.revisions[1:])
+    )
+    with pytest.raises(ValueError, match="unknown replay status"):
+        safety_counters(marked)

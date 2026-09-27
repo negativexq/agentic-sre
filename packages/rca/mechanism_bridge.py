@@ -229,8 +229,8 @@ _CONFIG_KINDS = frozenset({"ConfigMap", "Secret"})
 _POLICY_KINDS = frozenset({"POLICY_CREATED", "NETWORK_RESTRICTION"})
 
 
-def _binding_key(binding: RuntimeKubernetesBinding) -> tuple[str, str, str]:
-    return (binding.namespace, binding.deployment or "", binding.pod or "")
+def _binding_key(binding: RuntimeKubernetesBinding) -> tuple[str, str, str, str]:
+    return (binding.namespace, binding.deployment or "", binding.pod or "", binding.pod_uid or "")
 
 
 def _bounded_ids(
@@ -303,7 +303,7 @@ def derive_runtime_failure_workload_episodes(
     *,
     history: Mapping[EntityRef, Sequence[ObjectVersion]],
 ) -> tuple[RuntimeFailureWorkloadEpisode, ...]:
-    accumulators: dict[tuple[str, str, str, str], _EpisodeAccumulator] = {}
+    accumulators: dict[tuple[str, str, str, str, str], _EpisodeAccumulator] = {}
     for summary in runtime_evidence.service_outcomes:
         if summary.span_kind is not RuntimeSpanKind.SERVER:
             continue

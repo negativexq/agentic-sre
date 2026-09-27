@@ -177,17 +177,77 @@ def _initiating_provenance(findings: Sequence[Finding]) -> tuple[str, ...]:
     return _bounded_ids(candidates)
 
 
-def _matched_edges(
+def actor_instance_uid(hypothesis: Hypothesis) -> str | None:
+    """The one exact instance UID the actor-local findings name, else ``None``.
+
+    No UID, or several distinct UIDs, give no single instance: a Pod-level
+    runtime binding then carries no authority for this hypothesis (fail closed).
+    """
+    uids = {
+        finding.entity_instance.uid
+        for finding in actor_findings(hypothesis)
+        if finding.entity_instance is not None
+    }
+    return next(iter(uids)) if len(uids) == 1 else None
+
+
+def _endpoint_state(
     actor: EntityRef,
+    actor_uid: str | None,
+    binding: RuntimeKubernetesBinding | None,
+    deployment_verification: RuntimeBindingVerificationState | None,
+    pod_verification: RuntimeBindingVerificationState | None,
+) -> RuntimeBindingVerificationState | None:
+    """The actor-level verification of one endpoint, or ``None`` if it names another actor.
+
+    A Deployment actor reads only the Deployment-level state. A Pod actor needs
+    the Pod-level state and the exact instance: the endpoint UID must equal the
+    hypothesis's single actor-local UID, otherwise the endpoint is unresolved
+    for it (a positive contradiction stays contradicted).
+    """
+    if binding is None or binding.namespace != actor.namespace:
+        return None
+    if actor.kind == "Deployment" and binding.deployment == actor.name:
+        return deployment_verification or RuntimeBindingVerificationState.UNRESOLVED
+    if actor.kind == "Pod" and binding.pod == actor.name:
+        if pod_verification is RuntimeBindingVerificationState.CONTRADICTED:
+            return pod_verification
+        if actor_uid is None or binding.pod_uid != actor_uid:
+            return RuntimeBindingVerificationState.UNRESOLVED
+        return pod_verification or RuntimeBindingVerificationState.UNRESOLVED
+    return None
+
+
+def _matched_edges(
+    hypothesis: Hypothesis,
     propagation: RuntimePropagation,
-) -> tuple[tuple[RuntimePropagationEdge, ...], tuple[RuntimePropagationEdge, ...]]:
-    incoming: list[RuntimePropagationEdge] = []
-    outgoing: list[RuntimePropagationEdge] = []
+) -> tuple[
+    tuple[tuple[RuntimePropagationEdge, RuntimeBindingVerificationState], ...],
+    tuple[tuple[RuntimePropagationEdge, RuntimeBindingVerificationState], ...],
+]:
+    actor = hypothesis.causal_actor
+    actor_uid = actor_instance_uid(hypothesis)
+    incoming: list[tuple[RuntimePropagationEdge, RuntimeBindingVerificationState]] = []
+    outgoing: list[tuple[RuntimePropagationEdge, RuntimeBindingVerificationState]] = []
     for edge in propagation.edges:
-        if actor in runtime_binding_entities(edge.affected_binding):
-            incoming.append(edge)
-        if actor in runtime_binding_entities(edge.source_binding):
-            outgoing.append(edge)
+        affected = _endpoint_state(
+            actor,
+            actor_uid,
+            edge.affected_binding,
+            edge.affected_deployment_verification,
+            edge.affected_pod_verification,
+        )
+        if affected is not None:
+            incoming.append((edge, affected))
+        source = _endpoint_state(
+            actor,
+            actor_uid,
+            edge.source_binding,
+            edge.source_deployment_verification,
+            edge.source_pod_verification,
+        )
+        if source is not None:
+            outgoing.append((edge, source))
     return tuple(incoming), tuple(outgoing)
 
 
@@ -288,27 +348,18 @@ def _assessment(
     findings = actor_findings(hypothesis)
     initiating = actor_aligned_initiating_findings(hypothesis)
     manifestation_only = actor_is_manifestation_only(hypothesis)
-    incoming, outgoing = _matched_edges(actor, propagation)
-    verified_incoming = tuple(
-        edge
-        for edge in incoming
-        if edge.affected_binding_state is RuntimeBindingVerificationState.VERIFIED
-    )
-    verified_outgoing = tuple(
-        edge
-        for edge in outgoing
-        if edge.source_binding_state is RuntimeBindingVerificationState.VERIFIED
-    )
-    unresolved_incoming = tuple(
-        edge
-        for edge in incoming
-        if edge.affected_binding_state is RuntimeBindingVerificationState.UNRESOLVED
-    )
-    contradicted_incoming = tuple(
-        edge
-        for edge in incoming
-        if edge.affected_binding_state is RuntimeBindingVerificationState.CONTRADICTED
-    )
+    incoming, outgoing = _matched_edges(hypothesis, propagation)
+
+    def having(
+        matched: tuple[tuple[RuntimePropagationEdge, RuntimeBindingVerificationState], ...],
+        state: RuntimeBindingVerificationState,
+    ) -> tuple[RuntimePropagationEdge, ...]:
+        return tuple(edge for edge, level in matched if level is state)
+
+    verified_incoming = having(incoming, RuntimeBindingVerificationState.VERIFIED)
+    verified_outgoing = having(outgoing, RuntimeBindingVerificationState.VERIFIED)
+    unresolved_incoming = having(incoming, RuntimeBindingVerificationState.UNRESOLVED)
+    contradicted_incoming = having(incoming, RuntimeBindingVerificationState.CONTRADICTED)
     overlap = bool(
         manifestation_only
         and any(
@@ -429,6 +480,7 @@ __all__ = [
     "HypothesisCausalRoleStats",
     "HypothesisCausalRoles",
     "actor_aligned_initiating_findings",
+    "actor_instance_uid",
     "actor_findings",
     "actor_is_manifestation_only",
     "actor_manifestation_findings",

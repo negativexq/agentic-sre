@@ -74,10 +74,14 @@ class RuntimeKubernetesBinding(BaseModel):
     namespace: str = Field(min_length=1)
     deployment: str | None = None
     pod: str | None = None
+    # The exact Pod instance the span reported (``k8s.pod.uid``); never inferred.
+    pod_uid: str | None = Field(default=None, min_length=1)
     quality: RuntimeBindingQuality
 
     @model_validator(mode="after")
     def _quality_matches_fields(self) -> RuntimeKubernetesBinding:
+        if self.pod_uid is not None and self.pod is None:
+            raise ValueError("a pod uid needs the pod name it belongs to")
         if self.deployment is not None and self.pod is not None:
             expected = RuntimeBindingQuality.NAMESPACE_DEPLOYMENT_POD
         elif self.deployment is not None:
@@ -416,6 +420,8 @@ def trace_kubernetes_binding(
         return None
     deployment = value("k8s.deployment.name")
     pod = value("k8s.pod.name")
+    # A UID without the Pod name it belongs to binds nothing.
+    pod_uid = value("k8s.pod.uid") if pod is not None else None
     if deployment is not None and pod is not None:
         quality = RuntimeBindingQuality.NAMESPACE_DEPLOYMENT_POD
     elif deployment is not None:
@@ -428,19 +434,20 @@ def trace_kubernetes_binding(
         namespace=namespace,
         deployment=deployment,
         pod=pod,
+        pod_uid=pod_uid,
         quality=quality,
     )
 
 
-def _binding_key(binding: RuntimeKubernetesBinding | None) -> tuple[str, str, str] | None:
+def _binding_key(binding: RuntimeKubernetesBinding | None) -> tuple[str, str, str, str] | None:
     if binding is None:
         return None
-    return (binding.namespace, binding.deployment or "", binding.pod or "")
+    return (binding.namespace, binding.deployment or "", binding.pod or "", binding.pod_uid or "")
 
 
-def _binding_sort_key(binding: RuntimeKubernetesBinding | None) -> tuple[str, str, str]:
+def _binding_sort_key(binding: RuntimeKubernetesBinding | None) -> tuple[str, str, str, str]:
     key = _binding_key(binding)
-    return key if key is not None else ("", "", "")
+    return key if key is not None else ("", "", "", "")
 
 
 @dataclass
@@ -494,7 +501,7 @@ def _summary_times(accumulator: _SummaryAccumulator) -> tuple[datetime, datetime
 
 def _binding_summary_key(
     service: str, binding: RuntimeKubernetesBinding
-) -> tuple[str, str, str, str]:
+) -> tuple[str, str, str, str, str]:
     return (service, *_binding_sort_key(binding))
 
 
@@ -624,10 +631,10 @@ _STAT_FIELDS = tuple(RuntimeEvidenceStats.model_fields)
 
 def derive_runtime_evidence(index: CanonicalTraceIndex) -> RuntimeEvidence:
     """Aggregate bounded protocol, binding, and strict call observations."""
-    binding_accumulators: dict[tuple[str, str, str, str], _SummaryAccumulator] = {}
+    binding_accumulators: dict[tuple[str, str, str, str, str], _SummaryAccumulator] = {}
     outcome_accumulators: dict[tuple[object, ...], _SummaryAccumulator] = {}
     call_accumulators: dict[tuple[object, ...], _SummaryAccumulator] = {}
-    binding_models: dict[tuple[str, str, str, str], RuntimeKubernetesBinding] = {}
+    binding_models: dict[tuple[str, str, str, str, str], RuntimeKubernetesBinding] = {}
     outcome_models: dict[
         tuple[object, ...],
         tuple[str, RuntimeKubernetesBinding | None, RuntimeSpanKind, RuntimeSpanOutcome],

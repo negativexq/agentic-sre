@@ -79,7 +79,11 @@ class RuntimeBindingVerification(BaseModel):
     at: datetime
     deployment: RuntimeEntityStateObservation | None = None
     pod: RuntimeEntityStateObservation | None = None
+    # Combined state, kept for audit and statistics only; actor authority reads
+    # the per-level states below (M20.5 P2b).
     state: RuntimeBindingVerificationState
+    deployment_verification: RuntimeBindingVerificationState | None = None
+    pod_verification: RuntimeBindingVerificationState | None = None
 
 
 def observed_entity_state_at(
@@ -135,6 +139,49 @@ def _entity_ref(binding: RuntimeKubernetesBinding, kind: str, name: str) -> Enti
     return EntityRef(namespace=binding.namespace, kind=kind, name=name)
 
 
+_ENTITY_VERIFICATION = {
+    RuntimeEntityState.PRESENT: RuntimeBindingVerificationState.VERIFIED,
+    RuntimeEntityState.ABSENT: RuntimeBindingVerificationState.CONTRADICTED,
+    RuntimeEntityState.UNKNOWN: RuntimeBindingVerificationState.UNRESOLVED,
+}
+
+
+def verify_pod_instance(
+    binding: RuntimeKubernetesBinding,
+    *,
+    at: datetime,
+    history: Mapping[EntityRef, Sequence[ObjectVersion]],
+) -> RuntimeBindingVerificationState | None:
+    """Verify the exact Pod instance a span names, strictly by UID (M20.5 P2b).
+
+    A Pod name alone never verifies an instance. VERIFIED needs the span's UID
+    to equal the UID of the live version observed at or before the span.
+    CONTRADICTED needs positive evidence: that very UID was observed deleted
+    by then. Everything else, including another UID observed at that time
+    (the span's instance may have started after that snapshot), is UNRESOLVED.
+    """
+    if binding.pod is None:
+        return None
+    if binding.pod_uid is None:
+        return RuntimeBindingVerificationState.UNRESOLVED
+    versions = sorted(
+        history.get(_entity_ref(binding, "Pod", binding.pod), ()),
+        key=lambda item: (item.observed_at, item.evidence_id),
+    )
+    eligible = [version for version in versions if version.observed_at <= at]
+    if any(
+        version.uid == binding.pod_uid and version.lifecycle is Lifecycle.DELETED
+        for version in eligible
+    ):
+        return RuntimeBindingVerificationState.CONTRADICTED
+    if not eligible:
+        return RuntimeBindingVerificationState.UNRESOLVED
+    latest = eligible[-1]
+    if latest.lifecycle is not Lifecycle.DELETED and latest.uid == binding.pod_uid:
+        return RuntimeBindingVerificationState.VERIFIED
+    return RuntimeBindingVerificationState.UNRESOLVED
+
+
 def verify_runtime_binding(
     binding: RuntimeKubernetesBinding | None,
     *,
@@ -179,6 +226,10 @@ def verify_runtime_binding(
         deployment=deployment,
         pod=pod,
         state=state,
+        deployment_verification=(
+            _ENTITY_VERIFICATION[deployment.state] if deployment is not None else None
+        ),
+        pod_verification=verify_pod_instance(binding, at=at, history=history),
     )
 
 
@@ -253,10 +304,10 @@ def _times(accumulator: _Accumulator) -> tuple[datetime, datetime]:
     return accumulator.first_seen, accumulator.last_seen
 
 
-def _binding_key(binding: RuntimeKubernetesBinding | None) -> tuple[str, str, str]:
+def _binding_key(binding: RuntimeKubernetesBinding | None) -> tuple[str, str, str, str]:
     if binding is None:
-        return ("", "", "")
-    return (binding.namespace, binding.deployment or "", binding.pod or "")
+        return ("", "", "", "")
+    return (binding.namespace, binding.deployment or "", binding.pod or "", binding.pod_uid or "")
 
 
 def _verification_key(
@@ -269,6 +320,8 @@ def _verification_key(
         service,
         *_binding_key(verification.binding),
         verification.state,
+        verification.deployment_verification or "",
+        verification.pod_verification or "",
         deployment.state if deployment is not None else "",
         deployment.basis if deployment is not None else "",
         pod.state if pod is not None else "",
@@ -290,6 +343,8 @@ class RuntimeBindingVerificationSummary(BaseModel):
     service: str = Field(min_length=1)
     binding: RuntimeKubernetesBinding
     verification_state: RuntimeBindingVerificationState
+    deployment_verification: RuntimeBindingVerificationState | None = None
+    pod_verification: RuntimeBindingVerificationState | None = None
     deployment_state: RuntimeEntityState | None = None
     deployment_basis: RuntimeEntityStateBasis | None = None
     pod_state: RuntimeEntityState | None = None
@@ -318,6 +373,8 @@ def _boundary_key(
     callee: RuntimeSpanOutcome,
     caller_binding_state: RuntimeBindingVerificationState | None,
     callee_binding_state: RuntimeBindingVerificationState | None,
+    caller_levels: tuple[object, object] = ("", ""),
+    callee_levels: tuple[object, object] = ("", ""),
 ) -> tuple[object, ...]:
     return (
         caller_service,
@@ -327,6 +384,8 @@ def _boundary_key(
         *_binding_key(callee_binding),
         caller_binding_state or "",
         callee_binding_state or "",
+        *caller_levels,
+        *callee_levels,
         caller.state,
         callee.state,
         caller.protocol,
@@ -380,6 +439,8 @@ def _propagation_key(
     affected_binding_state: RuntimeBindingVerificationState | None,
     source: RuntimeSpanOutcome,
     affected: RuntimeSpanOutcome,
+    source_levels: tuple[object, object] = ("", ""),
+    affected_levels: tuple[object, object] = ("", ""),
 ) -> tuple[object, ...]:
     return (
         source_service,
@@ -389,6 +450,8 @@ def _propagation_key(
         *_binding_key(affected_binding),
         source_binding_state or "",
         affected_binding_state or "",
+        *source_levels,
+        *affected_levels,
         source.state,
         affected.state,
         source.protocol,
@@ -415,6 +478,11 @@ class RuntimePropagationEdge(BaseModel):
     affected_binding: RuntimeKubernetesBinding | None
     source_binding_state: RuntimeBindingVerificationState | None
     affected_binding_state: RuntimeBindingVerificationState | None
+    # Per-level verification: the only authority-bearing binding states (M20.5 P2b).
+    source_deployment_verification: RuntimeBindingVerificationState | None = None
+    source_pod_verification: RuntimeBindingVerificationState | None = None
+    affected_deployment_verification: RuntimeBindingVerificationState | None = None
+    affected_pod_verification: RuntimeBindingVerificationState | None = None
     source_state: RuntimeOutcomeState
     affected_state: RuntimeOutcomeState
     source_protocol: RuntimeProtocol
@@ -599,6 +667,8 @@ def _add_verification(
             service=service,
             binding=verification.binding,
             verification_state=verification.state,
+            deployment_verification=verification.deployment_verification,
+            pod_verification=verification.pod_verification,
             deployment_state=deployment.state if deployment is not None else None,
             deployment_basis=deployment.basis if deployment is not None else None,
             pod_state=pod.state if pod is not None else None,
@@ -711,6 +781,16 @@ def derive_runtime_propagation(
 
         caller_state = caller_verification.state if caller_verification is not None else None
         callee_state = callee_verification.state if callee_verification is not None else None
+        caller_levels = (
+            (caller_verification.deployment_verification, caller_verification.pod_verification)
+            if caller_verification is not None
+            else (None, None)
+        )
+        callee_levels = (
+            (callee_verification.deployment_verification, callee_verification.pod_verification)
+            if callee_verification is not None
+            else (None, None)
+        )
         at = child.start_at
         evidence_ids = (
             parent.evidence_id,
@@ -730,6 +810,8 @@ def derive_runtime_propagation(
             callee,
             caller_state,
             callee_state,
+            (caller_levels[0] or "", caller_levels[1] or ""),
+            (callee_levels[0] or "", callee_levels[1] or ""),
         )
         boundary_accumulators.setdefault(key, _Accumulator()).add(
             at=at,
@@ -773,6 +855,8 @@ def derive_runtime_propagation(
                 caller_state,
                 callee,
                 caller,
+                (callee_levels[0] or "", callee_levels[1] or ""),
+                (caller_levels[0] or "", caller_levels[1] or ""),
             )
             edge_accumulators.setdefault(edge_key, _Accumulator()).add(
                 at=at,
@@ -790,6 +874,10 @@ def derive_runtime_propagation(
                     affected_binding=caller_binding,
                     source_binding_state=callee_state,
                     affected_binding_state=caller_state,
+                    source_deployment_verification=callee_levels[0],
+                    source_pod_verification=callee_levels[1],
+                    affected_deployment_verification=caller_levels[0],
+                    affected_pod_verification=caller_levels[1],
                     source_state=callee.state,
                     affected_state=caller.state,
                     source_protocol=callee.protocol,

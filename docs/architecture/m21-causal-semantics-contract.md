@@ -1,7 +1,7 @@
 # M21 Causal Semantics Contract
 
-Contract version: `m21.v0`
-Status: **FREEZE CANDIDATE — owner amendment 1 applied (2026-09-27); awaiting owner freeze.** No M21 production rule may be implemented before this document is frozen. On freeze it becomes `m21.v1`.
+Contract version: `m21.v1`
+Status: **FROZEN** (owner, 2026-09-27, after amendments 1–2). M21 implementation starts only after the M20 live-parity tasks, in the owner-frozen order.
 Baseline: `main` @ `d0caf5d0e3512930c1a8d4e0803e777a64fb2f06` (RCA code identical to the M20.1 audit)
 Scope: this contract defines the evidence that authorizes the RCA engine to treat a hypothesis as root-capable, root-supported or root-ineligible. It covers four topics: A unrelated initiated changes, B telemetry and control-plane actors, C asynchronous propagation, and D positive root support. It changes no code, test or threshold.
 
@@ -71,7 +71,7 @@ Topics A and B (and the async part of C) share one idea. An actor can only have 
 
 ### 4.1 Channel catalog (`m21.channel-catalog.v1`, proposed)
 
-| Channel | Meaning | APPLICABLE iff (structural, §4.2a) | Path evidence (keeps the actor alive) | Coverage evidence (needed to claim "no path") |
+| Channel | Meaning | APPLICABLE iff (evidence-independent structural/declarative, §4.2a) | Path evidence (keeps the actor alive) | Coverage evidence (needed to claim "no path") |
 |---|---|---|---|---|
 | K — Kubernetes reference | Owner/selector/routing/config/secret/volume/env/service-account/network-policy/quota/limit-range/PDB/HPA/scheduling references, including namespaceSelector and cross-namespace references | Always (every object has a reference surface) | Any reference chain from the change closure (§4.2) to a symptom-side entity | Object journal complete for every namespace and cluster-scoped kind in the window, **and** the relation extractor declares complete reference coverage for every kind in the closure (a versioned per-kind table) |
 | R — synchronous runtime | Traced CLIENT→SERVER calls | The closure contains a Pod instance that ran in the window, or a Service | Any traced call edge between closure services and symptom-side services, in either direction, in the window | Every Pod in the closure is instrumented (it emitted spans in the window) and trace reads for the window completed without error or truncation |

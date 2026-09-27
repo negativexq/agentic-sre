@@ -368,7 +368,7 @@ class SnapshotSource:
 
     @cached_property
     def _history(self) -> dict[EntityRef, list[ObjectVersion]]:
-        history: dict[EntityRef, list[ObjectVersion]] = {}
+        rows: list[tuple[datetime, int, EntityRef, dict[str, Any], str | None]] = []
         path = self.root / _OBJECTS
         for index, row in enumerate(iter_tsv(path)):
             try:
@@ -384,22 +384,34 @@ class SnapshotSource:
             observed = parse_time(row.get("Timestamp"))
             if ref is None or observed is None:
                 continue
+            raw_uid = metadata.get("uid")
+            uid = raw_uid if isinstance(raw_uid, str) and raw_uid else None
+            rows.append((observed, index, ref, body, uid))
+        # Compact in time order (oldest first), not file order. The original row
+        # index stays the evidence identity.
+        rows.sort(key=lambda item: (item[0], item[1]))
+        history: dict[EntityRef, list[ObjectVersion]] = {}
+        for observed, index, ref, body, uid in rows:
             versions = history.setdefault(ref, [])
             content = {k: v for k, v in body.items() if k not in {"status", "metadata"}}
             if versions:
-                last = versions[-1].body
-                if {k: v for k, v in last.items() if k not in {"status", "metadata"}} == content:
+                last = versions[-1]
+                same_content = {
+                    k: v for k, v in last.body.items() if k not in {"status", "metadata"}
+                } == content
+                # The same name and spec is not the same instance: a changed
+                # (or appearing/disappearing) UID always starts a new version.
+                if same_content and last.uid == uid:
                     continue
             versions.append(
                 ObjectVersion(
                     entity=ref,
+                    uid=uid,
                     observed_at=observed,
                     body=body,
                     evidence_id=f"{_OBJECTS}:{index}",
                 )
             )
-        for versions in history.values():
-            versions.sort(key=lambda item: item.observed_at)
         return _mark_lifecycle(history)
 
     def object_history(self) -> Mapping[EntityRef, Sequence[ObjectVersion]]:

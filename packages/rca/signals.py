@@ -829,21 +829,24 @@ def dependency_findings(
         records = [r for name in topology.service_names(caller) for r in errors.get(name, [])]
         if not records:
             continue
-        specific = [
-            service
-            for service in topology.outgoing(caller, "calls")
-            # Shared infrastructure (telemetry, gateways) is not a specific suspect.
-            if service not in alerting and service not in shared
+        declared = [
+            service for service in topology.outgoing(caller, "calls") if service not in alerting
         ]
-        for service in specific:
-            if len(specific) > 1:
-                # With several dependencies, only blame the ones the errors name.
-                token = service.name.casefold()
-                named = [r for r in records if token in r.message.casefold()]
-                if not named:
-                    continue
-            else:
-                named = records
+        # A declared dependency the errors name is a specific suspect, even when its
+        # declared fan-in marks it shared: the log names it explicitly (M20.3 F1).
+        # Log text never adds a dependency the topology does not declare.
+        blamed = {
+            service: named
+            for service in declared
+            if (named := [r for r in records if service.name.casefold() in r.message.casefold()])
+        }
+        if not blamed:
+            # Nothing is named: shared infrastructure (telemetry, gateways) is not a
+            # specific suspect, and only a single remaining dependency is blamed.
+            specific = [service for service in declared if service not in shared]
+            if len(specific) == 1:
+                blamed = {specific[0]: records}
+        for service, named in blamed.items():
             pods = topology.outgoing(service, "selects")
             targets = pods or (service,)
             times = [r.at for r in named if r.at is not None]

@@ -502,6 +502,7 @@ If implementation finds that the code or data semantics conflict with a clause, 
 | 2026-09-27 | Amendment 2 (owner `CONTRACT_AMENDMENT_REQUIRED`). I12 changed from structural-only to evidence-independent structural or declarative applicability, consistent with I10, OD-A3 and OD-B1. D2 support consequences are included in the epistemic digest independently of the aggregate state (digest invariant), and a D2 digest-visibility negative control is added. The D1 migration control is restated unchanged. Decision matrix D reads "existing epistemic state remains unchanged". | Owner review of amendment 1 |
 | 2026-09-28 | Amendment 3 (owner `CONTRACT_AMENDMENT_REQUIRED`, after the M20.6 upper-bound and census measurements). §2.1 full census (111 dev; 54 was an audit-truncation bug) and the R cohort; Topic A applies to SUPPORTED initiated changes with no D1 immunity (R is a cohort, not a rule); B's v1 value measured on the TELEMETRY subset only; C5 is not a predicate and needs a semantic feasibility audit; async-class safety witness in the C gate; D2 vs D3 split; order and scoreboard restated with a real-resolver measurement after every tranche. | Owner review of the M20.6 upper-bound measurement |
 | 2026-09-28 | Amendment 4 (owner `CONTRACT_AMENDMENT_REQUIRED`). §10 incident onset: V0 and V1 rejected; V2 approved as the bounded production direction with an explicit alert-channel coverage boundary (snapshot: first alert capture time; live: latest contiguous alert-observation segment, persisted and replayed exactly); causal onset separated from reference time, with UNKNOWN when no qualified episode exists; VI rejected; L3 deferred; Scenario-31 recorded as a benchmark/evidence/ground-truth conflict with no accommodation; engine 1.3.0; committed before its read-only remeasurement. | Owner review of the onset measurements and the S31 forensic audit |
+| 2026-09-28 | Amendment 4 result (owner decision after the gate FAIL): 'S24 regression fixed' failed; S24 recorded as a second benchmark/evidence/ground-truth conflict; A4-V2 ships on its safety gates; §10.1–10.3 unchanged (§10.4). | Owner decision on the A4 remeasurement |
 
 ## 10. Incident onset semantics and benchmark evidence conflict (amendment 4)
 
@@ -564,3 +565,20 @@ Gate:
 - deterministic, replayable onset.
 
 Performance numbers are read after the gate, never as it.
+
+### 10.4 Remeasurement result and owner decision (2026-09-28)
+
+The frozen remeasurement (`.local/m20-audit/m20_6b/a4_remeasure.*`) **failed** one gate: "S24 regression fixed". Every other gate passed:
+- new evidence-supported bad ground-truth elimination 0;
+- engine wrong `RESOLVED` 0;
+- no scenario-specific logic.
+
+Results for A4-V2:
+- ground truth supported 18 (V0 14), eliminated 1 (S24; V0: S24 and S31);
+- temporal eliminations 23 (V0 64);
+- causal onset UNKNOWN 1/35 (S11, single terminal capture);
+- S31 no longer eliminated, as a consequence of the boundary, not a rule.
+
+In S24 the alert channel is observed from 15:23:59 and records new diagnostic episodes from 15:41:08 (pending pods, request errors, no-requests on six services, crash loops), two hours before the recorded fault (17:52:10). The earlier V2 "fix" of S24 came only from its object-channel boundary hiding these observed episodes.
+
+**Owner decision (after the result, recorded as such):** S24 is a second `BENCHMARK_EVIDENCE_GROUND_TRUTH_CONFLICT` (the environment is observed degraded before the recorded fault). No scenario-specific accommodation is made. A4-V2 ships on its safety gates. The contract text above is unchanged.

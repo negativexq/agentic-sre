@@ -807,6 +807,21 @@ _CONNECTION_ERROR = re.compile(
 )
 
 
+def explicitly_names_dependency(message: str, dependency_name: str) -> bool:
+    """Whether ``message`` names the dependency as a whole DNS label (M20.3 F1.1).
+
+    ``payment-service``, ``http://payment-service:8080`` and
+    ``payment-service.default.svc`` name it; ``mypayment-service``,
+    ``payment-service-v2``, ``api.payment-service`` (a namespace label) and
+    ``PAYMENT_URL`` (an identifier) do not.
+    """
+    pattern = re.compile(
+        rf"(?<![a-z0-9._-]){re.escape(dependency_name)}(?![a-z0-9_-])",
+        re.IGNORECASE | re.ASCII,
+    )
+    return pattern.search(message) is not None
+
+
 def dependency_findings(
     logs: Sequence[LogRecord], topology: Topology, alerting: set[EntityRef]
 ) -> list[Finding]:
@@ -834,13 +849,22 @@ def dependency_findings(
         ]
         # A declared dependency the errors name is a specific suspect, even when its
         # declared fan-in marks it shared: the log names it explicitly (M20.3 F1).
-        # Log text never adds a dependency the topology does not declare.
-        blamed = {
+        # Log text never adds a dependency the topology does not declare, and a
+        # name shared by several declared dependencies identifies none of them.
+        names = Counter(service.name for service in declared)
+        mentioned = {
             service: named
             for service in declared
-            if (named := [r for r in records if service.name.casefold() in r.message.casefold()])
+            if (
+                named := [
+                    r for r in records if explicitly_names_dependency(r.message, service.name)
+                ]
+            )
         }
-        if not blamed:
+        blamed = {
+            service: named for service, named in mentioned.items() if names[service.name] == 1
+        }
+        if not mentioned:
             # Nothing is named: shared infrastructure (telemetry, gateways) is not a
             # specific suspect, and only a single remaining dependency is blamed.
             specific = [service for service in declared if service not in shared]

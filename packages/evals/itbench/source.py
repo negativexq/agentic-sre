@@ -34,8 +34,9 @@ from packages.rca.traces import normalize_trace_status, parse_trace_mapping, sem
 _OBJECTS = "k8s_objects_raw.tsv"
 # How raw snapshot files become normalized evidence; separate from the RCA engine
 # semantics version and from the dataset revision. v2 (M20.5 P2a): exact object
-# instances (`metadata.uid`) survive time-ordered history compaction.
-SOURCE_NORMALIZATION = "itbench-snapshot-source.v2"
+# instances (`metadata.uid`) survive time-ordered history compaction. v3 (M20.5
+# P2a-bis): events carry their `involvedObject.uid` like the live event journal.
+SOURCE_NORMALIZATION = "itbench-snapshot-source.v3"
 _EVENTS = "k8s_events_raw.tsv"
 _LOGS = "otel_logs_raw.tsv"
 _TRACES = "otel_traces_raw.tsv"
@@ -450,9 +451,13 @@ class SnapshotSource:
             seen.add(key)
             first = parse_time(event.get("firstTimestamp")) or parse_time(event.get("eventTime"))
             last = parse_time(event.get("lastTimestamp")) or first
+            involved_uid = involved.get("uid")
             result.append(
                 ClusterEvent(
                     entity=ref,
+                    involved_uid=involved_uid
+                    if isinstance(involved_uid, str) and involved_uid
+                    else None,
                     reason=str(event.get("reason") or ""),
                     type=str(event.get("type") or "Normal"),
                     message=str(event.get("message") or "")[:500],

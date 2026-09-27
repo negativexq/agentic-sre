@@ -1043,6 +1043,7 @@ class ObjectVersionRepository:
         namespace = str(metadata.get("namespace") or CLUSTER_SCOPE)
         key = f"{namespace}/{kind}/{name}"
         digest = self.content_hash(body)
+        uid = _nested_uid(body, "metadata")
         latest = self._latest(key)
         if latest is None:
             started = self._recording_started(namespace)
@@ -1054,7 +1055,9 @@ class ObjectVersionRepository:
             )
         elif latest.lifecycle == Lifecycle.DELETED:
             lifecycle = Lifecycle.CREATED
-        elif latest.content_hash == digest:
+        elif latest.content_hash == digest and latest.uid == uid:
+            # Same desired state of the same instance. The same name and spec with
+            # another (or an appearing/disappearing) UID is a new observation.
             return False
         else:
             lifecycle = Lifecycle.UPDATED
@@ -1064,7 +1067,7 @@ class ObjectVersionRepository:
                 namespace=namespace,
                 kind=kind,
                 name=name,
-                uid=_nested_uid(body, "metadata"),
+                uid=uid,
                 observed_at=observed_at,
                 content_hash=digest,
                 body=body,

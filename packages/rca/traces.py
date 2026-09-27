@@ -44,6 +44,12 @@ SEMANTIC_ATTRIBUTE_ALLOWLIST = frozenset(
         "db.operation.name",
         "messaging.system",
         "messaging.destination.name",
+        "messaging.operation",
+        "messaging.operation.type",
+        "messaging.operation.name",
+        "messaging.message.id",
+        "messaging.message.conversation_id",
+        "k8s.pod.uid",
         "error.type",
         "exception.type",
     }

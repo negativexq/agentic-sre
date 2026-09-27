@@ -195,6 +195,20 @@ class TraceSpanStatus(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
+class TraceSpanLink(BaseModel):
+    """One span link exactly as the provider reported it (M20.5 provenance only).
+
+    Links are preserved so later async semantics can be evaluated; nothing
+    derives parentage, propagation, support or elimination from them yet.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    trace_id: str = Field(min_length=1)
+    span_id: str = Field(min_length=1)
+    semantic_attributes: dict[str, str] = Field(default_factory=dict)
+
+
 class TraceSpanObservation(BaseModel):
     """One typed distributed-trace span observed from a read-only telemetry source."""
 
@@ -211,6 +225,10 @@ class TraceSpanObservation(BaseModel):
     duration_raw: float | None = None
     status: TraceSpanStatus = TraceSpanStatus.UNKNOWN
     semantic_attributes: dict[str, str] = Field(default_factory=dict)
+    # Bounded, deterministically ordered span links; ``dropped_link_count``
+    # records how many the bound cut, so truncation is never silent.
+    links: tuple[TraceSpanLink, ...] = ()
+    dropped_link_count: int = Field(default=0, ge=0)
     evidence_id: str = Field(min_length=1)
 
 

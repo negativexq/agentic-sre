@@ -16,7 +16,13 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urlsplit
 from urllib.request import Request, urlopen
 
-from packages.rca.model import EntityRef, InvestigationQuery, TraceSpanObservation, TraceSpanStatus
+from packages.rca.model import (
+    EntityRef,
+    InvestigationQuery,
+    TraceSpanLink,
+    TraceSpanObservation,
+    TraceSpanStatus,
+)
 from packages.rca.traces import SEMANTIC_ATTRIBUTE_ALLOWLIST
 
 _MAX_SEARCH_TRACE_IDS = 8
@@ -317,6 +323,35 @@ def _status(value: object) -> TraceSpanStatus:
     return TraceSpanStatus.UNKNOWN
 
 
+MAX_SPAN_LINKS = 8
+
+
+def _parse_links(value: object) -> tuple[tuple[TraceSpanLink, ...], int]:
+    """Bounded, deterministic span links: identical duplicates collapse, conflicts fail."""
+    if value is None:
+        return (), 0
+    links: dict[tuple[str, str], TraceSpanLink] = {}
+    for raw in _list(value, "span links"):
+        item = _mapping(raw, "span link")
+        attributes = _attributes(item.get("attributes"), "span link attributes")
+        link = TraceSpanLink(
+            trace_id=_string_id(item.get("traceId"), "link traceId", trace=True),
+            span_id=_string_id(item.get("spanId"), "link spanId"),
+            semantic_attributes={
+                key: str(attribute)
+                for key, attribute in attributes.items()
+                if key in SEMANTIC_ATTRIBUTE_ALLOWLIST
+            },
+        )
+        identity = (link.trace_id, link.span_id)
+        previous = links.get(identity)
+        if previous is not None and previous != link:
+            raise TempoProtocolError("Tempo returned conflicting duplicate span links")
+        links[identity] = link
+    ordered = tuple(links[identity] for identity in sorted(links))
+    return ordered[:MAX_SPAN_LINKS], max(0, len(ordered) - MAX_SPAN_LINKS)
+
+
 def _parse_span(
     raw: Mapping[str, object], resource_attributes: Mapping[str, object]
 ) -> TraceSpanObservation:
@@ -350,6 +385,7 @@ def _parse_span(
     if not isinstance(span_name, str):
         span_name = None
     status_raw = _mapping(raw.get("status"), "span status") if raw.get("status") is not None else {}
+    links, dropped_links = _parse_links(raw.get("links"))
     return TraceSpanObservation(
         trace_id=trace_id,
         span_id=span_id,
@@ -362,6 +398,8 @@ def _parse_span(
         duration_raw=None,
         status=_status(status_raw.get("code")),
         semantic_attributes=semantic,
+        links=links,
+        dropped_link_count=dropped_links,
         evidence_id=f"tempo:{trace_id}:{span_id}",
     )
 

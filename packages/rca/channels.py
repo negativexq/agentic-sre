@@ -6,12 +6,14 @@ I12) and, for applicable channels, the observed state. It changes no decision:
 the records are attached to the hypothesis audits, outside the epistemic digest.
 
 v1 limits, recorded as gap reasons rather than hidden:
-- K: the per-kind reference-coverage table is not declared yet (owner decision
-  pending), so K is PATH or UNCOVERED, never NO_PATH_COVERED.
+- K: `m21.k-reference-coverage.v1` (§4.5, amendment 5) records K1–K6; it is
+  fail-closed by construction (every profile kind INCOMPLETE, no journal-coverage
+  fact, no Kubernetes audit evidence), so K is never NO_PATH_COVERED today.
 - R/M: a trace read is never proven complete (Tempo is BEST_EFFORT), so no
   applicable runtime channel is covered.
 - N: a shared node is UNCOVERED (OD-A1).
-- C: never covered in v1.
+- C: never covered in v1; applicable also for a preempting closure Pod or a
+  control-plane identity access to the closure (§4.5.4).
 - O: alert provenance is undeclared, so O is UNKNOWN when applicable.
 """
 
@@ -20,11 +22,15 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime, timedelta
 
+from packages.rca.k_coverage import RULE_ID as K_RULE_ID
+from packages.rca.k_coverage import RULE_VERSION as K_RULE_VERSION
+from packages.rca.k_coverage import ApiAuditEvidence, JournalCoverageFact, evaluate_k
 from packages.rca.model import (
     ChannelApplicability,
     ChannelAssessment,
     ChannelEvaluation,
     ChannelState,
+    ClusterEvent,
     EntityRef,
     FindingKind,
     Hypothesis,
@@ -97,10 +103,12 @@ def _closure(
     actor: EntityRef,
     topology: Topology,
     latest: Mapping[EntityRef, ObjectVersion],
+    extra: Iterable[EntityRef] = (),
 ) -> set[EntityRef]:
-    members = {actor}
-    if actor.kind == "Namespace":
-        members |= {ref for ref in latest if ref.namespace == actor.name}
+    members = {actor, *extra}
+    for ref in list(members):
+        if ref.kind == "Namespace":
+            members |= {other for other in latest if other.namespace == ref.name}
     frontier = list(members)
     while frontier:
         ref = frontier.pop()
@@ -135,40 +143,63 @@ def _evaluate(
     traced_pods: set[str],
     onset: datetime | None,
     grace: timedelta,
+    events: Sequence[ClusterEvent],
+    journal_coverage: JournalCoverageFact | None,
+    api_audit: ApiAuditEvidence | None,
 ) -> ChannelAssessment:
     latest = {ref: versions[-1] for ref, versions in history.items() if versions}
     actor = hypothesis.causal_actor
-    closure = _closure(actor, topology, latest)
-    kinds = {ref.kind for ref in closure}
-    pods = sorted((ref for ref in closure if ref.kind == "Pod"), key=lambda ref: ref.canonical)
-    complete = actor in latest and kinds <= _KNOWN_KINDS
     changes = [causal_time(finding) for finding in hypothesis.initiating_findings]
     t_change = min((when for when in changes if when is not None), default=None)
     window_end = onset + grace if onset is not None else None
-    window_start = t_change
-    if t_change is not None:
-        previous = [
-            version.observed_at
-            for ref in closure
-            for version in history.get(ref, ())
-            if version.observed_at < t_change
-        ]
-        if previous:
-            window_start = max(previous)
+    # §4.5.3: actual readers, writers and targets expand the closure to a fixed point;
+    # the persisted graph is finite and members only grow, so this terminates.
+    extra: set[EntityRef] = set()
+    while True:
+        closure = _closure(actor, topology, latest, extra)
+        window_start = t_change
+        if t_change is not None:
+            previous = [
+                version.observed_at
+                for ref in closure
+                for version in history.get(ref, ())
+                if version.observed_at < t_change
+            ]
+            if previous:
+                window_start = max(previous)
+        k = evaluate_k(
+            closure,
+            history=history,
+            events=events,
+            topology=topology,
+            symptom_entities=symptom_entities,
+            window_start=window_start,
+            window_end=window_end,
+            journal_coverage=journal_coverage,
+            api_audit=api_audit,
+        )
+        if not k.expansion - closure:
+            break
+        extra |= k.expansion
+    kinds = {ref.kind for ref in closure}
+    pods = sorted((ref for ref in closure if ref.kind == "Pod"), key=lambda ref: ref.canonical)
+    complete = actor in latest and kinds <= _KNOWN_KINDS
 
     runtime_members = bool(pods) or "Service" in kinds
     closure_services = _service_names(closure, topology)
     evaluations: list[ChannelEvaluation] = []
 
-    # K — always applicable.
-    k_path = any(topology.causal_distance(ref, symptom_entities) is not None for ref in closure)
+    # K — always applicable (I12); its state follows §4.5.
     evaluations.append(
         ChannelEvaluation(
             channel="K",
             applicability=ChannelApplicability.APPLICABLE,
             applicability_basis="every object has a reference surface",
-            state=ChannelState.PATH if k_path else ChannelState.UNCOVERED,
-            gap_reason=None if k_path else "K_REFERENCE_COVERAGE_TABLE_UNDECLARED",
+            state=k.state,
+            gap_reason=k.gap_reason,
+            evidence_ids=k.evidence_ids,
+            rule_id=f"{K_RULE_ID}.{K_RULE_VERSION}",
+            preconditions=k.preconditions,
         )
     )
 
@@ -285,21 +316,45 @@ def _evaluate(
             )
         )
 
-    # C — cluster control plane.
+    # C — cluster control plane (§4.1, plus the §4.5.4 additions).
     control = sorted(kinds & _CONTROL_PLANE_KINDS)
-    evaluations.append(
-        ChannelEvaluation(
-            channel="C",
-            applicability=ChannelApplicability.APPLICABLE
-            if control
-            else ChannelApplicability.NOT_APPLICABLE,
-            applicability_basis=f"closure contains {', '.join(control)}"
-            if control
-            else "closure has no cluster-scoped or control-plane kind",
-            state=ChannelState.UNCOVERED if control else None,
-            gap_reason="CONTROL_PLANE_NEVER_COVERED_V1" if control else None,
+    preemption = _preemption(pods, latest, symptom_entities, topology)
+    bases = [f"closure contains {', '.join(control)}"] if control else []
+    if preemption is not None:
+        bases.append(preemption[1])
+    if k.control_plane_access:
+        bases.append("control-plane identity accessed the closure")
+    if bases:
+        missing_fact = (
+            not control
+            and not k.control_plane_access
+            and preemption
+            == (
+                ChannelState.UNKNOWN,
+                "preemption facts missing",
+            )
         )
-    )
+        evaluations.append(
+            ChannelEvaluation(
+                channel="C",
+                applicability=ChannelApplicability.APPLICABLE,
+                applicability_basis="; ".join(bases),
+                state=ChannelState.UNKNOWN if missing_fact else ChannelState.UNCOVERED,
+                gap_reason="C_PREEMPTION_FACT_MISSING"
+                if missing_fact
+                else "CONTROL_PLANE_NEVER_COVERED_V1",
+                evidence_ids=k.control_plane_access[:12],
+            )
+        )
+    else:
+        evaluations.append(
+            ChannelEvaluation(
+                channel="C",
+                applicability=ChannelApplicability.NOT_APPLICABLE,
+                applicability_basis="closure has no cluster-scoped or control-plane kind, "
+                "no preempting Pod and no control-plane identity access",
+            )
+        )
 
     # O — observation path.
     traffic = any(finding.kind is FindingKind.TRAFFIC_INCREASE for finding in hypothesis.findings)
@@ -336,6 +391,45 @@ def _evaluate(
     )
 
 
+def _preemption(
+    pods: Sequence[EntityRef],
+    latest: Mapping[EntityRef, ObjectVersion],
+    symptom_entities: set[EntityRef],
+    topology: Topology,
+) -> tuple[ChannelState, str] | None:
+    """§4.5.4: a closure Pod able to preempt a symptom-side Pod makes C applicable.
+
+    A required but missing priority fact is never NOT_APPLICABLE (§4.2a).
+    """
+    if not pods:
+        return None
+    symptom_pods = [
+        ref
+        for ref in latest
+        if ref.kind == "Pod"
+        and (ref in symptom_entities or topology.workload_of(ref) in symptom_entities)
+    ]
+
+    def priority(ref: EntityRef) -> int | None:
+        value = (latest[ref].body.get("spec") or {}).get("priority") if ref in latest else None
+        return value if isinstance(value, int) else None
+
+    victims = [priority(ref) for ref in symptom_pods]
+    missing = not symptom_pods or None in victims
+    for pod in pods:
+        spec = (latest[pod].body.get("spec") or {}) if pod in latest else {}
+        own, policy = priority(pod), spec.get("preemptionPolicy")
+        if own is None or policy is None:
+            missing = True
+            continue
+        if policy != "Never" and any(v is not None and own > v for v in victims):
+            return (
+                ChannelState.UNCOVERED,
+                f"closure Pod {pod.canonical} can preempt a symptom-side Pod",
+            )
+    return (ChannelState.UNKNOWN, "preemption facts missing") if missing else None
+
+
 def _closure_outcome(
     evaluations: Sequence[ChannelEvaluation],
     complete: bool,
@@ -368,6 +462,9 @@ def channel_assessments(
     trace_spans: Sequence[TraceSpanObservation],
     onset: datetime | None,
     grace: timedelta,
+    events: Sequence[ClusterEvent] = (),
+    journal_coverage: JournalCoverageFact | None = None,
+    api_audit: ApiAuditEvidence | None = None,
 ) -> dict[str, ChannelAssessment]:
     """One assessment per hypothesis that carries an initiated change."""
     traced_pods = {
@@ -385,6 +482,9 @@ def channel_assessments(
             traced_pods=traced_pods,
             onset=onset,
             grace=grace,
+            events=events,
+            journal_coverage=journal_coverage,
+            api_audit=api_audit,
         )
         for hypothesis in hypotheses
         if hypothesis.initiating_findings

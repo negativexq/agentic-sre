@@ -525,6 +525,7 @@ def diagnose_case(
             trace_spans=case.source.trace_observations(),
             onset=case.symptoms.onset,
             grace=config.ranking.verification_onset_grace,
+            events=case.source.events(),
         ),
     )
     information_gaps = derive_information_gaps(

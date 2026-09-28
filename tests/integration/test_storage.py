@@ -177,6 +177,8 @@ def test_alembic_migration_up_and_down(tmp_path: Path) -> None:
     engine = create_engine(f"sqlite:///{database_path}")
     expected_tables = {
         "action_executions",
+        "alert_coverage_polls",
+        "alert_coverage_segments",
         "alerts",
         "change_records",
         "diagnoses",

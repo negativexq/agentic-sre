@@ -117,6 +117,7 @@ def _case() -> tuple[Case, EntityRef, EntityRef]:
     ]
     source = InMemorySource(
         name="investigation-synthetic",
+        alert_coverage_start=T0,
         alert_items=[
             Alert(
                 name="ApiLatency",
@@ -853,6 +854,7 @@ def test_production_investigation_pipeline_resolves_from_real_event_observation(
     )
     source = _DeferredEventSource(
         name="production-investigation",
+        alert_coverage_start=at(0),
         alert_items=[alert("CheckoutLatency", "checkout", 5)],
         versions=versions,
         event_items=[*seed_events, newly_observed],

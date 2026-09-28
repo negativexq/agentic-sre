@@ -13,6 +13,7 @@ from typing import Any, Protocol
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from packages.rca.alert_coverage import AlertCoverageBoundary
 from packages.rca.investigation.environment import (
     InvestigationBackend,
     PrometheusInvestigationBackend,
@@ -450,6 +451,8 @@ class LiveSource:
     # objects are evidence only as members of a persisted cycle.
     snapshot_cycle_id: int | None = None
     snapshot_observed_at: datetime | None = None
+    # The alert-channel coverage frozen at the run boundary (M21 contract §10.2).
+    alert_coverage: AlertCoverageBoundary | None = None
     # Persisted ``event:<version_pk>`` ids, one per ``event_bodies`` item.
     event_evidence_ids: Sequence[str] | None = None
 
@@ -462,6 +465,10 @@ class LiveSource:
 
     def alerts(self) -> Sequence[Alert]:
         return self.alert_items
+
+    def alert_observation_start(self) -> datetime | None:
+        """W from the persisted boundary; unknown without contiguous coverage."""
+        return self.alert_coverage.alert_observation_start if self.alert_coverage else None
 
     def object_history(self) -> Mapping[EntityRef, Sequence[ObjectVersion]]:
         """Journal versions plus the run's persisted snapshot cycle.

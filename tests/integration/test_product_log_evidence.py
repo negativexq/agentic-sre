@@ -25,7 +25,7 @@ from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
-from test_live_diagnosis import T0, setup  # noqa: F401 - pytest fixture
+from test_live_diagnosis import T0, cover_alert_channel, setup  # noqa: F401 - pytest fixture
 from test_replay_provider import Readers
 
 from apps.control_plane.diagnosis import DiagnosisService
@@ -97,6 +97,7 @@ def _payment_service_change(world: Any, readers: Readers) -> None:
     cluster.objects[2] = service
     _service(world, readers).snapshot()
     clock.now = T0 + timedelta(minutes=13)
+    cover_alert_channel(world[0], start=T0, until=clock.now)
 
 
 def _latest(factory: sessionmaker[Session], incident_id: Any) -> tuple[str, DiagnosisRow]:

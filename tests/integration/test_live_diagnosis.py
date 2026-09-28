@@ -27,6 +27,7 @@ from packages.contracts import (
     IncidentSource,
     IncidentStatus,
 )
+from packages.rca.alert_coverage import ALERT_COVERAGE_SOURCE, AlertCoverageConfig
 from packages.rca.engine import diagnose
 from packages.rca.investigation.graph import trajectory_replay_contract
 from packages.rca.investigation.policy import ScriptedInvestigationPolicy
@@ -51,6 +52,7 @@ from packages.rca.provider_adapter import ProviderReaders
 from packages.storage.database import create_session_factory
 from packages.storage.models import AlertRow, Base, IncidentRow, LogObservationRow
 from packages.storage.repositories import (
+    AlertCoverageRepository,
     DiagnosisRepository,
     EventRepository,
     IncidentRepository,
@@ -109,6 +111,38 @@ def _order_service() -> dict[str, Any]:
             }
         },
     }
+
+
+def cover_alert_channel(
+    factory: sessionmaker[Session],
+    *,
+    start: datetime,
+    until: datetime,
+    interval: timedelta = timedelta(seconds=60),
+) -> None:
+    """Record successful alert-channel polls through the P1 coverage path, start..until.
+
+    Polls only move forward: an open segment continues from its last success.
+    """
+    config = AlertCoverageConfig(poll_interval=interval)
+    with factory() as session:
+        repository = AlertCoverageRepository(session)
+        segment = repository.open_segment(ALERT_COVERAGE_SOURCE)
+        at = segment.last_success_at + interval if segment is not None else start
+        polls = []
+        while at <= until:
+            polls.append(at)
+            at += interval
+        if not polls or polls[-1] < until:
+            polls.append(until)
+        for moment in polls:
+            repository.record_success(
+                source=ALERT_COVERAGE_SOURCE,
+                attempted_at=moment,
+                completed_at=moment,
+                active_alerts=0,
+                config=config,
+            )
 
 
 class FakeCluster:
@@ -477,6 +511,7 @@ def test_watched_config_change_is_diagnosed_through_the_api(setup: Any) -> None:
     cluster.objects[0] = _deployment("5000")
     assert service.snapshot() == 1
     clock.now = T0 + timedelta(minutes=13)
+    cover_alert_channel(factory, start=T0, until=clock.now)
 
     with TestClient(create_app(factory, diagnosis_service=service)) as client:
         missing = client.get(f"/api/v1/incidents/{incident_id}/diagnosis")
@@ -511,6 +546,7 @@ def test_deleted_object_becomes_a_verified_root_cause(setup: Any) -> None:
     del cluster.objects[1]  # order-service Deployment, the alerting component
     assert service.snapshot() == 1
     clock.now = T0 + timedelta(minutes=13)
+    cover_alert_channel(factory, start=T0, until=clock.now)
     diagnosis = service.run(incident_id, "MANUAL")
     assert diagnosis.root_cause == EntityRef.parse("sre-demo/Deployment/order-service")
     assert diagnosis.evidence[0].kind is FindingKind.OBJECT_DELETED

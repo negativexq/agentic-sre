@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -22,6 +22,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from packages.contracts import IncidentEvent, IncidentEventType
+from packages.rca.alert_coverage import (
+    ALERT_COVERAGE_SOURCE,
+    AlertCoverageBoundary,
+    AlertCoverageBoundaryError,
+    AlertCoverageConfig,
+)
 from packages.rca.manifest import ManifestEntry, manifest_membership_digest, ordered_entries
 from packages.rca.model import JournalEntry, LogRecord
 from packages.rca.provider_adapter import PROVIDER_CAPABILITIES, ProviderIntegrityError
@@ -34,6 +40,7 @@ from packages.storage.models import (
     SnapshotCycleRow,
 )
 from packages.storage.repositories import (
+    AlertCoverageRepository,
     AlertRepository,
     EventRepository,
     IncidentEventRepository,
@@ -70,6 +77,8 @@ class ManifestRequest:
     listed_objects: int
     # The run's configured provider capability contract (``ProviderAdapter.capabilities``).
     provider_capabilities: tuple[str, ...]
+    # How a polling gap breaks alert-channel coverage (M21 contract §10.2).
+    alert_coverage_config: AlertCoverageConfig = field(default_factory=AlertCoverageConfig)
 
 
 def canonical_provider_capabilities(names: Sequence[str]) -> list[str]:
@@ -186,6 +195,13 @@ def build_manifest(
                 )
             )
         counts = Counter(entry.source_type for entry in entries)
+        # Frozen with the membership, in the same transaction: the alert channel's
+        # coverage at the boundary is evidence, never recomputed later.
+        alert_coverage = AlertCoverageRepository(session).boundary_at(
+            source=ALERT_COVERAGE_SOURCE,
+            at=request.window_end,
+            config=request.alert_coverage_config,
+        )
         IncidentEventRepository(session).append(
             IncidentEvent(
                 incident_id=request.incident_id,
@@ -203,6 +219,7 @@ def build_manifest(
                     "provider_capabilities": canonical_provider_capabilities(
                         request.provider_capabilities
                     ),
+                    "alert_coverage": alert_coverage.to_payload(),
                 },
             ),
             commit=False,
@@ -261,6 +278,9 @@ class RunBoundary:
     provider_capabilities: tuple[str, ...]
     # How many objects the run's snapshot cycle listed (0 without a cycle).
     listed_objects: int
+    # The alert-channel coverage frozen at the boundary; None for runs recorded
+    # before M21 amendment 4, which never captured it.
+    alert_coverage: AlertCoverageBoundary | None = None
 
 
 def load_run_boundary(session: Session, run_id: str) -> RunBoundary:
@@ -309,7 +329,21 @@ def load_run_boundary(session: Session, run_id: str) -> RunBoundary:
     listed = payload.get("objects")
     if not isinstance(listed, int) or isinstance(listed, bool) or listed < 0:
         raise ReplayDataError(f"run {run_id} boundary listed object count is {listed!r}")
-    return RunBoundary(run_id, rows[0].incident_id, window_end, cycle_id, tuple(canonical), listed)
+    alert_coverage = None
+    if "alert_coverage" in payload:
+        try:
+            alert_coverage = AlertCoverageBoundary.from_payload(payload["alert_coverage"])
+        except AlertCoverageBoundaryError as error:
+            raise ReplayDataError(f"run {run_id} boundary: {error}") from error
+    return RunBoundary(
+        run_id,
+        rows[0].incident_id,
+        window_end,
+        cycle_id,
+        tuple(canonical),
+        listed,
+        alert_coverage,
+    )
 
 
 def load_replay_run(session: Session, run_id: str) -> tuple[RunBoundary, ManifestMembers]:

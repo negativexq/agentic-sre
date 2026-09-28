@@ -21,6 +21,7 @@ from apps.control_plane.scheduler import (
 )
 from packages.contracts import Alert as ContractAlert
 from packages.contracts import Incident, IncidentEvent, IncidentEventType
+from packages.rca.alert_coverage import AlertCoverageConfig
 from packages.rca.engine import RCA_ENGINE_VERSION, EngineConfig, Investigator, diagnose
 from packages.rca.epistemic_digest import diagnosis_epistemic_digest
 from packages.rca.investigation.graph import investigate_diagnosis
@@ -65,6 +66,7 @@ from packages.storage.manifest import (
     build_manifest,
     load_manifest_digest,
     load_members,
+    load_run_boundary,
 )
 from packages.storage.repositories import (
     EntityInstanceRepository,
@@ -343,6 +345,8 @@ class DiagnosisService:
     _last_snapshot_result: SnapshotResult | None = field(default=None, init=False, repr=False)
     # A STATUS_SNAPSHOT with unchanged content is written at most this often.
     status_snapshot_interval: timedelta = timedelta(seconds=30)
+    # How a polling gap breaks alert-channel coverage (frozen into each run boundary).
+    alert_coverage_config: AlertCoverageConfig = field(default_factory=AlertCoverageConfig)
     # Evidence retention; None (the default) keeps everything.
     retention_policy: RetentionPolicy | None = None
     # Deadline reevaluation (SRE_REEVALUATE); None (the default) never schedules.
@@ -698,11 +702,14 @@ class DiagnosisService:
                 snapshot_cycle_id=snapshot_cycle_id,
                 listed_objects=len(listed),
                 provider_capabilities=capture_adapter.capabilities(),
+                alert_coverage_config=self.alert_coverage_config,
             ),
             timestamp=self.clock(),
         )
         with self.session_factory() as session:
             members = load_members(session, entries)
+            # The live run reads back exactly the coverage it persisted, as replay will.
+            alert_coverage = load_run_boundary(session, run_id).alert_coverage
         source = LiveSource(
             incident=str(incident_id),
             alert_items=[alert_from_payload(item) for item in members.alerts],
@@ -717,6 +724,7 @@ class DiagnosisService:
             lifecycle_records=members.lifecycle,
             snapshot_cycle_id=members.snapshot.cycle_id if members.snapshot else None,
             snapshot_observed_at=members.snapshot.observed_at if members.snapshot else None,
+            alert_coverage=alert_coverage,
         )
         bounded_policy = self.bounded_policy_factory()
         # The effective configs are explicit so the revision can record them.
@@ -904,6 +912,7 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
         ),
         retention_policy=policy_from_environment(),
         reevaluation=reevaluation_from_environment(),
+        alert_coverage_config=AlertCoverageConfig.from_environment(),
     )
 
 

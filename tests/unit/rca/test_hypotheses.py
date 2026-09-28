@@ -37,6 +37,7 @@ def _rollout_source(
         versions.append(version("shop/Deployment/catalog", 5, changed_body, 1))
     return InMemorySource(
         name="hypothesis-rollout",
+        alert_coverage_start=at(0),
         alert_items=[alert("RequestErrorRate", "catalog", 7)],
         versions=versions,
         cutoff=at(10),
@@ -333,6 +334,7 @@ def test_recurring_chaos_schedule_is_actor_and_execution_is_manifestation() -> N
     target = "Successfully apply chaos for shop/checkout-5d8f7c9b4-abcde"
     source = InMemorySource(
         name="scheduled-chaos",
+        alert_coverage_start=at(0),
         alert_items=[alert("RequestLatency", "checkout", 6)],
         versions=[
             version(

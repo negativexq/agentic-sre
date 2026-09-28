@@ -101,7 +101,12 @@ def a1_source() -> InMemorySource:
         evidence_id="event:b-unhealthy",
     )
     return InMemorySource(
-        name="a1", alert_items=[ALERT], versions=versions, event_items=[event], cutoff=_at(27)
+        name="a1",
+        alert_coverage_start=_at(0),
+        alert_items=[ALERT],
+        versions=versions,
+        event_items=[event],
+        cutoff=_at(27),
     )
 
 
@@ -151,7 +156,12 @@ def a2_source() -> InMemorySource:
         sample_end=_at(30),
     )
     return InMemorySource(
-        name="a2", alert_items=[ALERT], versions=versions, pressure_items=[coverage], cutoff=_at(31)
+        name="a2",
+        alert_coverage_start=_at(0),
+        alert_items=[ALERT],
+        versions=versions,
+        pressure_items=[coverage],
+        cutoff=_at(31),
     )
 
 

@@ -107,7 +107,8 @@ def _mentions(finding: Finding, tokens: set[str]) -> list[str]:
 
 
 def _in_window(at: datetime | None, context: Context, config: RankingConfig) -> bool | None:
-    onset = context.symptoms.onset
+    # Ranking only, never authority: the reference time may anchor the window.
+    onset = context.symptoms.reference_time
     if at is None or onset is None:
         return None
     end = context.window_end or context.symptoms.last_seen or onset
@@ -449,7 +450,8 @@ def verification_trace(
     def temporally_valid(finding: Finding) -> bool:
         when = _causal_time(finding)
         onset = context.symptoms.onset
-        return onset is None or (
+        # An unknown causal onset validates nothing (fail closed).
+        return onset is not None and (
             when is not None and when <= onset + config.verification_onset_grace
         )
 

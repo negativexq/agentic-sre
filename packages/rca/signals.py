@@ -70,8 +70,22 @@ def is_background_alert(name: str) -> bool:
     return name.casefold() in BACKGROUND_ALERTS
 
 
-def extract_symptoms(alerts: Sequence[Alert]) -> Symptoms:
-    """Summarize diagnostic alerts; platform-health alerts only count as background."""
+ONSET_ANCHORED = "ANCHORED"
+ONSET_UNKNOWN_NO_ALERT_COVERAGE = "UNKNOWN_NO_ALERT_COVERAGE"
+ONSET_UNKNOWN_NO_NEW_EPISODE = "UNKNOWN_NO_NEW_EPISODE"
+ONSET_NO_DIAGNOSTIC_ALERTS = "NO_DIAGNOSTIC_ALERTS"
+
+
+def extract_symptoms(
+    alerts: Sequence[Alert], *, alert_observation_start: datetime | None
+) -> Symptoms:
+    """Summarize diagnostic alerts; platform-health alerts only count as background.
+
+    The causal onset is the earliest diagnostic alert that began at or after the
+    alert channel's observation start W (M21 contract §10.2). An alert already
+    active before W is pre-existing: still a symptom, never the onset. Without W,
+    or without a new episode inside it, the onset is unknown.
+    """
     background: Counter[str] = Counter()
     diagnostic: list[Alert] = []
     for alert in alerts:
@@ -90,13 +104,30 @@ def extract_symptoms(alerts: Sequence[Alert]) -> Symptoms:
         if alert.namespace:
             namespaces.add(alert.namespace)
     starts = [alert.starts_at for alert in diagnostic]
+    qualified = (
+        [start for start in starts if start >= alert_observation_start]
+        if alert_observation_start is not None
+        else []
+    )
+    onset = min(qualified) if qualified else None
+    if not starts:
+        basis = ONSET_NO_DIAGNOSTIC_ALERTS
+    elif alert_observation_start is None:
+        basis = ONSET_UNKNOWN_NO_ALERT_COVERAGE
+    elif onset is None:
+        basis = ONSET_UNKNOWN_NO_NEW_EPISODE
+    else:
+        basis = ONSET_ANCHORED
     return Symptoms(
-        onset=min(starts) if starts else None,
+        onset=onset,
         last_seen=max(starts) if starts else None,
         services=tuple(sorted(services)),
         namespaces=tuple(sorted(namespaces)),
         alert_names=tuple(sorted({alert.name for alert in diagnostic})),
         background_alert_counts=dict(sorted(background.items())),
+        reference_time=onset if onset is not None else (min(starts) if starts else None),
+        alert_observation_start=alert_observation_start,
+        onset_basis=basis,
     )
 
 

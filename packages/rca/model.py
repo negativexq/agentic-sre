@@ -407,12 +407,21 @@ class Symptoms(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    # The causal onset (M21 contract §10.2): the earliest diagnostic alert episode
+    # that began inside the alert channel's observed coverage. None is UNKNOWN, and
+    # nothing onset-derived may then carry decision authority.
     onset: datetime | None
     last_seen: datetime | None
     services: tuple[str, ...]
     namespaces: tuple[str, ...]
     alert_names: tuple[str, ...]
     background_alert_counts: dict[str, int] = Field(default_factory=dict)
+    # For query and ranking windows only, never authority: the causal onset when
+    # known, else the earliest diagnostic alert start.
+    reference_time: datetime | None = None
+    # W, the alert channel's observation start the onset was derived against.
+    alert_observation_start: datetime | None = None
+    onset_basis: str | None = None
 
 
 class Candidate(BaseModel):

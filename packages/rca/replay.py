@@ -452,6 +452,8 @@ class ReplaySource:
             lifecycle_records=members.lifecycle,
             snapshot_cycle_id=snapshot.cycle_id if snapshot else None,
             snapshot_observed_at=snapshot.observed_at if snapshot else None,
+            # Exactly the coverage the live run froze; never recomputed from segments.
+            alert_coverage=boundary.alert_coverage,
         )
         return cls(
             run_id=run_id,
@@ -472,6 +474,9 @@ class ReplaySource:
 
     def alerts(self) -> Sequence[Alert]:
         return self._base.alerts()
+
+    def alert_observation_start(self) -> datetime | None:
+        return self._base.alert_observation_start()
 
     def object_history(self) -> Mapping[EntityRef, Sequence[ObjectVersion]]:
         return self._base.object_history()

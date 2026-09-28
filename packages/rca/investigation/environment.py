@@ -739,10 +739,17 @@ class InitialObservationView:
     def alerts(self) -> tuple[Alert, ...]:
         return tuple(self.full_source.alerts())
 
+    def alert_observation_start(self) -> datetime | None:
+        # Alert coverage is a property of the channel, not of the bounded view.
+        return self.full_source.alert_observation_start()
+
     def object_history(self) -> dict[EntityRef, tuple[ObjectVersion, ...]]:
         full = self.full_source.object_history()
         seeded = self._seed_entities()
-        onset = extract_symptoms(self.full_source.alerts()).onset
+        onset = extract_symptoms(
+            self.full_source.alerts(),
+            alert_observation_start=self.full_source.alert_observation_start(),
+        ).reference_time
         start = (
             onset - self.seed_policy.history_window
             if onset is not None and self.seed_policy.history_window is not None
@@ -763,7 +770,10 @@ class InitialObservationView:
         return result
 
     def events(self) -> tuple[ClusterEvent, ...]:
-        onset = extract_symptoms(self.full_source.alerts()).onset
+        onset = extract_symptoms(
+            self.full_source.alerts(),
+            alert_observation_start=self.full_source.alert_observation_start(),
+        ).reference_time
         if (
             onset is None
             or self.seed_policy.event_before is None
@@ -782,7 +792,10 @@ class InitialObservationView:
         return visible
 
     def logs(self, service: str, *, limit: int = 20) -> tuple[dict[str, object], ...]:
-        onset = extract_symptoms(self.full_source.alerts()).onset
+        onset = extract_symptoms(
+            self.full_source.alerts(),
+            alert_observation_start=self.full_source.alert_observation_start(),
+        ).reference_time
         if onset is None:
             return ()
         start = onset - (self.seed_policy.event_before or timedelta())

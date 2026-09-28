@@ -120,6 +120,7 @@ def _catalog_source(later_image_at: float | None) -> InMemorySource:
         )
     source = InMemorySource(
         name="hypothesis-key-counter",
+        alert_coverage_start=at(0),
         alert_items=[alert("RequestErrorRate", "catalog", 7)],
         versions=versions,
         cutoff=at(40),

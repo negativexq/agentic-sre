@@ -448,6 +448,7 @@ def _traffic_runtime_observation(
     service = _entity("Service", "payment-service")
     source = InMemorySource(
         name="traffic-coverage-helper",
+        alert_coverage_start=T0,
         alert_items=[Alert(name="RequestErrorRate", service=service.name, starts_at=T0)],
         cutoff=cutoff,
     )
@@ -515,6 +516,7 @@ def test_resource_and_traffic_provider_graphs_rebuild_existing_findings() -> Non
     )
     resource_source = InMemorySource(
         name="resource",
+        alert_coverage_start=T0,
         alert_items=[
             Alert(
                 name="ContainerPressure",
@@ -586,6 +588,7 @@ def test_resource_and_traffic_provider_graphs_rebuild_existing_findings() -> Non
     )
     traffic_source = InMemorySource(
         name="traffic",
+        alert_coverage_start=T0,
         alert_items=[Alert(name="RequestErrorRate", service=service.name, starts_at=T0)],
     )
     traffic_gap = _gap("traffic", GapDimension.METRIC_CHANGE, service)
@@ -631,6 +634,7 @@ def test_resource_runtime_status_distinguishes_no_data_normal_and_abnormal() -> 
     pod = _entity()
     source = InMemorySource(
         name="resource-runtime-state",
+        alert_coverage_start=T0,
         alert_items=[Alert(name="PodPressure", service="payment-service", starts_at=T0)],
     )
     case = build_case(source)
@@ -694,6 +698,7 @@ def test_partial_traffic_window_cannot_be_observed_normal() -> None:
     service = _entity("Service", "payment-service")
     source = InMemorySource(
         name="traffic-partial-coverage",
+        alert_coverage_start=T0,
         alert_items=[Alert(name="RequestErrorRate", service=service.name, starts_at=T0)],
     )
     case = build_case(initial_view(source))
@@ -774,6 +779,7 @@ def test_partial_traffic_with_positive_increase_remains_observed_abnormal() -> N
             initial_view(
                 InMemorySource(
                     name="partial-traffic-abnormal",
+                    alert_coverage_start=T0,
                     alert_items=[
                         Alert(name="RequestErrorRate", service="payment-service", starts_at=T0)
                     ],
@@ -807,6 +813,7 @@ def test_traffic_descriptor_hash_uses_the_effective_limit() -> None:
     service = _entity("Service", "payment-service")
     source = InMemorySource(
         name="traffic-descriptor-limit",
+        alert_coverage_start=T0,
         alert_items=[Alert(name="RequestErrorRate", service=service.name, starts_at=T0)],
     )
     case = build_case(initial_view(source))

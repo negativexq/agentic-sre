@@ -1,7 +1,7 @@
 # M21 Supported-Leader Contract
 
-Contract version: `m21-leader.v1`
-Status: **FROZEN** (owner, 2026-09-28; open decisions closed in §9). Frozen before any measurement (§8). No code, test or threshold implements it yet.
+Contract version: `m21-leader.v0`
+Status: **MEASURED — FAILED / NOT AUTHORIZED FOR IMPLEMENTATION** (owner, 2026-09-28). Frozen before measurement (§8); the rule text below is unchanged by the result (§11).
 Relation to `m21.v1`: this is a separate contract. It changes no clause of `m21.v1`, `m16.v1` or `m18a.v1`. `RESOLVED` keeps its exact current meaning.
 
 ## 1. The question this contract answers
@@ -121,5 +121,34 @@ Required negative controls (synthetic):
 | Date | Change | Source |
 |---|---|---|
 | 2026-09-28 | `m21-leader.v0` draft frozen as `m21-leader.v1`; OD-L1(a), OD-L2 (any symptom-linked rival blocks), OD-L3 (AMBIGUOUS authority), OD-L4 (wording), OD-L5 (D1.1 separate) approved as proposed. | Owner approval of the draft |
+| 2026-09-28 | Measured under the frozen rule (§11): hard gate FAILED. Owner decision: no implementation; no grader change; no immediate v2. The owner designates this frozen contract `m21-leader.v0` (it was committed with the header `m21-leader.v1`); the rule id `m21.supported-leader.v1` and every clause are unchanged. | Owner decision on the measurement |
 
 Amendment rule: as in `m21.v1` §8. If implementation or measurement conflicts with a clause, it stops with `CONTRACT_AMENDMENT_REQUIRED`; the contract is never changed to pass its gate.
+
+## 11. Measurement outcome (2026-09-28)
+
+Frozen rule (commit `bdea766`), engine on `main` `9d1bb1b` (A4 + D1), 35 ITBench-Lite scenarios, read-only (`.local/m20-audit/m21_leader/`):
+
+```text
+fired: 7/35
+correct under current grader identity: 5/7   (S18, S19, S22, S35, S91)
+incorrect: S25, S29
+hard gate: FAILED
+production implementation: NOT AUTHORIZED
+```
+
+- **S25, S29: root/fault identity disagreement requiring an independently specified identity model.** In both, the leader is a chaos fault object on the service the ground truth names. S25: the leader is a `StressChaos` experiment, while the ground truth is a `Schedule`. S29: the leader is a `JVMChaos` whose name does not match the ground-truth filter. The evidence holds no name-blind, persisted provenance that the generated chaos object and the scheduled root are the same causal root family, so no equivalence is assumed.
+- **NONE (28).**
+  - Symptom-linked rival: 14. The rivals are application Pods and Deployments; being symptom-linked does not prove they are only manifestations, so blocking here is the intended fail-closed behavior (OD-L2).
+  - No leader: 12.
+  - Two or more leaders: 2.
+  - Not `AMBIGUOUS`: 5.
+- Wrong `RESOLVED`: 0.
+
+**Decision.**
+- **No implementation.**
+- **No change to the grader's matcher** for these cases.
+- **No immediate v2** designed against the same 35 scenarios.
+
+The same frozen `v0` rule will be re-measured, unchanged, after the rest of M21 (Topic A, D2 and the existing eligibility rules), because a different engine may present a different blocker set. Re-measuring an unchanged rule on an improved engine is not post-hoc tuning. If `wrong leader = 0` then, the rule becomes a production candidate again. If identity disagreements such as S25/S29 remain, they call for a separate causal root / fault-family identity contract, serving the grader, resolver, reporting and remediation alike — not a benchmark-specific patch.
+

@@ -843,6 +843,8 @@ class ChannelPrecondition(BaseModel):
     status: CoveragePreconditionStatus
     reason: str | None = None
     evidence_ids: tuple[str, ...] = ()
+    # Per-access provenance, e.g. both actors of an impersonated API request.
+    attributions: tuple[str, ...] = ()
 
 
 class ChannelEvaluation(BaseModel):

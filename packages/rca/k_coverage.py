@@ -356,12 +356,13 @@ def _touches(access: ApiAccess, member: EntityRef) -> bool:
 
 
 def _node_readers(
+    identity: str,
     access: ApiAccess,
     member: EntityRef,
     versions: Mapping[EntityRef, Sequence[ObjectVersion]],
 ) -> list[EntityRef]:
     """Exact kubelet attribution: Pods on the node whose spec references the object."""
-    node = access.user.removeprefix("system:node:")
+    node = identity.removeprefix("system:node:")
     if access.name is None:
         return []
     pods: set[EntityRef] = set()
@@ -482,35 +483,63 @@ def _k6(
     identity_pods = _identity_pods(versions)
     expansion: set[EntityRef] = set()
     control_plane: list[str] = []
+    attributions: list[str] = []
+
+    def attribute(identity: str, access: ApiAccess, members: list[EntityRef]) -> str | None:
+        """Attribute one identity's read of closure objects; None when it cannot be resolved."""
+        if identity in identities:
+            return "closure"
+        if identity in CONTROL_PLANE_USERS | CONTROL_PLANE_SERVICE_ACCOUNTS:
+            return "control-plane"
+        if identity.startswith("system:node:"):
+            pods = [
+                pod
+                for member in members
+                for pod in _node_readers(identity, access, member, versions)
+            ]
+            if pods and all(
+                _node_readers(identity, access, member, versions) for member in members
+            ):
+                return "kubelet:" + ",".join(sorted({pod.canonical for pod in pods}))
+            return None
+        readers = identity_pods.get(identity)
+        if identity.startswith("system:serviceaccount:") and readers:
+            return "workload:" + ",".join(sorted(pod.canonical for pod in readers))
+        return None
+
     for access in audit.accesses:
         if access.started_at > end or (access.ended_at is not None and access.ended_at < start):
             continue
         members = [member for member in closure if _touches(access, member)]
         verb = access.verb.lower()
-        actors = {access.user} | ({access.impersonated_user} if access.impersonated_user else set())
+        # Provenance keeps both actors (§4.5.3); the effective one is the impersonated identity.
+        authenticated, effective = access.user, access.impersonated_user or access.user
         if verb in _READ_VERBS and members:
-            if actors <= identities:
+            results = {
+                actor: attribute(actor, access, members) for actor in (authenticated, effective)
+            }
+            attributions.append(
+                f"{access.evidence_id}: authenticated={authenticated}->{results[authenticated]}; "
+                f"effective={effective}->{results[effective]}"
+            )
+            if None in results.values():
+                reason = (
+                    "K6_UNATTRIBUTED_NODE_ACCESS"
+                    if any(a.startswith("system:node:") for a, r in results.items() if r is None)
+                    else "K6_UNBOUND_ACCESS"
+                )
+                failures.append((reason, access.evidence_id))
                 continue
-            if access.impersonated_user is not None:
-                failures.append(("K6_IMPERSONATED_ACCESS", access.evidence_id))
-                continue
-            if access.user in CONTROL_PLANE_USERS | CONTROL_PLANE_SERVICE_ACCOUNTS:
+            if "control-plane" in results.values():
                 control_plane.append(access.evidence_id)
-                continue
-            if access.user.startswith("system:node:"):
-                if all(_node_readers(access, member, versions) for member in members):
-                    continue
-                failures.append(("K6_UNATTRIBUTED_NODE_ACCESS", access.evidence_id))
-                continue
-            readers = identity_pods.get(access.user)
-            if access.user.startswith("system:serviceaccount:") and readers:
-                expansion |= readers
-                continue
-            failures.append(("K6_UNBOUND_ACCESS", access.evidence_id))
-        elif verb in _WRITE_VERBS and actors & identities and not members:
-            if access.impersonated_user is not None:
-                failures.append(("K6_IMPERSONATED_ACCESS", access.evidence_id))
-            elif access.name is None:
+            # The closure expands from the attributable effective access only.
+            if (results[effective] or "").startswith("workload:"):
+                expansion |= identity_pods[effective]
+        elif verb in _WRITE_VERBS and {authenticated, effective} & identities and not members:
+            attributions.append(
+                f"{access.evidence_id}: authenticated={authenticated}; effective={effective}; write"
+            )
+            if access.name is None:
                 failures.append(("K6_UNBOUND_WRITE_TARGET", access.evidence_id))
             else:
                 expansion.add(
@@ -521,11 +550,16 @@ def _k6(
                     )
                 )
     if failures:
-        reason = failures[0][0]
-        return _fail("K6", reason, [e for _, e in failures if e]), expansion, tuple(control_plane)
-    if unknowns:
-        return _unknown("K6", unknowns[0]), expansion, tuple(control_plane)
-    return _pass("K6"), expansion, tuple(control_plane)
+        k6 = _fail("K6", failures[0][0], [e for _, e in failures if e])
+    elif unknowns:
+        k6 = _unknown("K6", unknowns[0])
+    else:
+        k6 = _pass("K6")
+    return (
+        k6.model_copy(update={"attributions": tuple(attributions)}),
+        expansion,
+        tuple(control_plane),
+    )
 
 
 def evaluate_k(

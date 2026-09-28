@@ -352,10 +352,50 @@ def test_an_unrecognised_system_identity_is_not_control_plane() -> None:
     assert _status(unknown)["K6"] is FAIL
 
 
-def test_an_impersonated_access_keeps_both_actors_and_the_surface_open() -> None:
-    access = _access("system:serviceaccount:monitoring:ksm", impersonated_user="bob")
-    k6 = next(p for p in _k(_base(), audit=_audit(access)).preconditions if p.precondition == "K6")
-    assert (k6.status, k6.reason) == (FAIL, "K6_IMPERSONATED_ACCESS")
+def _sa_pod(namespace: str, name: str, account: str) -> ObjectVersion:
+    return version(
+        f"{namespace}/Pod/{name}",
+        0,
+        {"spec": {"serviceAccountName": account, "containers": [{"name": name}]}},
+    )
+
+
+def _k6(result: k_coverage.KEvaluation) -> Any:
+    return next(p for p in result.preconditions if p.precondition == "K6")
+
+
+def test_impersonation_alone_does_not_fail_when_both_identities_are_attributable() -> None:
+    access = _access(
+        "system:serviceaccount:monitoring:ksm",
+        impersonated_user="system:serviceaccount:monitoring:agent",
+    )
+    pods = [_sa_pod("monitoring", "ksm-1", "ksm"), _sa_pod("monitoring", "agent-1", "agent")]
+    result = _k([*_base(), *pods], audit=_audit(access))
+    k6 = _k6(result)
+    assert k6.status is PASS
+    # Both actors stay in the record; the closure expands from the effective access only.
+    (record,) = k6.attributions
+    assert "authenticated=system:serviceaccount:monitoring:ksm->workload:" in record
+    assert "effective=system:serviceaccount:monitoring:agent->workload:" in record
+    assert result.expansion == {ref("monitoring/Pod/agent-1")}
+
+
+@pytest.mark.parametrize(
+    ("user", "impersonated"),
+    [
+        ("system:serviceaccount:monitoring:ksm", "bob"),  # unresolved effective identity
+        ("alice", "system:serviceaccount:monitoring:ksm"),  # unresolved impersonating identity
+    ],
+)
+def test_an_unresolved_identity_of_an_impersonated_access_keeps_the_surface_open(
+    user: str, impersonated: str
+) -> None:
+    access = _access(user, impersonated_user=impersonated)
+    result = _k([*_base(), _sa_pod("monitoring", "ksm-1", "ksm")], audit=_audit(access))
+    k6 = _k6(result)
+    assert (k6.status, k6.reason) == (FAIL, "K6_UNBOUND_ACCESS")
+    assert f"authenticated={user}" in k6.attributions[0]
+    assert f"effective={impersonated}" in k6.attributions[0]
 
 
 def test_an_actual_reader_workload_joins_the_closure_to_a_fixed_point() -> None:

@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from typing import Any, Protocol
 
 from packages.rca.causal_roles import HypothesisCausalRoles, derive_hypothesis_causal_roles
+from packages.rca.channels import attach_channel_assessments, channel_assessments
 from packages.rca.episode_end import RULE_ID as EPISODE_END_RULE_ID
 from packages.rca.episode_end import evaluate_ended_episodes
 from packages.rca.frontier import (
@@ -510,6 +511,21 @@ def diagnose_case(
         mechanism_mismatches=case.mechanism_mismatches,
         rule_preconditions=case.rule_preconditions,
         precondition_reasons=case.precondition_reasons,
+    )
+    # M21 F1: influence-channel coverage records, attached after the decision (audit only).
+    resolution_trace = attach_channel_assessments(
+        resolution_trace,
+        channel_assessments(
+            case.hypotheses,
+            topology=case.topology,
+            history=case.source.object_history(),
+            symptom_entities=set(case.context.symptom_entities),
+            symptom_services=case.symptoms.services,
+            runtime_graph=case.runtime_graph,
+            trace_spans=case.source.trace_observations(),
+            onset=case.symptoms.onset,
+            grace=config.ranking.verification_onset_grace,
+        ),
     )
     information_gaps = derive_information_gaps(
         case.hypotheses,

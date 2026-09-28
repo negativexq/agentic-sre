@@ -1,7 +1,7 @@
 # M21 Causal Semantics Contract
 
 Contract version: `m21.v1`
-Status: **FROZEN** (owner, 2026-09-27, after amendments 1–2; amendments 3–4 recorded 2026-09-28, §9). M21 implementation starts only after the M20 live-parity tasks, in the owner-frozen order.
+Status: **FROZEN** (owner, 2026-09-27, after amendments 1–2; amendments 3–5 recorded 2026-09-28, §9). M21 implementation starts only after the M20 live-parity tasks, in the owner-frozen order.
 Baseline: `main` @ `d0caf5d0e3512930c1a8d4e0803e777a64fb2f06` (RCA code identical to the M20.1 audit)
 Scope: this contract defines the evidence that authorizes the RCA engine to treat a hypothesis as root-capable, root-supported or root-ineligible. It covers four topics: A unrelated initiated changes, B telemetry and control-plane actors, C asynchronous propagation, and D positive root support. It changes no code, test or threshold.
 
@@ -90,11 +90,11 @@ Topics A and B (and the async part of C) share one idea. An actor can only have 
 
 | Channel | Meaning | APPLICABLE iff (evidence-independent structural/declarative, §4.2a) | Path evidence (keeps the actor alive) | Coverage evidence (needed to claim "no path") |
 |---|---|---|---|---|
-| K — Kubernetes reference | Owner/selector/routing/config/secret/volume/env/service-account/network-policy/quota/limit-range/PDB/HPA/scheduling references, including namespaceSelector and cross-namespace references | Always (every object has a reference surface) | Any reference chain from the change closure (§4.2) to a symptom-side entity | Object journal complete for every namespace and cluster-scoped kind in the window, **and** the relation extractor declares complete reference coverage for every kind in the closure (a versioned per-kind table) |
+| K — Kubernetes reference | Owner/selector/routing/config/secret/volume/env/service-account/network-policy/quota/limit-range/PDB/HPA/scheduling references, including namespaceSelector and cross-namespace references | Always (every object has a reference surface) | Any reference chain from the change closure (§4.2) to a symptom-side entity | Object journal complete for every namespace and cluster-scoped kind in the window, **and** the relation extractor declares complete reference coverage for every kind in the closure (a versioned per-kind table). Amendment 5: the exact conditions are K1–K6 of `m21.k-reference-coverage.v1` (§4.5) |
 | R — synchronous runtime | Traced CLIENT→SERVER calls | The closure contains a Pod instance that ran in the window, or a Service | Any traced call edge between closure services and symptom-side services, in either direction, in the window | Every Pod in the closure is instrumented (it emitted spans in the window) and trace reads for the window completed without error or truncation |
 | M — asynchronous messaging | PRODUCER → destination → CONSUMER | The closure contains a Pod instance that ran in the window | Any message-level or destination-level relation (§5.3) between the closure and the symptom side | Messaging instrumentation present on the closure's producers and consumers, and complete trace reads |
 | N — shared-node causal channel | CPU, memory, disk, network or PID contention on a shared node | The closure contains at least one Pod instance that was scheduled and running on a known node during the window (OD-A1) | A closure Pod and a symptom-side Pod shared a node in the window | All relevant placements known for the whole window **and** no closure Pod shares a node with a symptom-side Pod. A shared node is `UNCOVERED` in v1 (OD-A1) |
-| C — cluster control plane | Admission webhooks, CRDs/operators, RBAC, PriorityClass/preemption, DNS, CNI, API-server load | The closure contains a cluster-scoped or control-plane kind | The closure contains a cluster-scoped or control-plane kind, or an object that registers a webhook or controller | v1: **never covered.** Any closure touching these kinds is `INAPPLICABLE` for exclusion |
+| C — cluster control plane | Admission webhooks, CRDs/operators, RBAC, PriorityClass/preemption, DNS, CNI, API-server load | The closure contains a cluster-scoped or control-plane kind. Amendment 5 (§4.5.4) adds: a closure Pod that can preempt a symptom-side Pod; and an access by a recognized control-plane identity to a closure object | The closure contains a cluster-scoped or control-plane kind, or an object that registers a webhook or controller | v1: **never covered.** Any closure touching these kinds is `INAPPLICABLE` for exclusion |
 | O — observation path | The actor transports, stores or computes telemetry the symptom was measured from | Always for `TRAFFIC_INCREASE` (OD-A3) and for declared `TELEMETRY` actors (§5.2). Otherwise when the closure contains a Pod instance that ran in the window, or a Service | The alert or symptom signal's provenance passes through the actor | The alert's signal provenance is known and positively does not pass through the actor |
 
 Channel O matters because a telemetry actor can create or hide a symptom without touching the application (§5).
@@ -147,6 +147,155 @@ The window is `[T_change − L, onset + grace]`:
 
 Every channel's evidence must cover the entire window. A change whose time is interval-uncertain against the window is `INAPPLICABLE`.
 
+### 4.5 Channel K reference coverage: `m21.k-reference-coverage.v1` (amendment 5)
+
+This section defines when channel K may be `NO_PATH_COVERED`. K applicability is unchanged: K is always `APPLICABLE` (I12). The rule is **fail-closed by construction**. On the evidence available today, neither the product nor ITBench collects Kubernetes audit logs, so K6 cannot pass, and `NO_PATH_COVERED = 0` is the expected and accepted result. No completeness or reader-absence declaration is added to any benchmark to obtain yield (OD-K3, OD-K4).
+
+#### 4.5.1 Preconditions
+
+Every precondition is evaluated and recorded as `PASS`, `FAIL` or `UNKNOWN`, with its basis and evidence ids. The decision may short-circuit; the audit record never does (I4, I8).
+
+- **K1 — Continuous journal coverage, positively proven.** The object journal must carry an explicit, persisted coverage fact for the window:
+  - `coverage_start ≤ window start` and `coverage_end ≥ window end`;
+  - `covered_namespaces` ⊇ every closure namespace and every symptom-side namespace, plus cluster scope;
+  - `covered_kinds` ⊇ the kinds of the frozen profile (§4.5.2) and the RBAC kinds;
+  - `continuous = true` and `gap_count = 0`;
+  - `source` and `source_version`.
+
+  Watch or list continuity, or equivalent persisted provenance, is required. A point-in-time LIST, a set of completed listings, or the rows happening to be present in a dataset is not such a fact. When the fact is missing, K1 is `UNKNOWN`.
+- **K2 — Supported-kind profile.** Every closure kind must be `COMPLETE` in the frozen per-kind profile (§4.5.2). Otherwise K2 is `FAIL`.
+- **K3 — Namespace separation (v1, OD-K1).** No closure member shares a namespace with the symptom side (the full OD-A4 set). Otherwise K3 is `FAIL`, with reason `SAME_NAMESPACE_REFERENCE_SURFACE_INCOMPLETE`. This is a conservative v1 boundary. It is not a claim that a shared namespace is a causal path.
+- **K4 — Complete traversal.** The causal path search runs over a finite persisted graph with a visited set and **no semantic hop cap** (no `max_depth` of 4, 6 or any other policy value). The graph is the union of the edges derived from **all relevant versions in the causal window**, not only the latest versions. A found path makes the state `PATH`. A depth-limited or latest-only search may prove `PATH` but never its absence.
+- **K5 — No known unsupported reference surface.** None of the following may be present in the window. Each occurrence found is `FAIL`, with its reason:
+  - a NetworkPolicy peer using `namespaceSelector`;
+  - a Service of type `ExternalName`;
+  - a pod (anti-)affinity term with `namespaces` or `namespaceSelector`;
+  - a selector the extractor does not evaluate (`matchExpressions`, or chaos selector fields other than `namespaces`/`labelSelectors`);
+  - a Pod with `ephemeralContainers`;
+  - any structural or reference-bearing field outside the frozen profile, or an object or schema outside the profile's API-version range.
+
+  Values inside free-form maps (ConfigMap `data`, labels, annotations) are not schema fields. Their influence through API readers is handled by K6.
+- **K6 — API surface positively covered** (§4.5.3). A negative operator assertion ("there is no other reader") never satisfies K6.
+
+#### 4.5.2 Per-kind profile
+
+`m21.k-reference-coverage.vN` fixes a supported Kubernetes API version range. For each kind it lists:
+- its reference surfaces, both inbound and outbound;
+- the modelled surfaces;
+- the explicitly uncovered surfaces;
+- the tests.
+
+A kind is `COMPLETE` only when every causally relevant reference surface of the frozen schema is classified, and every modelled surface has a test. Promoting a kind is a versioned profile change, approved by the owner. Writing this contract does not make any kind `COMPLETE`.
+
+Initial profile (v1):
+
+| Kind | Status | Modelled today (`topology.derive_edges`) |
+|---|---|---|
+| Namespace | INCOMPLETE | contains its objects (closure only) |
+| ConfigMap | INCOMPLETE | consumers through Pod and workload-template volume, projected, envFrom and env valueFrom |
+| Service | INCOMPLETE | selector → Pod (matchLabels only); `routes_to`; env-declared hosts (`calls`) |
+| ServiceAccount | INCOMPLETE | none; Pod `spec.serviceAccountName` is not modelled |
+| Job | INCOMPLETE | ownerReferences; template config references |
+| Pod | INCOMPLETE | ownerReferences; config references (containers, initContainers); Service/NetworkPolicy selection (matchLabels) |
+
+`Secret` stays outside v1 (OD-A2).
+
+#### 4.5.3 API surface (K6)
+
+An RBAC permission is **potential surface only**. It is never a `PATH`, and on its own it never proves absence.
+
+**Direction.**
+- An external identity reads a closure object. The closure may influence the reader, so the reader's workload joins the closure.
+- A closure identity writes an external object. The closure may influence that object, so the target joins the closure.
+- A closure identity reads an external object. This is an incoming dependency. On its own it is not a K path out of the candidate.
+
+**Coverage.**
+- A permission exists but the API audit evidence is incomplete: `UNCOVERED`.
+- A permission exists, the audit evidence is complete (below), there is no actual relevant access, and no watch crosses the window: K6 may `PASS`.
+- There is an actual access by an identity that cannot be bound exactly to a workload (User, Group, or an unbound ServiceAccount): `UNCOVERED`.
+
+**Complete audit evidence** requires all of these:
+- **Window coverage.** Audit coverage spans the window for **every serving API-server instance** (HA included).
+- **Policy provenance.** The recorded audit policy positively covers the relevant API groups, resources, verbs and stages.
+- **No lost evidence.** No dropped or truncated audit evidence. The source is `apiserver_audit_error_total` (or an equivalent loss counter) per instance. An unchanged counter (start = end) means zero new errors only when the continuity of the same API-server process and series is proven. A counter reset, process restart, scrape gap, missing replica or disappeared series makes the coverage `UNKNOWN`.
+- **Crossing watches.** Every watch that was active at the window start is known. A watch opened before the window keeps receiving changes during it, so the long-running request lifecycle (for example the `ResponseStarted` stage) is modelled. If the pre-window active-watch state is unknown, K6 is `UNCOVERED`.
+
+**Collection requests.** A LIST or WATCH without an object name, whether namespaced or cluster-wide, counts as potential access to every object of the requested kind within the request scope. A selector that the evaluator cannot interpret safely and completely is not used to narrow that scope. The scope is recorded from the audit event (`requestURI`, `verb`, `objectRef`, `user`).
+
+**Kubelet attribution (exact).** An access by `system:node:N` is attributed to a Pod, and not counted as an independent external reader, only if all of these hold:
+- the audit identity is `system:node:N`;
+- an exact Pod instance is scheduled on N during the access;
+- that Pod's spec positively references the object;
+- the accessed resource and object match that reference.
+
+If several Pods qualify, all of them are recorded, in deterministic order. If no exact Pod-and-reference binding exists, the access is `UNCOVERED`. There is no "the node read it, so it was probably for this Pod" inference.
+
+**Control-plane identities.** An access by a recognized control-plane identity (controllers, garbage collector, namespace controller, …) is not counted a second time as a K6 external reader. It makes channel C `APPLICABLE`, and C is `UNCOVERED` in v1 (§4.5.4). Recognition comes only from a versioned identity-classification profile, never from an ad-hoc string list. An unrecognized `system:*` identity is not a control-plane identity by default.
+
+**Impersonation.** The audit record keeps both the `authenticated_actor` and the `effective_actor` (the impersonated identity). Access is attributed to both for provenance. Closure expansion follows the effective access and does not blindly expand the closure twice for one access; the impersonator is never dropped from provenance.
+
+**Fixed-point expansion.** Adding an actual reader, writer or target:
+1. expands the closure;
+2. is iterated to a fixed point with a visited set over the finite persisted graph, so termination is guaranteed;
+3. recomputes K1–K6;
+4. recomputes the applicability and coverage of R, M, N, C and O.
+
+A new member that shares a namespace, shares a node or adds a runtime edge is evaluated naturally by the corresponding channel.
+
+#### 4.5.4 Channel C additions (moved from K)
+
+Preemption and control-plane identity access belong to channel C and are not modelled in K.
+- **Preemption.** C is `APPLICABLE` when a closure Pod's resolved `spec.priority` is higher than that of a symptom-side Pod and its `spec.preemptionPolicy` is not `Never`.
+  - When these structural facts are complete and such a Pod exists: C is `APPLICABLE` and `UNCOVERED`.
+  - When a fact is required but missing (for example, `priorityClassName` is set but the resolved `priority` or `preemptionPolicy` is absent): C is `APPLICABLE` and `UNKNOWN`. It is never `NOT_APPLICABLE` (§4.2a).
+- **Control-plane identity access** to a closure object (§4.5.3): C is `APPLICABLE` and `UNCOVERED` in v1.
+
+#### 4.5.5 Final K state (deterministic precedence)
+
+1. A positive modelled path exists → `PATH`.
+2. Otherwise, any known incomplete or open influence surface → `UNCOVERED`.
+3. Otherwise, any required completeness fact unavailable → `UNKNOWN`.
+4. Otherwise, all of K1–K6 are positively satisfied and there is no path → `NO_PATH_COVERED`.
+
+When several preconditions fail at once, all of them are recorded, and the precedence picks the state. For example, K2 `FAIL` together with K1 `UNKNOWN` gives `UNCOVERED`.
+
+#### 4.5.6 Implementation and measurement gate
+
+- **Audit only.** K audit implementation records K1–K6 and the §4.5.4 C additions. The records are outside the epistemic digest; no decision changes, and no engine bump.
+- **Hard gates.**
+  - 35/35 epistemic digests equal to `main`.
+  - Replay passes.
+  - No ground-truth hypothesis with K `NO_PATH_COVERED`.
+- **Reported.**
+  - the K state distribution;
+  - the per-precondition distribution;
+  - the change in C;
+  - the §4.3 audit outcome distribution.
+
+Negative controls (each mutation must be caught):
+- a depth-5 path;
+- a path that exists only in an earlier window version;
+- a shared namespace;
+- missing journal coverage;
+- a K5 construct;
+- an RBAC permission without audit evidence;
+- a kubelet read without an exact Pod reference;
+- a counter reset;
+- an unknown pre-window watch;
+- preemption → C;
+- an unrecognized `system:*` identity not being treated as control plane;
+- K applicability independent of evidence (I12).
+
+#### 4.5.7 Owner decisions (2026-09-28)
+
+- **OD-K1: APPROVED (a).** Namespace separation (K3).
+- **OD-K2: APPROVED with direction clarification** (§4.5.3). A closure identity reading an external object is not, on its own, a K path out of the closure. API-server load is channel C, not K.
+- **OD-K3: (b).** No frozen journal-completeness declaration for ITBench. Without independent provenance, K1 is `UNKNOWN`, and Topic A staying inert is accepted.
+- **OD-K4: no reader-absence declaration in v1.** A future operator declaration may only be **positive**: it may add possible readers and surfaces, and it is never evidence of absence.
+- **Preemption** moves from K to C (§4.5.4).
+
+Amendment 5 is committed before the read-only census. **The K predicate is not changed after the measurement, whatever the result.** The owner then decides between Topic A authority and the next M21 slice.
+
 ## 5. Topics
 
 Each topic uses the same headings: problem, current behavior, risk, proposed semantic, required evidence, coverage preconditions, missing-evidence behavior, false-resolved failure mode, versioned rule candidate, open owner decisions.
@@ -184,7 +333,7 @@ Each topic uses the same headings: problem, current behavior, risk, proposed sem
 **COVERAGE PRECONDITIONS.**
 1. The closure is computable and contains only kinds in the v1 closed kind set. The v1 set is Namespace, ConfigMap, Service, ServiceAccount, Job and Pod (OD-A2). `Secret` is excluded in v1.
 2. At least one channel is applicable (I11).
-3. Channel K: the journal is complete for the window, and every closure kind has a declared complete reference table.
+3. Channel K: `NO_PATH_COVERED` under `m21.k-reference-coverage.v1` (§4.5, amendment 5).
 4. Channels R and M, when applicable: every closure Pod is instrumented, and the trace reads for the window completed.
 5. Channel N, when applicable: every relevant placement is known for the whole window, and no closure Pod shares a node with a symptom-side Pod. In v1, a shared node is `UNCOVERED`. An unknown or incomplete placement is `UNKNOWN` or `UNCOVERED` (OD-A1).
 6. Channel C: when applicable it is always `UNCOVERED` in v1, so a closure containing a control-plane or cluster-scoped kind is `INAPPLICABLE`.
@@ -503,6 +652,7 @@ If implementation finds that the code or data semantics conflict with a clause, 
 | 2026-09-28 | Amendment 3 (owner `CONTRACT_AMENDMENT_REQUIRED`, after the M20.6 upper-bound and census measurements). §2.1 full census (111 dev; 54 was an audit-truncation bug) and the R cohort; Topic A applies to SUPPORTED initiated changes with no D1 immunity (R is a cohort, not a rule); B's v1 value measured on the TELEMETRY subset only; C5 is not a predicate and needs a semantic feasibility audit; async-class safety witness in the C gate; D2 vs D3 split; order and scoreboard restated with a real-resolver measurement after every tranche. | Owner review of the M20.6 upper-bound measurement |
 | 2026-09-28 | Amendment 4 (owner `CONTRACT_AMENDMENT_REQUIRED`). §10 incident onset: V0 and V1 rejected; V2 approved as the bounded production direction with an explicit alert-channel coverage boundary (snapshot: first alert capture time; live: latest contiguous alert-observation segment, persisted and replayed exactly); causal onset separated from reference time, with UNKNOWN when no qualified episode exists; VI rejected; L3 deferred; Scenario-31 recorded as a benchmark/evidence/ground-truth conflict with no accommodation; engine 1.3.0; committed before its read-only remeasurement. | Owner review of the onset measurements and the S31 forensic audit |
 | 2026-09-28 | Amendment 4 result (owner decision after the gate FAIL): 'S24 regression fixed' failed; S24 recorded as a second benchmark/evidence/ground-truth conflict; A4-V2 ships on its safety gates; §10.1–10.3 unchanged (§10.4). | Owner decision on the A4 remeasurement |
+| 2026-09-28 | Amendment 5 (owner `CONTRACT_AMENDMENT_REQUIRED`, three review rounds). §4.5 `m21.k-reference-coverage.v1`: K `NO_PATH_COVERED` only under K1 continuous journal coverage, K2 per-kind profile COMPLETE (all six v1 kinds start INCOMPLETE), K3 namespace separation, K4 policy-unbounded traversal over all window versions, K5 no known unsupported reference surface, K6 API surface positively covered by complete Kubernetes audit evidence (permission is only potential; no negative operator assertion; exact kubelet attribution; collection requests; pre-window watches; audit-loss counter continuity; fixed-point closure expansion; impersonation provenance). Preemption and control-plane identity access move to channel C applicability. Every precondition is recorded; deterministic state precedence. Expected on current data: `NO_PATH_COVERED = 0`, accepted as fail-closed. | Owner review of the bounded-declaration draft |
 
 ## 10. Incident onset semantics and benchmark evidence conflict (amendment 4)
 

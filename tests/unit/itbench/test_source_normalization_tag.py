@@ -19,7 +19,7 @@ from packages.evals.itbench.source import SOURCE_NORMALIZATION
 
 
 def test_the_normalization_tag_names_the_exact_instance_snapshot_source() -> None:
-    assert SOURCE_NORMALIZATION == "itbench-snapshot-source.v4"
+    assert SOURCE_NORMALIZATION == "itbench-snapshot-source.v5"
 
 
 def test_the_prediction_manifest_records_the_source_normalization(tmp_path: Path) -> None:

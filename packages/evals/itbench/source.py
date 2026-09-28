@@ -38,7 +38,9 @@ _OBJECTS = "k8s_objects_raw.tsv"
 # P2a-bis): events carry their `involvedObject.uid` like the live event journal.
 # v4 (M20.6): every observed Pod body yields a status observation, not only the
 # compacted versions, like the live lifecycle ledger's STATUS_SNAPSHOT heartbeat.
-SOURCE_NORMALIZATION = "itbench-snapshot-source.v4"
+# v5 (M21 amendment 4): the alert channel's observation start (W) is the earliest
+# alert snapshot capture time.
+SOURCE_NORMALIZATION = "itbench-snapshot-source.v5"
 _EVENTS = "k8s_events_raw.tsv"
 _LOGS = "otel_logs_raw.tsv"
 _TRACES = "otel_traces_raw.tsv"
@@ -292,6 +294,25 @@ def pod_pressure(pod: EntityRef, path: Path, since: datetime) -> list[ResourcePr
     return result
 
 
+_ALERT_CAPTURE_PATTERNS = (
+    re.compile(r"alerts_at_(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})(\.\d+)?\.json$"),
+    re.compile(
+        r"alerts_in_alerting_state_(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})(\d{2})(\.\d+)?Z\.json$"
+    ),
+)
+
+
+def _alert_capture_time(relative: str) -> datetime | None:
+    """The UTC capture time an alert snapshot file is named after, if it is one."""
+    for pattern in _ALERT_CAPTURE_PATTERNS:
+        match = pattern.search(relative)
+        if match is not None:
+            day, hour, minute, second, fraction = match.groups()
+            stamp = f"{day}T{hour}:{minute}:{second}{fraction or ''}"
+            return datetime.fromisoformat(stamp).replace(tzinfo=UTC)
+    return None
+
+
 def _mark_lifecycle(
     history: dict[EntityRef, list[ObjectVersion]],
 ) -> dict[EntityRef, list[ObjectVersion]]:
@@ -372,6 +393,19 @@ class SnapshotSource:
 
     def alerts(self) -> Sequence[Alert]:
         return self._alerts
+
+    def alert_observation_start(self) -> datetime | None:
+        """W: the earliest alert-channel capture, from the alert snapshot file names.
+
+        A capture's own time, never any alert's ``activeAt`` (M21 contract §10.2).
+        No alert capture means the alert channel was never observed: unknown.
+        """
+        captures = [
+            captured
+            for relative in self.scenario.evidence_files.get(ITBenchEvidenceCategory.ALERTS, ())
+            if (captured := _alert_capture_time(relative)) is not None
+        ]
+        return min(captures) if captures else None
 
     @cached_property
     def _object_rows(self) -> list[tuple[datetime, int, EntityRef, dict[str, Any], str | None]]:

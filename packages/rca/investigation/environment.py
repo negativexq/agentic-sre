@@ -739,6 +739,10 @@ class InitialObservationView:
     def alerts(self) -> tuple[Alert, ...]:
         return tuple(self.full_source.alerts())
 
+    def alert_observation_start(self) -> datetime | None:
+        # Alert coverage is a property of the channel, not of the bounded view.
+        return self.full_source.alert_observation_start()
+
     def object_history(self) -> dict[EntityRef, tuple[ObjectVersion, ...]]:
         full = self.full_source.object_history()
         seeded = self._seed_entities()

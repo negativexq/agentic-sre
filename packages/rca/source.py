@@ -61,6 +61,14 @@ class ObservationSource(Protocol):
         """Pod status as observed bodies reported it; never inferred between observations."""
         ...
 
+    def alert_observation_start(self) -> datetime | None:
+        """W: since when the alert channel was contiguously observed; None when unknown.
+
+        Specific to the alert channel (M21 contract §10.2): object or journal
+        coverage never stands in for it.
+        """
+        ...
+
 
 @dataclass
 class InMemorySource:
@@ -76,6 +84,7 @@ class InMemorySource:
     traffic_items: list[TrafficObservation] = field(default_factory=list)
     trace_items: list[TraceSpanObservation] = field(default_factory=list)
     cutoff: datetime | None = None
+    alert_coverage_start: datetime | None = None
 
     def incident_id(self) -> str:
         return self.name
@@ -85,6 +94,9 @@ class InMemorySource:
 
     def alerts(self) -> Sequence[Alert]:
         return self.alert_items
+
+    def alert_observation_start(self) -> datetime | None:
+        return self.alert_coverage_start
 
     def object_history(self) -> Mapping[EntityRef, Sequence[ObjectVersion]]:
         history: dict[EntityRef, list[ObjectVersion]] = {}

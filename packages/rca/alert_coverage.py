@@ -110,6 +110,95 @@ class AlertmanagerConfig:
         return cls(url, bearer_token=token, timeout_seconds=timeout)
 
 
+COVERAGE_CONTIGUOUS = "CONTIGUOUS"
+COVERAGE_UNAVAILABLE = "UNAVAILABLE"
+
+
+class AlertCoverageBoundaryError(ValueError):
+    """A persisted alert-coverage boundary is malformed."""
+
+
+@dataclass(frozen=True)
+class AlertCoverageBoundary:
+    """The alert-channel coverage a run froze at its boundary (M21 contract §10.2).
+
+    ``CONTIGUOUS``: the run boundary lies in ``segment_id``, observed without a gap
+    since ``observation_start`` (W). ``UNAVAILABLE``: no contiguous segment covers
+    it, so W, and with it any alert-derived onset authority, is unknown.
+    """
+
+    status: str
+    segment_id: int | None = None
+    observation_start: datetime | None = None
+    last_success: datetime | None = None
+
+    def __post_init__(self) -> None:
+        contiguous = (self.segment_id, self.observation_start, self.last_success)
+        if self.status == COVERAGE_CONTIGUOUS:
+            if any(item is None for item in contiguous):
+                raise AlertCoverageBoundaryError("contiguous coverage needs a segment and W")
+        elif self.status == COVERAGE_UNAVAILABLE:
+            if any(item is not None for item in contiguous):
+                raise AlertCoverageBoundaryError("unavailable coverage carries no segment")
+        else:
+            raise AlertCoverageBoundaryError(f"unknown alert coverage status {self.status!r}")
+
+    @property
+    def alert_observation_start(self) -> datetime | None:
+        """W when the channel was contiguously observed; otherwise unknown."""
+        return self.observation_start if self.status == COVERAGE_CONTIGUOUS else None
+
+    def to_payload(self) -> dict[str, object]:
+        return {
+            "status": self.status,
+            "segment_id": self.segment_id,
+            "observation_start": _iso(self.observation_start),
+            "last_success": _iso(self.last_success),
+        }
+
+    @classmethod
+    def from_payload(cls, value: object) -> AlertCoverageBoundary:
+        """Exactly what was persisted; anything else is an error, never repaired."""
+        if not isinstance(value, dict) or set(value) != {
+            "status",
+            "segment_id",
+            "observation_start",
+            "last_success",
+        }:
+            raise AlertCoverageBoundaryError(f"alert coverage boundary is {value!r}")
+        segment = value["segment_id"]
+        if segment is not None and (not isinstance(segment, int) or isinstance(segment, bool)):
+            raise AlertCoverageBoundaryError(f"alert coverage segment id is {segment!r}")
+        status = value["status"]
+        if not isinstance(status, str):
+            raise AlertCoverageBoundaryError(f"alert coverage status is {status!r}")
+        return cls(
+            status=status,
+            segment_id=segment,
+            observation_start=_parse(value["observation_start"]),
+            last_success=_parse(value["last_success"]),
+        )
+
+
+UNAVAILABLE_COVERAGE = AlertCoverageBoundary(COVERAGE_UNAVAILABLE)
+
+
+def _iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value is not None else None
+
+
+def _parse(value: object) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value) if isinstance(value, str) else None
+    except ValueError:
+        parsed = None
+    if parsed is None or parsed.utcoffset() is None:
+        raise AlertCoverageBoundaryError(f"alert coverage time is {value!r}")
+    return parsed
+
+
 class _Response(Protocol):
     status: int
 
@@ -238,7 +327,12 @@ def alert_coverage_poller_from_environment(
 
 __all__ = [
     "ALERT_COVERAGE_SOURCE",
+    "COVERAGE_CONTIGUOUS",
+    "COVERAGE_UNAVAILABLE",
+    "UNAVAILABLE_COVERAGE",
     "AlertChannelReader",
+    "AlertCoverageBoundary",
+    "AlertCoverageBoundaryError",
     "AlertCoverageConfig",
     "AlertCoveragePoller",
     "AlertmanagerConfig",

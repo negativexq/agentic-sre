@@ -34,6 +34,7 @@ BOUNDARY_KEYS = {
     "events",
     "logs",
     "provider_capabilities",
+    "alert_coverage",
 }
 
 

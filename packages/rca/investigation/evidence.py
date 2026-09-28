@@ -185,6 +185,10 @@ class OverlayObservationSource:
     def alerts(self) -> Sequence[Alert]:
         return self.base.alerts()
 
+    def alert_observation_start(self) -> datetime | None:
+        # An overlay never changes the base run's alert coverage boundary.
+        return self.base.alert_observation_start()
+
     def supports(self, capability: str) -> bool:
         return capability in self.supported_capabilities
 

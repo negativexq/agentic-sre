@@ -74,7 +74,7 @@ from packages.storage.models import (
 
 if TYPE_CHECKING:
     from packages.incident.state_machine import TransitionResult
-    from packages.rca.alert_coverage import AlertCoverageConfig
+    from packages.rca.alert_coverage import AlertCoverageBoundary, AlertCoverageConfig
 
 
 class AlertCoverageRepository:
@@ -131,6 +131,43 @@ class AlertCoverageRepository:
         )
         self._session.commit()
         return segment.segment_id
+
+    def boundary_at(
+        self, *, source: str, at: datetime, config: AlertCoverageConfig
+    ) -> AlertCoverageBoundary:
+        """The contiguous coverage segment a run boundary at ``at`` lies in, if any.
+
+        The latest segment started at or before ``at`` covers it when ``at`` is
+        within its observed span, or when it is still open and ``at`` is within the
+        polling-gap tolerance of its last success. Otherwise coverage is unavailable.
+        """
+        from packages.rca.alert_coverage import (
+            COVERAGE_CONTIGUOUS,
+            UNAVAILABLE_COVERAGE,
+            AlertCoverageBoundary,
+        )
+
+        segment = self._session.scalar(
+            select(AlertCoverageSegmentRow)
+            .where(AlertCoverageSegmentRow.source == source)
+            .where(AlertCoverageSegmentRow.started_at <= at)
+            .order_by(
+                desc(AlertCoverageSegmentRow.started_at), desc(AlertCoverageSegmentRow.segment_id)
+            )
+            .limit(1)
+        )
+        if segment is None:
+            return UNAVAILABLE_COVERAGE
+        within = at <= segment.last_success_at
+        live = segment.status == "OPEN" and config.continues(segment.last_success_at, at)
+        if not (within or live):
+            return UNAVAILABLE_COVERAGE
+        return AlertCoverageBoundary(
+            status=COVERAGE_CONTIGUOUS,
+            segment_id=segment.segment_id,
+            observation_start=segment.started_at,
+            last_success=segment.last_success_at,
+        )
 
     def record_failure(
         self, *, source: str, attempted_at: datetime, completed_at: datetime, error_type: str

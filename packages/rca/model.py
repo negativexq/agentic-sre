@@ -810,6 +810,63 @@ class RootSupportRecord(BaseModel):
     path_shapes: tuple[tuple[tuple[str, str, str], ...], ...] = ()
 
 
+class ChannelApplicability(StrEnum):
+    """Whether an influence channel can mediate a candidate's closure (M21 §4.2a)."""
+
+    APPLICABLE = "APPLICABLE"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+
+
+class ChannelState(StrEnum):
+    """The observed state of one applicable channel (M21 §4.3)."""
+
+    PATH = "PATH"
+    NO_PATH_COVERED = "NO_PATH_COVERED"
+    UNCOVERED = "UNCOVERED"
+    UNKNOWN = "UNKNOWN"
+
+
+class ChannelEvaluation(BaseModel):
+    """One channel's applicability and, when applicable, its covered state."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    channel: str = Field(min_length=1)
+    applicability: ChannelApplicability
+    applicability_basis: str = Field(min_length=1)
+    state: ChannelState | None = None
+    gap_reason: str | None = None
+    evidence_ids: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def _state_only_when_applicable(self) -> ChannelEvaluation:
+        applicable = self.applicability is ChannelApplicability.APPLICABLE
+        if applicable != (self.state is not None):
+            raise ValueError("an applicable channel has a state; an inapplicable one has none")
+        return self
+
+
+class ChannelAssessment(BaseModel):
+    """The influence-channel coverage record of one initiated change (M21 §4, audit only).
+
+    It changes no decision: Topic A may later read it. ``closure_outcome`` is the
+    §4.3 table applied to the evaluations, recorded for audit.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    rule_id: str = "m21.channel-catalog"
+    rule_version: str = "v1"
+    closure_members: tuple[str, ...] = ()
+    closure_member_count: int = Field(default=0, ge=0)
+    closure_complete: bool = False
+    window_start: datetime | None = None
+    window_end: datetime | None = None
+    evaluations: tuple[ChannelEvaluation, ...] = ()
+    closure_outcome: RootSupportStatus = RootSupportStatus.INAPPLICABLE
+    outcome_reason: str = ""
+
+
 class HypothesisResolutionAudit(BaseModel):
     """Bounded per-hypothesis audit data retained in a resolution trace."""
 
@@ -829,6 +886,8 @@ class HypothesisResolutionAudit(BaseModel):
     precondition_audit: tuple[RulePreconditionAudit, ...] = ()
     # Root-support rule outcomes (M21 D1); audit only, outside the epistemic digest.
     root_support: tuple[RootSupportRecord, ...] = ()
+    # Influence-channel coverage of an initiated change (M21 F1); audit only.
+    channel_assessment: ChannelAssessment | None = None
 
 
 class ResolutionTrace(BaseModel):

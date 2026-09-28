@@ -826,6 +826,27 @@ class ChannelState(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
+class CoveragePreconditionStatus(StrEnum):
+    """Result of one coverage precondition (M21 §4.5.1); every one is recorded."""
+
+    PASS = "PASS"
+    FAIL = "FAIL"
+    UNKNOWN = "UNKNOWN"
+
+
+class ChannelPrecondition(BaseModel):
+    """One evaluated coverage precondition, with its basis (I4, I8)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    precondition: str = Field(min_length=1)
+    status: CoveragePreconditionStatus
+    reason: str | None = None
+    evidence_ids: tuple[str, ...] = ()
+    # Per-access provenance, e.g. both actors of an impersonated API request.
+    attributions: tuple[str, ...] = ()
+
+
 class ChannelEvaluation(BaseModel):
     """One channel's applicability and, when applicable, its covered state."""
 
@@ -837,6 +858,8 @@ class ChannelEvaluation(BaseModel):
     state: ChannelState | None = None
     gap_reason: str | None = None
     evidence_ids: tuple[str, ...] = ()
+    rule_id: str | None = None
+    preconditions: tuple[ChannelPrecondition, ...] = ()
 
     @model_validator(mode="after")
     def _state_only_when_applicable(self) -> ChannelEvaluation:

@@ -9,7 +9,12 @@ from typing import Any
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
-from test_live_diagnosis import T0, _deployment, setup  # noqa: F401 - pytest fixture
+from test_live_diagnosis import (  # noqa: F401 - pytest fixture
+    T0,
+    _deployment,
+    cover_alert_channel,
+    setup,
+)
 from test_replay_provider import Readers
 from test_trajectory_replay import _prepare
 
@@ -52,6 +57,7 @@ def _competing_changes(world: Any) -> None:
         session_factory=factory, namespaces=("sre-demo",), reader=cluster, clock=clock
     ).snapshot()
     clock.now = T0 + timedelta(minutes=13)
+    cover_alert_channel(factory, start=T0, until=clock.now)
 
 
 def _run(world: Any, readers: Readers, **kwargs: Any) -> tuple[str, DiagnosisRow]:

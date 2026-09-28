@@ -148,7 +148,7 @@ class Investigator(Protocol):
 # The deterministic RCA semantics a run was diagnosed with, persisted on every
 # revision. Bump it with any change that can alter a diagnosis from the same
 # evidence; replay refuses a run recorded under another version (M20.3a).
-RCA_ENGINE_VERSION = "1.2.2"
+RCA_ENGINE_VERSION = "1.3.0"
 
 
 @dataclass(frozen=True)
@@ -208,9 +208,11 @@ def build_case(
     trace_index = canonicalize_trace_spans(trace_spans)
     runtime_graph = derive_runtime_graph_from_index(trace_index)
     runtime_evidence = derive_runtime_evidence(trace_index)
-    symptoms = extract_symptoms(alerts)
+    symptoms = extract_symptoms(alerts, alert_observation_start=source.alert_observation_start())
     if reference_onset is not None:
-        symptoms = symptoms.model_copy(update={"onset": reference_onset})
+        symptoms = symptoms.model_copy(
+            update={"onset": reference_onset, "reference_time": reference_onset}
+        )
     runtime_propagation = derive_runtime_propagation(
         trace_index,
         history=history,
@@ -224,12 +226,13 @@ def build_case(
         window_end=source.observation_cutoff(),
         tokens=symptom_tokens(symptoms, entities, topology),
     )
+    # A query window, not authority: the reference time may anchor it.
     pressure_result = (
         source.resource_pressure(
             sorted(_pods(entities, topology), key=str),
-            symptoms.onset - config.pressure_baseline_gap,
+            symptoms.reference_time - config.pressure_baseline_gap,
         )
-        if symptoms.onset is not None
+        if symptoms.reference_time is not None
         else ()
     )
     pressure_records = () if isinstance(pressure_result, ProviderReadFailure) else pressure_result

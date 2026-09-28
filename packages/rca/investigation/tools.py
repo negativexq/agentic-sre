@@ -461,7 +461,7 @@ class DescribeTool(_BaseTool):
     ) -> InvestigationObservation:
         if self.backend is None:
             return self.execute(case, gap, target)
-        requested = _default_query(query, onset=case.symptoms.onset)
+        requested = _default_query(query, onset=case.symptoms.reference_time)
         versions = self.backend.query_history(target, requested)
         version = versions[-1] if versions else None
         if version is None:
@@ -501,7 +501,7 @@ class HistoryTool(_BaseTool):
     ) -> InvestigationObservation:
         if self.backend is None:
             return self.execute(case, gap, target)
-        requested = _default_query(query, onset=case.symptoms.onset)
+        requested = _default_query(query, onset=case.symptoms.reference_time)
         versions = self.backend.query_history(target, requested)
         return self._observation(
             gap,
@@ -543,7 +543,7 @@ class EventsTool(_BaseTool):
     ) -> InvestigationObservation:
         if self.backend is None:
             return self.execute(case, gap, target)
-        requested = _default_query(query, onset=case.symptoms.onset)
+        requested = _default_query(query, onset=case.symptoms.reference_time)
         events = self.backend.query_events(target, requested)
         return self._observation(
             gap,
@@ -565,7 +565,7 @@ class IncidentEventsTool(_BaseTool):
     ) -> InvestigationObservation:
         if self.backend is None:
             return self._observation(gap, target, {})
-        requested = _default_query(None, onset=case.symptoms.onset)
+        requested = _default_query(None, onset=case.symptoms.reference_time)
         events = self.backend.query_incident_events(target, requested)
         return self._observation(
             gap,
@@ -606,7 +606,7 @@ class IncidentChangesTool(_BaseTool):
     ) -> InvestigationObservation:
         if self.backend is None:
             return self._observation(gap, target, {})
-        requested = _default_query(None, onset=case.symptoms.onset)
+        requested = _default_query(None, onset=case.symptoms.reference_time)
         versions = self.backend.query_incident_changes(target, requested)
         return self._observation(
             gap,
@@ -674,7 +674,7 @@ class LogsTool(_BaseTool):
     ) -> InvestigationObservation:
         if self.backend is None:
             return self.execute(case, gap, target)
-        requested = _default_query(query, onset=case.symptoms.onset)
+        requested = _default_query(query, onset=case.symptoms.reference_time)
         records = self.backend.query_logs(target, requested)
         if isinstance(records, ProviderReadFailure):
             runtime = _loki_runtime_context(
@@ -719,7 +719,7 @@ class ResourcePressureTool(_BaseTool):
     def execute(
         self, case: Case, gap: InformationGap, target: EntityRef
     ) -> InvestigationObservation:
-        onset = case.symptoms.onset or case.context.window_end
+        onset = case.symptoms.reference_time or case.context.window_end
         since = onset - timedelta(hours=2) if onset else datetime.min.astimezone()
         pressure = case.source.resource_pressure((target,), since)
         if isinstance(pressure, ProviderReadFailure):
@@ -746,7 +746,7 @@ class ResourcePressureTool(_BaseTool):
     ) -> InvestigationObservation:
         if self.backend is None:
             return self.execute(case, gap, target)
-        requested = _default_query(query, onset=case.symptoms.onset)
+        requested = _default_query(query, onset=case.symptoms.reference_time)
         records = self.backend.query_resource_pressure(target, requested)
         if isinstance(records, ProviderReadFailure):
             runtime = _prometheus_runtime_context(
@@ -811,7 +811,7 @@ class TrafficTool(_BaseTool):
     ) -> InvestigationObservation:
         if self.backend is None:
             return self.execute(case, gap, target)
-        requested = _default_query(query, onset=case.symptoms.onset)
+        requested = _default_query(query, onset=case.symptoms.reference_time)
         records = self.backend.query_traffic(target, requested)
         if isinstance(records, ProviderReadFailure):
             runtime = _prometheus_runtime_context(
@@ -867,7 +867,7 @@ class RuntimeTracesTool(_BaseTool):
     def execute_query(
         self, case: Case, gap: InformationGap, target: EntityRef, query: InvestigationQuery | None
     ) -> InvestigationObservation:
-        requested = _default_query(query, onset=case.symptoms.onset)
+        requested = _default_query(query, onset=case.symptoms.reference_time)
         if self.backend is None:
             spans = _query_trace_observations(
                 case.source.trace_observations(),

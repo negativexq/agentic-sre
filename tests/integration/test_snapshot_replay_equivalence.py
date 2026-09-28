@@ -26,7 +26,12 @@ from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, sessionmaker
 from test_evidence_manifest import Seen
-from test_live_diagnosis import T0, FakeLogs, setup  # noqa: F401 - pytest fixture
+from test_live_diagnosis import (  # noqa: F401 - pytest fixture
+    T0,
+    FakeLogs,
+    cover_alert_channel,
+    setup,
+)
 from test_trajectory_replay import _NoClock
 
 import packages.rca.investigation.graph as graph_module
@@ -328,6 +333,7 @@ def _record(world: Any, monkeypatch: pytest.MonkeyPatch) -> Run:
     cluster.objects = [item for item in cluster.objects if item["kind"] != "ConfigMap"]
     seen = Seen(monkeypatch)
     clock.now = T0 + timedelta(minutes=30)
+    cover_alert_channel(factory, start=T0, until=clock.now)
     service.run(incident_id, "MANUAL")
     live = seen.source
     original = snapshot_state(live)

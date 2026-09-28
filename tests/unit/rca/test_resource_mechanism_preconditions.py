@@ -320,6 +320,9 @@ def _engine_source(cutoff: datetime, records: Sequence[ResourcePressure] = ()) -
     history = _history(_deployment(_container("512Mi")), _deployment(_container("128Mi")))
     return InMemorySource(
         name="a2-maturity",
+        alert_coverage_start=min(
+            version.observed_at for versions in history.values() for version in versions
+        ),
         alert_items=[
             Alert(
                 name="RequestErrorRate",

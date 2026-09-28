@@ -138,6 +138,7 @@ def _source_with_hidden_hpa_history(
     right_hpa = _ref("HorizontalPodAutoscaler", "right-hpa")
     source = InMemorySource(
         name="production-investigation-history",
+        alert_coverage_start=at(0),
         alert_items=[
             Alert(
                 name="ApiLatency",
@@ -229,6 +230,7 @@ def test_hidden_chaos_events_cannot_create_initial_topology_edges() -> None:
     service = _ref("Service", "api")
     source = InMemorySource(
         name="hidden-chaos-topology",
+        alert_coverage_start=at(0),
         alert_items=[Alert(name="ApiLatency", service="api", namespace="shop", starts_at=at(0))],
         versions=[
             _version(pod, 0, {"metadata": {"labels": {"app": "api"}}}, 0),
@@ -266,6 +268,7 @@ def test_investigation_only_error_logs_are_hidden_from_seed_but_queryable() -> N
     )
     source = InMemorySource(
         name="hidden-investigation-log",
+        alert_coverage_start=at(0),
         alert_items=[Alert(name="ApiLatency", service="api", namespace="shop", starts_at=at(0))],
         versions=[_version(_ref("Service", "api"), 0, {}, 0)],
         error_items=[log],

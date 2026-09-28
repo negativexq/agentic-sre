@@ -126,7 +126,8 @@ def _is_usable_anchor(value: datetime | None) -> bool:
 
 def _time_anchor(case: Case) -> datetime | None:
     cutoff = case.source.observation_cutoff()
-    for value in (case.symptoms.onset, case.context.window_end, cutoff):
+    # A query anchor, not authority: the reference time may anchor it.
+    for value in (case.symptoms.reference_time, case.context.window_end, cutoff):
         if _is_usable_anchor(value):
             return value
     return None
@@ -168,7 +169,8 @@ def resolve_effective_query(
     if anchor is None:
         return None
     cutoff = _observation_cutoff(case)
-    onset = case.symptoms.onset if _is_usable_anchor(case.symptoms.onset) else None
+    reference = case.symptoms.reference_time
+    onset = reference if _is_usable_anchor(reference) else None
     if onset is not None:
         causal_anchor = onset
     else:

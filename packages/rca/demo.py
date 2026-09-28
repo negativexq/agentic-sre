@@ -104,6 +104,8 @@ def demo_source() -> InMemorySource:
     return InMemorySource(
         name="demo-bad-rollout",
         alert_items=alerts,
+        # The demo's alert channel is observed from its start (M21 contract §10.2).
+        alert_coverage_start=START,
         versions=versions,
         event_items=[
             ClusterEvent(

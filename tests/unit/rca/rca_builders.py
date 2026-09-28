@@ -152,6 +152,8 @@ def config_change_source() -> InMemorySource:
     ]
     return InMemorySource(
         name="config-incident",
+        # The fixture observes the alert channel from its start (M21 contract §10.2).
+        alert_coverage_start=T0,
         alert_items=[
             alert("RequestErrorRate", "checkout", 12),
             alert("Watchdog", "prometheus", 0),

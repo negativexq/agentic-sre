@@ -35,7 +35,8 @@ def _topology(source: InMemorySource) -> Topology:
 
 def test_background_alerts_do_not_define_symptoms() -> None:
     symptoms = extract_symptoms(
-        [alert("Watchdog", "prometheus", 0), alert("RequestErrorRate", "checkout", 5)]
+        [alert("Watchdog", "prometheus", 0), alert("RequestErrorRate", "checkout", 5)],
+        alert_observation_start=at(0),
     )
     assert symptoms.services == ("checkout",)
     assert symptoms.alert_names == ("RequestErrorRate",)

@@ -40,8 +40,15 @@ def test_a_single_terminal_capture_is_w(tmp_path: Path) -> None:
 
 
 def test_w_never_comes_from_an_alert_active_at(tmp_path: Path) -> None:
-    # The fixture's alert file has an activeAt but no capture time in its name.
+    # An alert file with an activeAt but no capture time in its name.
     scenario = snapshot_scenario(tmp_path)
-    source = SnapshotSource(scenario)
+    alerts = Path(scenario.snapshot_path) / "alerts"
+    (alerts / "a.json").write_text(
+        (alerts / "alerts_at_2025-01-01T12-13-00.000000.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    files = dict(scenario.evidence_files)
+    files[ITBenchEvidenceCategory.ALERTS] = ("alerts/a.json",)
+    source = SnapshotSource(scenario.model_copy(update={"evidence_files": files}))
     assert source.alerts()  # the alert is read
     assert source.alert_observation_start() is None  # but W is unknown

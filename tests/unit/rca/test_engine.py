@@ -49,6 +49,7 @@ def test_config_change_is_diagnosed_verified_with_revert_proposal() -> None:
 def test_engine_uses_explicit_cutoff_for_late_events_and_logs() -> None:
     source = InMemorySource(
         name="cutoff",
+        alert_coverage_start=at(0),
         alert_items=[alert("RequestErrorRate", "checkout", 5)],
         versions=shop_objects(0),
         event_items=[
@@ -91,6 +92,7 @@ def test_chaos_experiment_on_alerting_pod_is_verified_and_collapsed() -> None:
     target = "Successfully apply chaos for shop/checkout-5d8f7c9b4-abcde"
     source = InMemorySource(
         name="chaos",
+        alert_coverage_start=at(0),
         alert_items=[alert("RequestLatency", "checkout", 6)],
         versions=shop_objects(0),
         event_items=[
@@ -118,6 +120,7 @@ def test_restrictive_network_policy_is_verified() -> None:
     )
     source = InMemorySource(
         name="policy",
+        alert_coverage_start=at(0),
         alert_items=[alert("RequestErrorRate", "checkout", 3)],
         versions=[*shop_objects(0), policy],
     )
@@ -129,6 +132,7 @@ def test_restrictive_network_policy_is_verified() -> None:
 def test_failure_event_only_is_never_verified() -> None:
     source = InMemorySource(
         name="crash",
+        alert_coverage_start=at(0),
         alert_items=[alert("RequestErrorRate", "checkout", 3)],
         versions=shop_objects(0),
         event_items=[
@@ -144,6 +148,7 @@ def test_failure_event_only_is_never_verified() -> None:
 def test_no_signal_returns_explicit_empty_diagnosis() -> None:
     source = InMemorySource(
         name="quiet",
+        alert_coverage_start=at(0),
         alert_items=[alert("RequestErrorRate", "checkout", 3)],
         versions=shop_objects(0),
     )
@@ -197,6 +202,7 @@ def test_dependency_outage_is_blamed_over_the_callers_own_warnings() -> None:
 
     source = InMemorySource(
         name="dependency",
+        alert_coverage_start=at(0),
         alert_items=[alert("RequestErrorRate", "cart", 5)],
         versions=[
             *microservice("cart", 0, {"STORE_ADDR": "store:6379"}),
@@ -239,6 +245,7 @@ def test_late_linked_change_cannot_verify_original_incident_onset() -> None:
     )
     source = InMemorySource(
         name="late-change",
+        alert_coverage_start=at(0),
         alert_items=[alert("RequestErrorRate", "checkout", 5)],
         versions=[*shop_objects(0), late],
         cutoff=at(180),
@@ -343,6 +350,7 @@ def test_hpa_failure_before_workload_symptoms_is_verified() -> None:
     )
     source = InMemorySource(
         name="hpa-failure",
+        alert_coverage_start=at(0),
         alert_items=[alert("RequestErrorRate", "checkout", 5)],
         versions=[*shop_objects(0), hpa],
         event_items=[
@@ -390,6 +398,7 @@ def test_late_hpa_failure_does_not_verify_over_earlier_workload_failure() -> Non
     )
     source = InMemorySource(
         name="late-hpa-failure",
+        alert_coverage_start=at(0),
         alert_items=[alert("RequestErrorRate", "checkout", 5)],
         versions=[*shop_objects(0), hpa],
         event_items=[
@@ -423,6 +432,7 @@ def _quota(used: str) -> dict[str, object]:
 def test_quota_that_rejects_pods_is_verified_with_a_capacity_proposal() -> None:
     source = InMemorySource(
         name="quota",
+        alert_coverage_start=at(0),
         alert_items=[alert("RequestErrorRate", "checkout", 5)],
         versions=[*shop_objects(0), version("shop/ResourceQuota/mem", 0, _quota("1024Mi"))],
         event_items=[
@@ -445,6 +455,7 @@ def test_quota_that_rejects_pods_is_verified_with_a_capacity_proposal() -> None:
 def test_quota_with_headroom_is_not_a_candidate() -> None:
     source = InMemorySource(
         name="quota-ok",
+        alert_coverage_start=at(0),
         alert_items=[alert("RequestErrorRate", "checkout", 5)],
         versions=[*shop_objects(0), version("shop/ResourceQuota/mem", 0, _quota("512Mi"))],
     )
@@ -465,6 +476,7 @@ def test_partial_network_policy_is_a_candidate_but_not_verified() -> None:
     )
     source = InMemorySource(
         name="partial-policy",
+        alert_coverage_start=at(0),
         alert_items=[alert("RequestErrorRate", "checkout", 3)],
         versions=[*shop_objects(0), policy],
     )
@@ -498,6 +510,7 @@ def test_oom_killed_container_proposes_more_memory() -> None:
     }
     source = InMemorySource(
         name="oom",
+        alert_coverage_start=at(0),
         alert_items=[alert("RequestErrorRate", "checkout", 3)],
         versions=[*versions[:2], crashed, versions[3]],
     )
@@ -513,6 +526,7 @@ def test_new_memory_pressure_on_the_alerting_pod_is_reported() -> None:
     pod = ref("shop/Pod/checkout-5d8f7c9b4-abcde")
     source = InMemorySource(
         name="pressure",
+        alert_coverage_start=at(0),
         alert_items=[alert("RequestErrorRate", "checkout", 10)],
         versions=shop_objects(0),
         pressure_items=[
@@ -577,6 +591,7 @@ def test_container_failure_behind_a_shared_policy_is_not_linked_to_a_sibling() -
     ]
     source = InMemorySource(
         name="shared-policy",
+        alert_coverage_start=at(0),
         alert_items=[alert("RequestErrorRate", "checkout", 10)],
         versions=versions,
     )

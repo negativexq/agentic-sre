@@ -21,7 +21,12 @@ def _tsv(path: Path, rows: list[tuple[str, dict[str, Any]]]) -> None:
 def snapshot_scenario(tmp_path: Path, scenario_id: str = "Scenario-1") -> ITBenchScenario:
     root = tmp_path / scenario_id
     (root / "alerts").mkdir(parents=True)
-    (root / "alerts" / "a.json").write_text(
+    # The alert channel is captured from 12:00 (nothing firing yet); the next
+    # capture, at 12:13, shows the alert that became active at 12:12.
+    (root / "alerts" / "alerts_at_2025-01-01T12-00-00.000000.json").write_text(
+        json.dumps({"data": {"alerts": []}}), encoding="utf-8"
+    )
+    (root / "alerts" / "alerts_at_2025-01-01T12-13-00.000000.json").write_text(
         json.dumps(
             {
                 "data": {
@@ -99,5 +104,10 @@ def snapshot_scenario(tmp_path: Path, scenario_id: str = "Scenario-1") -> ITBenc
         scenario_id=scenario_id,
         snapshot_path=str(root),
         evidence_categories=tuple(ITBenchEvidenceCategory),
-        evidence_files={ITBenchEvidenceCategory.ALERTS: ("alerts/a.json",)},
+        evidence_files={
+            ITBenchEvidenceCategory.ALERTS: (
+                "alerts/alerts_at_2025-01-01T12-00-00.000000.json",
+                "alerts/alerts_at_2025-01-01T12-13-00.000000.json",
+            )
+        },
     )

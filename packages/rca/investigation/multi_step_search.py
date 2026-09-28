@@ -150,7 +150,10 @@ def query_templates(source: ObservationSource) -> tuple[tuple[str, Investigation
     templates: list[tuple[str, InvestigationQuery]] = [
         ("full-history", InvestigationQuery(end=cutoff, limit=_MAX_LIMIT))
     ]
-    onset = extract_symptoms(source.alerts()).onset
+    # Query templates are windows, not authority: the reference time anchors them.
+    onset = extract_symptoms(
+        source.alerts(), alert_observation_start=source.alert_observation_start()
+    ).reference_time
     if onset is None:
         return tuple(templates)
 

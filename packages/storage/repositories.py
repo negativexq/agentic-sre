@@ -50,6 +50,8 @@ from packages.rca.requirements import requirement_key, requirement_targets_docum
 from packages.storage.models import (
     DIAGNOSIS_TRIGGERS,
     LIFECYCLE_OBSERVATION_TYPES,
+    AlertCoveragePollRow,
+    AlertCoverageSegmentRow,
     AlertRow,
     ChangeRecordRow,
     DiagnosisRow,
@@ -72,6 +74,84 @@ from packages.storage.models import (
 
 if TYPE_CHECKING:
     from packages.incident.state_machine import TransitionResult
+    from packages.rca.alert_coverage import AlertCoverageConfig
+
+
+class AlertCoverageRepository:
+    """Alert-channel coverage segments and their poll audit (M21 contract §10.2)."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def open_segment(self, source: str) -> AlertCoverageSegmentRow | None:
+        return self._session.scalar(
+            select(AlertCoverageSegmentRow)
+            .where(AlertCoverageSegmentRow.source == source)
+            .where(AlertCoverageSegmentRow.status == "OPEN")
+            .order_by(desc(AlertCoverageSegmentRow.segment_id))
+            .limit(1)
+        )
+
+    def record_success(
+        self,
+        *,
+        source: str,
+        attempted_at: datetime,
+        completed_at: datetime,
+        active_alerts: int,
+        config: AlertCoverageConfig,
+    ) -> int:
+        """Extend the open segment, or break it after a gap and start a new one."""
+        segment = self.open_segment(source)
+        if segment is not None and config.continues(segment.last_success_at, completed_at):
+            segment.last_success_at = completed_at
+        else:
+            if segment is not None:
+                segment.status = "BROKEN_GAP"
+                segment.ended_at = segment.last_success_at
+            segment = AlertCoverageSegmentRow(
+                source=source,
+                started_at=completed_at,
+                last_success_at=completed_at,
+                ended_at=None,
+                status="OPEN",
+            )
+            self._session.add(segment)
+            self._session.flush()
+        self._session.add(
+            AlertCoveragePollRow(
+                source=source,
+                segment_id=segment.segment_id,
+                attempted_at=attempted_at,
+                completed_at=completed_at,
+                success=True,
+                error_type=None,
+                active_alerts=active_alerts,
+            )
+        )
+        self._session.commit()
+        return segment.segment_id
+
+    def record_failure(
+        self, *, source: str, attempted_at: datetime, completed_at: datetime, error_type: str
+    ) -> None:
+        """An explicit failure ends coverage at the last success; no tolerance hides it."""
+        segment = self.open_segment(source)
+        if segment is not None:
+            segment.status = "CLOSED_FAILURE"
+            segment.ended_at = segment.last_success_at
+        self._session.add(
+            AlertCoveragePollRow(
+                source=source,
+                segment_id=None,
+                attempted_at=attempted_at,
+                completed_at=completed_at,
+                success=False,
+                error_type=error_type,
+                active_alerts=None,
+            )
+        )
+        self._session.commit()
 
 
 class RequirementOnsetUnavailable(RuntimeError):

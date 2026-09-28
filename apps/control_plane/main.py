@@ -47,6 +47,7 @@ from packages.contracts import (
     IncidentEvent,
 )
 from packages.incident import IncidentManager, normalize_alert
+from packages.rca.alert_coverage import alert_coverage_poller_from_environment
 from packages.rca.model import Diagnosis
 from packages.rca.report import (
     Lifecycle,
@@ -166,6 +167,9 @@ def create_app(
         engine = create_database_engine(database_url)
         session_factory = create_session_factory(engine)
     diagnoser = diagnosis_service or service_from_environment(session_factory)
+    # The webhook ingests alert occurrences; this read-only poller only records
+    # when the alert channel was actually observed (coverage), never incidents.
+    alert_coverage_poller = alert_coverage_poller_from_environment(session_factory)
     auto_diagnose = os.getenv("SRE_AUTO_DIAGNOSE", "").casefold() == "true"
 
     def session_dependency() -> Iterator[Session]:
@@ -192,12 +196,18 @@ def create_app(
                 target=diagnoser.watch, args=(stop, watch_interval), daemon=True
             )
             watcher.start()
+        poller = None
+        if alert_coverage_poller is not None:
+            poller = threading.Thread(target=alert_coverage_poller.run, args=(stop,), daemon=True)
+            poller.start()
         try:
             yield
         finally:
             stop.set()
             if watcher is not None:
                 watcher.join(timeout=5)
+            if poller is not None:
+                poller.join(timeout=5)
 
     app = FastAPI(title="Agentic SRE", version=PROJECT_VERSION, lifespan=lifespan)
     app.add_middleware(TelemetryMiddleware, runtime=telemetry)

@@ -36,6 +36,9 @@ spec:
               value: "true"
             - name: SRE_LOKI_URL
               value: http://loki.observability.svc.cluster.local:3100
+            # Read-only alert-channel coverage poll (GET /api/v2/alerts, every 60 s).
+            - name: SRE_ALERTMANAGER_URL
+              value: http://alertmanager.observability.svc.cluster.local:9093
           resources:
             requests:
               cpu: 100m

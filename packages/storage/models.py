@@ -6,6 +6,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -681,3 +682,47 @@ class ToolCallRow(Base):
     response: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     started_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     finished_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
+ALERT_COVERAGE_STATUSES = ("OPEN", "CLOSED_FAILURE", "BROKEN_GAP")
+
+
+class AlertCoverageSegmentRow(Base):
+    """One contiguous span in which the alert channel was actively observed.
+
+    ``OPEN`` is extended by each successful poll. A failed poll ends it at its last
+    success (``CLOSED_FAILURE``); a later success after a polling gap ends it there
+    too (``BROKEN_GAP``). Alert state outside a segment is unknown.
+    """
+
+    __tablename__ = "alert_coverage_segments"
+    __table_args__ = (
+        _one_of("status", ALERT_COVERAGE_STATUSES, "ck_alert_coverage_segment_status"),
+        Index("ix_alert_coverage_segments_source_status", "source", "status"),
+    )
+
+    segment_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    last_success_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+
+
+class AlertCoveragePollRow(Base):
+    """Audit of one alert-channel poll, successful or not."""
+
+    __tablename__ = "alert_coverage_polls"
+
+    poll_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    segment_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("alert_coverage_segments.segment_id", name="fk_alert_coverage_poll_segment"),
+        nullable=True,
+    )
+    attempted_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    error_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    active_alerts: Mapped[int | None] = mapped_column(Integer, nullable=True)

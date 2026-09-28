@@ -37,6 +37,8 @@ from packages.rca.model import (
     ResolutionElimination,
     ResolutionReasonCode,
     ResolutionTrace,
+    RootSupportRecord,
+    RootSupportStatus,
     RulePreconditionAudit,
     VerificationTrace,
 )
@@ -170,11 +172,62 @@ def structurally_equivalent(left: Hypothesis, right: Hypothesis) -> bool:
     return hypothesis_signature(left) == hypothesis_signature(right)
 
 
-def _has_aligned_initiating(hypothesis: Hypothesis) -> bool:
-    return any(
-        finding.temporal_role is EvidenceTemporalRole.INITIATING and finding.kind in _CHANGE_KINDS
-        for finding in hypothesis.findings
+CHANGE_ONSET_PATH_RULE = ("m21.support.change-onset-path", "v1")
+_CAUSAL_EXPLANATIONS = frozenset({"PATH", "DIRECT"})
+
+
+def change_onset_path_support(hypothesis: Hypothesis) -> RootSupportRecord:
+    """D1 ``m21.support.change-onset-path.v1``: the resolver's support predicate, explicit.
+
+    FIRED exactly when the hypothesis has a causal PATH/DIRECT explanation and an
+    initiating change finding (NOT_LATE against onset + grace, as temporal roles
+    record it). INAPPLICABLE when the causal onset is unknown, so no temporal role
+    could be established. Otherwise NOT_FIRED with its reasons.
+    """
+    rule_id, rule_version = CHANGE_ONSET_PATH_RULE
+    initiating = _initiating_changes(hypothesis)
+    linked = hypothesis.causal_explanation in _CAUSAL_EXPLANATIONS
+    onset_known = any(finding.incident_onset is not None for finding in hypothesis.findings)
+    reasons: list[str] = []
+    if linked and initiating:
+        status = RootSupportStatus.FIRED
+    elif not onset_known:
+        status = RootSupportStatus.INAPPLICABLE
+        reasons.append("CAUSAL_ONSET_UNKNOWN")
+    else:
+        status = RootSupportStatus.NOT_FIRED
+        if not linked:
+            reasons.append(ResolutionReasonCode.NO_CAUSAL_SYMPTOM_LINK.value)
+        if not initiating:
+            reasons.append(ResolutionReasonCode.NO_ONSET_CAPABLE_INITIATING_EVIDENCE.value)
+    return RootSupportRecord(
+        rule_id=rule_id,
+        rule_version=rule_version,
+        support_kind="CHANGE_ONSET_PATH",
+        status=status,
+        reasons=tuple(reasons),
+        decisive_evidence_ids=tuple(
+            sorted({evidence for finding in initiating for evidence in finding.evidence_ids})
+        )
+        if status is RootSupportStatus.FIRED
+        else (),
+        causal_explanation=hypothesis.causal_explanation,
+        path_shapes=_path_shape(hypothesis) if status is RootSupportStatus.FIRED else (),
     )
+
+
+def _initiating_changes(hypothesis: Hypothesis) -> tuple[Finding, ...]:
+    """The hypothesis' change findings whose temporal role is INITIATING."""
+    return tuple(
+        finding
+        for finding in hypothesis.findings
+        if finding.temporal_role is EvidenceTemporalRole.INITIATING
+        and finding.kind in _CHANGE_KINDS
+    )
+
+
+def _has_aligned_initiating(hypothesis: Hypothesis) -> bool:
+    return bool(_initiating_changes(hypothesis))
 
 
 @dataclass(frozen=True)
@@ -220,9 +273,7 @@ def assess_hypothesis(
         state = HypothesisEpistemicState.CONTRADICTED
     elif hypothesis.contradictory_findings:
         state = HypothesisEpistemicState.UNRESOLVED
-    elif hypothesis.causal_explanation in {"PATH", "DIRECT"} and _has_aligned_initiating(
-        hypothesis
-    ):
+    elif change_onset_path_support(hypothesis).status is RootSupportStatus.FIRED:
         state = HypothesisEpistemicState.SUPPORTED
     else:
         state = HypothesisEpistemicState.UNRESOLVED
@@ -618,6 +669,7 @@ def _audit_items(
                 )[:12],
                 onset_relation=signature.temporal_profile,
                 causal_linkage=hypothesis.causal_explanation,
+                root_support=(change_onset_path_support(hypothesis),),
             )
         )
     return tuple(audits)

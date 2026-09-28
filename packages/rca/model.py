@@ -782,6 +782,34 @@ class DominanceRelation(BaseModel):
     detail: str = ""
 
 
+class RootSupportStatus(StrEnum):
+    """Tri-state outcome of a root-support rule (M21 contract §5.4)."""
+
+    FIRED = "FIRED"
+    NOT_FIRED = "NOT_FIRED"
+    INAPPLICABLE = "INAPPLICABLE"
+
+
+class RootSupportRecord(BaseModel):
+    """One versioned root-support rule outcome for one hypothesis.
+
+    D1 records are audit only: they sit outside the epistemic digest, and the
+    resolver's SUPPORTED state is derived from the same evaluation, unchanged.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    rule_id: str = Field(min_length=1)
+    rule_version: str = Field(min_length=1)
+    consequence: str = "ROOT_SUPPORT"
+    support_kind: str = Field(min_length=1)
+    status: RootSupportStatus
+    reasons: tuple[str, ...] = ()
+    decisive_evidence_ids: tuple[str, ...] = ()
+    causal_explanation: str = ""
+    path_shapes: tuple[tuple[tuple[str, str, str], ...], ...] = ()
+
+
 class HypothesisResolutionAudit(BaseModel):
     """Bounded per-hypothesis audit data retained in a resolution trace."""
 
@@ -799,6 +827,8 @@ class HypothesisResolutionAudit(BaseModel):
     # Neutral precondition metadata is intentionally outside epistemic state.
     # Defaults preserve parsing of diagnosis documents written before M19-5.1.
     precondition_audit: tuple[RulePreconditionAudit, ...] = ()
+    # Root-support rule outcomes (M21 D1); audit only, outside the epistemic digest.
+    root_support: tuple[RootSupportRecord, ...] = ()
 
 
 class ResolutionTrace(BaseModel):

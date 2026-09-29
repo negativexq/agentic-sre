@@ -518,8 +518,8 @@ def _quota_finding(
                 f"{entity.kind} rejected pod creation {sum(e.count for e in rejections)} time(s) "
                 f"for {', '.join(ref.name for ref in workloads[:3])}: {rejections[-1].message[:240]}"
             ),
-            evidence_ids=(version.evidence_id, *(e.evidence_id for e in rejections[:3])),
-            related=workloads,
+            evidence_ids=(version.evidence_id, *(e.evidence_id for e in rejections)),
+            related=tuple(dict.fromkeys((*rejected, *workloads))),
             details={"exhausted": exhausted, "rejected": [ref.canonical for ref in rejected[:10]]},
         )
     if exhausted:
@@ -882,7 +882,7 @@ def failure_findings(events: Sequence[ClusterEvent]) -> list[Finding]:
                 entity_instance=_instance(entity, uid),
                 at=max(times) if times else None,
                 summary=f"{reason} x{count}: {items[-1].message[:160]}",
-                evidence_ids=tuple(item.evidence_id for item in items[:4]),
+                evidence_ids=tuple(item.evidence_id for item in items),
                 details={"reason": reason, "count": count},
             )
         )

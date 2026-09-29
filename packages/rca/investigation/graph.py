@@ -16,6 +16,7 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel
 
 from packages.rca.engine import Case, EngineConfig, build_case, diagnose_case
+from packages.rca.epistemic_digest import diagnosis_epistemic_digest
 from packages.rca.frontier import (
     apply_frontier_progress,
     covered_frontier_dimensions,
@@ -1532,6 +1533,7 @@ def _update_latest_action_audit(
 
 def _audit_before_state(diagnosis: Diagnosis) -> dict[str, Any]:
     return {
+        "causal_decision_before": diagnosis_epistemic_digest(diagnosis),
         "resolution_before": diagnosis.resolution,
         "leading_actor_before": _leading_actor(diagnosis),
         "hypothesis_states_before": _hypothesis_states(diagnosis),
@@ -1543,13 +1545,16 @@ def _audit_after_state(audit: InvestigationActionAudit, diagnosis: Diagnosis) ->
     hypothesis_states = _hypothesis_states(diagnosis)
     gap_states = _gap_states(diagnosis)
     leading_actor = _leading_actor(diagnosis)
+    digest = diagnosis_epistemic_digest(diagnosis)
     changed = (
-        audit.resolution_before != diagnosis.resolution
+        (audit.causal_decision_before is not None and audit.causal_decision_before != digest)
+        or audit.resolution_before != diagnosis.resolution
         or audit.leading_actor_before != leading_actor
         or audit.hypothesis_states_before != hypothesis_states
         or audit.gap_states_before != gap_states
     )
     return {
+        "causal_decision_after": digest,
         "resolution_after": diagnosis.resolution,
         "leading_actor_after": leading_actor,
         "hypothesis_states_after": hypothesis_states,
@@ -2347,6 +2352,46 @@ def _finalize(state: InvestigationState) -> dict[str, Any]:
             "steps": (*state["current_diagnosis"].steps, *state.get("trace_steps", ())),
         }
     )
+    trace = diagnosis.resolution_trace
+    if trace is not None and trace.frontier_answers:
+        alternatives = {a.alternative_id: a for a in diagnosis.structural_alternatives}
+        answers = []
+        for answer in trace.frontier_answers:
+            alternative = alternatives.get(answer.alternative_id)
+            reads = [
+                o
+                for o in state["observations"]
+                if alternative and o.target in alternative.observation_targets
+            ]
+            phase = (
+                "ANSWERED"
+                if answer.state == "ANSWERED_ROLE_TRANSFERRED"
+                else "BLOCKED_ACCESS"
+                if any(o.error for o in reads)
+                else "BLOCKED_BUDGET"
+                if "BUDGET" in reason.value or "WALL_TIME" in reason.value
+                else "INVESTIGATED_INCONCLUSIVE"
+                if reads
+                else "UNEXPLORED"
+            )
+            answers.append(
+                answer.model_copy(
+                    update={
+                        "investigation_state": phase,
+                        "blocked_reason": reason.value if phase.startswith("BLOCKED") else None,
+                    }
+                )
+            )
+        by_id = {a.alternative_id: a for a in answers}
+        diagnosis = diagnosis.model_copy(
+            update={
+                "resolution_trace": trace.model_copy(update={"frontier_answers": tuple(answers)}),
+                "structural_alternatives": tuple(
+                    a.model_copy(update={"answer": by_id.get(a.alternative_id)})
+                    for a in diagnosis.structural_alternatives
+                ),
+            }
+        )
     # Count only references that crossed the initial/effective-case boundary;
     # a normalized finding may retain already-known provenance for explanation.
     evidence_refs = tuple(

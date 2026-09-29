@@ -150,7 +150,7 @@ class Investigator(Protocol):
 # The deterministic RCA semantics a run was diagnosed with, persisted on every
 # revision. Bump it with any change that can alter a diagnosis from the same
 # evidence; replay refuses a run recorded under another version (M20.3a).
-RCA_ENGINE_VERSION = "2.0.0"
+RCA_ENGINE_VERSION = "2.1.0"
 
 
 @dataclass(frozen=True)
@@ -478,7 +478,7 @@ def diagnose_case(
             discovery_change_namespaces=incident_namespaces(case),
         )
         return Diagnosis(
-            decision_semantics="m21.v2",
+            decision_semantics="m21.v3",
             incident_id=case.incident_id,
             root_cause=None,
             confidence=Confidence.UNVERIFIED,
@@ -519,7 +519,14 @@ def diagnose_case(
         rule_preconditions=case.rule_preconditions,
         precondition_reasons=case.precondition_reasons,
         structural_alternatives=case.structural_alternatives,
+        events=case.source.events(),
+        runtime_propagation=case.runtime_propagation,
     )
+    answers = {a.alternative_id: a for a in resolution_trace.frontier_answers}
+    case.structural_alternatives = [
+        a.model_copy(update={"answer": answers.get(a.alternative_id)})
+        for a in case.structural_alternatives
+    ]
     # M21 F1: influence-channel coverage records, attached after the decision (audit only).
     resolution_trace = attach_channel_assessments(
         resolution_trace,
@@ -566,7 +573,7 @@ def diagnose_case(
             )
         )
         return Diagnosis(
-            decision_semantics="m21.v2",
+            decision_semantics="m21.v3",
             incident_id=case.incident_id,
             root_cause=None,
             confidence=Confidence.UNVERIFIED,
@@ -689,13 +696,15 @@ def diagnose_case(
         else ()
     )
     return Diagnosis(
-        decision_semantics="m21.v2",
+        decision_semantics="m21.v3",
         incident_id=case.incident_id,
         root_cause=selected.causal_actor,
         confidence=confidence,
         resolution=resolution_trace.state,
         summary=(
-            f"Supported possible initiating cause: {selected.causal_actor.canonical}. "
+            f"Observed quota admission rejection by {selected.causal_actor.canonical} explains the declared incident scope. Incident recovery is not assessed."
+            if resolution_trace.diagnosis_status == "MECHANISM_VERIFIED_CAUSE"
+            else f"Supported possible initiating cause: {selected.causal_actor.canonical}. "
             "Mechanism execution and incident recovery are not established."
             if resolution_trace.diagnosis_status == "SUPPORTED_CAUSE"
             else f"Observed on {selected.causal_actor.canonical}: {selected.findings[0].summary if selected.findings else 'no actor observation'}. Causal investigation remains open: {resolution_trace.rationale}"

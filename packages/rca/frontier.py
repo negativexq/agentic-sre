@@ -41,6 +41,7 @@ _DIMENSIONS_BY_ROLE = {
     "fault_actor": (GapDimension.EVENT_SEQUENCE, GapDimension.FAILURE_ONSET),
     "dependency": (GapDimension.DEPENDENCY_HEALTH, GapDimension.LOG_ERROR_PATTERN),
     "workload_controller": (GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING),
+    "quota": (GapDimension.EVENT_SEQUENCE, GapDimension.ENTITY_STATE),
 }
 
 
@@ -138,6 +139,26 @@ def derive_structural_frontier(context: Context) -> tuple[StructuralAlternative,
             {affected} | (previous[0] if previous else set()),
             tuple(sorted(set((*(previous[1] if previous else ()), *basis)))),
         )
+
+    # ResourceQuota with pod admission limits is an explicit namespace-wide
+    # admission mechanism. Its presence creates a question, never admission or
+    # support. Scope/selectors remain unanswered until an actual rejection.
+    for actor, version in context.topology.latest.items():
+        if actor.kind != "ResourceQuota":
+            continue
+        spec, status = version.body.get("spec", {}), version.body.get("status", {})
+        hard = (spec.get("hard", {}) if isinstance(spec, dict) else {}) or (
+            status.get("hard", {}) if isinstance(status, dict) else {}
+        )
+        if not isinstance(hard, dict) or not any(
+            k in {"pods", "cpu", "memory", "ephemeral-storage"}
+            or k.startswith(("requests.", "limits."))
+            for k in hard
+        ):
+            continue
+        quota_targets = {w for w in workloads if w.namespace == actor.namespace}
+        if quota_targets:
+            rows[(actor, "quota")] = (quota_targets, ("declared:pod-admission-quota",))
 
     # A directly alerting workload/controller is a legitimate structural actor
     # even when no historical change has been consumed yet.
@@ -252,6 +273,7 @@ def material_frontier(
             "autoscaler",
             "network_policy",
             "fault_actor",
+            "quota",
         }:
             continue
         for hypothesis in hypotheses:
@@ -283,7 +305,8 @@ def investigation_status(
     if not alternatives and not bounded:
         return InvestigationStatus.NOT_REQUIRED
     if any(
-        item.status is FrontierStatus.UNEXPLORED or item.material_for_hypothesis_ids
+        (item.answer is None or item.answer.state != "ANSWERED_ROLE_TRANSFERRED")
+        and (item.status is FrontierStatus.UNEXPLORED or item.material_for_hypothesis_ids)
         for item in alternatives
     ):
         return InvestigationStatus.OPEN

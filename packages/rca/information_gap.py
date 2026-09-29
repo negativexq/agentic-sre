@@ -1207,6 +1207,7 @@ def derive_information_gaps(
         if item.alternative_id in material
         else item
         for item in structural_alternatives
+        if item.answer is None or item.answer.state != "ANSWERED_ROLE_TRANSFERRED"
     )
     if runtime_context is not None:
         return _derive_runtime_aware_gaps(

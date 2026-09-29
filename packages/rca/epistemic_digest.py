@@ -86,9 +86,24 @@ def epistemic_state(diagnosis: Diagnosis) -> EpistemicState:
         return hypothesis.hypothesis_key or None
 
     causal_decision = None
-    if trace is not None and trace.semantics_version == "m21.v2":
+    if trace is not None and trace.semantics_version in {"m21.v2", "m21.v3"}:
         causal_decision = json.dumps(
             {
+                **(
+                    {
+                        "explanations": [r.model_dump(mode="json") for r in trace.explanations],
+                        "frontier_answers": [
+                            a.model_dump(
+                                mode="json", exclude={"investigation_state", "blocked_reason"}
+                            )
+                            for a in trace.frontier_answers
+                        ],
+                        "mechanism_verified": sorted(trace.mechanism_verified_hypotheses),
+                        "independent_causes": sorted(trace.independent_mechanism_causes),
+                    }
+                    if trace.semantics_version == "m21.v3"
+                    else {}
+                ),
                 "version": trace.semantics_version,
                 "diagnosis": trace.diagnosis_status,
                 "claim_level": trace.claim_level,

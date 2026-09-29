@@ -118,4 +118,4 @@ def test_the_record_is_persisted_in_the_diagnosis_document() -> None:
     assert trace is not None
     assert {
         record.rule_id for audit in trace.hypothesis_audits for record in audit.root_support
-    } == {CHANGE_ONSET_PATH_RULE[0]}
+    } == {CHANGE_ONSET_PATH_RULE[0], "m21.support.observed-quota-rejection"}

@@ -176,9 +176,15 @@ def diagnosis_html(
     cause = (
         escape(diagnosis.root_cause.canonical) if diagnosis.root_cause else "No root cause found"
     )
+    actor_label = (
+        "Observed mechanism cause"
+        if diagnosis.resolution_trace
+        and diagnosis.resolution_trace.claim_level == "OBSERVED_MECHANISM_CAUSE"
+        else "Possible causal actor"
+    )
     parts.append(
         "<div class='card'>"
-        f"<div class='muted'>Possible causal actor {_badge(diagnosis.confidence)}</div>"
+        f"<div class='muted'>{actor_label} {_badge(diagnosis.confidence)}</div>"
         f"<div class='cause'>{cause}</div>"
         f"<div class='muted'>Resolution</div><div class='badge'>{escape(diagnosis.resolution.value)}</div>"
         f"<p>{escape(diagnosis.summary)}</p></div>"

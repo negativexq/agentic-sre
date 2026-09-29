@@ -12,13 +12,16 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 
+from packages.rca.causal_closure import answer_frontier, explanations, quota_execution
 from packages.rca.causal_roles import HypothesisCausalRole
 from packages.rca.claims import actor_findings, admission_reasons, admitted, symptom_links
 from packages.rca.episode_end import RULE_ID as EPISODE_END_RULE_ID
 from packages.rca.episode_end import RULE_VERSION as EPISODE_END_RULE_VERSION
 from packages.rca.episode_end import EndedEpisode
 from packages.rca.model import (
+    CausalExplanation,
     CausalWitness,
+    ClusterEvent,
     Diagnosis,
     DominanceRelation,
     EliminationConsequence,
@@ -54,6 +57,7 @@ from packages.rca.root_cause_eligibility import (
     RootCauseEligibilities,
     RootCauseEligibilityState,
 )
+from packages.rca.runtime_propagation import RuntimePropagation
 from packages.rca.temporal import (
     OBJECT_CHANGE_KINDS,
     TemporalContradictionCertainty,
@@ -434,6 +438,8 @@ def _elimination_for(
 
 
 def _legacy_elimination_reason(item: ResolutionElimination) -> str:
+    if item.code is ResolutionReasonCode.POSITIVELY_EXPLAINED_OBSERVATION:
+        return f"{item.hypothesis_id}: positively explained rejection observation"
     if item.code is ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION:
         return f"{item.hypothesis_id}: contradictory evidence"
     if item.code is ResolutionReasonCode.ROOT_CAUSE_INELIGIBLE_PROPAGATED_EFFECT:
@@ -725,6 +731,8 @@ def resolve_hypotheses(
     rule_preconditions: Mapping[tuple[str, str], Sequence[PreconditionResult]] | None = None,
     precondition_reasons: Mapping[tuple[str, str], Sequence[PreconditionAuditReason]] | None = None,
     structural_alternatives: Sequence[StructuralAlternative] = (),
+    events: Sequence[ClusterEvent] = (),
+    runtime_propagation: RuntimePropagation | None = None,
 ) -> ResolutionTrace:
     """Resolve distinguishability without treating missing proof as contradiction.
 
@@ -769,6 +777,34 @@ def resolve_hypotheses(
         root_cause_eligibilities=effective_eligibilities,
         mismatches=mismatches,
     )
+    # Being too late to initiate the incident does not negate a recorded later
+    # rejection. Other positive contradictions still block explanation authority.
+    observation_excluded = frozenset(
+        item.hypothesis_id
+        for item in trace.eliminations
+        if item.code is not ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION
+    )
+    relations = explanations(
+        hypotheses,
+        set(trace.plausible_hypotheses),
+        events,
+        runtime_propagation,
+        observation_excluded,
+    )
+    explained = {r.explained_claim: r for r in relations if r.consequence == "EXPLAINS_CLAIM"}
+    if explained:
+        trace = _resolve(
+            hypotheses,
+            verification_traces=verification_traces,
+            onset_grace=onset_grace,
+            root_cause_eligibilities=effective_eligibilities,
+            mismatches=mismatches,
+            explained=explained,
+        )
+    execution = {
+        h.hypothesis_id: quota_execution(h, change_onset_path_support(h), events)
+        for h in hypotheses
+    }
     trace = _attach_audits(trace, hypotheses, verification_traces, onset_grace)
     audits = tuple(
         audit.model_copy(
@@ -781,6 +817,7 @@ def resolve_hypotheses(
                     if audit.hypothesis_id in mismatches
                     else {}
                 ),
+                "root_support": (*audit.root_support, execution[audit.hypothesis_id]),
                 "precondition_audit": tuple(
                     [
                         RulePreconditionAudit(rule_id=rule_id, result=result)
@@ -805,11 +842,29 @@ def resolve_hypotheses(
 
     material = material_frontier(structural_alternatives, admitted_claims)
     supported_ids = set(trace.plausible_hypotheses)
+    answers = answer_frontier(material, relations, set(observation_excluded) - set(explained))
+    answered = {a.alternative_id for a in answers if a.state == "ANSWERED_ROLE_TRANSFERRED"}
+    strong_ids = {hid for hid in supported_ids if execution[hid].status is RootSupportStatus.FIRED}
+    independent = (
+        len(strong_ids) > 1
+        and not any("EXPLANATION_CYCLE" in r.remaining_uncertainty for r in relations)
+        and all(
+            set(execution[left].decisive_evidence_ids).isdisjoint(
+                execution[right].decisive_evidence_ids
+            )
+            and next(h.causal_actor for h in hypotheses if h.hypothesis_id == left)
+            != next(h.causal_actor for h in hypotheses if h.hypothesis_id == right)
+            for left in strong_ids
+            for right in strong_ids
+            if left != right
+        )
+    )
     limiting = tuple(
         sorted(
             alternative.alternative_id
             for alternative in material
-            if supported_ids.intersection(alternative.material_for_hypothesis_ids)
+            if alternative.alternative_id not in answered
+            and supported_ids.intersection(alternative.material_for_hypothesis_ids)
         )
     )
     status = (
@@ -821,7 +876,12 @@ def resolve_hypotheses(
     )
     updates: dict[str, object] = {
         "hypothesis_audits": audits,
-        "semantics_version": "m21.v2",
+        "semantics_version": "m21.v3",
+        "explanations": relations,
+        "explained_hypotheses": tuple(sorted(explained)),
+        "mechanism_verified_hypotheses": tuple(sorted(strong_ids)),
+        "independent_mechanism_causes": tuple(sorted(strong_ids)) if independent else (),
+        "frontier_answers": answers,
         "diagnosis_status": status,
         "claim_level": "POSSIBLE_INITIATING_CAUSE" if supported_ids else "UNESTABLISHED",
         "admitted_hypotheses": tuple(sorted(h.hypothesis_id for h in admitted_claims)),
@@ -832,6 +892,30 @@ def resolve_hypotheses(
             (a.alternative_id, a.material_for_hypothesis_ids) for a in material
         ),
     }
+    strong_complete = (
+        len(supported_ids) == 1
+        and strong_ids == supported_ids
+        and all(
+            set(h.symptom_entities).issubset(
+                {w.symptom for w in execution[h.hypothesis_id].witnesses}
+            )
+            for h in hypotheses
+            if h.hypothesis_id in supported_ids
+        )
+    )
+    if independent:
+        updates["diagnosis_status"] = "MULTIPLE_OBSERVED_CAUSES"
+    if strong_ids and strong_ids == supported_ids:
+        updates["claim_level"] = "OBSERVED_MECHANISM_CAUSE"
+    if strong_complete and not trace.unresolved_hypotheses and not limiting:
+        updates.update(
+            state=Resolution.RESOLVED,
+            diagnosis_status="MECHANISM_VERIFIED_CAUSE",
+            decision_basis="OBSERVED_MECHANISM_DISAMBIGUATED_V1",
+            rationale="The observed quota rejection explains the declared incident scope; independent admitted rivals and material unanswered questions are absent. Recovery is not assessed.",
+            unresolved_dimensions=(),
+        )
+        return trace.model_copy(update=updates)
     # D1 v2 establishes a possible initiator, not observed mechanism execution.
     # Keep legacy RESOLVED authority reserved for stronger, future proof rules.
     if trace.state is Resolution.RESOLVED:
@@ -860,7 +944,9 @@ def _resolve(
     onset_grace: timedelta | None,
     root_cause_eligibilities: RootCauseEligibilities | None,
     mismatches: Mapping[str, MechanismMismatch],
+    explained: Mapping[str, CausalExplanation] | None = None,
 ) -> ResolutionTrace:
+    explained = explained or {}
     considered = tuple(sorted(h.hypothesis_id for h in hypotheses))
     audits = _audit_items(hypotheses, verification_traces, onset_grace=onset_grace)
     if not hypotheses:
@@ -931,10 +1017,14 @@ def _resolve(
         )
     )
     supported = tuple(
-        hypothesis for hypothesis in supported_all if hypothesis not in eligibility_excluded
+        hypothesis
+        for hypothesis in supported_all
+        if hypothesis not in eligibility_excluded and hypothesis.hypothesis_id not in explained
     )
     unresolved = tuple(
-        hypothesis for hypothesis in unresolved_all if hypothesis not in eligibility_excluded
+        hypothesis
+        for hypothesis in unresolved_all
+        if hypothesis not in eligibility_excluded and hypothesis.hypothesis_id not in explained
     )
     contradiction_eliminations = tuple(
         _elimination_for(hypothesis, assessments[hypothesis.hypothesis_id], onset_grace)
@@ -955,11 +1045,29 @@ def _resolve(
             elif ended is not None:
                 eligibility_elimination_items.append(_ended_episode_elimination(ended))
     eligibility_eliminations = tuple(eligibility_elimination_items)
-    eliminations = contradiction_eliminations + eligibility_eliminations
+    explanation_eliminations = tuple(
+        ResolutionElimination(
+            hypothesis_id=hid,
+            code=ResolutionReasonCode.POSITIVELY_EXPLAINED_OBSERVATION,
+            evidence_ids=r.evidence_ids,
+            decisive_evidence_ids=r.evidence_ids,
+            observation_ids=r.explained_evidence_ids,
+            rule_id=r.rule_id,
+            rule_version=r.rule_version,
+            consequence=EliminationConsequence.ROOT_INELIGIBILITY,
+            targets=(r.manifestation.canonical,),
+            mechanism=r.mechanism,
+            coverage_basis=", ".join(r.coverage),
+            detail="All local observations of this claim are the explicitly recorded quota rejection; no other local initiating/change facts are covered or discarded.",
+        )
+        for hid, r in sorted(explained.items())
+    )
+    eliminations = contradiction_eliminations + eligibility_eliminations + explanation_eliminations
     legacy_reasons = tuple(_legacy_elimination_reason(item) for item in eliminations)
     signatures = tuple(hypothesis_signature(hypothesis) for hypothesis in supported)
     eliminated_ids = {hypothesis.hypothesis_id for hypothesis in (*contradicted, *mismatched)}
     eliminated_ids.update(item.hypothesis_id for item in eligibility_excluded)
+    eliminated_ids.update(explained)
     base = dict(
         considered_hypotheses=considered,
         plausible_hypotheses=tuple(h.hypothesis_id for h in supported),
@@ -1179,8 +1287,8 @@ def _resolve(
 def has_supported_cause(diagnosis: Diagnosis) -> bool:
     """Scoped support for new products; legacy RESOLVED is read as recorded."""
     trace = diagnosis.resolution_trace
-    if trace is not None and trace.semantics_version == "m21.v2":
-        return trace.diagnosis_status == "SUPPORTED_CAUSE"
+    if trace is not None and trace.semantics_version in {"m21.v2", "m21.v3"}:
+        return trace.diagnosis_status in {"SUPPORTED_CAUSE", "MECHANISM_VERIFIED_CAUSE"}
     return diagnosis.resolution is Resolution.RESOLVED
 
 

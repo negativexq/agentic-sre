@@ -513,6 +513,7 @@ class HypothesisSignature(BaseModel):
 class ResolutionReasonCode(StrEnum):
     """Stable reason codes used when a hypothesis is excluded from resolution."""
 
+    POSITIVELY_EXPLAINED_OBSERVATION = "POSITIVELY_EXPLAINED_OBSERVATION"
     NO_CAUSAL_SYMPTOM_LINK = "NO_CAUSAL_SYMPTOM_LINK"
     NO_ONSET_CAPABLE_INITIATING_EVIDENCE = "NO_ONSET_CAPABLE_INITIATING_EVIDENCE"
     EXPLICIT_TEMPORAL_CONTRADICTION = "EXPLICIT_TEMPORAL_CONTRADICTION"
@@ -819,6 +820,45 @@ class CausalWitness(BaseModel):
     claim_level: str = "POSSIBLE_INITIATING_CAUSE"
 
 
+class CausalExplanation(BaseModel):
+    """Positive, scoped explanation; never a topology-derived dominance edge."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    explaining_claim: str
+    explained_claim: str
+    actor: EntityRef
+    actor_instance: EntityInstanceRef | None = None
+    manifestation: EntityRef
+    manifestation_instance: EntityInstanceRef | None = None
+    episode_onset: datetime
+    mechanism: str
+    path: tuple[CausalHop, ...]
+    evidence_ids: tuple[str, ...]
+    explained_evidence_ids: tuple[str, ...]
+    coverage: tuple[str, ...]
+    rule_id: str
+    rule_version: str = "v1"
+    consequence: str = "EXPLAINS_OBSERVATION"
+    remaining_uncertainty: tuple[str, ...] = ()
+
+
+class FrontierAnswer(BaseModel):
+    """An evidence-backed answer to one material question, not global absence."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    alternative_id: str
+    question: str
+    state: str = "OPEN"
+    investigation_state: str = "UNEXPLORED"
+    blocked_reason: str | None = None
+    evidence_ids: tuple[str, ...] = ()
+    affected_claims: tuple[str, ...] = ()
+    transferred_claims: tuple[str, ...] = ()
+    remaining_uncertainty: tuple[str, ...] = ()
+    rule_id: str = "m21.frontier.observed-role"
+    rule_version: str = "v1"
+
+
 class RootSupportRecord(BaseModel):
     """One versioned root-support rule outcome for one hypothesis.
 
@@ -958,6 +998,11 @@ class ResolutionTrace(BaseModel):
     context_hypotheses: tuple[str, ...] = ()
     material_frontier_ids: tuple[str, ...] = ()
     frontier_bindings: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    explanations: tuple[CausalExplanation, ...] = ()
+    explained_hypotheses: tuple[str, ...] = ()
+    mechanism_verified_hypotheses: tuple[str, ...] = ()
+    independent_mechanism_causes: tuple[str, ...] = ()
+    frontier_answers: tuple[FrontierAnswer, ...] = ()
     leading_hypothesis_ids: tuple[str, ...] = ()
     signatures: tuple[HypothesisSignature, ...] = ()
     distinguishing_facts: tuple[str, ...] = ()
@@ -1240,6 +1285,7 @@ class StructuralAlternative(BaseModel):
     observation_targets: tuple[EntityRef, ...] = ()
     queried_dimensions: tuple[GapDimension, ...] = ()
     status: FrontierStatus = FrontierStatus.UNEXPLORED
+    answer: FrontierAnswer | None = None
 
 
 class HypothesisDiagnostics(BaseModel):
@@ -1511,6 +1557,8 @@ class InvestigationActionAudit(BaseModel):
     hypothesis_states_after: tuple[InvestigationHypothesisState, ...] = ()
     gap_states_before: tuple[InvestigationGapState, ...] = ()
     gap_states_after: tuple[InvestigationGapState, ...] = ()
+    causal_decision_before: str | None = None
+    causal_decision_after: str | None = None
     decision_state_changed: bool | None = None
     progress_classification: str = "PENDING"
 

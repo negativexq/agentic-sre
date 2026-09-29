@@ -14,7 +14,9 @@ provider reads come from its recorded tape — and rerun only the resolver:
   ``eval_config_digest``; the product's ``EngineConfig``, API, environment and
   ``code.config_digest`` never see it.
 
-Either ablated diagnosis must not be ``RESOLVED``; T5 additionally requires that
+For m21.v2/v3, T5/T6 test loss of unique possible-cause support, not loss
+of verified mechanism or incident recovery. Legacy records retain RESOLVED scope.
+Either ablated diagnosis must lose its versioned target support; T5 additionally requires that
 ``H_x`` is no longer eliminated by the target rule.
 """
 
@@ -77,6 +79,15 @@ class AblationResult:
     diagnosis: Diagnosis | None
     reason: str = ""
     eval_config_digest: str | None = None
+
+    @property
+    def claim_version(self) -> str:
+        trace = self.diagnosis.resolution_trace if self.diagnosis else None
+        return (
+            "m21.unique-possible-cause.v1"
+            if trace and trace.semantics_version in {"m21.v2", "m21.v3"}
+            else "legacy.resolved.v1"
+        )
 
 
 class _WithoutEvidence:

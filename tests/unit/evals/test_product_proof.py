@@ -1268,3 +1268,16 @@ def test_an_unknown_replay_status_is_refused() -> None:
     )
     with pytest.raises(ValueError, match="unknown replay status"):
         safety_counters(marked)
+
+
+def test_possible_cause_proof_is_not_reported_as_strong_resolution() -> None:
+    from test_product_ablation import _full, a1_source
+
+    world = facts()
+    current = replace(world.revisions[-1], diagnosis=_full(a1_source()))
+    result = evaluate(replace(world, revisions=(*world.revisions[:-1], current)))
+    assert result.decision_authority["T4_claim"] == "m21.unique-possible-cause.v1"
+    assert result.decision_authority["possible_cause_disambiguated"] == "PASS"
+    assert result.decision_authority["observed_mechanism"] == "NOT_ESTABLISHED"
+    assert result.decision_authority["strong_diagnosis_disambiguated"] == "NOT_ESTABLISHED"
+    assert result.decision_authority["incident_recovery"] == "NOT_ASSESSED"

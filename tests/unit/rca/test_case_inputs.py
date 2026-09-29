@@ -7,7 +7,13 @@ from datetime import timedelta
 from rca_builders import at
 from test_fault_execution import TARGET, _chaos_case, ev
 
-from packages.rca.engine import Case, build_case, diagnose_case, prepare_case_inputs
+from packages.rca.engine import (
+    Case,
+    EngineConfig,
+    build_case,
+    diagnose_case,
+    prepare_case_inputs,
+)
 
 EVENTS = [
     ev("chaos/Schedule/checkout-delay", "Spawned", 1, uid="s1"),
@@ -37,10 +43,17 @@ def test_assessed_onset_moves_only_the_onset_and_reference_time() -> None:
 
 
 def test_assessing_the_onset_of_record_is_the_identity() -> None:
+    # The decision is identical; only the timing record differs (an assessed case never
+    # assesses itself), so compare with timing assessment off on both sides.
+    off = EngineConfig(timing_stability=False)
     source = _chaos_case(EVENTS)
     base = build_case(source)
     assert base.symptoms.onset is not None
-    assert dump(build_case(source, assessed_onset=base.symptoms.onset)) == dump(base)
+    assessed = build_case(source, assessed_onset=base.symptoms.onset)
+    assert (
+        diagnose_case(assessed, config=off).model_dump_json()
+        == diagnose_case(base, config=off).model_dump_json()
+    )
 
 
 def test_shared_inputs_give_the_same_result_as_fresh_reads_for_every_onset() -> None:

@@ -13,7 +13,71 @@ import json
 from dataclasses import dataclass
 from hashlib import sha256
 
-from packages.rca.model import Diagnosis, EliminationConsequence, Hypothesis
+from packages.rca.model import (
+    Diagnosis,
+    EliminationConsequence,
+    Hypothesis,
+    TimingAssessment,
+)
+
+
+def _iso(value: object) -> str | None:
+    return value.isoformat() if hasattr(value, "isoformat") else None
+
+
+def _timing_document(timing: TimingAssessment) -> dict[str, object]:
+    """Everything replay needs to audit why the same onset set and outcomes were produced.
+
+    Not just the computed bounds: the qualified episodes each member derives from (alert
+    fingerprint, start, capture evidence ids), the cutoff and coverage boundary, and every
+    stability outcome. Deterministic order only.
+    """
+    uncertainty = timing.uncertainty
+    return {
+        "version": timing.version,
+        "reason": uncertainty.reason,
+        "cutoff": _iso(uncertainty.cutoff),
+        "alert_observation_start": _iso(uncertainty.alert_observation_start),
+        "h0": _iso(uncertainty.h0),
+        "upper": _iso(uncertainty.upper),
+        "members": [
+            {
+                "onset": _iso(member.onset),
+                "is_h0": member.is_h0,
+                "is_upper": member.is_upper,
+                "episodes": [
+                    {
+                        "fingerprint": episode.fingerprint,
+                        "name": episode.name,
+                        "starts_at": _iso(episode.starts_at),
+                        "evidence": sorted(episode.evidence_ids),
+                    }
+                    for episode in sorted(member.episodes, key=lambda e: e.fingerprint)
+                ],
+            }
+            for member in uncertainty.members
+        ],
+        "status": timing.status.value,
+        "outcomes": [
+            {"onset": _iso(o.onset), "diagnosis": o.diagnosis_status} for o in timing.outcomes
+        ],
+        "claims": [
+            {
+                "key": claim.hypothesis_key,
+                "formation": claim.formation.value,
+                "adjudication": claim.adjudication.value,
+                "relations": [
+                    {
+                        "relation": r.relation,
+                        "stability": r.stability.value,
+                        "values": list(r.values),
+                    }
+                    for r in claim.relations
+                ],
+            }
+            for claim in sorted(timing.claims, key=lambda c: c.hypothesis_key)
+        ],
+    }
 
 
 @dataclass(frozen=True)
@@ -117,6 +181,11 @@ def epistemic_state(diagnosis: Diagnosis) -> EpistemicState:
                             }
                             for f in sorted(trace.causal_families, key=lambda item: item.family_id)
                         ],
+                        **(
+                            {"timing": _timing_document(trace.timing)}
+                            if trace.timing is not None
+                            else {}
+                        ),
                     }
                     if trace.semantics_version == "m21.v3"
                     else {}

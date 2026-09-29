@@ -473,6 +473,68 @@ class OnsetUncertainty(BaseModel):
         return bool(self.members)
 
 
+class RelationTiming(BaseModel):
+    """Stability of one temporal relation a decision may rely on, over every admissible onset."""
+
+    model_config = ConfigDict(frozen=True)
+
+    relation: str
+    stability: TimingStability
+    # The distinct values the relation took over the onsets where the claim exists (audit).
+    values: tuple[str, ...] = ()
+
+
+class ClaimTiming(BaseModel):
+    """Formation and adjudication stability of one exact claim (M21 timing contract §4).
+
+    Formation: the same identity forms with the same evidence set and assessed mechanism under
+    every onset. Adjudication: each relation a decision relied on holds identically. The claim
+    is matched across onsets by its onset-independent ``hypothesis_key``.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    hypothesis_key: str
+    actor: str
+    formation: TimingStability
+    adjudication: TimingStability
+    relations: tuple[RelationTiming, ...] = ()
+
+    def relation(self, name: str) -> TimingStability:
+        return next(
+            (r.stability for r in self.relations if r.relation == name), TimingStability.UNASSESSED
+        )
+
+
+class OnsetOutcome(BaseModel):
+    """The diagnosis status the same evidence gives under one admissible onset (audit)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    onset: datetime
+    diagnosis_status: str
+
+
+class TimingAssessment(BaseModel):
+    """Timing stability of one revision's decisions, derived only from that revision's evidence.
+
+    ``uncertainty`` records how ``O`` was derived (episodes, capture evidence ids, ``H0``,
+    ``U``) so replay can audit why it produced the same set. ``status`` is the stability of
+    the diagnosis status itself; ``claims`` carries the per-claim outcomes.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    version: str = "m21.timing.v1"
+    uncertainty: OnsetUncertainty
+    status: TimingStability = TimingStability.UNASSESSED
+    outcomes: tuple[OnsetOutcome, ...] = ()
+    claims: tuple[ClaimTiming, ...] = ()
+
+    def claim(self, hypothesis_key: str) -> ClaimTiming | None:
+        return next((c for c in self.claims if c.hypothesis_key == hypothesis_key), None)
+
+
 class Symptoms(BaseModel):
     """What the incident looks like from its alerts."""
 
@@ -1119,6 +1181,8 @@ class ResolutionTrace(BaseModel):
     dominance_relations: tuple[DominanceRelation, ...] = ()
     hypothesis_audits: tuple[HypothesisResolutionAudit, ...] = ()
     causal_families: tuple[CausalFamily, ...] = ()
+    # Timing stability over the evidence-derived onset set; None when not assessed at all.
+    timing: TimingAssessment | None = None
     decision_basis: str = ""
     rationale: str = ""
 
@@ -1816,8 +1880,12 @@ __all__ = [
     "EntityInstanceRef",
     "FamilyState",
     "InstanceResolution",
+    "ClaimTiming",
     "OnsetCandidate",
+    "OnsetOutcome",
     "OnsetUncertainty",
+    "RelationTiming",
+    "TimingAssessment",
     "TimingStability",
     "Finding",
     "FindingKind",

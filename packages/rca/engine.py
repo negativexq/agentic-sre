@@ -50,8 +50,11 @@ from packages.rca.model import (
     ProviderReadFailure,
     RequirementEvaluation,
     Resolution,
+    ResolutionTrace,
     StructuralAlternative,
     Symptoms,
+    TimingAssessment,
+    TimingStability,
 )
 from packages.rca.ranking import (
     Context,
@@ -93,6 +96,13 @@ from packages.rca.signals import (
     traffic_findings,
 )
 from packages.rca.source import ObservationSource
+from packages.rca.timing_stability import (
+    OnsetView,
+    claim_views,
+    compute_timing_assessment,
+    derive_onset_uncertainty,
+    source_alert_episodes,
+)
 from packages.rca.topology import Topology, derive_edges, with_runtime_propagation
 
 
@@ -134,6 +144,8 @@ class Case:
     # What re-assessing this case against another onset needs (never part of a decision).
     extra_findings: tuple[Finding, ...] = ()
     inputs: CaseInputs | None = field(default=None, repr=False, compare=False)
+    # Set when this case only re-derives the evidence against another admissible onset.
+    assessed_onset: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -168,6 +180,8 @@ class EngineConfig:
     # Explicit infrastructure namespaces that may be queried only by the
     # incident-scoped event discovery capability.
     auxiliary_event_namespaces: tuple[str, ...] = ()
+    # Assess every decision against the evidence-derived onset set (M21 timing contract).
+    timing_stability: bool = True
 
     def __post_init__(self) -> None:
         normalized = tuple(
@@ -404,6 +418,7 @@ def build_case(
         steps=steps,
         extra_findings=tuple(extra_findings),
         inputs=inputs,
+        assessed_onset=assessed_onset,
         mechanism_mismatches=dict(resource_evaluations.mismatches),
         requirement_evaluations=build_requirement_evaluations(
             hypotheses,
@@ -502,6 +517,86 @@ def _requirement_provenance(case: Case) -> dict[str, Any]:
     }
 
 
+def _resolution_trace(case: Case, config: EngineConfig) -> ResolutionTrace:
+    """Resolve a non-empty case: attach signatures, verify, then resolve.
+
+    Resolution compares immutable evidence structures. The same signatures are attached to
+    the serialized hypotheses so API consumers can inspect the comparison without
+    reconstructing it from entity names.
+    """
+    case.hypotheses = [
+        hypothesis.model_copy(update={"signature": hypothesis_signature(hypothesis)})
+        for hypothesis in case.hypotheses
+    ]
+    verification_traces = {
+        hypothesis.hypothesis_id: verification_trace(
+            hypothesis_candidate(hypothesis), case.context, config.ranking
+        )
+        for hypothesis in case.hypotheses
+    }
+    return resolve_hypotheses(
+        case.hypotheses,
+        verification_traces=verification_traces,
+        onset_grace=config.ranking.verification_onset_grace,
+        root_cause_eligibilities=case.root_cause_eligibilities,
+        mechanism_mismatches=case.mechanism_mismatches,
+        rule_preconditions=case.rule_preconditions,
+        precondition_reasons=case.precondition_reasons,
+        structural_alternatives=case.structural_alternatives,
+        events=case.source.events(),
+        runtime_propagation=case.runtime_propagation,
+    )
+
+
+def assess_case_timing(
+    case: Case, config: EngineConfig, trace: ResolutionTrace
+) -> TimingAssessment:
+    """How far this revision's decisions hold over every onset its evidence admits.
+
+    The admissible onsets come only from the alert captures at or before the revision cutoff.
+    Every onset re-derives the same observations (same source, same investigation findings)
+    against that onset; no observation changes. Without capture history, or when the case was
+    not built at the onset of record, nothing is claimed.
+    """
+    source = case.source
+    uncertainty = derive_onset_uncertainty(
+        source_alert_episodes(source),
+        alert_observation_start=source.alert_observation_start(),
+        cutoff=source.observation_cutoff(),
+    )
+    if uncertainty.assessable and uncertainty.h0 != case.symptoms.onset:
+        uncertainty = uncertainty.model_copy(
+            update={"reason": "ONSET_OF_RECORD_MISMATCH", "members": ()}
+        )
+    if not uncertainty.assessable or uncertainty.h0 is None:
+        return TimingAssessment(uncertainty=uncertainty, status=TimingStability.UNASSESSED)
+    views = {
+        uncertainty.h0: OnsetView(
+            diagnosis_status=trace.diagnosis_status,
+            claims=claim_views(case.hypotheses, trace),
+        )
+    }
+    for member in uncertainty.members:
+        if member.onset == uncertainty.h0:
+            continue
+        assessed = build_case(
+            source,
+            config,
+            extra_findings=case.extra_findings,
+            assessed_onset=member.onset,
+            inputs=case.inputs,
+        )
+        if not assessed.candidates:
+            views[member.onset] = OnsetView(diagnosis_status="INSUFFICIENT_EVIDENCE", claims={})
+            continue
+        assessed_trace = _resolution_trace(assessed, config)
+        views[member.onset] = OnsetView(
+            diagnosis_status=assessed_trace.diagnosis_status,
+            claims=claim_views(assessed.hypotheses, assessed_trace),
+        )
+    return compute_timing_assessment(uncertainty, views)
+
+
 def diagnose_case(
     case: Case,
     *,
@@ -556,31 +651,7 @@ def diagnose_case(
             alternative_hypotheses=tuple(case.hypotheses),
             **_requirement_provenance(case),
         )
-    # Resolution compares immutable evidence structures.  Attach the same
-    # signatures to the serialized hypotheses so API consumers can inspect the
-    # comparison without reconstructing it from entity names.
-    case.hypotheses = [
-        hypothesis.model_copy(update={"signature": hypothesis_signature(hypothesis)})
-        for hypothesis in case.hypotheses
-    ]
-    verification_traces = {
-        hypothesis.hypothesis_id: verification_trace(
-            hypothesis_candidate(hypothesis), case.context, config.ranking
-        )
-        for hypothesis in case.hypotheses
-    }
-    resolution_trace = resolve_hypotheses(
-        case.hypotheses,
-        verification_traces=verification_traces,
-        onset_grace=config.ranking.verification_onset_grace,
-        root_cause_eligibilities=case.root_cause_eligibilities,
-        mechanism_mismatches=case.mechanism_mismatches,
-        rule_preconditions=case.rule_preconditions,
-        precondition_reasons=case.precondition_reasons,
-        structural_alternatives=case.structural_alternatives,
-        events=case.source.events(),
-        runtime_propagation=case.runtime_propagation,
-    )
+    resolution_trace = _resolution_trace(case, config)
     answers = {a.alternative_id: a for a in resolution_trace.frontier_answers}
     case.structural_alternatives = [
         a.model_copy(update={"answer": answers.get(a.alternative_id)})
@@ -602,6 +673,10 @@ def diagnose_case(
             events=case.source.events(),
         ),
     )
+    if config.timing_stability and case.assessed_onset is None:
+        resolution_trace = resolution_trace.model_copy(
+            update={"timing": assess_case_timing(case, config, resolution_trace)}
+        )
     information_gaps = derive_information_gaps(
         case.hypotheses,
         resolution_trace,

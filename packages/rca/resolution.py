@@ -8,7 +8,7 @@ canonical ordering are deliberately absent from that decision.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -20,6 +20,7 @@ from packages.rca.episode_end import RULE_VERSION as EPISODE_END_RULE_VERSION
 from packages.rca.episode_end import EndedEpisode
 from packages.rca.model import (
     CausalExplanation,
+    CausalFamily,
     CausalWitness,
     ClusterEvent,
     Diagnosis,
@@ -28,12 +29,14 @@ from packages.rca.model import (
     EliminationPrecondition,
     EliminationTimeBasis,
     EvidenceTemporalRole,
+    FamilyState,
     Finding,
     FindingKind,
     Hypothesis,
     HypothesisEpistemicState,
     HypothesisResolutionAudit,
     HypothesisSignature,
+    InstanceResolution,
     PreconditionAuditReason,
     PreconditionResult,
     PreconditionStatus,
@@ -685,6 +688,7 @@ def _audit_items(
                 root_support=(change_onset_path_support(hypothesis),),
                 admission="ADMITTED" if admitted(hypothesis) else "OBSERVED_CONTEXT",
                 admission_reasons=admission_reasons(hypothesis),
+                causal_family_id=hypothesis.causal_family_id,
             )
         )
     return tuple(audits)
@@ -719,6 +723,66 @@ def _attach_audits(
             ),
         }
     )
+
+
+def family_of(hypothesis: Hypothesis) -> str:
+    """Root-cause competition identity; claims without a family compete as themselves."""
+    return hypothesis.causal_family_id or hypothesis.hypothesis_id
+
+
+def build_families(
+    hypotheses: Sequence[Hypothesis],
+    supported: Sequence[Hypothesis],
+    unresolved: Sequence[Hypothesis],
+    excluded_ids: Collection[str],
+) -> tuple[CausalFamily, ...]:
+    """Group admitted exact claims into causal families for competition counting.
+
+    Exact claims are never merged: every member keeps its own UID, evidence, timing, support
+    and contradiction records. A family is SUPPORTED when any selectable member is,
+    otherwise UNRESOLVED when any selectable member is, otherwise EXCLUDED. Incarnations of
+    one causal proposition therefore do not compete with each other. This grants no strong
+    authority and does not read the incident onset.
+    """
+    supported_ids = {h.hypothesis_id for h in supported}
+    unresolved_ids = {h.hypothesis_id for h in unresolved}
+    groups: dict[str, list[Hypothesis]] = {}
+    for hypothesis in hypotheses:
+        if admitted(hypothesis):
+            groups.setdefault(family_of(hypothesis), []).append(hypothesis)
+    families = []
+    for family_id, members in sorted(groups.items()):
+        sup = [m for m in members if m.hypothesis_id in supported_ids]
+        unr = [m for m in members if m.hypothesis_id in unresolved_ids]
+        exc = [m for m in members if m.hypothesis_id in excluded_ids]
+        viable = sup + unr or members
+        if any(m.actor_instance is None for m in viable):
+            resolution = InstanceResolution.UNKNOWN
+        elif len(viable) == 1:
+            resolution = InstanceResolution.EXACT
+        else:
+            resolution = InstanceResolution.MULTIPLE_VIABLE
+        families.append(
+            CausalFamily(
+                family_id=family_id,
+                actor=members[0].causal_actor,
+                mechanism_family=members[0].mechanism_family,
+                state=(
+                    FamilyState.SUPPORTED
+                    if sup
+                    else FamilyState.UNRESOLVED
+                    if unr
+                    else FamilyState.EXCLUDED
+                ),
+                instance_resolution=resolution,
+                members=tuple(sorted(m.hypothesis_id for m in members)),
+                supported_members=tuple(sorted(m.hypothesis_id for m in sup)),
+                unresolved_members=tuple(sorted(m.hypothesis_id for m in unr)),
+                excluded_members=tuple(sorted(m.hypothesis_id for m in exc)),
+                representative=(sup or unr)[0].hypothesis_id if sup or unr else None,
+            )
+        )
+    return tuple(families)
 
 
 def resolve_hypotheses(
@@ -867,9 +931,11 @@ def resolve_hypotheses(
             and supported_ids.intersection(alternative.material_for_hypothesis_ids)
         )
     )
+    supported_families = [f for f in trace.causal_families if f.state is FamilyState.SUPPORTED]
+    competing_unresolved = [f for f in trace.causal_families if f.state is FamilyState.UNRESOLVED]
     status = (
         "SUPPORTED_CAUSE"
-        if len(supported_ids) == 1 and not trace.unresolved_hypotheses
+        if len(supported_families) == 1 and not competing_unresolved
         else "COMPETING_CAUSES"
         if supported_ids
         else "INSUFFICIENT_EVIDENCE"
@@ -1068,7 +1134,11 @@ def _resolve(
     eliminated_ids = {hypothesis.hypothesis_id for hypothesis in (*contradicted, *mismatched)}
     eliminated_ids.update(item.hypothesis_id for item in eligibility_excluded)
     eliminated_ids.update(explained)
+    families = build_families(hypotheses, supported, unresolved, eliminated_ids)
+    supported_families = tuple(f for f in families if f.state is FamilyState.SUPPORTED)
+    unresolved_families = tuple(f for f in families if f.state is FamilyState.UNRESOLVED)
     base = dict(
+        causal_families=families,
         considered_hypotheses=considered,
         plausible_hypotheses=tuple(h.hypothesis_id for h in supported),
         unresolved_hypotheses=tuple(h.hypothesis_id for h in unresolved),
@@ -1147,7 +1217,7 @@ def _resolve(
         }
     )
 
-    if unresolved:
+    if unresolved_families:
         leading_ids = tuple(
             sorted(
                 (
@@ -1178,8 +1248,8 @@ def _resolve(
             onset_grace,
         )
 
-    if len(supported) == 1:
-        selected = supported[0]
+    if len(supported_families) == 1:
+        selected = by_id[supported_families[0].representative or supported[0].hypothesis_id]
         if eligibility_excluded:
             discriminator = _eligibility_discriminator(
                 selected,

@@ -100,6 +100,23 @@ def epistemic_state(diagnosis: Diagnosis) -> EpistemicState:
                         ],
                         "mechanism_verified": sorted(trace.mechanism_verified_hypotheses),
                         "independent_causes": sorted(trace.independent_mechanism_causes),
+                        # Family competition: identity, state, exact members and how far the
+                        # viable instances are resolved. `representative` is rank-derived
+                        # display and never enters the digest.
+                        "families": [
+                            {
+                                "id": f.family_id,
+                                "actor": f.actor.canonical,
+                                "mechanism_family": f.mechanism_family,
+                                "state": f.state.value,
+                                "instance_resolution": f.instance_resolution.value,
+                                "members": sorted(f.members),
+                                "supported": sorted(f.supported_members),
+                                "unresolved": sorted(f.unresolved_members),
+                                "excluded": sorted(f.excluded_members),
+                            }
+                            for f in sorted(trace.causal_families, key=lambda item: item.family_id)
+                        ],
                     }
                     if trace.semantics_version == "m21.v3"
                     else {}
@@ -114,6 +131,11 @@ def epistemic_state(diagnosis: Diagnosis) -> EpistemicState:
                 "claims": [
                     {
                         "id": audit.hypothesis_id,
+                        **(
+                            {"family": audit.causal_family_id}
+                            if trace.semantics_version == "m21.v3"
+                            else {}
+                        ),
                         "admission": audit.admission,
                         "reasons": sorted(audit.admission_reasons),
                         "support": [

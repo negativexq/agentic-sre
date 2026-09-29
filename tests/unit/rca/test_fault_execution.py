@@ -165,11 +165,11 @@ def test_events_without_uid_keep_name_derived_behaviour() -> None:
     assert "schedule_uid" not in findings["delay-aaaaa"].details
 
 
-def _chaos_case(events: list[ClusterEvent]) -> InMemorySource:
+def _chaos_case(events: list[ClusterEvent], alert_minute: float = 6) -> InMemorySource:
     return InMemorySource(
         name="scheduled-chaos",
         alert_coverage_start=at(0),
-        alert_items=[alert("RequestLatency", "checkout", 6)],
+        alert_items=[alert("RequestLatency", "checkout", alert_minute)],
         versions=[
             version("shop/Deployment/checkout", 0, deployment("checkout")),
             version("shop/ReplicaSet/checkout-rs", 0, replicaset("checkout-rs", "checkout")),

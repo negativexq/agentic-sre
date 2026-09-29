@@ -983,6 +983,45 @@ class HypothesisResolutionAudit(BaseModel):
     channel_assessment: ChannelAssessment | None = None
     admission: str = "LEGACY_UNASSESSED"
     admission_reasons: tuple[str, ...] = ()
+    causal_family_id: str = ""
+
+
+class FamilyState(StrEnum):
+    """Aggregate state of a causal family over its selectable exact members."""
+
+    SUPPORTED = "SUPPORTED"
+    UNRESOLVED = "UNRESOLVED"
+    EXCLUDED = "EXCLUDED"
+
+
+class InstanceResolution(StrEnum):
+    """How far a family's viable exact instances are resolved."""
+
+    EXACT = "EXACT"
+    MULTIPLE_VIABLE = "MULTIPLE_VIABLE"
+    UNKNOWN = "UNKNOWN"
+
+
+class CausalFamily(BaseModel):
+    """One root-cause competition unit: a logical actor and its mechanism family.
+
+    Exact claims (one per UID/lifecycle) stay separate audit records; a family only decides
+    whether incarnations of the same causal proposition compete with each other.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    family_id: str
+    actor: EntityRef
+    mechanism_family: str = ""
+    state: FamilyState
+    instance_resolution: InstanceResolution
+    members: tuple[str, ...] = ()
+    supported_members: tuple[str, ...] = ()
+    unresolved_members: tuple[str, ...] = ()
+    excluded_members: tuple[str, ...] = ()
+    # Display only (first supported member in rank order); never identity or state.
+    representative: str | None = None
 
 
 class ResolutionTrace(BaseModel):
@@ -1016,6 +1055,7 @@ class ResolutionTrace(BaseModel):
     discriminators: tuple[ResolutionDiscriminator, ...] = ()
     dominance_relations: tuple[DominanceRelation, ...] = ()
     hypothesis_audits: tuple[HypothesisResolutionAudit, ...] = ()
+    causal_families: tuple[CausalFamily, ...] = ()
     decision_basis: str = ""
     rationale: str = ""
 
@@ -1242,6 +1282,13 @@ class Hypothesis(BaseModel):
     claim_version: str = "legacy"
     actor_instance: EntityInstanceRef | None = None
     mechanism: str = "UNKNOWN"
+    # Onset-independent: the kinds of the actor's own cause-capable findings, whatever
+    # temporal role the incident onset gives them. ``mechanism`` is the assessed result.
+    mechanism_family: str = ""
+    # Root-cause competition identity: logical actor + mechanism family. Never the instance
+    # UID, incident onset, temporal role, score or evidence ids. Empty on legacy claims.
+    causal_family_id: str = ""
+    # The onset this claim was assessed against. It is assessment context, not identity.
     episode_onset: datetime | None = None
     presentation_group_id: str = ""
     symptom_entities: tuple[EntityRef, ...] = ()
@@ -1690,6 +1737,7 @@ __all__ = [
     "CLUSTER_SCOPE",
     "Alert",
     "Candidate",
+    "CausalFamily",
     "CausalHop",
     "EvidenceTemporalRole",
     "ClusterEvent",
@@ -1702,6 +1750,8 @@ __all__ = [
     "Edge",
     "EntityRef",
     "EntityInstanceRef",
+    "FamilyState",
+    "InstanceResolution",
     "Finding",
     "FindingKind",
     "InvestigationStep",

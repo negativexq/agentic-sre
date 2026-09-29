@@ -373,10 +373,35 @@ def _make_hypothesis(
     mechanism = (
         ",".join(sorted({finding.kind.value for finding in initiating})) or "MANIFESTATION_ONLY"
     )
+    # Identity never reads a temporal role: the family is the kinds of the actor's own
+    # cause-capable findings whatever role the onset gives them. UID stays "unknown" when
+    # no exact instance is observed; nothing is inferred from names or other observations.
+    mechanism_family = (
+        ",".join(
+            sorted(
+                {
+                    finding.kind.value
+                    for finding in actor_findings
+                    if finding.kind in _INITIATING_KINDS
+                }
+            )
+        )
+        or "MANIFESTATION_ONLY"
+    )
+    # The bucket assessed against the current incident onset has an onset-free identity, so
+    # shifting the onset never changes it. Evidence stamped with a foreign episode is a
+    # different claim about a different incident and keeps its own episode in its key.
     identity = "|".join(
-        [actor.canonical, instance.uid if instance else "unknown", str(onset), mechanism, *linked]
+        [
+            actor.canonical,
+            instance.uid if instance else "unknown",
+            mechanism_family,
+            *((f"foreign-episode:{onset.isoformat()}",) if episode_conflict and onset else ()),
+        ]
     )
     claim_key = f"hkey:{sha256(identity.encode()).hexdigest()[:16]}"
+    family_material = "|".join([actor.canonical, mechanism_family])
+    causal_family_id = f"cfam:{sha256(family_material.encode()).hexdigest()[:16]}"
     score, top_reasons, duplicate_count = _aggregate_score(all_findings, context, config)
     grouping_reasons = list(top_reasons)
     if len(members) > 1:
@@ -394,6 +419,8 @@ def _make_hypothesis(
         actor_instance=instance,
         episode_onset=onset,
         mechanism=mechanism,
+        mechanism_family=mechanism_family,
+        causal_family_id=causal_family_id,
         presentation_group_id=_hypothesis_id(actor=members[0], members=members, findings=()),
         symptom_entities=scoped_symptoms,
         member_paths=tuple(path for _, path in member_paths),
@@ -443,7 +470,9 @@ def group_candidates(
             hypotheses=(),
             diagnostics=HypothesisDiagnostics(),
         )
-    # Exact UID and incident episode partitions never lend evidence to each other.
+    # Exact UID and incident episode partitions never lend evidence to each other. This is
+    # an evidence boundary, not identity: only a bucket stamped with a foreign episode
+    # carries that stamp in its key (see ``_make_hypothesis``).
     partitioned: list[Candidate] = []
     for candidate in candidates:
         buckets: dict[tuple[EntityInstanceRef | None, datetime | None], list[Finding]] = {}

@@ -1,0 +1,3200 @@
+{
+  "scenario": "Scenario-102",
+  "scope": "Observed late quota rejection; not incident initiation or recovery",
+  "diagnosis": "INSUFFICIENT_EVIDENCE",
+  "explanation": {
+    "explaining_claim": "hypothesis:bb0a338516e60ab6:086a670151d3e36d",
+    "explained_claim": "hypothesis:3228f3a046504269:eb334b43a121c3c0",
+    "actor": {
+      "kind": "ResourceQuota",
+      "name": "otel-demo-memory",
+      "namespace": "otel-demo"
+    },
+    "actor_instance": null,
+    "manifestation": {
+      "kind": "ReplicaSet",
+      "name": "ad-554b849958",
+      "namespace": "otel-demo"
+    },
+    "manifestation_instance": {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e"
+    },
+    "episode_onset": "2025-12-15T15:31:21.639554Z",
+    "mechanism": "QUOTA_ADMISSION_REJECTION",
+    "path": [
+      {
+        "source": {
+          "kind": "ResourceQuota",
+          "name": "otel-demo-memory",
+          "namespace": "otel-demo"
+        },
+        "relation": "quota_blocks",
+        "target": {
+          "kind": "ReplicaSet",
+          "name": "ad-554b849958",
+          "namespace": "otel-demo"
+        },
+        "direction": "forward"
+      }
+    ],
+    "evidence_ids": [
+      "k8s_events_raw.tsv:764",
+      "k8s_events_raw.tsv:766",
+      "k8s_events_raw.tsv:768",
+      "k8s_events_raw.tsv:770",
+      "k8s_events_raw.tsv:772",
+      "k8s_events_raw.tsv:774",
+      "k8s_events_raw.tsv:776",
+      "k8s_events_raw.tsv:778",
+      "k8s_events_raw.tsv:780",
+      "k8s_events_raw.tsv:783",
+      "k8s_events_raw.tsv:785",
+      "k8s_events_raw.tsv:787",
+      "k8s_events_raw.tsv:788",
+      "k8s_events_raw.tsv:790",
+      "k8s_events_raw.tsv:797",
+      "k8s_events_raw.tsv:809",
+      "k8s_events_raw.tsv:810"
+    ],
+    "explained_evidence_ids": [
+      "k8s_events_raw.tsv:764",
+      "k8s_events_raw.tsv:766",
+      "k8s_events_raw.tsv:768",
+      "k8s_events_raw.tsv:770",
+      "k8s_events_raw.tsv:772",
+      "k8s_events_raw.tsv:774",
+      "k8s_events_raw.tsv:776",
+      "k8s_events_raw.tsv:778",
+      "k8s_events_raw.tsv:780",
+      "k8s_events_raw.tsv:783",
+      "k8s_events_raw.tsv:785",
+      "k8s_events_raw.tsv:787",
+      "k8s_events_raw.tsv:788",
+      "k8s_events_raw.tsv:790",
+      "k8s_events_raw.tsv:797",
+      "k8s_events_raw.tsv:809",
+      "k8s_events_raw.tsv:810"
+    ],
+    "coverage": [
+      "EXACT_EVENT_SUBJECT_AND_UID",
+      "ALL_LOCAL_FACTS_CHECKED"
+    ],
+    "rule_id": "m21.explanation.observed-quota-rejection",
+    "rule_version": "v1",
+    "consequence": "EXPLAINS_CLAIM",
+    "remaining_uncertainty": [
+      "OBSERVED_ROLE_DOES_NOT_ESTABLISH_INCIDENT_INITIATION"
+    ]
+  },
+  "claims": [
+    {
+      "hypothesis_id": "hypothesis:bb0a338516e60ab6:086a670151d3e36d",
+      "hypothesis_key": "hkey:086a670151d3e36d",
+      "causal_actor": {
+        "kind": "ResourceQuota",
+        "name": "otel-demo-memory",
+        "namespace": "otel-demo"
+      },
+      "claim_version": "m21.v2",
+      "actor_instance": null,
+      "mechanism": "MANIFESTATION_ONLY",
+      "episode_onset": "2025-12-15T15:31:21.639554Z",
+      "presentation_group_id": "hypothesis:3499a33ee0a47055",
+      "symptom_entities": [
+        {
+          "kind": "Deployment",
+          "name": "accounting",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Deployment",
+          "name": "ad",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Deployment",
+          "name": "cart",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Deployment",
+          "name": "fraud-detection",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Deployment",
+          "name": "frontend",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Deployment",
+          "name": "frontend-proxy",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Deployment",
+          "name": "payment",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Deployment",
+          "name": "recommendation",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "accounting-58d4b6c958-d9hcc",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "ad-554b849958-p226w",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "cart-755465879b-pdqqh",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "fraud-detection-9fb7d885b-zxjkn",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "frontend-675fd7b5c5-nkn95",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "frontend-proxy-6b4d584985-vmrpz",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "payment-55766d76b9-rqfsf",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "recommendation-5f45f75855-x4vvb",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Service",
+          "name": "ad",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Service",
+          "name": "frontend",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Service",
+          "name": "frontend-proxy",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Service",
+          "name": "payment",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Service",
+          "name": "recommendation",
+          "namespace": "otel-demo"
+        }
+      ],
+      "member_paths": [],
+      "relation_evidence_ids": [
+        "k8s_objects_raw.tsv:262",
+        "k8s_objects_raw.tsv:270",
+        "k8s_objects_raw.tsv:271",
+        "k8s_objects_raw.tsv:3243",
+        "k8s_objects_raw.tsv:367",
+        "k8s_objects_raw.tsv:374",
+        "k8s_objects_raw.tsv:375",
+        "k8s_objects_raw.tsv:570",
+        "k8s_objects_raw.tsv:576",
+        "k8s_objects_raw.tsv:577",
+        "k8s_objects_raw.tsv:623",
+        "k8s_objects_raw.tsv:630",
+        "k8s_objects_raw.tsv:631"
+      ],
+      "members": [
+        {
+          "kind": "ResourceQuota",
+          "name": "otel-demo-memory",
+          "namespace": "otel-demo"
+        }
+      ],
+      "manifestations": [],
+      "findings": [
+        {
+          "kind": "QUOTA_EXCEEDED",
+          "entity": {
+            "kind": "ResourceQuota",
+            "name": "otel-demo-memory",
+            "namespace": "otel-demo"
+          },
+          "entity_instance": null,
+          "at": "2025-12-15T17:54:41Z",
+          "summary": "ResourceQuota rejected pod creation 45 time(s) for ad: (combined from similar events): Error creating: pods \"ad-554b849958-bnpsk\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:3243",
+            "k8s_events_raw.tsv:764",
+            "k8s_events_raw.tsv:766",
+            "k8s_events_raw.tsv:768",
+            "k8s_events_raw.tsv:770",
+            "k8s_events_raw.tsv:772",
+            "k8s_events_raw.tsv:774",
+            "k8s_events_raw.tsv:776",
+            "k8s_events_raw.tsv:778",
+            "k8s_events_raw.tsv:780",
+            "k8s_events_raw.tsv:783",
+            "k8s_events_raw.tsv:785",
+            "k8s_events_raw.tsv:787",
+            "k8s_events_raw.tsv:788",
+            "k8s_events_raw.tsv:790",
+            "k8s_events_raw.tsv:797",
+            "k8s_events_raw.tsv:809",
+            "k8s_events_raw.tsv:810"
+          ],
+          "related": [
+            {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            }
+          ],
+          "details": {
+            "exhausted": [
+              "memory"
+            ],
+            "rejected": [
+              "otel-demo/ReplicaSet/ad-554b849958"
+            ]
+          },
+          "temporal_role": "CONSEQUENCE",
+          "incident_onset": "2025-12-15T15:31:21.639554Z",
+          "onset_delta_seconds": 8599.360446
+        }
+      ],
+      "initiating_findings": [],
+      "supporting_findings": [],
+      "contradictory_findings": [
+        {
+          "kind": "QUOTA_EXCEEDED",
+          "entity": {
+            "kind": "ResourceQuota",
+            "name": "otel-demo-memory",
+            "namespace": "otel-demo"
+          },
+          "entity_instance": null,
+          "at": "2025-12-15T17:54:41Z",
+          "summary": "ResourceQuota rejected pod creation 45 time(s) for ad: (combined from similar events): Error creating: pods \"ad-554b849958-bnpsk\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:3243",
+            "k8s_events_raw.tsv:764",
+            "k8s_events_raw.tsv:766",
+            "k8s_events_raw.tsv:768",
+            "k8s_events_raw.tsv:770",
+            "k8s_events_raw.tsv:772",
+            "k8s_events_raw.tsv:774",
+            "k8s_events_raw.tsv:776",
+            "k8s_events_raw.tsv:778",
+            "k8s_events_raw.tsv:780",
+            "k8s_events_raw.tsv:783",
+            "k8s_events_raw.tsv:785",
+            "k8s_events_raw.tsv:787",
+            "k8s_events_raw.tsv:788",
+            "k8s_events_raw.tsv:790",
+            "k8s_events_raw.tsv:797",
+            "k8s_events_raw.tsv:809",
+            "k8s_events_raw.tsv:810"
+          ],
+          "related": [
+            {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            }
+          ],
+          "details": {
+            "exhausted": [
+              "memory"
+            ],
+            "rejected": [
+              "otel-demo/ReplicaSet/ad-554b849958"
+            ]
+          },
+          "temporal_role": "CONSEQUENCE",
+          "incident_onset": "2025-12-15T15:31:21.639554Z",
+          "onset_delta_seconds": 8599.360446
+        }
+      ],
+      "causal_paths": [
+        [
+          {
+            "source": {
+              "kind": "ResourceQuota",
+              "name": "otel-demo-memory",
+              "namespace": "otel-demo"
+            },
+            "relation": "quota_blocks",
+            "target": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "direction": "forward"
+          },
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "relation": "backs",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ResourceQuota",
+              "name": "otel-demo-memory",
+              "namespace": "otel-demo"
+            },
+            "relation": "quota_blocks",
+            "target": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "direction": "forward"
+          },
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "relation": "backs",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend-proxy",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ResourceQuota",
+              "name": "otel-demo-memory",
+              "namespace": "otel-demo"
+            },
+            "relation": "quota_blocks",
+            "target": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "direction": "forward"
+          },
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ResourceQuota",
+              "name": "otel-demo-memory",
+              "namespace": "otel-demo"
+            },
+            "relation": "quota_blocks",
+            "target": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "direction": "forward"
+          },
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "relation": "backs",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "ReplicaSet",
+              "name": "frontend-675fd7b5c5",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "frontend-675fd7b5c5",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "frontend-675fd7b5c5-nkn95",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ResourceQuota",
+              "name": "otel-demo-memory",
+              "namespace": "otel-demo"
+            },
+            "relation": "quota_blocks",
+            "target": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "direction": "forward"
+          },
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "relation": "backs",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "ReplicaSet",
+              "name": "frontend-proxy-6b4d584985",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "frontend-proxy-6b4d584985",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "frontend-proxy-6b4d584985-vmrpz",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ResourceQuota",
+              "name": "otel-demo-memory",
+              "namespace": "otel-demo"
+            },
+            "relation": "quota_blocks",
+            "target": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "direction": "forward"
+          },
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "relation": "backs",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ResourceQuota",
+              "name": "otel-demo-memory",
+              "namespace": "otel-demo"
+            },
+            "relation": "quota_blocks",
+            "target": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "direction": "forward"
+          },
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "relation": "backs",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ResourceQuota",
+              "name": "otel-demo-memory",
+              "namespace": "otel-demo"
+            },
+            "relation": "quota_blocks",
+            "target": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "direction": "forward"
+          },
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "relation": "backs",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend-proxy",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "frontend-proxy",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "frontend-proxy",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ResourceQuota",
+              "name": "otel-demo-memory",
+              "namespace": "otel-demo"
+            },
+            "relation": "quota_blocks",
+            "target": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "forward"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ResourceQuota",
+              "name": "otel-demo-memory",
+              "namespace": "otel-demo"
+            },
+            "relation": "quota_blocks",
+            "target": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "forward"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ResourceQuota",
+              "name": "otel-demo-memory",
+              "namespace": "otel-demo"
+            },
+            "relation": "quota_blocks",
+            "target": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "forward"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend-proxy",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ResourceQuota",
+              "name": "otel-demo-memory",
+              "namespace": "otel-demo"
+            },
+            "relation": "quota_blocks",
+            "target": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "forward"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ResourceQuota",
+              "name": "otel-demo-memory",
+              "namespace": "otel-demo"
+            },
+            "relation": "quota_blocks",
+            "target": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "forward"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "ReplicaSet",
+              "name": "frontend-675fd7b5c5",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "frontend-675fd7b5c5",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "frontend-675fd7b5c5-nkn95",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ResourceQuota",
+              "name": "otel-demo-memory",
+              "namespace": "otel-demo"
+            },
+            "relation": "quota_blocks",
+            "target": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "forward"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "ReplicaSet",
+              "name": "frontend-proxy-6b4d584985",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "frontend-proxy-6b4d584985",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "frontend-proxy-6b4d584985-vmrpz",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ResourceQuota",
+              "name": "otel-demo-memory",
+              "namespace": "otel-demo"
+            },
+            "relation": "quota_blocks",
+            "target": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "forward"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ResourceQuota",
+              "name": "otel-demo-memory",
+              "namespace": "otel-demo"
+            },
+            "relation": "quota_blocks",
+            "target": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "forward"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ResourceQuota",
+              "name": "otel-demo-memory",
+              "namespace": "otel-demo"
+            },
+            "relation": "quota_blocks",
+            "target": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "forward"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend-proxy",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "frontend-proxy",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "frontend-proxy",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ]
+      ],
+      "linked_symptoms": [
+        "otel-demo/Deployment/ad",
+        "otel-demo/Deployment/frontend",
+        "otel-demo/Deployment/frontend-proxy",
+        "otel-demo/Pod/ad-554b849958-p226w",
+        "otel-demo/Pod/frontend-675fd7b5c5-nkn95",
+        "otel-demo/Pod/frontend-proxy-6b4d584985-vmrpz",
+        "otel-demo/Service/ad",
+        "otel-demo/Service/frontend",
+        "otel-demo/Service/frontend-proxy"
+      ],
+      "causal_explanation": "PATH",
+      "score": 10.5,
+      "reasons": [
+        "0 hop(s) from an alerting component",
+        "acts in an alerting namespace",
+        "happened in the incident window"
+      ],
+      "structural_basis": [],
+      "signature": {
+        "initiating_kinds": [],
+        "supporting_kinds": [],
+        "contradiction_kinds": [
+          "QUOTA_EXCEEDED"
+        ],
+        "temporal_profile": [
+          "late_consequence"
+        ],
+        "symptom_relation": "PATH",
+        "causal_path_shape": [
+          [
+            [
+              "ResourceQuota",
+              "quota_blocks",
+              "Deployment"
+            ]
+          ],
+          [
+            [
+              "ResourceQuota",
+              "quota_blocks",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "owns",
+              "ReplicaSet"
+            ],
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ]
+          ],
+          [
+            [
+              "ResourceQuota",
+              "quota_blocks",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ]
+          ],
+          [
+            [
+              "ResourceQuota",
+              "quota_blocks",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ]
+          ],
+          [
+            [
+              "ResourceQuota",
+              "quota_blocks",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ]
+          ],
+          [
+            [
+              "ResourceQuota",
+              "quota_blocks",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ]
+          ],
+          [
+            [
+              "ResourceQuota",
+              "quota_blocks",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ]
+          ],
+          [
+            [
+              "ResourceQuota",
+              "quota_blocks",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "ReplicaSet"
+            ],
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ]
+          ],
+          [
+            [
+              "ResourceQuota",
+              "quota_blocks",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "ReplicaSet"
+            ],
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ]
+          ],
+          [
+            [
+              "ResourceQuota",
+              "quota_blocks",
+              "ReplicaSet"
+            ],
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ]
+          ],
+          [
+            [
+              "ResourceQuota",
+              "quota_blocks",
+              "ReplicaSet"
+            ],
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ],
+            [
+              "Pod",
+              "backs",
+              "Service"
+            ]
+          ],
+          [
+            [
+              "ResourceQuota",
+              "quota_blocks",
+              "ReplicaSet"
+            ],
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ],
+            [
+              "Pod",
+              "backs",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ]
+          ],
+          [
+            [
+              "ResourceQuota",
+              "quota_blocks",
+              "ReplicaSet"
+            ],
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ],
+            [
+              "Pod",
+              "backs",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ]
+          ],
+          [
+            [
+              "ResourceQuota",
+              "quota_blocks",
+              "ReplicaSet"
+            ],
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ],
+            [
+              "Pod",
+              "backs",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ]
+          ],
+          [
+            [
+              "ResourceQuota",
+              "quota_blocks",
+              "ReplicaSet"
+            ],
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ],
+            [
+              "Pod",
+              "backs",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ]
+          ],
+          [
+            [
+              "ResourceQuota",
+              "quota_blocks",
+              "ReplicaSet"
+            ],
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ],
+            [
+              "Pod",
+              "backs",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "ReplicaSet"
+            ],
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ]
+          ],
+          [
+            [
+              "ResourceQuota",
+              "quota_blocks",
+              "ReplicaSet"
+            ],
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ],
+            [
+              "Pod",
+              "backs",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "ReplicaSet"
+            ],
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ]
+          ]
+        ],
+        "manifestation_shape": [],
+        "provenance_classes": [
+          "object_observation"
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "hypothesis:3228f3a046504269:eb334b43a121c3c0",
+      "hypothesis_key": "hkey:eb334b43a121c3c0",
+      "causal_actor": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "claim_version": "m21.v2",
+      "actor_instance": {
+        "entity": {
+          "kind": "ReplicaSet",
+          "name": "ad-554b849958",
+          "namespace": "otel-demo"
+        },
+        "uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e"
+      },
+      "mechanism": "MANIFESTATION_ONLY",
+      "episode_onset": "2025-12-15T15:31:21.639554Z",
+      "presentation_group_id": "hypothesis:9033f16c5308499a",
+      "symptom_entities": [
+        {
+          "kind": "Deployment",
+          "name": "accounting",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Deployment",
+          "name": "ad",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Deployment",
+          "name": "cart",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Deployment",
+          "name": "fraud-detection",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Deployment",
+          "name": "frontend",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Deployment",
+          "name": "frontend-proxy",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Deployment",
+          "name": "payment",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Deployment",
+          "name": "recommendation",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "accounting-58d4b6c958-d9hcc",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "ad-554b849958-p226w",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "cart-755465879b-pdqqh",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "fraud-detection-9fb7d885b-zxjkn",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "frontend-675fd7b5c5-nkn95",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "frontend-proxy-6b4d584985-vmrpz",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "payment-55766d76b9-rqfsf",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Pod",
+          "name": "recommendation-5f45f75855-x4vvb",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Service",
+          "name": "ad",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Service",
+          "name": "frontend",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Service",
+          "name": "frontend-proxy",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Service",
+          "name": "payment",
+          "namespace": "otel-demo"
+        },
+        {
+          "kind": "Service",
+          "name": "recommendation",
+          "namespace": "otel-demo"
+        }
+      ],
+      "member_paths": [],
+      "relation_evidence_ids": [
+        "k8s_objects_raw.tsv:262",
+        "k8s_objects_raw.tsv:270",
+        "k8s_objects_raw.tsv:271",
+        "k8s_objects_raw.tsv:367",
+        "k8s_objects_raw.tsv:374",
+        "k8s_objects_raw.tsv:375",
+        "k8s_objects_raw.tsv:570",
+        "k8s_objects_raw.tsv:576",
+        "k8s_objects_raw.tsv:577",
+        "k8s_objects_raw.tsv:630",
+        "k8s_objects_raw.tsv:631"
+      ],
+      "members": [
+        {
+          "kind": "ReplicaSet",
+          "name": "ad-554b849958",
+          "namespace": "otel-demo"
+        }
+      ],
+      "manifestations": [],
+      "findings": [
+        {
+          "kind": "FAILURE_EVENT",
+          "entity": {
+            "kind": "ReplicaSet",
+            "name": "ad-554b849958",
+            "namespace": "otel-demo"
+          },
+          "entity_instance": {
+            "entity": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e"
+          },
+          "at": "2025-12-15T18:00:09Z",
+          "summary": "FailedCreate x45: (combined from similar events): Error creating: pods \"ad-554b849958-bnpsk\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:764",
+            "k8s_events_raw.tsv:766",
+            "k8s_events_raw.tsv:768",
+            "k8s_events_raw.tsv:770",
+            "k8s_events_raw.tsv:772",
+            "k8s_events_raw.tsv:774",
+            "k8s_events_raw.tsv:776",
+            "k8s_events_raw.tsv:778",
+            "k8s_events_raw.tsv:780",
+            "k8s_events_raw.tsv:783",
+            "k8s_events_raw.tsv:785",
+            "k8s_events_raw.tsv:787",
+            "k8s_events_raw.tsv:788",
+            "k8s_events_raw.tsv:790",
+            "k8s_events_raw.tsv:797",
+            "k8s_events_raw.tsv:809",
+            "k8s_events_raw.tsv:810"
+          ],
+          "related": [],
+          "details": {
+            "reason": "FailedCreate",
+            "count": 45
+          },
+          "temporal_role": "SUPPORTING",
+          "incident_onset": "2025-12-15T15:31:21.639554Z",
+          "onset_delta_seconds": 8927.360446
+        }
+      ],
+      "initiating_findings": [],
+      "supporting_findings": [
+        {
+          "kind": "FAILURE_EVENT",
+          "entity": {
+            "kind": "ReplicaSet",
+            "name": "ad-554b849958",
+            "namespace": "otel-demo"
+          },
+          "entity_instance": {
+            "entity": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e"
+          },
+          "at": "2025-12-15T18:00:09Z",
+          "summary": "FailedCreate x45: (combined from similar events): Error creating: pods \"ad-554b849958-bnpsk\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory",
+          "evidence_ids": [
+            "k8s_events_raw.tsv:764",
+            "k8s_events_raw.tsv:766",
+            "k8s_events_raw.tsv:768",
+            "k8s_events_raw.tsv:770",
+            "k8s_events_raw.tsv:772",
+            "k8s_events_raw.tsv:774",
+            "k8s_events_raw.tsv:776",
+            "k8s_events_raw.tsv:778",
+            "k8s_events_raw.tsv:780",
+            "k8s_events_raw.tsv:783",
+            "k8s_events_raw.tsv:785",
+            "k8s_events_raw.tsv:787",
+            "k8s_events_raw.tsv:788",
+            "k8s_events_raw.tsv:790",
+            "k8s_events_raw.tsv:797",
+            "k8s_events_raw.tsv:809",
+            "k8s_events_raw.tsv:810"
+          ],
+          "related": [],
+          "details": {
+            "reason": "FailedCreate",
+            "count": 45
+          },
+          "temporal_role": "SUPPORTING",
+          "incident_onset": "2025-12-15T15:31:21.639554Z",
+          "onset_delta_seconds": 8927.360446
+        }
+      ],
+      "contradictory_findings": [],
+      "causal_paths": [
+        [
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "relation": "backs",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "relation": "backs",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend-proxy",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "relation": "backs",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "ReplicaSet",
+              "name": "frontend-675fd7b5c5",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "frontend-675fd7b5c5",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "frontend-675fd7b5c5-nkn95",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "relation": "backs",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "ReplicaSet",
+              "name": "frontend-proxy-6b4d584985",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "frontend-proxy-6b4d584985",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "frontend-proxy-6b4d584985-vmrpz",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "relation": "backs",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "relation": "backs",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ],
+        [
+          {
+            "source": {
+              "kind": "ReplicaSet",
+              "name": "ad-554b849958",
+              "namespace": "otel-demo"
+            },
+            "relation": "owns",
+            "target": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Pod",
+              "name": "ad-554b849958-p226w",
+              "namespace": "otel-demo"
+            },
+            "relation": "backs",
+            "target": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "ad",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Service",
+              "name": "frontend",
+              "namespace": "otel-demo"
+            },
+            "relation": "dependency_of",
+            "target": {
+              "kind": "Deployment",
+              "name": "frontend-proxy",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          },
+          {
+            "source": {
+              "kind": "Deployment",
+              "name": "frontend-proxy",
+              "namespace": "otel-demo"
+            },
+            "relation": "serves",
+            "target": {
+              "kind": "Service",
+              "name": "frontend-proxy",
+              "namespace": "otel-demo"
+            },
+            "direction": "reverse"
+          }
+        ]
+      ],
+      "linked_symptoms": [
+        "otel-demo/Deployment/frontend",
+        "otel-demo/Deployment/frontend-proxy",
+        "otel-demo/Pod/ad-554b849958-p226w",
+        "otel-demo/Pod/frontend-675fd7b5c5-nkn95",
+        "otel-demo/Pod/frontend-proxy-6b4d584985-vmrpz",
+        "otel-demo/Service/ad",
+        "otel-demo/Service/frontend",
+        "otel-demo/Service/frontend-proxy"
+      ],
+      "causal_explanation": "PATH",
+      "score": 6.5,
+      "reasons": [
+        "0 hop(s) from an alerting component",
+        "acts in an alerting namespace",
+        "happened in the incident window"
+      ],
+      "structural_basis": [],
+      "signature": {
+        "initiating_kinds": [],
+        "supporting_kinds": [
+          "FAILURE_EVENT"
+        ],
+        "contradiction_kinds": [],
+        "temporal_profile": [
+          "supporting_after_onset"
+        ],
+        "symptom_relation": "PATH",
+        "causal_path_shape": [
+          [
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ]
+          ],
+          [
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ],
+            [
+              "Pod",
+              "backs",
+              "Service"
+            ]
+          ],
+          [
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ],
+            [
+              "Pod",
+              "backs",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ]
+          ],
+          [
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ],
+            [
+              "Pod",
+              "backs",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ]
+          ],
+          [
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ],
+            [
+              "Pod",
+              "backs",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ]
+          ],
+          [
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ],
+            [
+              "Pod",
+              "backs",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ]
+          ],
+          [
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ],
+            [
+              "Pod",
+              "backs",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "Deployment"
+            ],
+            [
+              "Deployment",
+              "serves",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "ReplicaSet"
+            ],
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ]
+          ],
+          [
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ],
+            [
+              "Pod",
+              "backs",
+              "Service"
+            ],
+            [
+              "Service",
+              "dependency_of",
+              "ReplicaSet"
+            ],
+            [
+              "ReplicaSet",
+              "owns",
+              "Pod"
+            ]
+          ]
+        ],
+        "manifestation_shape": [],
+        "provenance_classes": [
+          "kubernetes_event"
+        ]
+      }
+    }
+  ],
+  "eliminations": [
+    {
+      "hypothesis_id": "hypothesis:bb0a338516e60ab6:086a670151d3e36d",
+      "code": "EXPLICIT_TEMPORAL_CONTRADICTION",
+      "evidence_ids": [
+        "k8s_events_raw.tsv:764",
+        "k8s_events_raw.tsv:766",
+        "k8s_events_raw.tsv:768",
+        "k8s_events_raw.tsv:770",
+        "k8s_events_raw.tsv:772",
+        "k8s_events_raw.tsv:774",
+        "k8s_events_raw.tsv:776",
+        "k8s_events_raw.tsv:778",
+        "k8s_events_raw.tsv:780",
+        "k8s_events_raw.tsv:783",
+        "k8s_events_raw.tsv:785",
+        "k8s_events_raw.tsv:787",
+        "k8s_events_raw.tsv:788",
+        "k8s_events_raw.tsv:790",
+        "k8s_events_raw.tsv:797",
+        "k8s_events_raw.tsv:809",
+        "k8s_events_raw.tsv:810",
+        "k8s_objects_raw.tsv:3243"
+      ],
+      "detail": "1 contradictory finding(s) are observed strictly after incident onset plus the 15-minute grace, so they cannot have initiated it",
+      "rule_id": "m16.temporal-contradiction",
+      "rule_version": "v1",
+      "consequence": "CONTRADICTION",
+      "targets": [
+        "otel-demo/ResourceQuota/otel-demo-memory"
+      ],
+      "mechanism": "INITIATING_TIMING",
+      "observation_ids": [],
+      "time_basis": [
+        {
+          "evidence_ids": [
+            "k8s_objects_raw.tsv:3243",
+            "k8s_events_raw.tsv:764",
+            "k8s_events_raw.tsv:766",
+            "k8s_events_raw.tsv:768",
+            "k8s_events_raw.tsv:770",
+            "k8s_events_raw.tsv:772",
+            "k8s_events_raw.tsv:774",
+            "k8s_events_raw.tsv:776",
+            "k8s_events_raw.tsv:778",
+            "k8s_events_raw.tsv:780",
+            "k8s_events_raw.tsv:783",
+            "k8s_events_raw.tsv:785",
+            "k8s_events_raw.tsv:787",
+            "k8s_events_raw.tsv:788",
+            "k8s_events_raw.tsv:790",
+            "k8s_events_raw.tsv:797",
+            "k8s_events_raw.tsv:809",
+            "k8s_events_raw.tsv:810"
+          ],
+          "onset": "2025-12-15T15:31:21.639554Z",
+          "boundary": "2025-12-15T15:46:21.639554Z",
+          "causal_time": "2025-12-15T17:54:41Z",
+          "interval_start": null,
+          "interval_end": null,
+          "certainty": "DEFINITELY_LATE",
+          "target": ""
+        }
+      ],
+      "coverage_basis": "",
+      "preconditions": [
+        {
+          "name": "positive_contradictory_finding",
+          "passed": true,
+          "detail": "every eliminating finding is a positive contradictory observation"
+        },
+        {
+          "name": "definitely_late_beyond_onset_grace",
+          "passed": true,
+          "detail": "lower time bound after onset + 15 min"
+        }
+      ],
+      "decisive_evidence_ids": []
+    },
+    {
+      "hypothesis_id": "hypothesis:3228f3a046504269:eb334b43a121c3c0",
+      "code": "POSITIVELY_EXPLAINED_OBSERVATION",
+      "evidence_ids": [
+        "k8s_events_raw.tsv:764",
+        "k8s_events_raw.tsv:766",
+        "k8s_events_raw.tsv:768",
+        "k8s_events_raw.tsv:770",
+        "k8s_events_raw.tsv:772",
+        "k8s_events_raw.tsv:774",
+        "k8s_events_raw.tsv:776",
+        "k8s_events_raw.tsv:778",
+        "k8s_events_raw.tsv:780",
+        "k8s_events_raw.tsv:783",
+        "k8s_events_raw.tsv:785",
+        "k8s_events_raw.tsv:787",
+        "k8s_events_raw.tsv:788",
+        "k8s_events_raw.tsv:790",
+        "k8s_events_raw.tsv:797",
+        "k8s_events_raw.tsv:809",
+        "k8s_events_raw.tsv:810"
+      ],
+      "detail": "All local observations of this claim are the explicitly recorded quota rejection; no other local initiating/change facts are covered or discarded.",
+      "rule_id": "m21.explanation.observed-quota-rejection",
+      "rule_version": "v1",
+      "consequence": "ROOT_INELIGIBILITY",
+      "targets": [
+        "otel-demo/ReplicaSet/ad-554b849958"
+      ],
+      "mechanism": "QUOTA_ADMISSION_REJECTION",
+      "observation_ids": [
+        "k8s_events_raw.tsv:764",
+        "k8s_events_raw.tsv:766",
+        "k8s_events_raw.tsv:768",
+        "k8s_events_raw.tsv:770",
+        "k8s_events_raw.tsv:772",
+        "k8s_events_raw.tsv:774",
+        "k8s_events_raw.tsv:776",
+        "k8s_events_raw.tsv:778",
+        "k8s_events_raw.tsv:780",
+        "k8s_events_raw.tsv:783",
+        "k8s_events_raw.tsv:785",
+        "k8s_events_raw.tsv:787",
+        "k8s_events_raw.tsv:788",
+        "k8s_events_raw.tsv:790",
+        "k8s_events_raw.tsv:797",
+        "k8s_events_raw.tsv:809",
+        "k8s_events_raw.tsv:810"
+      ],
+      "time_basis": [],
+      "coverage_basis": "EXACT_EVENT_SUBJECT_AND_UID, ALL_LOCAL_FACTS_CHECKED",
+      "preconditions": [],
+      "decisive_evidence_ids": [
+        "k8s_events_raw.tsv:764",
+        "k8s_events_raw.tsv:766",
+        "k8s_events_raw.tsv:768",
+        "k8s_events_raw.tsv:770",
+        "k8s_events_raw.tsv:772",
+        "k8s_events_raw.tsv:774",
+        "k8s_events_raw.tsv:776",
+        "k8s_events_raw.tsv:778",
+        "k8s_events_raw.tsv:780",
+        "k8s_events_raw.tsv:783",
+        "k8s_events_raw.tsv:785",
+        "k8s_events_raw.tsv:787",
+        "k8s_events_raw.tsv:788",
+        "k8s_events_raw.tsv:790",
+        "k8s_events_raw.tsv:797",
+        "k8s_events_raw.tsv:809",
+        "k8s_events_raw.tsv:810"
+      ]
+    }
+  ],
+  "frontier_answers": [
+    {
+      "alternative_id": "alternative:1b38e73af879c41a8f97",
+      "question": "WHAT_OBSERVED_UPSTREAM_ROLE_AFFECTS_THIS_CLAIM",
+      "state": "OPEN",
+      "investigation_state": "UNEXPLORED",
+      "blocked_reason": null,
+      "evidence_ids": [
+        "k8s_events_raw.tsv:764",
+        "k8s_events_raw.tsv:766",
+        "k8s_events_raw.tsv:768",
+        "k8s_events_raw.tsv:770",
+        "k8s_events_raw.tsv:772",
+        "k8s_events_raw.tsv:774",
+        "k8s_events_raw.tsv:776",
+        "k8s_events_raw.tsv:778",
+        "k8s_events_raw.tsv:780",
+        "k8s_events_raw.tsv:783",
+        "k8s_events_raw.tsv:785",
+        "k8s_events_raw.tsv:787",
+        "k8s_events_raw.tsv:788",
+        "k8s_events_raw.tsv:790",
+        "k8s_events_raw.tsv:797",
+        "k8s_events_raw.tsv:809",
+        "k8s_events_raw.tsv:810"
+      ],
+      "affected_claims": [
+        "hypothesis:3228f3a046504269:eb334b43a121c3c0"
+      ],
+      "transferred_claims": [
+        "hypothesis:bb0a338516e60ab6:086a670151d3e36d"
+      ],
+      "remaining_uncertainty": [
+        "UPSTREAM_ROLE_PARTIALLY_DETERMINED"
+      ],
+      "rule_id": "m21.frontier.observed-role",
+      "rule_version": "v1"
+    }
+  ],
+  "raw_observations": [
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "involved_uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e",
+      "reason": "FailedCreate",
+      "type": "Warning",
+      "message": "Error creating: pods \"ad-554b849958-v9dqt\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+      "first_at": "2025-12-15T17:54:41Z",
+      "last_at": "2025-12-15T17:54:41Z",
+      "count": 1,
+      "evidence_id": "k8s_events_raw.tsv:764"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "involved_uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e",
+      "reason": "FailedCreate",
+      "type": "Warning",
+      "message": "Error creating: pods \"ad-554b849958-jk89r\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+      "first_at": "2025-12-15T17:54:41Z",
+      "last_at": "2025-12-15T17:54:41Z",
+      "count": 1,
+      "evidence_id": "k8s_events_raw.tsv:766"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "involved_uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e",
+      "reason": "FailedCreate",
+      "type": "Warning",
+      "message": "Error creating: pods \"ad-554b849958-768hf\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+      "first_at": "2025-12-15T17:54:41Z",
+      "last_at": "2025-12-15T17:54:41Z",
+      "count": 1,
+      "evidence_id": "k8s_events_raw.tsv:768"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "involved_uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e",
+      "reason": "FailedCreate",
+      "type": "Warning",
+      "message": "Error creating: pods \"ad-554b849958-7vlzz\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+      "first_at": "2025-12-15T17:54:41Z",
+      "last_at": "2025-12-15T17:54:41Z",
+      "count": 1,
+      "evidence_id": "k8s_events_raw.tsv:770"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "involved_uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e",
+      "reason": "FailedCreate",
+      "type": "Warning",
+      "message": "Error creating: pods \"ad-554b849958-j97lq\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+      "first_at": "2025-12-15T17:54:41Z",
+      "last_at": "2025-12-15T17:54:41Z",
+      "count": 1,
+      "evidence_id": "k8s_events_raw.tsv:772"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "involved_uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e",
+      "reason": "FailedCreate",
+      "type": "Warning",
+      "message": "Error creating: pods \"ad-554b849958-kvbrg\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+      "first_at": "2025-12-15T17:54:41Z",
+      "last_at": "2025-12-15T17:54:41Z",
+      "count": 1,
+      "evidence_id": "k8s_events_raw.tsv:774"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "involved_uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e",
+      "reason": "FailedCreate",
+      "type": "Warning",
+      "message": "Error creating: pods \"ad-554b849958-hzxxc\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+      "first_at": "2025-12-15T17:54:41Z",
+      "last_at": "2025-12-15T17:54:41Z",
+      "count": 1,
+      "evidence_id": "k8s_events_raw.tsv:776"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "involved_uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e",
+      "reason": "FailedCreate",
+      "type": "Warning",
+      "message": "Error creating: pods \"ad-554b849958-rm569\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+      "first_at": "2025-12-15T17:54:41Z",
+      "last_at": "2025-12-15T17:54:41Z",
+      "count": 1,
+      "evidence_id": "k8s_events_raw.tsv:778"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "involved_uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e",
+      "reason": "FailedCreate",
+      "type": "Warning",
+      "message": "Error creating: pods \"ad-554b849958-pwfxk\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+      "first_at": "2025-12-15T17:54:42Z",
+      "last_at": "2025-12-15T17:54:42Z",
+      "count": 1,
+      "evidence_id": "k8s_events_raw.tsv:780"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "involved_uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e",
+      "reason": "FailedCreate",
+      "type": "Warning",
+      "message": "(combined from similar events): Error creating: pods \"ad-554b849958-rnr6r\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+      "first_at": "2025-12-15T17:54:43Z",
+      "last_at": "2025-12-15T17:54:43Z",
+      "count": 1,
+      "evidence_id": "k8s_events_raw.tsv:783"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "involved_uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e",
+      "reason": "FailedCreate",
+      "type": "Warning",
+      "message": "(combined from similar events): Error creating: pods \"ad-554b849958-9jrwf\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+      "first_at": "2025-12-15T17:54:43Z",
+      "last_at": "2025-12-15T17:54:46Z",
+      "count": 2,
+      "evidence_id": "k8s_events_raw.tsv:785"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "involved_uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e",
+      "reason": "FailedCreate",
+      "type": "Warning",
+      "message": "(combined from similar events): Error creating: pods \"ad-554b849958-zk7d5\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+      "first_at": "2025-12-15T17:54:43Z",
+      "last_at": "2025-12-15T17:54:51Z",
+      "count": 3,
+      "evidence_id": "k8s_events_raw.tsv:787"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "involved_uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e",
+      "reason": "FailedCreate",
+      "type": "Warning",
+      "message": "(combined from similar events): Error creating: pods \"ad-554b849958-5969h\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+      "first_at": "2025-12-15T17:54:43Z",
+      "last_at": "2025-12-15T17:55:01Z",
+      "count": 4,
+      "evidence_id": "k8s_events_raw.tsv:788"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "involved_uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e",
+      "reason": "FailedCreate",
+      "type": "Warning",
+      "message": "(combined from similar events): Error creating: pods \"ad-554b849958-ds46g\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+      "first_at": "2025-12-15T17:54:43Z",
+      "last_at": "2025-12-15T17:55:22Z",
+      "count": 5,
+      "evidence_id": "k8s_events_raw.tsv:790"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "involved_uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e",
+      "reason": "FailedCreate",
+      "type": "Warning",
+      "message": "(combined from similar events): Error creating: pods \"ad-554b849958-ws6b2\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+      "first_at": "2025-12-15T17:54:43Z",
+      "last_at": "2025-12-15T17:56:03Z",
+      "count": 6,
+      "evidence_id": "k8s_events_raw.tsv:797"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "involved_uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e",
+      "reason": "FailedCreate",
+      "type": "Warning",
+      "message": "(combined from similar events): Error creating: pods \"ad-554b849958-c724h\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+      "first_at": "2025-12-15T17:54:43Z",
+      "last_at": "2025-12-15T17:57:25Z",
+      "count": 7,
+      "evidence_id": "k8s_events_raw.tsv:809"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "ad-554b849958",
+        "namespace": "otel-demo"
+      },
+      "involved_uid": "8a217393-53d2-4d89-9ea3-5d6e9f42929e",
+      "reason": "FailedCreate",
+      "type": "Warning",
+      "message": "(combined from similar events): Error creating: pods \"ad-554b849958-bnpsk\" is forbidden: exceeded quota: otel-demo-memory, requested: memory=225Mi, used: memory=1901Mi, limited: memory=1503238553600m",
+      "first_at": "2025-12-15T17:54:43Z",
+      "last_at": "2025-12-15T18:00:09Z",
+      "count": 8,
+      "evidence_id": "k8s_events_raw.tsv:810"
+    }
+  ]
+}

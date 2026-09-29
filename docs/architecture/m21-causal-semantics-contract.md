@@ -1,12 +1,91 @@
 # M21 Causal Semantics Contract — actor-specific claims
 
-Contract version: `m21.v2`; engine `2.0.0`; D1 `m21.support.change-onset-path.v2`.
+Contract version: `m21.v3`; engine `2.1.0`; D1 remains `m21.support.change-onset-path.v2`.
 Authorized replacement of the conflicting frozen v1 clauses, 2026-09-28.
 The v2 clauses below govern current code. The original v1 text is retained below
 as historical rationale; its default competition, D1 audit-only, dominance and
 supported-leader provisions are superseded, not additional requirements.
 
-## Current decision contract
+## v3 explanation and decision closure (2026-09-29)
+
+Actor-scoped formation and positive admission stay `claim_version=m21.v2`.
+The decision trace is `m21.v3`; the additions below supersede v2's blanket
+D1-only downgrade only when the named stronger rule fires. D1 remains possible
+initiation, never observed execution.
+
+`CausalExplanation` identifies source claim, exact explained claim/observations,
+actors/instances, episode, directed mechanism, decisive raw observation IDs,
+coverage, rule version, consequence and remaining uncertainty. It does not
+transfer evidence ownership. A structural mechanism bridge alone cannot produce
+an explanation or strong support.
+
+- `m21.explanation.runtime-return.v1` records a paired non-success return with
+  positively verified endpoints, exact Pod UID, matching claim episode and
+  target observation provenance. It explains that return, not every local fact
+  or the remote failure origin. Existing m16 propagated-effect eliminations
+  remain distinct and auditable.
+- `m21.explanation.observed-quota-rejection.v1` consumes a raw rejection event
+  explicitly naming the quota and namespace and the rejected subject/UID. Its
+  source claim must be admitted; the raw `Warning/FailedCreate` establishes
+  its observed role even when incident initiation is undetermined. Later
+  rejections in the same episode can explain later effects without supplying D1
+  support. An initiating-timing contradiction does not negate a recorded later role;
+  other positive source contradictions block explanation authority. Only
+  a target whose **all** local observations are these rejection events is explained as a whole. Any other
+  local change, including ambiguous-time changes, remains a rival. The shared
+  event is one observation, not independent corroboration.
+- Explanation cycles remain observation records with `EXPLANATION_CYCLE`;
+  they cannot retire claims, answer frontier questions or assert independent
+  mechanisms. Explanation never supplies its own source support.
+
+`m21.support.observed-quota-rejection.v1` adds `OBSERVED_MECHANISM_CAUSE` only
+when a D1-supported quota claim has a raw, explicitly named rejection at its
+origin time and the actual rejected subject is an incident symptom. It does
+not promote quota exhaustion, selectors, generic quota→service paths, or a
+structural config bridge. Missing UID is not invented. Its supported scope is
+that observed admission rejection, not why all quota demand arose or service
+recovery.
+
+`MECHANISM_VERIFIED_CAUSE` / legacy `RESOLVED` requires one eligible supported
+claim, execution witnesses covering **every declared incident symptom**, no
+unresolved admitted claim, and no unanswered material frontier. The decision
+basis is `OBSERVED_MECHANISM_DISAMBIGUATED_V1`. D1-only unique support remains
+`SUPPORTED_CAUSE` / `AMBIGUOUS`. Multiple distinct actors with disjoint direct
+execution observations may be `MULTIPLE_OBSERVED_CAUSES`; they remain ambiguous
+for the legacy single-root API. Other admitted competition is `COMPETING_CAUSES`
+and does not assert causal independence merely from the presence of two claims.
+
+`FrontierAnswer` asks which observed upstream role affects the bound claims.
+A positive explanation may answer that scoped question and transfer it to its
+source claim (`ANSWERED_ROLE_TRANSFERRED`). Every bound claim question must
+be covered; partial answers retain their witnesses and remain open. The source still requires
+adjudication; this is not a proof of universal non-causality. A relevant positive
+contradiction withdraws the answer on recomputation. Unrelated observations do
+not. Quota declarations with pod-admission limits can create an investigation
+question for affected workloads; namespace membership alone still cannot admit
+or support a claim.
+
+Frontier causal answers are separate from investigation progress:
+`UNEXPLORED`, `INVESTIGATED_INCONCLUSIVE`, `ANSWERED`, `BLOCKED_ACCESS` and
+`BLOCKED_BUDGET`. NO_DATA, an empty read, PROMOTED and exhaustion never answer
+a question. Answered questions leave the material query queue; open questions
+remain visible with their terminal reason. Existing physical-read identity and
+attempt budgets prevent repeated identical unsuccessful reads.
+
+Decision-bearing explanations, execution witnesses and frontier answers enter
+the canonical digest. Terminal access/budget bookkeeping does not. Action audits
+record before/after causal digests, so scoped support/answer transitions count
+even when the legacy label stays ambiguous. Engine-version replay remains
+strict: a 2.0.0 tape is not silently interpreted by 2.1.0. Legacy documents and
+v2 digest projections remain readable as recorded. Reports are version 2.3.
+
+Product proof T4 and T5/T6 ablations explicitly identify
+`m21.unique-possible-cause.v1` for v2/v3 records, rather than presenting that
+weaker success as the old definitive-resolution proof. Artifacts separately
+report observed mechanism, positive rival elimination, strong disambiguation
+and recovery. Recovery stays `NOT_ASSESSED`.
+
+## Preserved v2 decision contract (v3 exceptions above)
 
 The stages are observation → presentation episode → actor/instance/incident
 claim → positive admission → support/contradiction → scoped diagnosis.

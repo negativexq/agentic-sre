@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Protocol
@@ -34,7 +34,9 @@ from packages.rca.mechanism_bridge import (
     derive_runtime_mechanism_bridges,
 )
 from packages.rca.model import (
+    Alert,
     Candidate,
+    ClusterEvent,
     Confidence,
     Diagnosis,
     EntityRef,
@@ -71,6 +73,7 @@ from packages.rca.root_cause_eligibility import (
 )
 from packages.rca.runtime_evidence import RuntimeEvidence, derive_runtime_evidence
 from packages.rca.runtime_graph import (
+    CanonicalTraceIndex,
     RuntimeGraph,
     canonicalize_trace_spans,
     derive_runtime_graph_from_index,
@@ -128,6 +131,9 @@ class Case:
         default_factory=dict
     )
     requirement_evaluations: tuple[RequirementEvaluation, ...] = ()
+    # What re-assessing this case against another onset needs (never part of a decision).
+    extra_findings: tuple[Finding, ...] = ()
+    inputs: CaseInputs | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -183,11 +189,55 @@ def _pods(entities: Iterable[EntityRef], topology: Topology) -> set[EntityRef]:
     return pods
 
 
+@dataclass(frozen=True)
+class CaseInputs:
+    """The onset-independent, source-derived part of a case.
+
+    Everything here depends only on what the source observed, never on the incident onset,
+    so one diagnosis can reuse it to assess the same evidence against several onsets
+    (M21 timing contract). Building it once is the expensive step (trace-derived runtime
+    evidence); the onset-dependent assembly on top of it is comparatively cheap.
+    """
+
+    alerts: tuple[Alert, ...]
+    history: Mapping[EntityRef, Sequence[ObjectVersion]]
+    events: tuple[ClusterEvent, ...]
+    topology: Topology
+    trace_index: CanonicalTraceIndex
+    runtime_graph: RuntimeGraph
+    runtime_evidence: RuntimeEvidence
+
+
+def prepare_case_inputs(source: ObservationSource) -> CaseInputs:
+    """Read the source once and derive every onset-independent structure."""
+    alerts = tuple(source.alerts())
+    history = source.object_history()
+    events = tuple(source.events())
+    latest: dict[EntityRef, ObjectVersion] = {
+        ref: versions[-1] for ref, versions in history.items()
+    }
+    topology = Topology(derive_edges(latest, list(events)), latest)
+    trace_spans = source.trace_observations()
+    trace_index = canonicalize_trace_spans(trace_spans)
+    return CaseInputs(
+        alerts=alerts,
+        history=history,
+        events=events,
+        topology=topology,
+        trace_index=trace_index,
+        runtime_graph=derive_runtime_graph_from_index(trace_index),
+        runtime_evidence=derive_runtime_evidence(trace_index),
+    )
+
+
 def build_case(
     source: ObservationSource,
     config: EngineConfig | None = None,
     extra_findings: Sequence[Finding] = (),
     reference_onset: datetime | None = None,
+    *,
+    assessed_onset: datetime | None = None,
+    inputs: CaseInputs | None = None,
 ) -> Case:
     """Run every deterministic stage and return the ranked case.
 
@@ -195,25 +245,32 @@ def build_case(
     alerts there is no onset, so it stands in for one in the existing
     onset-relative semantics. It is refused when alerts exist, and the probe
     never persists it.
+
+    ``assessed_onset`` re-derives the case as if the incident onset were that value while
+    every observation stays as it was (M21 timing contract). It is an assessment of the same
+    evidence, never a new onset of record: the result is not persisted and not reported.
+    ``inputs`` reuses an earlier :func:`prepare_case_inputs` of the same source.
     """
     config = config or EngineConfig()
-    alerts = list(source.alerts())
+    if inputs is None:
+        inputs = prepare_case_inputs(source)
+    alerts = list(inputs.alerts)
     if reference_onset is not None and alerts:
         raise ValueError("reference_onset is only for an incident-free probe without alerts")
-    history = source.object_history()
-    events = list(source.events())
-    latest: dict[EntityRef, ObjectVersion] = {
-        ref: versions[-1] for ref, versions in history.items()
-    }
-    topology = Topology(derive_edges(latest, events), latest)
-    trace_spans = source.trace_observations()
-    trace_index = canonicalize_trace_spans(trace_spans)
-    runtime_graph = derive_runtime_graph_from_index(trace_index)
-    runtime_evidence = derive_runtime_evidence(trace_index)
+    history = inputs.history
+    events = list(inputs.events)
+    topology = inputs.topology
+    trace_index = inputs.trace_index
+    runtime_graph = inputs.runtime_graph
+    runtime_evidence = inputs.runtime_evidence
     symptoms = extract_symptoms(alerts, alert_observation_start=source.alert_observation_start())
     if reference_onset is not None:
         symptoms = symptoms.model_copy(
             update={"onset": reference_onset, "reference_time": reference_onset}
+        )
+    if assessed_onset is not None:
+        symptoms = symptoms.model_copy(
+            update={"onset": assessed_onset, "reference_time": assessed_onset}
         )
     runtime_propagation = derive_runtime_propagation(
         trace_index,
@@ -345,6 +402,8 @@ def build_case(
         structural_alternatives=structural_alternatives,
         hypothesis_diagnostics=grouping.diagnostics,
         steps=steps,
+        extra_findings=tuple(extra_findings),
+        inputs=inputs,
         mechanism_mismatches=dict(resource_evaluations.mismatches),
         requirement_evaluations=build_requirement_evaluations(
             hypotheses,

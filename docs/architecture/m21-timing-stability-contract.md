@@ -81,6 +81,17 @@ Relations that carry authority, and the only ones a stability gate reads: `tempo
 `ended_episode`, `d1`, `execution` (the observed quota rejection), and the claim's formation.
 `onset_relation` (the categorical before/near/late label) is recorded for audit and is never a gate.
 
+**Status drivers (audit only).** When the diagnosis status under an admissible onset differs from the
+onset of record, the outcome lists the claims whose competition standing differs and why, in the words of
+the evidence: `BLOCKED_ENDED_EPISODE_RULE` (the rule could not be judged, there are no observations after
+its deadline; nothing was contradicted), `ELIMINATION_NOT_HOLDING` (a positive outcome differs),
+`FORMS_ONLY_UNDER_THIS_ONSET`, `NO_LONGER_FORMED`, `ELIMINATED_OR_EXPLAINED_UNDER_THIS_ONSET`, `OTHER`.
+Drivers change no decision and enter the digest. Measured on the three `SUPPORTED_CAUSE` diagnoses that
+the controller-spawn explanation produced (Scenario-19, 29, 91): the instability comes from stale pod
+claims whose ended-episode elimination cannot be judged under later onsets because the snapshot ends at
+the deadline, and from pod claims that only form under some onsets, not from the explanation, which holds
+under every onset.
+
 ## 5. Authority rules
 
 1. `TIMING_SENSITIVE` never removes a claim, its admission, or its possible-cause support. Tiers are

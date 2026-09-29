@@ -394,6 +394,20 @@ def _time_basis(finding: Finding, grace: timedelta) -> EliminationTimeBasis:
     )
 
 
+def _explanation_detail(relation: CausalExplanation) -> str:
+    """Why an explained claim leaves competition, in the words of the rule that explained it."""
+    if relation.mechanism == "CONTROLLER_SPAWNED_EXECUTION":
+        return (
+            "Every local observation of this claim is one execution of a schedule instance whose "
+            "controller record names it by UID; it is not an independent root-cause alternative. "
+            "This does not establish that the fault initiated the incident."
+        )
+    return (
+        "All local observations of this claim are the explicitly recorded quota rejection; no "
+        "other local initiating/change facts are covered or discarded."
+    )
+
+
 def _elimination_for(
     hypothesis: Hypothesis,
     assessment: HypothesisAssessment,
@@ -1138,7 +1152,7 @@ def _resolve(
             targets=(r.manifestation.canonical,),
             mechanism=r.mechanism,
             coverage_basis=", ".join(r.coverage),
-            detail="All local observations of this claim are the explicitly recorded quota rejection; no other local initiating/change facts are covered or discarded.",
+            detail=_explanation_detail(r),
         )
         for hid, r in sorted(explained.items())
     )

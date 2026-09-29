@@ -59,6 +59,8 @@ class FaultExecution(BaseModel):
     ref: FaultRef
     schedule: FaultRef | None = None  # the schedule instance that spawned this experiment
     children: tuple[FaultRef, ...] = ()  # experiment instances a schedule spawned
+    # Evidence ids of the controller ``Spawned`` events that named this experiment instance.
+    spawn_evidence: tuple[str, ...] = ()
     targets: tuple[FaultTarget, ...] = ()
     reasons: dict[str, int]
     spawned: int = 0
@@ -125,6 +127,7 @@ def fault_executions(
             by_name[(key[0].namespace, key[0].name)].append(key)
     owner_of: dict[FaultKey, FaultRef] = {}
     children: dict[FaultKey, list[FaultRef]] = defaultdict(list)
+    spawn_evidence: dict[FaultKey, list[str]] = defaultdict(list)
     for key, items in groups.items():
         if key[0].kind != "Schedule":
             continue
@@ -133,9 +136,12 @@ def fault_executions(
             if match is None:
                 continue
             for child in by_name.get((key[0].namespace, match["name"]), ()):
+                schedule = FaultRef(entity=key[0], uid=key[1])
                 if child not in owner_of:
-                    owner_of[child] = FaultRef(entity=key[0], uid=key[1])
+                    owner_of[child] = schedule
                     children[key].append(FaultRef(entity=child[0], uid=child[1]))
+                if owner_of[child] == schedule:
+                    spawn_evidence[child].append(event.evidence_id)
     if parents:
         for key in groups:
             parent = parents.get(key[0])
@@ -154,6 +160,7 @@ def fault_executions(
                 ref=FaultRef(entity=key[0], uid=key[1]),
                 schedule=owner_of.get(key),
                 children=tuple(children.get(key, ())),
+                spawn_evidence=tuple(spawn_evidence.get(key, ())),
                 targets=_targets(items) if key[0].kind != "Schedule" else (),
                 reasons=dict(reasons),
                 spawned=reasons.get("Spawned", 0),

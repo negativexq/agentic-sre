@@ -2,6 +2,9 @@
 
 Only a recorded quota rejection proves admission-control execution. Runtime
 propagation explains an observed return, never the origin of the remote failure.
+A schedule instance explains the experiment instances its controller named by UID: those
+are executions of one recurring fault, not independent root-cause alternatives. That claims
+nothing about the incident and moves no frontier answer.
 Historical mechanism bridges alone intentionally grant no execution authority.
 """
 
@@ -15,6 +18,7 @@ from packages.rca.model import (
     CausalHop,
     CausalWitness,
     ClusterEvent,
+    FindingKind,
     FrontierAnswer,
     Hypothesis,
     RootSupportRecord,
@@ -27,9 +31,11 @@ from packages.rca.runtime_propagation import (
     RuntimePropagationEdge,
 )
 from packages.rca.signals import _QUOTA_MESSAGE
+from packages.rca.topology import is_chaos_kind
 
 EXECUTION_RULE = "m21.support.observed-quota-rejection"
 EXPLANATION_RULE = "m21.explanation.observed-quota-rejection"
+SPAWN_EXPLANATION_RULE = "m21.explanation.controller-spawn"
 
 
 def quota_execution(
@@ -101,6 +107,90 @@ def quota_execution(
 
 def _same_episode(left: Hypothesis, right: Hypothesis) -> bool:
     return left.episode_onset is not None and left.episode_onset == right.episode_onset
+
+
+def _spawn_explanations(
+    hypotheses: Sequence[Hypothesis],
+    supported: set[str],
+    excluded_sources: frozenset[str],
+) -> list[CausalExplanation]:
+    """A supported schedule instance explains the experiments its controller named by UID.
+
+    Witness: the ``Spawned`` controller records that name the experiment instance, kept on
+    the experiment's finding. The experiment claim leaves competition only when every one of
+    its own local facts is that execution (an execution of one recurring fault is not an
+    independent root cause). The schedule itself must be supported: an unresolved schedule
+    never retires a supported experiment. Nothing here says the fault caused the incident.
+    """
+    result: list[CausalExplanation] = []
+    for source in hypotheses:
+        instance = source.actor_instance
+        if (
+            source.causal_actor.kind != "Schedule"
+            or instance is None
+            or source.episode_onset is None
+            or source.hypothesis_id not in supported
+            or source.hypothesis_id in excluded_sources
+            or not admitted(source)
+        ):
+            continue
+        for target in hypotheses:
+            if (
+                target.hypothesis_id == source.hypothesis_id
+                or target.causal_actor.kind == "Schedule"
+                or not is_chaos_kind(target.causal_actor.kind)
+                or target.actor_instance is None
+                or not admitted(target)
+                or not _same_episode(source, target)
+            ):
+                continue
+            local = actor_findings(target)
+            spawned: list[str] = []
+            covered: list[str] = []
+            executions = 0
+            for finding in local:
+                details = finding.details
+                if (
+                    finding.kind is FindingKind.FAULT_INJECTION
+                    and details.get("schedule") == source.causal_actor.canonical
+                    and details.get("schedule_uid") == instance.uid
+                    and details.get("spawn_evidence_ids")
+                ):
+                    executions += 1
+                    spawned.extend(details["spawn_evidence_ids"])
+                    covered.extend(finding.evidence_ids)
+            if not executions:
+                continue
+            all_covered = executions == len(local)
+            result.append(
+                CausalExplanation(
+                    explaining_claim=source.hypothesis_id,
+                    explained_claim=target.hypothesis_id,
+                    actor=source.causal_actor,
+                    actor_instance=instance,
+                    manifestation=target.causal_actor,
+                    manifestation_instance=target.actor_instance,
+                    episode_onset=source.episode_onset,
+                    mechanism="CONTROLLER_SPAWNED_EXECUTION",
+                    path=(
+                        CausalHop(
+                            source=source.causal_actor,
+                            relation="spawns",
+                            target=target.causal_actor,
+                        ),
+                    ),
+                    evidence_ids=tuple(sorted(set(spawned))),
+                    explained_evidence_ids=tuple(sorted(set(covered))),
+                    coverage=("EXACT_SPAWN_RECORD_UIDS", "ALL_LOCAL_FACTS_CHECKED"),
+                    rule_id=SPAWN_EXPLANATION_RULE,
+                    consequence="EXPLAINS_CLAIM" if all_covered else "EXPLAINS_OBSERVATION",
+                    remaining_uncertainty=(
+                        "SPAWN_DOES_NOT_ESTABLISH_INCIDENT_INITIATION",
+                        *(() if all_covered else ("OTHER_ACTOR_FACTS_REMAIN",)),
+                    ),
+                )
+            )
+    return result
 
 
 def explanations(
@@ -247,6 +337,7 @@ def explanations(
                         remaining_uncertainty=("REMOTE_FAILURE_ORIGIN", "OTHER_ACTOR_FACTS_REMAIN"),
                     )
                 )
+    result.extend(_spawn_explanations(hypotheses, supported, excluded_sources))
     # Edges in cycles never remove claims. The raw observations remain auditable.
     adjacency: dict[str, set[str]] = {}
     for item in result:
@@ -298,6 +389,7 @@ def answer_frontier(
             r
             for r in relations
             if r.actor == alternative.actor
+            and r.rule_id != SPAWN_EXPLANATION_RULE
             and r.explained_claim in alternative.material_for_hypothesis_ids
         ]
         valid = [

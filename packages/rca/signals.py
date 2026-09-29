@@ -822,6 +822,8 @@ def fault_event_findings(events: Sequence[ClusterEvent], topology: Topology) -> 
                 details["schedule"] = execution.schedule.entity.canonical
                 if execution.schedule.uid is not None:
                     details["schedule_uid"] = execution.schedule.uid
+                    # The controller record naming this instance; only a UID-keyed owner has one.
+                    details["spawn_evidence_ids"] = list(execution.spawn_evidence)
                 details["schedule_active_from"] = active_from.isoformat() if active_from else None
                 details["schedule_active_to"] = active_to.isoformat() if active_to else None
         details["targets"] = sorted({t.canonical for t in targets})

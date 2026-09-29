@@ -146,7 +146,12 @@ must be conditioned on the claims where the relation is exercised.
 - **Cost:** every diagnosis re-derives the case once per member of `O` (median 4, up to 37; a 36-member
   snapshot takes minutes). Evaluating one representative per role-breakpoint interval is allowed by §3 and
   not implemented.
-- **Active investigation** reassesses on every turn; its effect and replay parity with timing on have not
-  been re-measured.
+- **Active investigation** reassesses on every turn. Measured 2026-09-29 (full regression and offline
+  replay of all 35 scenarios, timing on): replay 35/35 PASS with source and transition parity true;
+  snapshot and active status distributions identical to the run before timing; queries 210 → 210 and open
+  material frontier 637 → 637; unresolved claims 128 → 150 (the same +22 as the snapshot measurement);
+  decision-changing queries 47 → 49 (one more each in the two largest onset sets, Scenario-20 and
+  Scenario-102); recorded source calls 525,543 → 581,700 (+11%, at most 28,641 per scenario); regression
+  wall time about 30 minutes with 4 workers.
 - **Formation stability** is reported and gates strong authority, but no rule yet consumes it beyond §5.2.
 - Console and web do not display stability, withheld authority or `instance_resolution`.

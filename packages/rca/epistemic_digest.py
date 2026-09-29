@@ -59,7 +59,15 @@ def _timing_document(timing: TimingAssessment) -> dict[str, object]:
         ],
         "status": timing.status.value,
         "outcomes": [
-            {"onset": _iso(o.onset), "diagnosis": o.diagnosis_status} for o in timing.outcomes
+            {
+                "onset": _iso(o.onset),
+                "diagnosis": o.diagnosis_status,
+                "drivers": [
+                    {"key": d.hypothesis_key, "change": d.change, "reason": d.reason}
+                    for d in sorted(o.drivers, key=lambda d: (d.hypothesis_key, d.change))
+                ],
+            }
+            for o in timing.outcomes
         ],
         "claims": [
             {

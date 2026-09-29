@@ -33,6 +33,7 @@ from packages.rca.model import (
     PreconditionStatus,
     RelationTiming,
     ResolutionTrace,
+    StatusDriver,
     TimingAssessment,
     TimingStability,
     WithheldAuthority,
@@ -144,6 +145,8 @@ class ClaimView:
     mechanism: str
     evidence: frozenset[str]
     relations: Mapping[str, str]
+    # SUPPORTED, UNRESOLVED or NONE: whether the claim competes for the root cause.
+    standing: str = "NONE"
 
 
 @dataclass(frozen=True)
@@ -178,6 +181,13 @@ def claim_views(hypotheses: Sequence[Hypothesis], trace: ResolutionTrace) -> dic
             actor=hypothesis.causal_actor.canonical,
             mechanism=hypothesis.mechanism,
             evidence=frozenset(e for f in hypothesis.findings for e in f.evidence_ids),
+            standing=(
+                "SUPPORTED"
+                if hypothesis.hypothesis_id in trace.plausible_hypotheses
+                else "UNRESOLVED"
+                if hypothesis.hypothesis_id in trace.unresolved_hypotheses
+                else "NONE"
+            ),
             relations={
                 RELATION_D1: d1,
                 RELATION_EXECUTION: support.get(EXECUTION_RULE_ID, "ABSENT"),
@@ -215,6 +225,52 @@ def _ended_rule_unassessable(audit: HypothesisResolutionAudit | None) -> bool:
         )
         for item in audit.precondition_audit
     )
+
+
+_MAX_DRIVERS = 12
+
+
+def _status_drivers(base: OnsetView, other: OnsetView) -> tuple[StatusDriver, ...]:
+    """Claims whose competition standing differs between the onset of record and ``other``.
+
+    Explains a status difference in the words of the evidence: a rule that could not be
+    judged is reported as such, not as a contradiction.
+    """
+    drivers: list[StatusDriver] = []
+    for key in sorted(set(base.claims) | set(other.claims)):
+        before, after = base.claims.get(key), other.claims.get(key)
+        was = before.standing if before else "NONE"
+        now = after.standing if after else "NONE"
+        if (was == "NONE") == (now == "NONE"):
+            continue
+        claim = after or before
+        assert claim is not None
+        if now != "NONE":
+            change = "GAINS_COMPETITION"
+            if before is None:
+                reason = "FORMS_ONLY_UNDER_THIS_ONSET"
+            elif after is not None and any(
+                before.relations.get(rel) == ELIMINATED and after.relations.get(rel) == UNASSESSABLE
+                for rel in (RELATION_ENDED_EPISODE, RELATION_TEMPORAL_CONTRADICTION)
+            ):
+                reason = "BLOCKED_ENDED_EPISODE_RULE"
+            elif after is not None and any(
+                before.relations.get(rel) == ELIMINATED
+                and after.relations.get(rel) == NOT_ELIMINATED
+                for rel in (RELATION_ENDED_EPISODE, RELATION_TEMPORAL_CONTRADICTION)
+            ):
+                reason = "ELIMINATION_NOT_HOLDING"
+            else:
+                reason = "OTHER"
+        else:
+            change = "LEAVES_COMPETITION"
+            reason = (
+                "NO_LONGER_FORMED" if after is None else "ELIMINATED_OR_EXPLAINED_UNDER_THIS_ONSET"
+            )
+        drivers.append(
+            StatusDriver(hypothesis_key=key, actor=claim.actor, change=change, reason=reason)
+        )
+    return tuple(drivers[:_MAX_DRIVERS])
 
 
 def compute_timing_assessment(
@@ -285,7 +341,15 @@ def compute_timing_assessment(
         uncertainty=uncertainty,
         status=status,
         outcomes=tuple(
-            OnsetOutcome(onset=onset, diagnosis_status=evaluated[onset].diagnosis_status)
+            OnsetOutcome(
+                onset=onset,
+                diagnosis_status=evaluated[onset].diagnosis_status,
+                drivers=(
+                    _status_drivers(base, evaluated[onset])
+                    if evaluated[onset].diagnosis_status != base.diagnosis_status
+                    else ()
+                ),
+            )
             for onset in sorted(evaluated)
         ),
         claims=tuple(claims),

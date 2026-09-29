@@ -522,13 +522,36 @@ class WithheldAuthority(BaseModel):
     relations: tuple[str, ...] = ()
 
 
+class StatusDriver(BaseModel):
+    """One claim whose standing differs from the onset of record and so moves the status.
+
+    ``change`` says whether it enters or leaves competition under the assessed onset;
+    ``reason`` says why, in the words of the evidence, never as a contradiction unless the
+    evidence actually contradicted: ``BLOCKED_ENDED_EPISODE_RULE`` (the rule could not be
+    judged, no observations after the deadline), ``ELIMINATION_NOT_HOLDING`` (a positive
+    outcome differs), ``FORMS_ONLY_UNDER_THIS_ONSET``, ``NO_LONGER_FORMED``,
+    ``ELIMINATED_OR_EXPLAINED_UNDER_THIS_ONSET`` or ``OTHER``.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    hypothesis_key: str
+    actor: str
+    change: str
+    reason: str
+
+
 class OnsetOutcome(BaseModel):
-    """The diagnosis status the same evidence gives under one admissible onset (audit)."""
+    """The diagnosis status the same evidence gives under one admissible onset (audit).
+
+    ``drivers`` is filled only when the status differs from the onset of record.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     onset: datetime
     diagnosis_status: str
+    drivers: tuple[StatusDriver, ...] = ()
 
 
 class TimingAssessment(BaseModel):
@@ -1904,6 +1927,7 @@ __all__ = [
     "OnsetOutcome",
     "OnsetUncertainty",
     "RelationTiming",
+    "StatusDriver",
     "TimingAssessment",
     "TimingStability",
     "WithheldAuthority",

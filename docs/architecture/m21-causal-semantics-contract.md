@@ -56,6 +56,25 @@ structural config bridge. Missing UID is not invented. Its supported scope is
 that observed admission rejection, not why all quota demand arose or service
 recovery.
 
+`m21.support.observed-fault-execution.v1` (2026-09-30, owner-approved carrier: Schedule
+instance) adds `OBSERVED_MECHANISM_CAUSE` from a chaos **execution witness** plus an
+**incident-effect relation**. The witness is produced at the exact experiment instance:
+its controller records give the target pod, `Applied` time and an observed `Recovered` time
+(an interval whose end is unobserved proves nothing). The effect relation holds for a target
+when the exact Pod claim of that target, in the same episode, is a declared incident symptom
+of the holder, has a failure observation inside `[Applied, Recovered]` and **none before
+`Applied`**. `Spawned`, `Applied` or a name match alone confer nothing. The witness is carried
+to the parent **Schedule instance** only through the exact `controller-spawn` records (UID on
+both sides, same as the explanation rule); a Schedule carries the witnesses of its own
+spawned experiments and no others. An experiment with no admitted parent Schedule claim is
+its own holder under the same conditions. The holder must already be D1-supported, and the
+timing contract's gates apply unchanged (`execution` is the fired state of this rule; a
+sensitive one withholds strong authority). Scope: only the observed effect at that target.
+The witness covers a declared symptom only where the target itself is that symptom, so a
+service-level symptom stays uncovered and `RESOLVED` is not reachable without a verified
+path to it. The fault action (`spec.action`) is not observed, so the record states the
+chaos kind, never a specific action. Recovery stays `NOT_ASSESSED`.
+
 `MECHANISM_VERIFIED_CAUSE` / legacy `RESOLVED` requires one eligible supported
 claim, execution witnesses covering **every declared incident symptom**, no
 unresolved admitted claim, and no unanswered material frontier. The decision

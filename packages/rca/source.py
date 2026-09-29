@@ -9,6 +9,7 @@ from typing import Any, Protocol
 
 from packages.rca.model import (
     Alert,
+    AlertEpisode,
     ClusterEvent,
     EntityRef,
     LogRecord,
@@ -20,6 +21,7 @@ from packages.rca.model import (
     TrafficObservation,
 )
 from packages.rca.pod_status import pod_status_from_history
+from packages.rca.timing_stability import alert_fingerprint
 
 
 class ObservationSource(Protocol):
@@ -85,6 +87,8 @@ class InMemorySource:
     trace_items: list[TraceSpanObservation] = field(default_factory=list)
     cutoff: datetime | None = None
     alert_coverage_start: datetime | None = None
+    # Explicit capture history; when absent each alert is one episode that is still firing.
+    alert_episode_items: list[AlertEpisode] | None = None
 
     def incident_id(self) -> str:
         return self.name
@@ -97,6 +101,27 @@ class InMemorySource:
 
     def alert_observation_start(self) -> datetime | None:
         return self.alert_coverage_start
+
+    def alert_episodes(self) -> Sequence[AlertEpisode]:
+        if self.alert_episode_items is not None:
+            return self.alert_episode_items
+        seen: dict[tuple[str, datetime], AlertEpisode] = {}
+        for alert in self.alert_items:
+            fingerprint = alert_fingerprint({"alertname": alert.name, **alert.labels})
+            captured = self.cutoff or alert.starts_at
+            seen.setdefault(
+                (fingerprint, alert.starts_at),
+                AlertEpisode(
+                    fingerprint=fingerprint,
+                    name=alert.name,
+                    service=alert.service,
+                    starts_at=alert.starts_at,
+                    first_capture=captured,
+                    last_capture=captured,
+                    firing_at_cutoff=True,
+                ),
+            )
+        return sorted(seen.values(), key=lambda e: (e.starts_at, e.fingerprint))
 
     def object_history(self) -> Mapping[EntityRef, Sequence[ObjectVersion]]:
         history: dict[EntityRef, list[ObjectVersion]] = {}

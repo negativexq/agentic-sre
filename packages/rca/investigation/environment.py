@@ -11,6 +11,7 @@ from packages.rca.investigation.actions import observation_identity
 from packages.rca.investigation.tempo import TempoTraceBatch
 from packages.rca.model import (
     Alert,
+    AlertEpisode,
     ClusterEvent,
     EntityRef,
     InvestigationQuery,
@@ -742,6 +743,11 @@ class InitialObservationView:
     def alert_observation_start(self) -> datetime | None:
         # Alert coverage is a property of the channel, not of the bounded view.
         return self.full_source.alert_observation_start()
+
+    def alert_episodes(self) -> Sequence[AlertEpisode] | None:
+        # Capture history is also a property of the channel, not of the bounded view.
+        method = getattr(self.full_source, "alert_episodes", None)
+        return method() if callable(method) else None
 
     def object_history(self) -> dict[EntityRef, tuple[ObjectVersion, ...]]:
         full = self.full_source.object_history()

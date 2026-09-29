@@ -18,6 +18,7 @@ from packages.rca.json_access import child
 from packages.rca.model import (
     CLUSTER_SCOPE,
     Alert,
+    AlertEpisode,
     ClusterEvent,
     EntityRef,
     Lifecycle,
@@ -29,6 +30,7 @@ from packages.rca.model import (
     TrafficObservation,
 )
 from packages.rca.pod_status import pod_status_from_body
+from packages.rca.timing_stability import alert_fingerprint
 from packages.rca.traces import normalize_trace_status, parse_trace_mapping, semantic_attributes
 
 _OBJECTS = "k8s_objects_raw.tsv"
@@ -406,6 +408,79 @@ class SnapshotSource:
             if (captured := _alert_capture_time(relative)) is not None
         ]
         return min(captures) if captures else None
+
+    @cached_property
+    def _alert_episodes(self) -> tuple[AlertEpisode, ...]:
+        """Episodes from the alert captures at or before the observation cutoff.
+
+        One episode is one (alert fingerprint, ``activeAt``). ``firing_at_cutoff`` is presence
+        in the last such capture. Nothing is read from captures after the cutoff.
+        """
+        cutoff = self._observation_cutoff
+        captures: list[tuple[datetime, str, list[tuple[dict[str, str], datetime]]]] = []
+        for relative in self.scenario.evidence_files.get(ITBenchEvidenceCategory.ALERTS, ()):
+            captured = _alert_capture_time(relative)
+            if captured is None or (cutoff is not None and captured > cutoff):
+                continue
+            value = json.loads((self.root / relative).read_text(encoding="utf-8"))
+            if isinstance(value, dict):
+                value = value.get("data", value)
+                value = value.get("alerts", []) if isinstance(value, dict) else value
+            firing: list[tuple[dict[str, str], datetime]] = []
+            for item in value if isinstance(value, list) else []:
+                if not isinstance(item, dict) or item.get("state") != "firing":
+                    continue
+                labels = item.get("labels")
+                starts = parse_time(item.get("activeAt"))
+                if not isinstance(labels, dict) or starts is None:
+                    continue
+                if not isinstance(labels.get("alertname"), str):
+                    continue
+                firing.append(({str(k): str(v) for k, v in labels.items()}, starts))
+            captures.append((captured, relative, firing))
+        if not captures:
+            return ()
+        captures.sort(key=lambda item: (item[0], item[1]))
+        last_capture = captures[-1][0]
+        seen: dict[tuple[str, datetime], dict[str, Any]] = {}
+        for captured, relative, firing in captures:
+            for labels, starts in firing:
+                fingerprint = alert_fingerprint(labels)
+                entry = seen.setdefault(
+                    (fingerprint, starts),
+                    {
+                        "name": labels["alertname"],
+                        "service": labels.get("service_name") or labels.get("service"),
+                        "first": captured,
+                        "evidence": [relative],
+                        "captures": 0,
+                    },
+                )
+                entry["captures"] += 1
+                entry["last"] = captured
+                entry["last_evidence"] = relative
+        episodes = []
+        for (fingerprint, starts), entry in seen.items():
+            evidence = [entry["evidence"][0]]
+            if entry["last_evidence"] != evidence[0]:
+                evidence.append(entry["last_evidence"])
+            episodes.append(
+                AlertEpisode(
+                    fingerprint=fingerprint,
+                    name=entry["name"],
+                    service=entry["service"],
+                    starts_at=starts,
+                    first_capture=entry["first"],
+                    last_capture=entry["last"],
+                    captures=entry["captures"],
+                    firing_at_cutoff=entry["last"] == last_capture,
+                    evidence_ids=tuple(evidence),
+                )
+            )
+        return tuple(sorted(episodes, key=lambda e: (e.starts_at, e.fingerprint)))
+
+    def alert_episodes(self) -> Sequence[AlertEpisode]:
+        return self._alert_episodes
 
     @cached_property
     def _object_rows(self) -> list[tuple[datetime, int, EntityRef, dict[str, Any], str | None]]:

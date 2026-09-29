@@ -410,6 +410,69 @@ class Finding(BaseModel):
         return self
 
 
+class AlertEpisode(BaseModel):
+    """One alert episode as the alert channel captured it (M21 timing contract §3).
+
+    An episode is a fingerprint plus one ``starts_at``. ``firing_at_cutoff`` says whether it
+    was still firing in the last capture at or before the revision cutoff; it is a fact of that
+    capture, never a prediction of how long the episode lasts.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    fingerprint: str
+    name: str
+    service: str | None = None
+    starts_at: datetime
+    first_capture: datetime
+    last_capture: datetime
+    captures: int = 1
+    firing_at_cutoff: bool = False
+    evidence_ids: tuple[str, ...] = ()
+
+
+class TimingStability(StrEnum):
+    """Whether a decision holds over every admissible onset (M21 timing contract §4)."""
+
+    STABLE = "STABLE"
+    SENSITIVE = "SENSITIVE"
+    UNASSESSED = "UNASSESSED"
+
+
+class OnsetCandidate(BaseModel):
+    """One admissible onset with the episodes that derive it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    onset: datetime
+    is_h0: bool = False
+    is_upper: bool = False
+    episodes: tuple[AlertEpisode, ...] = ()
+
+
+class OnsetUncertainty(BaseModel):
+    """The evidence-derived set ``O`` of admissible onsets at one revision cutoff.
+
+    ``h0`` is the M21 §10.2 onset of record. ``upper`` is the earliest qualified episode still
+    firing in the last capture (or, when none is, the latest qualified start). ``members`` are
+    every qualified episode start in ``[h0, upper]``. Empty ``members`` means the onset is not
+    assessable and every timing outcome is ``UNASSESSED``.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    reason: str = "ONSET_UNKNOWN"
+    cutoff: datetime | None = None
+    alert_observation_start: datetime | None = None
+    h0: datetime | None = None
+    upper: datetime | None = None
+    members: tuple[OnsetCandidate, ...] = ()
+
+    @property
+    def assessable(self) -> bool:
+        return bool(self.members)
+
+
 class Symptoms(BaseModel):
     """What the incident looks like from its alerts."""
 
@@ -1736,6 +1799,7 @@ class InvestigationResult(BaseModel):
 __all__ = [
     "CLUSTER_SCOPE",
     "Alert",
+    "AlertEpisode",
     "Candidate",
     "CausalFamily",
     "CausalHop",
@@ -1752,6 +1816,9 @@ __all__ = [
     "EntityInstanceRef",
     "FamilyState",
     "InstanceResolution",
+    "OnsetCandidate",
+    "OnsetUncertainty",
+    "TimingStability",
     "Finding",
     "FindingKind",
     "InvestigationStep",

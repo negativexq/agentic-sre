@@ -40,6 +40,7 @@ _SOURCE_METHODS = frozenset(
         "trace_observations",
         "pod_status_observations",
         "alert_observation_start",
+        "alert_episodes",
         "access_ledger",
     }
 )

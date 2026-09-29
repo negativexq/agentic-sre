@@ -506,6 +506,22 @@ class ClaimTiming(BaseModel):
         )
 
 
+class WithheldAuthority(BaseModel):
+    """One piece of temporal authority that was not granted because it was timing-sensitive.
+
+    The claim is never removed and its possible-cause support is kept; only the stronger or
+    negative authority that leaned on an unstable relation is withheld.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    hypothesis_key: str
+    actor: str
+    # TEMPORAL_ELIMINATION, ENDED_EPISODE_ELIMINATION or STRONG_MECHANISM.
+    authority: str
+    relations: tuple[str, ...] = ()
+
+
 class OnsetOutcome(BaseModel):
     """The diagnosis status the same evidence gives under one admissible onset (audit)."""
 
@@ -530,6 +546,9 @@ class TimingAssessment(BaseModel):
     status: TimingStability = TimingStability.UNASSESSED
     outcomes: tuple[OnsetOutcome, ...] = ()
     claims: tuple[ClaimTiming, ...] = ()
+    # Authority the onset-of-record decision would have carried but that was withheld because
+    # a relation it relied on is not stable over the onset set (M21 timing contract §5).
+    withheld: tuple[WithheldAuthority, ...] = ()
 
     def claim(self, hypothesis_key: str) -> ClaimTiming | None:
         return next((c for c in self.claims if c.hypothesis_key == hypothesis_key), None)
@@ -1887,6 +1906,7 @@ __all__ = [
     "RelationTiming",
     "TimingAssessment",
     "TimingStability",
+    "WithheldAuthority",
     "Finding",
     "FindingKind",
     "InvestigationStep",

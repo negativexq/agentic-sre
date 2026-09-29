@@ -13,28 +13,37 @@ from __future__ import annotations
 
 import json
 from collections import Counter, defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime
 from hashlib import sha256
 from typing import Any
 
+from packages.rca.episode_end import RULE_ID as EPISODE_END_RULE_ID
 from packages.rca.model import (
     AlertEpisode,
     ClaimTiming,
     Hypothesis,
+    HypothesisResolutionAudit,
     OnsetCandidate,
     OnsetOutcome,
     OnsetUncertainty,
+    PreconditionStatus,
     RelationTiming,
     ResolutionTrace,
     TimingAssessment,
     TimingStability,
+    WithheldAuthority,
 )
 from packages.rca.signals import is_background_alert
 
 D1_RULE_ID = "m21.support.change-onset-path"
+# The strong rule that today proves mechanism execution: an observed quota rejection.
+EXECUTION_RULE_ID = "m21.support.observed-quota-rejection"
 RELATION_D1 = "d1"
+RELATION_EXECUTION = "execution"
 RELATION_ONSET = "onset_relation"
 RELATION_TEMPORAL_CONTRADICTION = "temporal_contradiction"
 RELATION_ENDED_EPISODE = "ended_episode"
@@ -42,6 +51,8 @@ _TEMPORAL_CONTRADICTION_CODE = "EXPLICIT_TEMPORAL_CONTRADICTION"
 _ENDED_EPISODE_CODE = "MANIFESTATION_EPISODE_ENDED_BEFORE_ONSET"
 ELIMINATED = "ELIMINATED"
 NOT_ELIMINATED = "NONE"
+# The rule could not be evaluated under this onset; it neither holds nor fails to hold.
+UNASSESSABLE = "UNASSESSABLE"
 
 
 def alert_fingerprint(labels: Mapping[str, Any]) -> str:
@@ -160,14 +171,8 @@ def claim_views(hypotheses: Sequence[Hypothesis], trace: ResolutionTrace) -> dic
         if not key or repeats[key] > 1:
             continue
         audit = audits.get(hypothesis.hypothesis_id)
-        d1 = next(
-            (
-                r.status.value
-                for r in (audit.root_support if audit else ())
-                if r.rule_id == D1_RULE_ID
-            ),
-            "ABSENT",
-        )
+        support = {r.rule_id: r.status.value for r in (audit.root_support if audit else ())}
+        d1 = support.get(D1_RULE_ID, "ABSENT")
         own = codes.get(hypothesis.hypothesis_id, set())
         views[key] = ClaimView(
             actor=hypothesis.causal_actor.canonical,
@@ -175,16 +180,41 @@ def claim_views(hypotheses: Sequence[Hypothesis], trace: ResolutionTrace) -> dic
             evidence=frozenset(e for f in hypothesis.findings for e in f.evidence_ids),
             relations={
                 RELATION_D1: d1,
+                RELATION_EXECUTION: support.get(EXECUTION_RULE_ID, "ABSENT"),
                 RELATION_ONSET: ",".join(audit.onset_relation) if audit else "",
                 RELATION_TEMPORAL_CONTRADICTION: (
                     ELIMINATED if _TEMPORAL_CONTRADICTION_CODE in own else NOT_ELIMINATED
                 ),
-                RELATION_ENDED_EPISODE: ELIMINATED
-                if _ENDED_EPISODE_CODE in own
-                else NOT_ELIMINATED,
+                # Three-valued: an elimination the rule could not even attempt (its evidence
+                # window after the deadline is missing) is UNASSESSABLE, not "not eliminated".
+                RELATION_ENDED_EPISODE: (
+                    ELIMINATED
+                    if _ENDED_EPISODE_CODE in own
+                    else UNASSESSABLE
+                    if _ended_rule_unassessable(audit)
+                    else NOT_ELIMINATED
+                ),
             },
         )
     return views
+
+
+def _ended_rule_unassessable(audit: HypothesisResolutionAudit | None) -> bool:
+    """Whether the ended-episode rule's preconditions were not met for this claim.
+
+    The rule needs observations after onset plus grace. When the snapshot ends too soon after
+    an admissible onset, the rule is blocked: nothing was contradicted, it cannot be judged.
+    """
+    if audit is None:
+        return False
+    return any(
+        item.rule_id == EPISODE_END_RULE_ID
+        and (
+            item.reason is not None
+            or (item.result is not None and item.result.status is not PreconditionStatus.PASS)
+        )
+        for item in audit.precondition_audit
+    )
 
 
 def compute_timing_assessment(
@@ -222,12 +252,19 @@ def compute_timing_assessment(
         relations = []
         for name in sorted(base.claims[key].relations):
             values = sorted({c.relations.get(name, "ABSENT") for c in present})
+            # UNASSESSABLE never contradicts anything: instability needs two different
+            # values that were each actually assessed (M21 timing contract, relation values).
+            assessed = [v for v in values if v != UNASSESSABLE]
             relations.append(
                 RelationTiming(
                     relation=name,
-                    stability=TimingStability.STABLE
-                    if len(values) == 1
-                    else TimingStability.SENSITIVE,
+                    stability=(
+                        TimingStability.SENSITIVE
+                        if len(assessed) > 1
+                        else TimingStability.STABLE
+                        if assessed
+                        else TimingStability.UNASSESSED
+                    ),
                     values=tuple(values),
                 )
             )
@@ -255,12 +292,127 @@ def compute_timing_assessment(
     )
 
 
+@dataclass(frozen=True)
+class TimingMasks:
+    """Authority withheld at the onset of record because it is not timing-stable (§5).
+
+    Identifiers are the hypothesis ids of the revision being resolved. A masked claim is
+    never removed and keeps its possible-cause support; only the authority that leaned on an
+    unstable relation is not granted, and nothing is upgraded.
+    """
+
+    temporal: frozenset[str] = frozenset()
+    ended: frozenset[str] = frozenset()
+    strong: frozenset[str] = frozenset()
+    withheld: tuple[WithheldAuthority, ...] = ()
+
+    def any(self) -> bool:
+        return bool(self.temporal or self.ended or self.strong)
+
+
+_NO_MASKS = TimingMasks()
+_MASKS: ContextVar[TimingMasks | None] = ContextVar("timing_masks", default=None)
+
+
+def current_timing_masks() -> TimingMasks:
+    return _MASKS.get() or _NO_MASKS
+
+
+@contextmanager
+def applied_timing_masks(masks: TimingMasks) -> Iterator[None]:
+    """Resolve under ``masks``; the resolver reads them wherever it grants temporal authority."""
+    token = _MASKS.set(masks)
+    try:
+        yield
+    finally:
+        _MASKS.reset(token)
+
+
+def derive_timing_masks(
+    hypotheses: Sequence[Hypothesis], trace: ResolutionTrace, timing: TimingAssessment
+) -> TimingMasks:
+    """Which authority of the onset-of-record decision the stability outcomes withhold.
+
+    - A temporal or ended-episode *elimination* is negative authority; it stands only when
+      that relation is stable over ``O`` (§5.3). A sensitive one leaves the claim unresolved.
+    - A *strong* (mechanism-verified) authority relies on the claim's formation, its D1
+      support and its execution witness; all three must be stable (§5.2).
+
+    Nothing is derived when the onset was not assessed.
+    """
+    if not timing.claims:
+        return TimingMasks()
+    codes: dict[str, set[str]] = defaultdict(set)
+    for elimination in trace.eliminations:
+        codes[elimination.hypothesis_id].add(elimination.code.value)
+    strong_ids = set(trace.mechanism_verified_hypotheses)
+    temporal: set[str] = set()
+    ended: set[str] = set()
+    strong: set[str] = set()
+    withheld: list[WithheldAuthority] = []
+    for hypothesis in hypotheses:
+        claim = timing.claim(hypothesis.hypothesis_key)
+        own = codes.get(hypothesis.hypothesis_id, set())
+        actor = hypothesis.causal_actor.canonical
+        key = hypothesis.hypothesis_key
+        if claim is not None:
+            for code, relation, authority, bucket in (
+                (
+                    _TEMPORAL_CONTRADICTION_CODE,
+                    RELATION_TEMPORAL_CONTRADICTION,
+                    "TEMPORAL_ELIMINATION",
+                    temporal,
+                ),
+                (_ENDED_EPISODE_CODE, RELATION_ENDED_EPISODE, "ENDED_EPISODE_ELIMINATION", ended),
+            ):
+                if code in own and claim.relation(relation) is TimingStability.SENSITIVE:
+                    bucket.add(hypothesis.hypothesis_id)
+                    withheld.append(
+                        WithheldAuthority(
+                            hypothesis_key=key,
+                            actor=actor,
+                            authority=authority,
+                            relations=(relation,),
+                        )
+                    )
+        if hypothesis.hypothesis_id in strong_ids:
+            unstable = (
+                ["formation"]
+                if claim is None or claim.formation is not TimingStability.STABLE
+                else []
+            ) + [
+                relation
+                for relation in (RELATION_D1, RELATION_EXECUTION)
+                if claim is None or claim.relation(relation) is not TimingStability.STABLE
+            ]
+            if unstable:
+                strong.add(hypothesis.hypothesis_id)
+                withheld.append(
+                    WithheldAuthority(
+                        hypothesis_key=key,
+                        actor=actor,
+                        authority="STRONG_MECHANISM",
+                        relations=tuple(unstable),
+                    )
+                )
+    return TimingMasks(
+        temporal=frozenset(temporal),
+        ended=frozenset(ended),
+        strong=frozenset(strong),
+        withheld=tuple(sorted(withheld, key=lambda w: (w.hypothesis_key, w.authority))),
+    )
+
+
 __all__ = [
     "ClaimView",
     "OnsetView",
+    "TimingMasks",
     "alert_fingerprint",
+    "applied_timing_masks",
     "claim_views",
     "compute_timing_assessment",
+    "current_timing_masks",
     "derive_onset_uncertainty",
+    "derive_timing_masks",
     "source_alert_episodes",
 ]

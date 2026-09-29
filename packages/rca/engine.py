@@ -98,9 +98,11 @@ from packages.rca.signals import (
 from packages.rca.source import ObservationSource
 from packages.rca.timing_stability import (
     OnsetView,
+    applied_timing_masks,
     claim_views,
     compute_timing_assessment,
     derive_onset_uncertainty,
+    derive_timing_masks,
     source_alert_episodes,
 )
 from packages.rca.topology import Topology, derive_edges, with_runtime_propagation
@@ -548,6 +550,16 @@ def _resolution_trace(case: Case, config: EngineConfig) -> ResolutionTrace:
     )
 
 
+def _without_ended_episodes(
+    eligibilities: RootCauseEligibilities, hypothesis_ids: frozenset[str]
+) -> RootCauseEligibilities:
+    """Eligibilities without the ended-episode exclusion of the given claims."""
+    return RootCauseEligibilities(
+        eligibilities.assessments,
+        {k: v for k, v in eligibilities.ended_episodes.items() if k not in hypothesis_ids},
+    )
+
+
 def assess_case_timing(
     case: Case, config: EngineConfig, trace: ResolutionTrace
 ) -> TimingAssessment:
@@ -652,6 +664,20 @@ def diagnose_case(
             **_requirement_provenance(case),
         )
     resolution_trace = _resolution_trace(case, config)
+    timing: TimingAssessment | None = None
+    if config.timing_stability and case.assessed_onset is None:
+        timing = assess_case_timing(case, config, resolution_trace)
+        masks = derive_timing_masks(case.hypotheses, resolution_trace, timing)
+        if masks.any():
+            # Authority that is not timing-stable is withheld and the case is resolved again
+            # under that withholding. Ended-episode ineligibility is dropped for the same
+            # claims so root selection below sees them as the resolution does (§5).
+            case.root_cause_eligibilities = _without_ended_episodes(
+                case.root_cause_eligibilities, masks.ended
+            )
+            with applied_timing_masks(masks):
+                resolution_trace = _resolution_trace(case, config)
+            timing = timing.model_copy(update={"withheld": masks.withheld})
     answers = {a.alternative_id: a for a in resolution_trace.frontier_answers}
     case.structural_alternatives = [
         a.model_copy(update={"answer": answers.get(a.alternative_id)})
@@ -673,10 +699,8 @@ def diagnose_case(
             events=case.source.events(),
         ),
     )
-    if config.timing_stability and case.assessed_onset is None:
-        resolution_trace = resolution_trace.model_copy(
-            update={"timing": assess_case_timing(case, config, resolution_trace)}
-        )
+    if timing is not None:
+        resolution_trace = resolution_trace.model_copy(update={"timing": timing})
     information_gaps = derive_information_gaps(
         case.hypotheses,
         resolution_trace,

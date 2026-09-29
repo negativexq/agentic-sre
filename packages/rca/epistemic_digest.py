@@ -77,6 +77,10 @@ def _timing_document(timing: TimingAssessment) -> dict[str, object]:
             }
             for claim in sorted(timing.claims, key=lambda c: c.hypothesis_key)
         ],
+        "withheld": [
+            {"key": w.hypothesis_key, "authority": w.authority, "relations": list(w.relations)}
+            for w in sorted(timing.withheld, key=lambda w: (w.hypothesis_key, w.authority))
+        ],
     }
 
 

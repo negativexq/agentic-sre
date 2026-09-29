@@ -68,6 +68,7 @@ from packages.rca.temporal import (
     parse_time,
     temporal_contradiction_certainty,
 )
+from packages.rca.timing_stability import current_timing_masks
 
 _CHANGE_KINDS = frozenset(
     {
@@ -309,7 +310,10 @@ def assess_hypothesis(
             if certainty is TemporalContradictionCertainty.DEFINITELY_LATE
         )
 
-    if hard_findings:
+    # A contradiction that holds under the onset of record but not under every admissible
+    # onset is negative authority that is not timing-stable: the claim stays unresolved
+    # instead of contradicted (M21 timing contract §5.3).
+    if hard_findings and hypothesis.hypothesis_id not in current_timing_masks().temporal:
         state = HypothesisEpistemicState.CONTRADICTED
     elif local_contradictions:
         state = HypothesisEpistemicState.UNRESOLVED
@@ -816,6 +820,8 @@ def resolve_hypotheses(
         if not preconditions_allow_elimination(results)
     }
     blocked_rules.update(key for key, reasons in supplied_reasons.items() if reasons)
+    # An ended-episode elimination that is not timing-stable does not eliminate (§5.3).
+    blocked_rules.update((hid, EPISODE_END_RULE_ID) for hid in current_timing_masks().ended)
     mismatches = {
         hypothesis_id: mismatch
         for hypothesis_id, mismatch in (mechanism_mismatches or {}).items()
@@ -908,7 +914,15 @@ def resolve_hypotheses(
     supported_ids = set(trace.plausible_hypotheses)
     answers = answer_frontier(material, relations, set(observation_excluded) - set(explained))
     answered = {a.alternative_id for a in answers if a.state == "ANSWERED_ROLE_TRANSFERRED"}
-    strong_ids = {hid for hid in supported_ids if execution[hid].status is RootSupportStatus.FIRED}
+    # Strong authority leans on temporal ordering; when the claim's formation, D1 support or
+    # execution witness is not timing-stable it is not granted and the claim stays a
+    # possible cause (M21 timing contract §5.2). Nothing is ever upgraded.
+    strong_ids = {
+        hid
+        for hid in supported_ids
+        if execution[hid].status is RootSupportStatus.FIRED
+        and hid not in current_timing_masks().strong
+    }
     independent = (
         len(strong_ids) > 1
         and not any("EXPLANATION_CYCLE" in r.remaining_uncertainty for r in relations)

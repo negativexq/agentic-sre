@@ -234,3 +234,28 @@ Son üretim kodu için doğrulama hash'i, ilk ölçüm hash'inden ayrı kaydedil
 son scope-sunum koruması karma güçlü/D1 destek grubunu topluca yükseltmez.
 35 snapshot'taki bütün alan eşitliği ve aktif bantların son kodda replay'i bu
 son düzeltmenin ölçülen sonuçları değiştirmediğini ayrıca kontrol eder.
+
+## Denetleyici-spawn açıklaması, ölçüm (2026-09-30)
+
+`m21.explanation.controller-spawn.v1` (35 görülen dev vakası; tam regresyon, aktif investigation
+dahil, ardından kayıtlı replay). Kuraldan önceki koşuyla karşılaştırma:
+
+| Ölçüm | Önce | Sonra |
+|---|---:|---:|
+| Kayıtlı replay (kaynak ve transition eşitliği) | 35/35 | 35/35 |
+| Snapshot tanısı | 23 COMPETING, 12 INSUFFICIENT | 20 COMPETING, 12 INSUFFICIENT, 3 SUPPORTED_CAUSE (19, 29, 91) |
+| Aktif son tanı, sorgu, karar değiştiren sorgu | 10/24/1, 210, 49 | aynı |
+| Açık materyal frontier, cevaplanan frontier | 637, 0 | 637, 0 |
+| Açıklanan claim | 1 | 104 |
+| Unresolved claim | 150 | 96 |
+| Güçlü destek | 0 | 0 |
+
+Üç yeni `SUPPORTED_CAUSE`'ın üçünde de tanı durumu onset kümesi boyunca kararsızdır
+(`TIMING_SENSITIVE`); §10.2 notlu katman kuralı gereği düşürülmemiştir, ama kesinlik artışı olarak
+sunulmamalıdır.
+
+**Etiket eşleşmeli destek 56 → 14** (11 vakada değişti). Bu, etiketlerin deney nesnelerini adlandırdığı
+vakalarda desteklenen tek ailenin artık Schedule olmasından gelir. Etiket varlık kimliğini skorlar,
+mekanizma doğruluğunu değil; kural etikete göre ayarlanmadı ve bu düşüş bir doğruluk hükmü değildir.
+Hangi varlığın raporlanacak kök neden olduğu (yinelenen fault'ın tanımı olan Schedule mı, tek bir
+yürütme mi) ayrı bir modelleme sorusudur ve etiket eşleşmesiyle karara bağlanmamalıdır.

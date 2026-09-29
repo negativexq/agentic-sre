@@ -34,6 +34,16 @@ an explanation or strong support.
   a target whose **all** local observations are these rejection events is explained as a whole. Any other
   local change, including ambiguous-time changes, remains a rival. The shared
   event is one observation, not independent corroboration.
+- `m21.explanation.controller-spawn.v1` (2026-09-30) explains an experiment instance by the
+  schedule instance whose controller `Spawned` record names it, keyed by UID on both sides
+  (an owner inferred from names has no UID and explains nothing). The schedule claim must be
+  admitted, UID-bound and **supported**: an unresolved schedule never retires a supported
+  experiment. The experiment leaves competition only when **all** of its local facts are
+  that execution; any other local fact keeps it as a rival (`EXPLAINS_OBSERVATION`). The
+  claim is audited, not deleted: its targets and interval stay for later execution rules.
+  It states that executions of one recurring fault are not independent root causes; it does
+  not state that the fault initiated the incident, grants no strong authority, and **never
+  answers a frontier question**.
 - Explanation cycles remain observation records with `EXPLANATION_CYCLE`;
   they cannot retire claims, answer frontier questions or assert independent
   mechanisms. Explanation never supplies its own source support.

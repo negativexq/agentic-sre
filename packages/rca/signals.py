@@ -285,6 +285,7 @@ def _lifecycle_finding(entity: EntityRef, version: ObjectVersion) -> Finding | N
         return Finding(
             kind=FindingKind.OBJECT_DELETED,
             entity=entity,
+            entity_instance=_instance(entity, version.instance_uid),
             at=version.observed_at,
             summary=f"{entity.kind} deleted (first noticed missing at this time)",
             evidence_ids=(version.evidence_id,),
@@ -294,6 +295,7 @@ def _lifecycle_finding(entity: EntityRef, version: ObjectVersion) -> Finding | N
         return Finding(
             kind=FindingKind.OBJECT_CREATED,
             entity=entity,
+            entity_instance=_instance(entity, version.instance_uid),
             at=_creation_time(version.body) or version.observed_at,
             summary=f"{entity.kind} created",
             evidence_ids=(version.evidence_id,),
@@ -316,6 +318,17 @@ def change_findings(history: Mapping[EntityRef, Sequence[ObjectVersion]]) -> lis
                 current.lifecycle is not Lifecycle.UPDATED
                 or previous.lifecycle is Lifecycle.DELETED
             ):
+                continue
+            if (
+                previous.instance_uid
+                and current.instance_uid
+                and previous.instance_uid != current.instance_uid
+            ):
+                created = _lifecycle_finding(
+                    entity, current.model_copy(update={"lifecycle": Lifecycle.CREATED})
+                )
+                if created is not None:
+                    findings.append(created)
                 continue
             before, after = _content(previous.body), _content(current.body)
             leaves = _diff(before, after)
@@ -363,6 +376,7 @@ def change_findings(history: Mapping[EntityRef, Sequence[ObjectVersion]]) -> lis
                 Finding(
                     kind=kind,
                     entity=entity,
+                    entity_instance=_instance(entity, current.instance_uid),
                     at=current.observed_at,
                     summary=summary,
                     evidence_ids=(previous.evidence_id, current.evidence_id),

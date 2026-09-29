@@ -195,7 +195,9 @@ FIXTURES = [
 @pytest.mark.parametrize(("make", "rule", "other"), FIXTURES)
 def test_the_fixture_resolves_through_the_target_rule(make: Any, rule: Any, other: Any) -> None:
     diagnosis = _full(make())
-    assert diagnosis.resolution is Resolution.RESOLVED
+    assert diagnosis.resolution is Resolution.AMBIGUOUS
+    assert diagnosis.resolution_trace is not None
+    assert diagnosis.resolution_trace.diagnosis_status == "SUPPORTED_CAUSE"
     assert diagnosis.root_cause is not None
     assert diagnosis.root_cause.canonical == "shop/Deployment/payment"
     _, elimination = _target(diagnosis, rule)

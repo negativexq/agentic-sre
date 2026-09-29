@@ -9,12 +9,14 @@ from typing import Any, Protocol
 
 from packages.rca.causal_roles import HypothesisCausalRoles, derive_hypothesis_causal_roles
 from packages.rca.channels import attach_channel_assessments, channel_assessments
+from packages.rca.claims import admitted
 from packages.rca.episode_end import RULE_ID as EPISODE_END_RULE_ID
 from packages.rca.episode_end import evaluate_ended_episodes
 from packages.rca.frontier import (
     apply_frontier_progress,
     derive_structural_frontier,
     investigation_status,
+    material_frontier,
 )
 from packages.rca.hypotheses import (
     GroupingResult,
@@ -53,7 +55,6 @@ from packages.rca.ranking import (
     Context,
     RankingConfig,
     annotate_temporal_roles,
-    collapse_fault_instances,
     score_findings,
     symptom_tokens,
     verification_trace,
@@ -89,7 +90,7 @@ from packages.rca.signals import (
     traffic_findings,
 )
 from packages.rca.source import ObservationSource
-from packages.rca.topology import Topology, derive_edges
+from packages.rca.topology import Topology, derive_edges, with_runtime_propagation
 
 
 @dataclass
@@ -149,7 +150,7 @@ class Investigator(Protocol):
 # The deterministic RCA semantics a run was diagnosed with, persisted on every
 # revision. Bump it with any change that can alter a diagnosis from the same
 # evidence; replay refuses a run recorded under another version (M20.3a).
-RCA_ENGINE_VERSION = "1.3.0"
+RCA_ENGINE_VERSION = "2.0.0"
 
 
 @dataclass(frozen=True)
@@ -219,6 +220,7 @@ def build_case(
         history=history,
         incident_onset=symptoms.onset,
     )
+    topology = with_runtime_propagation(topology, runtime_propagation)
     entities = symptom_entities(alerts, topology)
     context = Context(
         symptoms=symptoms,
@@ -260,7 +262,6 @@ def build_case(
         history=history,
     )
     candidates = score_findings(findings, context, config.ranking)
-    candidates = collapse_fault_instances(candidates, topology, symptoms.onset)
     grouping: GroupingResult = group_candidates(candidates, topology, context, config.ranking)
     hypotheses = list(grouping.hypotheses)
     hypothesis_causal_roles = derive_hypothesis_causal_roles(hypotheses, runtime_propagation)
@@ -284,11 +285,7 @@ def build_case(
         grace=config.ranking.verification_onset_grace,
         evaluation_at=context.window_end,
     )
-    structural_alternatives = (
-        list(derive_structural_frontier(context))
-        if getattr(source, "initial_observation_bounded", False)
-        else []
-    )
+    structural_alternatives = list(derive_structural_frontier(context))
     structural_alternatives = list(
         apply_frontier_progress(
             structural_alternatives,
@@ -296,6 +293,12 @@ def build_case(
             queried_dimensions_by_alternative={},
         )
     )
+    material = {
+        item.alternative_id: item for item in material_frontier(structural_alternatives, hypotheses)
+    }
+    structural_alternatives = [
+        material.get(item.alternative_id, item) for item in structural_alternatives
+    ]
     steps = [
         InvestigationStep(
             actor="engine",
@@ -403,7 +406,8 @@ def _root_cause_selectable_hypotheses(case: Case) -> tuple[Hypothesis, ...]:
     return tuple(
         hypothesis
         for hypothesis in case.hypotheses
-        if case.root_cause_eligibilities.is_root_cause_selectable(hypothesis.hypothesis_id)
+        if admitted(hypothesis)
+        and case.root_cause_eligibilities.is_root_cause_selectable(hypothesis.hypothesis_id)
     )
 
 
@@ -455,6 +459,7 @@ def diagnose_case(
             mechanism_mismatches=case.mechanism_mismatches,
             rule_preconditions=case.rule_preconditions,
             precondition_reasons=case.precondition_reasons,
+            structural_alternatives=case.structural_alternatives,
         )
         information_gaps = derive_information_gaps(
             (),
@@ -473,6 +478,7 @@ def diagnose_case(
             discovery_change_namespaces=incident_namespaces(case),
         )
         return Diagnosis(
+            decision_semantics="m21.v2",
             incident_id=case.incident_id,
             root_cause=None,
             confidence=Confidence.UNVERIFIED,
@@ -488,6 +494,7 @@ def diagnose_case(
                 case.structural_alternatives,
                 bounded=bool(getattr(case.source, "initial_observation_bounded", False)),
             ),
+            alternative_hypotheses=tuple(case.hypotheses),
             **_requirement_provenance(case),
         )
     # Resolution compares immutable evidence structures.  Attach the same
@@ -501,7 +508,7 @@ def diagnose_case(
         hypothesis.hypothesis_id: verification_trace(
             hypothesis_candidate(hypothesis), case.context, config.ranking
         )
-        for hypothesis in case.hypotheses[: config.alternatives + 4]
+        for hypothesis in case.hypotheses
     }
     resolution_trace = resolve_hypotheses(
         case.hypotheses,
@@ -511,6 +518,7 @@ def diagnose_case(
         mechanism_mismatches=case.mechanism_mismatches,
         rule_preconditions=case.rule_preconditions,
         precondition_reasons=case.precondition_reasons,
+        structural_alternatives=case.structural_alternatives,
     )
     # M21 F1: influence-channel coverage records, attached after the decision (audit only).
     resolution_trace = attach_channel_assessments(
@@ -544,7 +552,11 @@ def diagnose_case(
         discovery_event_namespaces=authorized_event_namespaces(case, config),
         discovery_change_namespaces=incident_namespaces(case),
     )
-    selectable_hypotheses = _root_cause_selectable_hypotheses(case)
+    selectable_hypotheses = tuple(
+        h
+        for h in _root_cause_selectable_hypotheses(case)
+        if h.hypothesis_id not in resolution_trace.eliminated_hypotheses
+    )
     if not selectable_hypotheses:
         case.steps.append(
             InvestigationStep(
@@ -554,6 +566,7 @@ def diagnose_case(
             )
         )
         return Diagnosis(
+            decision_semantics="m21.v2",
             incident_id=case.incident_id,
             root_cause=None,
             confidence=Confidence.UNVERIFIED,
@@ -572,6 +585,7 @@ def diagnose_case(
                 case.structural_alternatives,
                 bounded=bool(getattr(case.source, "initial_observation_bounded", False)),
             ),
+            alternative_hypotheses=tuple(case.hypotheses),
             **_requirement_provenance(case),
         )
     ranked_top_ineligible = not case.root_cause_eligibilities.is_root_cause_selectable(
@@ -588,7 +602,12 @@ def diagnose_case(
             if hypothesis.hypothesis_id == leader_ids[0]
         )
     else:
-        selected = selectable_hypotheses[0] if ranked_top_ineligible else case.hypotheses[0]
+        supported = [
+            h
+            for h in selectable_hypotheses
+            if h.hypothesis_id in resolution_trace.plausible_hypotheses
+        ]
+        selected = supported[0] if len(supported) == 1 else selectable_hypotheses[0]
     mode = "deterministic"
     model_calls = 0
     if investigator is not None:
@@ -609,15 +628,16 @@ def diagnose_case(
             )
             proposed = _selected_hypothesis(case, choice.entity)
             if proposed is not None and proposed.hypothesis_id != selected.hypothesis_id:
-                if not case.root_cause_eligibilities.is_root_cause_selectable(
-                    proposed.hypothesis_id
+                if proposed not in selectable_hypotheses or (
+                    resolution_trace.plausible_hypotheses
+                    and proposed.hypothesis_id not in resolution_trace.plausible_hypotheses
                 ):
                     case.steps.append(
                         InvestigationStep(
                             actor="engine",
                             action="kept",
                             detail=(
-                                "rejected root-cause-ineligible propagated-effect hypothesis "
+                                "rejected context or root-cause-ineligible hypothesis "
                                 f"{proposed.hypothesis_id}"
                             ),
                         )
@@ -648,7 +668,7 @@ def diagnose_case(
         hypothesis
         for hypothesis in case.hypotheses
         if hypothesis.hypothesis_id != selected.hypothesis_id
-    )[: config.alternatives]
+    )
     case.steps.append(
         InvestigationStep(actor="engine", action="verify", detail=f"{confidence.value}: {reason}")
     )
@@ -669,14 +689,20 @@ def diagnose_case(
         else ()
     )
     return Diagnosis(
+        decision_semantics="m21.v2",
         incident_id=case.incident_id,
         root_cause=selected.causal_actor,
         confidence=confidence,
         resolution=resolution_trace.state,
-        summary=_summary(selected_candidate, confidence, reason),
+        summary=(
+            f"Supported possible initiating cause: {selected.causal_actor.canonical}. "
+            "Mechanism execution and incident recovery are not established."
+            if resolution_trace.diagnosis_status == "SUPPORTED_CAUSE"
+            else f"Observed on {selected.causal_actor.canonical}: {selected.findings[0].summary if selected.findings else 'no actor observation'}. Causal investigation remains open: {resolution_trace.rationale}"
+        ),
         symptoms=case.symptoms,
         evidence=selected.findings[:5],
-        causal_path=selected.causal_paths[0] if selected.causal_paths else (),
+        causal_path=selected_candidate.causal_path,
         causal_explanation=selected.causal_explanation,
         alternatives=alternatives,
         hypothesis=selected,

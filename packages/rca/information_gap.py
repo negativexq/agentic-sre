@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 
 from packages.rca.causal_roles import HypothesisCausalRole, HypothesisCausalRoles
+from packages.rca.claims import admitted
 from packages.rca.mechanism_bridge import RuntimeMechanismBridges
 from packages.rca.model import (
     AuthorizedQuery,
@@ -1052,13 +1053,14 @@ def _derive_runtime_aware_gaps(
             needs.append(
                 _InformationNeed(
                     dimension=dimension,
+                    hypothesis_ids=alternative.material_for_hypothesis_ids,
                     alternative_ids=(alternative.alternative_id,),
                     authorized_queries=queries,
                     missing_fact=(
                         f"whether {alternative.actor.canonical} has actor-local evidence "
                         f"for {dimension.value.lower()}"
                     ),
-                    rationale=f"open {alternative.role} structural alternative requires actor-local evidence",
+                    rationale=f"open {alternative.role} mechanism may change initiating cause; actor-local evidence required",
                 )
             )
     unique: dict[tuple[object, ...], _InformationNeed] = {}
@@ -1187,7 +1189,25 @@ def derive_information_gaps(
     discovery_event_namespaces: Sequence[str] = (),
     discovery_change_namespaces: Sequence[str] = (),
 ) -> tuple[InformationGap, ...]:
-    """Derive gaps for unresolved evidence or open structural alternatives."""
+    """Derive gaps for admitted claims and concrete upstream mechanisms."""
+    hypotheses = tuple(
+        item
+        for item in hypotheses
+        if admitted(item) and item.hypothesis_id not in resolution.eliminated_hypotheses
+    )
+    from packages.rca.frontier import material_frontier
+
+    material = {
+        item.alternative_id: item for item in material_frontier(structural_alternatives, hypotheses)
+    }
+    structural_alternatives = tuple(
+        material.get(item.alternative_id, item).model_copy(
+            update={"status": FrontierStatus.UNEXPLORED}
+        )
+        if item.alternative_id in material
+        else item
+        for item in structural_alternatives
+    )
     if runtime_context is not None:
         return _derive_runtime_aware_gaps(
             hypotheses,

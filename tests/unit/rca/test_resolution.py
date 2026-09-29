@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from claim_builders import incident_claim
 
 from packages.rca.demo import demo_source
 from packages.rca.engine import diagnose
@@ -82,7 +83,8 @@ def _hpa(name: str, *, score: float = 10, extra: Finding | None = None) -> Hypot
         source_class="kubernetes_event",
     )
     findings.append(support)
-    return Hypothesis(
+    findings.append(support.model_copy(update={"entity": actor}))
+    return incident_claim(
         hypothesis_id=f"hypothesis:{name}",
         causal_actor=actor,
         members=(actor, target),
@@ -109,7 +111,7 @@ def test_supporting_only_peer_remains_unresolved() -> None:
     config_actor = _entity("ConfigMap", "settings")
     workload = _entity("Deployment", "checkout")
     config_finding = _finding(config_actor, FindingKind.CONFIG_CHANGE, "config-change")
-    upstream = Hypothesis(
+    upstream = incident_claim(
         hypothesis_id="hypothesis:config",
         causal_actor=config_actor,
         members=(config_actor, workload),
@@ -138,7 +140,7 @@ def test_supporting_only_peer_remains_unresolved() -> None:
         seconds=60,
         source_class="kubernetes_event",
     )
-    downstream = Hypothesis(
+    downstream = incident_claim(
         hypothesis_id="hypothesis:pod",
         causal_actor=downstream_finding.entity,
         members=(downstream_finding.entity,),
@@ -191,14 +193,14 @@ def test_resolution_trace_contains_structured_discriminator_and_audit() -> None:
 
     trace = resolve_hypotheses((selected, alternative))
 
-    assert trace.state is Resolution.RESOLVED
-    assert trace.decision_basis == "VALID_DOMINANCE"
+    assert trace.state is Resolution.AMBIGUOUS
+    assert trace.decision_basis == "EQUIVALENT_OR_INCOMPARABLE_PLAUSIBLE_HYPOTHESES"
     assert trace.considered_hypotheses == tuple(
         sorted((selected.hypothesis_id, alternative.hypothesis_id))
     )
     assert trace.plausible_hypotheses
-    assert trace.dominance_relations
-    assert trace.discriminators[0].kind == "VALID_DOMINANCE"
+    assert not trace.dominance_relations
+    assert not trace.discriminators
     assert {item.hypothesis_id for item in trace.hypothesis_audits} == {
         selected.hypothesis_id,
         alternative.hypothesis_id,
@@ -229,7 +231,7 @@ def test_contradiction_is_a_structured_resolution_reason() -> None:
         seconds=120,
         source_class="kubernetes_event",
     )
-    late = Hypothesis(
+    late = incident_claim(
         hypothesis_id="hypothesis:late-structured",
         causal_actor=late_finding.entity,
         members=(late_finding.entity,),
@@ -260,9 +262,9 @@ def test_unique_initiating_evidence_dominates_shared_support() -> None:
 
     trace = resolve_hypotheses((h1, h2))
 
-    assert trace.state is Resolution.RESOLVED
-    assert trace.leading_hypothesis_ids == (h1.hypothesis_id,)
-    assert trace.distinguishing_facts
+    assert trace.state is Resolution.AMBIGUOUS
+    assert set(trace.leading_hypothesis_ids) == {h1.hypothesis_id, h2.hypothesis_id}
+    assert not trace.distinguishing_facts
 
 
 def test_late_consequence_does_not_establish_dominance() -> None:
@@ -310,7 +312,7 @@ def test_additional_aligned_initiating_evidence_can_establish_dominance() -> Non
     )
     weaker = _hpa("weaker")
 
-    assert dominates(stronger, weaker)
+    assert not dominates(stronger, weaker)
 
 
 def test_contradicted_alternative_is_eliminated() -> None:
@@ -329,7 +331,7 @@ def test_contradicted_alternative_is_eliminated() -> None:
             }
         }
     )
-    bad = Hypothesis(
+    bad = incident_claim(
         hypothesis_id="hypothesis:late",
         causal_actor=late.entity,
         members=(late.entity,),
@@ -342,7 +344,8 @@ def test_contradicted_alternative_is_eliminated() -> None:
 
     trace = resolve_hypotheses((good, bad))
 
-    assert trace.state is Resolution.RESOLVED
+    assert trace.state is Resolution.AMBIGUOUS
+    assert trace.diagnosis_status == "SUPPORTED_CAUSE"
     assert bad.hypothesis_id in trace.eliminated_hypotheses
     assert "contradictory evidence" in trace.elimination_reasons[0]
 
@@ -362,13 +365,13 @@ def test_interval_uncertain_change_is_unresolved_not_eliminated() -> None:
             }
         }
     )
-    hypothesis = Hypothesis(
+    hypothesis = incident_claim(
         hypothesis_id="hypothesis:interval",
         causal_actor=finding.entity,
         members=(finding.entity,),
         findings=(finding,),
         contradictory_findings=(finding,),
-        causal_explanation="PATH",
+        causal_explanation="DIRECT",
     )
 
     trace = resolve_hypotheses((hypothesis,))
@@ -396,7 +399,7 @@ def test_schedule_causal_time_prevents_late_observation_from_elimination() -> No
             }
         }
     )
-    hypothesis = Hypothesis(
+    hypothesis = incident_claim(
         hypothesis_id="hypothesis:scheduled",
         causal_actor=finding.entity,
         members=(finding.entity,),
@@ -437,7 +440,7 @@ def test_resolution_trace_partitions_are_disjoint() -> None:
             }
         }
     )
-    contradicted = Hypothesis(
+    contradicted = incident_claim(
         hypothesis_id="hypothesis:contradicted",
         causal_actor=contradicted_finding.entity,
         members=(contradicted_finding.entity,),
@@ -452,7 +455,9 @@ def test_resolution_trace_partitions_are_disjoint() -> None:
     assert not supported_ids & unresolved_ids
     assert not supported_ids & eliminated_ids
     assert not unresolved_ids & eliminated_ids
-    assert supported_ids | unresolved_ids | eliminated_ids == set(trace.considered_hypotheses)
+    assert supported_ids | unresolved_ids | eliminated_ids | set(trace.context_hypotheses) == set(
+        trace.considered_hypotheses
+    )
 
 
 def test_no_signal_and_weak_candidate_are_insufficient() -> None:
@@ -471,7 +476,7 @@ def test_no_signal_and_weak_candidate_are_insufficient() -> None:
 
 
 def test_unlinked_hypothesis_without_positive_contradiction_is_unresolved() -> None:
-    unlinked = Hypothesis(
+    unlinked = incident_claim(
         hypothesis_id="hypothesis:unlinked-no-proof",
         causal_actor=_entity("Deployment", "unlinked"),
         members=(_entity("Deployment", "unlinked"),),
@@ -484,7 +489,7 @@ def test_unlinked_hypothesis_without_positive_contradiction_is_unresolved() -> N
     assert assessment.state is HypothesisEpistemicState.UNRESOLVED
     assert ResolutionReasonCode.NO_CAUSAL_SYMPTOM_LINK in assessment.reason_codes
     assert assessment.hard_contradiction_findings == ()
-    assert trace.unresolved_hypotheses == (unlinked.hypothesis_id,)
+    assert trace.context_hypotheses == (unlinked.hypothesis_id,)
     assert trace.eliminated_hypotheses == ()
     assert trace.eliminations == ()
     assert trace.hypothesis_audits[0].plausible is False
@@ -524,7 +529,7 @@ def test_unlinked_hypothesis_with_aligned_initiating_evidence_stays_unresolved()
     assert assessment.state is HypothesisEpistemicState.UNRESOLVED
     assert ResolutionReasonCode.NO_CAUSAL_SYMPTOM_LINK in assessment.reason_codes
     assert trace.eliminated_hypotheses == ()
-    assert trace.unresolved_hypotheses == (unlinked.hypothesis_id,)
+    assert trace.context_hypotheses == (unlinked.hypothesis_id,)
 
 
 def test_positive_aligned_hypothesis_is_supported() -> None:
@@ -537,7 +542,8 @@ def test_grouped_actor_and_manifestation_is_one_resolvable_episode() -> None:
     hypothesis = _hpa("payments")
     trace = resolve_hypotheses((hypothesis,))
 
-    assert trace.state is Resolution.RESOLVED
+    assert trace.state is Resolution.AMBIGUOUS
+    assert trace.diagnosis_status == "SUPPORTED_CAUSE"
     assert len(hypothesis.members) == 2
     assert hypothesis.manifestations == (_entity("Deployment", "payments-workload"),)
 
@@ -553,7 +559,7 @@ def test_signature_is_name_independent_and_score_independent() -> None:
 def test_unlinked_hypothesis_remains_unresolved_despite_high_score() -> None:
     base = resolve_hypotheses((_hpa("one"), _hpa("two")))
     renamed = resolve_hypotheses((_hpa("alpha"), _hpa("omega")))
-    unrelated = Hypothesis(
+    unrelated = incident_claim(
         hypothesis_id="hypothesis:unrelated",
         causal_actor=_entity("Pod", "unrelated"),
         members=(_entity("Pod", "unrelated"),),
@@ -564,8 +570,8 @@ def test_unlinked_hypothesis_remains_unresolved_despite_high_score() -> None:
 
     assert base.state is renamed.state is expanded.state is Resolution.AMBIGUOUS
     assert len(base.leading_hypothesis_ids) == len(renamed.leading_hypothesis_ids)
-    assert len(expanded.leading_hypothesis_ids) == 3
-    assert unrelated.hypothesis_id in expanded.unresolved_hypotheses
+    assert len(expanded.leading_hypothesis_ids) == 2
+    assert unrelated.hypothesis_id in expanded.context_hypotheses
     assert unrelated.hypothesis_id not in expanded.eliminated_hypotheses
 
 
@@ -643,7 +649,8 @@ def test_structural_alternative_is_queryable_but_not_a_resolver_hypothesis() -> 
     trace = resolve_hypotheses((hypothesis,))
     gaps = derive_information_gaps((hypothesis,), trace, structural_alternatives=(alternative,))
 
-    assert trace.state is Resolution.RESOLVED
+    assert trace.state is Resolution.AMBIGUOUS
+    assert trace.diagnosis_status == "SUPPORTED_CAUSE"
     assert hypothesis.causal_actor != actor
     gap = next(item for item in gaps if item.dimension is GapDimension.CONFIG_DIFFERENCE)
     assert gap.hypothesis_ids == (hypothesis.hypothesis_id,)
@@ -651,7 +658,12 @@ def test_structural_alternative_is_queryable_but_not_a_resolver_hypothesis() -> 
     assert alternative.status is FrontierStatus.UNEXPLORED
 
     exhausted = alternative.model_copy(update={"status": FrontierStatus.QUERIED_NO_CAUSAL_FINDING})
-    assert derive_information_gaps((hypothesis,), trace, structural_alternatives=(exhausted,)) == ()
+    assert all(
+        alternative.alternative_id not in gap.alternative_ids
+        for gap in derive_information_gaps(
+            (hypothesis,), trace, structural_alternatives=(exhausted,)
+        )
+    )
 
 
 def test_information_gap_marks_observed_hpa_state_as_already_observed() -> None:
@@ -701,8 +713,8 @@ def test_discriminating_evidence_removes_ambiguity_and_gaps() -> None:
     right = _hpa("right")
     trace = resolve_hypotheses((left, right))
 
-    assert trace.state is Resolution.RESOLVED
-    assert derive_information_gaps((left, right), trace) == ()
+    assert trace.state is Resolution.AMBIGUOUS
+    assert derive_information_gaps((left, right), trace)
 
 
 def test_unresolvable_metric_gap_is_not_presented_as_support() -> None:
@@ -766,7 +778,8 @@ def test_missing_linkage_stays_unresolved_in_resolution_audit() -> None:
     )
 
     assert trace.state is Resolution.AMBIGUOUS
-    assert set(trace.unresolved_hypotheses) == {weak_base.hypothesis_id, weak_other.hypothesis_id}
+    assert trace.diagnosis_status == "SUPPORTED_CAUSE"
+    assert set(trace.context_hypotheses) == {weak_base.hypothesis_id, weak_other.hypothesis_id}
     assert trace.eliminated_hypotheses == ()
     records = resolution_audit_records(diagnosis)
 

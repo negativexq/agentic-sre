@@ -75,7 +75,7 @@ def test_synthetic_controls_use_real_production_path(
         )
         assert unresolved_unlinked.causal_explanation == "UNLINKED"
         assert not unresolved_unlinked.plausible
-        assert unresolved_unlinked.is_leading
+        assert not unresolved_unlinked.is_leading
     if name == "late_competing_change":
         assert audit.resolution == "AMBIGUOUS"
         assert any(

@@ -82,7 +82,7 @@ def test_frontier_lifecycle_distinguishes_unexplored_queried_and_promoted() -> N
         hypotheses=(Hypothesis(hypothesis_id="hypothesis:test", causal_actor=alternative.actor),),
         queried_dimensions_by_alternative={},
     )
-    assert promoted[0].status is FrontierStatus.PROMOTED
+    assert promoted[0].status is FrontierStatus.UNEXPLORED
 
     untouched = apply_frontier_progress(
         (alternative,), hypotheses=(), queried_dimensions_by_alternative={}

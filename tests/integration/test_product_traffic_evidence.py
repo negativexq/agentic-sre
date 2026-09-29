@@ -150,10 +150,11 @@ def test_a_flat_traffic_read_is_preserved_as_neutral_evidence(setup: Any) -> Non
     run = _run(setup, factor=1.0)
     assert run["observation"].runtime.state is RuntimeObservationState.OBSERVED_NORMAL
     assert run["audit"].observation_outcome is GapOutcomeKind.UNKNOWN
-    investigated, base = run["investigated"], run["base"]
+    investigated = run["investigated"]
     assert list(_findings(investigated.document, "TRAFFIC_INCREASE")) == []
-    # Nothing decision-relevant was acquired: the decision is the base one.
-    assert investigated.epistemic_digest == base.epistemic_digest
+    # This neutral read has no authority; other material reads may add evidence.
+    assert run["audit"].decision_state_changed is False
+    assert run["audit"].hypothesis_states_before == run["audit"].hypothesis_states_after
 
 
 def test_a_traffic_spike_is_typed_from_the_read_without_resolution_authority(

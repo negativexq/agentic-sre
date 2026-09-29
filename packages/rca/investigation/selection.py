@@ -122,6 +122,9 @@ def _unresolved_hypothesis_ids(diagnosis: Diagnosis) -> tuple[set[str], set[str]
 def _hypothesis_relevance(candidate: ObservationCandidate, diagnosis: Diagnosis) -> int:
     leading, unresolved = _unresolved_hypothesis_ids(diagnosis)
     candidate_ids = set(candidate.hypothesis_ids)
+    trace = diagnosis.resolution_trace
+    if trace is not None and trace.semantics_version == "m21.v2":
+        candidate_ids.intersection_update(trace.admitted_hypotheses)
     if candidate_ids & leading:
         return 3
     if candidate_ids & unresolved:
@@ -130,6 +133,11 @@ def _hypothesis_relevance(candidate: ObservationCandidate, diagnosis: Diagnosis)
 
 
 def _structural_relevance(candidate: ObservationCandidate, diagnosis: Diagnosis) -> int:
+    trace = diagnosis.resolution_trace
+    if trace is not None and set(candidate.alternative_ids).intersection(
+        alternative for alternative, claims in trace.frontier_bindings if claims
+    ):
+        return 3
     alternatives = {item.alternative_id: item for item in diagnosis.structural_alternatives}
     referenced = {
         alternative_id

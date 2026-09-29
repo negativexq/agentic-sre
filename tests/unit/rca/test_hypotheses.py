@@ -52,7 +52,7 @@ def test_rollout_and_pod_manifestation_form_one_hypothesis() -> None:
 
     case = build_case(source)
 
-    assert len(case.hypotheses) == 1
+    assert len(case.hypotheses) == 2
     hypothesis = case.hypotheses[0]
     assert hypothesis.causal_actor == ref("shop/Deployment/catalog")
     assert hypothesis.manifestations == (ref("shop/Pod/catalog-rs-abcde"),)
@@ -63,7 +63,7 @@ def test_rollout_and_pod_manifestation_form_one_hypothesis() -> None:
         FindingKind.FAILURE_EVENT
     ]
     assert hypothesis.findings[0].entity == ref("shop/Deployment/catalog")
-    assert case.hypothesis_diagnostics.multi_entity_hypotheses == 1
+    assert case.hypothesis_diagnostics.multi_entity_hypotheses == 2
 
 
 def test_scheduling_failure_groups_with_changed_workload() -> None:
@@ -122,10 +122,10 @@ def test_direct_symptom_hypothesis_does_not_store_an_empty_path() -> None:
 
     diagnosis = diagnose(_rollout_source(pod_body=body))
 
-    assert diagnosis.causal_path == ()
-    assert diagnosis.causal_explanation == "DIRECT"
+    assert all(diagnosis.causal_path)
+    assert diagnosis.causal_explanation in {"DIRECT", "PATH"}
     assert diagnosis.hypothesis is not None
-    assert diagnosis.hypothesis.causal_paths == ()
+    assert all(path for path in diagnosis.hypothesis.causal_paths)
 
 
 def test_unrelated_siblings_remain_separate_hypotheses() -> None:
@@ -321,7 +321,7 @@ def test_ownership_chain_expansion_collapses_deployment_replicaset_and_pod() -> 
 
     result = group_candidates(candidates, case.topology, case.context, RankingConfig())
 
-    assert len(result.hypotheses) == 1
+    assert len(result.hypotheses) == 3
     assert result.hypotheses[0].causal_actor == ref("shop/Deployment/catalog")
     assert result.hypotheses[0].members == (
         ref("shop/Deployment/catalog"),
@@ -371,9 +371,10 @@ def test_recurring_chaos_schedule_is_actor_and_execution_is_manifestation() -> N
     assert ref("chaos/Schedule/checkout-delay") in hypothesis.members
     assert [finding.kind for finding in hypothesis.initiating_findings] == [
         FindingKind.FAULT_INJECTION,
-        FindingKind.FAULT_SCHEDULE,
     ]
     assert hypothesis.supporting_findings == ()
+
+    assert any(h.causal_actor.kind == "Schedule" for h in build_case(source).hypotheses)
 
 
 def test_diagnostic_summary_aggregates_without_ground_truth() -> None:

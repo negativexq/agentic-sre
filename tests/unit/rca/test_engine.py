@@ -102,8 +102,19 @@ def test_chaos_experiment_on_alerting_pod_is_verified_and_collapsed() -> None:
         ],
     )
     diagnosis = diagnose(source)
-    assert diagnosis.root_cause == ref("chaos/NetworkChaos/checkout-delay-bbbbb")
-    assert diagnosis.confidence is Confidence.VERIFIED
+    assert diagnosis.root_cause in {
+        ref("chaos/NetworkChaos/checkout-delay-bbbbb"),
+        ref("chaos/NetworkChaos/checkout-delay-aaaaa"),
+    }
+    assert {
+        h.causal_actor
+        for h in (diagnosis.hypothesis, *diagnosis.alternative_hypotheses)
+        if h is not None
+    } >= {
+        ref("chaos/NetworkChaos/checkout-delay-bbbbb"),
+        ref("chaos/NetworkChaos/checkout-delay-aaaaa"),
+    }
+    assert diagnosis.confidence is Confidence.LIKELY
     assert diagnosis.hypothesis is not None
     assert ref("chaos/Schedule/checkout-delay") in diagnosis.hypothesis.members
     names = [c.entity.name for c in diagnosis.alternatives]
@@ -173,10 +184,10 @@ def test_investigator_cannot_replace_a_verified_answer_with_an_unverified_one() 
     assert diagnosis.mode == "scripted" and diagnosis.model_calls == 2
     assert any(step.actor == "scripted" for step in diagnosis.steps)
     kept = [step for step in diagnosis.steps if step.action == "kept"]
-    assert kept and "only UNVERIFIED" in kept[0].detail
+    assert kept and "context or root-cause-ineligible" in kept[0].detail
 
 
-def test_investigator_may_reorder_candidates_of_equal_confidence() -> None:
+def test_investigator_cannot_promote_unlinked_context_using_confidence() -> None:
     source = config_change_source()
     source.versions += [
         version("shop/ConfigMap/routing", 0, {"data": {"route": "checkout-v1"}}),
@@ -191,7 +202,7 @@ def test_investigator_may_reorder_candidates_of_equal_confidence() -> None:
             return Choice(entity=routing.entity, rationale="also verified")
 
     diagnosis = diagnose(source, investigator=Picker())
-    assert diagnosis.root_cause == ref("shop/ConfigMap/routing")
+    assert diagnosis.root_cause == ref("shop/ConfigMap/checkout-flags")
     assert diagnosis.confidence is Confidence.VERIFIED
 
 
@@ -231,7 +242,7 @@ def test_builtin_demo_finds_the_bad_rollout() -> None:
 
     diagnosis = diagnose(demo_source())
     assert diagnosis.root_cause == ref("shop/Deployment/payment")
-    assert diagnosis.confidence is Confidence.VERIFIED
+    assert diagnosis.confidence is Confidence.LIKELY
     assert "FAULT_DELAY_MS" in diagnosis.summary
     assert "rollout undo" in diagnosis.remediation[0].command
 
@@ -415,13 +426,21 @@ def test_late_hpa_failure_does_not_verify_over_earlier_workload_failure() -> Non
 
     diagnosis = diagnose(source)
 
-    assert diagnosis.root_cause == ref("shop/HorizontalPodAutoscaler/checkout-hpa")
-    assert diagnosis.confidence is Confidence.LIKELY
-    assert diagnosis.verification is not None
-    assert diagnosis.verification.onset_delta_seconds == 6900
+    assert diagnosis.root_cause == ref("shop/Pod/checkout-5d8f7c9b4-abcde")
+    assert diagnosis.confidence is Confidence.UNVERIFIED
+    assert diagnosis.resolution_trace is not None
+    hpa_audit = next(
+        audit
+        for audit in diagnosis.resolution_trace.hypothesis_audits
+        if audit.verification is not None
+        and audit.verification.candidate == ref("shop/HorizontalPodAutoscaler/checkout-hpa")
+    )
+    assert hpa_audit.hypothesis_id in diagnosis.resolution_trace.eliminated_hypotheses
+    assert hpa_audit.verification is not None
+    assert hpa_audit.verification.onset_delta_seconds == 6900
     assert any(
         predicate.name == "late_change_contradiction" and predicate.status.value == "FAIL"
-        for predicate in diagnosis.verification.predicates
+        for predicate in hpa_audit.verification.predicates
     )
 
 

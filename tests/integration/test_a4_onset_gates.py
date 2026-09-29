@@ -37,7 +37,7 @@ def _covered_run(world: Any) -> tuple[str, DiagnosisRow]:
 def test_the_frozen_boundary_replays_the_same_onset_and_digest(setup: Any) -> None:  # noqa: F811
     factory, *_ = setup
     run_id, row = _covered_run(setup)
-    assert row.engine_version == RCA_ENGINE_VERSION == "1.3.0"
+    assert row.engine_version == RCA_ENGINE_VERSION == "2.0.0"
     assert row.document["symptoms"]["onset_basis"] == ONSET_ANCHORED
     replayed = build_case(ReplaySource.from_run(run_id, session_factory=factory), EngineConfig())
     assert replayed.symptoms.onset is not None
@@ -47,7 +47,7 @@ def test_the_frozen_boundary_replays_the_same_onset_and_digest(setup: Any) -> No
     assert replay_run(run_id, "base", session_factory=factory) == row.epistemic_digest
 
 
-def test_a_run_recorded_by_engine_1_2_2_is_unsupported_under_1_3_0(setup: Any) -> None:  # noqa: F811
+def test_a_run_recorded_by_engine_1_2_2_is_unsupported_under_2_0_0(setup: Any) -> None:  # noqa: F811
     factory, *_ = setup
     run_id, _ = _covered_run(setup)
     with factory() as session:

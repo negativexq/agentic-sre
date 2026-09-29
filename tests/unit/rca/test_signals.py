@@ -462,3 +462,21 @@ def test_policy_and_derived_kinds_are_not_lifecycle_findings() -> None:
         ],
     }
     assert change_findings(history) == []
+
+
+def test_recreated_name_does_not_diff_content_across_uids() -> None:
+    actor = "shop/ConfigMap/checkout-flags"
+    old = version(actor, 0, {"metadata": {"uid": "old"}, "data": {"mode": "a"}})
+    new = version(actor, 4, {"metadata": {"uid": "new"}, "data": {"mode": "b"}})
+    findings = change_findings({ref(actor): (old, new)})
+    assert len(findings) == 1
+    assert findings[0].kind is FindingKind.OBJECT_CREATED
+    assert findings[0].entity_instance is not None
+    assert findings[0].entity_instance.uid == "new"
+    assert findings[0].evidence_ids == (new.evidence_id,)
+    same_instance = new.model_copy(update={"body": {**new.body, "metadata": {"uid": "old"}}})
+    changes = change_findings({ref(actor): (old, same_instance)})
+    assert len(changes) == 1
+    assert changes[0].kind is FindingKind.CONFIG_CHANGE
+    assert changes[0].entity_instance is not None
+    assert changes[0].entity_instance.uid == "old"

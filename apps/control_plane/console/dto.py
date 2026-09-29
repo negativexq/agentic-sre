@@ -132,6 +132,12 @@ class DiagnosisView(ConsoleModel):
 
     incident_id: str
     resolution: str
+    decision_semantics: str = "legacy"
+    diagnosis_status: str = "UNASSESSED"
+    claim_level: str = "UNASSESSED"
+    incident_recovery: str = "NOT_ASSESSED"
+    context_hypothesis_ids: tuple[str, ...] = ()
+    material_frontier_ids: tuple[str, ...] = ()
     confidence: str
     # The leading actor is the top-ranked actor even when unresolved; it equals
     # the root cause only once the diagnosis is RESOLVED.

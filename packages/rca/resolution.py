@@ -13,10 +13,12 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from packages.rca.causal_roles import HypothesisCausalRole
+from packages.rca.claims import actor_findings, admission_reasons, admitted, symptom_links
 from packages.rca.episode_end import RULE_ID as EPISODE_END_RULE_ID
 from packages.rca.episode_end import RULE_VERSION as EPISODE_END_RULE_VERSION
 from packages.rca.episode_end import EndedEpisode
 from packages.rca.model import (
+    CausalWitness,
     Diagnosis,
     DominanceRelation,
     EliminationConsequence,
@@ -40,6 +42,7 @@ from packages.rca.model import (
     RootSupportRecord,
     RootSupportStatus,
     RulePreconditionAudit,
+    StructuralAlternative,
     VerificationTrace,
 )
 from packages.rca.ranking import RankingConfig
@@ -172,24 +175,51 @@ def structurally_equivalent(left: Hypothesis, right: Hypothesis) -> bool:
     return hypothesis_signature(left) == hypothesis_signature(right)
 
 
-CHANGE_ONSET_PATH_RULE = ("m21.support.change-onset-path", "v1")
+CHANGE_ONSET_PATH_RULE = ("m21.support.change-onset-path", "v2")
 _CAUSAL_EXPLANATIONS = frozenset({"PATH", "DIRECT"})
 
 
 def change_onset_path_support(hypothesis: Hypothesis) -> RootSupportRecord:
-    """D1 ``m21.support.change-onset-path.v1``: the resolver's support predicate, explicit.
+    """D1 v2 supports a possible initiator through an actor-owned witness.
 
-    FIRED exactly when the hypothesis has a causal PATH/DIRECT explanation and an
-    initiating change finding (NOT_LATE against onset + grace, as temporal roles
-    record it). INAPPLICABLE when the causal onset is unknown, so no temporal role
-    could be established. Otherwise NOT_FIRED with its reasons.
+    A path establishes structural relevance, not observed mechanism execution.
+    Missing actor/time/source provenance cannot fire support.
     """
     rule_id, rule_version = CHANGE_ONSET_PATH_RULE
     initiating = _initiating_changes(hypothesis)
-    linked = hypothesis.causal_explanation in _CAUSAL_EXPLANATIONS
-    onset_known = any(finding.incident_onset is not None for finding in hypothesis.findings)
+    links = symptom_links(hypothesis)
+    linked = admitted(hypothesis)
+    onset_known = any(finding.incident_onset is not None for finding in actor_findings(hypothesis))
     reasons: list[str] = []
-    if linked and initiating:
+    witnesses = tuple(
+        CausalWitness(
+            actor=hypothesis.causal_actor,
+            actor_instance=hypothesis.actor_instance,
+            origin=finding,
+            attribution="m21.attribution.quota-rejection.v1"
+            if any(hop.relation == "quota_blocks" for hop in path)
+            else "DIRECT_OWNERSHIP",
+            missing=("MECHANISM_EXECUTION_NOT_PROVEN",)
+            + (("ACTOR_INSTANCE_UNKNOWN",) if hypothesis.actor_instance is None else ())
+            + (
+                ("RELATION_PROVENANCE_UNAVAILABLE",)
+                if path and not hypothesis.relation_evidence_ids
+                else ()
+            ),
+            relation_evidence_ids=hypothesis.relation_evidence_ids,
+            mechanism=finding.kind.value,
+            symptom=symptom,
+            path=path,
+            onset=finding.incident_onset,
+            evidence_ids=tuple(
+                sorted(set((*finding.evidence_ids, *hypothesis.relation_evidence_ids)))
+            ),
+        )
+        for finding in initiating
+        if finding.incident_onset is not None and finding.at is not None and finding.evidence_ids
+        for symptom, path in links
+    )
+    if linked and witnesses:
         status = RootSupportStatus.FIRED
     elif not onset_known:
         status = RootSupportStatus.INAPPLICABLE
@@ -198,16 +228,17 @@ def change_onset_path_support(hypothesis: Hypothesis) -> RootSupportRecord:
         status = RootSupportStatus.NOT_FIRED
         if not linked:
             reasons.append(ResolutionReasonCode.NO_CAUSAL_SYMPTOM_LINK.value)
-        if not initiating:
+        if not witnesses:
             reasons.append(ResolutionReasonCode.NO_ONSET_CAPABLE_INITIATING_EVIDENCE.value)
     return RootSupportRecord(
         rule_id=rule_id,
         rule_version=rule_version,
+        witnesses=witnesses,
         support_kind="CHANGE_ONSET_PATH",
         status=status,
         reasons=tuple(reasons),
         decisive_evidence_ids=tuple(
-            sorted({evidence for finding in initiating for evidence in finding.evidence_ids})
+            sorted({evidence for witness in witnesses for evidence in witness.evidence_ids})
         )
         if status is RootSupportStatus.FIRED
         else (),
@@ -220,7 +251,7 @@ def _initiating_changes(hypothesis: Hypothesis) -> tuple[Finding, ...]:
     """The hypothesis' change findings whose temporal role is INITIATING."""
     return tuple(
         finding
-        for finding in hypothesis.findings
+        for finding in actor_findings(hypothesis)
         if finding.temporal_role is EvidenceTemporalRole.INITIATING
         and finding.kind in _CHANGE_KINDS
     )
@@ -247,22 +278,24 @@ def assess_hypothesis(
     """Separate hard contradiction from missing positive causal proof."""
     grace = onset_grace or RankingConfig().verification_onset_grace
     reasons: list[ResolutionReasonCode] = []
-    if hypothesis.causal_explanation not in {"PATH", "DIRECT"}:
+    if not admitted(hypothesis):
         reasons.append(ResolutionReasonCode.NO_CAUSAL_SYMPTOM_LINK)
     if not _has_aligned_initiating(hypothesis):
         reasons.append(ResolutionReasonCode.NO_ONSET_CAPABLE_INITIATING_EVIDENCE)
 
     hard_findings: list[Finding] = []
-    temporal_findings = tuple(
-        temporal_contradiction_certainty(finding, grace)
-        for finding in hypothesis.contradictory_findings
+    local_contradictions = tuple(
+        f for f in hypothesis.contradictory_findings if f in actor_findings(hypothesis)
     )
-    if hypothesis.contradictory_findings:
+    temporal_findings = tuple(
+        temporal_contradiction_certainty(finding, grace) for finding in local_contradictions
+    )
+    if local_contradictions:
         reasons.append(ResolutionReasonCode.EXPLICIT_TEMPORAL_CONTRADICTION)
         hard_findings.extend(
             finding
             for finding, certainty in zip(
-                hypothesis.contradictory_findings,
+                local_contradictions,
                 temporal_findings,
                 strict=True,
             )
@@ -271,7 +304,7 @@ def assess_hypothesis(
 
     if hard_findings:
         state = HypothesisEpistemicState.CONTRADICTED
-    elif hypothesis.contradictory_findings:
+    elif local_contradictions:
         state = HypothesisEpistemicState.UNRESOLVED
     elif change_onset_path_support(hypothesis).status is RootSupportStatus.FIRED:
         state = HypothesisEpistemicState.SUPPORTED
@@ -310,38 +343,12 @@ def dominates(
     *,
     onset_grace: timedelta | None = None,
 ) -> bool:
-    """Return true only for evidence inclusion with a causal discriminator.
+    """Finding-kind inclusion cannot explain another independent actor.
 
-    Scores, candidate rank, and canonical entity order are never used to
-    eliminate a hypothesis.  A stronger hypothesis must contain the weaker
-    evidence shape and add onset-capable causal support.
+    No positive cross-claim explanation rule is implemented here. Existing
+    runtime propagated-effect eliminations remain the authoritative rule.
     """
-    if (
-        assess_hypothesis(stronger, onset_grace=onset_grace).state
-        is not HypothesisEpistemicState.SUPPORTED
-        or assess_hypothesis(weaker, onset_grace=onset_grace).state
-        is not HypothesisEpistemicState.SUPPORTED
-    ):
-        return False
-    stronger_keys = {_evidence_key(finding) for finding in stronger.findings}
-    weaker_keys = {_evidence_key(finding) for finding in weaker.findings}
-    if not weaker_keys <= stronger_keys:
-        return False
-    stronger_initiating = {
-        _evidence_key(finding)
-        for finding in stronger.initiating_findings
-        if finding.temporal_role is EvidenceTemporalRole.INITIATING
-    }
-    weaker_initiating = {
-        _evidence_key(finding)
-        for finding in weaker.initiating_findings
-        if finding.temporal_role is EvidenceTemporalRole.INITIATING
-    }
-    # Extra support/consequence shapes are not causal discrimination.  The
-    # stronger episode must add an aligned initiating evidence shape; otherwise
-    # a late failure or a larger manifestation set would manufacture
-    # dominance.
-    return stronger_initiating > weaker_initiating
+    return False
 
 
 TEMPORAL_CONTRADICTION_RULE = ("m16.temporal-contradiction", "v1")
@@ -648,7 +655,7 @@ def _audit_items(
         for hypothesis in sorted(hypotheses, key=lambda item: item.hypothesis_id)
         if hypothesis.hypothesis_id not in {item.hypothesis_id for item in focused}
     )
-    for hypothesis in (*focused, *remaining)[:_MAX_TRACE_ITEMS]:
+    for hypothesis in (*focused, *remaining):
         assessment = assess_hypothesis(hypothesis, onset_grace=onset_grace)
         reasons = assessment.reason_codes
         signature = hypothesis_signature(hypothesis)
@@ -670,6 +677,8 @@ def _audit_items(
                 onset_relation=signature.temporal_profile,
                 causal_linkage=hypothesis.causal_explanation,
                 root_support=(change_onset_path_support(hypothesis),),
+                admission="ADMITTED" if admitted(hypothesis) else "OBSERVED_CONTEXT",
+                admission_reasons=admission_reasons(hypothesis),
             )
         )
     return tuple(audits)
@@ -715,6 +724,7 @@ def resolve_hypotheses(
     mechanism_mismatches: Mapping[str, MechanismMismatch] | None = None,
     rule_preconditions: Mapping[tuple[str, str], Sequence[PreconditionResult]] | None = None,
     precondition_reasons: Mapping[tuple[str, str], Sequence[PreconditionAuditReason]] | None = None,
+    structural_alternatives: Sequence[StructuralAlternative] = (),
 ) -> ResolutionTrace:
     """Resolve distinguishability without treating missing proof as contradiction.
 
@@ -751,6 +761,7 @@ def resolve_hypotheses(
         effective_eligibilities = RootCauseEligibilities(
             root_cause_eligibilities.assessments, ended
         )
+    admitted_claims = tuple(h for h in hypotheses if admitted(h))
     trace = _resolve(
         hypotheses,
         verification_traces=verification_traces,
@@ -758,6 +769,7 @@ def resolve_hypotheses(
         root_cause_eligibilities=effective_eligibilities,
         mismatches=mismatches,
     )
+    trace = _attach_audits(trace, hypotheses, verification_traces, onset_grace)
     audits = tuple(
         audit.model_copy(
             update={
@@ -789,7 +801,56 @@ def resolve_hypotheses(
         )
         for audit in trace.hypothesis_audits
     )
-    return trace.model_copy(update={"hypothesis_audits": audits})
+    from packages.rca.frontier import material_frontier
+
+    material = material_frontier(structural_alternatives, admitted_claims)
+    supported_ids = set(trace.plausible_hypotheses)
+    limiting = tuple(
+        sorted(
+            alternative.alternative_id
+            for alternative in material
+            if supported_ids.intersection(alternative.material_for_hypothesis_ids)
+        )
+    )
+    status = (
+        "SUPPORTED_CAUSE"
+        if len(supported_ids) == 1 and not trace.unresolved_hypotheses
+        else "COMPETING_CAUSES"
+        if supported_ids
+        else "INSUFFICIENT_EVIDENCE"
+    )
+    updates: dict[str, object] = {
+        "hypothesis_audits": audits,
+        "semantics_version": "m21.v2",
+        "diagnosis_status": status,
+        "claim_level": "POSSIBLE_INITIATING_CAUSE" if supported_ids else "UNESTABLISHED",
+        "admitted_hypotheses": tuple(sorted(h.hypothesis_id for h in admitted_claims)),
+        "context_hypotheses": tuple(sorted(h.hypothesis_id for h in hypotheses if not admitted(h))),
+        "considered_hypotheses": tuple(sorted(h.hypothesis_id for h in hypotheses)),
+        "material_frontier_ids": limiting,
+        "frontier_bindings": tuple(
+            (a.alternative_id, a.material_for_hypothesis_ids) for a in material
+        ),
+    }
+    # D1 v2 establishes a possible initiator, not observed mechanism execution.
+    # Keep legacy RESOLVED authority reserved for stronger, future proof rules.
+    if trace.state is Resolution.RESOLVED:
+        updates.update(
+            state=Resolution.AMBIGUOUS,
+            decision_basis="SUPPORTED_POSSIBLE_CAUSE",
+            rationale="A possible initiating cause is supported under observed relations; mechanism execution is not proven and incident recovery is not assessed.",
+            unresolved_dimensions=("mechanism_execution",),
+        )
+    if limiting and trace.state is Resolution.RESOLVED:
+        updates.update(
+            state=Resolution.AMBIGUOUS,
+            decision_basis="MATERIAL_CAUSAL_FRONTIER",
+            rationale="A possible initiating cause is supported; relevant unobserved mechanisms remain open.",
+            unresolved_dimensions=tuple(
+                sorted({a.role for a in material if a.alternative_id in limiting})
+            ),
+        )
+    return trace.model_copy(update=updates)
 
 
 def _resolve(
@@ -831,7 +892,8 @@ def _resolve(
             (
                 hypothesis
                 for hypothesis in hypotheses
-                if assessments[hypothesis.hypothesis_id].state
+                if admitted(hypothesis)
+                and assessments[hypothesis.hypothesis_id].state
                 is HypothesisEpistemicState.UNRESOLVED
             ),
             key=lambda item: item.hypothesis_id,
@@ -857,7 +919,7 @@ def _resolve(
     unresolved_all = tuple(item for item in unresolved_all if item not in mismatched)
     eligibility_excluded = tuple(
         hypothesis
-        for hypothesis in (*supported_all, *unresolved_all)
+        for hypothesis in hypotheses
         if root_cause_eligibilities is not None
         and (
             (
@@ -876,7 +938,7 @@ def _resolve(
     )
     contradiction_eliminations = tuple(
         _elimination_for(hypothesis, assessments[hypothesis.hypothesis_id], onset_grace)
-        for hypothesis in contradicted[:_MAX_TRACE_ITEMS]
+        for hypothesis in contradicted
     ) + tuple(_mechanism_elimination(mismatches[item.hypothesis_id]) for item in mismatched)
     eligibility_elimination_items: list[ResolutionElimination] = []
     if root_cause_eligibilities is not None:
@@ -905,7 +967,7 @@ def _resolve(
         eliminated_hypotheses=tuple(sorted(eliminated_ids)),
         elimination_reasons=legacy_reasons,
         eliminations=eliminations,
-        signatures=signatures[:_MAX_TRACE_ITEMS],
+        signatures=signatures,
         hypothesis_audits=audits,
     )
     if not supported and unresolved:
@@ -944,7 +1006,7 @@ def _resolve(
                 base,
                 state=Resolution.INSUFFICIENT_EVIDENCE,
                 decision_basis="NO_PLAUSIBLE_HYPOTHESIS",
-                rationale="All generated hypotheses contain a hard causal contradiction.",
+                rationale="No admitted claim has sufficient positive initiating evidence.",
             ),
             hypotheses,
             verification_traces,
@@ -1043,7 +1105,7 @@ def _resolve(
                 discriminators=(discriminator,),
                 dominance_relations=dominance_relations[:_MAX_TRACE_ITEMS],
                 decision_basis=basis,
-                rationale="The leading hypothesis is deterministically distinguished by its causal evidence.",
+                rationale="One possible initiating cause is supported among admitted claims under observed relations; mechanism execution and incident recovery are not established.",
             ),
             hypotheses,
             verification_traces,
@@ -1095,7 +1157,7 @@ def _resolve(
         _trace(
             base,
             state=Resolution.AMBIGUOUS,
-            leading_hypothesis_ids=tuple(h.hypothesis_id for h in leading[:_MAX_TRACE_ITEMS]),
+            leading_hypothesis_ids=tuple(h.hypothesis_id for h in leading),
             unresolved_dimensions=(
                 "causal_actor_identity",
                 "initiating_evidence_source",
@@ -1114,12 +1176,22 @@ def _resolve(
     )
 
 
+def has_supported_cause(diagnosis: Diagnosis) -> bool:
+    """Scoped support for new products; legacy RESOLVED is read as recorded."""
+    trace = diagnosis.resolution_trace
+    if trace is not None and trace.semantics_version == "m21.v2":
+        return trace.diagnosis_status == "SUPPORTED_CAUSE"
+    return diagnosis.resolution is Resolution.RESOLVED
+
+
 def resolution_audit_records(diagnosis: Diagnosis) -> list[dict[str, object]]:
     """Return bounded near-collision records for a stored diagnosis."""
     trace = diagnosis.resolution_trace
     if trace is None or len(trace.hypothesis_audits) < 2:
         return []
-    audits = trace.hypothesis_audits
+    audits = tuple(
+        audit for audit in trace.hypothesis_audits if audit.admission != "OBSERVED_CONTEXT"
+    )
     final_selected_id = trace.leading_hypothesis_ids[0] if trace.leading_hypothesis_ids else None
     final_selected = next(
         (audit for audit in audits if audit.hypothesis_id == final_selected_id), None
@@ -1211,7 +1283,7 @@ def resolution_audit_records(diagnosis: Diagnosis) -> list[dict[str, object]]:
                     "resolution_reason": trace.rationale,
                 }
             )
-    return records[:_MAX_TRACE_ITEMS]
+    return records
 
 
 def summarize_resolution_audit(diagnoses: Iterable[Diagnosis]) -> dict[str, object]:

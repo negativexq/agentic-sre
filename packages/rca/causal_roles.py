@@ -13,6 +13,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from packages.rca.claims import actor_findings
 from packages.rca.model import (
     EntityRef,
     EvidenceTemporalRole,
@@ -94,11 +95,6 @@ def runtime_binding_entities(
     if binding.pod is not None:
         entities.append(EntityRef(namespace=binding.namespace, kind="Pod", name=binding.pod))
     return tuple(sorted(entities, key=lambda item: item.canonical))
-
-
-def actor_findings(hypothesis: Hypothesis) -> tuple[Finding, ...]:
-    """Return findings attached to the exact causal actor only."""
-    return tuple(item for item in hypothesis.findings if item.entity == hypothesis.causal_actor)
 
 
 def actor_aligned_initiating_findings(hypothesis: Hypothesis) -> tuple[Finding, ...]:

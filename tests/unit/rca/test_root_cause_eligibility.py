@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+from claim_builders import incident_claim
 
 from packages.rca.causal_roles import (
     HypothesisCausalRole,
@@ -51,6 +52,7 @@ def _finding(
         kind=kind,
         entity=entity,
         at=at,
+        incident_onset=_AT,
         temporal_role=role,
         summary=f"{kind.value} on {entity.name}",
         evidence_ids=(evidence,),
@@ -61,7 +63,7 @@ def _hypothesis(
     actor: EntityRef,
     findings: tuple[Finding, ...],
 ) -> Hypothesis:
-    return Hypothesis(
+    return incident_claim(
         hypothesis_id=f"hypothesis:{actor.name}",
         causal_actor=actor,
         members=(actor,),
@@ -101,16 +103,16 @@ def _role(
     )
 
 
-def test_episode_initiating_evidence_is_not_actor_limited() -> None:
+def test_episode_initiating_evidence_is_actor_limited() -> None:
     actor = _entity("Pod", "payment")
     member = _entity("ConfigMap", "payment-config")
     finding = _finding(member, FindingKind.CONFIG_CHANGE, "config-change")
     hypothesis = _hypothesis(actor, (finding,))
 
-    assert episode_source_capable_initiating_findings(hypothesis) == (finding,)
+    assert episode_source_capable_initiating_findings(hypothesis) == ()
     role = _role(hypothesis, HypothesisCausalRole.PROPAGATED_EFFECT, incoming=1, pairs=1)
     assessment = assess_root_cause_eligibility(hypothesis, role)
-    assert assessment.state is RootCauseEligibilityState.UNDETERMINED
+    assert assessment.state is RootCauseEligibilityState.INELIGIBLE_PROPAGATED_EFFECT
 
 
 def test_propagated_effect_without_episode_initiator_is_ineligible() -> None:
@@ -212,9 +214,10 @@ def test_resolver_excludes_only_ineligible_propagated_effects() -> None:
     eligibility = derive_root_cause_eligibilities((source, affected), roles)
     trace = resolve_hypotheses((source, affected), root_cause_eligibilities=eligibility)
 
-    assert trace.state is Resolution.RESOLVED
+    assert trace.state is Resolution.AMBIGUOUS
+    assert trace.diagnosis_status == "SUPPORTED_CAUSE"
     assert trace.leading_hypothesis_ids == (source.hypothesis_id,)
-    assert trace.decision_basis == "ROOT_CAUSE_ELIGIBILITY"
+    assert trace.discriminators[0].kind == "ROOT_CAUSE_ELIGIBILITY"
     assert affected.hypothesis_id in trace.considered_hypotheses
     assert affected.hypothesis_id in trace.eliminated_hypotheses
     assert any(

@@ -36,6 +36,7 @@ from packages.rca.model import (
     Resolution,
     ResolutionElimination,
 )
+from packages.rca.resolution import has_supported_cause
 
 PASS, FAIL = "PASS", "FAIL"
 # Evidence served from provider reads: it must be on the run's committed tape.
@@ -338,7 +339,7 @@ def _t3(ctx: _Context) -> str:
 
 def _t4(ctx: _Context) -> str:
     r2 = ctx.r2.diagnosis
-    if r2.resolution is not Resolution.RESOLVED:
+    if not has_supported_cause(r2):
         return f"R2 is {r2.resolution.value}"
     root = ctx.facts.expectation.root_actor
     leader = r2.root_cause.canonical if r2.root_cause is not None else None
@@ -363,9 +364,7 @@ def _n0(ctx: _Context) -> str:
         return "D is empty"
     if decisive & ctx.r_early.universe:
         return f"D ∩ U(R_early) = {sorted(decisive & ctx.r_early.universe)}"
-    if early.resolution is Resolution.RESOLVED and _uses_rule(
-        early, ctx.facts.expectation.target_rule
-    ):
+    if has_supported_cause(early) and _uses_rule(early, ctx.facts.expectation.target_rule):
         return "R_early is RESOLVED with the target rule"
     return ""
 

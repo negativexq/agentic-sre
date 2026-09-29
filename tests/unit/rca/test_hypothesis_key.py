@@ -23,7 +23,7 @@ def _rollout(*extra_events: tuple[str, float]) -> Hypothesis:
     source.event_items.append(event(POD, "ImagePullBackOff", 6, type_="Warning"))
     for reason, minutes in extra_events:
         source.event_items.append(event(POD, reason, minutes, type_="Warning"))
-    (hypothesis,) = build_case(source).hypotheses
+    hypothesis = build_case(source).hypotheses[0]
     return hypothesis
 
 
@@ -35,17 +35,17 @@ def _pod_only(uid: str) -> Hypothesis:
             update={"involved_uid": uid, "evidence_id": f"{warning.evidence_id}:{uid}"}
         )
     )
-    (hypothesis,) = build_case(source).hypotheses
+    hypothesis = build_case(source).hypotheses[0]
     return hypothesis
 
 
-def test_added_supporting_evidence_keeps_the_key_but_changes_the_id() -> None:
+def test_member_support_keeps_actor_claim_identity() -> None:
     before, after = _rollout(), _rollout(("BackOff", 7))
 
     assert len(after.findings) > len(before.findings)
     assert before.hypothesis_key == after.hypothesis_key
     assert before.hypothesis_key.startswith("hkey:")
-    assert before.hypothesis_id != after.hypothesis_id
+    assert before.hypothesis_id == after.hypothesis_id
 
 
 def test_added_evidence_on_the_actor_itself_keeps_the_key() -> None:
@@ -55,7 +55,7 @@ def test_added_evidence_on_the_actor_itself_keeps_the_key() -> None:
     source.event_items.append(
         event("shop/Deployment/catalog", "ProgressDeadlineExceeded", 9, type_="Warning")
     )
-    (after,) = build_case(source).hypotheses
+    after = build_case(source).hypotheses[0]
 
     assert any(f.entity == after.causal_actor and f not in before.findings for f in after.findings)
     assert after.hypothesis_key == before.hypothesis_key
@@ -89,11 +89,11 @@ def test_different_actors_or_episode_classes_get_different_keys() -> None:
     assert _hypothesis_key(actor, ()) != rollout.hypothesis_key
 
 
-def test_pod_uid_never_enters_the_key() -> None:
+def test_pod_uid_separates_the_key() -> None:
     first, second = _pod_only("uid-a"), _pod_only("uid-b")
 
     assert first.findings[0].entity_instance is not None
-    assert first.hypothesis_key == second.hypothesis_key
+    assert first.hypothesis_key != second.hypothesis_key
     assert first.hypothesis_id != second.hypothesis_id
 
 
@@ -151,7 +151,8 @@ def test_real_counter_evidence_keeps_the_key() -> None:
 
 
 def test_repeated_key_in_one_revision_is_never_matched() -> None:
-    first, second = _pod_only("uid-a"), _pod_only("uid-b")
+    first = _pod_only("uid-a")
+    second = first.model_copy(update={"hypothesis_id": "duplicate-claim"})
     unique = _rollout()
     assert first.hypothesis_key == second.hypothesis_key
 

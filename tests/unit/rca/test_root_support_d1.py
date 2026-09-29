@@ -1,7 +1,6 @@
-"""M21 D1: `m21.support.change-onset-path.v1` makes the resolver's support predicate explicit.
+"""M21 D1: `m21.support.change-onset-path.v2` makes the resolver's support predicate explicit.
 
-Audit only (OD-D3): the record sits outside the epistemic digest and the SUPPORTED
-state is derived from the same evaluation, unchanged.
+The actor-specific witness is decision-bearing and included in the digest.
 """
 
 from __future__ import annotations
@@ -102,13 +101,13 @@ def _with_support(diagnosis: Diagnosis, status: RootSupportStatus) -> Diagnosis:
 
 
 @pytest.mark.parametrize("coverage", COVERAGES)
-def test_the_d1_record_is_outside_the_epistemic_digest(coverage: datetime | None) -> None:
+def test_the_d1_record_is_inside_the_epistemic_digest(coverage: datetime | None) -> None:
     diagnosis = diagnose_case(_case(coverage))
     trace = diagnosis.resolution_trace
     assert trace is not None and all(audit.root_support for audit in trace.hypothesis_audits)
     digest = diagnosis_epistemic_digest(diagnosis)
     for status in RootSupportStatus:
-        assert diagnosis_epistemic_digest(_with_support(diagnosis, status)) == digest
+        assert diagnosis_epistemic_digest(_with_support(diagnosis, status)) != digest
 
 
 def test_the_record_is_persisted_in_the_diagnosis_document() -> None:

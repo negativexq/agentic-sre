@@ -21,6 +21,7 @@ from packages.rca.causal_roles import (
     HypothesisCausalRoleAssessment,
     HypothesisCausalRoles,
 )
+from packages.rca.claims import actor_findings
 from packages.rca.model import (
     EntityRef,
     EvidenceTemporalRole,
@@ -75,10 +76,14 @@ _MIN_TIMESTAMP = datetime.min.replace(tzinfo=UTC)
 def episode_source_capable_initiating_findings(
     hypothesis: Hypothesis,
 ) -> tuple[Finding, ...]:
-    """Return source-capable initiating findings from the entire episode."""
+    """Return claim-local initiating premises; legacy episodes remain readable."""
     return tuple(
         finding
-        for finding in hypothesis.findings
+        for finding in (
+            actor_findings(hypothesis)
+            if hypothesis.claim_version == "m21.v2"
+            else hypothesis.findings
+        )
         if finding.kind in _SOURCE_CAPABLE_INITIATING_KINDS
         and finding.temporal_role is EvidenceTemporalRole.INITIATING
     )

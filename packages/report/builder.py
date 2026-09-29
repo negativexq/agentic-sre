@@ -350,6 +350,20 @@ def build_report(
         leading_root_actor=leading,
         confidence=diagnosis.confidence.value,
         resolution=diagnosis.resolution.value,
+        decision_semantics=diagnosis.decision_semantics,
+        diagnosis_status=diagnosis.resolution_trace.diagnosis_status
+        if diagnosis.resolution_trace
+        else "UNASSESSED",
+        claim_level=diagnosis.resolution_trace.claim_level
+        if diagnosis.resolution_trace
+        else "UNASSESSED",
+        incident_recovery=diagnosis.incident_recovery,
+        context_hypothesis_ids=diagnosis.resolution_trace.context_hypotheses
+        if diagnosis.resolution_trace
+        else (),
+        material_frontier_ids=diagnosis.resolution_trace.material_frontier_ids
+        if diagnosis.resolution_trace
+        else (),
         is_resolved=is_resolved,
         summary=diagnosis.summary,
         resolution_rationale=(

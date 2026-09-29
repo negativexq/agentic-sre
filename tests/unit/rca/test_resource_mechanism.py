@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
+from claim_builders import incident_claim
 from provider_test_helpers import provider_session_factory
 from sqlalchemy import select
 
@@ -127,7 +128,7 @@ def _limit_change() -> Hypothesis:
         summary="spec changed: resources.limits.memory 512Mi -> 128Mi",
         evidence_ids=("journal:1", "journal:2"),
     )
-    return Hypothesis(
+    return incident_claim(
         hypothesis_id="hypothesis:payment-limits",
         causal_actor=DEPLOY,
         members=(DEPLOY, POD),
@@ -250,7 +251,7 @@ def _other_supported() -> Hypothesis:
         summary="payment-settings changed",
         evidence_ids=("config-change",),
     )
-    return Hypothesis(
+    return incident_claim(
         hypothesis_id="hypothesis:payment-settings",
         causal_actor=config,
         members=(config, DEPLOY),
@@ -271,9 +272,10 @@ def test_mismatch_contradicts_the_limit_hypothesis_and_resolves_to_the_other() -
         (limits, settings), mechanism_mismatches={limits.hypothesis_id: mismatch}
     )
 
-    assert trace.state is Resolution.RESOLVED
+    assert trace.state is Resolution.AMBIGUOUS
+    assert trace.diagnosis_status == "SUPPORTED_CAUSE"
     assert trace.leading_hypothesis_ids == (settings.hypothesis_id,)
-    assert trace.decision_basis == "VALID_CONTRADICTION"
+    assert trace.discriminators[0].kind == "VALID_CONTRADICTION"
     (item,) = trace.eliminations
     assert item.code is ResolutionReasonCode.OBSERVED_NORMAL_MECHANISM_MISMATCH
     assert (item.rule_id, item.rule_version) == RESOURCE_PRESSURE_RULE

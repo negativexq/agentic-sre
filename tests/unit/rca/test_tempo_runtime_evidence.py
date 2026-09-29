@@ -455,7 +455,8 @@ def test_tempo_finding_enters_existing_investigation_rebuild() -> None:
     assert any(
         finding.kind is FindingKind.DEPENDENCY_ERRORS
         and finding.details.get("runtime_pillar") == "TEMPO"
-        for finding in rebuilt_diagnosis.evidence
+        for hypothesis in rebuilt_diagnosis.alternative_hypotheses
+        for finding in hypothesis.findings
     )
     assert runtime_case.runtime_graph.edges
     assert runtime_case.runtime_propagation.boundaries

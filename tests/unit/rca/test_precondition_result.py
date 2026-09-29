@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+from claim_builders import incident_claim
 from pydantic import ValidationError
 
 from packages.rca.episode_end import (
@@ -179,13 +180,13 @@ def _supported_hypothesis() -> Hypothesis:
         summary="resource settings changed",
         evidence_ids=("journal:1",),
     )
-    return Hypothesis(
+    return incident_claim(
         hypothesis_id="h1",
         causal_actor=actor,
         members=(actor, target),
         findings=(finding,),
         initiating_findings=(finding,),
-        causal_explanation="PATH",
+        causal_explanation="DIRECT",
     )
 
 

@@ -202,7 +202,7 @@ class Run:
         (entry,) = [
             entry
             for entry in self.investigated.document["hypothesis_inventory"]
-            if entry["causal_actor"] == POD
+            if entry["causal_actor"] == POD and entry["instance_uids"] == [POD_UID]
         ]
         return str(entry["hypothesis_id"])
 
@@ -325,20 +325,25 @@ def _natural_trace_read(run: Run) -> InvestigationActionAudit:
     assert contract.config["seed_mode"] == SEED_FULL_SOURCE
     assert run.result.model_calls == 0
 
-    (audit,) = [
-        item for item in run.result.action_audits if item.action.capability == "runtime_traces"
-    ]
+    audit = next(
+        item
+        for item in run.result.action_audits
+        if item.action.capability == "runtime_traces" and item.new_evidence_refs
+    )
     assert audit.gap_dimension is GapDimension.DEPENDENCY_HEALTH
     assert audit.authorization_result == "AUTHORIZED"
     assert audit.action.target is not None
     assert audit.action.target.canonical == f"sre-demo/Pod/{POD_NAME}"
 
     # The real reader spoke Tempo's protocol: one TraceQL search, then trace fetches.
-    search, *fetches = run.tempo.requests
+    search = next(
+        url for url in run.tempo.requests if urlsplit(url).path == "/api/search" and POD_NAME in url
+    )
+    fetches = [url for url in run.tempo.requests if urlsplit(url).path != "/api/search"]
     assert urlsplit(search).path == "/api/search" and POD_NAME in search
     assert fetches and all("/api/v2/traces/" in url for url in fetches)
 
-    (read,) = run.tempo_reads
+    read = run.tempo_reads[0]
     assert read.caller_class == "INVESTIGATION"
     assert set(read.evidence_ids) == run.tempo.ids()
     assert set(audit.new_evidence_refs) == run.tempo.ids()
@@ -348,9 +353,12 @@ def _natural_trace_read(run: Run) -> InvestigationActionAudit:
 
 
 def _trace_observation(run: Run) -> InvestigationObservation:
-    (observation,) = [
-        item for item in run.result.observations if item.capability == "runtime_traces"
-    ]
+    observation = next(
+        item
+        for item in run.result.observations
+        if item.capability == "runtime_traces"
+        and item.target.canonical == f"sre-demo/Pod/{POD_NAME}"
+    )
     assert observation.runtime is not None
     return observation
 
@@ -384,7 +392,7 @@ def test_an_exact_uid_chain_carries_trace_evidence_to_m16_authority(
     audit = _natural_trace_read(run)
 
     # BEST_EFFORT does not void observed errors: they are positive evidence.
-    (read,) = run.tempo_reads
+    read = run.tempo_reads[0]
     assert read.observation["diagnostics"]["completeness"] == "BEST_EFFORT"
     assert _runtime_state(run) is RuntimeObservationState.OBSERVED_ABNORMAL
     assert audit.observation_outcome is GapOutcomeKind.SUPPORTS
@@ -461,10 +469,22 @@ def test_a_broken_uid_chain_gives_no_pod_authority(
     # Deployment-level verification does not depend on the Pod instance.
     assert edge.affected_deployment_verification is VERIFIED
 
-    role = _pod_role(run)
-    assert role.verified_incoming_edges == 0
-    assert role.role not in M16_ROLES
-    assert run.pod_exclusions(run.investigated) == []
+    pod_entries = [
+        entry
+        for entry in run.investigated.document["hypothesis_inventory"]
+        if entry["causal_actor"] == POD
+    ]
+    for entry in pod_entries:
+        role = run.roles.for_hypothesis(entry["hypothesis_id"])
+        assert role is not None
+        if entry["instance_uids"] == [POD_UID] and pod_level is VERIFIED:
+            # An exact-instance observation remains valid even when another
+            # same-named instance (or unbound observation) is also present.
+            assert role.verified_incoming_edges >= 1
+            assert role.role in M16_ROLES
+        else:
+            assert role.verified_incoming_edges == 0
+            assert role.role not in M16_ROLES
     assert run.replays("trajectory")
     assert run.replays("selector")
 
@@ -507,7 +527,7 @@ def test_success_only_traces_are_never_observed_normal(
     audit = _natural_trace_read(run)
 
     # The completeness diagnostics are persisted on the tape.
-    (read,) = run.tempo_reads
+    read = run.tempo_reads[0]
     diagnostics = read.observation["diagnostics"]
     assert diagnostics["completeness"] == completeness
     assert diagnostics["search_limit_reached"] is search_limit

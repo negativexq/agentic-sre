@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+from claim_builders import incident_claim
+
 from packages.rca.causal_roles import HypothesisCausalRole
 from packages.rca.model import (
     CausalHop,
@@ -64,7 +66,7 @@ def _supported(name: str) -> Hypothesis:
     actor = _entity("HorizontalPodAutoscaler", name)
     target = _entity("Deployment", f"{name}-workload")
     initiating = _finding(actor, FindingKind.AUTOSCALING_FAILURE, f"{name}-hpa")
-    return Hypothesis(
+    return incident_claim(
         hypothesis_id=f"hypothesis:{name}",
         causal_actor=actor,
         members=(actor, target),
@@ -78,7 +80,7 @@ def _supported(name: str) -> Hypothesis:
 
 
 def _contradicted(late: Finding) -> Hypothesis:
-    return Hypothesis(
+    return incident_claim(
         hypothesis_id="hypothesis:late",
         causal_actor=late.entity,
         members=(late.entity,),
@@ -182,7 +184,7 @@ def test_propagated_effect_elimination_keeps_exact_untruncated_provenance() -> N
 
 
 def test_missing_proof_is_never_an_audited_elimination() -> None:
-    unlinked = Hypothesis(
+    unlinked = incident_claim(
         hypothesis_id="hypothesis:unlinked",
         causal_actor=_entity("Deployment", "unlinked"),
         members=(_entity("Deployment", "unlinked"),),
@@ -191,7 +193,7 @@ def test_missing_proof_is_never_an_audited_elimination() -> None:
     trace = resolve_hypotheses((_supported("good"), unlinked))
 
     assert trace.eliminations == ()
-    assert unlinked.hypothesis_id in trace.unresolved_hypotheses
+    assert unlinked.hypothesis_id in trace.context_hypotheses
 
 
 def test_pre_contract_elimination_records_still_load() -> None:

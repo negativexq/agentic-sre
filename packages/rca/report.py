@@ -178,13 +178,16 @@ def diagnosis_html(
     )
     parts.append(
         "<div class='card'>"
-        f"<div class='muted'>Root cause {_badge(diagnosis.confidence)}</div>"
+        f"<div class='muted'>Possible causal actor {_badge(diagnosis.confidence)}</div>"
         f"<div class='cause'>{cause}</div>"
         f"<div class='muted'>Resolution</div><div class='badge'>{escape(diagnosis.resolution.value)}</div>"
         f"<p>{escape(diagnosis.summary)}</p></div>"
     )
     if diagnosis.resolution_trace:
         trace = diagnosis.resolution_trace
+        parts.append(
+            f"<p>Diagnosis: {escape(trace.diagnosis_status)} · Scope: {escape(trace.claim_level)} · Incident recovery: {escape(diagnosis.incident_recovery)}</p>"
+        )
         resolution_parts = [
             f"<h2>Resolution: {escape(trace.state.value)}</h2>",
             f"<div class='card'><p>{escape(trace.rationale)}</p>",

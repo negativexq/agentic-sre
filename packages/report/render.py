@@ -27,6 +27,8 @@ def _duration(seconds: float | None) -> str:
 
 
 def _actor_line(snapshot: ReportSnapshot) -> str:
+    if snapshot.decision_semantics == "m21.v2":
+        return f"Possible causal actor: `{snapshot.leading_root_actor or 'none identified'}` ({snapshot.diagnosis_status}; {snapshot.claim_level}; recovery {snapshot.incident_recovery})"
     if snapshot.is_resolved:
         return f"Root cause: `{snapshot.root_actor}`"
     return f"Leading root actor: `{snapshot.leading_root_actor or 'none identified'}`"
@@ -317,7 +319,13 @@ def to_pdf(snapshot: ReportSnapshot) -> bytes:
     pdf.h2("Executive summary")
     pdf.kv("Severity / status", f"{snapshot.severity} / {snapshot.status}")
     actor = snapshot.root_actor if snapshot.is_resolved else snapshot.leading_root_actor
-    label = "Root cause" if snapshot.is_resolved else "Leading root actor"
+    label = (
+        "Possible causal actor"
+        if snapshot.decision_semantics == "m21.v2"
+        else "Root cause"
+        if snapshot.is_resolved
+        else "Leading root actor"
+    )
     pdf.kv(label, actor or "none identified")
     pdf.kv("Confidence", snapshot.confidence)
     pdf.kv("Resolution", snapshot.resolution)

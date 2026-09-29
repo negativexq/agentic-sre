@@ -37,11 +37,11 @@ from packages.rca.model import (
     LogRecord,
     ObjectVersion,
     ProviderReadFailure,
-    Resolution,
     ResourcePressure,
     TraceSpanObservation,
     TrafficObservation,
 )
+from packages.rca.resolution import has_supported_cause
 from packages.rca.resource_mechanism import RULE_ID as RESOURCE_RULE_ID
 from packages.rca.root_cause_eligibility import RootCauseEligibilities
 
@@ -168,8 +168,12 @@ def evidence_ablation(
     )
     if _eliminated_by(ablated, hypothesis_key, rule):
         return AblationResult(FAIL, ablated, "H_x is still eliminated by the target rule")
-    if ablated.resolution is Resolution.RESOLVED:
-        return AblationResult(FAIL, ablated, "the ablated diagnosis is still RESOLVED")
+    if has_supported_cause(ablated):
+        return AblationResult(
+            FAIL,
+            ablated,
+            "the ablated diagnosis still has a supported cause (legacy RESOLVED or scoped support)",
+        )
     return AblationResult(PASS, ablated)
 
 
@@ -208,8 +212,13 @@ def rule_ablation(
     overrides = EvalRuleOverrides(disabled_rules=(rule,))
     digest = eval_config_digest(effective, overrides)
     ablated = diagnose_case(without_rule(build_case(source, effective), rule[0]), config=effective)
-    if ablated.resolution is Resolution.RESOLVED:
-        return AblationResult(FAIL, ablated, "the ablated diagnosis is still RESOLVED", digest)
+    if has_supported_cause(ablated):
+        return AblationResult(
+            FAIL,
+            ablated,
+            "the ablated diagnosis still has a supported cause (legacy RESOLVED or scoped support)",
+            digest,
+        )
     return AblationResult(PASS, ablated, eval_config_digest=digest)
 
 

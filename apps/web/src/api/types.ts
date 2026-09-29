@@ -90,6 +90,12 @@ export interface InvestigationAuditView {
 }
 
 export interface DiagnosisView {
+  decision_semantics?: string;
+  diagnosis_status?: string;
+  claim_level?: string;
+  incident_recovery?: string;
+  context_hypothesis_ids?: string[];
+  material_frontier_ids?: string[];
   incident_id: string;
   resolution: Resolution;
   confidence: Confidence;

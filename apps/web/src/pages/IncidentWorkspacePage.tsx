@@ -50,7 +50,7 @@ function RootActor({ diagnosis }: { diagnosis: DiagnosisView }) {
       <CardBody className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium uppercase tracking-wide text-subtle">
-            {resolved ? "Root cause" : "Leading root actor"}
+            {diagnosis.decision_semantics === "m21.v2" ? "Possible causal actor" : resolved ? "Root cause" : "Leading root actor"}
           </span>
           <Badge tone={confidenceTone(diagnosis.confidence)}>{diagnosis.confidence}</Badge>
           <Badge tone={resolutionTone(diagnosis.resolution)}>{diagnosis.resolution}</Badge>
@@ -59,6 +59,14 @@ function RootActor({ diagnosis }: { diagnosis: DiagnosisView }) {
           {actor ? shortEntity(actor) : "No single root cause identified"}
         </p>
         <p className="text-sm text-muted break-anywhere">{diagnosis.summary}</p>
+        {diagnosis.decision_semantics === "m21.v2" && (
+          <p className="text-sm text-muted">
+            Diagnosis: {diagnosis.diagnosis_status}. Scope: {diagnosis.claim_level}.
+            Incident recovery: {diagnosis.incident_recovery}.
+            Context observations: {diagnosis.context_hypothesis_ids?.length ?? 0}.
+            Open causal boundaries: {diagnosis.material_frontier_ids?.length ?? 0}.
+          </p>
+        )}
 
         {!resolved && (
           <div className="rounded-lg border border-accent/30 bg-accent-soft px-3 py-2 text-sm">

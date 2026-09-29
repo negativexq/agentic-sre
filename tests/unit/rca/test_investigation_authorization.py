@@ -341,7 +341,7 @@ def test_frontier_progress_is_partial_until_fully_covered_and_promotes_only_hypo
         hypotheses=(Hypothesis(hypothesis_id="h1", causal_actor=actor),),
         queried_dimensions_by_alternative={},
     )[0]
-    assert promoted.status is FrontierStatus.PROMOTED
+    assert promoted.status is FrontierStatus.UNEXPLORED
 
     manifestation = apply_frontier_progress(
         (alternative,),
@@ -354,7 +354,7 @@ def test_frontier_progress_is_partial_until_fully_covered_and_promotes_only_hypo
         ),
         queried_dimensions_by_alternative={},
     )[0]
-    assert manifestation.status is FrontierStatus.PROMOTED
+    assert manifestation.status is FrontierStatus.UNEXPLORED
 
 
 def test_normalized_findings_keep_signal_provenance_separate_from_observation_refs() -> None:

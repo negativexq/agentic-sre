@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from claim_builders import incident_claim
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
@@ -37,7 +38,6 @@ from packages.rca.model import (
     Finding,
     FindingKind,
     GapOutcomeKind,
-    Hypothesis,
     HypothesisDiagnostics,
     InvestigationAction,
     InvestigationObservation,
@@ -94,7 +94,7 @@ def _case() -> tuple[Case, EntityRef, EntityRef]:
         details={},
     )
     hypotheses = [
-        Hypothesis(
+        incident_claim(
             hypothesis_id="hypothesis:left",
             causal_actor=left,
             members=(left,),
@@ -104,7 +104,7 @@ def _case() -> tuple[Case, EntityRef, EntityRef]:
             causal_explanation="DIRECT",
             score=10,
         ),
-        Hypothesis(
+        incident_claim(
             hypothesis_id="hypothesis:right",
             causal_actor=right,
             members=(right,),
@@ -351,11 +351,11 @@ def test_ambiguous_investigation_adds_evidence_and_resolves_deterministically() 
         rebuild_case=_rebuild_with_findings,
     )
     assert result.initial_resolution is Resolution.AMBIGUOUS
-    assert result.final_resolution is Resolution.RESOLVED
+    assert result.final_resolution is Resolution.AMBIGUOUS
     assert result.diagnosis.root_cause == right
     assert result.tool_calls == 1
     assert result.model_calls == 0
-    assert result.resolved_during_investigation
+    assert not result.resolved_during_investigation
     assert tool.calls == 1
     assert result.observations[0].outcome is GapOutcomeKind.SUPPORTS
     assert result.observations[0].hypothesis_ids
@@ -366,7 +366,7 @@ def test_ambiguous_investigation_adds_evidence_and_resolves_deterministically() 
     assert audit.authorization_result == "AUTHORIZED"
     assert audit.backend_execution_status.value == "SUCCEEDED"
     assert audit.resolution_before is Resolution.AMBIGUOUS
-    assert audit.resolution_after is Resolution.RESOLVED
+    assert audit.resolution_after is Resolution.AMBIGUOUS
     assert audit.hypothesis_states_before
     assert audit.hypothesis_states_after
     assert audit.hypothesis_states_before != audit.hypothesis_states_after
@@ -402,10 +402,12 @@ def test_investigation_observation_can_reveal_a_temporal_contradiction() -> None
         tools={"events": _DiscriminatingEventsTool(contradiction)},
         rebuild_case=_rebuild_with_left_contradiction,
     )
-    assert result.final_resolution is Resolution.RESOLVED
+    assert result.final_resolution is Resolution.AMBIGUOUS
+    assert result.diagnosis.resolution_trace is not None
+    assert result.diagnosis.resolution_trace.diagnosis_status == "SUPPORTED_CAUSE"
     assert result.diagnosis.root_cause == right
     assert result.diagnosis.resolution_trace is not None
-    assert result.diagnosis.resolution_trace.decision_basis == "VALID_CONTRADICTION"
+    assert result.diagnosis.resolution_trace.discriminators[0].kind == "VALID_CONTRADICTION"
 
 
 def test_no_data_is_neutral_and_does_not_resolve() -> None:
@@ -493,7 +495,7 @@ def test_invalid_action_retries_then_executes_only_the_valid_second_action() -> 
     assert result.rejected_actions == 1
     assert result.tool_calls == 1
     assert tool.calls == 1
-    assert result.final_resolution is Resolution.RESOLVED
+    assert result.final_resolution is Resolution.AMBIGUOUS
 
 
 def test_unsupported_capability_retries_without_dictionary_lookup_or_execution() -> None:
@@ -915,7 +917,7 @@ def test_checkpoint_resume_preserves_state_and_does_not_repeat_action() -> None:
     partial = graph.invoke(state, config={"configurable": {"thread_id": thread_id}})
     assert partial.get("final_result") is None
     result = resume_investigation(graph, thread_id=thread_id)
-    assert result.final_resolution is Resolution.RESOLVED
+    assert result.final_resolution is Resolution.AMBIGUOUS
     assert result.tool_calls == 1
     assert result.observations
     assert tool.calls == 1
@@ -981,7 +983,7 @@ def test_unpicklable_source_never_enters_a_checkpoint_and_resume_rebuilds_the_ca
         keys = set(checkpoint.checkpoint["channel_values"])
         assert not keys & _RUNTIME_KEYS
     result = resume_investigation(graph, thread_id="locked-source")
-    assert result.final_resolution is Resolution.RESOLVED
+    assert result.final_resolution is Resolution.AMBIGUOUS
     assert tool.calls == 1
 
 
@@ -1046,7 +1048,7 @@ def test_resume_uses_a_fresh_runtime_and_rebuilds_case_with_checkpointed_finding
     )
     result = resume_investigation(graph_b, thread_id="fresh-runtime")
 
-    assert result.final_resolution is Resolution.RESOLVED
+    assert result.final_resolution is Resolution.AMBIGUOUS
     assert result.observations
     assert result.tool_calls == 1
     assert rebuilt_sources == [source_b]

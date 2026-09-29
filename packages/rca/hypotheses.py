@@ -11,6 +11,7 @@ from packages.rca.model import (
     Candidate,
     CausalHop,
     Diagnosis,
+    EntityInstanceRef,
     EntityRef,
     EvidenceTemporalRole,
     Finding,
@@ -215,52 +216,6 @@ def _aggregate_score(
     return round(total, 3), reasons, duplicate_count
 
 
-def _actor_candidate(
-    candidates: Sequence[Candidate], topology: Topology
-) -> tuple[Candidate, tuple[tuple[EntityRef, tuple[CausalHop, ...]], ...]]:
-    paths_by_actor: dict[EntityRef, list[tuple[EntityRef, tuple[CausalHop, ...]]]] = {}
-    for candidate in candidates:
-        for other in candidates:
-            if other.entity == candidate.entity:
-                continue
-            path = topology.causal_path(candidate.entity, {other.entity}, max_depth=6)
-            if path is not None:
-                paths_by_actor.setdefault(candidate.entity, []).append((other.entity, path))
-
-    def key(candidate: Candidate) -> tuple[int, float, int, int, str, str]:
-        """Prefer an initiating candidate using the existing ranking order.
-
-        A Schedule is retained in the same episode as its spawned execution,
-        but it is not promoted solely because it has a ``spawns`` edge. The
-        concrete fault object remains the actor when its initiating evidence
-        is stronger; a Schedule becomes the actor when it is the only or
-        strongest causal control point represented by the evidence.
-        """
-        return (
-            int(_has_initiating_evidence(candidate)),
-            candidate.score,
-            len(paths_by_actor.get(candidate.entity, ())),
-            int(candidate.entity.kind == "Schedule"),
-            _earliest_initiating(candidate),
-            candidate.entity.canonical,
-        )
-
-    # Reverse only the evidence dimensions; canonical identity remains the
-    # deterministic final tie-break, never causal evidence.
-    actor = sorted(
-        candidates,
-        key=lambda candidate: (
-            -key(candidate)[0],
-            -key(candidate)[1],
-            -key(candidate)[2],
-            -key(candidate)[3],
-            key(candidate)[4],
-            key(candidate)[5],
-        ),
-    )[0]
-    return actor, tuple(paths_by_actor.get(actor.entity, ()))
-
-
 def _hypothesis_id(
     actor: EntityRef, members: Sequence[EntityRef], findings: Sequence[Finding]
 ) -> str:
@@ -309,9 +264,18 @@ def _signature(hypothesis: Hypothesis) -> tuple[object, ...]:
 
 
 def _make_hypothesis(
-    candidates: Sequence[Candidate], topology: Topology, context: Context, config: RankingConfig
+    candidates: Sequence[Candidate],
+    topology: Topology,
+    context: Context,
+    config: RankingConfig,
+    actor_candidate: Candidate,
 ) -> tuple[Hypothesis, int, bool]:
-    actor_candidate, member_paths = _actor_candidate(candidates, topology)
+    member_paths = tuple(
+        (candidate.entity, path)
+        for candidate in candidates
+        if candidate.entity != actor_candidate.entity
+        if (path := topology.causal_path(actor_candidate.entity, {candidate.entity}, max_depth=6))
+    )
     actor = actor_candidate.entity
     members = tuple(
         sorted((candidate.entity for candidate in candidates), key=lambda item: item.canonical)
@@ -333,30 +297,21 @@ def _make_hypothesis(
     )
     initiating = tuple(
         finding
-        for finding in all_findings
+        for finding in actor_findings
         if finding.temporal_role is EvidenceTemporalRole.INITIATING
-        and not (
-            actor.kind == "Schedule"
-            and finding.entity != actor
-            and finding.kind is FindingKind.FAULT_INJECTION
-        )
+        and finding.kind in _INITIATING_KINDS
     )
     supporting = tuple(
         finding
         for finding in all_findings
         if finding.temporal_role is EvidenceTemporalRole.SUPPORTING
         or (finding.entity != actor and finding.kind in _MANIFESTATION_KINDS)
-        or (
-            actor.kind == "Schedule"
-            and finding.entity != actor
-            and finding.kind is FindingKind.FAULT_INJECTION
-        )
     )
     contradictory = tuple(
         finding
-        for finding in all_findings
+        for finding in actor_findings
         if finding.temporal_role is EvidenceTemporalRole.CONSEQUENCE
-        and (finding.entity == actor or finding.kind in _INITIATING_KINDS)
+        and finding.kind in _INITIATING_KINDS
     )
     manifestations = tuple(
         member
@@ -364,18 +319,64 @@ def _make_hypothesis(
         if member != actor
         and any(finding.entity == member for finding in supporting + contradictory)
     )
-    paths: list[tuple[CausalHop, ...]] = []
-    primary = topology.causal_path(actor, context.symptom_entities, max_depth=6)
-    if primary:
-        paths.append(primary)
-    for member, path in sorted(member_paths, key=lambda item: item[0].canonical):
-        if member == actor or not path or path in paths:
-            continue
-        paths.append(path)
+    paths = [
+        path
+        for symptom in sorted(context.symptom_entities, key=lambda item: item.canonical)
+        if (path := topology.causal_path(actor, {symptom}, max_depth=6))
+    ]
+    # Quota rejection is a positively observed mechanism, attributed by the
+    # quota normalizer to exact rejected workloads (not generic relatedness).
+    for finding in actor_findings:
+        if (
+            finding.kind is FindingKind.QUOTA_EXCEEDED
+            and finding.evidence_ids
+            and finding.details.get("rejected")
+        ):
+            for affected in finding.related:
+                for symptom in sorted(context.symptom_entities, key=lambda item: item.canonical):
+                    tail = topology.causal_path(affected, {symptom}, max_depth=6)
+                    if tail is not None:
+                        paths.append(
+                            (
+                                CausalHop(source=actor, relation="quota_blocks", target=affected),
+                                *tail,
+                            )
+                        )
     linked = tuple(
-        sorted({symptom for candidate in candidates for symptom in candidate.linked_symptoms})
+        sorted(
+            symptom.canonical
+            for symptom in context.symptom_entities
+            if symptom == actor or any(path[-1].target == symptom for path in paths)
+        )
     )
-    explanation = "PATH" if paths else ("DIRECT" if linked else "UNLINKED")
+    explanation = (
+        "PATH" if paths else ("DIRECT" if actor in context.symptom_entities else "UNLINKED")
+    )
+    instances = {finding.entity_instance for finding in actor_findings}
+    instance = next(iter(instances)) if len(instances) == 1 else None
+    onset = actor_findings[0].incident_onset if actor_findings else None
+    latest = topology.latest.get(actor)
+    identity_conflict = (
+        instance is not None
+        and latest is not None
+        and latest.instance_uid is not None
+        and instance.uid != latest.instance_uid
+    )
+    episode_conflict = onset is not None and onset != context.symptoms.onset
+    if identity_conflict or episode_conflict:
+        paths, linked, explanation = [], (), "UNLINKED"
+    scoped_symptoms = (
+        ()
+        if identity_conflict or episode_conflict
+        else tuple(sorted(context.symptom_entities, key=lambda item: item.canonical))
+    )
+    mechanism = (
+        ",".join(sorted({finding.kind.value for finding in initiating})) or "MANIFESTATION_ONLY"
+    )
+    identity = "|".join(
+        [actor.canonical, instance.uid if instance else "unknown", str(onset), mechanism, *linked]
+    )
+    claim_key = f"hkey:{sha256(identity.encode()).hexdigest()[:16]}"
     score, top_reasons, duplicate_count = _aggregate_score(all_findings, context, config)
     grouping_reasons = list(top_reasons)
     if len(members) > 1:
@@ -387,8 +388,32 @@ def _make_hypothesis(
     if duplicate_count:
         grouping_reasons.append(f"deduplicated {duplicate_count} repeated evidence reference(s)")
     hypothesis = Hypothesis(
-        hypothesis_id=_hypothesis_id(actor, members, all_findings),
-        hypothesis_key=_hypothesis_key(actor, initiating),
+        hypothesis_id=_hypothesis_id(actor, (actor,), actor_findings) + ":" + claim_key[5:],
+        hypothesis_key=claim_key,
+        claim_version="m21.v2",
+        actor_instance=instance,
+        episode_onset=onset,
+        mechanism=mechanism,
+        presentation_group_id=_hypothesis_id(actor=members[0], members=members, findings=()),
+        symptom_entities=scoped_symptoms,
+        member_paths=tuple(path for _, path in member_paths),
+        relation_evidence_ids=tuple(
+            sorted(
+                {
+                    evidence_id
+                    for path in paths
+                    for hop in path
+                    for evidence_id in (
+                        *topology.edge_evidence.get((hop.source, hop.relation, hop.target), ()),
+                        *(
+                            topology.latest[ref].evidence_id
+                            for ref in (hop.source, hop.target)
+                            if ref in topology.latest
+                        ),
+                    )
+                }
+            )
+        ),
         causal_actor=actor,
         members=members,
         manifestations=manifestations,
@@ -418,6 +443,20 @@ def group_candidates(
             hypotheses=(),
             diagnostics=HypothesisDiagnostics(),
         )
+    # Exact UID and incident episode partitions never lend evidence to each other.
+    partitioned: list[Candidate] = []
+    for candidate in candidates:
+        buckets: dict[tuple[EntityInstanceRef | None, datetime | None], list[Finding]] = {}
+        for finding in candidate.findings:
+            if finding.entity == candidate.entity:
+                buckets.setdefault((finding.entity_instance, finding.incident_onset), []).append(
+                    finding
+                )
+        for findings in buckets.values():
+            partitioned.append(
+                candidate.model_copy(update={"findings": _effective_findings(findings)})
+            )
+    candidates = partitioned
     disjoint = _DisjointSet(len(candidates))
     for left_index, left in enumerate(candidates):
         for right_index in range(left_index + 1, len(candidates)):
@@ -426,15 +465,24 @@ def group_candidates(
     components: dict[int, list[Candidate]] = {}
     for index, candidate in enumerate(candidates):
         components.setdefault(disjoint.find(index), []).append(candidate)
-    built = [_make_hypothesis(items, topology, context, config) for items in components.values()]
+    built = [
+        _make_hypothesis(items, topology, context, config, actor)
+        for items in components.values()
+        for actor in items
+    ]
     hypotheses = tuple(
         sorted(
             (item[0] for item in built),
             key=lambda item: (-item.score, item.causal_actor.canonical, item.hypothesis_id),
         )
     )
-    duplicate_count = sum(item[1] for item in built)
-    ownership_count = sum(int(item[2] and len(item[0].members) > 1) for item in built)
+    duplicate_count = sum(
+        max(item[1] for item in built if item[0].presentation_group_id == group_id)
+        for group_id in {item[0].presentation_group_id for item in built}
+    )
+    ownership_count = len(
+        {item[0].presentation_group_id for item in built if item[2] and len(item[0].members) > 1}
+    )
     ties = sum(
         1
         for left_index, left in enumerate(hypotheses)
@@ -498,7 +546,11 @@ def summarize_diagnoses(diagnoses: Iterable[Diagnosis]) -> dict[str, int]:
 
 def hypothesis_candidate(hypothesis: Hypothesis) -> Candidate:
     """Adapt a grouped hypothesis to the existing verification/remediation APIs."""
-    primary_path = hypothesis.causal_paths[0] if hypothesis.causal_paths else ()
+    primary_path = (
+        hypothesis.causal_paths[0]
+        if hypothesis.causal_paths and hypothesis.causal_explanation != "DIRECT"
+        else ()
+    )
     return Candidate(
         entity=hypothesis.causal_actor,
         score=hypothesis.score,

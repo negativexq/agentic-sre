@@ -1,6 +1,127 @@
-# M21 Causal Semantics Contract
+# M21 Causal Semantics Contract — actor-specific claims
 
-Contract version: `m21.v1`
+Contract version: `m21.v2`; engine `2.0.0`; D1 `m21.support.change-onset-path.v2`.
+Authorized replacement of the conflicting frozen v1 clauses, 2026-09-28.
+The v2 clauses below govern current code. The original v1 text is retained below
+as historical rationale; its default competition, D1 audit-only, dominance and
+supported-leader provisions are superseded, not additional requirements.
+
+## Current decision contract
+
+The stages are observation → presentation episode → actor/instance/incident
+claim → positive admission → support/contradiction → scoped diagnosis.
+`Hypothesis` is the claim representation; no parallel hypothesis hierarchy is
+introduced. Every actor in a presentation component is retained, including two
+independent initiators and manifestations. Exact UID and incident-onset partitions
+are separate claims. Unknown UID observations never donate evidence to a known
+UID. A known current UID mismatch or a different incident onset removes the
+claim's current incident links. The former pre-group fault-instance collapse is
+not used by the engine: choosing one scheduled execution could lose a cause.
+
+Claim identity incorporates actor, UID when known, mechanism class, incident
+onset and reached symptom scope; source IDs distinguish revision-local evidence.
+Presentation group membership and rank never confer causal authority. Scores
+order presentation and investigation only. Group findings remain available for
+inspection; support, contradiction, roles and episode eligibility use actor-local
+premises. There is no transitive group attribution.
+
+### Admission and preserved uncertainty
+
+`ADMITTED` means an actor-local observation has a validated directed mechanism
+chain to a real alert-derived incident entity, or is itself directly alerting.
+This is weaker than support: a related failure with no initiating evidence
+remains a rival. Paths must start at the actor, be contiguous, use modeled causal
+relations, and end at the declared incident symptom. Actor→member paths are stored
+separately and never satisfy this predicate. Opaque `PATH`/`linked_symptoms`
+strings, namespace/node co-location, rank and another actor's findings are not
+admission evidence. A verified observed non-success propagation chain is also
+usable, only at positively verified Kubernetes binding levels; Pod edges require
+the current exact UID. This establishes propagation, not initiation.
+
+`OBSERVED_CONTEXT` is retained and can be promoted by new evidence. It is neither
+contradicted nor proven noncausal, and generates no queue to prove every observed
+object innocent. Existing positive temporal, runtime propagated-effect, ended
+instance and observed-normal mechanism rules remain applicable. Topic A's
+covered-no-path requirements still govern a *positive noncausality assertion*;
+they are not prerequisites to keep an unlinked observation as context.
+
+Preserved: **Missing evidence is not contradiction or proof of non-causality.**
+Replaced: **Every observed object remains a root competitor until eliminated.**
+The resolver compares admitted claims, retaining every unresolved real rival.
+Finding-kind set inclusion cannot explain another independent cause: dominance
+is disabled until a positive causal explanation rule is supplied. Multiple
+independent supported causes remain explicitly ambiguous.
+
+### D1 witness and authority boundary
+
+D1 v2 requires an actor/instance/episode-owned initiating change, a known causal
+onset, an observed timestamp, source evidence IDs and an admitted incident link.
+It emits `CausalWitness` records with the origin Finding, direct ownership,
+mechanism, instance, actual symptom, directed chain, onset, source and available
+relation observation IDs, coverage, missing execution proof, and rule version.
+Quota rejection has one explicit attribution rule: the quota normalizer's
+positive rejection evidence and exact rejected workload targets authorize
+`quota_blocks`; generic `Finding.related` does not.
+
+The level is **POSSIBLE_INITIATING_CAUSE**, not proven mechanism execution.
+Runtime failure origin alone does not fire this initiating support rule. It
+cannot eliminate an upstream configuration or unobserved dependency.
+A unique supported eligible claim with no admitted rival yields
+`diagnosis_status=SUPPORTED_CAUSE`. Competing admitted claims yield
+`COMPETING_CAUSES`; absence of support yields `INSUFFICIENT_EVIDENCE`.
+The legacy `resolution` remains `AMBIGUOUS` for a D1-only supported diagnosis:
+D1 v2 does not grant legacy `RESOLVED` authority. This applies equally with or
+without unrelated context. No conclusive initiating-proof rule is introduced.
+
+### Material frontier and planner
+
+The existing `StructuralAlternative` representation is extended with affected
+entities and explicit claim bindings. Frontier construction runs for full
+snapshots as well as bounded initial views. A modeled upstream dependency,
+configuration, autoscaler, policy or fault affecting a node on an admitted
+actor→incident chain is material to that claim's initiating-cause boundary.
+Unrelated global coverage limitations do not automatically block the diagnosis.
+Material gaps state the mechanism and affected claim, and reuse existing
+bounded authorized queries, information gaps and read-cost policy.
+
+`NO_DATA`, provider failure, completed reads, promotion and exhausted budget
+are not causal closure. In particular, `QUERIED_NO_CAUSAL_FINDING` remains an
+observational lifecycle status, never a proof of absence. Material mechanisms
+remain visible after such reads. There is deliberately no generic frontier
+closure rule: positive mechanism-specific closure must be implemented before a
+future stronger initiating-proof rule can use it. Unmodeled dependencies are not
+invented as object competitors; the possible-cause scope remains explicit.
+
+The planner uses the same admitted IDs and material frontier bindings: complete
+an initiating witness, distinguish real rivals, examine a material upstream
+mechanism, or test a propagated manifestation. Context IDs receive no causal
+priority, and frontier bindings outrank incidental structural observations.
+Priority remains search guidance, never resolver authority.
+
+### Product, inventory and replay migration
+
+Engine `2.0.0`, `claim_version=m21.v2`, `ResolutionTrace.semantics_version=m21.v2`
+and `Diagnosis.decision_semantics=m21.v2` make the transition explicit.
+`diagnosis_status`/`claim_level`, `investigation_status`, and
+`incident_recovery=NOT_ASSESSED` are separate axes. Console DTO, web workspace,
+standalone HTML and report snapshots expose the scope. Existing incident alert
+recovery and lifecycle transitions are unchanged. `root_cause` remains a legacy
+selected-actor field, not new proof of incident recovery; consumers must read
+its diagnosis status and scope. Legacy RESOLVED consumers receive no new
+RESOLVED values from D1 v2.
+
+All claims, audits, admissions, support witnesses and frontier bindings are
+retained without an eight-record decision/measurement cap. Decision-bearing
+witnesses, admission and material frontier enter the epistemic digest in sorted
+canonical form. Scores do not. Legacy documents remain readable with `legacy`
+semantics; unversioned claims are not auto-admitted. Existing replay engine
+version checks reject old runs explicitly as unsupported, rather than applying
+new meaning to old decisions. Replay of newly recorded runs uses recorded reads.
+Recalculation of old evidence requires a new engine-versioned run.
+
+## Historical v1 text (superseded where stated above)
+
+Historical contract version: `m21.v1`
 Status: **FROZEN** (owner, 2026-09-27, after amendments 1–2; amendments 3–5 recorded 2026-09-28, §9). M21 implementation starts only after the M20 live-parity tasks, in the owner-frozen order.
 Baseline: `main` @ `d0caf5d0e3512930c1a8d4e0803e777a64fb2f06` (RCA code identical to the M20.1 audit)
 Scope: this contract defines the evidence that authorizes the RCA engine to treat a hypothesis as root-capable, root-supported or root-ineligible. It covers four topics: A unrelated initiated changes, B telemetry and control-plane actors, C asynchronous propagation, and D positive root support. It changes no code, test or threshold.

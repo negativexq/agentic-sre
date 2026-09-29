@@ -17,6 +17,7 @@ from hashlib import sha256
 from typing import Any
 from uuid import UUID
 
+from packages.rca.claims import actor_findings
 from packages.rca.episode_end import RULE_ID as EPISODE_END_RULE_ID
 from packages.rca.episode_end import RULE_VERSION as EPISODE_END_RULE_VERSION
 from packages.rca.episode_end import InstanceRequirement
@@ -71,7 +72,11 @@ def _instance_uids(hypothesis: Hypothesis) -> tuple[str, ...]:
         sorted(
             {
                 finding.entity_instance.uid
-                for finding in hypothesis.findings
+                for finding in (
+                    actor_findings(hypothesis)
+                    if hypothesis.claim_version == "m21.v2"
+                    else hypothesis.findings
+                )
                 if finding.entity_instance is not None and finding.entity_instance.uid
             }
         )

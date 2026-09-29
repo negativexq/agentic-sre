@@ -1221,7 +1221,9 @@ def test_the_rca_result_and_keys_are_unchanged_on_the_ablation_fixtures() -> Non
 
     for make in (a1_source, a2_source):
         diagnosis = _full(make())
-        assert diagnosis.resolution is Resolution.RESOLVED
+        assert diagnosis.resolution is Resolution.AMBIGUOUS
+        assert diagnosis.resolution_trace is not None
+        assert diagnosis.resolution_trace.diagnosis_status == "SUPPORTED_CAUSE"
         case = build_case(make(), EngineConfig())
         keys = {item.hypothesis_id: item.hypothesis_key for item in case.hypotheses}
         assert {

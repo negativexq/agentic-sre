@@ -1,0 +1,1498 @@
+[
+  {
+    "scenario": "Scenario-1",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 22,
+    "root_preserved": false,
+    "root_admitted": false,
+    "root_claims": [],
+    "root_context_reasons": [],
+    "false_support": 1,
+    "correct_support": 0,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 1,
+    "context": 19,
+    "frontier": 17,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "debafed76220eb986d491d1ccab296df283b589ed2fb78c69185af336eecb169",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-102",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 9,
+    "root_preserved": false,
+    "root_admitted": false,
+    "root_claims": [],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 0,
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "diagnosis": "INSUFFICIENT_EVIDENCE",
+    "wrong_resolved": false,
+    "unresolved": 2,
+    "context": 6,
+    "frontier": 0,
+    "real_rival_ambiguity": false,
+    "context_blockage": null,
+    "digest": "76df510f647219aa718748e3bfe95c03e889e1ba435618e77aa65f45b066dc2b",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-105",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 12,
+    "root_preserved": false,
+    "root_admitted": false,
+    "root_claims": [],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 0,
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "diagnosis": "INSUFFICIENT_EVIDENCE",
+    "wrong_resolved": false,
+    "unresolved": 3,
+    "context": 8,
+    "frontier": 0,
+    "real_rival_ambiguity": false,
+    "context_blockage": null,
+    "digest": "56301ab419c49b9503bb4ff093f76c013b8601cfae66af926c06f54d5723ca2a",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-11",
+    "split": "dev",
+    "engine": "2.0.0",
+    "claims": 14,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:9751cace7c89b322:2a7a3b5c28b8ad15"
+    ],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 0,
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "diagnosis": "INSUFFICIENT_EVIDENCE",
+    "wrong_resolved": false,
+    "unresolved": 5,
+    "context": 9,
+    "frontier": 0,
+    "real_rival_ambiguity": false,
+    "context_blockage": null,
+    "digest": "a6afda841b0da733bc2986fd8c561ec9460369b89ce8278e3e1e7a4e2777ed68",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-12",
+    "split": "dev",
+    "engine": "2.0.0",
+    "claims": 25,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:fda5ccc9639f7291:3dcb9fd0d9dd0b72"
+    ],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 1,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 2,
+    "context": 21,
+    "frontier": 6,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "43d7493a30076c14bf8cea26def69bcea521542e284f37d6127e701c1ffb9e9e",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-13",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 20,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:b29eb724be7a0024:36d285e04eabb76e"
+    ],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 0,
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "diagnosis": "INSUFFICIENT_EVIDENCE",
+    "wrong_resolved": false,
+    "unresolved": 2,
+    "context": 17,
+    "frontier": 0,
+    "real_rival_ambiguity": false,
+    "context_blockage": null,
+    "digest": "b6e8786160b6134f58a63a2d7f28064dcf8f568d9d105f9e31de0b261ffc6a10",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-14",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 22,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:c625267c7dbc29fc:dee8370d63d8142b"
+    ],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 1,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 2,
+    "context": 18,
+    "frontier": 16,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "3e3edce869b1ab827cfda0f615e414945e6f19796916bd1899367f72a841487d",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-15",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 23,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:2affed19c0c96e68:ba4607d1ae5eca41"
+    ],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 0,
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "diagnosis": "INSUFFICIENT_EVIDENCE",
+    "wrong_resolved": false,
+    "unresolved": 4,
+    "context": 18,
+    "frontier": 0,
+    "real_rival_ambiguity": false,
+    "context_blockage": null,
+    "digest": "d38982e693617aefaa430f8c349acd58175953ba12625a619c2a7dfa273b48f9",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-16",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 20,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:090a44d653f3b264:ef7be2466f44eda0"
+    ],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 0,
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "diagnosis": "INSUFFICIENT_EVIDENCE",
+    "wrong_resolved": false,
+    "unresolved": 1,
+    "context": 18,
+    "frontier": 0,
+    "real_rival_ambiguity": false,
+    "context_blockage": null,
+    "digest": "45605c6b747a5f0c432748fd5aab35a4ef2a88afcc3b6f0198b5d2f6c93333f4",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-17",
+    "split": "dev",
+    "engine": "2.0.0",
+    "claims": 56,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:020a59c1bbcc15e8:ab67f9f48b64794c",
+      "hypothesis:18aaba7805453347:6a42877df350d770",
+      "hypothesis:1da9b2f5e8595c5b:e36402ceaf4a9aec",
+      "hypothesis:287342aa360d76ef:ea002dda1e423ddc",
+      "hypothesis:2af7a9597e02994f:11f21535518f7773",
+      "hypothesis:3707ed048630bd54:8c6d2045c2e6877a",
+      "hypothesis:43aa8b9ba38ce06b:445fb1ed6c31c4f3",
+      "hypothesis:4cef9c8645146c0d:d154767f16fb1c3e",
+      "hypothesis:60dfad22a3323330:de7705186fb56294",
+      "hypothesis:6f0d984031f6ee15:437d4475d5ba0c29",
+      "hypothesis:7b734b5687e69fe3:f72e357d28027e2e",
+      "hypothesis:812ce13551992b6b:df2706109b381155",
+      "hypothesis:895d9e12474b636a:f4afaa7649eed2d0",
+      "hypothesis:9031e07760ba9927:d1287a0827c4d009",
+      "hypothesis:99db9ed109f95260:00328ba2a78ecf5a",
+      "hypothesis:9b2a17455f1c7ab8:23fe7a9471a3603d",
+      "hypothesis:9d57a11cc98827df:ac5e2a2a2378c4a8",
+      "hypothesis:9dbede016ea939c5:962c17d4bdd08431",
+      "hypothesis:a13e88330cee3ed8:6009eacec02f8792",
+      "hypothesis:a8065a742747685f:d1daf0ff1f14834f",
+      "hypothesis:a90d3ae2fad8fb0e:bab0da929d7f1b05",
+      "hypothesis:ae6448ce67fa9855:b9875e7356ef39c0",
+      "hypothesis:bee58b5d2b6ae86a:0106d9ba6f669a12",
+      "hypothesis:cfd825995b8baead:708296450adc5fb3",
+      "hypothesis:e07f01ce9026602d:c0321b013b9eaec8",
+      "hypothesis:f584b3eeb3bebf3f:99d1e14b97c9305a"
+    ],
+    "root_context_reasons": [
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ]
+    ],
+    "false_support": 1,
+    "correct_support": 9,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 6,
+    "context": 39,
+    "frontier": 26,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "9ef5be8eed3f0a52cbba6252fdc9c471ffcee116706e390825778b777cb7e03d",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-18",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 48,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:0a102e22e41e456b:3db9777e20bef1ce",
+      "hypothesis:0db92af4903a40b0:1b657cdb0c67fb3a",
+      "hypothesis:1608a253ce44af40:41eb388e24cabb56",
+      "hypothesis:2217e9cf244eab8b:4a85e827265a54fe",
+      "hypothesis:25824bc0aacdaf2a:09a52c65cb8a558a",
+      "hypothesis:30ca51b6119b6be7:be64ee17e49f210a",
+      "hypothesis:3ddc17d292137dc0:9ad0414d7a1726d7",
+      "hypothesis:3fc746b2beadb0f1:202df4f352eff0cf",
+      "hypothesis:4598c4f8ea3652ab:60343ea752d314dc",
+      "hypothesis:63bba5c662c762c4:f7c9eef0d46bedc2",
+      "hypothesis:6f81782cce4d4a03:61fec7cb3d4c2fbf",
+      "hypothesis:735e7f1596762aad:d90d5f5b6c7e7c9b",
+      "hypothesis:7f777395fb763ce2:95a234a57e087802",
+      "hypothesis:834e3f17bfc3489f:2911cee8f3e71e4f",
+      "hypothesis:857eb6159f69dcc7:5f52f3ae2500607a",
+      "hypothesis:90da0c8cc47dc7b6:4b9cfbd075322dc4",
+      "hypothesis:931c03ed8ca573b3:19e6a16d499eb63a",
+      "hypothesis:a101294ccdbd6b71:cd33bed5f0cc06ac",
+      "hypothesis:b2a5e7d1633e09ff:5d90d483169e486f",
+      "hypothesis:b2fae603853d6d7e:9d9b8f7627e9e2d0",
+      "hypothesis:b4d8f8fcdc679aef:23f8ef9ec164956a",
+      "hypothesis:b56959c448680f83:640ecd60d8bd3e71",
+      "hypothesis:c1c9b27c1c14baf4:9992149db3c90bb9",
+      "hypothesis:cd8ea13672baa7b7:f17a5ab698915456",
+      "hypothesis:d863532777863fcd:9b4ceb11a86b6c8c",
+      "hypothesis:db21e25054f6a501:11c73135eb12abcc",
+      "hypothesis:e55f64a56a73fd69:712e96a1d14d14d7",
+      "hypothesis:e8641bd5dc711c18:b8227caad2282af6"
+    ],
+    "root_context_reasons": [
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ]
+    ],
+    "false_support": 0,
+    "correct_support": 3,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 9,
+    "context": 35,
+    "frontier": 23,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "0f4ba9378cdb5a535aaa57c4a3ed4bdee29723bd6b20d002a74994371d8d3c0a",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-19",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 52,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:08d3970ae5ee2f98:555b013f164b4437",
+      "hypothesis:0b29f54c28d41631:29957e66e6e7947a",
+      "hypothesis:0bec7bd8e46bf142:14b95a8188e3df74",
+      "hypothesis:1593e9704133363c:3a7b356ccbf55421",
+      "hypothesis:3a02c4c3e2ebccb6:a94e5085afe9d697",
+      "hypothesis:421be0b2c5adc673:c086b0c9dbcd4f42",
+      "hypothesis:425be5b60a272f7e:facf84526ce6d8c4",
+      "hypothesis:453fd02661ed486b:0e1e9cb796c2b6c1",
+      "hypothesis:53ca89e6fc3242cb:6a7e858d8fa2cf50",
+      "hypothesis:58ea9b08555b75ad:6ef042e2c72a901e",
+      "hypothesis:64b302fadfa357a8:ba793c64734dd970",
+      "hypothesis:6d72a4bff5a42106:2c71a30d0b2173b2",
+      "hypothesis:72d6ef3b3920f785:aae747f50635e3b0",
+      "hypothesis:8498d7447c7faa43:879bc176b5c85432",
+      "hypothesis:88d50cfbf23df18f:83f26689ac717094",
+      "hypothesis:91cd2b72b9e8a879:a626dcfcb6eb041c",
+      "hypothesis:957bfbf0ba366895:32f9290e9e5d9ce6",
+      "hypothesis:abb2980a78aad244:ac7fcb97fd219fef",
+      "hypothesis:b0ca28d3357d5148:6d8943839a5ebec0",
+      "hypothesis:b3b5e4e9ce077b2a:7b084e1034b07ee5",
+      "hypothesis:ba627267051b2295:6201a139e438003e",
+      "hypothesis:bba59425de6c22c3:05a0fbd0dd58abd2",
+      "hypothesis:bff4cd276e92ead5:5bcdbdb9170838ae",
+      "hypothesis:d6d64da6267396b9:b34a03876859308c",
+      "hypothesis:d7c04df051496ec4:019a9d75ee3f13ba",
+      "hypothesis:dffede035318a5b5:3ece5ea19a5a6611",
+      "hypothesis:eb0121fa7c02dd1e:d66b46b6c6a28195",
+      "hypothesis:f49654e23cb56590:a9e786efddf91030",
+      "hypothesis:f4f2b2dcb7e5fa20:9da90f1e93114fa3",
+      "hypothesis:f5f593e5ad4914b1:29f7bc0e4162fcfb"
+    ],
+    "root_context_reasons": [
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ]
+    ],
+    "false_support": 0,
+    "correct_support": 5,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 6,
+    "context": 40,
+    "frontier": 27,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "38d8b6e2b9581d4543dd177d63e31675888970fa81ff8b28fcfc52b10d7e8b2b",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-2",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 20,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:d914b44beb627f35:3b8ec68ddc2cb5fb"
+    ],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 0,
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "diagnosis": "INSUFFICIENT_EVIDENCE",
+    "wrong_resolved": false,
+    "unresolved": 2,
+    "context": 17,
+    "frontier": 0,
+    "real_rival_ambiguity": false,
+    "context_blockage": null,
+    "digest": "a4ae9eb2fa09a109e24e2357a7131d6c6d8d35a920a7663141a1ff165a31b11c",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-20",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 12,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:37f7a31527aa093e:e78d5cd8091fd63e",
+      "hypothesis:617365c1dbc18e3a:cca8a85e4a8ddc16"
+    ],
+    "root_context_reasons": [
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ]
+    ],
+    "false_support": 0,
+    "correct_support": 0,
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "diagnosis": "INSUFFICIENT_EVIDENCE",
+    "wrong_resolved": false,
+    "unresolved": 2,
+    "context": 9,
+    "frontier": 0,
+    "real_rival_ambiguity": false,
+    "context_blockage": null,
+    "digest": "b4275d1bc27991588d3197ad415b522f949ff978f5fa1e2111e1fc54422b4562",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-21",
+    "split": "dev",
+    "engine": "2.0.0",
+    "claims": 32,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:496ad4622d3dd8ee:3f88179a9ea75d76",
+      "hypothesis:4e2207a67a74415a:1e4e647bb8d5c190",
+      "hypothesis:6934092335d01b31:c9daa43643f4cef2",
+      "hypothesis:9ee3b55b8e1f20f8:c63c4c1a44baf194",
+      "hypothesis:a76d4b6bd2a12d60:aec1cba72dace2ed",
+      "hypothesis:d505c1878de12e36:f30ff6c78822ce2b",
+      "hypothesis:f302518b4f8fca95:2a499325e1c986b9",
+      "hypothesis:ffb992919b43f746:240a7c3da32b9add"
+    ],
+    "root_context_reasons": [
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ]
+    ],
+    "false_support": 1,
+    "correct_support": 0,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 9,
+    "context": 21,
+    "frontier": 20,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "c5bc666bdf8945f07bc7b0bc8c4f8061b02b3b63538a7e453a40e9fc114994d9",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-22",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 31,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:04aa8357de98c939:55da97b565f78b39",
+      "hypothesis:1b0f8f4500c50fe6:806239d0bf5c6c4a",
+      "hypothesis:6a0f1a0c77550f38:15577fa17b299156",
+      "hypothesis:733752a5b1a16e4b:5c17861c4b3a57b7",
+      "hypothesis:7fe89e0c7e50746f:0cf003d21da09e57",
+      "hypothesis:ba1a1d0cb95a4d24:340e6c4f5aac2240",
+      "hypothesis:d2cc7d4d9a7c1381:b014b16c5fe2384b",
+      "hypothesis:d6ab30269354909b:daa807e96e0f4fac",
+      "hypothesis:f2c030890596238c:b00ba2315052d4e9"
+    ],
+    "root_context_reasons": [
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ]
+    ],
+    "false_support": 1,
+    "correct_support": 2,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 5,
+    "context": 21,
+    "frontier": 19,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "af56f2cfcdeb713d9d31a94c47821bdc64971539e820edeb0cdb66d7f209a3c8",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-23",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 25,
+    "root_preserved": false,
+    "root_admitted": false,
+    "root_claims": [],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 0,
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "diagnosis": "INSUFFICIENT_EVIDENCE",
+    "wrong_resolved": false,
+    "unresolved": 2,
+    "context": 20,
+    "frontier": 0,
+    "real_rival_ambiguity": false,
+    "context_blockage": null,
+    "digest": "94c2f14a2ead9f4f767f35fbb56d00bcbfdfb2c01cfc5d1d3e3bbf2088ca3a72",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-24",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 12,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:cde201e8d7bf6fe6:5f8219769f2bcd71"
+    ],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 0,
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "diagnosis": "INSUFFICIENT_EVIDENCE",
+    "wrong_resolved": false,
+    "unresolved": 3,
+    "context": 8,
+    "frontier": 0,
+    "real_rival_ambiguity": false,
+    "context_blockage": null,
+    "digest": "1bf32c5cfc9b994f5ca104a566d10220ce45cb6d880051a6c499bf7e1770f7d7",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-25",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 47,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:b51caec58a570205:f6f50961d9242076"
+    ],
+    "root_context_reasons": [],
+    "false_support": 6,
+    "correct_support": 1,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 4,
+    "context": 35,
+    "frontier": 22,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "9b116d19c2f782513e0450eac1b2f31bf696b85ae55cdf9bdcb1001995b1c029",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-29",
+    "split": "dev",
+    "engine": "2.0.0",
+    "claims": 45,
+    "root_preserved": false,
+    "root_admitted": false,
+    "root_claims": [],
+    "root_context_reasons": [],
+    "false_support": 2,
+    "correct_support": 0,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 8,
+    "context": 34,
+    "frontier": 22,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "cf3144c6dc8d04d4e4706d969b3575ccdd3ae4c1e756dcc060b85870a8dd4b7a",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-31",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 24,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:f6f8ccb3d628bae3:790ea69ef1fd92be"
+    ],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 1,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 4,
+    "context": 19,
+    "frontier": 6,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "0ba7df03d176d42687f89eb4267ff075aa886d1c526e394da8e05b69785fa117",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-33",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 21,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:26843e2811b6561f:ca5fd195d4b51e20"
+    ],
+    "root_context_reasons": [],
+    "false_support": 2,
+    "correct_support": 0,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 2,
+    "context": 16,
+    "frontier": 14,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "d8ef1808f0ee4e42a5046336b8275d2e1f87311471e9e2d076fc85a6d08448dc",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-34",
+    "split": "dev",
+    "engine": "2.0.0",
+    "claims": 25,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:7dbc90b0cefef469:b2fdbce6e9687bce"
+    ],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 0,
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "diagnosis": "INSUFFICIENT_EVIDENCE",
+    "wrong_resolved": false,
+    "unresolved": 4,
+    "context": 21,
+    "frontier": 0,
+    "real_rival_ambiguity": false,
+    "context_blockage": null,
+    "digest": "450bab231dfbc4fe8064c0fecc0e9d1b1ad04603a1aba230e856c924895925e6",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-35",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 47,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:13e7936b7ae3badb:9a04344e1a788060",
+      "hypothesis:164f790d919b22ee:383743c74d7c7ca1",
+      "hypothesis:186970257034ce37:add13069180fbf78",
+      "hypothesis:2f5cdedca8ef96ce:641114ba29d456ba",
+      "hypothesis:38ca30f484762413:914d43c0c14d17fe",
+      "hypothesis:49434a0106b3e9fb:a0822565307b3399",
+      "hypothesis:51642577cae0ba5b:6d59d087b01c095a",
+      "hypothesis:564d80c08a64ce7d:27b6d47497723cfe",
+      "hypothesis:61acf94b8331d617:00f07e73079e4914",
+      "hypothesis:63ee0c2cda557f98:d3df0c83008f3e45",
+      "hypothesis:6d4ecd76c8feaa3e:b3dee774054edfb7",
+      "hypothesis:75a213321fc31818:88c4372959a381fe",
+      "hypothesis:96ccd55e1f91ca0b:838e1d02d1877280",
+      "hypothesis:97b1fe8f312b14d3:f70497686638e416",
+      "hypothesis:9f4080bf86d5bbfc:87f1867989d5157d",
+      "hypothesis:a96c9b530646078a:ba42dbbfd4a1e4d3",
+      "hypothesis:b0c5969f52f73b4f:5f7c175f94c102ba",
+      "hypothesis:c661e5035fe8c9b4:adb18a61ba9d981b",
+      "hypothesis:c662e08ad27d77a8:cc805ce60c4f1285",
+      "hypothesis:c85230c2a1d010e9:d93cc52ca5e2e93a",
+      "hypothesis:cacd2e818a220b99:555e94a480ccb0ee",
+      "hypothesis:ccb17d075d71ef1c:02de6ee376a4167e",
+      "hypothesis:ceca3c166defebe2:347bf3f5cd6408a6",
+      "hypothesis:d05a36899406b93b:fd71ed59bf908ccf",
+      "hypothesis:d216351dcb8ff16b:80725888cae2c8d7",
+      "hypothesis:e12b2101a5375b20:9cb870ba730795b9",
+      "hypothesis:e3548e453287f9da:f62f5ff170bbe492"
+    ],
+    "root_context_reasons": [
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ]
+    ],
+    "false_support": 1,
+    "correct_support": 2,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 8,
+    "context": 35,
+    "frontier": 22,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "619dd08d5b58cb4e1c59c49e64edba17ef0b1522e255321742f77ec3df92c9f7",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-38",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 47,
+    "root_preserved": false,
+    "root_admitted": false,
+    "root_claims": [],
+    "root_context_reasons": [],
+    "false_support": 5,
+    "correct_support": 0,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 9,
+    "context": 33,
+    "frontier": 7,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "00fce787ef17fa21b0f47601d485f85e4c59208cd21580ae09c2b6465769c23c",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-4",
+    "split": "dev",
+    "engine": "2.0.0",
+    "claims": 22,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:d5f44a20f8d4a068:5010fffae0004657"
+    ],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 1,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 1,
+    "context": 19,
+    "frontier": 13,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "a7ded85842cb8700f2a3b8285febe7d6d10033eb21640e9c2e29ddf75d8e5df8",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-5",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 30,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:3543fe10d30499b3:0014d625bb333462"
+    ],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 1,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 1,
+    "context": 19,
+    "frontier": 14,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "2a12b7be7338ab87fb3b9e679fc15a4487680d200e640b37a7e5727d9e5709b9",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-6",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 24,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:200f5af731b16652:cf52a386b2c8c124"
+    ],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 1,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 1,
+    "context": 21,
+    "frontier": 13,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "ec2ce2c8a6eeb17d6cb7a768980cf66c03da1cceeb43e009fc724e7c724d0596",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-7",
+    "split": "dev",
+    "engine": "2.0.0",
+    "claims": 19,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:96fb297ccb8fa23f:b5c9964686f12101"
+    ],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 0,
+    "resolution": "INSUFFICIENT_EVIDENCE",
+    "diagnosis": "INSUFFICIENT_EVIDENCE",
+    "wrong_resolved": false,
+    "unresolved": 2,
+    "context": 16,
+    "frontier": 0,
+    "real_rival_ambiguity": false,
+    "context_blockage": null,
+    "digest": "21b9eb9f7218a7e76eb59b1f8fbe6fef8b4bc6acc0b9df7f001828cc16b6a72c",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-8",
+    "split": "dev",
+    "engine": "2.0.0",
+    "claims": 21,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:c01e59cb1eb90f7f:eb17eda046906c21"
+    ],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 1,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 1,
+    "context": 18,
+    "frontier": 13,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "12bcb79e831ada4d274f4e3d5e5c8af07159d95dca8c6bd4f4741666b16ada73",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-80",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 38,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:05d6987855f3129e:f2486f3189b875bf",
+      "hypothesis:13a4f989f87f6b86:280e8f49ab191042",
+      "hypothesis:16276609ce566ad0:51c33eb1752c6316",
+      "hypothesis:1e8c276d7dfa7dff:0fff629a848790f7",
+      "hypothesis:21b2aba01bc9b92d:4d737ef5648bc2ca",
+      "hypothesis:4a95240fae51b242:6b4b048ab68b8b4c",
+      "hypothesis:4aa6108b1a1db1ed:6205dde8f1a6ee42",
+      "hypothesis:58160b25027990fb:1cad18daa9820d44",
+      "hypothesis:8b1a394fb3a1cde3:a29ad9a5e7ab1729",
+      "hypothesis:989ab7f0c69e906a:ebc84451d3789355",
+      "hypothesis:98a9c082d3447878:da23b79e429fcd50",
+      "hypothesis:9b9124998cb7289f:c8c11922ae76d06d",
+      "hypothesis:9ed15592d0672005:2c7f99231d8729f9",
+      "hypothesis:cab644fdb9d2e3a7:d7c0acd4ed42d392",
+      "hypothesis:fa8d1254910a0c9c:8af9e35d6d7fb73e"
+    ],
+    "root_context_reasons": [
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ]
+    ],
+    "false_support": 1,
+    "correct_support": 3,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 7,
+    "context": 26,
+    "frontier": 25,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "7678e07a7a520d29b547aad9a476c14c82ea06e347d6eea35420c785c241fa5b",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-81",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 45,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:060e61522bc86830:b1a2824f7109ae99",
+      "hypothesis:07bef077bc5994c0:ea116105403a0313",
+      "hypothesis:0b403d02f6f37343:d0ae846a28df75b5",
+      "hypothesis:1bea1bd5f43e7806:310935af3ab1d5fc",
+      "hypothesis:21766d8f7732ec7e:17e84f5085051f07",
+      "hypothesis:2f6ccd6b6d8339c3:bd3f31c65b529f65",
+      "hypothesis:358a3b617eb529c7:08e3d2cee124de54",
+      "hypothesis:3744bdec3b53063d:7d2b7c3b0d5585fd",
+      "hypothesis:4bc287a32e4581e3:7343b8bb7c5048fb",
+      "hypothesis:6163cf7419779afc:a8fa8e2deb39a013",
+      "hypothesis:6bb3084b0b99a2b1:ce15528a7001d2f9",
+      "hypothesis:87dc72599f941074:1277c4261820b7be",
+      "hypothesis:9058026641399ea0:3c4b410f1b817d5a",
+      "hypothesis:93b220c0b70d934c:6ca8297102947650",
+      "hypothesis:9980713d91bab37b:54f2f2e329b7d98d",
+      "hypothesis:9a1093dd445c6c85:34207b3b2a371d5f",
+      "hypothesis:b31f3e56ef01ac27:bb2aaa5947e9ac39",
+      "hypothesis:ba7987a682ce6bdc:688de469dcbd17e6",
+      "hypothesis:cf25063173c7a375:b036b1c67a217b1b",
+      "hypothesis:d538bc0e3dd90d4d:2a3ba98c4dc709bd",
+      "hypothesis:e56378a1edade0c1:6c9be51f8065e463",
+      "hypothesis:e6e8259e189b353b:69d0eafbdceba7e4",
+      "hypothesis:e7f86dda2c512b66:7aa18216c0e6d7e1",
+      "hypothesis:f81cb49ce472e497:0d11cc13d447c08c",
+      "hypothesis:ffd7391a116566eb:b81ed176c1024ad0"
+    ],
+    "root_context_reasons": [
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ]
+    ],
+    "false_support": 1,
+    "correct_support": 11,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 1,
+    "context": 32,
+    "frontier": 28,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "924fdb6124c040acc1b556f0878cb9179688be7bf2cb9b22078bf4faa095eb0b",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-83",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 41,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:08b961b621e9648d:278e97bd10bb3e44",
+      "hypothesis:0d8edc0a8f4481c6:e931de42a5beb8e6",
+      "hypothesis:3b93c225762199b6:d94da2a9b7c16bfc",
+      "hypothesis:455ad03b209d25b5:7902a20391238c82",
+      "hypothesis:4bbdee652a53ffb4:0d81991705672a36",
+      "hypothesis:5691a4a988c1de4a:6d8b22b9b8325663",
+      "hypothesis:58a3d8c1e8294595:9360172c9b33de93",
+      "hypothesis:6c09bb5c860d1430:1e861406680261d7",
+      "hypothesis:70786ed216ee4d7a:b97c5d6d6bfe7535",
+      "hypothesis:81900be119640c0b:3ab5d033d32a9b61",
+      "hypothesis:8e488ced790bdbe6:96f869525b02c389",
+      "hypothesis:9e076f28b803060e:c69aa47b3ba38db3",
+      "hypothesis:ad8a8e8424888389:84d663197d6a249e",
+      "hypothesis:bf105d233667d429:0196aa61d9958214",
+      "hypothesis:ce60c0d91945c2cd:35ce6bc39cb1543a",
+      "hypothesis:db4cb6b9e54a66c6:c91c5c1125bd07ed",
+      "hypothesis:e5a35b590a5e5c47:d07ecd29b48f3498",
+      "hypothesis:e6487afde6f0fad5:2ed77c008d196477",
+      "hypothesis:ef45df9b7aa0aca9:3bf162e8f225a3bd",
+      "hypothesis:f4dc1fec3e66db5a:2992d6c16b2aae93",
+      "hypothesis:f71da65a7f73889b:cc69d4af1507fd9a"
+    ],
+    "root_context_reasons": [
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ]
+    ],
+    "false_support": 1,
+    "correct_support": 8,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 3,
+    "context": 29,
+    "frontier": 24,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "5f0add7831dc91877f7eac3a13ef9f73e221a1b8b02ad425cb9442c9bdb93e62",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-9",
+    "split": "test",
+    "engine": "2.0.0",
+    "claims": 22,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:e1468a436c381db4:5776d1253ab6727c"
+    ],
+    "root_context_reasons": [],
+    "false_support": 0,
+    "correct_support": 1,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 1,
+    "context": 19,
+    "frontier": 13,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "5f49c17d7ab8666217cb042b950d8308408d9f47b5775cf0d9cd5e2c1d5039bf",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  },
+  {
+    "scenario": "Scenario-91",
+    "split": "dev",
+    "engine": "2.0.0",
+    "claims": 49,
+    "root_preserved": true,
+    "root_admitted": true,
+    "root_claims": [
+      "hypothesis:01483f3dddded401:b7c4bda9393191f6",
+      "hypothesis:06d6c18c5e0b4a7a:aeafea35233c51bd",
+      "hypothesis:1d48fb2dc2a8af84:9b2f358f93a99f75",
+      "hypothesis:27050ccb7177ef4a:588be80aaf7a3750",
+      "hypothesis:27b31c4cf853f52d:7ac4eda161cf5d18",
+      "hypothesis:329b247571eb7ced:ba9f992e1fc28459",
+      "hypothesis:374b26fde8ee136e:3e24ad143aa159a2",
+      "hypothesis:425f561a639dc67c:9b29b41563915d6b",
+      "hypothesis:46b22801d98fc0a4:22b84ed685848ebd",
+      "hypothesis:68a1dd83db1aa3e1:edd340057708bce9",
+      "hypothesis:699a6f9d0e016d3b:7e0887060d7381ac",
+      "hypothesis:6cb5bdc1491e3018:35512aef539fa3e9",
+      "hypothesis:6cd4bfd561431138:050e4d8c22e61e2c",
+      "hypothesis:724e143ac0f2ba97:e2e76104ac9227c0",
+      "hypothesis:856661eb41e2cc09:693b1edce257f4ca",
+      "hypothesis:8d90e56abaec0097:de6df9728896dac3",
+      "hypothesis:8ddc99b8ad4938e5:fe5363bf1e4b615b",
+      "hypothesis:91e287acfb1f59b9:879b38a5345698dd",
+      "hypothesis:9201af6e914c646f:79beb11347e82812",
+      "hypothesis:93d4c2d1aeef8f06:2e6832d6e70d2c50",
+      "hypothesis:94e9ac48e3b6a7d5:5b83072e4e624090",
+      "hypothesis:993f99b2da2561fc:0b3013ec7b1f8b54",
+      "hypothesis:b0bcd3decc14b0cc:b64e3d4f9fcf05b9",
+      "hypothesis:bff8e94c546c3959:3d3a3af9f935aeda",
+      "hypothesis:d13667895ca0d6d5:ee2e4b3da6d61228",
+      "hypothesis:d2b182e8c6e90cea:e465ae28935eed9b",
+      "hypothesis:da2d07985b3ed3a6:973312c3ad625271",
+      "hypothesis:e961308063f48130:f59cbbb03bb7a41e",
+      "hypothesis:ec723e2c4b47c2cf:a5c2281926ef40d2"
+    ],
+    "root_context_reasons": [
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ],
+      [
+        "NO_POSITIVE_INCIDENT_LINK"
+      ]
+    ],
+    "false_support": 1,
+    "correct_support": 1,
+    "resolution": "AMBIGUOUS",
+    "diagnosis": "COMPETING_CAUSES",
+    "wrong_resolved": false,
+    "unresolved": 12,
+    "context": 34,
+    "frontier": 24,
+    "real_rival_ambiguity": true,
+    "context_blockage": null,
+    "digest": "ae29a66a4978a0e3cd4a829b0219cfcb2d4f514c1489a9d116097fc0acd51c94",
+    "repeated_decision_digest_equal": true,
+    "active_investigation_reads": null,
+    "provider_cost": null
+  }
+]

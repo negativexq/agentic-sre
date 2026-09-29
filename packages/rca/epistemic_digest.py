@@ -2,8 +2,9 @@
 
 Only decision-bearing fields participate: the resolution, the root causal
 actor, each hypothesis' identity, causal actor, epistemic state and root
-eligibility, and each elimination's rule identity and evidence. Free text,
-scores, timestamps and model output never enter the digest.
+eligibility, and each elimination's rule identity and evidence. In m21.v2 the
+actor/time/source witnesses, admission and material frontier also participate.
+Ranking scores and model output never enter the digest.
 """
 
 from __future__ import annotations
@@ -47,6 +48,7 @@ class EpistemicState:
     root_causal_actor: str | None
     hypotheses: tuple[EpistemicHypothesisEntry, ...]
     eliminations: tuple[EpistemicEliminationEntry, ...]
+    causal_decision: str | None = None
 
 
 def epistemic_state(diagnosis: Diagnosis) -> EpistemicState:
@@ -83,7 +85,49 @@ def epistemic_state(diagnosis: Diagnosis) -> EpistemicState:
             return None
         return hypothesis.hypothesis_key or None
 
+    causal_decision = None
+    if trace is not None and trace.semantics_version == "m21.v2":
+        causal_decision = json.dumps(
+            {
+                "version": trace.semantics_version,
+                "diagnosis": trace.diagnosis_status,
+                "claim_level": trace.claim_level,
+                "admitted": sorted(trace.admitted_hypotheses),
+                "context": sorted(trace.context_hypotheses),
+                "material_frontier": sorted(trace.material_frontier_ids),
+                "frontier_bindings": sorted(trace.frontier_bindings),
+                "claims": [
+                    {
+                        "id": audit.hypothesis_id,
+                        "admission": audit.admission,
+                        "reasons": sorted(audit.admission_reasons),
+                        "support": [
+                            record.model_dump(mode="json") for record in audit.root_support
+                        ],
+                    }
+                    for audit in sorted(audits, key=lambda item: item.hypothesis_id)
+                ],
+                "frontier": [
+                    {
+                        "id": item.alternative_id,
+                        "actor": item.actor.canonical,
+                        "role": item.role,
+                        "affected": sorted(entity.canonical for entity in item.affected_entities),
+                        "dimensions": sorted(
+                            dimension.value for dimension in item.queryable_dimensions
+                        ),
+                    }
+                    for item in sorted(
+                        diagnosis.structural_alternatives, key=lambda item: item.alternative_id
+                    )
+                    if item.alternative_id in trace.material_frontier_ids
+                ],
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
     return EpistemicState(
+        causal_decision=causal_decision,
         resolution=diagnosis.resolution.value,
         root_causal_actor=(
             diagnosis.root_cause.canonical if diagnosis.root_cause is not None else None
@@ -149,6 +193,11 @@ def compute_epistemic_digest(state: EpistemicState) -> str:
             "root_causal_actor": state.root_causal_actor,
             "hypotheses": hypotheses,
             "eliminations": eliminations,
+            **(
+                {"causal_decision": json.loads(state.causal_decision)}
+                if state.causal_decision is not None
+                else {}
+            ),
         },
         sort_keys=True,
         separators=(",", ":"),

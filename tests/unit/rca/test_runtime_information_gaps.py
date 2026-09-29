@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from claim_builders import incident_claim as _incident_claim
+
 from packages.rca.causal_roles import HypothesisCausalRoles
 from packages.rca.frontier import apply_frontier_progress, covered_frontier_dimensions
 from packages.rca.information_gap import (
@@ -18,6 +20,8 @@ from packages.rca.model import (
     Confidence,
     Diagnosis,
     EntityRef,
+    Finding,
+    FindingKind,
     FrontierStatus,
     GapDimension,
     GapResolvability,
@@ -34,6 +38,24 @@ from packages.rca.model import (
 from packages.rca.root_cause_eligibility import RootCauseEligibilities
 from packages.rca.runtime_propagation import RuntimePropagation
 from packages.rca.source import InMemorySource
+
+
+def incident_claim(**kwargs: Any) -> Hypothesis:
+    actor = kwargs["causal_actor"]
+    kwargs.setdefault("causal_explanation", "DIRECT")
+    kwargs.setdefault(
+        "findings",
+        (
+            Finding(
+                entity=actor,
+                kind=FindingKind.FAILURE_EVENT,
+                at=None,
+                summary="observed failure",
+                evidence_ids=("event:1",),
+            ),
+        ),
+    )
+    return _incident_claim(**kwargs)
 
 
 def _entity(kind: str, name: str) -> EntityRef:
@@ -69,7 +91,7 @@ def test_unresolved_deployment_is_actor_local() -> None:
     actor = _entity("Deployment", "payment")
     member = _entity("Pod", "payment-0")
     config = _entity("ConfigMap", "payment-config")
-    hypothesis = Hypothesis(
+    hypothesis = incident_claim(
         hypothesis_id="h-deployment",
         causal_actor=actor,
         members=(actor, member, config),
@@ -86,7 +108,7 @@ def test_unresolved_deployment_is_actor_local() -> None:
 
 def test_pod_contract_has_events_pressure_and_traces_but_no_traffic() -> None:
     actor = _entity("Pod", "payment-0")
-    hypothesis = Hypothesis(hypothesis_id="h-pod", causal_actor=actor, members=(actor,))
+    hypothesis = incident_claim(hypothesis_id="h-pod", causal_actor=actor, members=(actor,))
     gaps = derive_information_gaps(
         (hypothesis,),
         _unresolved_trace(hypothesis.hypothesis_id),
@@ -104,7 +126,7 @@ def test_pod_contract_has_events_pressure_and_traces_but_no_traffic() -> None:
 
 def test_legacy_failure_onset_contract_preserves_events_only() -> None:
     actor = _entity("Pod", "payment-0")
-    hypothesis = Hypothesis(hypothesis_id="h-pod-onset", causal_actor=actor, members=(actor,))
+    hypothesis = incident_claim(hypothesis_id="h-pod-onset", causal_actor=actor, members=(actor,))
 
     gaps = derive_information_gaps(
         (hypothesis,),
@@ -144,7 +166,9 @@ def test_typed_tempo_provider_adds_failure_onset_trace_route() -> None:
             return getattr(self.source, name)
 
     actor = _entity("Pod", "payment-0")
-    hypothesis = Hypothesis(hypothesis_id="h-typed-pod-onset", causal_actor=actor, members=(actor,))
+    hypothesis = incident_claim(
+        hypothesis_id="h-typed-pod-onset", causal_actor=actor, members=(actor,)
+    )
     gaps = derive_information_gaps(
         (hypothesis,),
         _unresolved_trace(hypothesis.hypothesis_id),
@@ -182,7 +206,7 @@ def test_source_only_failure_onset_excludes_unconfigured_runtime_traces() -> Non
             return getattr(self.source, name)
 
     actor = _entity("Pod", "payment-0")
-    hypothesis = Hypothesis(
+    hypothesis = incident_claim(
         hypothesis_id="h-pod-onset-unavailable", causal_actor=actor, members=(actor,)
     )
     gaps = derive_information_gaps(
@@ -233,7 +257,7 @@ def test_typed_prometheus_provider_adds_pod_metric_baseline_route() -> None:
 
 def test_service_contract_is_logs_and_traffic_only() -> None:
     actor = _entity("Service", "payment")
-    hypothesis = Hypothesis(hypothesis_id="h-service", causal_actor=actor, members=(actor,))
+    hypothesis = incident_claim(hypothesis_id="h-service", causal_actor=actor, members=(actor,))
     gaps = derive_information_gaps(
         (hypothesis,),
         _unresolved_trace(hypothesis.hypothesis_id),

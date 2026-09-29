@@ -13,7 +13,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-REPORT_VERSION = "2.1"
+REPORT_VERSION = "2.2"
 
 
 class ReportModel(BaseModel):
@@ -173,6 +173,12 @@ class ReportSnapshot(ReportModel):
     leading_root_actor: str | None
     confidence: str
     resolution: str
+    decision_semantics: str = "legacy"
+    diagnosis_status: str = "UNASSESSED"
+    claim_level: str = "UNASSESSED"
+    incident_recovery: str = "NOT_ASSESSED"
+    context_hypothesis_ids: tuple[str, ...] = ()
+    material_frontier_ids: tuple[str, ...] = ()
     is_resolved: bool
     summary: str
     resolution_rationale: str | None

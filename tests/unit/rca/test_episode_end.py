@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from claim_builders import incident_claim
+
 from packages.rca.episode_end import EpisodeEndBasis, assess_ended_episode
 from packages.rca.live import LiveSource
 from packages.rca.model import (
@@ -53,7 +55,7 @@ def _failure(
 
 
 def _manifestation(*findings: Finding) -> Hypothesis:
-    return Hypothesis(
+    return incident_claim(
         hypothesis_id="hypothesis:worker",
         causal_actor=POD,
         members=(POD,),
@@ -207,7 +209,7 @@ def _supported_change() -> Hypothesis:
         summary="settings changed",
         evidence_ids=("settings-change",),
     )
-    return Hypothesis(
+    return incident_claim(
         hypothesis_id="hypothesis:settings",
         causal_actor=config,
         members=(config, workload),
@@ -227,9 +229,10 @@ def test_ended_alternative_no_longer_blocks_resolution_and_is_audited() -> None:
     eligibilities = RootCauseEligibilities((), {stale.hypothesis_id: ended})
     trace = resolve_hypotheses((supported, stale), root_cause_eligibilities=eligibilities)
 
-    assert trace.state is Resolution.RESOLVED
+    assert trace.state is Resolution.AMBIGUOUS
+    assert trace.diagnosis_status == "SUPPORTED_CAUSE"
     assert trace.leading_hypothesis_ids == (supported.hypothesis_id,)
-    assert trace.decision_basis == "ROOT_CAUSE_ELIGIBILITY"
+    assert trace.discriminators[0].kind == "ROOT_CAUSE_ELIGIBILITY"
     assert not eligibilities.is_root_cause_selectable(stale.hypothesis_id)
     (item,) = trace.eliminations
     assert item.code is ResolutionReasonCode.MANIFESTATION_EPISODE_ENDED_BEFORE_ONSET

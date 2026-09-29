@@ -121,6 +121,14 @@ class ObjectVersion(BaseModel):
     evidence_id: str
     lifecycle: Lifecycle = Lifecycle.UPDATED
 
+    @property
+    def instance_uid(self) -> str | None:
+        if self.uid:
+            return self.uid
+        metadata = self.body.get("metadata")
+        uid = metadata.get("uid") if isinstance(metadata, dict) else None
+        return uid if isinstance(uid, str) and uid else None
+
 
 class PodStatusObservation(BaseModel):
     """What one Pod's status showed at one observation time.
@@ -790,11 +798,32 @@ class RootSupportStatus(StrEnum):
     INAPPLICABLE = "INAPPLICABLE"
 
 
+class CausalWitness(BaseModel):
+    """Actor-local, incident-anchored evidence; topology supports a possible cause."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    actor: EntityRef
+    actor_instance: EntityInstanceRef | None = None
+    origin: Finding
+    relation_evidence_ids: tuple[str, ...] = ()
+    attribution: str = "DIRECT_OWNERSHIP"
+    mechanism: str
+    symptom: EntityRef
+    path: tuple[CausalHop, ...] = ()
+    onset: datetime
+    evidence_ids: tuple[str, ...]
+    coverage: tuple[str, ...] = ("ACTOR_OBSERVATION", "INCIDENT_ONSET", "STRUCTURAL_RELATION")
+    missing: tuple[str, ...] = ("MECHANISM_EXECUTION_NOT_PROVEN",)
+    rule_id: str = "m21.support.change-onset-path"
+    rule_version: str = "v2"
+    claim_level: str = "POSSIBLE_INITIATING_CAUSE"
+
+
 class RootSupportRecord(BaseModel):
     """One versioned root-support rule outcome for one hypothesis.
 
-    D1 records are audit only: they sit outside the epistemic digest, and the
-    resolver's SUPPORTED state is derived from the same evaluation, unchanged.
+    D1 v2 witnesses carry decision authority and enter the epistemic digest.
+    Legacy records remain readable with their recorded rule version.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -808,6 +837,7 @@ class RootSupportRecord(BaseModel):
     decisive_evidence_ids: tuple[str, ...] = ()
     causal_explanation: str = ""
     path_shapes: tuple[tuple[tuple[str, str, str], ...], ...] = ()
+    witnesses: tuple[CausalWitness, ...] = ()
 
 
 class ChannelApplicability(StrEnum):
@@ -891,7 +921,7 @@ class ChannelAssessment(BaseModel):
 
 
 class HypothesisResolutionAudit(BaseModel):
-    """Bounded per-hypothesis audit data retained in a resolution trace."""
+    """Full per-hypothesis decision inventory retained in a resolution trace."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -907,10 +937,12 @@ class HypothesisResolutionAudit(BaseModel):
     # Neutral precondition metadata is intentionally outside epistemic state.
     # Defaults preserve parsing of diagnosis documents written before M19-5.1.
     precondition_audit: tuple[RulePreconditionAudit, ...] = ()
-    # Root-support rule outcomes (M21 D1); audit only, outside the epistemic digest.
+    # Versioned root-support witnesses; decision-bearing in m21.v2.
     root_support: tuple[RootSupportRecord, ...] = ()
     # Influence-channel coverage of an initiated change (M21 F1); audit only.
     channel_assessment: ChannelAssessment | None = None
+    admission: str = "LEGACY_UNASSESSED"
+    admission_reasons: tuple[str, ...] = ()
 
 
 class ResolutionTrace(BaseModel):
@@ -919,6 +951,13 @@ class ResolutionTrace(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     state: Resolution
+    semantics_version: str = "legacy"
+    diagnosis_status: str = "UNASSESSED"
+    claim_level: str = "UNASSESSED"
+    admitted_hypotheses: tuple[str, ...] = ()
+    context_hypotheses: tuple[str, ...] = ()
+    material_frontier_ids: tuple[str, ...] = ()
+    frontier_bindings: tuple[tuple[str, tuple[str, ...]], ...] = ()
     leading_hypothesis_ids: tuple[str, ...] = ()
     signatures: tuple[HypothesisSignature, ...] = ()
     distinguishing_facts: tuple[str, ...] = ()
@@ -1155,6 +1194,14 @@ class Hypothesis(BaseModel):
     # that predate it. ``hypothesis_id`` stays revision-local.
     hypothesis_key: str = ""
     causal_actor: EntityRef
+    claim_version: str = "legacy"
+    actor_instance: EntityInstanceRef | None = None
+    mechanism: str = "UNKNOWN"
+    episode_onset: datetime | None = None
+    presentation_group_id: str = ""
+    symptom_entities: tuple[EntityRef, ...] = ()
+    member_paths: tuple[tuple[CausalHop, ...], ...] = ()
+    relation_evidence_ids: tuple[str, ...] = ()
     members: tuple[EntityRef, ...] = ()
     manifestations: tuple[EntityRef, ...] = ()
     findings: tuple[Finding, ...] = ()
@@ -1181,6 +1228,9 @@ class StructuralAlternative(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     alternative_id: str
+    affected_entities: tuple[EntityRef, ...] = ()
+    material_for_hypothesis_ids: tuple[str, ...] = ()
+    missing_decision: str = ""
     actor: EntityRef
     role: str
     structural_basis: tuple[str, ...] = ()
@@ -1471,6 +1521,8 @@ class Diagnosis(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     incident_id: str
+    decision_semantics: str = "legacy"
+    incident_recovery: str = "NOT_ASSESSED"
     root_cause: EntityRef | None
     confidence: Confidence
     resolution: Resolution = Resolution.INSUFFICIENT_EVIDENCE

@@ -17,6 +17,8 @@ from packages.rca.model import (
     EntityRef,
     ObjectVersion,
 )
+from packages.rca.runtime_evidence import RuntimeKubernetesBinding
+from packages.rca.runtime_propagation import RuntimeBindingVerificationState, RuntimePropagation
 
 WORKLOAD_KINDS = frozenset({"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"})
 _CHAOS_TARGET = re.compile(r"apply chaos for ([a-z0-9.-]+)/([a-z0-9.-]+)", re.IGNORECASE)
@@ -42,6 +44,13 @@ class RelationSemantics:
 
 
 RELATION_SEMANTICS: dict[str, RelationSemantics] = {
+    "runtime_propagates": RelationSemantics(
+        "verified observed non-success return",
+        forward=True,
+        backward=False,
+        forward_relation="runtime_propagates",
+        backward_relation="runtime_affected_by",
+    ),
     "owned_by": RelationSemantics(
         "owner and managed child",
         forward=False,
@@ -345,6 +354,7 @@ class Topology:
 
     def __init__(self, edges: Iterable[Edge], latest: Mapping[EntityRef, ObjectVersion]) -> None:
         self.edges = tuple(edges)
+        self.edge_evidence: dict[tuple[EntityRef, str, EntityRef], tuple[str, ...]] = {}
         self.latest = latest
         self._adjacent: dict[EntityRef, set[tuple[EntityRef, str]]] = {}
         self._out: dict[EntityRef, list[Edge]] = {}
@@ -545,6 +555,68 @@ class Topology:
         depths = self.causal_reachable(start, max_depth=max_depth)
         found = [depths[target] for target in targets if target in depths]
         return min(found) if found else None
+
+
+def with_runtime_propagation(topology: Topology, propagation: RuntimePropagation) -> Topology:
+    """Admit observed failure chains only at positively verified binding levels.
+
+    A Pod edge also requires the current exact UID. Runtime propagation never
+    supplies an initiating change and never proves a root cause.
+    """
+
+    def endpoints(
+        binding: RuntimeKubernetesBinding | None,
+        deployment_state: RuntimeBindingVerificationState | None,
+        pod_state: RuntimeBindingVerificationState | None,
+    ) -> tuple[EntityRef, ...]:
+        if binding is None:
+            return ()
+        refs = []
+        if binding.deployment and deployment_state is RuntimeBindingVerificationState.VERIFIED:
+            refs.append(
+                EntityRef(kind="Deployment", name=binding.deployment, namespace=binding.namespace)
+            )
+        if (
+            binding.pod
+            and binding.pod_uid
+            and pod_state is RuntimeBindingVerificationState.VERIFIED
+        ):
+            pod = EntityRef(kind="Pod", name=binding.pod, namespace=binding.namespace)
+            current = topology.latest.get(pod)
+            if current is not None and current.instance_uid == binding.pod_uid:
+                refs.append(pod)
+        return tuple(refs)
+
+    evidence: dict[tuple[EntityRef, str, EntityRef], set[str]] = {}
+    edges = set(topology.edges)
+    for observed in propagation.edges:
+        if not observed.evidence_ids:
+            continue
+        sources = endpoints(
+            observed.source_binding,
+            observed.source_deployment_verification,
+            observed.source_pod_verification,
+        )
+        targets = endpoints(
+            observed.affected_binding,
+            observed.affected_deployment_verification,
+            observed.affected_pod_verification,
+        )
+        for source in sources:
+            for target in targets:
+                edge = Edge(source=source, relation="runtime_propagates", target=target)
+                edges.add(edge)
+                evidence.setdefault((source, edge.relation, target), set()).update(
+                    observed.evidence_ids
+                )
+    result = Topology(
+        sorted(
+            edges, key=lambda edge: (edge.source.canonical, edge.relation, edge.target.canonical)
+        ),
+        topology.latest,
+    )
+    result.edge_evidence = {key: tuple(sorted(ids)) for key, ids in evidence.items()}
+    return result
 
 
 def pod_workload_name(pod_name: str) -> str:

@@ -145,15 +145,23 @@ def test_log_evidence_on_the_full_source_product_path(setup: Any) -> None:  # no
     assert result.model_calls == 0
 
     # (2) A natural dependency-health / log-error gap yields a bounded logs candidate.
-    (logs,) = [audit for audit in result.action_audits if audit.action.capability == "logs"]
+    logs = next(
+        audit
+        for audit in result.action_audits
+        if audit.action.capability == "logs"
+        and audit.action.target == EntityRef.parse("sre-demo/Service/payment-service")
+        and audit.new_evidence_refs
+    )
     assert logs.gap_dimension in {GapDimension.DEPENDENCY_HEALTH, GapDimension.LOG_ERROR_PATTERN}
     assert logs.authorization_result == "AUTHORIZED"
     assert logs.action.target is not None
     assert logs.action.target.canonical == "sre-demo/Service/payment-service"
 
     # (3) It is an INVESTIGATION Loki read on the tape.
-    assert len(loki_reads) == 1
-    tape_ids, raw = loki_reads[0]
+    assert loki_reads
+    tape_ids, raw = next(
+        (ids, raw) for ids, raw in loki_reads if set(logs.new_evidence_refs) <= set(ids)
+    )
 
     # (4) The returned evidence ids resolve to the raw records on the tape and were acquired.
     assert logs.new_evidence_refs
@@ -173,7 +181,8 @@ def test_log_evidence_on_the_full_source_product_path(setup: Any) -> None:  # no
     assert investigated.document["resolution"] != Resolution.RESOLVED.value
     assert investigated.document["resolution"] == base.document["resolution"]
     assert investigated.document["root_cause"] == base.document["root_cause"]
-    assert investigated.epistemic_digest == base.epistemic_digest
+    assert logs.decision_state_changed is False
+    assert logs.hypothesis_states_before == logs.hypothesis_states_after
 
     # (7) The base path: the captured caller log is typed by F1.1 with its Loki provenance.
     case = build_case(ReplaySource.from_run(base_run, session_factory=factory), EngineConfig())

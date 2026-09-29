@@ -112,7 +112,15 @@ def diagnosis_view(
     states = _epistemic_states(diagnosis.resolution_trace)
 
     hypotheses = diagnosis.alternative_hypotheses or diagnosis.ambiguous_hypotheses
-    competing = [_hypothesis_view(item, states) for item in hypotheses]
+    contexts = (
+        set(diagnosis.resolution_trace.context_hypotheses) if diagnosis.resolution_trace else set()
+    )
+    competing = [
+        _hypothesis_view(item, states).model_copy(update={"epistemic_state": "OBSERVED_CONTEXT"})
+        if item.hypothesis_id in contexts
+        else _hypothesis_view(item, states)
+        for item in hypotheses
+    ]
 
     hypothesis = diagnosis.hypothesis
     initiating = hypothesis.initiating_findings if hypothesis else ()
@@ -124,6 +132,20 @@ def diagnosis_view(
     return DiagnosisView(
         incident_id=diagnosis.incident_id,
         resolution=diagnosis.resolution.value,
+        decision_semantics=diagnosis.decision_semantics,
+        diagnosis_status=diagnosis.resolution_trace.diagnosis_status
+        if diagnosis.resolution_trace
+        else "UNASSESSED",
+        claim_level=diagnosis.resolution_trace.claim_level
+        if diagnosis.resolution_trace
+        else "UNASSESSED",
+        incident_recovery=diagnosis.incident_recovery,
+        context_hypothesis_ids=diagnosis.resolution_trace.context_hypotheses
+        if diagnosis.resolution_trace
+        else (),
+        material_frontier_ids=diagnosis.resolution_trace.material_frontier_ids
+        if diagnosis.resolution_trace
+        else (),
         confidence=diagnosis.confidence.value,
         leading_root_actor=leading,
         root_cause=leading if is_resolved else None,

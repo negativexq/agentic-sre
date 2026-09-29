@@ -12,6 +12,7 @@ import json
 from collections.abc import Mapping, Sequence
 from hashlib import sha256
 
+from packages.rca.claims import admitted, symptom_links
 from packages.rca.model import (
     Diagnosis,
     EntityRef,
@@ -103,7 +104,7 @@ def derive_structural_frontier(context: Context) -> tuple[StructuralAlternative,
     to the resulting actor.
     """
     workloads = _workloads(context)
-    rows: dict[tuple[EntityRef, str], tuple[EntityRef, tuple[str, ...]]] = {}
+    rows: dict[tuple[EntityRef, str], tuple[set[EntityRef], tuple[str, ...]]] = {}
 
     for edge in context.topology.edges:
         role = _ROLE_BY_RELATION.get(edge.relation)
@@ -133,29 +134,42 @@ def derive_structural_frontier(context: Context) -> tuple[StructuralAlternative,
         basis: tuple[str, ...] = (f"{edge.relation}:{actor.kind}:{affected.kind}",)
         key = (actor, role)
         previous = rows.get(key)
-        rows[key] = (affected, tuple(sorted(set((*(previous[1] if previous else ()), *basis)))))
+        rows[key] = (
+            {affected} | (previous[0] if previous else set()),
+            tuple(sorted(set((*(previous[1] if previous else ()), *basis)))),
+        )
 
     # A directly alerting workload/controller is a legitimate structural actor
     # even when no historical change has been consumed yet.
     for workload in sorted(workloads, key=lambda item: item.canonical):
         key = (workload, "workload_controller")
-        rows.setdefault(key, (workload, ("symptom:workload_controller",)))
+        rows.setdefault(key, ({workload}, ("symptom:workload_controller",)))
 
     alternatives: list[StructuralAlternative] = []
-    for (actor, role), (affected, basis) in sorted(
+    for (actor, role), (affected_entities, basis) in sorted(
         rows.items(), key=lambda item: (item[0][0].canonical, item[0][1])
     ):
         path = context.topology.causal_path(actor, set(context.symptom_entities), max_depth=4) or ()
         alternatives.append(
             StructuralAlternative(
                 alternative_id=_alternative_id(actor, role, basis),
+                affected_entities=tuple(sorted(affected_entities, key=lambda item: item.canonical)),
                 actor=actor,
                 role=role,
                 structural_basis=basis,
                 causal_path=path,
                 linked_symptoms=_linked_symptoms(actor, context),
                 queryable_dimensions=_DIMENSIONS_BY_ROLE[role],
-                observation_targets=_related_targets(actor, affected, context),
+                observation_targets=tuple(
+                    sorted(
+                        {
+                            target
+                            for affected in affected_entities
+                            for target in _related_targets(actor, affected, context)
+                        },
+                        key=lambda item: item.canonical,
+                    )
+                ),
                 queried_dimensions=(),
                 status=FrontierStatus.UNEXPLORED,
             )
@@ -199,7 +213,8 @@ def apply_frontier_progress(
     promoted_actors = {
         entity
         for hypothesis in hypotheses
-        for entity in (hypothesis.causal_actor, *hypothesis.members)
+        if admitted(hypothesis)
+        for entity in (hypothesis.causal_actor,)
     }
     updated: list[StructuralAlternative] = []
     for alternative in alternatives:
@@ -218,13 +233,59 @@ def apply_frontier_progress(
     return tuple(updated)
 
 
+def material_frontier(
+    alternatives: Sequence[StructuralAlternative],
+    hypotheses: Sequence[Hypothesis],
+) -> tuple[StructuralAlternative, ...]:
+    """Bind unknown upstream mechanisms to concrete incident-linked claims.
+
+    Query completion, no findings, promotion and budget exhaustion are not
+    negative causal evidence. None can close this boundary. A modeled upstream
+    dependency or configuration of an observed chain limits initiating certainty.
+    """
+    result: list[StructuralAlternative] = []
+    for alternative in alternatives:
+        affected_ids = []
+        if alternative.role not in {
+            "dependency",
+            "configuration_source",
+            "autoscaler",
+            "network_policy",
+            "fault_actor",
+        }:
+            continue
+        for hypothesis in hypotheses:
+            if not admitted(hypothesis) or hypothesis.causal_actor == alternative.actor:
+                continue
+            chain = {hypothesis.causal_actor}
+            for symptom, path in symptom_links(hypothesis):
+                chain.add(symptom)
+                chain.update(hop.source for hop in path)
+                chain.update(hop.target for hop in path)
+            if chain.intersection(alternative.affected_entities):
+                affected_ids.append(hypothesis.hypothesis_id)
+        if affected_ids:
+            result.append(
+                alternative.model_copy(
+                    update={
+                        "material_for_hypothesis_ids": tuple(sorted(affected_ids)),
+                        "missing_decision": "UPSTREAM_MECHANISM_COULD_CHANGE_INITIATING_CAUSE",
+                    }
+                )
+            )
+    return tuple(sorted(result, key=lambda item: item.alternative_id))
+
+
 def investigation_status(
     alternatives: Sequence[StructuralAlternative], *, bounded: bool
 ) -> InvestigationStatus:
     """Return the thin active-investigation status for a case."""
-    if not bounded:
+    if not alternatives and not bounded:
         return InvestigationStatus.NOT_REQUIRED
-    if any(item.status is FrontierStatus.UNEXPLORED for item in alternatives):
+    if any(
+        item.status is FrontierStatus.UNEXPLORED or item.material_for_hypothesis_ids
+        for item in alternatives
+    ):
         return InvestigationStatus.OPEN
     return InvestigationStatus.EXHAUSTED
 

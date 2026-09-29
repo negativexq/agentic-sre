@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 
+from packages.rca.claims import actor_findings
 from packages.rca.json_access import child
 from packages.rca.model import (
     EliminationPrecondition,
@@ -239,7 +240,9 @@ def _manifestation_groups(
     actor = hypothesis.causal_actor
     if onset is None or actor.kind != "Pod":
         return None
-    findings = hypothesis.findings
+    findings = (
+        actor_findings(hypothesis) if hypothesis.claim_version == "m21.v2" else hypothesis.findings
+    )
     if (
         not findings
         or hypothesis.initiating_findings
@@ -267,7 +270,9 @@ def _scope_exit_uids(hypothesis: Hypothesis, onset: datetime | None) -> tuple[st
     missing evidence, never a scope exit.
     """
     actor = hypothesis.causal_actor
-    findings = hypothesis.findings
+    findings = (
+        actor_findings(hypothesis) if hypothesis.claim_version == "m21.v2" else hypothesis.findings
+    )
     if onset is None or actor.kind != "Pod" or not findings:
         return ()
     if not (
@@ -410,7 +415,9 @@ def assess_ended_episode(
     actor = hypothesis.causal_actor
     if onset is None or actor.kind != "Pod":
         return None
-    findings = hypothesis.findings
+    findings = (
+        actor_findings(hypothesis) if hypothesis.claim_version == "m21.v2" else hypothesis.findings
+    )
     if (
         not findings
         or hypothesis.initiating_findings

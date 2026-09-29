@@ -361,6 +361,18 @@ def build_report(
         context_hypothesis_ids=diagnosis.resolution_trace.context_hypotheses
         if diagnosis.resolution_trace
         else (),
+        explanation_summaries=tuple(
+            f"{r.explaining_claim} → {r.explained_claim}: {r.mechanism}; {r.consequence}; evidence {', '.join(r.evidence_ids)}"
+            for r in diagnosis.resolution_trace.explanations
+        )
+        if diagnosis.resolution_trace
+        else (),
+        frontier_answer_summaries=tuple(
+            f"{a.question}: {a.state}; {a.investigation_state}; evidence {', '.join(a.evidence_ids)}; remains {', '.join(a.remaining_uncertainty)}"
+            for a in diagnosis.resolution_trace.frontier_answers
+        )
+        if diagnosis.resolution_trace
+        else (),
         material_frontier_ids=diagnosis.resolution_trace.material_frontier_ids
         if diagnosis.resolution_trace
         else (),

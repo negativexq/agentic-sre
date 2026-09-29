@@ -146,6 +146,13 @@ def diagnosis_view(
         material_frontier_ids=diagnosis.resolution_trace.material_frontier_ids
         if diagnosis.resolution_trace
         else (),
+        causal_explanations=tuple(r.model_dump(mode="json") for r in trace.explanations)
+        if trace
+        else (),
+        frontier_answers=tuple(a.model_dump(mode="json") for a in trace.frontier_answers)
+        if trace
+        else (),
+        mechanism_verified_hypothesis_ids=trace.mechanism_verified_hypotheses if trace else (),
         confidence=diagnosis.confidence.value,
         leading_root_actor=leading,
         root_cause=leading if is_resolved else None,

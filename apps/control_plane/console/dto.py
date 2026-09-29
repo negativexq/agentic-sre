@@ -138,6 +138,9 @@ class DiagnosisView(ConsoleModel):
     incident_recovery: str = "NOT_ASSESSED"
     context_hypothesis_ids: tuple[str, ...] = ()
     material_frontier_ids: tuple[str, ...] = ()
+    causal_explanations: tuple[dict[str, Any], ...] = ()
+    frontier_answers: tuple[dict[str, Any], ...] = ()
+    mechanism_verified_hypothesis_ids: tuple[str, ...] = ()
     confidence: str
     # The leading actor is the top-ranked actor even when unresolved; it equals
     # the root cause only once the diagnosis is RESOLVED.

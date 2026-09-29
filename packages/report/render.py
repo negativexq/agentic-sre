@@ -27,8 +27,13 @@ def _duration(seconds: float | None) -> str:
 
 
 def _actor_line(snapshot: ReportSnapshot) -> str:
-    if snapshot.decision_semantics == "m21.v2":
-        return f"Possible causal actor: `{snapshot.leading_root_actor or 'none identified'}` ({snapshot.diagnosis_status}; {snapshot.claim_level}; recovery {snapshot.incident_recovery})"
+    if snapshot.decision_semantics in {"m21.v2", "m21.v3"}:
+        label = (
+            "Observed mechanism cause"
+            if snapshot.claim_level == "OBSERVED_MECHANISM_CAUSE"
+            else "Possible causal actor"
+        )
+        return f"{label}: `{snapshot.leading_root_actor or 'none identified'}` ({snapshot.diagnosis_status}; {snapshot.claim_level}; recovery {snapshot.incident_recovery})"
     if snapshot.is_resolved:
         return f"Root cause: `{snapshot.root_actor}`"
     return f"Leading root actor: `{snapshot.leading_root_actor or 'none identified'}`"
@@ -98,6 +103,12 @@ def to_markdown(snapshot: ReportSnapshot) -> str:
     )
     lines.append("")
     lines.append(f"> {snapshot.summary}")
+    if snapshot.explanation_summaries or snapshot.frontier_answer_summaries:
+        lines.extend(["", "## Causal explanations and open questions", ""])
+        lines.extend(
+            f"- {text}"
+            for text in (*snapshot.explanation_summaries, *snapshot.frontier_answer_summaries)
+        )
     lines.append("")
     if snapshot.resolution_rationale:
         lines.append(f"**Resolution rationale.** {snapshot.resolution_rationale}")
@@ -320,8 +331,12 @@ def to_pdf(snapshot: ReportSnapshot) -> bytes:
     pdf.kv("Severity / status", f"{snapshot.severity} / {snapshot.status}")
     actor = snapshot.root_actor if snapshot.is_resolved else snapshot.leading_root_actor
     label = (
-        "Possible causal actor"
-        if snapshot.decision_semantics == "m21.v2"
+        (
+            "Observed mechanism cause"
+            if snapshot.claim_level == "OBSERVED_MECHANISM_CAUSE"
+            else "Possible causal actor"
+        )
+        if snapshot.decision_semantics in {"m21.v2", "m21.v3"}
         else "Root cause"
         if snapshot.is_resolved
         else "Leading root actor"

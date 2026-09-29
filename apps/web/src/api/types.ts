@@ -96,6 +96,9 @@ export interface DiagnosisView {
   incident_recovery?: string;
   context_hypothesis_ids?: string[];
   material_frontier_ids?: string[];
+  causal_explanations?: { explaining_claim: string; explained_claim: string; mechanism: string; consequence: string; evidence_ids: string[] }[];
+  frontier_answers?: { alternative_id: string; question: string; state: string; investigation_state: string; evidence_ids: string[]; remaining_uncertainty: string[] }[];
+  mechanism_verified_hypothesis_ids?: string[];
   incident_id: string;
   resolution: Resolution;
   confidence: Confidence;

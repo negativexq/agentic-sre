@@ -11,6 +11,7 @@ Historical mechanism bridges alone intentionally grant no execution authority.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 
 from packages.rca.claims import actor_findings, admitted, symptom_links
 from packages.rca.model import (
@@ -18,6 +19,7 @@ from packages.rca.model import (
     CausalHop,
     CausalWitness,
     ClusterEvent,
+    Finding,
     FindingKind,
     FrontierAnswer,
     Hypothesis,
@@ -36,6 +38,16 @@ from packages.rca.topology import is_chaos_kind
 EXECUTION_RULE = "m21.support.observed-quota-rejection"
 EXPLANATION_RULE = "m21.explanation.observed-quota-rejection"
 SPAWN_EXPLANATION_RULE = "m21.explanation.controller-spawn"
+FAULT_EXECUTION_RULE = "m21.support.observed-fault-execution"
+EXECUTION_RULES = (EXECUTION_RULE, FAULT_EXECUTION_RULE)
+_EFFECT_KINDS = frozenset(
+    {
+        FindingKind.CONTAINER_FAILURE,
+        FindingKind.RESOURCE_PRESSURE,
+        FindingKind.DEPENDENCY_ERRORS,
+        FindingKind.FAILURE_EVENT,
+    }
+)
 
 
 def quota_execution(
@@ -100,6 +112,149 @@ def quota_execution(
         support_kind="OBSERVED_MECHANISM_CAUSE",
         status=RootSupportStatus.FIRED if witnesses else RootSupportStatus.NOT_FIRED,
         reasons=() if witnesses else ("NO_DIRECT_INCIDENT_REJECTION_WITNESS",),
+        decisive_evidence_ids=tuple(sorted({e for w in witnesses for e in w.evidence_ids})),
+        witnesses=tuple(witnesses),
+    )
+
+
+def _instant(value: object) -> datetime | None:
+    return datetime.fromisoformat(value) if isinstance(value, str) else None
+
+
+def _fault_executions(holder: Hypothesis, hypotheses: Sequence[Hypothesis]) -> list[Finding]:
+    """The injection findings whose witness this holder may carry.
+
+    A Schedule instance carries exactly the experiments its controller named by UID. An
+    experiment carries its own execution, unless an admitted Schedule claim is its parent.
+    """
+    if holder.causal_actor.kind == "Schedule":
+        instance = holder.actor_instance
+        return [
+            finding
+            for child in hypotheses
+            if instance is not None
+            and child.hypothesis_id != holder.hypothesis_id
+            and is_chaos_kind(child.causal_actor.kind)
+            and child.causal_actor.kind != "Schedule"
+            and child.actor_instance is not None
+            and _same_episode(holder, child)
+            for finding in actor_findings(child)
+            if finding.kind is FindingKind.FAULT_INJECTION
+            and finding.details.get("schedule") == holder.causal_actor.canonical
+            and finding.details.get("schedule_uid") == instance.uid
+            and finding.details.get("spawn_evidence_ids")
+        ]
+    parents = {
+        h.actor_instance.uid
+        for h in hypotheses
+        if h.causal_actor.kind == "Schedule" and admitted(h) and h.actor_instance is not None
+    }
+    return [
+        finding
+        for finding in actor_findings(holder)
+        if finding.kind is FindingKind.FAULT_INJECTION
+        and finding.details.get("schedule_uid") not in parents
+    ]
+
+
+def _effect_times(finding: Finding, events: Sequence[ClusterEvent]) -> list[datetime]:
+    """Every instant this observation covers, not just its latest one.
+
+    Repeated events of one reason merge into a single finding stamped with the latest, so
+    the raw events behind its evidence ids give the earlier occurrences.
+    """
+    ids = set(finding.evidence_ids)
+    times = [
+        t for e in events if e.evidence_id in ids for t in (e.first_at, e.last_at) if t is not None
+    ]
+    return [*times, *([finding.at] if finding.at is not None else [])]
+
+
+def fault_execution(
+    holder: Hypothesis,
+    possible: RootSupportRecord,
+    hypotheses: Sequence[Hypothesis],
+    events: Sequence[ClusterEvent],
+) -> RootSupportRecord:
+    """Execution witness plus incident effect at the exact target, never Spawned/Applied alone."""
+    witnesses: list[CausalWitness] = []
+    if (
+        possible.status is RootSupportStatus.FIRED
+        and holder.actor_instance is not None
+        and holder.episode_onset is not None
+        and is_chaos_kind(holder.causal_actor.kind)
+    ):
+        pods = {
+            (h.causal_actor.namespace, h.causal_actor.name): h
+            for h in hypotheses
+            if h.causal_actor.kind == "Pod"
+            and h.actor_instance is not None
+            and _same_episode(holder, h)
+            and h.causal_actor in holder.symptom_entities
+        }
+        for injection in _fault_executions(holder, hypotheses):
+            for target in injection.details.get("execution_targets", ()):
+                namespace, _, rest = str(target["target"]).partition("/")
+                pod = pods.get((namespace, rest.partition("/")[0]))
+                applied, recovered = (
+                    _instant(target["applied_at"]),
+                    _instant(target["recovered_at"]),
+                )
+                if pod is None or applied is None or recovered is None:
+                    continue
+                effects = [
+                    (f, _effect_times(f, events))
+                    for f in actor_findings(pod)
+                    if f.kind in _EFFECT_KINDS
+                ]
+                inside = [
+                    f for f, times in effects if any(applied <= t <= recovered for t in times)
+                ]
+                if not inside or any(t < applied for _, times in effects for t in times):
+                    continue
+                spawned = tuple(injection.details.get("spawn_evidence_ids", ()))
+                effect_ids = tuple(sorted({e for f in inside for e in f.evidence_ids}))
+                witnesses.append(
+                    CausalWitness(
+                        actor=holder.causal_actor,
+                        actor_instance=holder.actor_instance,
+                        origin=injection,
+                        mechanism="FAULT_EXECUTION_ON_INCIDENT_SYMPTOM",
+                        attribution=(
+                            "EXPERIMENT_EXECUTION_CARRIED_BY_SPAWN_RECORD"
+                            if spawned
+                            else "EXPERIMENT_EXECUTION"
+                        ),
+                        symptom=pod.causal_actor,
+                        path=(
+                            CausalHop(
+                                source=holder.causal_actor,
+                                relation="fault_targets",
+                                target=pod.causal_actor,
+                            ),
+                        ),
+                        onset=holder.episode_onset,
+                        evidence_ids=tuple(sorted({*injection.evidence_ids, *effect_ids})),
+                        relation_evidence_ids=spawned,
+                        coverage=(
+                            "EXACT_EXPERIMENT_INSTANCE",
+                            "EXECUTION_INTERVAL_CLOSED",
+                            "EFFECT_INSIDE_INTERVAL",
+                            "NO_EFFECT_BEFORE_APPLY",
+                            *(("EXACT_SPAWN_RECORD_UIDS",) if spawned else ()),
+                        ),
+                        missing=("FAULT_ACTION_NOT_OBSERVED", "INCIDENT_RECOVERY_NOT_ASSESSED"),
+                        rule_id=FAULT_EXECUTION_RULE,
+                        rule_version="v1",
+                        claim_level="OBSERVED_MECHANISM_CAUSE",
+                    )
+                )
+    return RootSupportRecord(
+        rule_id=FAULT_EXECUTION_RULE,
+        rule_version="v1",
+        support_kind="OBSERVED_MECHANISM_CAUSE",
+        status=RootSupportStatus.FIRED if witnesses else RootSupportStatus.NOT_FIRED,
+        reasons=() if witnesses else ("NO_EXECUTION_WITH_INCIDENT_EFFECT_WITNESS",),
         decisive_evidence_ids=tuple(sorted({e for w in witnesses for e in w.evidence_ids})),
         witnesses=tuple(witnesses),
     )

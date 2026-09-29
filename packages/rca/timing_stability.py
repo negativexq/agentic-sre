@@ -42,7 +42,10 @@ from packages.rca.signals import is_background_alert
 
 D1_RULE_ID = "m21.support.change-onset-path"
 # The strong rule that today proves mechanism execution: an observed quota rejection.
-EXECUTION_RULE_ID = "m21.support.observed-quota-rejection"
+EXECUTION_RULE_IDS = (
+    "m21.support.observed-quota-rejection",
+    "m21.support.observed-fault-execution",
+)
 RELATION_D1 = "d1"
 RELATION_EXECUTION = "execution"
 RELATION_ONSET = "onset_relation"
@@ -190,7 +193,9 @@ def claim_views(hypotheses: Sequence[Hypothesis], trace: ResolutionTrace) -> dic
             ),
             relations={
                 RELATION_D1: d1,
-                RELATION_EXECUTION: support.get(EXECUTION_RULE_ID, "ABSENT"),
+                RELATION_EXECUTION: next(
+                    (support[rule] for rule in EXECUTION_RULE_IDS if rule in support), "ABSENT"
+                ),
                 RELATION_ONSET: ",".join(audit.onset_relation) if audit else "",
                 RELATION_TEMPORAL_CONTRADICTION: (
                     ELIMINATED if _TEMPORAL_CONTRADICTION_CODE in own else NOT_ELIMINATED

@@ -12,7 +12,12 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 
-from packages.rca.causal_closure import answer_frontier, explanations, quota_execution
+from packages.rca.causal_closure import (
+    answer_frontier,
+    explanations,
+    fault_execution,
+    quota_execution,
+)
 from packages.rca.causal_roles import HypothesisCausalRole
 from packages.rca.claims import actor_findings, admission_reasons, admitted, symptom_links
 from packages.rca.episode_end import RULE_ID as EPISODE_END_RULE_ID
@@ -69,6 +74,7 @@ from packages.rca.temporal import (
     temporal_contradiction_certainty,
 )
 from packages.rca.timing_stability import current_timing_masks
+from packages.rca.topology import is_chaos_kind
 
 _CHANGE_KINDS = frozenset(
     {
@@ -886,7 +892,11 @@ def resolve_hypotheses(
             explained=explained,
         )
     execution = {
-        h.hypothesis_id: quota_execution(h, change_onset_path_support(h), events)
+        h.hypothesis_id: (
+            fault_execution(h, change_onset_path_support(h), hypotheses, events)
+            if is_chaos_kind(h.causal_actor.kind)
+            else quota_execution(h, change_onset_path_support(h), events)
+        )
         for h in hypotheses
     }
     trace = _attach_audits(trace, hypotheses, verification_traces, onset_grace)
@@ -1006,7 +1016,7 @@ def resolve_hypotheses(
             state=Resolution.RESOLVED,
             diagnosis_status="MECHANISM_VERIFIED_CAUSE",
             decision_basis="OBSERVED_MECHANISM_DISAMBIGUATED_V1",
-            rationale="The observed quota rejection explains the declared incident scope; independent admitted rivals and material unanswered questions are absent. Recovery is not assessed.",
+            rationale="The observed mechanism execution explains the declared incident scope; independent admitted rivals and material unanswered questions are absent. Recovery is not assessed.",
             unresolved_dimensions=(),
         )
         return trace.model_copy(update=updates)

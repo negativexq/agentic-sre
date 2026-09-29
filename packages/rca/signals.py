@@ -9,6 +9,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
+from packages.rca.fault_execution import FaultExecution, FaultRef, fault_executions
 from packages.rca.json_access import child, mapping
 from packages.rca.model import (
     Alert,
@@ -737,45 +738,54 @@ def _clock(value: datetime | None) -> str:
 
 
 def fault_event_findings(events: Sequence[ClusterEvent], topology: Topology) -> list[Finding]:
-    """Chaos experiments seen in events, one finding per experiment object.
+    """Chaos experiments seen in events, one finding per experiment *instance*.
 
-    A finding's time is when the experiment started. Experiments spawned by a
-    schedule also report how long the schedule has been injecting faults, because
-    a recurring fault that began before the alerts can be the cause even when its
-    latest run happened later.
+    Instances are keyed by the events' involved UID, so two incarnations that share a
+    name never share a finding. A finding's time is when the experiment started.
+    Experiments spawned by a schedule also report how long that schedule instance has
+    been injecting faults, because a recurring fault that began before the alerts can
+    be the cause even when its latest run happened later.
     """
-    grouped: dict[EntityRef, list[ClusterEvent]] = {}
-    for event in events:
-        if is_chaos_kind(event.entity.kind):
-            grouped.setdefault(event.entity, []).append(event)
     parents = {edge.target: edge.source for edge in topology.edges if edge.relation == "spawns"}
-    schedule_events: dict[EntityRef, list[ClusterEvent]] = {}
-    for entity, items in grouped.items():
-        owner = entity if entity.kind == "Schedule" else parents.get(entity)
-        if owner is not None:
-            schedule_events.setdefault(owner, []).extend(items)
+    executions = fault_executions(events, parents)
+    by_ref = {(x.ref.entity, x.ref.uid): x for x in executions}
+
+    def window(schedule: FaultRef) -> tuple[datetime | None, datetime | None]:
+        members = [x for x in executions if _in_schedule(x, schedule)]
+        times = [t for x in members for t in (x.first_at, x.last_at) if t is not None]
+        return (min(times), max(times)) if times else (None, None)
+
     findings: list[Finding] = []
-    for entity, items in grouped.items():
-        reasons = Counter(item.reason for item in items)
-        first, last = _span(items)
-        parent = parents.get(entity)
+    for execution in executions:
+        entity, uid = execution.ref.entity, execution.ref.uid
+        reasons = execution.reasons
+        first, last = execution.first_at, execution.last_at
         details: dict[str, Any] = {
             "first_at": first.isoformat() if first else None,
             "last_at": last.isoformat() if last else None,
             "reasons": dict(reasons),
             "failed_applications": reasons.get("Failed", 0),
+            "failed_apply": execution.failed_apply,
+            "failed_recover": execution.failed_recover,
         }
+        if uid is not None:
+            details["instance_uid"] = uid
         if entity.kind == "Schedule":
-            if not reasons.get("Spawned"):
+            if not execution.spawned:
                 continue
             kind = FindingKind.FAULT_SCHEDULE
-            active_from, active_to = _span(schedule_events.get(entity, items))
+            active_from, active_to = window(execution.ref)
             summary = (
                 f"chaos schedule injecting faults since {_clock(active_from)}, "
-                f"last run {_clock(active_to)} ({reasons['Spawned']} experiment(s))"
+                f"last run {_clock(active_to)} ({execution.spawned} experiment(s))"
             )
             first = active_from
+            owned = [
+                by_ref[(c.entity, c.uid)] for c in execution.children if (c.entity, c.uid) in by_ref
+            ]
             targets = tuple(
+                dict.fromkeys(t.pod for child in owned for t in child.targets)
+            ) or tuple(
                 target
                 for child in topology.outgoing(entity, "spawns")
                 for target in topology.outgoing(child, "disrupts")
@@ -790,13 +800,28 @@ def fault_event_findings(events: Sequence[ClusterEvent], topology: Topology) -> 
                 f"{entity.kind} applied fault at {_clock(first)} "
                 f"({reasons.get('Applied', 0)} application(s))"
             )
-            if parent is not None:
-                active_from, active_to = _span(schedule_events.get(parent, items))
+            details["execution_targets"] = [
+                {
+                    "target": "/".join(
+                        part
+                        for part in (t.pod.namespace, t.pod.name, t.container)
+                        if part is not None
+                    ),
+                    "applied_at": t.applied_at.isoformat() if t.applied_at else None,
+                    "recovered_at": t.recovered_at.isoformat() if t.recovered_at else None,
+                    "applications": t.applications,
+                }
+                for t in execution.targets
+            ]
+            if execution.schedule is not None:
+                active_from, active_to = window(execution.schedule)
                 summary += (
-                    f"; schedule {parent.name} has injected this fault repeatedly from "
-                    f"{_clock(active_from)} to {_clock(active_to)}"
+                    f"; schedule {execution.schedule.entity.name} has injected this fault "
+                    f"repeatedly from {_clock(active_from)} to {_clock(active_to)}"
                 )
-                details["schedule"] = parent.canonical
+                details["schedule"] = execution.schedule.entity.canonical
+                if execution.schedule.uid is not None:
+                    details["schedule_uid"] = execution.schedule.uid
                 details["schedule_active_from"] = active_from.isoformat() if active_from else None
                 details["schedule_active_to"] = active_to.isoformat() if active_to else None
         details["targets"] = sorted({t.canonical for t in targets})
@@ -804,14 +829,33 @@ def fault_event_findings(events: Sequence[ClusterEvent], topology: Topology) -> 
             Finding(
                 kind=kind,
                 entity=entity,
+                entity_instance=_instance(entity, uid),
                 at=first,
                 summary=summary,
-                evidence_ids=tuple(item.evidence_id for item in items[:6]),
+                evidence_ids=execution.evidence_ids[:6],
                 related=tuple(dict.fromkeys(targets)),
                 details=details,
             )
         )
     return findings
+
+
+def _in_schedule(execution: FaultExecution, schedule: FaultRef) -> bool:
+    """The schedule instance itself, or an experiment it owns.
+
+    With a known schedule UID only that instance's own events and the experiments it
+    named count; an unknown UID (name-derived ownership) spans every instance.
+    """
+    if execution.ref.entity == schedule.entity and (
+        schedule.uid is None or execution.ref.uid == schedule.uid
+    ):
+        return True
+    owner = execution.schedule
+    return (
+        owner is not None
+        and owner.entity == schedule.entity
+        and (schedule.uid is None or owner.uid == schedule.uid)
+    )
 
 
 def failure_findings(events: Sequence[ClusterEvent]) -> list[Finding]:

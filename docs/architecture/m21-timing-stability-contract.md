@@ -29,7 +29,19 @@ authority loss reported (§8) instead of tuned.
 **I1 (identity invariance).** Changing the incident onset never changes a claim's identity; it may
 change whether the claim forms and how it is evaluated. The *lifecycle episode* is the actor instance's own
 episode (for example one chaos-experiment UID, one Schedule incarnation UID, one object UID). Two UIDs
-with the same name are two claims. `hypothesis_key` is derived only from the identity tuple.
+with the same name are two claims. `hypothesis_key` is derived only from the identity tuple, with a family made of the kinds of the actor's
+own cause-capable findings whatever temporal role the onset gives them (`mechanism_family`; the assessed
+`mechanism` stays a separate, onset-dependent result). An exact UID that is not observed is carried as
+`unknown`; nothing is inferred from names or other observations. Evidence stamped with a foreign incident
+episode remains a separate evidence partition and keeps its own episode in its key.
+
+**I2 (causal family).** `causal_family_id` is derived from the logical actor and `mechanism_family` only
+(never UID, onset, temporal role, score or evidence ids). Exact claims are never merged: UID, lifecycle,
+evidence, timing, support and contradiction stay separate audit records. Root-cause competition is counted
+per family: SUPPORTED if any selectable member is, else UNRESOLVED if any is, else EXCLUDED. A family also
+reports `instance_resolution` (`EXACT`, `MULTIPLE_VIABLE`, `UNKNOWN`). Family aggregation grants no strong
+authority and does not bypass the stability rules below; it only stops incarnations of one causal
+proposition from competing with themselves.
 
 ## 3. Uncertainty set `O` (evidence-derived, diagnosis-time)
 

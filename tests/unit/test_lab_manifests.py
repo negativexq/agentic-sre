@@ -70,7 +70,8 @@ def test_the_makefile_installs_the_vendored_chart_with_the_recorded_values() -> 
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     assert "chaos-mesh-$(CHAOS_TAG:v%=%).tgz" in makefile
     assert "-f $(CHAOS_DIR)/values.yaml" in makefile
-    assert "docker pull $$image@$$digest" in makefile  # images are pulled by digest
+    assert "crictl pull $$image:$$tag" in makefile  # the node pulls the pinned tags
+    assert "digest mismatch" in makefile  # and a digest other than the pinned one is refused
 
 
 def test_kafka_declares_its_topic_and_keeps_its_data_across_a_container_restart() -> None:

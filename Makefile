@@ -1,7 +1,7 @@
 .PHONY: install lock lint typecheck test test-pg check demo serve-local \
 	itbench-setup itbench-index eval-dev eval-test benchmark-qualify \
 	images cluster-up build-images deploy load status ui inject-bad-rollout recover rbac-check \
-	lab-images chaos-mesh-install chaos-mesh-uninstall lab-up lab-check cluster-down precommit offline-demo e2e-kind e2e-kind-clean m18a-live-validate release-check \
+	lab-images chaos-mesh-install chaos-mesh-uninstall lab-up lab-check lab-check-once cluster-down precommit offline-demo e2e-kind e2e-kind-clean m18a-live-validate release-check \
 	verify-release-provenance product-bench-dev
 
 PY := .venv/bin/python
@@ -120,16 +120,17 @@ cluster-up:
 IMAGES := control-plane migrator order-service payment-service order-worker
 
 # Chaos Mesh for the lab (infra/kubernetes/chaos-mesh/pins.yaml): the vendored chart, containerd
-# values, one controller. `lab-images` pulls the pinned images by digest and loads them into the
-# node so that a run never waits on a registry.
+# values, one controller. `lab-images` has the node pull the pinned images and refuses any whose digest
+# differs from pins.yaml, so that a run never waits on a registry. (`kind load` cannot import these
+# multi-platform images from the local Docker store: "content digest not found".)
 CHAOS_DIR := infra/kubernetes/chaos-mesh
 CHAOS_TAG := v2.8.4
 
 lab-images:
 	$(PY) -c "import sys, yaml; [print(i['name'], i['tag'], i['digest']) for i in yaml.safe_load(open(sys.argv[1]))['images']]" $(CHAOS_DIR)/pins.yaml | while read image tag digest; do \
-		docker pull $$image@$$digest || exit 1; \
-		docker tag $$image@$$digest $$image:$$tag || exit 1; \
-		kind load docker-image $$image:$$tag --name agentic-sre || exit 1; \
+		docker exec agentic-sre-control-plane crictl pull $$image:$$tag >/dev/null || exit 1; \
+		docker exec agentic-sre-control-plane crictl inspecti $$image:$$tag | grep -q "$$digest" \
+			|| { echo "digest mismatch for $$image:$$tag (pinned $$digest)"; exit 1; }; \
 	done
 
 chaos-mesh-install:
@@ -163,8 +164,16 @@ lab-up: cluster-up build-images lab-images
 	$(MAKE) lab-check
 
 # The scriptable part of the bring-up gate; the chaos smoke, the alert path and the node restart are
-# run by hand and recorded (design section 8, step 5). Every check fails if kubectl itself fails.
+# run by hand and recorded (design section 8, step 5). The topic and the schema converge on their own
+# (sidecars), so the gate retries for up to two minutes and reports the last failure; every single
+# check still fails if kubectl itself fails.
 lab-check:
+	@for attempt in $$(seq 1 24); do \
+		out=$$($(MAKE) --no-print-directory lab-check-once 2>&1) && { echo "$$out"; exit 0; }; \
+		sleep 5; \
+	done; echo "$$out"; echo "lab check: FAIL after 2 minutes"; exit 1
+
+lab-check-once:
 	@pods=$$($(KUBECTL) get pods -A --no-headers) || { echo "kubectl could not list pods"; exit 1; }; \
 	bad=$$(echo "$$pods" | awk '$$4 != "Running" && $$4 != "Completed"'); \
 	test -n "$$pods" || { echo "no pods found"; exit 1; }; \

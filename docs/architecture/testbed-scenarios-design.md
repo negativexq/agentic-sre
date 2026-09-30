@@ -1,6 +1,7 @@
 # Testbed scenarios and runs (roadmap B4)
 
-Status: **PROPOSED** (2026-09-30). Nothing here is implemented. Builds on `testbed-ground-truth-contract.md`
+Status: **APPROVED IN SLICES** (2026-09-30). The owner chose sliced delivery (§10); the decisions of §9 apply to the
+slice that is being built, and the decoy amendment waits until the negative control joins. Builds on `testbed-ground-truth-contract.md`
 (what a run records and how it is scored), `testbed-lab-design.md` (the lab) and
 `testbed-control-plane-design.md` (the control plane outside it).
 
@@ -119,3 +120,31 @@ recordings of roadmap B6 (they attach to these runs later); running the suite (r
    dropped before the manifest is frozen.
 5. Tiers by salted hash and the acceptance thresholds of §6.
 6. The runner of §7 as a new module next to the existing live suite.
+
+## 10. Delivery in slices (owner decision, 2026-09-30)
+
+The full list of §4 and §5 stays the target. Delivery is staged so that the riskiest part, the runner and the
+validity of the probes, is tested first and the suite grows only on evidence.
+
+1. **Slice 1: `dependency-fault`, `payment-service` delay.** One scenario, three repeats, `DEV`. The runner is
+   built for it; a **phase 0** run (not scored, stored apart from the suite) shows whether the oracle derives
+   every timeline field; only then is the manifest frozen and the three repeats run. Per-run isolation of §3 is
+   part of the slice.
+2. **Then, one family at a time,** each with its own phase 0: `direct-pod-fault`, `config-or-rollout`,
+   `scheduled-recurring`, `competing-causes`, and last `negative-control` (which needs the decoy amendment of
+   §6, asked for then).
+3. **The tier split** applies once the suite has more than one scenario; slice 1 is declared `DEV` in its
+   manifest.
+
+Rules made concrete for the slice (open to amendment here):
+
+- **Primary incident.** One fault raises several incidents (four to six alerts of one chain). A run is scored on
+  the **earliest incident created after the injection whose alert belongs to the scenario's expected alerts**,
+  using its latest stored diagnosis; every stored diagnosis of the run is kept as an artifact for later analysis.
+- **Probes.** The *target* probe is an HTTP request to `payment-service` made **from inside an `order-service`
+  pod** (it crosses the faulted network device; a host `port-forward` does not). The *propagation* and
+  *symptom* probes are one client-facing `POST /orders` through a port-forward, judged against two thresholds:
+  a threshold calibrated on the quiet baseline of that run (propagation), and the 0.5 s of the alert rules
+  (symptom). Calibration values are written to the injector journal.
+- **Chain of the slice:** cause and execution = the experiment (its UID), target effect = the `payment-service`
+  pod (its UID), propagation = the `order-service` Deployment, symptom = the `order-service` service.

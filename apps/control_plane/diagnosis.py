@@ -21,6 +21,7 @@ from apps.control_plane.scheduler import (
 )
 from packages.connector.client import (
     ConnectorClient,
+    ConnectorError,
     StreamedClusterReader,
     cluster_reader,
     in_process_transport,
@@ -531,11 +532,20 @@ class DiagnosisService:
 
     def watch(self, stop: threading.Event, interval_seconds: float) -> None:
         """Snapshot the cluster until ``stop`` is set; errors are logged and retried."""
+        unreachable = False
         while not stop.is_set():
             try:
                 stored = self.snapshot()
+                if unreachable:
+                    logger.info("the connector answers again; the object journal resumes")
+                    unreachable = False
                 if stored:
                     logger.info("object journal stored %d changed object(s)", stored)
+            except ConnectorError as error:
+                # A connector that is away is an expected state, not a fault: say so once.
+                if not unreachable:
+                    logger.warning("the cluster is unreachable through the connector: %s", error)
+                unreachable = True
             except Exception:
                 logger.warning("cluster snapshot failed", exc_info=True)
             self.apply_retention()

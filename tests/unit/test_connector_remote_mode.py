@@ -205,7 +205,8 @@ def test_a_lost_connector_is_logged_once_and_its_return_is_logged(
     # handler to the module's logger and re-enables it for the duration.
     logger = logging.getLogger("apps.control_plane.connector_intake")
     monkeypatch.setattr(logger, "disabled", False)
-    monkeypatch.setattr(logger, "level", logging.INFO)
+    monkeypatch.setattr(logger, "level", logger.level)  # restored on teardown
+    logger.setLevel(logging.INFO)  # setLevel, not an assignment: it clears the enabled-for cache
     messages: list[str] = []
 
     class Collect(logging.Handler):
@@ -232,3 +233,59 @@ def test_a_lost_connector_is_logged_once_and_its_return_is_logged(
         assert any("available again" in m for m in messages)
     finally:
         logger.removeHandler(handler)
+
+
+def test_the_watch_loop_reports_an_unreachable_connector_once_and_its_return() -> None:
+    import logging
+
+    from packages.connector.client import ConnectorUnavailable
+
+    service = DiagnosisService(session_factory=factory(), namespaces=("shop",))
+    outcomes: list[Any] = [
+        ConnectorUnavailable("gone"),
+        ConnectorUnavailable("gone"),
+        ConnectorUnavailable("gone"),
+        0,
+        ConnectorUnavailable("gone again"),
+    ]
+
+    def snapshot() -> int:
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return int(outcome)
+
+    service.snapshot = snapshot  # type: ignore[method-assign]
+    service.apply_retention = lambda: None  # type: ignore[method-assign]
+    service.reevaluate = lambda: None  # type: ignore[method-assign]
+
+    class Cycles:
+        """A stop flag that lets the loop run for the scripted outcomes, without waiting."""
+
+        def is_set(self) -> bool:
+            return not outcomes
+
+        def wait(self, timeout: float | None = None) -> bool:
+            return False
+
+    logger = logging.getLogger("apps.control_plane.diagnosis")
+    messages: list[tuple[int, bool]] = []
+
+    class Collect(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            messages.append((record.levelno, record.exc_info is not None))
+
+    handler = Collect(level=logging.INFO)
+    previous = (logger.disabled, logger.level)
+    logger.disabled = False
+    logger.setLevel(logging.INFO)  # setLevel clears the logger's enabled-for cache
+    logger.addHandler(handler)
+    try:
+        service.watch(Cycles(), 0.0)  # type: ignore[arg-type]
+    finally:
+        logger.removeHandler(handler)
+        logger.disabled = previous[0]
+        logger.setLevel(previous[1])
+    # one warning for the first loss, one info for the return, one warning for the second loss;
+    # none of them carries a traceback
+    assert messages == [(logging.WARNING, False), (logging.INFO, False), (logging.WARNING, False)]

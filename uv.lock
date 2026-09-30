@@ -15,8 +15,10 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "confluent-kafka" },
+    { name = "cryptography" },
     { name = "fastapi" },
     { name = "fpdf2" },
+    { name = "grpcio" },
     { name = "kubernetes" },
     { name = "langgraph" },
     { name = "openai" },
@@ -47,8 +49,10 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.16,<2.0" },
     { name = "confluent-kafka", specifier = ">=2.11,<3.0" },
+    { name = "cryptography", specifier = ">=45.0,<51.0" },
     { name = "fastapi", specifier = ">=0.116,<1.0" },
     { name = "fpdf2", specifier = ">=2.8,<3.0" },
+    { name = "grpcio", specifier = ">=1.70,<2.0" },
     { name = "httpx2", marker = "extra == 'dev'", specifier = ">=2.12,<3.0" },
     { name = "kubernetes", specifier = ">=32.0,<33.0" },
     { name = "langgraph", specifier = ">=0.6,<2.0" },

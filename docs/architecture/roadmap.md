@@ -38,7 +38,7 @@ Contract: [`connector-boundary-contract.md`](connector-boundary-contract.md).
 
 | # | Work | Status | Depends on |
 |---|---|---|---|
-| B0 | Hygiene: `orders.created` is now declared and re-created by a sidecar, and Kafka keeps its data across container restarts (DONE, verified live); 88 unused anonymous Docker volumes reviewed (deletion awaits approval) | DECISION (volume deletion only) | owner approval |
+| B0 | Hygiene: `orders.created` is declared and re-created by a sidecar and Kafka keeps its data across container restarts (verified live); 88 unused Docker volumes removed and one kept | DONE | |
 | B1 | `Timeline` ground truth (`testbed-ground-truth-contract.md`): cause created, execution started, target effect, propagation, symptom started, alert fired, recovery; written by the injector and an independent oracle | DONE (contract approved; implementation follows B2) | |
 | B2 | Recreate the lab cluster (destructive): Chaos Mesh, observability stack, exposed ports, connector inside the lab | DECISION | B1, A7 |
 | B3 | Control plane outside the lab (host or container), read-only kubeconfig, its own Postgres | NEXT | A7, B2 |

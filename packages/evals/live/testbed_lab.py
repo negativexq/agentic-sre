@@ -42,6 +42,7 @@ from packages.evals.live.runner import WorkloadDriver
 from packages.evals.live.scenarios import Target, Workload
 from packages.evals.live.testbed_grader import RunScore, aggregate, score_run
 from packages.evals.live.testbed_runner import (
+    BaselineNotQuiet,
     Injection,
     RunOutcome,
     RunParameters,
@@ -262,7 +263,7 @@ class LabWorld:
         if unreachable:
             raise RuntimeError(f"port-forward failed for {', '.join(unreachable)}")
 
-    def _target_warnings(self) -> list[str]:
+    def target_warnings(self) -> list[str]:
         """Warning events of the current target pod (a terminated pod of the same workload is another pod)."""
         pods = json.loads(
             self._run(
@@ -300,7 +301,7 @@ class LabWorld:
             self._fresh_target_pod()  # before the port-forwards: replacing order-service would cut its own
             self._start_forwards()
             self._warm_up()
-            if not self._target_warnings():
+            if not self.target_warnings():
                 return
             self._forwarder.stop_all()  # type: ignore[union-attr]
         raise RuntimeError(
@@ -693,9 +694,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             acceptance={},
         ).frozen()
         store.write_manifest(manifest)
-        outcome = run_once(
-            manifest, spec.scenario_id, 0, world, store, work_root=args.root / "work", clock=clock
-        )
+        try:
+            outcome = run_once(
+                manifest,
+                spec.scenario_id,
+                0,
+                world,
+                store,
+                work_root=args.root / "work",
+                clock=clock,
+            )
+        except BaselineNotQuiet as refused:
+            print(f"run refused before the injection: {refused}")
+            return 2
         print(_summarize(outcome))
         return 0 if outcome.record.valid else 1
 
@@ -714,15 +725,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         for repeat in range(spec.repeats):
             if store.run_dir(manifest.suite_id, spec.scenario_id, repeat).exists():
                 continue
-            outcome = run_once(
-                manifest,
-                spec.scenario_id,
-                repeat,
-                world,
-                store,
-                work_root=args.root / "work",
-                clock=clock,
-            )
+            try:
+                outcome = run_once(
+                    manifest,
+                    spec.scenario_id,
+                    repeat,
+                    world,
+                    store,
+                    work_root=args.root / "work",
+                    clock=clock,
+                )
+            except BaselineNotQuiet as refused:
+                # the suite stops: a world that is not quiet is fixed first, never retried until lucky
+                print(f"run {spec.scenario_id}#{repeat} refused before the injection: {refused}")
+                return 2
             print(_summarize(outcome), flush=True)
             outcomes.append(outcome)
     scores = [o.score for o in outcomes if o.score is not None]

@@ -209,3 +209,40 @@ Consequences, none acted on: the rule's non-firing here is explained by observab
 so no rule change is indicated, and the engine must not be adjusted to make slice 1 fire. Options for the owner:
 a fresh `payment-service` pod per run in the isolation step (removes 2), and re-reading the incident's diagnosis after
 recovery before storing it (addresses 3). Both are harness changes and would need slice 1 to be re-run as a new suite.
+
+### Baseline health (owner-approved, 2026-09-30)
+
+**Diagnosis.** After seven phase-0 runs of `direct-pod-fault`, an offline audit of every recorded run database
+showed the problem was the world, not the rule or the fault intensity: the target services failed their probes
+under the **ordinary test load**, before any fault. `m21.support.observed-fault-execution` refuses an effect
+that may precede `Applied`, and it refused exactly where the target pod held a warning older than the
+injection:
+
+| Run | Valid | Target-pod warnings before `Applied` |
+|---|---|---|
+| slice1 #0, #1 | yes | 0 (the delay left no pod failure at all) |
+| slice1 #2 | yes | 15 |
+| phase0 direct (order-service), two runs | yes | 5 and 9 |
+
+For example, in the last one the fresh `order-service` pod failed its liveness probe at 14:33:40 and its
+readiness probe at 14:34:10, and the experiment applied at 14:34:48. The audit also found two isolation leaks:
+events re-created by the kubelet with their cached first timestamp (9 of 13 databases), and the previous
+connector's buffer delivered to a new run's database (2 databases; fixed by restarting the connector before the
+control plane).
+
+**Changes.**
+
+1. **Headroom, lab only.** `make lab-tune` (part of `lab-up`) raises the probe timeout of `order-service` and
+   `payment-service` from 1 s to 3 s through `infra/kubernetes/lab-workload-patch.yaml`; `workload.yaml` stays as
+   the demo defines it. Measured under the test load (about 12 requests per second, three minutes, no fault):
+   no warning on either service. Under a 24-worker CPU stress on `order-service`: request median 0.9 s and
+   both probes failing, no restart. Raising the CPU limit to 1000m was tried and rejected: the stress then
+   crossed neither the alert nor a probe.
+2. **A gate before the injection.** If the target pod holds any warning event after the baseline, the run is
+   refused before anything is injected (`BaselineNotQuiet`), nothing is recorded as a run, the work directory is
+   kept aside, and a suite stops rather than retrying until the world happens to be quiet. Applied
+   retrospectively, the gate refuses exactly the runs the rule refused for this reason.
+
+**Method.** Debugging by one eight-minute live run per hypothesis was slow and read each run's symptom
+instead of its cause; the audit above took minutes over data already recorded. Such audits come first from now
+on, and a live run confirms a fix.

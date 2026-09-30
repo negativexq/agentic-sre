@@ -57,6 +57,7 @@ class FakeWorld:
         self.calls: list[str] = []
         self.apply_event, self.diagnose, self.fail_on_inject = apply_event, diagnose, fail_on_inject
         self.injected: datetime | None = None
+        self.baseline_warnings: list[str] = []
         self.removed: datetime | None = None
         self.document = diagnose_case(build_case(source(full())), config=OFF).model_dump(
             mode="json"
@@ -121,6 +122,9 @@ class FakeWorld:
                 self.document,
             )
         ]
+
+    def target_warnings(self) -> list[str]:
+        return list(self.baseline_warnings)
 
     def rediagnose(self, alerts: Collection[str], since: datetime) -> int:
         self.rediagnosed_after_removal = self.removed is not None
@@ -302,3 +306,16 @@ def test_a_direct_pod_fault_is_a_cpu_stress_whose_chain_has_no_propagation() -> 
     chain = direct_pod_chain(Injection("pod-stress-3", "u", "pay-1", "pu", T0, "StressChaos"))
     assert [link.role for link in chain.links] == ["cause", "execution", "target_effect", "symptom"]
     assert chain.of_role("cause")[0].actor == "sre-demo/StressChaos/pod-stress-3"
+
+
+def test_a_target_that_failed_before_the_fault_stops_the_run_before_the_injection(
+    tmp_path: Path,
+) -> None:
+    from packages.evals.live.testbed_runner import BaselineNotQuiet
+
+    world = FakeWorld(FakeClock())
+    world.baseline_warnings = ["payment-1: Unhealthy"]
+    with pytest.raises(BaselineNotQuiet):
+        run(tmp_path, world)
+    assert "inject" not in world.calls and world.calls[-2:] == ["stop_load", "cleanup"]
+    assert not (tmp_path / "store" / "s1" / "dependency-delay").exists()  # no run is recorded

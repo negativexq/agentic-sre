@@ -81,6 +81,13 @@ DIAGNOSIS_QUIET_SECONDS = 20.0
 ALERT_POLL_SECONDS = 5.0
 
 
+class BaselineNotQuiet(RuntimeError):
+    """The target already failed before the fault: nothing measured afterwards could be told apart from it.
+
+    Raised before the injection, so no run is recorded; the work directory keeps its journal.
+    """
+
+
 class Clock(Protocol):
     def now(self) -> datetime: ...
 
@@ -170,6 +177,10 @@ class World(Protocol):
     def target_measure(self) -> Measurement: ...
 
     def client_measure(self) -> Measurement: ...
+
+    def target_warnings(self) -> list[str]:
+        """Warning events of the fault's target pod as the cluster holds them now."""
+        ...
 
     def inject(self, params: RunParameters, journal: InjectorJournal, name: str) -> Injection: ...
 
@@ -394,6 +405,19 @@ def run_once(
         )
         # 2. injection after the seeded offset
         run.wait(params.offset_seconds)
+        # the gate: a target that already failed makes every later effect ambiguous (design, "Baseline health")
+        warnings = world.target_warnings()
+        run.journal.record(
+            verb="check",
+            object="target/events",
+            role="baseline_gate",
+            ok=not warnings,
+            payload={"warnings": warnings},
+        )
+        if warnings:
+            raise BaselineNotQuiet(
+                f"the target raised warnings before the injection: {warnings[:5]}"
+            )
         prefix = "pod-stress" if params.fault == "cpu-stress" else "dep-delay"
         injection = world.inject(params, run.journal, f"{prefix}-{params.seed}")
         alert_at: datetime | None = None
@@ -443,6 +467,12 @@ def run_once(
         )
         # 5. the stored diagnoses, once they stop changing
         stored = _await_diagnoses(world, clock, run, alerts, injection.injected_at)
+    except BaselineNotQuiet:
+        # kept for inspection, out of the way of the repeat's real run
+        world.stop_load()
+        world.cleanup()
+        work.rename(work.with_name(f"{work.name}.refused-{clock.now():%Y%m%dT%H%M%S}"))
+        raise
     finally:
         world.stop_load()
         world.cleanup()

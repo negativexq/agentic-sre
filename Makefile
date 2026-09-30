@@ -161,12 +161,21 @@ lab-up: cluster-up build-images lab-images
 		$(KUBECTL) rollout status deployment/$$name -n observability --timeout=180s || exit 1; \
 	done
 	$(MAKE) chaos-mesh-install
+	$(MAKE) lab-tune
 	$(MAKE) lab-check
 
 # The scriptable part of the bring-up gate; the chaos smoke, the alert path and the node restart are
 # run by hand and recorded (design section 8, step 5). The topic and the schema converge on their own
 # (sidecars), so the gate retries for up to two minutes and reports the last failure; every single
 # check still fails if kubectl itself fails.
+# Lab-only headroom for the fault targets (infra/kubernetes/lab-workload-patch.yaml); the demo manifest is untouched.
+lab-tune:
+	for name in order-service payment-service; do \
+		sed "s/SERVICE/$$name/" infra/kubernetes/lab-workload-patch.yaml | \
+			$(KUBECTL) -n $(NAMESPACE) patch deployment $$name --type strategic --patch-file /dev/stdin || exit 1; \
+		$(KUBECTL) -n $(NAMESPACE) rollout status deployment/$$name --timeout=180s || exit 1; \
+	done
+
 lab-check:
 	@for attempt in $$(seq 1 24); do \
 		out=$$($(MAKE) --no-print-directory lab-check-once 2>&1) && { echo "$$out"; exit 0; }; \

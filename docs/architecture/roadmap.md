@@ -42,7 +42,7 @@ Contract: [`connector-boundary-contract.md`](connector-boundary-contract.md).
 | B1 | `Timeline` ground truth (`testbed-ground-truth-contract.md`): manifest, journal, oracle, chain and scoring implemented and tested; scenarios and runner wiring come with B4 | DONE | |
 | B2 | Recreate the lab cluster: Chaos Mesh 2.8.4 with containerd values, self-migrating Postgres, isolated control workload, gate passed (`testbed-lab-design.md` §13) | DONE | B1, A7 |
 | B3 | Control plane outside the lab, its own Postgres; the Connector inside the lab dials out (`testbed-control-plane-design.md` §10) | DONE (all seven gate items pass, including a lab recreation with the history intact) | A7, B2 |
-| B4 | Scenarios, repeats, dev and held-out split, frozen manifest, runner (`testbed-scenarios-design.md`) | PROPOSED (design written, awaiting approval) | B1, B2, B3 |
+| B4 | Scenarios, repeats, dev and held-out split, frozen manifest, runner (`testbed-scenarios-design.md`) | ACTIVE: slices 1 (`dependency-fault`) and 2 (`direct-pod-fault`) run; `config-or-rollout` next | B1, B2, B3 |
 | B5 | Frozen engine baseline: version and acceptance criteria fixed before any run | NEXT | B4 |
 | B6 | Multi-cutoff recordings per run, to test timing stability against a known world | NEXT | B4 |
 
@@ -55,12 +55,13 @@ never receives ground truth.
 | # | Work | Status |
 |---|---|---|
 | C1 | Service-level effect relation: implement the specified relation (`m21-causal-semantics-contract.md`, "Service-level effect relation", deferred); parameters chosen on dev incidents, confirmed on held-out | NEXT |
-| C2 | Observe the fault action (`spec.action`) and the first target-local effect time | NEXT |
+| C2 | Observe the fault action (`spec.action`) and the first target-local effect time; bind resource-pressure findings (CPU throttling, memory) to the pod instance that held the name at that time, so a saturating fault's effect is an effect of the exact instance (testbed slice 2: the witness formed in 1 of 3 runs, only where a probe also failed) | NEXT |
 | C3 | General fault-to-downstream-effect explanation (needs path evidence) | NEXT |
 | C4 | Frontier closure by evidence | NEXT |
 | C5 | New strong rules (rollout, config consumption, autoscaling) on the same witness and effect skeleton | NEXT |
 | C6 | `RESOLVED`: every declared symptom covered by witnesses | NEXT |
 | C7 | Capture history for live and replay sources (timing stability is `UNASSESSED` there) | NEXT |
+| C9 | Evidence timing of a resolved incident: its window freezes at resolution, so an event that happened before the resolution but reached the control plane seconds later (the connector's event path lags about 15 s) is never seen, e.g. an experiment's `Recovered`. Decide the membership rule (event time versus arrival time, with or without a bounded arrival grace) in the causal semantics contract first | DECISION |
 | C8 | Cost reduction for large onset sets (one representative per breakpoint) | PARKED |
 
 ## 5. D. Product surface

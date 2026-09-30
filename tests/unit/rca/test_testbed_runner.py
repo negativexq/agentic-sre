@@ -268,3 +268,21 @@ def test_calibration_sits_well_above_the_baseline_and_never_below_the_floor() ->
     assert calibrate([0.2, 0.05]) == pytest.approx(0.6)
     with pytest.raises(ValueError):
         calibrate([])
+
+
+def test_a_direct_pod_fault_is_a_cpu_stress_whose_chain_has_no_propagation() -> None:
+    from packages.evals.live.testbed_runner import Injection, direct_pod_chain
+
+    spec = ScenarioSpec(
+        scenario_id="direct-stress",
+        family="direct-pod-fault",
+        tier="DEV",
+        repeats=1,
+        seeds=(3,),
+        parameters={"cpu_load": ParameterRange(low=80, high=100)},
+    )
+    params = derive_parameters(spec, 3)
+    assert params.fault == "cpu-stress" and 80 <= params.cpu_load <= 100
+    chain = direct_pod_chain(Injection("pod-stress-3", "u", "pay-1", "pu", T0, "StressChaos"))
+    assert [link.role for link in chain.links] == ["cause", "execution", "target_effect", "symptom"]
+    assert chain.of_role("cause")[0].actor == "sre-demo/StressChaos/pod-stress-3"

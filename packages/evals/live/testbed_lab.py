@@ -53,6 +53,7 @@ from packages.rca.model import Diagnosis
 REPO = Path(__file__).resolve().parents[3]
 NAMESPACE = "sre-demo"
 SCENARIO_ID = "dependency-delay-payment"
+DIRECT_SCENARIO_ID = "direct-stress-payment"
 WATCHED_NAMESPACES = ("sre-demo", "lab-control", "chaos-mesh")
 
 
@@ -175,9 +176,8 @@ class LabWorld:
         unreachable = self._forwarder.start_all()
         if unreachable:
             raise RuntimeError(f"port-forward failed for {', '.join(unreachable)}")
-        self._run(
-            ["kubectl", "-n", NAMESPACE, "delete", "networkchaos", "--all", "--ignore-not-found"]
-        )
+        self._delete_experiments()
+        self._fresh_target_pod()
         for namespace in WATCHED_NAMESPACES:
             self._run(
                 ["kubectl", "-n", namespace, "delete", "events", "--all", "--ignore-not-found"]
@@ -210,6 +210,46 @@ class LabWorld:
             return any(c["name"] == "Connector" and c["status"] == "connected" for c in rows)
 
         self._wait("the connector to attach", connected, 90)
+
+    def _delete_experiments(self) -> None:
+        for kind in ("networkchaos", "stresschaos"):
+            self._run(
+                ["kubectl", "-n", NAMESPACE, "delete", kind, "--all", "--ignore-not-found"],
+                check=False,
+            )
+
+    def _fresh_target_pod(self) -> None:
+        """A new ``payment-service`` pod per run, so it carries no event history of an earlier run.
+
+        The kubelet re-creates a deleted event with its cached first timestamp and count, so an old
+        pod's recurring events would look as if they began before this run's injection.
+        """
+        deployment = "deployment/payment-service"
+        self._run(["kubectl", "-n", NAMESPACE, "rollout", "restart", deployment])
+        self._run(
+            ["kubectl", "-n", NAMESPACE, "rollout", "status", deployment, "--timeout=180s"],
+            timeout=200,
+        )
+
+        def single_pod() -> bool:
+            items = json.loads(
+                self._run(
+                    [
+                        "kubectl",
+                        "-n",
+                        NAMESPACE,
+                        "get",
+                        "pod",
+                        "-l",
+                        "app=payment-service",
+                        "-o",
+                        "json",
+                    ]
+                ).stdout
+            )["items"]
+            return len(items) == 1 and all("deletionTimestamp" not in i["metadata"] for i in items)
+
+        self._wait("the old payment-service pod to terminate", single_pod, 120)
 
     def start_load(self, rps: float) -> None:
         workload = Workload(
@@ -270,16 +310,29 @@ class LabWorld:
         )
 
     def inject(self, params: RunParameters, journal: InjectorJournal, name: str) -> Injection:
-        manifest = f"""apiVersion: chaos-mesh.org/v1alpha1
-kind: NetworkChaos
-metadata: {{name: {name}, namespace: {NAMESPACE}}}
-spec:
-  action: delay
-  mode: all
-  selector: {{namespaces: [{NAMESPACE}], labelSelectors: {{app: payment-service}}}}
-  delay: {{latency: {params.latency_ms}ms}}
-  duration: {int(params.duration_seconds) + 60}s
-"""
+        if params.fault == "cpu-stress":
+            kind, body = (
+                "StressChaos",
+                (
+                    "  mode: all\n"
+                    f"  selector: {{namespaces: [{NAMESPACE}], labelSelectors: {{app: payment-service}}}}\n"
+                    f"  stressors: {{cpu: {{workers: 2, load: {params.cpu_load}}}}}\n"
+                ),
+            )
+        else:
+            kind, body = (
+                "NetworkChaos",
+                (
+                    "  action: delay\n  mode: all\n"
+                    f"  selector: {{namespaces: [{NAMESPACE}], labelSelectors: {{app: payment-service}}}}\n"
+                    f"  delay: {{latency: {params.latency_ms}ms}}\n"
+                ),
+            )
+        manifest = (
+            f"apiVersion: chaos-mesh.org/v1alpha1\nkind: {kind}\n"
+            f"metadata: {{name: {name}, namespace: {NAMESPACE}}}\nspec:\n{body}"
+            f"  duration: {int(params.duration_seconds) + 60}s\n"
+        )
         result = self._run(["kubectl", "apply", "-f", "-"], stdin=manifest, check=False)
         ok = result.returncode == 0
         uid = ""
@@ -290,7 +343,7 @@ spec:
                     "-n",
                     NAMESPACE,
                     "get",
-                    "networkchaos",
+                    kind.lower(),
                     name,
                     "-o",
                     "jsonpath={.metadata.uid}",
@@ -298,7 +351,7 @@ spec:
             ).stdout.strip()
         entry = journal.record(
             verb="apply",
-            object=f"networkchaos {name}",
+            object=f"{kind.lower()} {name}",
             ok=ok,
             response=result.stdout if ok else result.stderr,
             uid=uid or None,
@@ -322,7 +375,7 @@ spec:
             ).stdout
         )["items"]
         pod = pods[0]["metadata"]
-        return Injection(name, uid, pod["name"], pod["uid"], entry.at)
+        return Injection(name, uid, pod["name"], pod["uid"], entry.at, kind)
 
     def applied_at(self, injection: Injection) -> datetime | None:
         selector = f"involvedObject.name={injection.name},reason=Applied"
@@ -359,7 +412,7 @@ spec:
                 "-n",
                 NAMESPACE,
                 "delete",
-                "networkchaos",
+                injection.kind.lower(),
                 injection.name,
                 "--ignore-not-found",
             ],
@@ -367,7 +420,7 @@ spec:
         )
         journal.record(
             verb="delete",
-            object=f"networkchaos {injection.name}",
+            object=f"{injection.kind.lower()} {injection.name}",
             ok=result.returncode == 0,
             response=result.stdout or result.stderr,
             role=ROLE_CAUSE_REMOVED,
@@ -400,10 +453,7 @@ spec:
         ]
 
     def cleanup(self) -> None:
-        self._run(
-            ["kubectl", "-n", NAMESPACE, "delete", "networkchaos", "--all", "--ignore-not-found"],
-            check=False,
-        )
+        self._delete_experiments()
         if self._forwarder is not None:
             self._forwarder.stop_all()
             self._forwarder = None
@@ -432,6 +482,27 @@ def dependency_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> 
             "load_rps": ParameterRange(low=8, high=12),
         },
     )
+
+
+def direct_pod_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> ScenarioSpec:
+    """Slice 2 (design §10): a CPU stress on ``payment-service`` under load."""
+    return ScenarioSpec(
+        scenario_id=DIRECT_SCENARIO_ID,
+        family="direct-pod-fault",
+        tier=tier,  # type: ignore[arg-type]
+        repeats=repeats,
+        seeds=seeds,
+        parameters={
+            "baseline_seconds": ParameterRange(low=45, high=45),
+            "offset_seconds": ParameterRange(low=0, high=20),
+            "duration_seconds": ParameterRange(low=90, high=110),
+            "cpu_load": ParameterRange(low=80, high=100),
+            "load_rps": ParameterRange(low=8, high=12),
+        },
+    )
+
+
+SPECS = {"dependency": dependency_spec, "direct": direct_pod_spec}
 
 
 def _summarize(outcome: RunOutcome) -> str:
@@ -482,12 +553,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="packages.evals.live.testbed_lab")
     parser.add_argument("--root", type=Path, default=REPO / ".local/testbed")
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("phase0", help="one unscored validation run, stored apart from the suite")
+    phase0 = commands.add_parser(
+        "phase0", help="one unscored validation run, stored apart from the suite"
+    )
+    phase0.add_argument("--scenario", choices=sorted(SPECS), default="dependency")
     freeze = commands.add_parser("freeze", help="write the frozen manifest of slice 1")
     freeze.add_argument("--suite", required=True)
     freeze.add_argument("--salt", required=True)
     freeze.add_argument("--seeds", required=True, help="comma separated, one per repeat")
     freeze.add_argument("--engine-version", required=True)
+    freeze.add_argument("--scenario", choices=sorted(SPECS), default="dependency")
     run = commands.add_parser("run", help="run the missing repeats of a frozen suite")
     run.add_argument("--suite", required=True)
     rescore = commands.add_parser(
@@ -507,7 +582,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             engine_version=args.engine_version,
             created_at=clock.now(),
             salt=args.salt,
-            scenarios=(dependency_spec(len(seeds), seeds),),
+            scenarios=(SPECS[args.scenario](len(seeds), seeds),),
             acceptance={"false_resolved": 0, "false_strong_authority": 0},
         ).frozen()
         print(TestbedStore(args.root).write_manifest(manifest), manifest.sha256)
@@ -525,12 +600,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             engine_version=RCA_ENGINE_VERSION,
             created_at=clock.now(),
             salt="phase0",
-            scenarios=(dependency_spec(1, (1,)),),
+            scenarios=(spec := SPECS[args.scenario](1, (1,)),),
             acceptance={},
         ).frozen()
         store.write_manifest(manifest)
         outcome = run_once(
-            manifest, SCENARIO_ID, 0, world, store, work_root=args.root / "work", clock=clock
+            manifest, spec.scenario_id, 0, world, store, work_root=args.root / "work", clock=clock
         )
         print(_summarize(outcome))
         return 0 if outcome.record.valid else 1

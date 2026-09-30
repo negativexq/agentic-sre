@@ -62,6 +62,15 @@ DEPENDENCY_ALERTS = frozenset(
         "KafkaConsumerLag",
     }
 )
+# A CPU stress on payment-service raises the same latency alerts and may also trip its own runtime and error alerts.
+DIRECT_POD_ALERTS = DEPENDENCY_ALERTS | {
+    "PaymentRuntimeInstability",
+    "PaymentServiceLatencyCritical",
+    "PaymentErrorRateHigh",
+    "HighErrorRate",
+    "OrderErrorRateHigh",
+}
+ALERTS_BY_FAMILY: dict[str, frozenset[str]] = {"direct-pod-fault": frozenset(DIRECT_POD_ALERTS)}
 ALERT_LATENCY_SECONDS = 0.5  # the latency of the lab's alert rules: the symptom threshold
 RECOVERY_TIMEOUT_SECONDS = 180.0
 EXECUTION_TIMEOUT_SECONDS = 30.0
@@ -86,6 +95,8 @@ class RunParameters:
     duration_seconds: float
     latency_ms: int
     load_rps: float
+    fault: str = "network-delay"  # or "cpu-stress" (direct-pod-fault)
+    cpu_load: int = 100
 
 
 def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
@@ -103,6 +114,8 @@ def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
         duration_seconds=draw("duration_seconds", 100.0),
         latency_ms=int(draw("latency_ms", 400.0)),
         load_rps=draw("load_rps", 10.0),
+        fault="cpu-stress" if spec.family == "direct-pod-fault" else "network-delay",
+        cpu_load=int(draw("cpu_load", 100.0)),
     )
 
 
@@ -123,6 +136,7 @@ class Injection:
     target_pod: str
     target_pod_uid: str
     injected_at: datetime
+    kind: str = "NetworkChaos"
 
 
 @dataclass(frozen=True)
@@ -169,9 +183,47 @@ class RunOutcome:
     directory: Path
 
 
+def direct_pod_chain(injection: Injection) -> Chain:
+    """The world's chain for a CPU stress on ``payment-service``: the pod is the symptom, nothing propagates."""
+    experiment = f"sre-demo/{injection.kind}/{injection.name}"
+    return Chain(
+        links=(
+            Link(
+                role="cause",
+                actor=experiment,
+                instance_uid=injection.uid,
+                knowable=True,
+                mechanism="StressChaos cpu",
+            ),
+            Link(
+                role="execution",
+                actor=experiment,
+                instance_uid=injection.uid,
+                knowable=True,
+                mechanism="StressChaos cpu",
+                evidence_class="execution",
+            ),
+            Link(
+                role="target_effect",
+                actor=f"sre-demo/Pod/{injection.target_pod}",
+                instance_uid=injection.target_pod_uid,
+                knowable=True,
+                mechanism="request latency at the stressed pod",
+                evidence_class="effect",
+            ),
+            Link(
+                role="symptom",
+                actor="sre-demo/Service/payment-service",
+                knowable=False,
+                mechanism="latency of the stressed service itself",
+            ),
+        )
+    )
+
+
 def dependency_chain(injection: Injection) -> Chain:
     """The world's chain for a delay on ``payment-service`` (design §10)."""
-    experiment = f"sre-demo/NetworkChaos/{injection.name}"
+    experiment = f"sre-demo/{injection.kind}/{injection.name}"
     return Chain(
         links=(
             Link(
@@ -283,9 +335,10 @@ def run_once(
     *,
     work_root: Path,
     clock: Clock,
-    alerts: Collection[str] = DEPENDENCY_ALERTS,
+    alerts: Collection[str] | None = None,
 ) -> RunOutcome:
     spec = manifest.spec(scenario_id)
+    alerts = alerts or ALERTS_BY_FAMILY.get(spec.family, DEPENDENCY_ALERTS)
     params = derive_parameters(spec, spec.seeds[repeat])
     run_id = f"{manifest.suite_id}-{scenario_id}-{repeat}"
     work = work_root / run_id
@@ -319,7 +372,8 @@ def run_once(
         )
         # 2. injection after the seeded offset
         run.wait(params.offset_seconds)
-        injection = world.inject(params, run.journal, f"dep-delay-{params.seed}")
+        prefix = "pod-stress" if params.fault == "cpu-stress" else "dep-delay"
+        injection = world.inject(params, run.journal, f"{prefix}-{params.seed}")
         alert_at: datetime | None = None
         applied: datetime | None = None
         deadline = clock.now().timestamp() + params.duration_seconds
@@ -427,7 +481,9 @@ def _finish(
         spec.scenario_id,
         repeat,
         timeline=timeline,
-        chain=dependency_chain(injection),
+        chain=(direct_pod_chain if spec.family == "direct-pod-fault" else dependency_chain)(
+            injection
+        ),
         clock_offset_seconds=0.0,  # the injector and the oracle share one host clock
         diagnosis_completed_at=primary.diagnosed_at if primary else None,
     )

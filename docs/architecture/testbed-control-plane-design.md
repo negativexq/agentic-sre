@@ -1,6 +1,7 @@
 # Control plane outside the lab (roadmap B3)
 
-Status: **PROPOSED** (2026-09-30). Nothing here is implemented. Companion to
+Status: **APPROVED** by the owner (2026-09-30), including the six decisions of §9 as recommended.
+Implementation follows; the record is in §10. Companion to
 `testbed-lab-design.md` (the lab), `connector-boundary-contract.md` (§12 transport, §13 status) and
 `testbed-ground-truth-contract.md` (what a run records).
 
@@ -90,7 +91,7 @@ Helm, enrollment, certificate rotation and revocation (roadmap A8); more than on
 plane; running the control plane in a container; the stream-mode default (`connector-boundary-contract.md`
 §12.9); any change to the existing in-cluster demo manifests.
 
-## 9. Decisions requested
+## 9. Decisions (approved 2026-09-30, all as recommended)
 
 1. The placement of §3: control plane and its own Postgres on the host, the Connector in a `connector`
    namespace of the lab.

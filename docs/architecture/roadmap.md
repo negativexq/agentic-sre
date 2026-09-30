@@ -107,3 +107,44 @@ testbed can confirm them (C).
   fit, so the control plane runs outside the lab (B3).
 - **`RESOLVED` stays at zero on the seen set.** Not a defect; the missing evidence kinds are
   measured in `m21-causal-closure-validation.md`.
+
+## 10. Resource measurement for B2 (2026-09-30, read-only)
+
+Measured on the running lab before any change. **Verdict: the planned lab fits.**
+
+| Quantity | Measured |
+|---|---|
+| Docker VM | 8 CPUs, 9.7 GiB memory (host has 16 GiB) |
+| Kind node container | 3.0 GiB of 9.7 GiB in use; about 0.3 CPU |
+| Container working sets | 2.3 GiB: `sre-demo` 0.95, `observability` 0.76, `kube-system` 0.59 |
+| Largest containers | Kafka 569 MiB, kube-apiserver 276, Tempo 190, Loki 164, Grafana 149, control plane 145 |
+| Requested (memory) | `sre-demo` 1.4 GiB, `observability` 1.3 GiB, `kube-system` 0.3 GiB |
+| Disk | 39 GB free on the host volume; the Kind node's `/var` uses 5.1 GB |
+
+What B2 adds, and its estimated cost. **The Chaos Mesh figures are estimates from the chart's
+usual defaults, not read from the chart** (no chart is available offline); verify them with
+`helm template` before installing.
+
+| Addition | Estimated memory |
+|---|---|
+| Chaos Mesh, one controller replica, no dashboard, one daemon | 0.3 to 0.5 GiB |
+| Chaos Mesh at chart defaults (three controller replicas, dashboard) | about 1.5 GiB |
+| Connector pod inside the lab | about 0.15 GiB |
+| Oracle probe and an isolated control workload | about 0.1 GiB |
+| **Total in the Docker VM** | **about 3.6 to 4.7 GiB of 9.7 GiB**, before test load |
+
+Observations that shape B2:
+
+- The observability stack (Prometheus, Loki, Tempo, Grafana, Alertmanager, OTel collector,
+  kube-state-metrics) is **already running**; B2 does not add it again.
+- The existing `sre-demo` workload already contains the edges the families need: a call edge
+  (`order-service` to `payment-service`), an asynchronous edge (Kafka to `order-worker`) and a
+  database. Direct, dependency, scheduled and config or rollout families need no new services;
+  the negative control needs one small isolated workload.
+- With the Connector inside the lab **dialling out** (A7), the observability services need no
+  published ports, so the `extraPortMappings` that a Kind recreation would otherwise need are
+  reduced to whatever the injector needs to drive workload traffic. Decide that in B2's design.
+- The host is the tighter resource: 16 GiB total, about 52% free, with a large compressed set.
+  Do not run the 35-scenario regression harness (four workers) at the same time as a testbed batch.
+- Kind's chaos daemon needs the containerd runtime and socket settings; these are part of the
+  Chaos Mesh install values, to be recorded in B2.

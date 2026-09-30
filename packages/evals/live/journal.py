@@ -19,6 +19,7 @@ ROLE_CAUSE_CREATED = "cause_created"
 ROLE_EXECUTION_OBSERVED = "execution_observed"
 ROLE_ALERT_OBSERVED = "alert_observed"
 ROLE_CAUSE_REMOVED = "cause_removed"
+EVENT_RESOLUTION_SECONDS = 1.0
 
 
 class JournalEntry(BaseModel):
@@ -130,4 +131,11 @@ def injector_stamps(entries: Sequence[JournalEntry]) -> dict[str, datetime]:
             at = parse_instant(entry.payload.get("starts_at"))
             if at is not None:
                 stamps["alert_fired_at"] = at
+    # A Kubernetes event carries a one-second timestamp, so the controller's Applied instant can read up to
+    # a second before the create call that caused it returned. Within that resolution it is the creation
+    # instant; an earlier reading is a real inconsistency and is left as recorded (it invalidates the run).
+    created, applied = stamps.get("cause_created_at"), stamps.get("execution_started_at")
+    if created is not None and applied is not None and applied < created:
+        if (created - applied).total_seconds() < EVENT_RESOLUTION_SECONDS:
+            stamps["execution_started_at"] = created
     return stamps

@@ -15,8 +15,9 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
@@ -32,6 +33,15 @@ class ProbeResult:
     ok: bool
     latency_seconds: float | None = None
     detail: str = ""
+
+    @property
+    def observed_at(self) -> datetime:
+        """When the outcome was known: the sample's end. A sample that started before a fault and was
+        slowed by it can only finish after the fault began, so an effect stamped here never precedes
+        its cause."""
+        if self.latency_seconds is None:
+            return self.at
+        return self.at + timedelta(seconds=self.latency_seconds)
 
 
 class Probe(Protocol):
@@ -138,9 +148,14 @@ class SeriesWriter:
 
     def __init__(self, path: Path) -> None:
         self.path = path
+        self._lock = threading.Lock()
         path.parent.mkdir(parents=True, exist_ok=True)
 
     def write(self, result: ProbeResult) -> None:
+        with self._lock:
+            self._append(result)
+
+    def _append(self, result: ProbeResult) -> None:
         line = json.dumps(
             {
                 "probe": result.probe,
@@ -187,9 +202,12 @@ class Oracle:
         self._interval = interval_seconds
 
     def sample_once(self) -> list[ProbeResult]:
+        """Every probe once, concurrently: a slow probe (a call slowed by the fault under test) must not
+        delay the start of the others, or the timeline would show the coupling instead of the world."""
+        with ThreadPoolExecutor(max_workers=max(1, len(self._probes))) as pool:
+            outcomes = [future.result() for future in [pool.submit(p.check) for p in self._probes]]
         results: list[ProbeResult] = []
-        for probe in self._probes:
-            outcome = probe.check()
+        for outcome in outcomes:
             results.extend([outcome] if isinstance(outcome, ProbeResult) else outcome)
         for result in results:
             self._writer.write(result)
@@ -203,7 +221,7 @@ class Oracle:
 
 
 def _of(series: Sequence[ProbeResult], probe: str) -> list[ProbeResult]:
-    return sorted((r for r in series if r.probe == probe), key=lambda r: r.at)
+    return sorted((r for r in series if r.probe == probe), key=lambda r: r.observed_at)
 
 
 def first_run_start(
@@ -218,11 +236,11 @@ def first_run_start(
 
     A single blip never counts; the instant reported is the first sample of the run.
     """
-    samples = [r for r in _of(series, probe) if r.at >= after]
+    samples = [r for r in _of(series, probe) if r.observed_at >= after]
     for index in range(len(samples) - length + 1):
         window = samples[index : index + length]
         if all(r.ok is ok for r in window):
-            return window[0].at
+            return window[0].observed_at
     return None
 
 

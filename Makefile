@@ -254,6 +254,11 @@ cp-up: lab-pki
 	@if [ -f $(LAB_DIR)/cp.pid ] && kill -0 $$(cat $(LAB_DIR)/cp.pid) 2>/dev/null; then \
 		echo "the control plane is already running (pid $$(cat $(LAB_DIR)/cp.pid))"; \
 	else \
+		for port in 8080 8443; do \
+			if lsof -nP -iTCP:$$port -sTCP:LISTEN >/dev/null 2>&1; then \
+				echo "port $$port is already in use by another process"; exit 1; \
+			fi; \
+		done; \
 		KUBECONFIG=/dev/null DATABASE_URL=$(CP_DB) SRE_CONNECTOR_MODE=remote \
 		SRE_CONNECTOR_LISTEN=0.0.0.0:8443 SRE_CONNECTOR_ALLOWED=lab \
 		SRE_CONNECTOR_TLS_CERT=$(LAB_DIR)/pki/server.crt SRE_CONNECTOR_TLS_KEY=$(LAB_DIR)/pki/server.key \
@@ -264,13 +269,18 @@ cp-up: lab-pki
 	fi
 
 # Stops only the control plane process (its Postgres keeps running), so a run can restart it on another
-# database (`make cp-up CP_DB_NAME=...`).
+# database (`make cp-up CP_DB_NAME=...`). A graceful stop waits for open connections (a browser's event
+# stream keeps one open indefinitely), so it is given ten seconds and then ended, and the port must be free
+# before the function returns: a second process would otherwise share the gateway port.
 cp-stop:
-	@if [ -f $(LAB_DIR)/cp.pid ]; then kill $$(cat $(LAB_DIR)/cp.pid) 2>/dev/null || true; rm -f $(LAB_DIR)/cp.pid; fi
+	@if [ -f $(LAB_DIR)/cp.pid ]; then \
+		pid=$$(cat $(LAB_DIR)/cp.pid); kill $$pid 2>/dev/null || true; \
+		for i in $$(seq 1 20); do kill -0 $$pid 2>/dev/null || break; sleep 0.5; done; \
+		kill -9 $$pid 2>/dev/null || true; rm -f $(LAB_DIR)/cp.pid; \
+	fi
 
 # Stops the control plane and its Postgres; the volume (the diagnosis history) is kept.
-cp-down:
-	@if [ -f $(LAB_DIR)/cp.pid ]; then kill $$(cat $(LAB_DIR)/cp.pid) 2>/dev/null || true; rm -f $(LAB_DIR)/cp.pid; fi
+cp-down: cp-stop
 	@docker stop $(CP_PG) >/dev/null 2>&1 || true
 
 # Deletes the control plane's history. Explicit on purpose.

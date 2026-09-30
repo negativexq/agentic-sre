@@ -171,3 +171,21 @@ Two rules were made concrete and are stated here so that an amendment can change
 Not done, on purpose: the scenario definitions and their randomization (roadmap B4), the wiring that
 makes `run_scenario` assemble and store a `RunRecord`, the per-scenario choice of probe roles, and any
 live use. Nothing here has touched a cluster.
+
+## 12. Measurement notes from phase 0 (2026-09-30)
+
+Found by the first real run of slice 1; they refine §4 and are put here for the owner to confirm.
+
+1. **Oracle instants are observation instants.** A probe result is stamped when the sample *ended* (its start
+   plus its latency), not when it started. A sample that began just before a fault and was slowed by it can
+   only finish after the fault began, so an effect stamped this way never precedes its cause; stamped at the
+   start it could (and did, by fractions of a second).
+2. **Event-derived instants have one-second resolution.** A Kubernetes event's timestamp is truncated to the
+   second, so the controller's `Applied` instant can read up to a second before the create call that caused it
+   returned (observed: 0.5 s). Within that resolution `execution_started_at` is set to the creation instant; an
+   earlier reading is a real inconsistency and stays as observed, which invalidates the run (§4.1).
+3. **Probes sample concurrently.** Sequential probing let one call slowed by the fault under test (a 3 s
+   request) hold back the others, so the timeline showed the probes' coupling rather than the world.
+4. **Isolation removes lingering events before anything restarts.** Kubernetes keeps events for about an hour,
+   so an earlier run's chaos events reached the next run through the connector's first listing. They are deleted
+   in the watched namespaces before the connector restarts and the control plane starts on its empty database.

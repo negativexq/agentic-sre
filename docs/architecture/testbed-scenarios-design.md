@@ -148,3 +148,19 @@ Rules made concrete for the slice (open to amendment here):
   (symptom). Calibration values are written to the injector journal.
 - **Chain of the slice:** cause and execution = the experiment (its UID), target effect = the `payment-service`
   pod (its UID), propagation = the `order-service` Deployment, symptom = the `order-service` service.
+
+### Phase 0, first run (2026-09-30)
+
+All seven timeline fields were derived and the target probe (a request to `payment-service` from an
+`order-service` pod) degraded within a sample of the injection, so the main risk of §5 did not materialize for
+this family. The run was `INVALID` for a measurement reason (an event timestamp one-second resolution, see the
+ground-truth contract §12) and exposed three further things, all corrected in the harness: sequential probing,
+stamping at sample start, and lingering events from earlier experiments reaching the run.
+
+**An engine finding, not fixed here.** The stored diagnoses named `NetworkChaos/cp-gate-delay`, an experiment from
+an earlier manual run that had ended about 40 minutes before the incident, as the root cause, and gave it
+**strong** authority (`m21.support.observed-fault-execution`) through an execution interval of 11:36:03 to 11:37:22
+and a pod-failure observation inside it, while the real experiment of the run was only plausible. The rule does
+not require the execution interval to be connected to the incident's onset. That is a false strong authority of
+exactly the kind the acceptance criterion `false_strong_authority = 0` exists to catch, and it is a defect of the
+rule of `m21-causal-semantics-contract.md` (the fault-execution paragraph), not a limitation of the data.

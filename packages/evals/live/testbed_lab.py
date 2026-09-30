@@ -51,6 +51,7 @@ from packages.evals.live.testbed_runner import (
 REPO = Path(__file__).resolve().parents[3]
 NAMESPACE = "sre-demo"
 SCENARIO_ID = "dependency-delay-payment"
+WATCHED_NAMESPACES = ("sre-demo", "lab-control", "chaos-mesh")
 
 
 class RealClock:
@@ -155,7 +156,32 @@ class LabWorld:
     # ---- World ---------------------------------------------------------------------------------
 
     def isolate(self, run_id: str) -> None:
+        """Quiet the lab, then give the run a fresh control plane and connector (design §3).
+
+        Order matters: Kubernetes keeps events for about an hour, so an earlier run's chaos events would
+        reach the new run through the connector's first listing and be blamed for it. They are removed
+        *before* the connector restarts and before the control plane starts on its empty database.
+        """
         self.database = database_name(run_id)
+        self._forwarder = PortForwarder(
+            (
+                Forward("order-service", self.order_port, 8000, NAMESPACE),
+                Forward("alertmanager", self.alertmanager_port, 9093, "observability"),
+            ),
+            timeout_seconds=30,
+        )
+        unreachable = self._forwarder.start_all()
+        if unreachable:
+            raise RuntimeError(f"port-forward failed for {', '.join(unreachable)}")
+        self._run(
+            ["kubectl", "-n", NAMESPACE, "delete", "networkchaos", "--all", "--ignore-not-found"]
+        )
+        for namespace in WATCHED_NAMESPACES:
+            self._run(
+                ["kubectl", "-n", namespace, "delete", "events", "--all", "--ignore-not-found"]
+            )
+        self._wait("the alerts to clear", lambda: not self._alerts(), 300, step=5.0)
+
         self._run(["make", "cp-stop"])
         self._run(["make", "cp-up", f"CP_DB_NAME={self.database}"], timeout=180)
         self._wait(
@@ -182,20 +208,6 @@ class LabWorld:
             return any(c["name"] == "Connector" and c["status"] == "connected" for c in rows)
 
         self._wait("the connector to attach", connected, 90)
-        self._forwarder = PortForwarder(
-            (
-                Forward("order-service", self.order_port, 8000, NAMESPACE),
-                Forward("alertmanager", self.alertmanager_port, 9093, "observability"),
-            ),
-            timeout_seconds=30,
-        )
-        unreachable = self._forwarder.start_all()
-        if unreachable:
-            raise RuntimeError(f"port-forward failed for {', '.join(unreachable)}")
-        self._run(
-            ["kubectl", "-n", NAMESPACE, "delete", "networkchaos", "--all", "--ignore-not-found"]
-        )
-        self._wait("the alerts to clear", lambda: not self._alerts(), 300, step=5.0)
 
     def start_load(self, rps: float) -> None:
         workload = Workload(

@@ -200,7 +200,10 @@ def test_the_connector_image_and_the_control_plane_targets_keep_their_promises()
     down = makefile[makefile.index("\ncp-down:") : makefile.index("\ncp-reset:")]
     assert "volume rm" not in down and "docker stop" in down  # the history survives
     assert "volume rm" in makefile[makefile.index("\ncp-reset:") :]
-    up = makefile[makefile.index("\ncp-up:") : makefile.index("\ncp-down:")]
+    stop = makefile[makefile.index("\ncp-stop:") : makefile.index("\ncp-down:")]
+    assert "kill -9" in stop  # a graceful stop that never finishes must not leave a second listener
+    up = makefile[makefile.index("\ncp-up:") : makefile.index("\ncp-stop:")]
+    assert "already in use by another process" in up
     assert "KUBECONFIG=/dev/null" in up and "SRE_CONNECTOR_MODE=remote" in up
     check = makefile[makefile.index("\nconnector-check:") : makefile.index("\ncp-up:")]
     assert "create networkchaos.chaos-mesh.org" in check  # the connector can never inject a fault

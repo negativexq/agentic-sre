@@ -5,6 +5,7 @@ from __future__ import annotations
 import stat
 import subprocess
 import threading
+import time
 from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -412,3 +413,68 @@ def test_an_http_probe_reports_health_failure_and_slowness() -> None:
         assert not down.ok
     finally:
         server.shutdown()
+
+
+def test_an_effect_is_stamped_when_it_was_observed_so_it_never_precedes_its_cause() -> None:
+    # a sample that began 0.4 s before the fault and was slowed by it ends 3 s after that start
+    slowed = [
+        ProbeResult("p", at(-0.4) + timedelta(seconds=i * 4), ok=False, latency_seconds=3.0)
+        for i in range(3)
+    ]
+    stamp = first_run_start(slowed, "p", ok=False, after=at(0))
+    assert stamp == at(-0.4) + timedelta(seconds=3.0)
+    assert stamp is not None and stamp >= at(0)
+    assert slowed[0].observed_at == at(2.6)
+
+
+def test_a_slow_probe_does_not_delay_the_start_of_another_in_the_same_tick(tmp_path: Path) -> None:
+    from packages.evals.live.oracle import LatencyProbe, Measurement
+
+    starts: dict[str, float] = {}
+
+    def slow() -> Measurement:
+        starts["slow"] = time.monotonic()
+        time.sleep(0.4)
+        return Measurement(datetime.now(UTC), True, 0.4)
+
+    def fast() -> Measurement:
+        starts["fast"] = time.monotonic()
+        return Measurement(datetime.now(UTC), True, 0.01)
+
+    oracle = Oracle(
+        [LatencyProbe("slow", slow, {"slow": None}), LatencyProbe("fast", fast, {"fast": None})],
+        SeriesWriter(tmp_path / "s.jsonl"),
+    )
+    oracle.sample_once()
+    assert abs(starts["fast"] - starts["slow"]) < 0.15
+
+
+def test_an_applied_event_read_within_its_one_second_resolution_is_the_creation_instant() -> None:
+    from packages.evals.live.journal import JournalEntry
+
+    def entries(applied_at: datetime) -> list[JournalEntry]:
+        return [
+            JournalEntry(
+                seq=1, at=at(10.5), verb="apply", object="x", ok=True, role=ROLE_CAUSE_CREATED
+            ),
+            JournalEntry(
+                seq=2,
+                at=at(20),
+                verb="observe",
+                object="e",
+                ok=True,
+                role=ROLE_EXECUTION_OBSERVED,
+                payload={"applied_at": applied_at.isoformat()},
+            ),
+        ]
+
+    truncated = injector_stamps(
+        entries(at(10.0))
+    )  # the event says 10 s, the create returned at 10.5 s
+    assert truncated["execution_started_at"] == truncated["cause_created_at"] == at(10.5)
+    genuine = injector_stamps(
+        entries(at(8.0))
+    )  # 2.5 s earlier is not resolution: left as it was seen
+    assert genuine["execution_started_at"] == at(8.0)
+    later = injector_stamps(entries(at(11.0)))
+    assert later["execution_started_at"] == at(11.0)

@@ -40,6 +40,16 @@ the history we chose to keep. Each run therefore gets, instead:
 Nothing is truncated. The change journal of the run's database starts empty, so the only changes the engine
 can find are the run's own. Estimated cost: about a minute per run.
 
+**Observed on 2026-09-30 while verifying the UI notifications:** after the lab was recreated, the control
+plane's journal (kept across the recreation on purpose) recorded the new cluster's `kube-root-ca.crt`
+ConfigMaps as **updates** (same key, new content) about 30 minutes before the next incident, and the engine
+then named `ConfigMap/kube-root-ca.crt` as the leading root actor of all six new incidents ("Ambiguous",
+"Likely") although the chaos experiment's own events (29 of them, including `Applied` and `Recovered`) had
+reached the journal. Before the recreation the same fault was attributed to the experiment. This is exactly
+the confound that a fresh database per run removes, and it is also a finding about the engine itself: a stale
+unrelated change outranked a fault applied inside the incident's window. It is not fixed by name (the
+causal semantics contract forbids keying on these objects); phase 0 must include this case.
+
 ## 4. Scenarios
 
 Two variants per family (a `scenario_id` each); the split of §6 assigns each variant to `DEV` or `HOLDOUT`.

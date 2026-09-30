@@ -67,7 +67,7 @@ never receives ground truth.
 
 | # | Work | Status |
 |---|---|---|
-| D1 | UI notification: toast and badge on a new incident, a second one when the diagnosis lands; driven only by persisted state | NEXT |
+| D1 | UI notification: toast and badge on a new incident, a second one when the diagnosis lands; driven only by persisted state | DONE (verified in the browser against real alerts; `docs/ui/product-contract.md`, Notifications) | |
 | D2 | Browser notification while the tab is closed | PARKED |
 | D3 | Console shows timing stability, withheld authority, `instance_resolution` and status drivers | NEXT |
 | D4 | Connect Cluster flow (token, install command, health, partial-coverage states) | NEXT (after A8) |

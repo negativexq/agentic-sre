@@ -116,6 +116,23 @@ Immutable report snapshots. A report pins `diagnosis_run_id` and does not
 change when the incident is re-diagnosed. Library with filters; per-incident a
 report links back to its incident and run.
 
+### Notifications
+Announcements appear on every screen, not only the incident list. They are derived **only from persisted
+incident state** (the incident list the console already refetches on each server-sent signal), never from
+anything the engine did not record:
+
+- **New incident**: an incident id this browser has not been told about (severity, service, title).
+- **Diagnosis ready**: `has_diagnosis` turned true on an incident being watched (resolution, confidence and
+  the leading root actor as the engine stated them; an unresolved diagnosis keeps its neutral tone). A
+  re-run diagnosis is not announced again.
+- The first visit of a browser takes the current state as a **silent baseline**; storage that is missing or
+  corrupted reads as a first visit, so nothing is announced rather than everything. A burst shows the newest
+  three and a summary of the rest.
+- The navigation shows an unread count (once per incident) and the tab title carries it; both clear when the
+  incident, or the incident list, is opened. Incidents already on screen are not counted as unread.
+- Toasts are a polite live region, dismiss after 12 s (paused while hovered or focused) and never take focus.
+  Browser (operating-system) notifications while the tab is closed are not part of this and stay deferred.
+
 ### Connections & Settings
 Read-only connector health first (Kubernetes / Prometheus / Alertmanager /
 Loki / Tempo / Email: Connected / Degraded / Unavailable / Not configured).

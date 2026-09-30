@@ -207,9 +207,9 @@ Connector's standalone webhook listener (today the control plane's existing rout
 to the in-process Connector), and persistence of the consumer's cursor (a restart re-reads the
 buffer and relies on the idempotent intake).
 
-## 12. Transport: gRPC over mTLS, the Connector dials out (roadmap A7) — PROPOSED
+## 12. Transport: gRPC over mTLS, the Connector dials out (roadmap A7) — APPROVED
 
-Not approved; nothing below is implemented. It replaces the "deferred" transport of §6.
+Approved by the owner on 2026-09-30 with the seven decisions of §12.11 as recommended. It replaces the "deferred" transport of §6.
 
 **12.1 Direction.** The Control Plane hosts a gRPC server. The Connector dials it and opens one
 long-lived bidirectional stream, `connector.v1.Session/Open`. Requests travel Control Plane to
@@ -265,7 +265,7 @@ tests pin, so it needs its own owner decision.
 installed as transitive ones). The lockfile refresh needs `uv`, which this environment does not
 have; it is left to the owner.
 
-**12.11 Decisions requested.**
+**12.11 Decisions (approved 2026-09-30, all as recommended).**
 1. The Connector dials out over one bidirectional stream; requests ride it back (§12.1).
 2. Byte-stream framing with no compiled `.proto` (§12.2).
 3. Identity by URI SAN, an allow-list of connector ids, one session per id, reconnect keeps the
@@ -274,3 +274,31 @@ have; it is left to the owner.
 5. No transport retries; a timeout or a dropped session is `ConnectorUnavailable` (§12.5).
 6. The Control Plane starts degraded without a Connector and attaches readers on connect (§12.6).
 7. The stream-mode default flip stays out of A7 (§12.9).
+
+## 13. Implementation status of §12 (2026-09-30)
+
+Implemented: `packages/connector/pki.py` (CA, server and per-connector certificates),
+`transport.py` (`ConnectorGateway`, `ConnectorAgent`, `gateway_from_environment`), `agent.py` (the
+standalone process and its local webhook receiver), and a remote mode of the control plane
+(`SRE_CONNECTOR_MODE=remote`; `SRE_CONNECTOR_LISTEN`, `SRE_CONNECTOR_TLS_CERT`, `_TLS_KEY`,
+`_TLS_CLIENT_CA`, `SRE_CONNECTOR_ALLOWED`, `SRE_CONNECTOR_ID`). In remote mode the service starts with
+no reader, attaches them when a connector connects, reports "no connector is connected" in system
+status, and answers the old webhook route with 410.
+
+Verification: the 29 tests of the §7 and §10 suites run **unchanged over gRPC with mTLS**
+(`test_connector_over_grpc.py`) and pass, as do 13 transport tests (allowed identity served;
+identity off the allow-list, foreign authority, expired and missing certificates refused; a new
+session replaces the old and takes the requests; a drop in the middle of a request fails it; a
+reconnect keeps the epoch so the cursor resumes with no `Gap`; an oversize message and a timeout end
+in `ConnectorUnavailable`) and 4 remote-mode tests. The standalone process was also run once for real
+against a gateway: it connected over mTLS, reported its capabilities, accepted an authenticated
+webhook into the stream and exited 0 on SIGTERM. Total: 2,347 tests pass.
+
+Repository changes this needed: `grpcio` and `cryptography` declared in `pyproject.toml` (both were
+transitive), a mypy override treating `grpc` as untyped (no stubs), and `cryptography` added to the
+pre-commit mypy environment. **`uv.lock` is not refreshed** (`uv` is not available here): the owner
+runs `uv lock`.
+
+Not done, by decision or by scope: the default of `SRE_CONNECTOR_STREAMS` is unchanged (§12.9);
+deployment manifests and Helm for the agent, enrollment and certificate rotation (roadmap A8); one
+connector per control plane; a real cluster was not connected (the lab is recreated in B2).

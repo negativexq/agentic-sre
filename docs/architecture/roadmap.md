@@ -30,7 +30,7 @@ Contract: [`connector-boundary-contract.md`](connector-boundary-contract.md).
 | A4 | Alert path behind the connector: cursor-paged `read_alerts` and `read_changes`, `Gap`, heartbeat-derived `W`, local webhook receiver, change mirror (contract §10) | DONE in-process, opt-in via `SRE_CONNECTOR_STREAMS`; default flips at A7 | A3 |
 | A5 | Partial `list_events` listing (a failed namespace is skipped silently): contract amendment and fix | DECISION | |
 | A6 | Live `query_traffic` and `query_traces` readers | PARKED | B |
-| A7 | Physical separation: gRPC over mTLS, connector dials out, static certificates (contract §12) | PROPOSED (contract written, awaiting approval) | A4 |
+| A7 | Physical separation: gRPC over mTLS, connector dials out, static certificates (contract §12, §13) | DONE (all suites pass over gRPC; the stream-mode default flip stays a separate decision; `uv lock` left to the owner) | A4 |
 | A8 | `connectorctl preflight` with real probing, enrollment token, certificate issue and rotation, Helm | NEXT | A7 |
 | A9 | Remote and multi-tenant operation, connector version compatibility | PARKED | A8 |
 

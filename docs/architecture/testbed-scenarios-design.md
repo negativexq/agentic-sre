@@ -283,3 +283,22 @@ instance, an effect at the exact target pod, all four coverage conditions. In al
 reached the control plane before the incident resolved (the race of the confirmation run went the other way here).
 What decided each run was blocker 2: repeat 0's pod failed a probe inside the interval (an event of the pod
 instance); repeats 1 and 2 did not, and their only effect was CPU pressure, which is not bound to a pod instance.
+
+### Alert flap census and a stale-alert leak (2026-09-30, offline)
+
+**Census.** Across the 22 recorded run databases there are 32 cases of one alert fingerprint firing again after
+it resolved. Gap from resolution to the next firing: one at 6 s (an `OrderDependencyLatencyHigh` flap during a
+fault), two at 19.6 s (`KafkaConsumerLag` / `OrderWorkerLagHigh` at load start), and every other case 90 s or
+more, where the two firings had different causes (load start versus the end of a run, or two different runs).
+In this lab, short gaps (under about 20 s) were continuations of one episode and gaps of 90 s and more were new
+episodes; nothing was seen between. The sample is small and lab-specific (the faults are removed after about
+100 s, and the `for:` of the lab's rules shapes it), so it bounds the quiet interval but does not choose it; a
+soak run is needed for that.
+
+**Leak found.** Alertmanager resends a group's recently resolved alerts with the group's next notification. A
+fresh control-plane database takes them as new occurrences and opens incidents for them, created after the
+run's injection although the alerts began minutes before it (slice 3 repeat 1: three incidents from repeat 0's
+alerts, one of which the harness took as the primary incident; that slice has no valid run, so no score changed).
+The harness now ignores an incident whose alert began before the injection. In the product, with one persistent
+database, the occurrence key (fingerprint and start) already makes the resend idempotent; a new or restored
+database would still open incidents for alerts that arrive already resolved, which is worth a rule of its own.

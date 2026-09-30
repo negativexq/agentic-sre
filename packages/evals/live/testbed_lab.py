@@ -114,6 +114,9 @@ _DIAGNOSES = text(
         where incident_id = i.incident_id order by created_at desc limit 1
     ) d on true
     where i.title = any(:alerts) and i.created_at >= :since
+      -- an alert that began before the run (Alertmanager resends a group's recently resolved alerts
+      -- with the next notification) is not the run's, however late it reaches a fresh database
+      and not exists (select 1 from alerts a where a.incident_id = i.incident_id and a.starts_at < :since)
     order by i.created_at
     """
 ).bindparams(bindparam("alerts", expanding=False))

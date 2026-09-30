@@ -131,6 +131,13 @@ spec:
               value: "1"
             - name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS
               value: "0"
+            # An emptyDir outlives a container restart (the image default under /tmp does not),
+            # so a restarted broker keeps its topics.
+            - name: KAFKA_LOG_DIRS
+              value: /var/lib/kafka/data
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /var/lib/kafka/data
           ports:
             - containerPort: 9092
           resources:
@@ -140,6 +147,36 @@ spec:
             limits:
               cpu: 1
               memory: 1Gi
+        # Declares the topics and re-creates any that are missing (after a pod loss, for
+        # instance); creation is idempotent. Consumers such as order-worker fail hard on an
+        # unknown topic, so this must not be a one-off deploy step.
+        - name: topics
+          image: apache/kafka:3.9.0
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              until /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092 >/dev/null 2>&1; do sleep 2; done
+              while true; do
+                for topic in ${TOPICS//,/ }; do
+                  /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --topic "$topic" --bootstrap-server localhost:9092 >/dev/null 2>&1 || true
+                done
+                sleep 30
+              done
+          env:
+            - name: TOPICS
+              value: orders.created
+            - name: KAFKA_HEAP_OPTS
+              value: -Xmx128m -Xms64m
+          resources:
+            requests:
+              cpu: 10m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 384Mi
+      volumes:
+        - name: kafka-data
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

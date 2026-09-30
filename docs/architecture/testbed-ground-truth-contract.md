@@ -1,7 +1,7 @@
 # Testbed ground-truth contract (`testbed.v1`)
 
-Status: **PROPOSED** (2026-09-30). Nothing here is implemented; owner approval is required before
-any code. Roadmap step B1 (`roadmap.md`). Amendments are made here first.
+Status: **APPROVED** by the owner (2026-09-30), including the five decisions of §10 as recommended.
+Nothing here is implemented yet. Roadmap step B1 (`roadmap.md`). Amendments are made here first.
 
 ## 1. Purpose
 
@@ -135,7 +135,7 @@ Choosing the fault parameters, building the oracle probes, the Chaos Mesh instal
 lab recreation (roadmap B0, B2, B4). The oracle is a separate process with no connection to the
 engine, and this contract does not fix its implementation.
 
-## 10. Decisions requested
+## 10. Decisions (approved 2026-09-30, all as recommended)
 
 1. The seven timeline fields of §4, including `alert_fired_at` as a separate observation from
    `symptom_started_at`.

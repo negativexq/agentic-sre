@@ -164,3 +164,24 @@ and a pod-failure observation inside it, while the real experiment of the run wa
 not require the execution interval to be connected to the incident's onset. That is a false strong authority of
 exactly the kind the acceptance criterion `false_strong_authority = 0` exists to catch, and it is a defect of the
 rule of `m21-causal-semantics-contract.md` (the fault-execution paragraph), not a limitation of the data.
+
+### Slice 1 result (2026-09-30)
+
+Suite `slice1` (manifest `064176e7…`, engine 2.1.0, seeds 11, 12, 13, `DEV`): three valid runs, `false_strong_authority`
+0, `false_resolved` 0. Rescored under the amendment of the ground-truth contract §13 (the first scores counted
+structural `change-onset-path` witnesses as execution and effect, and read the links from one incident whose choice
+depended on which alert arrived first):
+
+| Metric | First score | Rescored |
+|---|---|---|
+| cause / instance recall | 3/3, 3/3 | 3/3, 3/3 |
+| execution witness recall | 3/3 | **0/3** |
+| effect link recall | 2/3 | **0/3** |
+| propagation link recall | 1/3 | not measured |
+| median time to diagnosis | 96.5 s | 96.5 s |
+
+The engine names the injected experiment (and its exact instance) as a possible initiating cause in every run and
+never gives it strong authority: `m21.support.observed-fault-execution` is `NOT_FIRED`
+(`NO_EXECUTION_WITH_INCIDENT_EFFECT_WITNESS`) in all 10 stored diagnoses. Why it does not fire on a real run is the next
+question (engine investigation, not a scorer matter). Run 2's different first incident (`OrderDependencyLatencyHigh`
+before the payment alerts, two incidents instead of four) is alert ordering in the lab, now neutral to the links.

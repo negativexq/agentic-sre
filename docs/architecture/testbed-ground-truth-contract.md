@@ -189,3 +189,17 @@ Found by the first real run of slice 1; they refine §4 and are put here for the
 4. **Isolation removes lingering events before anything restarts.** Kubernetes keeps events for about an hour,
    so an earlier run's chaos events reached the next run through the connector's first listing. They are deleted
    in the watched namespaces before the connector restarts and the control plane starts on its empty database.
+
+## 13. Scoring amendment (2026-09-30, owner-approved)
+
+Found by rescoring slice 1 (`testbed-scenarios-design.md`, "Slice 1 result"). In §7:
+
+1. `execution_witness`, `effect_link` and `propagation_link` read only witnesses of the execution rules
+   (`m21.support.observed-quota-rejection`, `m21.support.observed-fault-execution`). A structural path
+   (`m21.support.change-onset-path`) is a D1 support, not an observation of an execution, an effect or a propagation.
+2. `propagation_link` is not measured (`None`) while the chain's propagation link is not knowable; it enters
+   with the service-level effect relation (roadmap C1).
+3. The links of the chain belong to the whole fault: they are read from the witnesses of **every** incident the run
+   stored. Naming, strong authority, elimination and timing still come from the primary incident (the earliest).
+
+Rescoring writes `score.v2.json` beside the original `score.json`; nothing is re-run and no record changes.

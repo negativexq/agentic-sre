@@ -26,6 +26,7 @@ from sqlalchemy import bindparam, create_engine, text
 from packages.evals.live.actions import Context, Forward, PortForwarder
 from packages.evals.live.ground_truth import (
     ParameterRange,
+    RunRecord,
     ScenarioSpec,
     SuiteManifest,
     TestbedStore,
@@ -39,7 +40,7 @@ from packages.evals.live.journal import (
 from packages.evals.live.oracle import Measurement, http_measurement
 from packages.evals.live.runner import WorkloadDriver
 from packages.evals.live.scenarios import Target, Workload
-from packages.evals.live.testbed_grader import aggregate
+from packages.evals.live.testbed_grader import RunScore, aggregate, score_run
 from packages.evals.live.testbed_runner import (
     Injection,
     RunOutcome,
@@ -47,6 +48,7 @@ from packages.evals.live.testbed_runner import (
     StoredDiagnosis,
     run_once,
 )
+from packages.rca.model import Diagnosis
 
 REPO = Path(__file__).resolve().parents[3]
 NAMESPACE = "sre-demo"
@@ -457,6 +459,25 @@ def _summarize(outcome: RunOutcome) -> str:
     return "\n".join(lines)
 
 
+def _rescore(store: TestbedStore, suite: str) -> int:
+    """Score the stored runs with the current scorer into ``score.v2.json``; nothing is re-run."""
+    manifest = store.load_manifest(suite)
+    scores: list[RunScore] = []
+    for spec in manifest.scenarios:
+        for repeat in range(spec.repeats):
+            directory = store.run_dir(suite, spec.scenario_id, repeat)
+            record = RunRecord.model_validate_json((directory / "run.json").read_bytes())
+            stored = json.loads((directory / "diagnoses.json").read_bytes())
+            if not record.valid or not stored:
+                continue
+            documents = [Diagnosis.model_validate(d["document"]) for d in stored]
+            score = score_run(record, documents[0], tier=spec.tier, also=documents[1:])
+            store.write_artifact(record, "score.v2.json", score.model_dump_json().encode())
+            scores.append(score)
+    print(json.dumps(aggregate(scores), indent=2, sort_keys=True))
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="packages.evals.live.testbed_lab")
     parser.add_argument("--root", type=Path, default=REPO / ".local/testbed")
@@ -469,8 +490,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     freeze.add_argument("--engine-version", required=True)
     run = commands.add_parser("run", help="run the missing repeats of a frozen suite")
     run.add_argument("--suite", required=True)
+    rescore = commands.add_parser(
+        "rescore", help="score a suite's stored runs again, keeping the old scores"
+    )
+    rescore.add_argument("--suite", required=True)
     args = parser.parse_args(argv)
     clock = RealClock()
+
+    if args.command == "rescore":
+        return _rescore(TestbedStore(args.root), args.suite)
 
     if args.command == "freeze":
         seeds = tuple(int(s) for s in args.seeds.split(","))

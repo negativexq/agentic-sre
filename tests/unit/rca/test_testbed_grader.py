@@ -145,3 +145,56 @@ def test_the_aggregate_never_merges_tiers_and_skips_links_the_world_lacked() -> 
     assert dev["propagation_link_recall"] is None
     assert summary["HOLDOUT/direct-pod-fault"]["false_resolved"] == 1
     assert dev["false_resolved"] == 0
+
+
+def test_a_structural_path_is_not_an_execution_effect_or_propagation_witness() -> None:
+    from packages.rca.causal_closure import EXECUTION_RULES
+
+    plain = diagnosis()
+    assert plain.resolution_trace is not None
+    audits = tuple(
+        audit.model_copy(
+            update={
+                "root_support": tuple(
+                    r.model_copy(update={"rule_id": "m21.support.change-onset-path"})
+                    if r.rule_id in EXECUTION_RULES
+                    else r
+                    for r in audit.root_support
+                )
+            }
+        )
+        for audit in plain.resolution_trace.hypothesis_audits
+    )
+    structural = plain.model_copy(
+        update={
+            "resolution_trace": plain.resolution_trace.model_copy(
+                update={"hypothesis_audits": audits}
+            )
+        }
+    )
+    score = score_run(record(truth_chain()), structural, tier="DEV")
+    assert score.execution_witness is False and score.effect_link is False
+
+
+def test_the_links_of_a_fault_are_read_from_every_incident_of_the_run() -> None:
+    nothing = diagnosis().model_copy(update={"resolution_trace": None})
+    alone = score_run(record(truth_chain()), nothing, tier="DEV")
+    together = score_run(record(truth_chain()), nothing, tier="DEV", also=[diagnosis()])
+    assert alone.effect_link is False and together.effect_link is True
+
+
+def test_a_propagation_link_that_cannot_yet_be_observed_is_not_measured() -> None:
+    chain = truth_chain()
+    with_propagation = Chain(
+        links=(
+            *chain.links,
+            Link(
+                role="propagation",
+                actor="shop/Deployment/orders",
+                knowable=False,
+                mechanism="dependency latency",
+                evidence_class="propagation",
+            ),
+        )
+    )
+    assert score_run(record(with_propagation), diagnosis(), tier="DEV").propagation_link is None

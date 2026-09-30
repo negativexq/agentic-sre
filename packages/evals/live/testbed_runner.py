@@ -454,7 +454,12 @@ def _finish(
     )
     score = None
     if record.valid and primary is not None:
-        score = score_run(record, Diagnosis.model_validate(primary.document), tier=spec.tier)
+        score = score_run(
+            record,
+            Diagnosis.model_validate(primary.document),
+            tier=spec.tier,
+            also=[Diagnosis.model_validate(d.document) for d in stored if d is not primary],
+        )
         store.write_artifact(record, "score.json", score.model_dump_json().encode())
     shutil.rmtree(work, ignore_errors=True)
     return RunOutcome(record=record, score=score, directory=directory)

@@ -15,6 +15,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from packages.evals.live.ground_truth import RunRecord
+from packages.rca.causal_closure import EXECUTION_RULES
 from packages.rca.model import Diagnosis, Resolution, RootSupportStatus
 
 
@@ -53,6 +54,11 @@ def _identity(diagnosis: Diagnosis) -> dict[str, tuple[str, frozenset[str]]]:
 
 
 def _fired_witnesses(diagnosis: Diagnosis) -> list[Any]:
+    """Witnesses of the execution rules only.
+
+    A structural path (``change-onset-path``) is not an execution, an effect or a propagation
+    observation, so it never counts toward those links (testbed contract §7, amended 2026-09-30).
+    """
     trace = diagnosis.resolution_trace
     if trace is None:
         return []
@@ -60,12 +66,23 @@ def _fired_witnesses(diagnosis: Diagnosis) -> list[Any]:
         witness
         for audit in trace.hypothesis_audits
         for record in audit.root_support
-        if record.status is RootSupportStatus.FIRED
+        if record.status is RootSupportStatus.FIRED and record.rule_id in EXECUTION_RULES
         for witness in record.witnesses
     ]
 
 
-def score_run(record: RunRecord, diagnosis: Diagnosis, *, tier: str) -> RunScore:
+def score_run(
+    record: RunRecord,
+    diagnosis: Diagnosis,
+    *,
+    tier: str,
+    also: Sequence[Diagnosis] = (),
+) -> RunScore:
+    """Score ``diagnosis`` (the run's primary incident); ``also`` are the run's other incidents.
+
+    Naming, strong authority and timing come from the primary incident. The links of the chain
+    belong to the whole fault, so they are read from the witnesses of every incident of the run.
+    """
     if not record.valid:
         return RunScore(
             scenario_id=record.scenario_id,
@@ -86,10 +103,14 @@ def score_run(record: RunRecord, diagnosis: Diagnosis, *, tier: str) -> RunScore
     if diagnosis.root_cause is not None:
         named_actors.add(diagnosis.root_cause.canonical)
 
-    witnesses = _fired_witnesses(diagnosis)
+    witnesses = [w for d in (diagnosis, *also) for w in _fired_witnesses(d)]
 
     def carried(link_role: str, matches: Any) -> bool | None:
-        links = chain.of_role(link_role)
+        links = [
+            link
+            for link in chain.of_role(link_role)
+            if link_role != "propagation" or link.knowable  # not yet observable (roadmap C1)
+        ]
         if not links:
             return None
         return any(matches(w, link) for w in witnesses for link in links)

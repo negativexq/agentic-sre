@@ -78,7 +78,9 @@ B3 is done when all of these hold and are recorded:
 3. A forced fault (a chaos delay under load) produces an incident in the control plane's database through
    the stream and an automatic diagnosis is stored.
 4. Deleting the connector pod makes the control plane report the connector unavailable (and close the
-   coverage segment); when the pod returns it reattaches and resumes its cursor with no `Gap`.
+   coverage segment); when the pod returns it reattaches. A new pod is a new process and a new epoch, so the
+   stream declares `CONNECTOR_RESTART` and the control plane rebuilds from a snapshot. (Resuming a cursor with
+   no `Gap` is what a dropped connection of the same process does; that is covered by the transport tests.)
 5. Restarting the control plane makes the connector reconnect on its own.
 6. The connector's identity cannot write: `can-i` denies create, patch and delete, and denies reading
    secrets, in every watched namespace.
@@ -140,3 +142,24 @@ Defects found and fixed while doing it:
 
 Observation: after the restart the control plane stored 11 further diagnosis revisions in about a minute
 (15 against 4 before), consistent with its re-evaluation loop running on its first cycles; not investigated.
+
+Gate item 4 was run against the live lab (2026-09-30): after the pod was deleted the control plane reported
+`unavailable` within 2 s and `connected` again by 4 s; the coverage segment open before the deletion was closed
+at its last success (10:56:40) with a `ConnectorUnavailable` failure recorded at 10:56:45, and the new
+connector's first heartbeat opened the next segment at 10:56:48, so the alert-channel coverage `W` restarted at
+the moment of the loss. The incident history was untouched and the watch loop logged no error. The design text of
+item 4 expected a resumed cursor with no `Gap`; that was wrong for a restarted process and is corrected above.
+
+Gate item 7 was run against the live lab (2026-09-30): the lab cluster was deleted and recreated with
+`make lab-up` (`lab check: PASS` on the first attempt) and the connector redeployed with `make
+connector-deploy` while the control plane kept running. The connector attached in about 3 s with the same
+certificate. The control plane's history was identical before and after (4 incidents, 19 diagnoses, 4 alerts,
+all four incidents still readable), and its journal grew from 31 to 69 object versions as the new lab was
+observed; the journal semantics held (an object whose name returned under a new UID is recorded as an update
+with the new UID, objects that did not return as deleted). **All seven gate items pass; B3 is done.**
+
+One more defect found in that run and fixed: while the lab was away the watch loop logged a full traceback
+("cluster snapshot failed") every 15 s for about eight minutes (96 lines). The connector being away is an
+expected state, so the loop now reports the loss once and its return once, without a traceback; other
+failures still log as before. Two logging tests were also made independent of test order (they attach their
+own handler and use `setLevel`, since assigning a logger's level does not clear Python's enabled-for cache).

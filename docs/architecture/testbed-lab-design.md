@@ -130,3 +130,33 @@ renders offline from the vendored archive and the containerd settings reach the 
 inputs, and the Kafka topic reconciler of B0, from drifting. Not done: the destructive recreation
 itself, the `lab-control` workload and the migration step as a declared bring-up action (all part of
 the recreation, which is asked again).
+
+## 12. Bring-up manifests (2026-09-30)
+
+Written and validated against the live API without applying them (a server-side dry run of
+`dependencies.yaml`, a strict client-side validation of `lab-control.yaml`):
+
+- **Postgres** keeps its data in an `emptyDir` (it survives a container restart) and has a readiness
+  probe. The schema migration is a `migrate` **sidecar** rather than a one-off job: it waits for the
+  database, runs `alembic upgrade head` (idempotent) and repeats every minute, so a pod that returns
+  empty converges again. The old `db-migration` job stays for the existing `make deploy` flow.
+- **`lab-control`** (`infra/kubernetes/lab-control.yaml`): a namespace, a one-replica `isolated-echo`
+  workload on the pinned `python` image, a service, and a default-deny `NetworkPolicy` for ingress and
+  egress. `make lab-check` fails if `sre-demo` can reach it, so "no path" is checked. The image is in
+  `pins.yaml` and loaded by `make lab-images`.
+- **`make lab-up`** creates the cluster, builds and loads images, applies everything except the control
+  plane, waits for every rollout, installs Chaos Mesh and runs `make lab-check`. It never deletes a
+  cluster. **`make lab-check`** checks the pods, the topic, the schema, the 23 CRDs and the isolation; the
+  chaos smoke, the alert path and the node restart stay manual and are recorded.
+
+Findings while writing them:
+
+- A check must fail when its tool fails. The first draft of `lab-check` passed its pod check when
+  `kubectl` itself could not connect (an empty list satisfied `test -z`); each check now reports a tool
+  failure, and a test asserts that. `KUBECTL` selects the context (`make lab-check KUBECTL="kubectl
+  --context kind-agentic-sre"`); this machine has no default `kubectl` context.
+- Against the running cluster the check passes the pod and topic checks and **fails on the schema**, which
+  is the known state: the live database has no tables. Applying `dependencies.yaml` there would repair
+  that at once through the new sidecar; that was not done, because the cluster is about to be recreated.
+
+The destructive recreation is the only step left of B2.

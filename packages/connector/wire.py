@@ -201,7 +201,9 @@ def traces_from_wire(result: dict[str, Any]) -> tuple[TraceSpanObservation, ...]
 
 # ---- streams as cursor-paged reads (contract §10) -------------------------------------------
 
-GapReason = Literal["CONNECTOR_RESTART", "BUFFER_EXPIRED", "BACKEND_UNREACHABLE"]
+GapReason = Literal[
+    "CONNECTOR_RESTART", "BUFFER_EXPIRED", "BACKEND_UNREACHABLE", "RESOURCE_VERSION_EXPIRED"
+]
 
 
 class ReadArgs(WireModel):
@@ -246,6 +248,8 @@ class ObjectDeletedItem(StreamItem):
     kind: Literal["object_deleted"] = "object_deleted"
     observed_at: datetime
     key: str
+    # contract §15: "watch" is an observed deletion on a continuous watch; "listing" an inferred one
+    source: Literal["watch", "listing"] = "listing"
 
 
 class EventItem(StreamItem):

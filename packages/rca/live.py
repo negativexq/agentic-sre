@@ -127,6 +127,8 @@ class ObjectListing:
     objects: tuple[dict[str, Any], ...]
     completed_scopes: frozenset[ListingScope]
     failed_scopes: tuple[ListingFailure, ...] = ()
+    # The resourceVersion each scope's LIST returned, for a watch to start from (connector contract §15).
+    resource_versions: Mapping[ListingScope, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

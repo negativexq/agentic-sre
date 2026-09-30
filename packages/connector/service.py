@@ -356,6 +356,10 @@ class Connector:
                 self._put(self._changes, wire.EventItem(seq=0, observed_at=at, body=event))
         self._status(listing, at, snapshot=False)
 
+    def watch_changes_once(self) -> None:
+        """Consume each scope's watch once (connector contract §15). Not implemented yet."""
+        raise NotImplementedError("the watch path of contract §15 is not implemented yet")
+
     def run(
         self,
         stop: threading.Event,

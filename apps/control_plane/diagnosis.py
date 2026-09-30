@@ -530,12 +530,37 @@ class DiagnosisService:
             logger.warning("deadline reevaluation pass failed", exc_info=True)
             return None
 
+    def follows_changes(self) -> bool:
+        """Whether the reader can say that changes arrived, so the journal follows them (contract §15)."""
+        return callable(getattr(self.reader, "pending", None))
+
+    def follow_changes(self, stop: threading.Event, interval_seconds: float = 1.0) -> None:
+        """Journal the cluster as soon as the change stream carries anything; no fixed batching."""
+        while not stop.is_set():
+            pending = getattr(
+                self.reader, "pending", None
+            )  # the reader may attach later (remote mode)
+            try:
+                if callable(pending) and pending():
+                    stored = self.snapshot()
+                    if stored:
+                        logger.info("object journal stored %d changed object(s)", stored)
+            except ConnectorError:
+                pass  # the slower loop reports a connector that is away, once
+            except Exception:
+                logger.warning("following the change stream failed", exc_info=True)
+            stop.wait(interval_seconds)
+
     def watch(self, stop: threading.Event, interval_seconds: float) -> None:
-        """Snapshot the cluster until ``stop`` is set; errors are logged and retried."""
+        """Snapshot the cluster until ``stop`` is set; errors are logged and retried.
+
+        When the reader follows the change stream (``follow_changes`` runs), this loop no longer
+        snapshots on its interval; it keeps retention and scheduled re-evaluation.
+        """
         unreachable = False
         while not stop.is_set():
             try:
-                stored = self.snapshot()
+                stored = 0 if self.follows_changes() else self.snapshot()
                 if unreachable:
                     logger.info("the connector answers again; the object journal resumes")
                     unreachable = False

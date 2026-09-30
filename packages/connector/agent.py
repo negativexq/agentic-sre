@@ -92,6 +92,9 @@ def main() -> None:
         args=(stop,),
         kwargs={
             "changes_interval": float(os.getenv("SRE_WATCH_INTERVAL_SECONDS", "15")),
+            # contract §15: watch each scope; the full listing is then a reconciliation
+            "watch": os.getenv("SRE_CONNECTOR_WATCH", "true").casefold() == "true",
+            "reconcile_interval": float(os.getenv("SRE_RECONCILE_INTERVAL_SECONDS", "600")),
             "alerts_interval": AlertCoverageConfig.from_environment().poll_interval.total_seconds(),
         },
         daemon=True,

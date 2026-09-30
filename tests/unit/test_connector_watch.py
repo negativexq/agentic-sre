@@ -186,3 +186,82 @@ def test_a_watch_never_emits_a_denied_kind() -> None:
     cluster.batches[PODS] = [[event("ADDED", secret, "11")]]
     connector.watch_changes_once()
     assert after_snapshot(client) == []
+
+
+def test_the_mirror_says_once_that_changes_arrived() -> None:
+    from packages.connector.client import StreamedClusterReader
+
+    connector, client, cluster, _ = make()
+    reader = StreamedClusterReader(client)
+    assert reader.pending()  # the first snapshot
+    assert not reader.pending()  # nothing new since
+    cluster.batches[PODS] = [[event("MODIFIED", pod("a", "11"), "11")]]
+    connector.watch_changes_once()
+    assert reader.pending() and not reader.pending()
+
+
+def test_the_background_loop_watches_every_scope_and_delivers_a_change_at_once() -> None:
+    import threading
+    import time
+
+    clock = Clock()
+    cluster = FakeWatchCluster()
+    connector = Connector(cluster=cluster, watch_namespaces=("shop",), clock=clock)
+    client = ConnectorClient(in_process_transport(connector))
+    original = cluster.watch
+
+    def slow_watch(scope: ListingScope, version: str) -> Iterator[Any]:
+        time.sleep(0.02)  # a real watch blocks; an empty fake would spin
+        return original(scope, version)
+
+    cluster.watch = slow_watch  # type: ignore[method-assign,assignment]
+    cluster.batches[PODS] = [[event("MODIFIED", pod("a", "11"), "11")]]
+    stop = threading.Event()
+    loop = threading.Thread(
+        target=connector.run, args=(stop,), kwargs={"reconcile_interval": 3600.0}, daemon=True
+    )
+    loop.start()
+    try:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if any(
+                isinstance(i, wire.ObjectItem) and i.body["metadata"]["resourceVersion"] == "11"
+                for i in items(client)
+            ):
+                break
+            time.sleep(0.05)
+        else:
+            raise AssertionError("the watched change never reached the stream")
+    finally:
+        stop.set()
+        loop.join(timeout=5)
+    assert {PODS, EVENTS} <= {scope for scope, _ in cluster.watched_from}
+    assert cluster.lists == 1  # no reconciliation within the interval
+
+
+def test_the_control_plane_journals_only_when_the_stream_carried_something() -> None:
+    import threading
+
+    from apps.control_plane.diagnosis import DiagnosisService
+
+    calls: list[bool] = []
+
+    class Reader:
+        def __init__(self) -> None:
+            self.answers = [True, False, False, True]
+
+        def pending(self) -> bool:
+            return self.answers.pop(0) if self.answers else False
+
+    service = DiagnosisService.__new__(DiagnosisService)
+    service.reader = Reader()  # type: ignore[assignment]
+    service.snapshot = lambda: calls.append(True) or 0  # type: ignore[method-assign,func-returns-value]
+    stop = threading.Event()
+    thread = threading.Thread(target=service.follow_changes, args=(stop, 0.001), daemon=True)
+    thread.start()
+    import time
+
+    time.sleep(0.2)
+    stop.set()
+    thread.join(timeout=2)
+    assert len(calls) == 2  # once per page that carried something, never on a fixed interval

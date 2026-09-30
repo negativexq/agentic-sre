@@ -285,6 +285,10 @@ def create_app(
                 target=diagnoser.watch, args=(stop, watch_interval), daemon=True
             )
             watcher.start()
+            # contract §15: the journal follows the change stream within about a second
+            follower = getattr(diagnoser, "follow_changes", None)
+            if callable(follower) and (gateway is not None or connector is not None):
+                threading.Thread(target=follower, args=(stop, 1.0), daemon=True).start()
         poller = None
         if alert_coverage_poller is not None:
             poller = threading.Thread(target=alert_coverage_poller.run, args=(stop,), daemon=True)

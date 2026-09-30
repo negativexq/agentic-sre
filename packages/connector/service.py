@@ -124,6 +124,7 @@ class Connector:
         self._changes_lock = threading.RLock()
         # the resourceVersion each scope's watch resumes from (contract §15); set by every listing
         self._versions: dict[ListingScope, str] = {}
+        self._generation = 0
         self.watch_stats: dict[str, int] = defaultdict(int)
 
     def handle(self, payload: bytes) -> bytes:
@@ -318,7 +319,8 @@ class Connector:
         if len(objects) + len(events) + 2 > self.changes_buffer_len:
             raise ValueError("snapshot exceeds the change buffer")
         self._seen, self._events_seen = {}, {}
-        self._versions = dict(listing.resource_versions)
+        self._versions = {**listing.resource_versions, **self._event_versions()}
+        self._generation += 1  # watches of the replaced versions must not touch the new state
         begin = self._put(self._changes, wire.SnapshotBeginItem(seq=0, observed_at=at))
         self._changes.mark_baseline(begin)
         for body in objects:
@@ -339,7 +341,7 @@ class Connector:
         listing: ObjectListing,
         at: datetime,
     ) -> None:
-        self._versions.update(listing.resource_versions)
+        self._versions.update({**listing.resource_versions, **self._event_versions()})
         present: set[str] = set()
         for body in objects:
             key = object_key(body)
@@ -372,17 +374,28 @@ class Connector:
             if not self.watch_scope_once(scope):
                 return  # continuity was lost; the new snapshot set every scope's version again
 
+    def _event_versions(self) -> dict[ListingScope, str]:
+        versions = getattr(self.cluster, "event_resource_versions", None)
+        return dict(versions) if isinstance(versions, dict) else {}
+
     def watch_scope_once(self, scope: ListingScope) -> bool:
         """Consume one scope's watch until it ends; False when continuity was lost (a gap and a snapshot)."""
         watch = getattr(self.cluster, "watch", None)
-        version = self._versions.get(scope)
+        with self._changes_lock:
+            version = self._versions.get(scope)
+            generation = self._generation
         if watch is None or version is None:
             return True
         try:
             for event in watch(scope, version):
-                self._apply_watch_event(scope, event)
+                if not self._apply_watch_event(scope, event, generation):
+                    return (
+                        True  # a newer snapshot replaced this watch; the caller starts a fresh one
+                    )
         except ResourceVersionExpired:
             with self._changes_lock:
+                if generation != self._generation:
+                    return True  # another scope's expiry already took the new snapshot
                 self.watch_stats["expired"] += 1
                 self._put(
                     self._changes,
@@ -394,6 +407,8 @@ class Connector:
         except Exception:
             logger.warning("watch of %s/%s failed", scope.namespace, scope.kind, exc_info=True)
             with self._changes_lock:
+                if generation != self._generation:
+                    return True
                 self._put(
                     self._changes,
                     wire.GapItem(seq=0, at=self.clock(), reason="BACKEND_UNREACHABLE"),
@@ -403,25 +418,26 @@ class Connector:
         self.watch_stats["resumes"] += 1
         return True
 
-    def _apply_watch_event(self, scope: ListingScope, event: WatchEvent) -> None:
+    def _apply_watch_event(self, scope: ListingScope, event: WatchEvent, generation: int) -> bool:
+        """Apply one watch event; False when a newer snapshot has replaced the watch it came from."""
         with self._changes_lock:
-            if self._versions.get(scope) is None:
-                return  # a snapshot replaced this scope's version while the event was in flight
+            if generation != self._generation or self._versions.get(scope) is None:
+                return False
             self._versions[scope] = event.resource_version
             self.watch_stats["events"] += 1
             body = event.body
             if event.type == "BOOKMARK" or body.get("kind") in wire.DENIED_KINDS:
-                return
+                return True
             at = self.clock()
             if scope.kind == "Event":
                 key, digest = _event_key(body), _digest(body)
                 if self._events_seen.get(key) != digest:
                     self._events_seen[key] = digest
                     self._put(self._changes, wire.EventItem(seq=0, observed_at=at, body=body))
-                return
+                return True
             object_id = object_key(body)
             if object_id is None:
-                return
+                return True
             if event.type == "DELETED":
                 # observed deletion: a continuous watch (a gap would have replaced this version)
                 if self._seen.pop(object_id, None) is not None:
@@ -431,11 +447,24 @@ class Connector:
                             seq=0, observed_at=at, key=object_id, source="watch"
                         ),
                     )
-                return
+                return True
             digest = _digest(body)
             if self._seen.get(object_id) != digest:
                 self._seen[object_id] = digest
                 self._put(self._changes, wire.ObjectItem(seq=0, observed_at=at, body=body))
+            return True
+
+    def _watch_loop(self, scope: ListingScope, stop: threading.Event) -> None:
+        """Keep one scope watched: resume after the server ends a watch, start over after a snapshot."""
+        while not stop.is_set():
+            with self._changes_lock:
+                if scope not in self._versions:
+                    return
+            try:
+                self.watch_scope_once(scope)
+            except Exception:
+                logger.warning("watch loop of %s/%s", scope.namespace, scope.kind, exc_info=True)
+                stop.wait(5.0)
 
     def run(
         self,
@@ -443,14 +472,40 @@ class Connector:
         *,
         changes_interval: float = 15.0,
         alerts_interval: float = 60.0,
+        watch: bool = True,
+        reconcile_interval: float = 600.0,
     ) -> None:
-        """Poll both sources until stopped; a poll never raises out of the loop."""
-        next_changes = next_alerts = 0.0
+        """Poll both sources until stopped; a poll never raises out of the loop.
+
+        With a cluster that can watch (contract §15), each listed scope is watched in its own thread
+        and the full listing becomes a reconciliation every ``reconcile_interval`` seconds.
+        """
+        watching = watch and getattr(self.cluster, "watch", None) is not None
+        if watching:
+            changes_interval = reconcile_interval
+        threads: dict[ListingScope, threading.Thread] = {}
+        next_changes = next_alerts = next_stats = 0.0
         elapsed = 0.0
         while not stop.is_set():
             if elapsed >= next_changes:
                 self.poll_changes_once()
                 next_changes = elapsed + changes_interval
+            if watching:
+                with self._changes_lock:
+                    scopes = list(self._versions)
+                for scope in scopes:
+                    thread = threads.get(scope)
+                    if thread is None or not thread.is_alive():
+                        thread = threading.Thread(
+                            target=self._watch_loop, args=(scope, stop), daemon=True
+                        )
+                        threads[scope] = thread
+                        thread.start()
+                        self.watch_stats["watch_starts"] += 1
+                if elapsed >= next_stats:
+                    next_stats = elapsed + 60.0
+                    live = sum(1 for t in threads.values() if t.is_alive())
+                    logger.info("watch stats: active=%d %s", live, dict(self.watch_stats))
             if elapsed >= next_alerts:
                 self.poll_alerts_once()
                 next_alerts = elapsed + alerts_interval

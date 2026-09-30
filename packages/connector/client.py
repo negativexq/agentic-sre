@@ -225,8 +225,26 @@ class StreamedClusterReader:
         self._ready = False
         self._blocked: str | None = None
         self._lock = threading.RLock()
+        self._applied = 0  # stream items applied so far
+        self._reported = 0  # ... as of the last ``pending`` call
+
+    def pending(self) -> bool:
+        """Drain the stream; whether anything arrived since the previous call (contract §15).
+
+        Lets the control plane journal a change as soon as it arrives instead of on a fixed interval.
+        An unreachable connector is not a change.
+        """
+        with self._lock:
+            try:
+                self._drain()
+            except ConnectorError:
+                return False
+            changed = self._applied != self._reported
+            self._reported = self._applied
+            return changed
 
     def _apply(self, item: wire.StreamItem) -> None:
+        self._applied += 1
         if isinstance(item, wire.GapItem):
             if item.reason == "BACKEND_UNREACHABLE":
                 self._blocked = f"the connector could not read the cluster at {item.at.isoformat()}"

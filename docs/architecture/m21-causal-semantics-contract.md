@@ -142,6 +142,14 @@ selection, the ranking itself, admission and every support rule are unchanged; t
 and benchmark correctness, whether any supported or strong outcome is lost, and whether a corrected case is
 merely replaced by another wrong actor.
 
+*Shadow measurement (2026-10-01).* ITBench, 35 scenarios: no change at all (same `root_cause`, status, strong
+witnesses, epistemic digest and correctness; 18 of 31 scoreable correct either way). Testbed, 81 incidents
+(the four databases contaminated by the manual `diag-stress` experiment excluded whole): one `root_cause`
+changed, from an unsupported `order-service` pod to the supported `StressChaos/pod-stress-1` that the run
+injected, which is the true cause; its status (`COMPETING_CAUSES`), claim level and strong witnesses unchanged,
+its digest changed accordingly; no supported or strong outcome was lost and no case moved to another wrong actor.
+Awaiting the owner's decision.
+
 ## Preserved v2 decision contract (v3 exceptions above)
 
 The stages are observation → presentation episode → actor/instance/incident

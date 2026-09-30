@@ -1,7 +1,8 @@
 # Testbed lab design (roadmap B2)
 
-Status: **PROPOSED** (2026-09-30). Nothing here is applied. Recreating the lab is destructive and
-needs the owner's explicit approval (§9). Companion to `testbed-ground-truth-contract.md`
+Status: **APPROVED** by the owner (2026-09-30), including the six decisions of §10 as recommended.
+Nothing here is applied yet. Recreating the lab is destructive: the design is approved, but the
+recreation itself is asked again when its prerequisites (roadmap A7 and the B1 implementation) hold. Companion to `testbed-ground-truth-contract.md`
 (what a run records) and `connector-boundary-contract.md` (how the engine reads the lab).
 
 ## 1. Purpose
@@ -102,7 +103,7 @@ The Kind node container and its 6.3 GB volume; every in-cluster object; the Kafk
 the unrelated Docker volume `3145b5b7b563`. Rollback is a second recreation from the same
 declarative inputs; there is no state to restore.
 
-## 10. Decisions requested
+## 10. Decisions (approved 2026-09-30, all as recommended)
 
 1. Delete and recreate the `agentic-sre` cluster as described (§8, §9).
 2. No `extraPortMappings`; the workload and the oracle are reached through supervised

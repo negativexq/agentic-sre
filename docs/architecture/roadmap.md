@@ -30,7 +30,7 @@ Contract: [`connector-boundary-contract.md`](connector-boundary-contract.md).
 | A4 | Alert path behind the connector: cursor-paged `read_alerts` and `read_changes`, `Gap`, heartbeat-derived `W`, local webhook receiver, change mirror (contract §10) | DONE in-process, opt-in via `SRE_CONNECTOR_STREAMS`; default flips at A7 | A3 |
 | A5 | Partial `list_events` listing (a failed namespace is skipped silently): contract amendment and fix | DECISION | |
 | A6 | Live `query_traffic` and `query_traces` readers | PARKED | B |
-| A7 | Physical separation: gRPC over mTLS, connector dials out, static certificates | NEXT | A4 |
+| A7 | Physical separation: gRPC over mTLS, connector dials out, static certificates (contract §12) | PROPOSED (contract written, awaiting approval) | A4 |
 | A8 | `connectorctl preflight` with real probing, enrollment token, certificate issue and rotation, Helm | NEXT | A7 |
 | A9 | Remote and multi-tenant operation, connector version compatibility | PARKED | A8 |
 
@@ -40,7 +40,7 @@ Contract: [`connector-boundary-contract.md`](connector-boundary-contract.md).
 |---|---|---|---|
 | B0 | Hygiene: `orders.created` is declared and re-created by a sidecar and Kafka keeps its data across container restarts (verified live); 88 unused Docker volumes removed and one kept | DONE | |
 | B1 | `Timeline` ground truth (`testbed-ground-truth-contract.md`): cause created, execution started, target effect, propagation, symptom started, alert fired, recovery; written by the injector and an independent oracle | DONE (contract approved; implementation follows B2) | |
-| B2 | Recreate the lab cluster (destructive): Chaos Mesh 2.8.4 with containerd values, connector inside the lab, Postgres volume and declared migration (`testbed-lab-design.md`) | DECISION (design proposed, awaiting approval) | B1, A7 |
+| B2 | Recreate the lab cluster (destructive): Chaos Mesh 2.8.4 with containerd values, connector inside the lab, Postgres volume and declared migration (`testbed-lab-design.md`) | DECISION (design approved; recreation asked again once A7 and B1 hold) | B1, A7 |
 | B3 | Control plane outside the lab (host or container), read-only kubeconfig, its own Postgres | NEXT | A7, B2 |
 | B4 | 4 to 6 controlled incidents, each repeated N times with randomized target and timing, dev and held-out split fixed up front: direct pod fault, dependency fault, scheduled recurring fault, config or rollout cause, negative control by construction, competing causes | NEXT | B2 |
 | B5 | Frozen engine baseline: version and acceptance criteria fixed before any run | NEXT | B4 |

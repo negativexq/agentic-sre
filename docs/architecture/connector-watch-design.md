@@ -1,6 +1,6 @@
 # Watch-driven change path (roadmap: event latency, C9 prerequisite)
 
-Status: **PROPOSED** (2026-10-01), awaiting the owner's decisions in §8. Nothing here is implemented.
+Status: **APPROVED** (2026-10-01) with the owner's corrections, which `connector-boundary-contract.md` §15 records and which override §3 to §5 below where they differ: an expired version is a `Gap(RESOURCE_VERSION_EXPIRED)` followed by a snapshot, not a silent relist; only a watch `DELETE` on a continuous watch is an observed deletion; the Connector's observation time is recorded now but used causally only with C9.
 Companion to `connector-boundary-contract.md` (§10 streams, §14 the latency measurement).
 
 ## 1. Problem (measured)

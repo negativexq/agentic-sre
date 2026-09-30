@@ -321,3 +321,62 @@ rule's own `for`). The 2 s setting was an experiment and is not adopted: polling
 watched namespace that often costs API load that grows with the cluster. The fix is a Kubernetes watch on the
 connector and a push of the deltas to the control plane (roadmap C9 and the connector's A-items); until then
 the default stays 15 s. The control plane's interval is now a Makefile variable (`CP_WATCH_INTERVAL`).
+
+## 15. Watch-driven change stream (amendment, APPROVED 2026-10-01)
+
+Design: `connector-watch-design.md` (approved with the owner's corrections). How the Connector observes the
+cluster is a source-side detail; this section fixes what the change stream means when it does so by watching.
+
+**Observation per scope.** Each watched (namespace, kind) scope, and Events per namespace, starts with a LIST, keeps
+the returned `resourceVersion`, and then WATCHes from it with bookmarks. Watch events are emitted as they arrive
+(`ObjectItem`, `EventItem`, `ObjectDeletedItem`), de-duplicated by content digest: a watch event delivered twice
+produces one item. LIST and WATCH pass through the same deny list (Secrets are never listed, watched or emitted).
+
+**Continuity.**
+
+- A watch that ends or disconnects and **resumes from its last `resourceVersion`** (or bookmark) is continuous:
+  no `Gap`, same connector epoch.
+- A watch that **cannot resume** because its version expired (`410 Gone`) has lost continuity. The Connector
+  appends `Gap(RESOURCE_VERSION_EXPIRED)` and then serves a new snapshot (`SnapshotBeginItem` … `ListingStatusItem`
+  with `snapshot=true`), after which every scope watches again from the snapshot's versions. The stream has only
+  global snapshots, so one expired scope relists all of them; the count of expirations is measured.
+- A LIST or WATCH that fails and cannot be resumed makes its scope a failed scope and appends
+  `Gap(BACKEND_UNREACHABLE)`, as a failed poll does.
+- A `Gap` means that continuous observation **cannot be guaranteed**, not that data was certainly lost. The §10
+  invariant holds unchanged: recovery restores the current observable state and never reconstructs the missing
+  interval. An object created and deleted inside that interval may never appear, and its absence is not evidence
+  that it never existed.
+
+**Two kinds of deletion.**
+
+- **Observed deletion:** a `DELETED` watch event on a continuous watch (no `Gap` since the scope's snapshot), for
+  the exact object UID. It carries `source = "watch"` and its time is the deletion's observation.
+- **Inferred deletion:** absence from a *completely* listed scope in a snapshot or reconciliation (as before this
+  amendment). It carries `source = "listing"` and says only that the object was gone by that listing; its
+  deletion time is unknown within the interval since it was last seen.
+- An incomplete listing never produces either. The journal keeps the source; only an observed deletion may supply a
+  deletion time.
+
+**Reconciliation.** A full LIST of every scope every 10 minutes remains as a safety net; it produces deltas and
+inferred deletions, never history.
+
+**Timing metrics, recorded now, not yet used causally.** Each journaled row keeps the source's own time where it
+has one (an Event's timestamp), the Connector's `observed_at`, and the control plane's `ingested_at`. Until roadmap
+C9 decides the evidence-membership rule, the Connector's `observed_at` changes no window, eligibility or decision.
+
+**Compatibility.** `RESOURCE_VERSION_EXPIRED` is a new `GapReason` and `ObjectDeletedItem.source` a new field, so the
+wire version is raised and a control plane must be upgraded before the Connectors it serves (an older control plane
+would reject the new reason as a malformed page).
+
+**Control plane consumption.** The control plane reads the change stream about once a second and runs its journal
+step as soon as a page carried anything; no second batching interval sits between a watch event and the journal.
+Retention and scheduled re-evaluation keep their own slower cadence.
+
+**Acceptance (all required).** Latency: median change-to-journal delay at most 2 s, p90 reported (reference: 2 s
+polling gave 2.5 s / 3.8 s). Continuity: a resumed watch appends no `Gap` and keeps the epoch; an expired version
+appends `Gap(RESOURCE_VERSION_EXPIRED)` and a new snapshot; a create-then-delete inside a lost interval is not
+reconstructed; a duplicate watch delivery yields one item; a process restart gives a new epoch; LIST and WATCH
+share the deny list; observed and inferred deletions keep their source. Load, from the Connector's own counters
+(API-server totals as context only, they cannot be attributed to the Connector): active watches, reconnects,
+relists, expirations, events per second, bytes per second, request count and rate, and the delays source time →
+Connector observation → control-plane ingestion.

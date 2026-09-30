@@ -38,6 +38,17 @@ def _actors(hypotheses: Sequence[Any]) -> tuple[EntityRef, ...]:
     return tuple(dict.fromkeys(h.causal_actor for h in hypotheses))
 
 
+def leader_by_tier(
+    pool: Sequence[Any], *, supported: Collection[str], strong: Collection[str]
+) -> Any:
+    """The engine's reported leader when the state is not ``RESOLVED``: the first hypothesis, in ranking
+    order, of the highest epistemic tier present (m21 contract, leader selection by tier). Canonical name
+    order remains only the ranking's last tie-break; it can no longer put a weaker tier ahead."""
+    strong_members = [h for h in pool if h.hypothesis_id in strong]
+    supported_members = [h for h in pool if h.hypothesis_id in supported]
+    return (strong_members or supported_members or list(pool))[0]
+
+
 def project_leading_actor(
     pool: Sequence[Any],
     *,

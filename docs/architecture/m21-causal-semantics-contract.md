@@ -129,7 +129,7 @@ weaker success as the old definitive-resolution proof. Artifacts separately
 report observed mechanism, positive rival elimination, strong disambiguation
 and recovery. Recovery stays `NOT_ASSESSED`.
 
-**Leader selection by epistemic tier (PROPOSED 2026-09-30, not implemented; roadmap C12).** Today, unless the
+**Leader selection by epistemic tier (APPROVED and implemented 2026-10-01; roadmap C12; `leader_by_tier` in `packages/rca/presentation.py`).** Today, unless the
 state is `RESOLVED` or exactly one claim is supported, the reported `root_cause` is the first selectable
 hypothesis in ranking order (score, then canonical name), so with two or more supported claims an unsupported
 candidate with an equal or higher score can be reported ahead of them. Proposed rule for every non-`RESOLVED`
@@ -148,7 +148,7 @@ witnesses, epistemic digest and correctness; 18 of 31 scoreable correct either w
 changed, from an unsupported `order-service` pod to the supported `StressChaos/pod-stress-1` that the run
 injected, which is the true cause; its status (`COMPETING_CAUSES`), claim level and strong witnesses unchanged,
 its digest changed accordingly; no supported or strong outcome was lost and no case moved to another wrong actor.
-Awaiting the owner's decision.
+Approved by the owner on this measurement; replaying the corrected incident with the implemented rule gives the injected experiment, shown as the single supported cause.
 
 ## Preserved v2 decision contract (v3 exceptions above)
 

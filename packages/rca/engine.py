@@ -56,7 +56,7 @@ from packages.rca.model import (
     TimingAssessment,
     TimingStability,
 )
-from packages.rca.presentation import project_leading_actor
+from packages.rca.presentation import leader_by_tier, project_leading_actor
 from packages.rca.ranking import (
     Context,
     RankingConfig,
@@ -769,12 +769,11 @@ def diagnose_case(
             if hypothesis.hypothesis_id == leader_ids[0]
         )
     else:
-        supported = [
-            h
-            for h in selectable_hypotheses
-            if h.hypothesis_id in resolution_trace.plausible_hypotheses
-        ]
-        selected = supported[0] if len(supported) == 1 else selectable_hypotheses[0]
+        selected = leader_by_tier(
+            selectable_hypotheses,
+            supported=frozenset(resolution_trace.plausible_hypotheses),
+            strong=frozenset(resolution_trace.mechanism_verified_hypotheses),
+        )
     mode = "deterministic"
     model_calls = 0
     if investigator is not None:

@@ -114,3 +114,33 @@ def test_the_console_shows_competing_candidates_and_never_one_of_them_chosen_by_
         "shop/Pod/c",
     )
     assert presented_leader("shop/Pod/c", None, (), "NO_EVIDENCE_IN_INCIDENT_WINDOW")[2] is None
+
+
+# ---- the engine's leader selection (m21-causal-semantics-contract.md, leader selection by tier) ------
+
+
+def leader(
+    pool: list[Any], *, supported: tuple[str, ...] = (), strong: tuple[str, ...] = ()
+) -> str:
+    from packages.rca.presentation import leader_by_tier
+
+    return str(
+        leader_by_tier(pool, supported=frozenset(supported), strong=frozenset(strong)).hypothesis_id
+    )
+
+
+def test_an_unsupported_candidate_never_leads_while_supported_ones_exist() -> None:
+    # the pool is in ranking order: the unsupported pod ranks first by name on an equal score
+    pool = [hyp("pod", "a-pod"), hyp("x1", "b-chaos"), hyp("x2", "c-chaos")]
+    assert leader(pool, supported=("x1", "x2")) == "x1"
+
+
+def test_a_strong_claim_leads_a_supported_one_ranked_ahead_of_it() -> None:
+    pool = [hyp("s", "a", score=9.0), hyp("m", "b", score=8.0)]
+    assert leader(pool, supported=("s", "m"), strong=("m",)) == "m"
+
+
+def test_within_a_tier_the_ranking_order_decides() -> None:
+    pool = [hyp("a", "a", score=9.0), hyp("b", "b", score=8.0)]
+    assert leader(pool, supported=("a", "b")) == "a"
+    assert leader(pool) == "a"  # no supported claim: the ranking alone, as before

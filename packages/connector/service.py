@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import threading
+from collections import defaultdict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -22,6 +23,7 @@ from pydantic import BaseModel, ValidationError
 
 from packages.connector import wire
 from packages.connector.streams import StreamBuffer
+from packages.connector.watch import ResourceVersionExpired, WatchEvent
 from packages.contracts import AlertmanagerWebhook
 from packages.rca.alert_coverage import (
     AlertmanagerConfig,
@@ -120,6 +122,9 @@ class Connector:
         self._seen: dict[str, str] = {}
         self._events_seen: dict[str, str] = {}
         self._changes_lock = threading.RLock()
+        # the resourceVersion each scope's watch resumes from (contract §15); set by every listing
+        self._versions: dict[ListingScope, str] = {}
+        self.watch_stats: dict[str, int] = defaultdict(int)
 
     def handle(self, payload: bytes) -> bytes:
         """Serve one request and return the encoded response; never raises."""
@@ -313,6 +318,7 @@ class Connector:
         if len(objects) + len(events) + 2 > self.changes_buffer_len:
             raise ValueError("snapshot exceeds the change buffer")
         self._seen, self._events_seen = {}, {}
+        self._versions = dict(listing.resource_versions)
         begin = self._put(self._changes, wire.SnapshotBeginItem(seq=0, observed_at=at))
         self._changes.mark_baseline(begin)
         for body in objects:
@@ -333,6 +339,7 @@ class Connector:
         listing: ObjectListing,
         at: datetime,
     ) -> None:
+        self._versions.update(listing.resource_versions)
         present: set[str] = set()
         for body in objects:
             key = object_key(body)
@@ -357,8 +364,78 @@ class Connector:
         self._status(listing, at, snapshot=False)
 
     def watch_changes_once(self) -> None:
-        """Consume each scope's watch once (connector contract §15). Not implemented yet."""
-        raise NotImplementedError("the watch path of contract §15 is not implemented yet")
+        """Consume each scope's watch until the server ends it, once per scope (contract §15).
+
+        Synchronous: the background loop runs the same per-scope step in its own threads.
+        """
+        for scope in list(self._versions):
+            if not self.watch_scope_once(scope):
+                return  # continuity was lost; the new snapshot set every scope's version again
+
+    def watch_scope_once(self, scope: ListingScope) -> bool:
+        """Consume one scope's watch until it ends; False when continuity was lost (a gap and a snapshot)."""
+        watch = getattr(self.cluster, "watch", None)
+        version = self._versions.get(scope)
+        if watch is None or version is None:
+            return True
+        try:
+            for event in watch(scope, version):
+                self._apply_watch_event(scope, event)
+        except ResourceVersionExpired:
+            with self._changes_lock:
+                self.watch_stats["expired"] += 1
+                self._put(
+                    self._changes,
+                    wire.GapItem(seq=0, at=self.clock(), reason="RESOURCE_VERSION_EXPIRED"),
+                )
+                self.watch_stats["relists"] += 1
+                self.poll_changes_once(force_snapshot=True)
+            return False
+        except Exception:
+            logger.warning("watch of %s/%s failed", scope.namespace, scope.kind, exc_info=True)
+            with self._changes_lock:
+                self._put(
+                    self._changes,
+                    wire.GapItem(seq=0, at=self.clock(), reason="BACKEND_UNREACHABLE"),
+                )
+                self.poll_changes_once(force_snapshot=True)
+            return False
+        self.watch_stats["resumes"] += 1
+        return True
+
+    def _apply_watch_event(self, scope: ListingScope, event: WatchEvent) -> None:
+        with self._changes_lock:
+            if self._versions.get(scope) is None:
+                return  # a snapshot replaced this scope's version while the event was in flight
+            self._versions[scope] = event.resource_version
+            self.watch_stats["events"] += 1
+            body = event.body
+            if event.type == "BOOKMARK" or body.get("kind") in wire.DENIED_KINDS:
+                return
+            at = self.clock()
+            if scope.kind == "Event":
+                key, digest = _event_key(body), _digest(body)
+                if self._events_seen.get(key) != digest:
+                    self._events_seen[key] = digest
+                    self._put(self._changes, wire.EventItem(seq=0, observed_at=at, body=body))
+                return
+            object_id = object_key(body)
+            if object_id is None:
+                return
+            if event.type == "DELETED":
+                # observed deletion: a continuous watch (a gap would have replaced this version)
+                if self._seen.pop(object_id, None) is not None:
+                    self._put(
+                        self._changes,
+                        wire.ObjectDeletedItem(
+                            seq=0, observed_at=at, key=object_id, source="watch"
+                        ),
+                    )
+                return
+            digest = _digest(body)
+            if self._seen.get(object_id) != digest:
+                self._seen[object_id] = digest
+                self._put(self._changes, wire.ObjectItem(seq=0, observed_at=at, body=body))
 
     def run(
         self,

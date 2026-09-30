@@ -1,15 +1,10 @@
-"""The watch-driven change stream (connector contract §15): continuity, gaps and the two kinds of deletion.
-
-Written before the implementation; each test is a strict expected failure until the watch path exists.
-"""
+"""The watch-driven change stream (connector contract §15): continuity, gaps and the two kinds of deletion."""
 
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
-
-import pytest
 
 from packages.connector import wire
 from packages.connector.client import ConnectorClient, in_process_transport
@@ -19,7 +14,6 @@ from packages.rca.live import ListingScope, ObjectListing
 T0 = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
 PODS = ListingScope("shop", "Pod")
 EVENTS = ListingScope("shop", "Event")
-PENDING = pytest.mark.xfail(strict=True, reason="watch path not implemented yet (contract §15)")
 
 
 class Clock:
@@ -101,13 +95,17 @@ def items(client: ConnectorClient) -> list[wire.StreamItem]:
     return client.read("read_changes", None).ordered()
 
 
+def since(client: ConnectorClient, cursor: str | None) -> list[wire.StreamItem]:
+    """What a consumer that already held ``cursor`` reads next: a gap reaches only such a consumer."""
+    return client.read("read_changes", cursor).ordered()
+
+
 def after_snapshot(client: ConnectorClient) -> list[wire.StreamItem]:
     everything = items(client)
     end = max(i for i, item in enumerate(everything) if isinstance(item, wire.ListingStatusItem))
     return everything[end + 1 :]
 
 
-@PENDING
 def test_a_watch_event_is_emitted_and_the_watch_resumes_from_its_version_without_a_gap() -> None:
     connector, client, cluster, _ = make()
     cluster.batches[PODS] = [[event("MODIFIED", pod("a", "11"), "11")], []]
@@ -120,7 +118,6 @@ def test_a_watch_event_is_emitted_and_the_watch_resumes_from_its_version_without
     assert cluster.lists == 1  # a resumed watch never relists
 
 
-@PENDING
 def test_a_watch_event_delivered_twice_is_one_item() -> None:
     connector, client, cluster, _ = make()
     change = pod("a", "11")
@@ -129,26 +126,28 @@ def test_a_watch_event_delivered_twice_is_one_item() -> None:
     assert [type(i).__name__ for i in after_snapshot(client)] == ["ObjectItem"]
 
 
-@PENDING
 def test_an_expired_version_is_a_gap_then_a_new_snapshot() -> None:
     from packages.connector.watch import ResourceVersionExpired
 
     connector, client, cluster, _ = make()
+    cursor = client.read(
+        "read_changes", None
+    ).next_cursor  # a consumer that has read the first snapshot
     cluster.batches[PODS] = [ResourceVersionExpired("410 Gone")]
     connector.watch_changes_once()
-    tail = items(client)
+    tail = since(client, cursor)
     gaps = [i for i in tail if isinstance(i, wire.GapItem)]
     assert [g.reason for g in gaps] == ["RESOURCE_VERSION_EXPIRED"]
     snapshots = [i for i in tail if isinstance(i, wire.SnapshotBeginItem)]
-    assert len(snapshots) == 2 and cluster.lists == 2  # the first LIST and the relist after the gap
+    assert len(snapshots) == 1 and cluster.lists == 2  # the relist after the gap is a new snapshot
 
 
-@PENDING
 def test_a_create_and_delete_inside_the_lost_interval_is_not_reconstructed() -> None:
     from packages.connector.watch import ResourceVersionExpired
 
     connector, client, cluster, _ = make()
     # while continuity is lost, "ghost" is created and deleted: the relist cannot see it
+    cursor = client.read("read_changes", None).next_cursor
     cluster.batches[PODS] = [ResourceVersionExpired("410 Gone")]
     connector.watch_changes_once()
     names = [i.body["metadata"]["name"] for i in items(client) if isinstance(i, wire.ObjectItem)]
@@ -157,10 +156,9 @@ def test_a_create_and_delete_inside_the_lost_interval_is_not_reconstructed() -> 
         isinstance(i, wire.ObjectDeletedItem) and "ghost" in i.key for i in items(client)
     )
     # the stream says continuity was lost; it never claims the interval was complete
-    assert any(isinstance(i, wire.GapItem) for i in items(client))
+    assert any(isinstance(i, wire.GapItem) for i in since(client, cursor))
 
 
-@PENDING
 def test_a_watch_delete_is_an_observed_deletion_and_a_listing_absence_an_inferred_one() -> None:
     connector, client, cluster, clock = make()
     cluster.batches[PODS] = [[event("DELETED", pod("a", "12"), "12")]]
@@ -177,7 +175,6 @@ def test_a_watch_delete_is_an_observed_deletion_and_a_listing_absence_an_inferre
     assert [d.source for d in inferred] == ["listing"]
 
 
-@PENDING
 def test_a_watch_never_emits_a_denied_kind() -> None:
     connector, client, cluster, _ = make()
     secret = {

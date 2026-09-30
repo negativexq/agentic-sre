@@ -241,7 +241,7 @@ def test_a_backend_error_crosses_the_stream_as_a_failure_not_a_lost_session(
     with pytest.raises(ConnectorReadError):
         ConnectorClusterReader(client).list_objects(["shop"])
     assert harness.gateway.connected() == {"lab-0"}
-    assert wire.WIRE_VERSION == "connector.v1"
+    assert wire.WIRE_VERSION == "connector.v2"  # raised by contract §15 (owner-approved)
 
 
 def test_frames_carry_the_request_id_and_the_payload_untouched() -> None:

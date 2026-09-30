@@ -24,7 +24,7 @@ from packages.rca.model import (
     TrafficObservation,
 )
 
-WIRE_VERSION = "connector.v1"
+WIRE_VERSION = "connector.v2"  # v2: watch-driven change stream (contract §15)
 MAX_BATCH = 500
 MAX_RESPONSE_BYTES = 16_000_000
 MAX_NAMESPACES = 32

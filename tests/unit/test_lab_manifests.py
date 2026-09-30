@@ -202,6 +202,11 @@ def test_the_connector_image_and_the_control_plane_targets_keep_their_promises()
     assert "volume rm" in makefile[makefile.index("\ncp-reset:") :]
     up = makefile[makefile.index("\ncp-up:") : makefile.index("\ncp-down:")]
     assert "KUBECONFIG=/dev/null" in up and "SRE_CONNECTOR_MODE=remote" in up
+    check = makefile[makefile.index("\nconnector-check:") : makefile.index("\ncp-up:")]
+    assert "create networkchaos.chaos-mesh.org" in check  # the connector can never inject a fault
+    assert (
+        "list networkchaos.chaos-mesh.org" in check
+    )  # and in chaos-mesh it reads chaos objects, not pods
     deploy = makefile[makefile.index("\nconnector-deploy:") : makefile.index("\nconnector-check:")]
     assert (
         "docker" not in deploy and "observability.yaml" not in deploy

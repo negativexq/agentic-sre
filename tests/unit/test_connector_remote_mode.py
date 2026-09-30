@@ -161,3 +161,74 @@ def test_the_gateway_needs_one_named_connector_among_the_allowed(tmp_path: Path)
         gateway_from_environment(env)
     with pytest.raises(ValueError):
         gateway_from_environment({**env, "SRE_CONNECTOR_ID": "c"})
+
+
+def test_backends_configured_on_the_connector_are_not_reported_as_unconfigured() -> None:
+    from apps.control_plane.console.dto import SystemConnector
+
+    row = SystemConnector(name="Connector", status="connected", detail="connected: lab")
+    status = build_system_status(
+        factory()(),
+        reader_configured=False,
+        connector_status=row,
+        connector_capabilities=frozenset({"changes", "history", "alerts", "logs"}),
+    )
+    by_name = {c.name: c for c in status.connectors}
+    assert by_name["Kubernetes"].status == "connected"
+    assert by_name["Alertmanager"].status == "connected"
+    assert by_name["Loki"].status == "connected"
+    assert by_name["Prometheus"].status == "not_configured"
+    assert "connector" in (by_name["Prometheus"].detail or "")
+    assert "PROMETHEUS_URL" not in " ".join(c.detail or "" for c in status.connectors)
+
+
+def test_with_no_connector_every_backend_is_unavailable_not_unconfigured() -> None:
+    status = build_system_status(
+        factory()(),
+        reader_configured=False,
+        connector_capabilities=frozenset(),
+    )
+    by_name = {c.name: c.status for c in status.connectors}
+    assert {by_name[n] for n in ("Kubernetes", "Alertmanager", "Prometheus", "Loki", "Tempo")} == {
+        "unavailable"
+    }
+
+
+def test_a_lost_connector_is_logged_once_and_its_return_is_logged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import logging
+
+    from packages.connector.client import ConnectorClient
+
+    # Another test's logging configuration can disable existing loggers, so this one attaches its own
+    # handler to the module's logger and re-enables it for the duration.
+    logger = logging.getLogger("apps.control_plane.connector_intake")
+    monkeypatch.setattr(logger, "disabled", False)
+    monkeypatch.setattr(logger, "level", logging.INFO)
+    messages: list[str] = []
+
+    class Collect(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            messages.append(record.getMessage())
+
+    handler = Collect(level=logging.INFO)
+    logger.addHandler(handler)
+    state = {"up": False}
+    connector = Connector(cluster=FakeCluster(), alert_source=FakeAlerts(), accept_webhook=True)
+
+    def transport(payload: bytes) -> bytes:
+        if not state["up"]:
+            raise ConnectionError("gone")
+        return connector.handle(payload)
+
+    consumer = AlertStreamConsumer(ConnectorClient(transport), factory())
+    try:
+        for _ in range(5):
+            consumer.step()
+        assert sum("unavailable" in m for m in messages) == 1
+        state["up"] = True
+        consumer.step()
+        assert any("available again" in m for m in messages)
+    finally:
+        logger.removeHandler(handler)

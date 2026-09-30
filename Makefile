@@ -224,12 +224,19 @@ connector-deploy: lab-pki
 	$(KUBECTL) -n connector rollout status deployment/connector --timeout=180s
 	$(KUBECTL) -n observability rollout status deployment/alertmanager --timeout=180s
 
-# The connector can read but never write, and never reads Secrets, in every namespace it watches.
+# The connector can read but never write, never reads Secrets and can never inject a fault, in every
+# namespace it watches. What it reads differs: workloads in `sre-demo` and `lab-control`, only Chaos
+# Mesh objects in `chaos-mesh` (the evidence namespace).
 connector-check:
-	@for ns in sre-demo lab-control chaos-mesh; do \
+	@for ns in sre-demo lab-control; do \
 		test "$$($(KUBECTL) auth can-i list pods --as=$(CONNECTOR_SA) -n $$ns)" = yes \
 			|| { echo "the connector cannot list pods in $$ns"; exit 1; }; \
-		for verb in "create pods" "patch deployments" "delete pods" "get secrets" "list secrets"; do \
+	done; \
+	test "$$($(KUBECTL) auth can-i list networkchaos.chaos-mesh.org --as=$(CONNECTOR_SA) -n chaos-mesh)" = yes \
+		|| { echo "the connector cannot list chaos objects in chaos-mesh"; exit 1; }; \
+	for ns in sre-demo lab-control chaos-mesh; do \
+		for verb in "create pods" "patch deployments" "delete pods" "get secrets" "list secrets" \
+			"create networkchaos.chaos-mesh.org" "delete networkchaos.chaos-mesh.org"; do \
 			test "$$($(KUBECTL) auth can-i $$verb --as=$(CONNECTOR_SA) -n $$ns)" = no \
 				|| { echo "the connector is not denied: $$verb in $$ns"; exit 1; }; \
 		done; \

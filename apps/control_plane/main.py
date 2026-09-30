@@ -39,7 +39,7 @@ from apps.control_plane.schemas import (
     RevisionDiffResponse,
 )
 from apps.control_plane.timeline import diagnosis_phases, newer_run_note
-from packages.connector.client import ConnectorClient, in_process_transport
+from packages.connector.client import ConnectorClient, ConnectorError, in_process_transport
 from packages.connector.service import Connector
 from packages.connector.transport import ConnectorGateway
 from packages.contracts import (
@@ -137,13 +137,45 @@ def build_system_status(
     *,
     reader_configured: bool,
     connector_status: SystemConnector | None = None,
+    connector_capabilities: frozenset[str] | None = None,
 ) -> SystemStatus:
-    """Assemble connector health from what the control plane can truthfully tell."""
+    """Assemble connector health from what the control plane can truthfully tell.
+
+    In remote mode the backends are configured on the connector, not here, so their rows come from
+    the capabilities the connector reports (``None`` keeps the environment-based rows).
+    """
     try:
         session.execute(text("SELECT 1"))
         database = SystemConnector(name="Database", status="connected", detail=None)
     except SQLAlchemyError:
         database = SystemConnector(name="Database", status="unavailable", detail="SELECT 1 failed")
+    if connector_capabilities is not None:
+
+        def through_connector(name: str, wanted: set[str]) -> SystemConnector:
+            if not connector_capabilities:
+                return SystemConnector(
+                    name=name, status="unavailable", detail="no connector is connected"
+                )
+            if wanted & connector_capabilities:
+                return SystemConnector(
+                    name=name, status="connected", detail="read through the connector"
+                )
+            return SystemConnector(
+                name=name, status="not_configured", detail="not configured on the connector"
+            )
+
+        return SystemStatus(
+            connectors=[
+                database,
+                through_connector("Kubernetes", {"changes", "history"}),
+                through_connector("Alertmanager", {"alerts"}),
+                through_connector("Prometheus", {"resource_pressure", "traffic"}),
+                through_connector("Loki", {"logs"}),
+                through_connector("Tempo", {"runtime_traces"}),
+                _env_connector("Email", "SRE_SMTP_HOST"),
+                *([connector_status] if connector_status is not None else []),
+            ]
+        )
     kubernetes = (
         SystemConnector(name="Kubernetes", status="connected", detail="cluster reader configured")
         if reader_configured
@@ -311,11 +343,20 @@ def create_app(
             )
         )
 
+    def connector_capabilities() -> frozenset[str] | None:
+        if remote_client is None:
+            return None
+        try:
+            return frozenset(remote_client.capabilities())
+        except ConnectorError:
+            return frozenset()
+
     def system_status_provider(session: Session) -> SystemStatus:
         return build_system_status(
             session,
             reader_configured=diagnoser.reader is not None,
             connector_status=connector_status(),
+            connector_capabilities=connector_capabilities(),
         )
 
     app.include_router(

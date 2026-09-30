@@ -51,6 +51,7 @@ class AlertStreamConsumer:
         self._clock = clock
         self._limit = page_limit
         self.cursor: str | None = None
+        self._available: bool | None = None  # log a change of state once, not every second
 
     def _latest_poll(self, session: Session) -> datetime | None:
         latest = session.scalar(
@@ -78,9 +79,14 @@ class AlertStreamConsumer:
         try:
             page = self._client.read("read_alerts", self.cursor, self._limit)
         except ConnectorError as error:
-            logger.warning("alert stream unavailable: %s", error)
+            if self._available is not False:
+                logger.warning("alert stream unavailable: %s", error)
+            self._available = False
             self._connector_lost(error)
             return 0
+        if self._available is False:
+            logger.info("alert stream available again")
+        self._available = True
         incident_ids: list[UUID] = []
         with self._session_factory() as session:
             repository = AlertCoverageRepository(session)

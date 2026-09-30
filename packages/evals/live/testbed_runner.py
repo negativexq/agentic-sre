@@ -190,6 +190,14 @@ class World(Protocol):
         """Warning events of the fault's target pod as the cluster holds them now."""
         ...
 
+    def foreign_faults(self) -> list[str]:
+        """Chaos objects or chaos events in the watched namespaces that this run did not create.
+
+        A manual diagnostic experiment, or one left by another run, would enter the run's evidence
+        and could be blamed for, or credited with, the incident.
+        """
+        ...
+
     def inject(self, params: RunParameters, journal: InjectorJournal, name: str) -> Injection: ...
 
     def applied_at(self, injection: Injection) -> datetime | None: ...
@@ -467,17 +475,20 @@ def run_once(
         run.wait(params.offset_seconds)
         # the gate: a target that already failed makes every later effect ambiguous (design, "Baseline health")
         warnings = world.target_warnings()
+        foreign = world.foreign_faults()
         run.journal.record(
             verb="check",
             object="target/events",
             role="baseline_gate",
-            ok=not warnings,
-            payload={"warnings": warnings},
+            ok=not warnings and not foreign,
+            payload={"warnings": warnings, "foreign_faults": foreign},
         )
         if warnings:
             raise BaselineNotQuiet(
                 f"the target raised warnings before the injection: {warnings[:5]}"
             )
+        if foreign:
+            raise BaselineNotQuiet(f"faults this run did not create are present: {foreign[:5]}")
         prefix = {"cpu-stress": "pod-stress", "env-delay": "env-delay"}.get(
             params.fault, "dep-delay"
         )
@@ -530,6 +541,16 @@ def run_once(
         )
         # 5. the stored diagnoses, once they stop changing
         stored = _await_diagnoses(world, clock, run, alerts, injection.injected_at)
+        foreign = world.foreign_faults()
+        run.journal.record(
+            verb="check",
+            object="chaos",
+            role="isolation_check",
+            ok=not foreign,
+            payload={"foreign_faults": foreign},
+        )
+        if foreign:
+            problems.append(f"faults this run did not create were present: {foreign[:5]}")
     except BaselineNotQuiet:
         # kept for inspection, out of the way of the repeat's real run
         world.stop_load()

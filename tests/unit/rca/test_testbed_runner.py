@@ -58,6 +58,8 @@ class FakeWorld:
         self.apply_event, self.diagnose, self.fail_on_inject = apply_event, diagnose, fail_on_inject
         self.injected: datetime | None = None
         self.baseline_warnings: list[str] = []
+        self.foreign_before: list[str] = []
+        self.foreign_after: list[str] = []
         self.removed: datetime | None = None
         self.document = diagnose_case(build_case(source(full())), config=OFF).model_dump(
             mode="json"
@@ -128,6 +130,9 @@ class FakeWorld:
 
     def target_warnings(self) -> list[str]:
         return list(self.baseline_warnings)
+
+    def foreign_faults(self) -> list[str]:
+        return list(self.foreign_before if self.injected is None else self.foreign_after)
 
     def rediagnose(self, alerts: Collection[str], since: datetime) -> int:
         self.rediagnosed_after_removal = self.removed is not None
@@ -348,3 +353,21 @@ def test_a_config_change_is_a_rollout_whose_execution_is_the_new_replica_set() -
         "rs9",
     )
     assert roles["target_effect"].instance_uid == "p9" and not roles["propagation"].knowable
+
+
+def test_a_fault_the_run_did_not_create_stops_it_before_the_injection(tmp_path: Path) -> None:
+    from packages.evals.live.testbed_runner import BaselineNotQuiet
+
+    world = FakeWorld(FakeClock())
+    world.foreign_before = ["sre-demo/StressChaos/diag-stress"]
+    with pytest.raises(BaselineNotQuiet, match="did not create"):
+        run(tmp_path, world)
+    assert "inject" not in world.calls
+
+
+def test_a_fault_that_appears_during_the_run_invalidates_it(tmp_path: Path) -> None:
+    world = FakeWorld(FakeClock())
+    world.foreign_after = ["sre-demo/StressChaos/diag-stress (event Applied)"]
+    _, _, outcome = run(tmp_path, world)
+    assert not outcome.record.valid
+    assert any("did not create" in reason for reason in outcome.record.invalid_reasons)

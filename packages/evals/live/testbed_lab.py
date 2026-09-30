@@ -58,6 +58,10 @@ SCENARIO_ID = "dependency-delay-payment"
 CONFIG_SCENARIO_ID = "config-delay-payment"
 DIRECT_SCENARIO_ID = "direct-stress-order"
 MAX_WARMUPS = 3
+RUN_LABEL = (
+    "testbed.agentic-sre.io/run"  # every experiment the harness creates carries its run's id
+)
+CHAOS_RESOURCES = ("networkchaos", "stresschaos", "podchaos", "iochaos", "httpchaos", "schedules")
 WARMUP_SECONDS = 90.0  # a restarted pod fails probes for its first minutes under load
 WATCHED_NAMESPACES = ("sre-demo", "lab-control", "chaos-mesh")
 
@@ -141,6 +145,7 @@ class LabWorld:
         self.target_script = _PAYMENT_SCRIPT if payment_probe else _TARGET_SCRIPT
         self._rollout: tuple[datetime, str, str, str, str] | None = None
         self._last_delay = ""
+        self._experiments: set[str] = set()  # the experiments this run created
         self.clock = clock or RealClock()
         self.pg_container, self.pg_port = pg_container, pg_port
         self.control_plane = control_plane
@@ -201,6 +206,7 @@ class LabWorld:
         *before* the connector restarts, and the connector restarts before the control plane starts on its empty database.
         """
         self.database = database_name(run_id)
+        self._experiments.clear()
         self._delete_experiments()
         self._unset_delay()  # a run that died mid-way may have left the change in place
         self._quiet_target_pod()
@@ -332,6 +338,29 @@ class LabWorld:
             if e.get("type") == "Warning" and e["involvedObject"].get("name") in names
         ]
 
+    def foreign_faults(self) -> list[str]:
+        found: list[str] = []
+        for namespace in WATCHED_NAMESPACES:
+            for resource in CHAOS_RESOURCES:
+                result = self._run(
+                    ["kubectl", "-n", namespace, "get", resource, "-o", "json"], check=False
+                )
+                if result.returncode != 0:
+                    continue  # a kind the lab does not serve
+                for item in json.loads(result.stdout)["items"]:
+                    labels = item["metadata"].get("labels") or {}
+                    if labels.get(RUN_LABEL) != self.database:
+                        found.append(f"{namespace}/{item['kind']}/{item['metadata']['name']}")
+            events = json.loads(
+                self._run(["kubectl", "-n", namespace, "get", "events", "-o", "json"]).stdout
+            )["items"]
+            for event in events:
+                involved = event.get("involvedObject", {})
+                kind, name = involved.get("kind", ""), involved.get("name", "")
+                if (kind.endswith("Chaos") or kind == "Schedule") and name not in self._experiments:
+                    found.append(f"{namespace}/{kind}/{name} (event {event.get('reason')})")
+        return sorted(set(found))
+
     def _quiet_target_pod(self) -> None:
         """A fresh target pod that raised no warning while it warmed up, or the run does not start.
 
@@ -443,9 +472,11 @@ class LabWorld:
             )
         manifest = (
             f"apiVersion: chaos-mesh.org/v1alpha1\nkind: {kind}\n"
-            f"metadata: {{name: {name}, namespace: {NAMESPACE}}}\nspec:\n{body}"
+            f"metadata: {{name: {name}, namespace: {NAMESPACE}, "
+            f"labels: {{{RUN_LABEL}: {self.database}}}}}\nspec:\n{body}"
             f"  duration: {int(params.duration_seconds) + 60}s\n"
         )
+        self._experiments.add(name)
         result = self._run(["kubectl", "apply", "-f", "-"], stdin=manifest, check=False)
         ok = result.returncode == 0
         uid = ""

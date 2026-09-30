@@ -302,3 +302,12 @@ alerts, one of which the harness took as the primary incident; that slice has no
 The harness now ignores an incident whose alert began before the injection. In the product, with one persistent
 database, the occurrence key (fingerprint and start) already makes the resend idempotent; a new or restored
 database would still open incidents for alerts that arrive already resolved, which is worth a rule of its own.
+
+### Isolation from faults the run did not create (2026-09-30, owner-approved)
+
+A manual diagnostic experiment (`diag-stress`, run while calibrating the CPU stress) entered the evidence of four
+phase-0 databases (20 incidents). Every experiment the harness creates now carries the label
+`testbed.agentic-sre.io/run` with its run's id. Before the injection the run is refused if any chaos object in the
+watched namespaces lacks that label for this run, or any chaos event names an experiment this run did not create;
+after the diagnoses are stored the same check runs again, and a finding makes the run `INVALID`. Manual diagnostic
+experiments therefore cannot be scored as part of a run, whether they happen before it or during it.

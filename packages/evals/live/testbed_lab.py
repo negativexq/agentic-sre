@@ -529,7 +529,7 @@ def direct_pod_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> 
             "baseline_seconds": ParameterRange(low=45, high=45),
             "offset_seconds": ParameterRange(low=0, high=20),
             "duration_seconds": ParameterRange(low=90, high=110),
-            "cpu_workers": ParameterRange(low=16, high=20),
+            "cpu_workers": ParameterRange(low=40, high=48),
             "load_rps": ParameterRange(low=8, high=12),
         },
     )

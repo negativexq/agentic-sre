@@ -246,3 +246,21 @@ control plane).
 **Method.** Debugging by one eight-minute live run per hypothesis was slow and read each run's symptom
 instead of its cause; the audit above took minutes over data already recorded. Such audits come first from now
 on, and a live run confirms a fix.
+
+### Confirmation run after the baseline fix (2026-09-30)
+
+Valid, the gate passed (no warning on the target before the injection), cause and exact instance named, no false
+strong authority; the fault-execution rule still did not fire. Read from the run's own database, two blockers
+remain, and neither is a harness defect:
+
+1. **The closing event lost a race with the incident's resolution by 0.17 s.** `Recovered` happened at 15:02:59
+   and reached the control plane at 15:03:14.681 (the connector's event path lags about 15 s); the incident
+   resolved at 15:03:14.508 and its window froze there, so every later diagnosis, including the one asked for
+   after recovery, correctly treats the interval as unclosed. The alert's resolve delay and the event lag are of
+   the same size, so this is a coin toss per run.
+2. **A CPU stress leaves its effect as a metric, not as an event of the pod instance.** With the probe headroom
+   the stressed pod failed no probe in this run; its only effect finding was `RESOURCE_PRESSURE` (throttling 22% to
+   100%), which the engine does not bind to a pod instance, so no exact Pod claim carried an effect.
+
+Both are properties of the engine and the product path (roadmap C2 and the evidence-arrival timing of a resolved
+incident), not of the lab, and are left for decisions rather than tuned around in the harness.

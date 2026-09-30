@@ -192,6 +192,7 @@ def test_alembic_migration_up_and_down(tmp_path: Path) -> None:
         "investigation_reads",
         "investigation_runs",
         "event_versions",
+        "journal_arrivals",
         "lifecycle_observations",
         "log_observations",
         "object_versions",

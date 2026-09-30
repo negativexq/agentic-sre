@@ -64,6 +64,7 @@ from packages.storage.models import (
     IncidentRow,
     InvestigationReadRow,
     InvestigationRunRow,
+    JournalArrivalRow,
     LifecycleObservationRow,
     LogObservationRow,
     ObjectVersionRow,
@@ -901,6 +902,18 @@ def _nested_uid(body: dict[str, Any], parent_key: str) -> str | None:
     return uid if isinstance(uid, str) else None
 
 
+def _record_arrival(
+    session: Session, journal: str, row: EventVersionRow | ObjectVersionRow, at: datetime | None
+) -> None:
+    """Keep when the Connector observed a new journal row (contract §15, measurement only)."""
+    if at is None:
+        return
+    session.flush()
+    session.add(
+        JournalArrivalRow(journal=journal, version_id=row.version_id, connector_observed_at=at)
+    )
+
+
 class EventRepository:
     """Append-only journal of observed Kubernetes events.
 
@@ -913,7 +926,13 @@ class EventRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def record(self, body: dict[str, Any], observed_at: datetime) -> bool:
+    def record(
+        self,
+        body: dict[str, Any],
+        observed_at: datetime,
+        *,
+        connector_observed_at: datetime | None = None,
+    ) -> bool:
         involved = child(body, "involvedObject")
         kind, name = involved.get("kind"), involved.get("name")
         if not isinstance(kind, str) or not isinstance(name, str):
@@ -934,18 +953,18 @@ class EventRepository:
             or _timestamp(body.get("eventTime"))
             or observed_at
         )
-        self._session.add(
-            EventVersionRow(
-                namespace=namespace,
-                involved_kind=kind,
-                involved_name=name,
-                involved_uid=_nested_uid(body, "involvedObject"),
-                dedup_key=key,
-                event_at=event_at,
-                observed_at=observed_at,
-                body=body,
-            )
+        row = EventVersionRow(
+            namespace=namespace,
+            involved_kind=kind,
+            involved_name=name,
+            involved_uid=_nested_uid(body, "involvedObject"),
+            dedup_key=key,
+            event_at=event_at,
+            observed_at=observed_at,
+            body=body,
         )
+        self._session.add(row)
+        _record_arrival(self._session, "event", row, connector_observed_at)
         self._session.commit()
         return True
 
@@ -1151,7 +1170,13 @@ class ObjectVersionRepository:
             )
         )
 
-    def record(self, body: dict[str, Any], observed_at: datetime) -> bool:
+    def record(
+        self,
+        body: dict[str, Any],
+        observed_at: datetime,
+        *,
+        connector_observed_at: datetime | None = None,
+    ) -> bool:
         """Store ``body`` unless it equals the object's latest live version."""
         metadata = child(body, "metadata")
         kind, name = body.get("kind"), metadata.get("name")
@@ -1178,19 +1203,19 @@ class ObjectVersionRepository:
             return False
         else:
             lifecycle = Lifecycle.UPDATED
-        self._session.add(
-            ObjectVersionRow(
-                object_key=key,
-                namespace=namespace,
-                kind=kind,
-                name=name,
-                uid=uid,
-                observed_at=observed_at,
-                content_hash=digest,
-                body=body,
-                lifecycle=lifecycle.value,
-            )
+        row = ObjectVersionRow(
+            object_key=key,
+            namespace=namespace,
+            kind=kind,
+            name=name,
+            uid=uid,
+            observed_at=observed_at,
+            content_hash=digest,
+            body=body,
+            lifecycle=lifecycle.value,
         )
+        self._session.add(row)
+        _record_arrival(self._session, "object", row, connector_observed_at)
         self._session.commit()
         return True
 

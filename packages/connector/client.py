@@ -226,6 +226,8 @@ class StreamedClusterReader:
         self._blocked: str | None = None
         self._lock = threading.RLock()
         self._applied = 0  # stream items applied so far
+        # when the Connector observed each object and Event (contract §15, measurement only)
+        self._observed: dict[str, datetime] = {}
         self._reported = 0  # ... as of the last ``pending`` call
 
     def pending(self) -> bool:
@@ -243,8 +245,20 @@ class StreamedClusterReader:
             self._reported = self._applied
             return changed
 
+    def observed_at_of(self, body: dict[str, Any]) -> datetime | None:
+        """When the Connector observed this object or Event, if it arrived through the stream."""
+        with self._lock:
+            key = _event_id(body) if body.get("kind") == "Event" else _key(body)
+            return self._observed.get(key) if key is not None else None
+
     def _apply(self, item: wire.StreamItem) -> None:
         self._applied += 1
+        if isinstance(item, wire.ObjectItem):
+            key = _key(item.body)
+            if key is not None:
+                self._observed[key] = item.observed_at
+        elif isinstance(item, wire.EventItem):
+            self._observed[_event_id(item.body)] = item.observed_at
         if isinstance(item, wire.GapItem):
             if item.reason == "BACKEND_UNREACHABLE":
                 self._blocked = f"the connector could not read the cluster at {item.at.isoformat()}"

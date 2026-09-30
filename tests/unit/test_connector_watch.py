@@ -265,3 +265,26 @@ def test_the_control_plane_journals_only_when_the_stream_carried_something() -> 
     stop.set()
     thread.join(timeout=2)
     assert len(calls) == 2  # once per page that carried something, never on a fixed interval
+
+
+def test_the_journal_keeps_when_the_connector_observed_a_change_without_using_it() -> None:
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import Session
+
+    from packages.storage.models import Base, JournalArrivalRow, ObjectVersionRow
+    from packages.storage.repositories import ObjectVersionRepository
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    seen = T0 - timedelta(seconds=14)
+    with Session(engine) as session:
+        repository = ObjectVersionRepository(session)
+        repository.record(pod("a"), T0, connector_observed_at=seen)
+        repository.record(pod("b"), T0)  # a change that did not come through a stream
+        ids = {r.name: r.version_id for r in session.scalars(select(ObjectVersionRow))}
+        arrivals = {
+            r.version_id: r.connector_observed_at
+            for r in session.scalars(select(JournalArrivalRow))
+        }
+    assert arrivals[ids["a"]].replace(tzinfo=UTC) == seen
+    assert ids["b"] not in arrivals  # the evidence row itself carries no new column

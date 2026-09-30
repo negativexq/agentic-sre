@@ -180,6 +180,22 @@ class EventVersionRow(Base):
     body: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 
+class JournalArrivalRow(Base):
+    """When the Connector observed a journaled object version or Event (connector contract §15).
+
+    Measurement only, kept apart from the evidence rows: no evidence window, eligibility or decision
+    reads it until roadmap C9 decides the membership rule.
+    """
+
+    __tablename__ = "journal_arrivals"
+    __table_args__ = (Index("ix_journal_arrivals_row", "journal", "version_id", unique=True),)
+
+    arrival_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    journal: Mapped[str] = mapped_column(String(16), nullable=False)  # "event" or "object"
+    version_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    connector_observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
 class ObjectVersionRow(Base):
     """One observed version of a Kubernetes object: a content change or a lifecycle event.
 

@@ -419,8 +419,15 @@ class DiagnosisService:
                         exc_info=True,
                     )
 
+            observed_of = getattr(self.reader, "observed_at_of", None)
+
+            def connector_time(body: dict[str, Any]) -> datetime | None:
+                return observed_of(body) if callable(observed_of) else None
+
             def record(body: dict[str, Any], observed_at: datetime) -> bool:
-                stored = repository.record(body, observed_at)
+                stored = repository.record(
+                    body, observed_at, connector_observed_at=connector_time(body)
+                )
                 best_effort(lambda: lifecycle.observe(body, observed_at))
                 best_effort(lambda: indexer.observe(body, observed_at))
                 return stored
@@ -477,7 +484,8 @@ class DiagnosisService:
                 event_bodies = []
                 event_listing_failed = True
             stored = object_snapshot.stored_versions + sum(
-                events.record(body, event_observed_at) for body in event_bodies
+                events.record(body, event_observed_at, connector_observed_at=connector_time(body))
+                for body in event_bodies
             )
             cycle_failures = failures + lifecycle.failures
             cycle_repairs = lifecycle.repairs + index_repairs

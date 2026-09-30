@@ -27,7 +27,7 @@ Contract: [`connector-boundary-contract.md`](connector-boundary-contract.md).
 | A1 | Logical separation: control-plane readers come from the connector client | DONE | A0 |
 | A2 | Wire schema, in-process transport, refusal of lossy encodings | DONE | A1 |
 | A3 | Migration gate: recorded real data survives the wire unchanged; direct-vs-wire epistemic digests identical (6 of 6 scenarios) | DONE | A2 |
-| A4 | Alert path behind the connector: cursor-paged `read_alerts` and `read_changes`, `Gap`, heartbeat-derived `W`, local webhook receiver, change mirror (contract §10) | DONE in-process, opt-in via `SRE_CONNECTOR_STREAMS`; default flips at A7 | A3 |
+| A4 | Alert path behind the connector: cursor-paged `read_alerts` and `read_changes`, `Gap`, heartbeat-derived `W`, local webhook receiver, change mirror (contract §10) | DONE in-process, opt-in via `SRE_CONNECTOR_STREAMS`; flipping the default stays a separate owner decision (existing tests pin the synchronous webhook reply) | A3 |
 | A5 | Partial `list_events` listing (a failed namespace is skipped silently): contract amendment and fix | DECISION | |
 | A6 | Live `query_traffic` and `query_traces` readers | PARKED | B |
 | A7 | Physical separation: gRPC over mTLS, connector dials out, static certificates (contract §12, §13) | DONE (all suites pass over gRPC; the stream-mode default flip stays a separate decision; `uv lock` left to the owner) | A4 |
@@ -86,7 +86,7 @@ never receives ground truth.
 |---|---|---|
 | F1 | Engine version: `RCA_ENGINE_VERSION` stays 2.1.0 and a test pins it; the series is unreleased | DECISION |
 | F2 | Name of the checkpoint that authorizes a push | DECISION |
-| F3 | Old in-cluster `control-plane` deployment: scale to zero rather than delete; lab recreation is destructive and needs its own approval | DECISION |
+| F3 | Old in-cluster `control-plane` deployment | DONE (moot: the recreated lab never deploys it; the control plane runs outside, B3) | |
 | F4 | `.local` upkeep: compress `baseline-rivals*.json`, prune superseded run directories after checking references | NEXT |
 
 ## 8. Critical path

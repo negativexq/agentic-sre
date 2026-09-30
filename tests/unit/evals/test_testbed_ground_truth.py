@@ -99,6 +99,27 @@ def test_a_complete_ordered_timeline_is_valid() -> None:
     assert timeline_problems(timeline(), "direct-pod-fault", 0.2) == []
 
 
+def test_a_direct_pod_fault_has_nothing_downstream_to_propagate_to() -> None:
+    assert timeline_problems(timeline(propagation_started_at=None), "direct-pod-fault", 0) == []
+    # the exception is that family's alone; any other family still needs the field
+    assert "missing propagation_started_at" in timeline_problems(
+        timeline(propagation_started_at=None), "dependency-fault", 0
+    )
+    # and only that field: an effect that never appeared still invalidates the run
+    assert "missing target_effect_at" in timeline_problems(
+        timeline(propagation_started_at=None, target_effect_at=None), "direct-pod-fault", 0
+    )
+
+
+def test_one_stray_baseline_spike_does_not_put_the_threshold_out_of_reach() -> None:
+    from packages.evals.live.testbed_runner import calibrate
+
+    baseline = [0.02] * 38 + [0.11, 2.96]  # a warm-up spike at the end of a 40 sample baseline
+    assert calibrate(baseline) < 0.5
+    assert calibrate([0.02] * 40) == 0.1  # the floor
+    assert calibrate([0.4] * 40) == pytest.approx(1.2)  # a steadily slow baseline still raises it
+
+
 def test_each_defect_makes_the_run_invalid() -> None:
     assert "missing recovery_at" in timeline_problems(
         timeline(recovery_at=None), "direct-pod-fault", 0

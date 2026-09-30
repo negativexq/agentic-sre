@@ -78,6 +78,11 @@ ORDER = tuple(FIELD_SOURCES)  # the ordering of contract §4.1
 NEGATIVE_CONTROL_NULLABLE = frozenset(
     {"target_effect_at", "propagation_started_at", "symptom_started_at"}
 )
+# A fault on the service that shows the symptom has nothing downstream to propagate to (contract §4.2).
+NULLABLE_BY_FAMILY: dict[str, frozenset[str]] = {
+    "negative-control": NEGATIVE_CONTROL_NULLABLE,
+    "direct-pod-fault": frozenset({"propagation_started_at"}),
+}
 
 
 class Timeline(Model):
@@ -97,7 +102,7 @@ class Timeline(Model):
 def timeline_problems(timeline: Timeline, family: str, clock_offset_seconds: float) -> list[str]:
     """Why a run's timeline is ``INVALID`` (contract §4.1 to §4.3); empty when it is valid."""
     problems: list[str] = []
-    nullable = NEGATIVE_CONTROL_NULLABLE if family == "negative-control" else frozenset()
+    nullable = NULLABLE_BY_FAMILY.get(family, frozenset())
     for name in ORDER:
         stamp = timeline.stamp(name)
         if stamp is None:

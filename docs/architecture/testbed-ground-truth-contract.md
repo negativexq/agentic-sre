@@ -70,11 +70,31 @@ symptom_started_at` is the alerting latency and is recorded, not corrected.
 `negative-control` (the fault has no effect path). Any other run with a null in these fields is
 `INVALID`, not scored.
 
+**Amendment (2026-09-30, owner-approved): `direct-pod-fault`.** In this family the faulted service is
+also the one that shows the symptom, so there is no downstream service for the fault to propagate to.
+`propagation_started_at` is null for a valid `direct-pod-fault` run (and only there, besides the
+negative control), its chain has no `propagation` link, and the scorer does not measure
+propagation-link recall for it. The other fields stay required. The oracle watches one probe of the
+faulted service with two views: `target_effect_at` is the first sustained breach of the calibrated
+threshold (§4.5) and `symptom_started_at` the first sustained breach of the alert's own threshold
+(0.5 s). Because the alert threshold is the looser view of the same samples, the target effect cannot
+be stamped after the symptom, and equal instants are allowed.
+
 ### 4.3 Clock discipline
 
 All stamps use one UTC clock source (the injector host). Oracle probe hosts record their measured
 offset against it; a run whose offset exceeds 1 second is `INVALID`. Timestamps are recorded as
 ISO-8601 with microseconds.
+
+### 4.5 Threshold calibration (amendment 2026-09-30, owner-approved)
+
+The oracle's target and propagation thresholds are calibrated from the run's own quiet baseline and
+written to the injector journal (`probe_calibration`) before the injection. The rule is **three times
+the 90th percentile** of the baseline latencies, never below 0.1 s. It replaces three times the
+maximum: a saturating fault has a heavy-tailed latency, and one stray baseline spike (a slow first
+request) pushed a maximum-based threshold beyond the fault's reach (7.5 s against a 2 s effect). Runs
+recorded before this amendment (suite `slice1`) used the maximum rule; their journals record the
+values used.
 
 ### 4.4 Injector journal
 

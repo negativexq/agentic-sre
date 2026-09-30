@@ -264,8 +264,11 @@ def test_parameters_are_reproducible_from_the_seed_and_stay_in_their_ranges() ->
 
 
 def test_calibration_sits_well_above_the_baseline_and_never_below_the_floor() -> None:
+    # three times the 90th percentile (contract §4.5, amended 2026-09-30; it was the maximum)
     assert calibrate([0.01, 0.02]) == 0.1
-    assert calibrate([0.2, 0.05]) == pytest.approx(0.6)
+    assert calibrate([0.05 + 0.01 * i for i in range(20)]) == pytest.approx(
+        3 * 0.22
+    )  # index 17 of 20
     with pytest.raises(ValueError):
         calibrate([])
 

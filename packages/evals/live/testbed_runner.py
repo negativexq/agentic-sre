@@ -122,11 +122,14 @@ def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
 def calibrate(latencies: Sequence[float], *, floor: float = 0.1) -> float:
     """A latency threshold from a quiet baseline: clearly above what the run itself showed, never below ``floor``.
 
-    Three times the largest baseline latency, so ordinary jitter is never read as an effect.
+    Three times the 90th percentile of the baseline: ordinary jitter is never read as an effect, and one
+    stray spike in a short baseline (a slow first request) does not push the threshold out of reach of the
+    fault (testbed contract §4.5).
     """
     if not latencies:
         raise ValueError("calibration needs at least one baseline sample")
-    return max(floor, 3.0 * max(latencies))
+    ordered = sorted(latencies)
+    return max(floor, 3.0 * ordered[int(0.9 * (len(ordered) - 1))])
 
 
 @dataclass(frozen=True)
@@ -269,21 +272,29 @@ def dependency_chain(injection: Injection) -> Chain:
 class _Run:
     """One repeat in progress: the shared state of the protocol steps."""
 
-    def __init__(self, world: World, clock: Clock, work: Path, params: RunParameters) -> None:
+    def __init__(
+        self, world: World, clock: Clock, work: Path, params: RunParameters, *, direct: bool = False
+    ) -> None:
         self.world, self.clock, self.params = world, clock, params
         self.journal = InjectorJournal(work / "journal.jsonl", clock=clock.now)
         self.writer = SeriesWriter(work / "series.jsonl")
         # Thresholds are read at every sample, so calibration edits them in place.
         self.views: dict[str, float | None] = {"target": None, "propagation": None, "symptom": None}
-        self.oracle = Oracle(
-            [
+        if direct:
+            # The faulted service is the one showing the symptom: one probe, two views of it (contract §4.2).
+            probes = [
+                LatencyProbe(
+                    "target", world.target_measure, _Views(self.views, ("target", "symptom"))
+                )
+            ]
+        else:
+            probes = [
                 LatencyProbe("target", world.target_measure, _Views(self.views, ("target",))),
                 LatencyProbe(
                     "client", world.client_measure, _Views(self.views, ("propagation", "symptom"))
                 ),
-            ],
-            self.writer,
-        )
+            ]
+        self.oracle = Oracle(probes, self.writer)
 
     def sample(self) -> list[ProbeResult]:
         return self.oracle.sample_once()
@@ -345,7 +356,9 @@ def run_once(
     if work.exists():
         raise FileExistsError(f"{work} exists; a re-run is a new repeat")
     work.mkdir(parents=True)
-    run = _Run(world, clock, work, params)
+    direct = spec.family == "direct-pod-fault"
+    watched_views = ("target", "symptom") if direct else ("target", "propagation", "symptom")
+    run = _Run(world, clock, work, params, direct=direct)
     problems: list[str] = []
     injection: Injection | None = None
     stored: list[StoredDiagnosis] = []
@@ -356,7 +369,7 @@ def run_once(
         run.wait(params.baseline_seconds)
         base = run.writer.read()
         target_limit = calibrate(_latencies(base, "target"))
-        client_limit = calibrate(_latencies(base, "propagation"))
+        client_limit = None if direct else calibrate(_latencies(base, "propagation"))
         run.views["target"], run.views["propagation"] = target_limit, client_limit
         run.views["symptom"] = ALERT_LATENCY_SECONDS
         run.journal.record(
@@ -407,9 +420,7 @@ def run_once(
         recover_by = removed_at.timestamp() + RECOVERY_TIMEOUT_SECONDS
         while clock.now().timestamp() < recover_by:
             run.wait(3.0)
-            if all_recovered_at(
-                run.writer.read(), ("target", "propagation", "symptom"), after=removed_at
-            ):
+            if all_recovered_at(run.writer.read(), watched_views, after=removed_at):
                 break
         # 4. the stored diagnoses, once they stop changing
         stored = _await_diagnoses(world, clock, run, alerts, injection.injected_at)
@@ -459,13 +470,14 @@ def _finish(
     removed = next((e.at for e in entries if e.role == "cause_removed" and e.ok), None)
     execution_at = injector.get("execution_started_at", injection.injected_at)
     series = run.writer.read()
+    direct = spec.family == "direct-pod-fault"
     oracle = oracle_stamps(
         series,
         ProbeRoles(
             target="target",
-            downstream="propagation",
+            downstream=None if direct else "propagation",
             symptom="symptom",
-            everything=("target", "propagation", "symptom"),
+            everything=("target", "symptom") if direct else ("target", "propagation", "symptom"),
         ),
         execution_started_at=execution_at,
         cause_removed_at=removed or run.clock.now(),

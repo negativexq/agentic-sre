@@ -82,6 +82,23 @@ except Exception as error:
 print(json.dumps({"ok": ok, "latency": time.monotonic() - started, "detail": detail}))
 """
 
+# The target probe of a fault on the service itself: a real payment request, the route the lab's latency
+# alerts watch (``/health`` is excluded from them and barely uses the CPU a stress takes).
+_PAYMENT_SCRIPT = """
+import json, time, urllib.request, uuid
+started = time.monotonic()
+body = json.dumps({"order_id": str(uuid.uuid4()), "amount_cents": 4200, "currency": "USD"}).encode()
+request = urllib.request.Request(
+    "http://payment-service:8000/payments", data=body, headers={"Content-Type": "application/json"}
+)
+try:
+    response = urllib.request.urlopen(request, timeout=6)
+    ok, detail = 200 <= response.status < 300, "HTTP %d" % response.status
+except Exception as error:
+    ok, detail = False, type(error).__name__
+print(json.dumps({"ok": ok, "latency": time.monotonic() - started, "detail": detail}))
+"""
+
 _DIAGNOSES = text(
     """
     select i.incident_id::text, i.title, i.created_at, d.created_at, d.document
@@ -106,7 +123,9 @@ class LabWorld:
         control_plane: str = "http://127.0.0.1:8080",
         order_port: int = 18000,
         alertmanager_port: int = 19093,
+        payment_probe: bool = False,
     ) -> None:
+        self.target_script = _PAYMENT_SCRIPT if payment_probe else _TARGET_SCRIPT
         self.clock = clock or RealClock()
         self.pg_container, self.pg_port = pg_container, pg_port
         self.control_plane = control_plane
@@ -295,7 +314,7 @@ class LabWorld:
                     "--",
                     "python",
                     "-c",
-                    _TARGET_SCRIPT,
+                    self.target_script,
                 ],
                 timeout=10,
                 check=False,
@@ -510,7 +529,7 @@ def direct_pod_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> 
             "baseline_seconds": ParameterRange(low=45, high=45),
             "offset_seconds": ParameterRange(low=0, high=20),
             "duration_seconds": ParameterRange(low=90, high=110),
-            "cpu_workers": ParameterRange(low=12, high=16),
+            "cpu_workers": ParameterRange(low=16, high=20),
             "load_rps": ParameterRange(low=8, high=12),
         },
     )
@@ -602,8 +621,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(TestbedStore(args.root).write_manifest(manifest), manifest.sha256)
         return 0
 
-    world = LabWorld(clock=clock)
     if args.command == "phase0":
+        world = LabWorld(clock=clock, payment_probe=args.scenario == "direct")
         # Phase 0 is not part of any suite: its own store, its own manifest, never scored into a result.
         from packages.rca.engine import RCA_ENGINE_VERSION
 
@@ -626,6 +645,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     store = TestbedStore(args.root)
     manifest = store.load_manifest(args.suite)
+    world = LabWorld(
+        clock=clock, payment_probe=any(sp.family == "direct-pod-fault" for sp in manifest.scenarios)
+    )
     outcomes: list[RunOutcome] = []
     for spec in manifest.scenarios:
         for repeat in range(spec.repeats):

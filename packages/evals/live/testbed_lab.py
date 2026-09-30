@@ -170,7 +170,7 @@ class LabWorld:
 
         Order matters: Kubernetes keeps events for about an hour, so an earlier run's chaos events would
         reach the new run through the connector's first listing and be blamed for it. They are removed
-        *before* the connector restarts and before the control plane starts on its empty database.
+        *before* the connector restarts, and the connector restarts before the control plane starts on its empty database.
         """
         self.database = database_name(run_id)
         self._delete_experiments()
@@ -181,13 +181,9 @@ class LabWorld:
             )
         self._wait("the alerts to clear", lambda: not self._alerts(), 300, step=5.0)
 
+        # The connector goes first, while no control plane is listening: a connector that outlives the previous
+        # run still holds its buffers (events, changes) and would hand them to the new database on attaching.
         self._run(["make", "cp-stop"])
-        self._run(["make", "cp-up", f"CP_DB_NAME={self.database}"], timeout=180)
-        self._wait(
-            "the control plane",
-            lambda: self._get_json(f"{self.control_plane}/health")["status"] == "ok",
-            60,
-        )
         self._run(["kubectl", "-n", "connector", "rollout", "restart", "deployment/connector"])
         self._run(
             [
@@ -200,6 +196,12 @@ class LabWorld:
                 "--timeout=180s",
             ],
             timeout=200,
+        )
+        self._run(["make", "cp-up", f"CP_DB_NAME={self.database}"], timeout=180)
+        self._wait(
+            "the control plane",
+            lambda: self._get_json(f"{self.control_plane}/health")["status"] == "ok",
+            60,
         )
 
         def connected() -> bool:

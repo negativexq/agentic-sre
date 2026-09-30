@@ -1,7 +1,7 @@
 .PHONY: install lock lint typecheck test test-pg check demo serve-local \
 	itbench-setup itbench-index eval-dev eval-test benchmark-qualify \
 	images cluster-up build-images deploy load status ui inject-bad-rollout recover rbac-check \
-	lab-images chaos-mesh-install chaos-mesh-uninstall cluster-down precommit offline-demo e2e-kind e2e-kind-clean m18a-live-validate release-check \
+	lab-images chaos-mesh-install chaos-mesh-uninstall lab-up lab-check cluster-down precommit offline-demo e2e-kind e2e-kind-clean m18a-live-validate release-check \
 	verify-release-provenance product-bench-dev
 
 PY := .venv/bin/python
@@ -138,6 +138,48 @@ chaos-mesh-install:
 
 chaos-mesh-uninstall:
 	helm uninstall chaos-mesh --namespace chaos-mesh
+
+# The testbed lab (docs/architecture/testbed-lab-design.md section 8): everything except the control
+# plane, which runs outside it. Destructive only in that `cluster-up` creates the cluster; it never
+# deletes one. Postgres converges its own schema (the `migrate` sidecar), Kafka its own topic.
+# `KUBECTL` selects the context: make lab-check KUBECTL="kubectl --context kind-agentic-sre".
+KUBECTL ?= kubectl
+
+lab-up: cluster-up build-images lab-images
+	$(KUBECTL) apply -f infra/kubernetes/namespace.yaml
+	$(KUBECTL) apply -f infra/kubernetes/observability.yaml
+	$(KUBECTL) apply -f infra/kubernetes/tools-rbac.yaml
+	$(KUBECTL) apply -f infra/kubernetes/workload.yaml
+	$(KUBECTL) apply -f infra/kubernetes/dependencies.yaml
+	$(KUBECTL) apply -f infra/kubernetes/lab-control.yaml
+	for name in kafka postgres redis order-service payment-service order-worker; do \
+		$(KUBECTL) rollout status deployment/$$name -n $(NAMESPACE) --timeout=300s || exit 1; \
+	done
+	$(KUBECTL) rollout status deployment/isolated-echo -n lab-control --timeout=180s
+	for name in otel-collector prometheus kube-state-metrics loki tempo alertmanager grafana; do \
+		$(KUBECTL) rollout status deployment/$$name -n observability --timeout=180s || exit 1; \
+	done
+	$(MAKE) chaos-mesh-install
+	$(MAKE) lab-check
+
+# The scriptable part of the bring-up gate; the chaos smoke, the alert path and the node restart are
+# run by hand and recorded (design section 8, step 5). Every check fails if kubectl itself fails.
+lab-check:
+	@pods=$$($(KUBECTL) get pods -A --no-headers) || { echo "kubectl could not list pods"; exit 1; }; \
+	bad=$$(echo "$$pods" | awk '$$4 != "Running" && $$4 != "Completed"'); \
+	test -n "$$pods" || { echo "no pods found"; exit 1; }; \
+	test -z "$$bad" || { echo "pods not running:"; echo "$$bad"; exit 1; }
+	@topics=$$($(KUBECTL) exec -n $(NAMESPACE) deployment/kafka -c kafka -- /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092) \
+		|| { echo "could not list Kafka topics"; exit 1; }; \
+	echo "$$topics" | grep -qx orders.created || { echo "topic orders.created is missing"; exit 1; }
+	@schema=$$($(KUBECTL) exec -n $(NAMESPACE) deployment/postgres -c postgres -- psql -U postgres -d agentic_sre -Atc "select to_regclass('public.alembic_version') is not null") \
+		|| { echo "could not query the database"; exit 1; }; \
+	test "$$schema" = t || { echo "the database schema has not been migrated"; exit 1; }
+	@crds=$$($(KUBECTL) get crd -o name) || { echo "could not list CRDs"; exit 1; }; \
+	test "$$(echo "$$crds" | grep -c chaos-mesh.org)" = 23 || { echo "expected 23 Chaos Mesh CRDs"; exit 1; }
+	@if $(KUBECTL) exec -n $(NAMESPACE) deployment/order-service -- python -c "import urllib.request; urllib.request.urlopen('http://isolated-echo.lab-control:8080', timeout=3)" >/dev/null 2>&1; then \
+		echo "the isolated workload is reachable from $(NAMESPACE)"; exit 1; fi
+	@echo "lab check: PASS"
 
 images:
 	for image in $(IMAGES); do \

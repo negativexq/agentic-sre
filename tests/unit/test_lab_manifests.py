@@ -34,12 +34,16 @@ def test_the_vendored_chart_is_the_pinned_one() -> None:
 
 def test_every_pinned_image_carries_a_digest_and_the_chart_version_tag() -> None:
     images = load(CHAOS / "pins.yaml")["images"]
-    assert {i["name"] for i in images} == {
+    by_name = {i["name"]: i for i in images}
+    assert set(by_name) == {
         "ghcr.io/chaos-mesh/chaos-mesh",
         "ghcr.io/chaos-mesh/chaos-daemon",
+        "python",
     }
     for image in images:
-        assert image["tag"] == "v2.8.4" and DIGEST.fullmatch(image["digest"])
+        assert DIGEST.fullmatch(image["digest"])
+    assert by_name["ghcr.io/chaos-mesh/chaos-mesh"]["tag"] == "v2.8.4"
+    assert by_name["ghcr.io/chaos-mesh/chaos-daemon"]["tag"] == "v2.8.4"
 
 
 def test_the_values_match_a_containerd_node_with_the_smallest_footprint() -> None:
@@ -83,3 +87,63 @@ def test_kafka_declares_its_topic_and_keeps_its_data_across_a_container_restart(
     topics_env = {e["name"]: e["value"] for e in containers["topics"]["env"]}
     assert topics_env["TOPICS"] == "orders.created"
     assert "--if-not-exists" in containers["topics"]["args"][0]
+
+
+def deployment(documents: list[Any], name: str) -> dict[str, Any]:
+    found = next(
+        d for d in documents if d and d["kind"] == "Deployment" and d["metadata"]["name"] == name
+    )
+    assert isinstance(found, dict)
+    return found
+
+
+def test_postgres_keeps_its_data_and_converges_its_own_schema() -> None:
+    documents = list(yaml.safe_load_all((ROOT / "infra/kubernetes/dependencies.yaml").read_text()))
+    pod = deployment(documents, "postgres")["spec"]["template"]["spec"]
+    containers = {c["name"]: c for c in pod["containers"]}
+    assert set(containers) == {"postgres", "migrate"}
+    assert {"name": "postgres-data", "emptyDir": {}} in pod["volumes"]
+    assert containers["postgres"]["volumeMounts"] == [
+        {"name": "postgres-data", "mountPath": "/var/lib/postgresql/data"}
+    ]
+    assert "readinessProbe" in containers["postgres"]
+    migrate = containers["migrate"]
+    assert migrate["image"] == "agentic-sre/migrator:dev"
+    assert "alembic upgrade head" in migrate["args"][0]
+    url = next(e["value"] for e in migrate["env"] if e["name"] == "DATABASE_URL")
+    assert "@localhost:5432/agentic_sre" in url  # the sidecar shares the pod, not the Service
+
+
+def test_the_negative_control_workload_is_isolated_by_a_checked_default_deny() -> None:
+    documents = [
+        d for d in yaml.safe_load_all((ROOT / "infra/kubernetes/lab-control.yaml").read_text()) if d
+    ]
+    kinds = sorted(d["kind"] for d in documents)
+    assert kinds == ["Deployment", "Namespace", "NetworkPolicy", "Service"]
+    assert {d["metadata"]["namespace"] for d in documents if d["kind"] != "Namespace"} == {
+        "lab-control"
+    }
+    policy = next(d for d in documents if d["kind"] == "NetworkPolicy")
+    assert policy["spec"]["podSelector"] == {}
+    assert policy["spec"]["policyTypes"] == ["Ingress", "Egress"]
+    assert "ingress" not in policy["spec"] and "egress" not in policy["spec"]  # deny everything
+    pins = load(CHAOS / "pins.yaml")["images"]
+    workload = next(d for d in documents if d["kind"] == "Deployment")
+    image = workload["spec"]["template"]["spec"]["containers"][0]["image"]
+    assert image in {f"{i['name']}:{i['tag']}" for i in pins}  # loaded into the node beforehand
+
+
+def test_lab_up_builds_everything_but_the_control_plane_and_lab_check_can_fail() -> None:
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    up = makefile[makefile.index("\nlab-up:") : makefile.index("\nlab-check:")]
+    assert "control-plane.yaml" not in up and "lab-control.yaml" in up
+    assert "$(MAKE) chaos-mesh-install" in up and "$(MAKE) lab-check" in up
+    check = makefile[makefile.index("\nlab-check:") : makefile.index("\nimages:")]
+    for problem in (
+        "kubectl could not list pods",
+        "could not list Kafka topics",
+        "could not query the database",
+        "could not list CRDs",
+        "the isolated workload is reachable",
+    ):
+        assert problem in check  # each check reports a tool failure instead of passing silently

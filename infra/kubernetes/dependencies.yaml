@@ -28,6 +28,15 @@ spec:
                   key: POSTGRES_PASSWORD
           ports:
             - containerPort: 5432
+          # An emptyDir outlives a container restart (the image's own directory does not), so a
+          # restarted database keeps its data and its schema.
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-d", "agentic_sre"]
+            periodSeconds: 5
           resources:
             requests:
               cpu: 100m
@@ -35,6 +44,37 @@ spec:
             limits:
               cpu: 500m
               memory: 1Gi
+        # Brings the schema to head and keeps it there. `alembic upgrade head` is idempotent, so a
+        # pod that was lost and came back empty converges again without a manual deploy step.
+        - name: migrate
+          image: agentic-sre/migrator:dev
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              until python -c "import socket; socket.create_connection(('localhost', 5432), 2)"; do sleep 2; done
+              while true; do
+                alembic upgrade head || true
+                sleep 60
+              done
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: workload-secrets
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: postgresql+psycopg://postgres:$(POSTGRES_PASSWORD)@localhost:5432/agentic_sre
+          resources:
+            requests:
+              cpu: 10m
+              memory: 96Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+      volumes:
+        - name: postgres-data
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

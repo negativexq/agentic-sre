@@ -15,3 +15,6 @@ images:
   - name: ghcr.io/chaos-mesh/chaos-daemon
     tag: v2.8.4
     digest: sha256:0d28dbd95b033279f65605ea88c354d25fe902409197274016dd2efc28ef25cd
+  - name: python
+    tag: 3.12.13-slim-bookworm
+    digest: sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2

@@ -2,7 +2,7 @@ import { fileURLToPath, URL } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 // The control plane serves the built SPA under /app, so assets must resolve
 // from that base in production while staying at root for the dev server.
@@ -30,4 +30,6 @@ export default defineConfig(({ command }) => ({
     outDir: "dist",
     sourcemap: true,
   },
+  // Pure logic only (no DOM): the notification diff is what can go wrong quietly.
+  test: { environment: "node", include: ["src/**/*.test.ts"] },
 }));

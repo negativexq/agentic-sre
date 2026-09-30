@@ -288,3 +288,38 @@ def test_the_journal_keeps_when_the_connector_observed_a_change_without_using_it
         }
     assert arrivals[ids["a"]].replace(tzinfo=UTC) == seen
     assert ids["b"] not in arrivals  # the evidence row itself carries no new column
+
+
+def test_an_api_outage_is_one_gap_and_one_snapshot_on_recovery_not_a_storm() -> None:
+    connector, client, cluster, _ = make()
+    cursor = client.read("read_changes", None).next_cursor
+    cluster.batches[PODS] = [RuntimeError("apiserver down"), RuntimeError("apiserver down")]
+    cluster.batches[EVENTS] = [RuntimeError("apiserver down")]
+    connector.watch_changes_once()  # the first failing watch
+    connector.watch_changes_once()  # and another one, while still down
+    for scope in (PODS, EVENTS):
+        connector.watch_scope_once(scope)
+    gaps = [i for i in since(client, cursor) if isinstance(i, wire.GapItem)]
+    assert [g.reason for g in gaps] == ["BACKEND_UNREACHABLE"]  # one gap for the outage
+    assert cluster.lists == 1  # no watch thread hammers the API with its own snapshot
+    assert connector.retry_snapshot_once()  # the loop retries; the API is back
+    assert cluster.lists == 2
+    tail = since(client, cursor)
+    assert sum(isinstance(i, wire.SnapshotBeginItem) for i in tail) == 1
+    assert not connector.retry_snapshot_once()  # recovered: nothing left to retry
+
+
+def test_an_expiry_whose_relist_fails_is_retried_by_the_loop() -> None:
+    from packages.connector.watch import ResourceVersionExpired
+
+    connector, _, cluster, _ = make()
+    cluster.batches[PODS] = [ResourceVersionExpired("410 Gone")]
+    listing = cluster.list_objects
+
+    def down(namespaces: Sequence[str]) -> ObjectListing:
+        raise RuntimeError("apiserver down")
+
+    cluster.list_objects = down  # type: ignore[method-assign]
+    connector.watch_changes_once()
+    cluster.list_objects = listing  # type: ignore[method-assign]
+    assert connector.retry_snapshot_once() and not connector.retry_snapshot_once()

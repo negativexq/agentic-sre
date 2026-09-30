@@ -125,6 +125,7 @@ class Connector:
         # the resourceVersion each scope's watch resumes from (contract §15); set by every listing
         self._versions: dict[ListingScope, str] = {}
         self._generation = 0
+        self._degraded = False  # a watch failed; the run loop retries the snapshot
         self.watch_stats: dict[str, int] = defaultdict(int)
 
     def handle(self, payload: bytes) -> bytes:
@@ -270,7 +271,9 @@ class Connector:
                 self.poll_changes_once(force_snapshot=True)
                 return self._changes.read(cursor, limit, needs_baseline=True)
 
-    def poll_changes_once(self, *, force_snapshot: bool = False) -> None:
+    def poll_changes_once(
+        self, *, force_snapshot: bool = False, gap_on_failure: bool = True
+    ) -> None:
         """List the watched namespaces and append what changed since the last listing."""
         if self.cluster is None:
             return
@@ -286,7 +289,10 @@ class Connector:
                     self._delta(objects, events, listing, at)
             except Exception:
                 logger.warning("change poll failed", exc_info=True)
-                self._put(self._changes, wire.GapItem(seq=0, at=at, reason="BACKEND_UNREACHABLE"))
+                if gap_on_failure:
+                    self._put(
+                        self._changes, wire.GapItem(seq=0, at=at, reason="BACKEND_UNREACHABLE")
+                    )
 
     def _status(self, listing: ObjectListing, at: datetime, *, snapshot: bool) -> None:
         self._put(
@@ -324,6 +330,7 @@ class Connector:
         self._seen, self._events_seen = {}, {}
         self._versions = {**listing.resource_versions, **self._event_versions()}
         self._generation += 1  # watches of the replaced versions must not touch the new state
+        self._degraded = False
         begin = self._put(self._changes, wire.SnapshotBeginItem(seq=0, observed_at=at))
         self._changes.mark_baseline(begin)
         for body in objects:
@@ -391,8 +398,9 @@ class Connector:
         with self._changes_lock:
             version = self._versions.get(scope)
             generation = self._generation
-        if watch is None or version is None:
-            return True
+            degraded = self._degraded
+        if watch is None or version is None or degraded:
+            return not degraded
         try:
             for event in watch(scope, version):
                 if not self._apply_watch_event(scope, event, generation):
@@ -410,17 +418,24 @@ class Connector:
                 )
                 self.watch_stats["relists"] += 1
                 self.poll_changes_once(force_snapshot=True)
+                if self._generation == generation:
+                    self._degraded = True  # the relist failed too: the run loop retries it
             return False
         except Exception:
-            logger.warning("watch of %s/%s failed", scope.namespace, scope.kind, exc_info=True)
             with self._changes_lock:
                 if generation != self._generation:
                     return True
-                self._put(
-                    self._changes,
-                    wire.GapItem(seq=0, at=self.clock(), reason="BACKEND_UNREACHABLE"),
-                )
-                self.poll_changes_once(force_snapshot=True)
+                self.watch_stats["watch_failures"] += 1
+                if not self._degraded:
+                    # one gap for the outage; the run loop retries the snapshot, not every watch
+                    logger.warning(
+                        "watch of %s/%s failed", scope.namespace, scope.kind, exc_info=True
+                    )
+                    self._degraded = True
+                    self._put(
+                        self._changes,
+                        wire.GapItem(seq=0, at=self.clock(), reason="BACKEND_UNREACHABLE"),
+                    )
             return False
         self.watch_stats["resumes"] += 1
         return True
@@ -463,14 +478,27 @@ class Connector:
                 self._put(self._changes, wire.ObjectItem(seq=0, observed_at=at, body=body))
             return True
 
+    def retry_snapshot_once(self) -> bool:
+        """After a watch failure, try the snapshot again; whether a retry was due."""
+        with self._changes_lock:
+            if not self._degraded:
+                return False
+            self.watch_stats["relists"] += 1
+            self.poll_changes_once(force_snapshot=True, gap_on_failure=False)
+            return True
+
     def _watch_loop(self, scope: ListingScope, stop: threading.Event) -> None:
         """Keep one scope watched: resume after the server ends a watch, start over after a snapshot."""
         while not stop.is_set():
             with self._changes_lock:
                 if scope not in self._versions:
                     return
+                generation = self._generation
             try:
-                self.watch_scope_once(scope)
+                if not self.watch_scope_once(scope):
+                    # wait for the new snapshot (after an expiry) or the loop's retry (after a failure)
+                    while not stop.is_set() and self._generation == generation:
+                        stop.wait(1.0)
             except Exception:
                 logger.warning("watch loop of %s/%s", scope.namespace, scope.kind, exc_info=True)
                 stop.wait(5.0)
@@ -493,7 +521,7 @@ class Connector:
         if watching:
             changes_interval = reconcile_interval
         threads: dict[ListingScope, threading.Thread] = {}
-        next_changes = next_alerts = next_stats = 0.0
+        next_changes = next_alerts = next_stats = next_retry = 0.0
         elapsed = 0.0
         while not stop.is_set():
             if elapsed >= next_changes:
@@ -511,6 +539,10 @@ class Connector:
                         threads[scope] = thread
                         thread.start()
                         self.watch_stats["watch_starts"] += 1
+            if watching and elapsed >= next_retry and self.retry_snapshot_once():
+                next_retry = (
+                    elapsed + 5.0
+                )  # a watch failed: retry the snapshot, not in a tight loop
             if elapsed >= next_stats:
                 next_stats = elapsed + 60.0
                 live = sum(1 for t in threads.values() if t.is_alive())

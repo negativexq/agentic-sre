@@ -62,7 +62,8 @@ read-only; the engine never holds the injector's identity.
 
 ## 5. Kind configuration
 
-A single control-plane node, the node image **pinned to the one already present locally** (no pull),
+A single control-plane node, the node image **pinned by digest to the one already present locally**
+(`kindest/node:v1.37.0@sha256:a1ed56cf…`, no pull; recorded in `kind-config.yaml`),
 and no `extraPortMappings`. Kind's containerd and the Kubernetes version stay as they are today so
 that results measured now remain comparable.
 
@@ -82,7 +83,11 @@ scenarios (B4); B2 only provides the channels.
 
 ## 8. Bring-up procedure and gate
 
-1. Render and record the Chaos Mesh manifests (pinned values) in the repository.
+1. Chaos Mesh inputs are recorded (done): the chart archive is vendored in
+   `infra/kubernetes/chaos-mesh/` with its digest, the values and the image digests are pinned
+   in `pins.yaml`, and `make lab-images` and `make chaos-mesh-install` use them. A rendered
+   manifest is deliberately **not** stored: helm generates fresh webhook certificates on every
+   render, so it would be unstable and would put private keys in the repository.
 2. Delete the Kind cluster `agentic-sre`; create it from the pinned configuration.
 3. Load the application and Chaos Mesh images; apply `namespace`, RBAC, dependencies, observability
    and workload manifests; **run the migration as a declared, idempotent step and give Postgres a
@@ -114,3 +119,14 @@ declarative inputs; there is no state to restore.
 5. Postgres gets a volume that survives a container restart, and the schema migration becomes a
    declared, idempotent bring-up step (§8.3).
 6. The Kubernetes and containerd versions stay pinned to today's for comparability (§5).
+
+## 11. Preparation status (2026-09-30)
+
+Done, without touching the running cluster: the Chaos Mesh chart 2.8.4 vendored with its digest, the
+pinned values and image digests (`pins.yaml`), the Kind configuration pinned by digest with no
+published port, and the `lab-images`, `chaos-mesh-install` and `chaos-mesh-uninstall` targets. The chart
+renders offline from the vendored archive and the containerd settings reach the daemon
+(`--runtime containerd`, hostPath `/run/containerd`). A test (`test_lab_manifests.py`) keeps these
+inputs, and the Kafka topic reconciler of B0, from drifting. Not done: the destructive recreation
+itself, the `lab-control` workload and the migration step as a declared bring-up action (all part of
+the recreation, which is asked again).

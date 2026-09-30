@@ -264,3 +264,22 @@ remain, and neither is a harness defect:
 
 Both are properties of the engine and the product path (roadmap C2 and the evidence-arrival timing of a resolved
 incident), not of the lab, and are left for decisions rather than tuned around in the harness.
+
+### Slice 2 result (2026-09-30)
+
+Suite `slice2` (manifest `0ad15b98…`, engine 2.1.0, `direct-stress-order`, seeds 21, 22, 23, `DEV`): three valid runs,
+no run refused by the baseline gate, `false_strong_authority` 0, `false_resolved` 0.
+
+| Metric | Result |
+|---|---|
+| cause / instance recall | 3/3, 3/3 |
+| execution witness recall | 1/3 |
+| effect link recall | 1/3 |
+| propagation link recall | not measured (none in this family) |
+| median time to diagnosis | 29 s |
+
+The first strong witness on a real run (repeat 0) was checked against the recorded truth: the exact experiment
+instance, an effect at the exact target pod, all four coverage conditions. In all three runs the `Recovered` event
+reached the control plane before the incident resolved (the race of the confirmation run went the other way here).
+What decided each run was blocker 2: repeat 0's pod failed a probe inside the interval (an event of the pod
+instance); repeats 1 and 2 did not, and their only effect was CPU pressure, which is not bound to a pod instance.

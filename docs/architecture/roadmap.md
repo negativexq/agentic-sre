@@ -40,7 +40,7 @@ Contract: [`connector-boundary-contract.md`](connector-boundary-contract.md).
 |---|---|---|---|
 | B0 | Hygiene: `orders.created` is declared and re-created by a sidecar and Kafka keeps its data across container restarts (verified live); 88 unused Docker volumes removed and one kept | DONE | |
 | B1 | `Timeline` ground truth (`testbed-ground-truth-contract.md`): cause created, execution started, target effect, propagation, symptom started, alert fired, recovery; written by the injector and an independent oracle | DONE (contract approved; implementation follows B2) | |
-| B2 | Recreate the lab cluster (destructive): Chaos Mesh, observability stack, exposed ports, connector inside the lab | DECISION | B1, A7 |
+| B2 | Recreate the lab cluster (destructive): Chaos Mesh 2.8.4 with containerd values, connector inside the lab, Postgres volume and declared migration (`testbed-lab-design.md`) | DECISION (design proposed, awaiting approval) | B1, A7 |
 | B3 | Control plane outside the lab (host or container), read-only kubeconfig, its own Postgres | NEXT | A7, B2 |
 | B4 | 4 to 6 controlled incidents, each repeated N times with randomized target and timing, dev and held-out split fixed up front: direct pod fault, dependency fault, scheduled recurring fault, config or rollout cause, negative control by construction, competing causes | NEXT | B2 |
 | B5 | Frozen engine baseline: version and acceptance criteria fixed before any run | NEXT | B4 |
@@ -121,17 +121,18 @@ Measured on the running lab before any change. **Verdict: the planned lab fits.*
 | Requested (memory) | `sre-demo` 1.4 GiB, `observability` 1.3 GiB, `kube-system` 0.3 GiB |
 | Disk | 39 GB free on the host volume; the Kind node's `/var` uses 5.1 GB |
 
-What B2 adds, and its estimated cost. **The Chaos Mesh figures are estimates from the chart's
-usual defaults, not read from the chart** (no chart is available offline); verify them with
-`helm template` before installing.
+What B2 adds. Chaos Mesh figures are **requested** resources read from a rendering of chart 2.8.4
+(`helm template`, nothing installed); actual use was not measured. The chart's defaults do not work on
+this node: they assume the Docker runtime, while the node uses containerd
+(`testbed-lab-design.md` §2).
 
-| Addition | Estimated memory |
+| Addition | Requested memory |
 |---|---|
-| Chaos Mesh, one controller replica, no dashboard, one daemon | 0.3 to 0.5 GiB |
-| Chaos Mesh at chart defaults (three controller replicas, dashboard) | about 1.5 GiB |
-| Connector pod inside the lab | about 0.15 GiB |
-| Oracle probe and an isolated control workload | about 0.1 GiB |
-| **Total in the Docker VM** | **about 3.6 to 4.7 GiB of 9.7 GiB**, before test load |
+| Chaos Mesh, one controller, no dashboard, no DNS server (the daemon sets no request) | 0.26 GiB |
+| Chaos Mesh at chart defaults (three controllers, dashboard, DNS server) | 1.09 GiB |
+| Connector pod inside the lab (estimate) | about 0.15 GiB |
+| Oracle probe and an isolated control workload (estimate) | about 0.1 GiB |
+| **Total in the Docker VM at the planned values** | **about 3.5 GiB of 9.7 GiB**, before test load |
 
 Observations that shape B2:
 

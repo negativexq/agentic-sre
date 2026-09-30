@@ -323,3 +323,25 @@ def test_an_expiry_whose_relist_fails_is_retried_by_the_loop() -> None:
     connector.watch_changes_once()
     cluster.list_objects = listing  # type: ignore[method-assign]
     assert connector.retry_snapshot_once() and not connector.retry_snapshot_once()
+
+
+def test_a_snapshot_with_failed_scopes_keeps_retrying_so_no_scope_stays_unwatched() -> None:
+    from packages.rca.live import ListingFailure
+
+    connector, _, cluster, _ = make()
+    cluster.batches[PODS] = [RuntimeError("apiserver down")]
+    connector.watch_changes_once()  # degraded
+    listing = cluster.list_objects
+
+    def half_ready(namespaces: Sequence[str]) -> ObjectListing:
+        # the API answers again but not yet for every scope: no version, a failed scope
+        return ObjectListing((), frozenset(), (ListingFailure(PODS, "not ready"),))
+
+    cluster.list_objects = half_ready  # type: ignore[method-assign]
+    assert connector.retry_snapshot_once()  # retried, but incomplete
+    cluster.list_objects = listing  # type: ignore[method-assign]
+    assert connector.retry_snapshot_once()  # retried again, now complete
+    assert not connector.retry_snapshot_once()
+    cluster.batches[PODS] = [[event("MODIFIED", pod("a", "11"), "11")]]
+    connector.watch_changes_once()
+    assert (PODS, "10") in cluster.watched_from[-2:] or (PODS, "10") in cluster.watched_from

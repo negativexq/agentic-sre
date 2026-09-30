@@ -330,7 +330,9 @@ class Connector:
         self._seen, self._events_seen = {}, {}
         self._versions = {**listing.resource_versions, **self._event_versions()}
         self._generation += 1  # watches of the replaced versions must not touch the new state
-        self._degraded = False
+        # a scope that failed, or a watched namespace whose Events returned no version, has no watch:
+        # keep retrying until every scope is listed, rather than leave it unwatched until reconciliation
+        self._degraded = self._incomplete(listing)
         begin = self._put(self._changes, wire.SnapshotBeginItem(seq=0, observed_at=at))
         self._changes.mark_baseline(begin)
         for body in objects:
@@ -387,6 +389,14 @@ class Connector:
         for scope in list(self._versions):
             if not self.watch_scope_once(scope):
                 return  # continuity was lost; the new snapshot set every scope's version again
+
+    def _incomplete(self, listing: ObjectListing) -> bool:
+        if getattr(self.cluster, "watch", None) is None:
+            return False  # a polling cluster: the next poll is the retry
+        if listing.failed_scopes:
+            return True
+        events = {scope.namespace for scope in self._versions if scope.kind == "Event"}
+        return bool(self._event_versions()) and not set(self.watch_namespaces) <= events
 
     def _event_versions(self) -> dict[ListingScope, str]:
         versions = getattr(self.cluster, "event_resource_versions", None)

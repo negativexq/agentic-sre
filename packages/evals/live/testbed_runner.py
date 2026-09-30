@@ -96,7 +96,7 @@ class RunParameters:
     latency_ms: int
     load_rps: float
     fault: str = "network-delay"  # or "cpu-stress" (direct-pod-fault)
-    cpu_load: int = 100
+    cpu_workers: int = 16
 
 
 def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
@@ -115,7 +115,7 @@ def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
         latency_ms=int(draw("latency_ms", 400.0)),
         load_rps=draw("load_rps", 10.0),
         fault="cpu-stress" if spec.family == "direct-pod-fault" else "network-delay",
-        cpu_load=int(draw("cpu_load", 100.0)),
+        cpu_workers=int(draw("cpu_workers", 16.0)),
     )
 
 

@@ -54,6 +54,7 @@ REPO = Path(__file__).resolve().parents[3]
 NAMESPACE = "sre-demo"
 SCENARIO_ID = "dependency-delay-payment"
 DIRECT_SCENARIO_ID = "direct-stress-payment"
+WARMUP_SECONDS = 90.0  # a restarted pod fails probes for its first minutes under load
 WATCHED_NAMESPACES = ("sre-demo", "lab-control", "chaos-mesh")
 
 
@@ -178,6 +179,7 @@ class LabWorld:
             raise RuntimeError(f"port-forward failed for {', '.join(unreachable)}")
         self._delete_experiments()
         self._fresh_target_pod()
+        self._warm_up()
         for namespace in WATCHED_NAMESPACES:
             self._run(
                 ["kubectl", "-n", namespace, "delete", "events", "--all", "--ignore-not-found"]
@@ -251,6 +253,18 @@ class LabWorld:
 
         self._wait("the old payment-service pod to terminate", single_pod, 120)
 
+    def _warm_up(self) -> None:
+        """Run the workload against the fresh pod, then forget it happened.
+
+        The pod's startup failures (probe timeouts under first load) belong to no run: the events they
+        produce are deleted straight after, before the connector or the control plane sees them.
+        """
+        self.start_load(10.0)
+        try:
+            time.sleep(WARMUP_SECONDS)
+        finally:
+            self.stop_load()
+
     def start_load(self, rps: float) -> None:
         workload = Workload(
             target=Target.ORDERS,
@@ -316,7 +330,7 @@ class LabWorld:
                 (
                     "  mode: all\n"
                     f"  selector: {{namespaces: [{NAMESPACE}], labelSelectors: {{app: payment-service}}}}\n"
-                    f"  stressors: {{cpu: {{workers: 2, load: {params.cpu_load}}}}}\n"
+                    f"  stressors: {{cpu: {{workers: {params.cpu_workers}, load: 100}}}}\n"
                 ),
             )
         else:
@@ -496,7 +510,7 @@ def direct_pod_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> 
             "baseline_seconds": ParameterRange(low=45, high=45),
             "offset_seconds": ParameterRange(low=0, high=20),
             "duration_seconds": ParameterRange(low=90, high=110),
-            "cpu_load": ParameterRange(low=80, high=100),
+            "cpu_workers": ParameterRange(low=12, high=16),
             "load_rps": ParameterRange(low=8, high=12),
         },
     )

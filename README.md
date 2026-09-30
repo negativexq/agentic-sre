@@ -16,20 +16,31 @@ Alert → evidence → hypotheses → bounded investigation → deterministic ju
 
 ### At a glance
 
-- **Blind TEST25 holdout: [17/22 scoreable = 77.3%](evals/results/v1.1.2/README.md); 0 model calls.** This is the primary ITBench-Lite accuracy measurement.
-- **DEV + holdout combined: 26/31 = 83.9%.** Four unmatchable published labels are excluded from the denominator.
+- **ITBench-Lite: [17/22 scoreable = 77.3%](evals/results/v1.1.2/README.md) on the TEST25 split, which was blind when it was frozen; 0 model calls.** Since 2026-09-28 all 35 published scenarios count as **development data**: the engine has been worked on with them in view, so they no longer measure generalization. The new held-out set is being built on our own [instrumented testbed](#instrumented-testbed).
+- **All 35 scenarios combined: 26/31 = 83.9%.** Four unmatchable published labels are excluded from the denominator.
 - **Live suite: 25/25 expected outcomes** — 16/16 correct root-cause actors, 9/9 correct abstentions, and 0 fabricated `RESOLVED` diagnoses. Actor identification and epistemic resolution are separate: `RESOLVED` 0, `AMBIGUOUS` 14, `INSUFFICIENT_EVIDENCE` 11. See the [live-suite report](evals/results/live-suite-2026-09-24.md) and [M16 validation](docs/results/m16-positive-elimination.md).
 - **0 model calls** — in both reported measurements; deterministic judgment remains authoritative.
 - **Bounded investigation** — the frozen TEST25 run used six validated physical reads per incident, one read at a time.
 - **Evidence-backed RCA** — observations become normalized Findings before they can change a diagnosis.
 - **Read-only by design** — the RCA investigator cannot mutate the cluster or execute remediation. The live benchmark harness separately stages and restores test faults.
+- **A trust boundary you can deploy** — the control plane holds no customer credential. A small [Connector](#connector-boundary) inside the cluster dials out over mutually authenticated gRPC and answers typed, bounded, audited, read-only requests.
+- **Measured against a known world** — an [instrumented testbed](#instrumented-testbed) injects faults whose truth is recorded (a seven-field timeline and a causal chain), freezes its manifest before running, and scores the stored diagnosis. It is how the engine's causal claims are checked, including where it falls short.
+- **Strong authority is earned, not assumed** — a root cause reaches strong authority only through an observed execution and its incident effect ([causal semantics](docs/architecture/m21-causal-semantics-contract.md)); ambiguity is reported as ambiguity.
 
 ## Measured root-cause performance
 
-The current frozen architecture was evaluated against ITBench-Lite ground
-truth with exact canonical entity comparison. The blind TEST25 result is the
-primary public measurement; the development split is shown separately so
+The frozen architecture of the time was evaluated against ITBench-Lite ground
+truth with exact canonical entity comparison. TEST25 was held out and blind
+when that architecture was frozen, and DEV10 is shown separately so that
 development evidence is not confused with holdout evidence.
+
+**Status of these numbers (2026-09-28).** Work on the causal semantics after
+that freeze was done with all 35 scenarios in view, so the whole set is now a
+**development regression set**: it protects against regressions and is not a
+generalization estimate. New causal rules are not derived from it. The held-out
+measurement comes from our own testbed, where the truth of every run is recorded
+by the harness rather than published by a third party (see
+[Instrumented testbed](#instrumented-testbed)).
 
 Four of the 35 published labels cannot be matched by any prediction: their
 entity filters match nothing in the scenario's own snapshot (Scenario-29, 23,
@@ -39,8 +50,8 @@ excluded from the accuracy denominator and reported separately.
 | Evaluation | Exact root-cause accuracy | Raw | Model calls |
 | --- | ---: | ---: | ---: |
 | DEV10 development split | 9/9 (100%) | 9/10 | 0 |
-| **Blind TEST25 holdout (primary)** | **[17/22 (77.3%)](evals/results/v1.1.2/README.md)** | 17/25 | **0** |
-| DEV + holdout combined | 26/31 (83.9%) | 26/35 | 0 |
+| **TEST25 (blind when frozen)** | **[17/22 (77.3%)](evals/results/v1.1.2/README.md)** | 17/25 | **0** |
+| All 35 combined | 26/31 (83.9%) | 26/35 | 0 |
 
 Confidence against ground truth on the 31 scoreable scenarios: `VERIFIED`
 predictions were 13/16 correct and `LIKELY` predictions 13/19.
@@ -104,6 +115,93 @@ No synthetic diagnosis, hypothesis, or root state was injected. The scheduler
 started the deadline revision; deterministic RCA rules made the diagnosis
 decision. This is one bounded product-path validation, not a generalization or
 accuracy benchmark and not a claim that the system resolves every incident.
+
+## Connector boundary
+
+The control plane never connects to a customer cluster. A **Connector** runs
+inside the cluster, holds every credential, and **dials out** to the control
+plane; nothing is exposed inbound. Contract:
+[connector-boundary-contract.md](docs/architecture/connector-boundary-contract.md).
+
+```text
+customer cluster                                    control plane
+Kubernetes · Prometheus · Loki · Tempo · Alertmanager
+        │ read-only, RBAC-scoped                    │ diagnoses, incidents, UI
+   [ Connector ]  ── gRPC over mTLS, outbound ──▶  [ gateway ]
+```
+
+- **Typed, bounded, audited requests:** `list_objects`, `list_events`,
+  `query_logs`, `query_resource_pressure`, `query_traffic`, `query_traces`,
+  `capabilities`, `preflight`. No shell, no free-form query, no secrets.
+- **Streams as cursor-paged reads:** `read_alerts` and `read_changes`, with
+  epochs and explicit `Gap` records (connector restart, buffer expiry, backend
+  unreachable). The alert-channel coverage window is derived from heartbeats, so
+  the engine knows what it could not have seen.
+- **Identity:** mTLS with a per-connector URI SAN; static 90-day certificates.
+  Enrollment, rotation, Helm packaging and multi-tenancy are not built yet.
+- **Proven equivalent:** recorded real data survives the wire unchanged, and the
+  direct and over-the-wire epistemic digests are identical on the migration gate.
+
+The stream mode is opt-in (`SRE_CONNECTOR_STREAMS`); making it the default is
+still an open decision.
+
+## Instrumented testbed
+
+The seen benchmarks cannot supply what a verified mechanism needs: the exact
+execution, the first effect at the target, the propagation path and the
+recovery. The testbed measures the engine against a world whose truth we record.
+
+- **Lab:** a single-node Kind cluster (node image pinned by digest), Chaos Mesh
+  2.8.4, the demo workload with Kafka and PostgreSQL, and an isolated control
+  workload behind a default-deny NetworkPolicy. The control plane runs **outside**
+  it with its own database; the Connector inside dials out, so recreating the lab
+  keeps the diagnosis history.
+- **Ground truth:** every run records a seven-field timeline (cause created,
+  execution started, target effect, propagation, symptom, alert, recovery) whose
+  fields have fixed producers (the injector or a separate oracle), plus the
+  causal chain. Runs that contradict themselves are `INVALID`, never scored.
+  The engine never sees any of it ([contract](docs/architecture/testbed-ground-truth-contract.md)).
+- **Discipline:** a fresh control-plane database, a connector restart and a
+  fresh target pod per run; manifests frozen with a hash and the engine version
+  before any run; write-once results; acceptance criteria fixed in advance
+  (`false_resolved = 0`, `false_strong_authority = 0`, at least 90% valid runs).
+- **Delivered in slices** ([design](docs/architecture/testbed-scenarios-design.md)),
+  each validated by an unscored phase-0 run before its manifest is frozen.
+
+**First result (slice 1, a network delay on `payment-service`, 3 valid runs, development
+tier).** The engine named the injected experiment and its exact instance in 3/3
+runs, with no false strong authority and no false `RESOLVED`. It never granted
+strong authority to that cause: the execution rule did not fire in any run,
+because a network delay leaves no pod-level failure observation and because the
+harness gave the target pod an event history (since fixed by a fresh pod per
+run). The measurement also found and fixed three defects on the way: a rule that
+gave strong authority to an experiment that had ended 40 minutes before the
+incident, and two scorer flaws that overstated execution and effect recall. This is a
+small development-tier baseline, not a benchmark.
+
+## Causal mechanism validation
+
+Beyond naming a likely actor, the engine separates *possible* from *observed*
+causes. A claim carries strong authority (`OBSERVED_MECHANISM_CAUSE`) only when
+a rule shows an execution witness and an incident effect at the exact target
+instance: for example a recorded quota rejection, or a chaos experiment with an
+observed `Applied`/`Recovered` interval, connected to the incident's onset, and
+an effect at the target inside that interval. `Spawned` or `Applied` alone confer
+nothing; a Schedule carries the witness of the experiments it spawned by exact
+UID. Timing stability is assessed across observation cutoffs, and a sensitive
+witness withholds strong authority. `RESOLVED` additionally requires every
+declared symptom to be covered, which is why it stays rare on purpose. Details:
+[causal semantics](docs/architecture/m21-causal-semantics-contract.md),
+[timing stability](docs/architecture/m21-timing-stability-contract.md).
+
+## Roadmap
+
+The ordered plan, with what blocks what, is in
+[docs/architecture/roadmap.md](docs/architecture/roadmap.md): the Connector
+boundary (mostly done), the testbed (lab, control plane and first slices done),
+engine capabilities that follow the testbed (service-level effect relation,
+first target-local effect, rollout and configuration rules, `RESOLVED` coverage)
+and the product surface (Connect Cluster flow).
 
 ## What is Agentic SRE?
 
@@ -269,6 +367,17 @@ make ui                    # in another terminal, then open http://localhost:808
 make live-restore          # undo the staged fault when finished
 ```
 
+For the instrumented lab used by the testbed (Kind, Chaos Mesh, the Connector and
+a control plane on the host):
+
+```bash
+make lab-up            # cluster, images, Chaos Mesh, workload; ends with lab-check
+make lab-pki           # certificates for the connector and the gateway
+make connector-deploy  # the Connector and the Alertmanager route into the lab
+make cp-up             # control plane and its own PostgreSQL on the host
+make connector-check   # the Connector can read, and cannot write or read Secrets
+```
+
 ### Operator console
 
 A React/TypeScript operator console (`apps/web`) renders the deterministic
@@ -310,12 +419,17 @@ there" — with the model-call count shown alongside (zero on the deterministic
 path). The [timeline design](docs/diagnosis-timeline.md) documents the per-run
 events behind it.
 
+**Notifications.** When a new incident opens, and again when its diagnosis is
+stored, the console shows a toast and a badge. They are derived only from
+persisted incident state, so a reload or a missed stream event can never invent
+or lose one.
+
 > The console presents persisted incident state and the engine's diagnosis. It
 > does not make causal claims or change the RCA logic measured above.
 
 ## Architecture and trust boundaries
 
-Agentic SRE has four practical layers:
+Agentic SRE has five practical layers:
 
 1. **RCA engine** — deterministic signals, causal hypotheses, verification,
    confidence, resolution, and remediation proposals.
@@ -323,12 +437,17 @@ Agentic SRE has four practical layers:
    read-only observation tools.
 3. **Observation sources** — Kubernetes object versions and Events, Prometheus
    and Alertmanager context, Loki logs, traces, and configured snapshot data.
-4. **Control plane** — incident lifecycle, persistence, API, CLI, and HTML/UI
-   reporting.
+4. **Connector** — the only component that touches the customer environment;
+   typed read-only requests and alert and change streams over an outbound mTLS
+   connection ([boundary](#connector-boundary)).
+5. **Control plane** — incident lifecycle, persistence, API, CLI, and HTML/UI
+   reporting. In remote mode it holds no customer credential.
 
 The trust boundary is explicit:
 
-- Kubernetes observation is read-only; Secrets are deliberately not read.
+- Kubernetes observation is read-only; Secrets are deliberately not read
+  (enforced by RBAC and again by the Connector's deny list).
+- The control plane holds no customer credential; the Connector only dials out.
 - There is no arbitrary shell execution or autonomous cluster write capability.
 - Remediation text is proposed for an operator and is never executed.
 - Only in-scope, allowlisted observation capabilities can run.
@@ -426,12 +545,14 @@ remediation is returned as a proposal for an operator to review and execute.
 
 ### How accurate is Agentic SRE?
 
-Against ITBench-Lite ground truth it reached **17/22 (77.3%)** on the blind
-TEST25 holdout and **26/31 (83.9%)** across all 35 scenarios, with zero model
-calls. Denominators exclude four scenarios whose published labels match
-nothing in their own snapshots. This is a measured 35-scenario benchmark
-result, not a universal accuracy guarantee; `VERIFIED` predictions were 13/16
-correct against ground truth.
+Against ITBench-Lite ground truth it reached **17/22 (77.3%)** on TEST25, which
+was blind when frozen, and **26/31 (83.9%)** across all 35 scenarios, with zero
+model calls. Denominators exclude four scenarios whose published labels match
+nothing in their own snapshots. Since 2026-09-28 those 35 are development data,
+so these figures are regression evidence, not a generalization estimate; the
+held-out measurement is the own testbed, whose first results are small and
+reported honestly above. `VERIFIED` predictions were 13/16 correct against
+ground truth.
 
 ### What makes it different from an AI SRE agent?
 
@@ -472,14 +593,24 @@ telemetry impose real limits.
   unavailable or later removed.
 - Live base RCA does not currently consume bounded traffic or trace
   observations through `LiveSource`; some observability queries and signal
-  mappings remain demo-workload-specific.
-- General external-cluster installation packaging and durable high-availability
-  deployment are not yet complete.
+  mappings remain demo-workload-specific (`query_traffic` and `query_traces`
+  have no live readers yet).
+- The Connector uses static 90-day certificates; enrollment, rotation, Helm
+  packaging, `preflight` probing and multi-tenant operation are not built, and
+  the stream mode is opt-in.
+- Strong authority needs an observed execution and a pod-level effect. A fault
+  whose effect is only latency (for example a network delay) currently yields a
+  correctly named but non-strong cause; the service-level effect relation is
+  specified and deferred until the testbed can measure it.
+- The testbed has a first slice, not a suite: one fault family so far, three
+  runs, development tier. There is no held-out result yet.
+- General durable high-availability deployment is not yet complete.
 - The system is evidence-driven RCA, not formal causal inference.
 - There is no autonomous remediation, arbitrary shell execution, or cluster write
   tool.
-- Current generalization evidence is the frozen 25-scenario blind TEST25 run;
-  larger and more diverse production datasets are still needed.
+- The only blind generalization evidence, TEST25, has since been folded into
+  the development set; a new held-out measurement is being built on the testbed,
+  and larger and more diverse production datasets are still needed.
 
 ## Repository structure
 
@@ -490,15 +621,23 @@ packages/storage      incident, observation, and journal persistence
 apps/control_plane    API, console DTOs, Alertmanager webhook, live diagnosis
 apps/web              React/TypeScript operator console (served at /app)
 apps/cli              agentic-sre CLI and benchmark entrypoints
-packages/evals        ITBench-Lite integration and grading
+packages/connector    Connector: wire schema, service, streams, gRPC transport, PKI
+packages/evals        ITBench-Lite integration and grading; live/ holds the testbed
 evals                 benchmark splits, methodology, and public results
-infra                 Docker, Kind, Kubernetes, and observability manifests
+infra                 Docker, Kind, Kubernetes, Chaos Mesh, Connector and observability manifests
 tests                 unit, integration, and release regression coverage
 ```
 
 ## Documentation
 
 - [Architecture details](docs/architecture.md)
+- [Roadmap](docs/architecture/roadmap.md)
+- [Connector boundary contract](docs/architecture/connector-boundary-contract.md)
+- [Causal semantics contract](docs/architecture/m21-causal-semantics-contract.md)
+- Testbed: [ground truth](docs/architecture/testbed-ground-truth-contract.md),
+  [lab](docs/architecture/testbed-lab-design.md),
+  [control plane](docs/architecture/testbed-control-plane-design.md),
+  [scenarios and results](docs/architecture/testbed-scenarios-design.md)
 - [Operator console product contract](docs/ui/product-contract.md)
 - [Evaluation methodology](evals/README.md)
 - [Frozen benchmark report](evals/results/v1.1.2/README.md)

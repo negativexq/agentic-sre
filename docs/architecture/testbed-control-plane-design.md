@@ -102,3 +102,41 @@ plane; running the control plane in a container; the stream-mode default (`conne
 5. `cp-down` keeps the Postgres volume; deletion is a separate, explicit target.
 6. The gate of §7, including deleting the connector pod and recreating the lab while the control plane's
    history survives.
+
+## 10. Implementation record (2026-09-30)
+
+Built: the `connector` image target, `packages/connector/lab.py` (static certificates and the lab's
+Alertmanager configuration), `infra/kubernetes/connector.yaml`, and the targets `lab-pki`,
+`connector-deploy`, `connector-check`, `cp-up`, `cp-down`, `cp-reset`. Tests: 9 for the helpers and the
+manifests' promises (no credential committed, read-only rules, `cp-down` keeps the volume, the control plane
+starts with `KUBECONFIG=/dev/null`, the demo manifests are untouched).
+
+Gate of section 7, against the live lab:
+
+1. **Session.** The control plane started degraded with no connector, then the connector connected and the
+   console showed `Connector connected: lab`. PASS.
+2. **No kubeconfig.** With `KUBECONFIG=/dev/null` the control plane's own database held 31 journaled lab
+   objects (25 in `sre-demo`, 6 in `lab-control`) and its events, all read through the connector. PASS.
+3. **Fault under load.** A 120 s `NetworkChaos` delay under load produced, through Alertmanager, the
+   connector's local receiver and the stream, 4 incidents and 4 automatic diagnoses about 66 s after the fault;
+   every diagnosis named the injected experiment as its root cause. PASS.
+5. **Control plane restart.** After `cp-down` and `cp-up` the connector was back in about 4 s with no action,
+   and the incident history was intact (4 incidents, no duplicates). PASS.
+6. **Read-only identity.** `make connector-check`: the connector lists pods in `sre-demo` and `lab-control`
+   and chaos objects in `chaos-mesh`, and is denied create, patch and delete, reading secrets, and creating
+   or deleting chaos objects in all three. PASS.
+4. **Connector pod deleted** and 7. **lab recreated while the history survives**: not yet run; both change
+   the lab and are asked for separately.
+
+Defects found and fixed while doing it:
+
+- The first `connector-check` demanded `list pods` in `chaos-mesh`, where the Role deliberately allows only
+  chaos objects and events; the check was wrong, not the identity. It now asserts what each namespace is meant
+  to allow and additionally that the connector cannot inject a fault.
+- The console reported Prometheus, Loki and Tempo as "not configured, set the variable" while they were
+  configured on the connector, because it looked at its own environment. In remote mode the rows now come from
+  the capabilities the connector reports, and read "unavailable" when no connector is connected.
+- With no connector the intake logged the same warning every second. It now logs a change of state once.
+
+Observation: after the restart the control plane stored 11 further diagnosis revisions in about a minute
+(15 against 4 before), consistent with its re-evaluation loop running on its first cycles; not investigated.

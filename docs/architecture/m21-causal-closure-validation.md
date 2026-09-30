@@ -259,3 +259,17 @@ vakalarda desteklenen tek ailenin artık Schedule olmasından gelir. Etiket varl
 mekanizma doğruluğunu değil; kural etikete göre ayarlanmadı ve bu düşüş bir doğruluk hükmü değildir.
 Hangi varlığın raporlanacak kök neden olduğu (yinelenen fault'ın tanımı olan Schedule mı, tek bir
 yürütme mi) ayrı bir modelleme sorusudur ve etiket eşleşmesiyle karara bağlanmamalıdır.
+
+## Fault-execution desteği: ölçüm (2026-09-30)
+
+`m21.support.observed-fault-execution.v1`, 35 gerçek yakalamada (spawn-full ile karşılaştırma,
+`PYTHONHASHSEED=0`): tanı durumları, claim seviyeleri ve state 35/35 vakada aynıdır (20 COMPETING /
+12 INSUFFICIENT / 3 SUPPORTED); replay 35/35 PASS. Kural 288 claim'den ikisinde tetiklenir
+(Scenario-18, Scenario-22; ikisinde de taşıyıcı Schedule instance'ı, tanık hedef pod'un kendisidir).
+İkisinde de desteklenen aile birden fazla olduğundan `OBSERVED_MECHANISM_CAUSE` seviyesi ve
+`RESOLVED` oluşmaz; zaman kararlılığı STABLE. Hiçbir vakada yetki geri çekilmedi (STRONG_MECHANISM
+withheld = 0). Yanlış `RESOLVED` = 0.
+
+Kapsam sınırı ölçümle örtüşür: hedef pod'da aralık içi etki gözlemi 35 vakada iki claim'de vardır;
+hizmet düzeyi semptomlar örtülmediği için bu kuralla `RESOLVED` erişilebilir değildir. Bu, kuralın
+başarısızlığı değil, yol kanıtı eksikliğinin ölçümüdür.

@@ -45,19 +45,26 @@ function Header({ incident, live }: { incident: IncidentListItem; live: ReactNod
 function RootActor({ diagnosis }: { diagnosis: DiagnosisView }) {
   const resolved = diagnosis.is_resolved;
   const actor = diagnosis.leading_root_actor;
+  const withheld = Boolean(diagnosis.leading_actor_withheld_reason);
   return (
     <Card>
       <CardBody className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium uppercase tracking-wide text-subtle">
-            {["m21.v2", "m21.v3"].includes(diagnosis.decision_semantics ?? "") ? (diagnosis.claim_level === "OBSERVED_MECHANISM_CAUSE" ? "Observed mechanism cause" : "Possible causal actor") : resolved ? "Root cause" : "Leading root actor"}
+            {withheld ? "Causal actor" : ["m21.v2", "m21.v3"].includes(diagnosis.decision_semantics ?? "") ? (diagnosis.claim_level === "OBSERVED_MECHANISM_CAUSE" ? "Observed mechanism cause" : "Possible causal actor") : resolved ? "Root cause" : "Leading root actor"}
           </span>
           <Badge tone={confidenceTone(diagnosis.confidence)}>{diagnosis.confidence}</Badge>
           <Badge tone={resolutionTone(diagnosis.resolution)}>{diagnosis.resolution}</Badge>
         </div>
         <p className="font-mono text-lg text-text break-anywhere">
-          {actor ? shortEntity(actor) : "No single root cause identified"}
+          {withheld ? "Not established" : actor ? shortEntity(actor) : "No single root cause identified"}
         </p>
+        {withheld && (
+          <p className="text-sm text-muted">
+            No candidate has evidence in the incident window. Observations outside it stay listed below as
+            context, not as causes.
+          </p>
+        )}
         <p className="text-sm text-muted break-anywhere">{diagnosis.summary}</p>
         {["m21.v2", "m21.v3"].includes(diagnosis.decision_semantics ?? "") && (
           <p className="text-sm text-muted">

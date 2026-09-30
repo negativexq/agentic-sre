@@ -319,7 +319,11 @@ def build_report(
     ``generated_at``, which identify this particular freezing.
     """
     is_resolved = diagnosis.resolution.value == "RESOLVED"
-    leading = diagnosis.root_cause.canonical if diagnosis.root_cause else None
+    leading = (
+        diagnosis.root_cause.canonical
+        if diagnosis.root_cause and diagnosis.leading_actor_established
+        else None
+    )
     states = _epistemic_states(diagnosis.resolution_trace)
     hypotheses = diagnosis.alternative_hypotheses or diagnosis.ambiguous_hypotheses
     alternatives = (

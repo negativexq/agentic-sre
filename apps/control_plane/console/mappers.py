@@ -108,7 +108,11 @@ def diagnosis_view(
 ) -> DiagnosisView:
     """Shape a stored diagnosis for the workspace, preserving its semantics."""
     is_resolved = diagnosis.resolution.value == "RESOLVED"
-    leading = diagnosis.root_cause.canonical if diagnosis.root_cause else None
+    leading = (
+        diagnosis.root_cause.canonical
+        if diagnosis.root_cause and diagnosis.leading_actor_established
+        else None
+    )
     states = _epistemic_states(diagnosis.resolution_trace)
 
     hypotheses = diagnosis.alternative_hypotheses or diagnosis.ambiguous_hypotheses
@@ -156,6 +160,7 @@ def diagnosis_view(
         confidence=diagnosis.confidence.value,
         leading_root_actor=leading,
         root_cause=leading if is_resolved else None,
+        leading_actor_withheld_reason=diagnosis.leading_actor_withheld_reason,
         is_resolved=is_resolved,
         summary=diagnosis.summary,
         resolution_rationale=trace.rationale if trace else None,
@@ -314,7 +319,16 @@ def incident_list_item(incident: Incident, view: dict[str, Any] | None) -> Incid
         severity=incident.severity.value,
         source=incident.source.value,
         service=service if isinstance(service, str) else None,
-        leading_root_actor=str(view["root_cause"]) if view and view.get("root_cause") else None,
+        leading_root_actor=(
+            str(view["root_cause"])
+            if view and view.get("root_cause") and not view.get("leading_actor_withheld_reason")
+            else None
+        ),
+        leading_actor_withheld_reason=(
+            str(view["leading_actor_withheld_reason"])
+            if view and view.get("leading_actor_withheld_reason")
+            else None
+        ),
         confidence=str(view["confidence"]) if view and view.get("confidence") else None,
         resolution=str(view["resolution"]) if view and view.get("resolution") else None,
         has_diagnosis=view is not None,

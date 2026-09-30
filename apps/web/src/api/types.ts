@@ -104,6 +104,8 @@ export interface DiagnosisView {
   confidence: Confidence;
   leading_root_actor: string | null;
   root_cause: string | null;
+  /** Why the engine did not establish a leading actor (roadmap C10); the actor is then null. */
+  leading_actor_withheld_reason?: string | null;
   is_resolved: boolean;
   summary: string;
   resolution_rationale: string | null;
@@ -175,6 +177,8 @@ export interface IncidentListItem {
   confidence: Confidence | null;
   resolution: Resolution | null;
   has_diagnosis: boolean;
+  /** Set when the engine did not establish a leading actor (roadmap C10). */
+  leading_actor_withheld_reason?: string | null;
   created_at: string;
   updated_at: string;
   age_seconds: number;

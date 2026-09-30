@@ -143,9 +143,11 @@ class DiagnosisView(ConsoleModel):
     mechanism_verified_hypothesis_ids: tuple[str, ...] = ()
     confidence: str
     # The leading actor is the top-ranked actor even when unresolved; it equals
-    # the root cause only once the diagnosis is RESOLVED.
+    # the root cause only once the diagnosis is RESOLVED. It is None, with the reason
+    # below, when the engine did not establish it (roadmap C10).
     leading_root_actor: str | None
     root_cause: str | None
+    leading_actor_withheld_reason: str | None = None
     is_resolved: bool
     summary: str
     resolution_rationale: str | None
@@ -234,6 +236,7 @@ class IncidentListItem(ConsoleModel):
     service: str | None
     leading_root_actor: str | None
     confidence: str | None
+    leading_actor_withheld_reason: str | None = None
     resolution: str | None
     has_diagnosis: bool
     created_at: datetime

@@ -1807,6 +1807,8 @@ class DiagnosisRepository:
                 "root_cause": row.root_cause,
                 "confidence": row.confidence,
                 "resolution": document.get("resolution"),
+                # roadmap C10: absent from documents written before the field existed
+                "leading_actor_withheld_reason": document.get("leading_actor_withheld_reason"),
                 "services": tuple(services),
                 "created_at": row.created_at,
                 "run_id": row.run_id,

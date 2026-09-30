@@ -69,3 +69,35 @@ def test_a_stored_document_from_before_the_field_is_presented_as_it_was() -> Non
     for key in ("leading_actor_established", "leading_actor_withheld_reason"):
         document.pop(key)
     assert Diagnosis.model_validate(document).leading_actor_established
+
+
+def test_the_console_never_presents_a_withheld_actor_but_keeps_it_as_context() -> None:
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    from apps.control_plane.console.mappers import diagnosis_view, incident_list_item
+    from packages.contracts import Incident, IncidentSeverity, IncidentSource, IncidentStatus
+
+    stale, fresh = diagnose(-300), diagnose(4)
+    view = diagnosis_view(stale)
+    assert view.leading_root_actor is None and view.root_cause is None
+    assert view.leading_actor_withheld_reason == "NO_EVIDENCE_IN_INCIDENT_WINDOW"
+    assert diagnosis_view(fresh).leading_root_actor == POD
+
+    now = datetime.now(UTC)
+    incident = Incident(
+        incident_id=uuid4(),
+        status=IncidentStatus.OPEN,
+        severity=IncidentSeverity.WARNING,
+        source=IncidentSource.ALERTMANAGER,
+        title="ConsumerLag",
+        created_at=now,
+        updated_at=now,
+    )
+    listed = incident_list_item(
+        incident,
+        {"root_cause": POD, "leading_actor_withheld_reason": "NO_EVIDENCE_IN_INCIDENT_WINDOW"},
+    )
+    assert listed.leading_root_actor is None and listed.leading_actor_withheld_reason
+    # a view stored before the field existed is presented as it was
+    assert incident_list_item(incident, {"root_cause": POD}).leading_root_actor == POD

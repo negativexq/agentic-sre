@@ -43,9 +43,15 @@ export function IncidentsTable({ items }: { items: IncidentListItem[] }) {
             </TCell>
             <TCell className="text-muted">{item.service ?? "—"}</TCell>
             <TCell className="max-w-[14rem]">
-              <span className="font-mono text-xs break-anywhere">
-                {shortEntity(item.leading_root_actor)}
-              </span>
+              {item.leading_actor_withheld_reason ? (
+                <span className="text-xs text-subtle" title="No candidate has evidence in the incident window">
+                  Not established
+                </span>
+              ) : (
+                <span className="font-mono text-xs break-anywhere">
+                  {shortEntity(item.leading_root_actor)}
+                </span>
+              )}
             </TCell>
             <TCell>
               {item.confidence ? (

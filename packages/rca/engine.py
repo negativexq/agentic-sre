@@ -60,6 +60,7 @@ from packages.rca.ranking import (
     Context,
     RankingConfig,
     annotate_temporal_roles,
+    finding_in_window,
     score_findings,
     symptom_tokens,
     verification_trace,
@@ -853,10 +854,19 @@ def diagnose_case(
         if resolution_trace.state is Resolution.AMBIGUOUS
         else ()
     )
+    # Roadmap C10: an unestablished leader whose evidence all lies outside the window is not a cause.
+    windows = [finding_in_window(f.at, case.context, config.ranking) for f in selected.findings]
+    withheld = (
+        resolution_trace.claim_level == "UNESTABLISHED"
+        and any(w is False for w in windows)
+        and not any(w is True for w in windows)
+    )
     return Diagnosis(
         decision_semantics="m21.v3",
         incident_id=case.incident_id,
         root_cause=selected.causal_actor,
+        leading_actor_established=not withheld,
+        leading_actor_withheld_reason="NO_EVIDENCE_IN_INCIDENT_WINDOW" if withheld else None,
         confidence=confidence,
         resolution=resolution_trace.state,
         summary=(
@@ -865,6 +875,8 @@ def diagnose_case(
             else f"Supported possible initiating cause: {selected.causal_actor.canonical}. "
             "Mechanism execution and incident recovery are not established."
             if resolution_trace.diagnosis_status == "SUPPORTED_CAUSE"
+            else f"No causal candidate has evidence in the incident window. Nearest observation, outside it, on {selected.causal_actor.canonical}: {selected.findings[0].summary if selected.findings else 'no actor observation'}. Causal investigation remains open: {resolution_trace.rationale}"
+            if withheld
             else f"Observed on {selected.causal_actor.canonical}: {selected.findings[0].summary if selected.findings else 'no actor observation'}. Causal investigation remains open: {resolution_trace.rationale}"
         ),
         symptoms=case.symptoms,

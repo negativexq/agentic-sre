@@ -1813,6 +1813,12 @@ class Diagnosis(BaseModel):
     # epistemic digest. Empty for documents written before it existed.
     requirement_evaluations: tuple[RequirementEvaluation, ...] = ()
     hypothesis_inventory: tuple[HypothesisInventoryEntry, ...] = ()
+    # Presentation, outside the epistemic digest (roadmap C10): whether ``root_cause`` may be shown as
+    # the leading actor. False when no claim is established and every finding of the leader whose time
+    # is known lies outside the incident window, so the ranking's least-bad candidate is never presented
+    # as a cause. ``root_cause`` itself is unchanged. True for documents written before it existed.
+    leading_actor_established: bool = True
+    leading_actor_withheld_reason: str | None = None
 
     @model_validator(mode="before")
     @classmethod

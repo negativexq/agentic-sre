@@ -115,6 +115,11 @@ def _in_window(at: datetime | None, context: Context, config: RankingConfig) -> 
     return onset - config.lookback <= at <= end + config.grace
 
 
+def finding_in_window(at: datetime | None, context: Context, config: RankingConfig) -> bool | None:
+    """Whether an instant lies in the incident window the ranking uses; ``None`` when unknowable."""
+    return _in_window(at, context, config)
+
+
 def _affected_entities(finding: Finding, topology: Topology) -> set[EntityRef]:
     """Where a finding acts: fault targets and their workloads, or the entity itself."""
     affected = {finding.entity, *finding.related}

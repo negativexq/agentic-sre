@@ -42,7 +42,7 @@ Contract: [`connector-boundary-contract.md`](connector-boundary-contract.md).
 | B1 | `Timeline` ground truth (`testbed-ground-truth-contract.md`): manifest, journal, oracle, chain and scoring implemented and tested; scenarios and runner wiring come with B4 | DONE | |
 | B2 | Recreate the lab cluster: Chaos Mesh 2.8.4 with containerd values, self-migrating Postgres, isolated control workload, gate passed (`testbed-lab-design.md` §13) | DONE | B1, A7 |
 | B3 | Control plane outside the lab, its own Postgres; the Connector inside the lab dials out (`testbed-control-plane-design.md` §10) | DONE (all seven gate items pass, including a lab recreation with the history intact) | A7, B2 |
-| B4 | 4 to 6 controlled incidents, each repeated N times with randomized target and timing, dev and held-out split fixed up front: direct pod fault, dependency fault, scheduled recurring fault, config or rollout cause, negative control by construction, competing causes | NEXT | B2 |
+| B4 | Scenarios, repeats, dev and held-out split, frozen manifest, runner (`testbed-scenarios-design.md`) | PROPOSED (design written, awaiting approval) | B1, B2, B3 |
 | B5 | Frozen engine baseline: version and acceptance criteria fixed before any run | NEXT | B4 |
 | B6 | Multi-cutoff recordings per run, to test timing stability against a known world | NEXT | B4 |
 

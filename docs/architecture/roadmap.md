@@ -39,7 +39,7 @@ Contract: [`connector-boundary-contract.md`](connector-boundary-contract.md).
 | # | Work | Status | Depends on |
 |---|---|---|---|
 | B0 | Hygiene: `orders.created` is declared and re-created by a sidecar and Kafka keeps its data across container restarts (verified live); 88 unused Docker volumes removed and one kept | DONE | |
-| B1 | `Timeline` ground truth (`testbed-ground-truth-contract.md`): cause created, execution started, target effect, propagation, symptom started, alert fired, recovery; written by the injector and an independent oracle | DONE (contract approved; implementation follows B2) | |
+| B1 | `Timeline` ground truth (`testbed-ground-truth-contract.md`): manifest, journal, oracle, chain and scoring implemented and tested; scenarios and runner wiring come with B4 | DONE | |
 | B2 | Recreate the lab cluster (destructive): Chaos Mesh 2.8.4 with containerd values, connector inside the lab, Postgres volume and declared migration (`testbed-lab-design.md`) | DECISION (design approved; recreation asked again once A7 and B1 hold) | B1, A7 |
 | B3 | Control plane outside the lab (host or container), read-only kubeconfig, its own Postgres | NEXT | A7, B2 |
 | B4 | 4 to 6 controlled incidents, each repeated N times with randomized target and timing, dev and held-out split fixed up front: direct pod fault, dependency fault, scheduled recurring fault, config or rollout cause, negative control by construction, competing causes | NEXT | B2 |

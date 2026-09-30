@@ -146,3 +146,28 @@ engine, and this contract does not fix its implementation.
    committed before the first run and hashed into every run (§3).
 5. Scoring is reported per tier and per family with valid-run counts, and is never merged with the
    seen-35 result (§7).
+
+## 11. Implementation status (2026-09-30)
+
+Implemented in `packages/evals/live/`: `ground_truth.py` (timeline, chain, suite manifest with a frozen
+digest, run assembly with the `INVALID` rules of §4, write-once store), `journal.py` (the injector
+journal and the derivation of the three injector fields from it; `Context.journal` and a `role`
+argument journal every `kubectl` call), `oracle.py` (probes, the series writer, run-based derivation of
+the four oracle fields, an NTP-style offset estimate) and `testbed_grader.py` (the §7 metrics from the
+engine's `Diagnosis`, an aggregate per tier and family that skips links the world did not have and
+never merges tiers). Scoring was exercised on the engine's real diagnosis of a scheduled chaos case.
+Tests: 22 for the record, journal and oracle and 5 for scoring.
+
+Two rules were made concrete and are stated here so that an amendment can change them:
+
+- An oracle **effect** or **propagation** is the first run of three consecutive failed samples after the
+  execution (or after the effect), and a **recovery** is the first instant every watched probe has three
+  consecutive healthy samples after the cause is removed. A single blip is never an effect.
+- Matching is by actor; a link's `evidence_class` decides which witness counts (an execution witness
+  whose origin or holder is a chain execution actor; an effect witness whose symptom is the effect
+  actor; a propagation witness whose path passes through the propagation actor). The engine emits no
+  propagation witness yet, so that recall is 0 by construction until the service-level relation exists.
+
+Not done, on purpose: the scenario definitions and their randomization (roadmap B4), the wiring that
+makes `run_scenario` assemble and store a `RunRecord`, the per-scenario choice of probe roles, and any
+live use. Nothing here has touched a cluster.

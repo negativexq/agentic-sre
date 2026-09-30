@@ -1,6 +1,7 @@
 """FastAPI application for the deterministic incident control plane."""
 
 import json
+import logging
 import os
 import threading
 from collections.abc import AsyncIterator, Iterator
@@ -40,6 +41,7 @@ from apps.control_plane.schemas import (
 from apps.control_plane.timeline import diagnosis_phases, newer_run_note
 from packages.connector.client import ConnectorClient, in_process_transport
 from packages.connector.service import Connector
+from packages.connector.transport import ConnectorGateway
 from packages.contracts import (
     Alert,
     AlertmanagerWebhook,
@@ -98,6 +100,9 @@ def _correlation_id(request: Request) -> str:
     return request.headers.get("X-Correlation-ID", str(uuid4()))
 
 
+logger = logging.getLogger(__name__)
+
+
 def _error(request: Request, code: str, message: str, status_code: int) -> JSONResponse:
     """Build the common error envelope."""
     body = ErrorResponse(
@@ -127,7 +132,12 @@ def _env_connector(name: str, env_var: str) -> SystemConnector:
     return SystemConnector(name=name, status="not_configured", detail=f"set {env_var} to enable")
 
 
-def build_system_status(session: Session, *, reader_configured: bool) -> SystemStatus:
+def build_system_status(
+    session: Session,
+    *,
+    reader_configured: bool,
+    connector_status: SystemConnector | None = None,
+) -> SystemStatus:
     """Assemble connector health from what the control plane can truthfully tell."""
     try:
         session.execute(text("SELECT 1"))
@@ -153,6 +163,7 @@ def build_system_status(session: Session, *, reader_configured: bool) -> SystemS
             _env_connector("Loki", "SRE_LOKI_URL"),
             _env_connector("Tempo", "TEMPO_URL"),
             _env_connector("Email", "SRE_SMTP_HOST"),
+            *([connector_status] if connector_status is not None else []),
         ]
     )
 
@@ -179,8 +190,16 @@ def create_app(
     connector: Connector | None = getattr(diagnoser, "connector", None)
     # In stream mode (SRE_CONNECTOR_STREAMS=true) the connector owns every Alertmanager
     # connection: it polls, receives the webhook locally and streams both here (contract §10).
+    # In remote mode (SRE_CONNECTOR_MODE=remote) a connector dials this process instead (§12).
+    gateway: ConnectorGateway | None = getattr(diagnoser, "gateway", None)
+    remote_client: ConnectorClient | None = getattr(diagnoser, "connector_client", None)
+    stream_client: ConnectorClient | None = (
+        ConnectorClient(in_process_transport(connector)) if connector is not None else remote_client
+    )
     alert_coverage_poller = (
-        None if connector is not None else alert_coverage_poller_from_environment(session_factory)
+        None
+        if stream_client is not None
+        else alert_coverage_poller_from_environment(session_factory)
     )
     auto_diagnose = os.getenv("SRE_AUTO_DIAGNOSE", "").casefold() == "true"
 
@@ -192,12 +211,12 @@ def create_app(
 
     alert_consumer = (
         AlertStreamConsumer(
-            ConnectorClient(in_process_transport(connector)),
+            stream_client,
             session_factory,
             config=AlertCoverageConfig.from_environment(),
             on_incidents=diagnose_in_background if auto_diagnose else None,
         )
-        if connector is not None
+        if stream_client is not None
         else None
     )
 
@@ -220,7 +239,9 @@ def create_app(
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         stop = threading.Event()
         watcher = None
-        if watch_interval > 0 and diagnoser.reader is not None:
+        if gateway is not None:
+            logger.info("connector gateway listening on port %d", gateway.start())
+        if watch_interval > 0 and (diagnoser.reader is not None or gateway is not None):
             watcher = threading.Thread(
                 target=diagnoser.watch, args=(stop, watch_interval), daemon=True
             )
@@ -230,8 +251,8 @@ def create_app(
             poller = threading.Thread(target=alert_coverage_poller.run, args=(stop,), daemon=True)
             poller.start()
         stream_threads: list[threading.Thread] = []
-        if connector is not None and alert_consumer is not None:
-            stream_threads = [
+        if connector is not None:
+            stream_threads.append(
                 threading.Thread(
                     target=connector.run,
                     args=(stop,),
@@ -240,11 +261,14 @@ def create_app(
                         "alerts_interval": AlertCoverageConfig.from_environment().poll_interval.total_seconds(),
                     },
                     daemon=True,
-                ),
-                threading.Thread(target=alert_consumer.run, args=(stop,), daemon=True),
-            ]
-            for thread in stream_threads:
-                thread.start()
+                )
+            )
+        if alert_consumer is not None:
+            stream_threads.append(
+                threading.Thread(target=alert_consumer.run, args=(stop,), daemon=True)
+            )
+        for thread in stream_threads:
+            thread.start()
         try:
             yield
         finally:
@@ -255,6 +279,8 @@ def create_app(
                 poller.join(timeout=5)
             for thread in stream_threads:
                 thread.join(timeout=5)
+            if gateway is not None:
+                gateway.stop()
 
     app = FastAPI(title="Agentic SRE", version=PROJECT_VERSION, lifespan=lifespan)
     app.add_middleware(TelemetryMiddleware, runtime=telemetry)
@@ -271,10 +297,26 @@ def create_app(
         response.headers.setdefault("Content-Security-Policy", CONTENT_SECURITY_POLICY)
         return response
 
-    reader_configured = diagnoser.reader is not None
+    def connector_status() -> SystemConnector | None:
+        if gateway is None:
+            return None
+        connected = sorted(gateway.connected())
+        return (
+            SystemConnector(
+                name="Connector", status="connected", detail=f"connected: {', '.join(connected)}"
+            )
+            if connected
+            else SystemConnector(
+                name="Connector", status="unavailable", detail="no connector is connected"
+            )
+        )
 
     def system_status_provider(session: Session) -> SystemStatus:
-        return build_system_status(session, reader_configured=reader_configured)
+        return build_system_status(
+            session,
+            reader_configured=diagnoser.reader is not None,
+            connector_status=connector_status(),
+        )
 
     app.include_router(
         create_console_router(
@@ -587,6 +629,11 @@ def create_app(
         session: Session = Depends(get_session),  # noqa: B008
     ) -> dict[str, object]:
         """Normalize and ingest an Alertmanager delivery idempotently."""
+        if gateway is not None:
+            raise HTTPException(
+                status_code=410,
+                detail="alerts reach the control plane through the connector; point Alertmanager at it",
+            )
         if connector is not None:
             # The connector is the local receiver; incidents follow through its alert stream.
             accepted = connector.receive_webhook(payload.model_dump(mode="json", by_alias=True))

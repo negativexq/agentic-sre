@@ -27,6 +27,7 @@ from packages.connector.client import (
 )
 from packages.connector.client import provider_readers as connector_provider_readers
 from packages.connector.service import Connector, connector_from_environment
+from packages.connector.transport import ConnectorGateway, gateway_from_environment
 from packages.contracts import Alert as ContractAlert
 from packages.contracts import Incident, IncidentEvent, IncidentEventType
 from packages.rca.alert_coverage import AlertCoverageConfig
@@ -332,6 +333,8 @@ class DiagnosisService:
     evidence_namespaces: tuple[str, ...] = ("chaos-mesh",)
     reader: ClusterReader | None = None
     connector: Connector | None = None
+    gateway: ConnectorGateway | None = None
+    connector_client: ConnectorClient | None = None
     investigator_factory: Callable[[], Investigator | None] = lambda: None
     bounded_policy_factory: Callable[[], InvestigationPolicy | None] = lambda: None
     # The product always seeds from the full source; only replay-mechanics
@@ -872,21 +875,35 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
     )
     # The control plane reaches customer resources only through the connector (contract §1);
     # today it runs in-process, and every call still crosses the encoded wire.
+    mode = os.getenv("SRE_CONNECTOR_MODE", "in-process").casefold()
+    if mode not in {"in-process", "remote"}:
+        raise ValueError("SRE_CONNECTOR_MODE must be 'in-process' or 'remote'")
     streams = os.getenv("SRE_CONNECTOR_STREAMS", "").casefold() == "true"
-    connector = connector_from_environment(
-        evidence_namespaces,
-        tuple(dict.fromkeys((*namespaces, *evidence_namespaces))),
-        accept_webhook=streams,
-    )
-    client = ConnectorClient(in_process_transport(connector))
-    # Stream mode rebuilds the cluster listing from the connector's change stream (contract §10);
-    # otherwise each listing is one request. Both answer the same ClusterReader protocol.
-    reader: ClusterReader | None = (
-        StreamedClusterReader(client)
-        if streams and "changes" in client.capabilities()
-        else cluster_reader(client)
-    )
-    provider_readers = connector_provider_readers(client)
+    connector: Connector | None = None
+    gateway: ConnectorGateway | None = None
+    remote_client: ConnectorClient | None = None
+    reader: ClusterReader | None
+    if mode == "remote":
+        # A remote connector dials this process (contract §12): the service starts with no reader
+        # and attaches them when a connector connects.
+        gateway, remote_id = gateway_from_environment()
+        remote_client = ConnectorClient(gateway.transport(remote_id))
+        reader, provider_readers = None, ProviderReaders()
+    else:
+        connector = connector_from_environment(
+            evidence_namespaces,
+            tuple(dict.fromkeys((*namespaces, *evidence_namespaces))),
+            accept_webhook=streams,
+        )
+        client = ConnectorClient(in_process_transport(connector))
+        # Stream mode rebuilds the cluster listing from the connector's change stream (§10);
+        # otherwise each listing is one request. Both answer the same ClusterReader protocol.
+        reader = (
+            StreamedClusterReader(client)
+            if streams and "changes" in client.capabilities()
+            else cluster_reader(client)
+        )
+        provider_readers = connector_provider_readers(client)
 
     # Built once and reused: OpenAIClient owns the call-budget counter, so a
     # fresh client per incident would reset SRE_LLM_MAX_CALLS every time.
@@ -918,12 +935,14 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
             llm_client = OpenAIClient()
         return LLMInvestigationPolicy(llm_client)
 
-    return DiagnosisService(
+    service = DiagnosisService(
         session_factory=session_factory,
         namespaces=namespaces,
         evidence_namespaces=evidence_namespaces,
         reader=reader,
         connector=connector if streams else None,
+        gateway=gateway,
+        connector_client=remote_client,
         provider_readers=provider_readers,
         investigator_factory=investigator,
         bounded_policy_factory=bounded_policy,
@@ -934,6 +953,22 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
         reevaluation=reevaluation_from_environment(),
         alert_coverage_config=AlertCoverageConfig.from_environment(),
     )
+    if gateway is not None and remote_client is not None:
+        client_for_attach = remote_client
+
+        def attach(_connector_id: str) -> None:
+            """A connector connected: read what it offers and attach the matching readers."""
+            capabilities = client_for_attach.capabilities()
+            service.reader = (
+                StreamedClusterReader(client_for_attach)
+                if "changes" in capabilities
+                else cluster_reader(client_for_attach)
+            )
+            service.provider_readers = connector_provider_readers(client_for_attach)
+            logger.info("connector attached with capabilities %s", ", ".join(capabilities))
+
+        gateway.on_connect = attach
+    return service
 
 
 __all__ = [

@@ -411,7 +411,14 @@ class Connector:
             with self._changes_lock:
                 if generation != self._generation:
                     return True  # another scope's expiry already took the new snapshot
+                logger.warning(
+                    "watch of %s/%s expired at %s; gap and relist",
+                    scope.namespace,
+                    scope.kind,
+                    version,
+                )
                 self.watch_stats["expired"] += 1
+                self.watch_stats[f"expired:{scope.kind}"] += 1
                 self._put(
                     self._changes,
                     wire.GapItem(seq=0, at=self.clock(), reason="RESOURCE_VERSION_EXPIRED"),

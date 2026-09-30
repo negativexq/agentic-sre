@@ -24,7 +24,7 @@ import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
@@ -226,28 +226,34 @@ class AlertmanagerReader:
 
     def active_alert_count(self) -> int:
         """The number of alerts Alertmanager reports now; raises when it was not observed."""
-        headers = {"Accept": "application/json"}
-        if self.config.bearer_token:
-            headers["Authorization"] = f"Bearer {self.config.bearer_token}"
-        request = Request(f"{self.config.base_url}{_ALERTS_PATH}", headers=headers, method="GET")
-        try:
-            with self.opener(request, timeout=self.config.timeout_seconds) as response:
-                if not 200 <= response.status < 300:
-                    raise AlertmanagerError(f"Alertmanager returned HTTP {response.status}")
-                body = response.read(_MAX_RESPONSE_BYTES + 1)
-        except HTTPError as error:
-            raise AlertmanagerError(f"Alertmanager returned HTTP {error.code}") from error
-        except (URLError, TimeoutError, OSError) as error:
-            raise AlertmanagerError("Alertmanager request failed") from error
-        if len(body) > _MAX_RESPONSE_BYTES:
-            raise AlertmanagerProtocolError("Alertmanager response is too large")
-        try:
-            alerts = json.loads(body)
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise AlertmanagerProtocolError("Alertmanager returned invalid JSON") from error
-        if not isinstance(alerts, list):
-            raise AlertmanagerProtocolError("Alertmanager did not return an alert list")
-        return len(alerts)
+        return len(fetch_alerts(self))
+
+
+def fetch_alerts(reader: AlertmanagerReader) -> list[dict[str, Any]]:
+    """The alerts Alertmanager reports now (``GET /api/v2/alerts`` only); raises if unobserved."""
+    config, opener = reader.config, reader.opener
+    headers = {"Accept": "application/json"}
+    if config.bearer_token:
+        headers["Authorization"] = f"Bearer {config.bearer_token}"
+    request = Request(f"{config.base_url}{_ALERTS_PATH}", headers=headers, method="GET")
+    try:
+        with opener(request, timeout=config.timeout_seconds) as response:
+            if not 200 <= response.status < 300:
+                raise AlertmanagerError(f"Alertmanager returned HTTP {response.status}")
+            body = response.read(_MAX_RESPONSE_BYTES + 1)
+    except HTTPError as error:
+        raise AlertmanagerError(f"Alertmanager returned HTTP {error.code}") from error
+    except (URLError, TimeoutError, OSError) as error:
+        raise AlertmanagerError("Alertmanager request failed") from error
+    if len(body) > _MAX_RESPONSE_BYTES:
+        raise AlertmanagerProtocolError("Alertmanager response is too large")
+    try:
+        alerts = json.loads(body)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise AlertmanagerProtocolError("Alertmanager returned invalid JSON") from error
+    if not isinstance(alerts, list):
+        raise AlertmanagerProtocolError("Alertmanager did not return an alert list")
+    return [a for a in alerts if isinstance(a, dict)]
 
 
 class AlertChannelReader(Protocol):

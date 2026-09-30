@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from apps.control_plane.auth import require_api_token
 from apps.control_plane.baseline import evaluate_baseline
+from apps.control_plane.connector_intake import AlertStreamConsumer
 from apps.control_plane.console import create_console_router
 from apps.control_plane.console.dto import SystemConnector, SystemStatus
 from apps.control_plane.console.email_delivery import EmailDelivery, email_delivery_from_env
@@ -37,6 +38,8 @@ from apps.control_plane.schemas import (
     RevisionDiffResponse,
 )
 from apps.control_plane.timeline import diagnosis_phases, newer_run_note
+from packages.connector.client import ConnectorClient, in_process_transport
+from packages.connector.service import Connector
 from packages.contracts import (
     Alert,
     AlertmanagerWebhook,
@@ -47,7 +50,10 @@ from packages.contracts import (
     IncidentEvent,
 )
 from packages.incident import IncidentManager, normalize_alert
-from packages.rca.alert_coverage import alert_coverage_poller_from_environment
+from packages.rca.alert_coverage import (
+    AlertCoverageConfig,
+    alert_coverage_poller_from_environment,
+)
 from packages.rca.model import Diagnosis
 from packages.rca.report import (
     Lifecycle,
@@ -169,8 +175,31 @@ def create_app(
     diagnoser = diagnosis_service or service_from_environment(session_factory)
     # The webhook ingests alert occurrences; this read-only poller only records
     # when the alert channel was actually observed (coverage), never incidents.
-    alert_coverage_poller = alert_coverage_poller_from_environment(session_factory)
+    # Injected test doubles need not carry a connector; only the real service does.
+    connector: Connector | None = getattr(diagnoser, "connector", None)
+    # In stream mode (SRE_CONNECTOR_STREAMS=true) the connector owns every Alertmanager
+    # connection: it polls, receives the webhook locally and streams both here (contract §10).
+    alert_coverage_poller = (
+        None if connector is not None else alert_coverage_poller_from_environment(session_factory)
+    )
     auto_diagnose = os.getenv("SRE_AUTO_DIAGNOSE", "").casefold() == "true"
+
+    def diagnose_in_background(incident_ids: list[UUID]) -> None:
+        for incident_id in incident_ids:
+            threading.Thread(
+                target=diagnoser.run, args=(incident_id, "INITIAL"), daemon=True
+            ).start()
+
+    alert_consumer = (
+        AlertStreamConsumer(
+            ConnectorClient(in_process_transport(connector)),
+            session_factory,
+            config=AlertCoverageConfig.from_environment(),
+            on_incidents=diagnose_in_background if auto_diagnose else None,
+        )
+        if connector is not None
+        else None
+    )
 
     def session_dependency() -> Iterator[Session]:
         session = session_factory()
@@ -200,6 +229,22 @@ def create_app(
         if alert_coverage_poller is not None:
             poller = threading.Thread(target=alert_coverage_poller.run, args=(stop,), daemon=True)
             poller.start()
+        stream_threads: list[threading.Thread] = []
+        if connector is not None and alert_consumer is not None:
+            stream_threads = [
+                threading.Thread(
+                    target=connector.run,
+                    args=(stop,),
+                    kwargs={
+                        "changes_interval": watch_interval if watch_interval > 0 else 15.0,
+                        "alerts_interval": AlertCoverageConfig.from_environment().poll_interval.total_seconds(),
+                    },
+                    daemon=True,
+                ),
+                threading.Thread(target=alert_consumer.run, args=(stop,), daemon=True),
+            ]
+            for thread in stream_threads:
+                thread.start()
         try:
             yield
         finally:
@@ -208,6 +253,8 @@ def create_app(
                 watcher.join(timeout=5)
             if poller is not None:
                 poller.join(timeout=5)
+            for thread in stream_threads:
+                thread.join(timeout=5)
 
     app = FastAPI(title="Agentic SRE", version=PROJECT_VERSION, lifespan=lifespan)
     app.add_middleware(TelemetryMiddleware, runtime=telemetry)
@@ -540,6 +587,10 @@ def create_app(
         session: Session = Depends(get_session),  # noqa: B008
     ) -> dict[str, object]:
         """Normalize and ingest an Alertmanager delivery idempotently."""
+        if connector is not None:
+            # The connector is the local receiver; incidents follow through its alert stream.
+            accepted = connector.receive_webhook(payload.model_dump(mode="json", by_alias=True))
+            return {"accepted": accepted, "incident_ids": []}
         now = datetime.now(UTC)
         manager = IncidentManager(session)
         incidents = [manager.ingest(normalize_alert(alert), now=now) for alert in payload.alerts]

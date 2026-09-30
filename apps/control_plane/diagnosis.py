@@ -19,6 +19,14 @@ from apps.control_plane.scheduler import (
     reevaluation_from_environment,
     run_scheduler_pass,
 )
+from packages.connector.client import (
+    ConnectorClient,
+    StreamedClusterReader,
+    cluster_reader,
+    in_process_transport,
+)
+from packages.connector.client import provider_readers as connector_provider_readers
+from packages.connector.service import Connector, connector_from_environment
 from packages.contracts import Alert as ContractAlert
 from packages.contracts import Incident, IncidentEvent, IncidentEventType
 from packages.rca.alert_coverage import AlertCoverageConfig
@@ -38,7 +46,6 @@ from packages.rca.lifecycle import classify, status_payload
 from packages.rca.live import (
     ChangeWatcher,
     ClusterReader,
-    KubernetesClusterReader,
     ListingFailure,
     LiveSource,
     ObjectSnapshot,
@@ -324,6 +331,7 @@ class DiagnosisService:
     namespaces: tuple[str, ...]
     evidence_namespaces: tuple[str, ...] = ("chaos-mesh",)
     reader: ClusterReader | None = None
+    connector: Connector | None = None
     investigator_factory: Callable[[], Investigator | None] = lambda: None
     bounded_policy_factory: Callable[[], InvestigationPolicy | None] = lambda: None
     # The product always seeds from the full source; only replay-mechanics
@@ -862,12 +870,23 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
         for item in os.getenv("SRE_EVIDENCE_NAMESPACES", "chaos-mesh").split(",")
         if item.strip()
     )
-    reader = (
-        KubernetesClusterReader(chaos_namespaces=evidence_namespaces)
-        if os.getenv("SRE_CLUSTER_ACCESS") == "true"
-        else None
+    # The control plane reaches customer resources only through the connector (contract §1);
+    # today it runs in-process, and every call still crosses the encoded wire.
+    streams = os.getenv("SRE_CONNECTOR_STREAMS", "").casefold() == "true"
+    connector = connector_from_environment(
+        evidence_namespaces,
+        tuple(dict.fromkeys((*namespaces, *evidence_namespaces))),
+        accept_webhook=streams,
     )
-    provider_readers = ProviderReaders.from_environment()
+    client = ConnectorClient(in_process_transport(connector))
+    # Stream mode rebuilds the cluster listing from the connector's change stream (contract §10);
+    # otherwise each listing is one request. Both answer the same ClusterReader protocol.
+    reader: ClusterReader | None = (
+        StreamedClusterReader(client)
+        if streams and "changes" in client.capabilities()
+        else cluster_reader(client)
+    )
+    provider_readers = connector_provider_readers(client)
 
     # Built once and reused: OpenAIClient owns the call-budget counter, so a
     # fresh client per incident would reset SRE_LLM_MAX_CALLS every time.
@@ -904,6 +923,7 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
         namespaces=namespaces,
         evidence_namespaces=evidence_namespaces,
         reader=reader,
+        connector=connector if streams else None,
         provider_readers=provider_readers,
         investigator_factory=investigator,
         bounded_policy_factory=bounded_policy,

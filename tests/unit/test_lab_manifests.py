@@ -148,3 +148,61 @@ def test_lab_up_builds_everything_but_the_control_plane_and_lab_check_can_fail()
         "the isolated workload is reachable",
     ):
         assert problem in check  # each check reports a tool failure instead of passing silently
+
+
+def test_the_connector_can_only_read_and_no_credential_is_committed() -> None:
+    documents = [
+        d for d in yaml.safe_load_all((ROOT / "infra/kubernetes/connector.yaml").read_text()) if d
+    ]
+    assert "Secret" not in {
+        d["kind"] for d in documents
+    }  # the certificate and token are made at bring-up
+    roles = [d for d in documents if d["kind"] == "Role"]
+    for role in roles:
+        for rule in role["rules"]:
+            assert set(rule["verbs"]) <= {"get", "list", "watch"}
+            assert "secrets" not in rule["resources"]
+    bindings = [d for d in documents if d["kind"] == "RoleBinding"]
+    assert {b["metadata"]["namespace"] for b in bindings} == {
+        "sre-demo",
+        "chaos-mesh",
+        "lab-control",
+    }
+    for binding in bindings:
+        assert binding["subjects"] == [
+            {"kind": "ServiceAccount", "name": "connector", "namespace": "connector"}
+        ]
+        assert binding["roleRef"]["name"] == "agentic-sre-reader"
+
+
+def test_the_connector_deployment_uses_the_bring_up_secrets_and_the_gateway_on_the_host() -> None:
+    documents = [
+        d for d in yaml.safe_load_all((ROOT / "infra/kubernetes/connector.yaml").read_text()) if d
+    ]
+    pod = deployment(documents, "connector")["spec"]["template"]["spec"]
+    assert pod["serviceAccountName"] == "connector"
+    container = pod["containers"][0]
+    assert container["image"] == "agentic-sre/connector:dev"
+    assert pod["volumes"] == [{"name": "tls", "secret": {"secretName": "connector-tls"}}]
+    token = next(e for e in container["env"] if e["name"] == "SRE_CONNECTOR_WEBHOOK_TOKEN")
+    assert token["valueFrom"]["secretKeyRef"] == {"name": "connector-webhook", "key": "token"}
+    config = next(d for d in documents if d["kind"] == "ConfigMap")["data"]
+    assert config["SRE_CONNECTOR_ENDPOINT"] == "host.docker.internal:8443"
+    assert config["SRE_WATCH_NAMESPACES"] == "sre-demo,lab-control"
+    assert config["SRE_EVIDENCE_NAMESPACES"] == "chaos-mesh"
+
+
+def test_the_connector_image_and_the_control_plane_targets_keep_their_promises() -> None:
+    dockerfile = (ROOT / "infra/docker/Dockerfile").read_text(encoding="utf-8")
+    assert "FROM base AS connector" in dockerfile and "packages.connector.agent" in dockerfile
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "IMAGES := control-plane migrator connector" in makefile
+    down = makefile[makefile.index("\ncp-down:") : makefile.index("\ncp-reset:")]
+    assert "volume rm" not in down and "docker stop" in down  # the history survives
+    assert "volume rm" in makefile[makefile.index("\ncp-reset:") :]
+    up = makefile[makefile.index("\ncp-up:") : makefile.index("\ncp-down:")]
+    assert "KUBECONFIG=/dev/null" in up and "SRE_CONNECTOR_MODE=remote" in up
+    deploy = makefile[makefile.index("\nconnector-deploy:") : makefile.index("\nconnector-check:")]
+    assert (
+        "docker" not in deploy and "observability.yaml" not in deploy
+    )  # the demo manifests stay untouched

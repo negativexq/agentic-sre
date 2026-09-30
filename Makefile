@@ -1,7 +1,7 @@
 .PHONY: install lock lint typecheck test test-pg check demo serve-local \
 	itbench-setup itbench-index eval-dev eval-test benchmark-qualify \
 	images cluster-up build-images deploy load status ui inject-bad-rollout recover rbac-check \
-	lab-images chaos-mesh-install chaos-mesh-uninstall lab-up lab-check lab-check-once cluster-down precommit offline-demo e2e-kind e2e-kind-clean m18a-live-validate release-check \
+	lab-images chaos-mesh-install chaos-mesh-uninstall lab-up lab-check lab-check-once lab-pki connector-deploy connector-check cp-up cp-down cp-reset cluster-down precommit offline-demo e2e-kind e2e-kind-clean m18a-live-validate release-check \
 	verify-release-provenance product-bench-dev
 
 PY := .venv/bin/python
@@ -117,7 +117,7 @@ verify-release-provenance:
 cluster-up:
 	kind create cluster --config infra/kubernetes/kind-config.yaml
 
-IMAGES := control-plane migrator order-service payment-service order-worker
+IMAGES := control-plane migrator connector order-service payment-service order-worker
 
 # Chaos Mesh for the lab (infra/kubernetes/chaos-mesh/pins.yaml): the vendored chart, containerd
 # values, one controller. `lab-images` has the node pull the pinned images and refuses any whose digest
@@ -189,6 +189,79 @@ lab-check-once:
 	@if $(KUBECTL) exec -n $(NAMESPACE) deployment/order-service -- python -c "import urllib.request; urllib.request.urlopen('http://isolated-echo.lab-control:8080', timeout=3)" >/dev/null 2>&1; then \
 		echo "the isolated workload is reachable from $(NAMESPACE)"; exit 1; fi
 	@echo "lab check: PASS"
+
+# --- the control plane outside the lab (docs/architecture/testbed-control-plane-design.md) ---------
+#
+# The control plane and its own Postgres run on the host; the Connector runs in the lab and dials
+# host.docker.internal:8443. Certificates and the webhook token are generated under .local/lab and never
+# committed; only the connector's material enters the cluster. `cp-down` keeps the Postgres volume.
+LAB_DIR := .local/lab
+CP_PG := agentic-sre-cp-pg
+CP_PG_VOLUME := agentic-sre-cp-pgdata
+CP_PG_PORT ?= 55433
+CP_DB := postgresql+psycopg://postgres:postgres@127.0.0.1:$(CP_PG_PORT)/agentic_sre
+CONNECTOR_SA := system:serviceaccount:connector:connector
+
+lab-pki:
+	$(PY) -m packages.connector.lab pki --out $(LAB_DIR)/pki
+
+connector-deploy: lab-pki
+	$(KUBECTL) apply -f infra/kubernetes/chaos-mesh-rbac.yaml
+	$(KUBECTL) apply -f infra/kubernetes/connector.yaml
+	test -f $(LAB_DIR)/webhook-token || { umask 077; head -c 24 /dev/urandom | base64 | tr -d '/+=\n' > $(LAB_DIR)/webhook-token; }
+	$(KUBECTL) -n connector create secret generic connector-tls \
+		--from-file=client.crt=$(LAB_DIR)/pki/client.crt --from-file=client.key=$(LAB_DIR)/pki/client.key \
+		--from-file=ca.crt=$(LAB_DIR)/pki/ca.crt --dry-run=client -o yaml | $(KUBECTL) apply -f -
+	$(KUBECTL) -n connector create secret generic connector-webhook \
+		--from-file=token=$(LAB_DIR)/webhook-token --dry-run=client -o yaml | $(KUBECTL) apply -f -
+	$(PY) -m packages.connector.lab alertmanager --source infra/observability/alertmanager.yml \
+		--url http://connector-webhook.connector.svc.cluster.local:9095/webhook \
+		--token-file $(LAB_DIR)/webhook-token > $(LAB_DIR)/alertmanager.yml
+	$(KUBECTL) -n observability create configmap alertmanager-config \
+		--from-file=alertmanager.yml=$(LAB_DIR)/alertmanager.yml --dry-run=client -o yaml | $(KUBECTL) apply -f -
+	$(KUBECTL) -n observability rollout restart deployment/alertmanager
+	$(KUBECTL) -n connector rollout restart deployment/connector
+	$(KUBECTL) -n connector rollout status deployment/connector --timeout=180s
+	$(KUBECTL) -n observability rollout status deployment/alertmanager --timeout=180s
+
+# The connector can read but never write, and never reads Secrets, in every namespace it watches.
+connector-check:
+	@for ns in sre-demo lab-control chaos-mesh; do \
+		test "$$($(KUBECTL) auth can-i list pods --as=$(CONNECTOR_SA) -n $$ns)" = yes \
+			|| { echo "the connector cannot list pods in $$ns"; exit 1; }; \
+		for verb in "create pods" "patch deployments" "delete pods" "get secrets" "list secrets"; do \
+			test "$$($(KUBECTL) auth can-i $$verb --as=$(CONNECTOR_SA) -n $$ns)" = no \
+				|| { echo "the connector is not denied: $$verb in $$ns"; exit 1; }; \
+		done; \
+	done; echo "connector RBAC: read-only PASS"
+
+cp-up: lab-pki
+	@docker start $(CP_PG) >/dev/null 2>&1 || docker run -d --name $(CP_PG) \
+		-e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=agentic_sre -p 127.0.0.1:$(CP_PG_PORT):5432 \
+		-v $(CP_PG_VOLUME):/var/lib/postgresql/data postgres:16.4-alpine >/dev/null
+	@for attempt in $$(seq 1 60); do docker exec $(CP_PG) pg_isready -U postgres -d agentic_sre >/dev/null 2>&1 && break; sleep 1; done
+	DATABASE_URL=$(CP_DB) $(PY) -m alembic upgrade head
+	@if [ -f $(LAB_DIR)/cp.pid ] && kill -0 $$(cat $(LAB_DIR)/cp.pid) 2>/dev/null; then \
+		echo "the control plane is already running (pid $$(cat $(LAB_DIR)/cp.pid))"; \
+	else \
+		KUBECONFIG=/dev/null DATABASE_URL=$(CP_DB) SRE_CONNECTOR_MODE=remote \
+		SRE_CONNECTOR_LISTEN=0.0.0.0:8443 SRE_CONNECTOR_ALLOWED=lab \
+		SRE_CONNECTOR_TLS_CERT=$(LAB_DIR)/pki/server.crt SRE_CONNECTOR_TLS_KEY=$(LAB_DIR)/pki/server.key \
+		SRE_CONNECTOR_TLS_CLIENT_CA=$(LAB_DIR)/pki/ca.crt SRE_AUTO_DIAGNOSE=true \
+		SRE_WATCH_NAMESPACES=sre-demo,lab-control SRE_WATCH_INTERVAL_SECONDS=15 \
+		nohup $(CLI) serve --host 127.0.0.1 --port 8080 > $(LAB_DIR)/cp.log 2>&1 & echo $$! > $(LAB_DIR)/cp.pid; \
+		echo "control plane started (pid $$(cat $(LAB_DIR)/cp.pid)); log $(LAB_DIR)/cp.log; console http://127.0.0.1:8080/app"; \
+	fi
+
+# Stops the control plane and its Postgres; the volume (the diagnosis history) is kept.
+cp-down:
+	@if [ -f $(LAB_DIR)/cp.pid ]; then kill $$(cat $(LAB_DIR)/cp.pid) 2>/dev/null || true; rm -f $(LAB_DIR)/cp.pid; fi
+	@docker stop $(CP_PG) >/dev/null 2>&1 || true
+
+# Deletes the control plane's history. Explicit on purpose.
+cp-reset: cp-down
+	docker rm -f $(CP_PG) >/dev/null 2>&1 || true
+	docker volume rm $(CP_PG_VOLUME) >/dev/null 2>&1 || true
 
 images:
 	for image in $(IMAGES); do \

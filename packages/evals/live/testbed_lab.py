@@ -9,6 +9,7 @@ truncated. Also holds the command line: ``phase0`` (one unscored validation run 
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import re
 import subprocess
@@ -54,6 +55,7 @@ from packages.rca.model import Diagnosis
 REPO = Path(__file__).resolve().parents[3]
 NAMESPACE = "sre-demo"
 SCENARIO_ID = "dependency-delay-payment"
+CONFIG_SCENARIO_ID = "config-delay-payment"
 DIRECT_SCENARIO_ID = "direct-stress-order"
 MAX_WARMUPS = 3
 WARMUP_SECONDS = 90.0  # a restarted pod fails probes for its first minutes under load
@@ -84,6 +86,24 @@ except Exception as error:
 print(json.dumps({"ok": ok, "latency": time.monotonic() - started, "detail": detail}))
 """
 
+# The target probe of a fault inside the payment handler (the delay of `config-or-rollout` is applied in
+# `POST /payments` only, so `/health` would never see it).
+_PAYMENT_SCRIPT = """
+import json, time, urllib.request, uuid
+started = time.monotonic()
+body = json.dumps({"order_id": str(uuid.uuid4()), "amount_cents": 4200, "currency": "USD"}).encode()
+request = urllib.request.Request(
+    "http://payment-service:8000/payments", data=body, headers={"Content-Type": "application/json"}
+)
+try:
+    response = urllib.request.urlopen(request, timeout=6)
+    ok, detail = 200 <= response.status < 300, "HTTP %d" % response.status
+except Exception as error:
+    ok, detail = False, type(error).__name__
+print(json.dumps({"ok": ok, "latency": time.monotonic() - started, "detail": detail}))
+"""
+DELAY_VARIABLE = "FAULT_PAYMENT_DELAY_MS"
+
 _DIAGNOSES = text(
     """
     select i.incident_id::text, i.title, i.created_at, d.created_at, d.document,
@@ -110,10 +130,14 @@ class LabWorld:
         order_port: int = 18000,
         alertmanager_port: int = 19093,
         target_app: str = "payment-service",
+        payment_probe: bool = False,
     ) -> None:
         self.target_app = (
             target_app  # the workload the fault lands on; its pod is replaced for every run
         )
+        self.target_script = _PAYMENT_SCRIPT if payment_probe else _TARGET_SCRIPT
+        self._rollout: tuple[datetime, str, str, str, str] | None = None
+        self._last_delay = ""
         self.clock = clock or RealClock()
         self.pg_container, self.pg_port = pg_container, pg_port
         self.control_plane = control_plane
@@ -175,6 +199,7 @@ class LabWorld:
         """
         self.database = database_name(run_id)
         self._delete_experiments()
+        self._unset_delay()  # a run that died mid-way may have left the change in place
         self._quiet_target_pod()
         for namespace in WATCHED_NAMESPACES:
             self._run(
@@ -210,6 +235,20 @@ class LabWorld:
             return any(c["name"] == "Connector" and c["status"] == "connected" for c in rows)
 
         self._wait("the connector to attach", connected, 90)
+
+    def _unset_delay(self) -> subprocess.CompletedProcess[str]:
+        return self._run(
+            [
+                "kubectl",
+                "-n",
+                NAMESPACE,
+                "set",
+                "env",
+                "deployment/payment-service",
+                f"{DELAY_VARIABLE}-",
+            ],
+            check=False,
+        )
 
     def _delete_experiments(self) -> None:
         for kind in ("networkchaos", "stresschaos"):
@@ -350,7 +389,7 @@ class LabWorld:
                     "--",
                     "python",
                     "-c",
-                    _TARGET_SCRIPT,
+                    self.target_script,
                 ],
                 timeout=10,
                 check=False,
@@ -379,6 +418,8 @@ class LabWorld:
         )
 
     def inject(self, params: RunParameters, journal: InjectorJournal, name: str) -> Injection:
+        if params.fault == "env-delay":
+            return self._inject_env_delay(params, journal)
         if params.fault == "cpu-stress":
             kind, body = (
                 "StressChaos",
@@ -446,7 +487,101 @@ class LabWorld:
         pod = pods[0]["metadata"]
         return Injection(name, uid, pod["name"], pod["uid"], entry.at, kind)
 
+    def _inject_env_delay(self, params: RunParameters, journal: InjectorJournal) -> Injection:
+        """Change the Deployment's environment; the rollout it starts is the execution."""
+        before = json.loads(
+            self._run(
+                ["kubectl", "-n", NAMESPACE, "get", "deployment", "payment-service", "-o", "json"]
+            ).stdout
+        )["metadata"]
+        result = self._run(
+            [
+                "kubectl",
+                "-n",
+                NAMESPACE,
+                "set",
+                "env",
+                "deployment/payment-service",
+                f"{DELAY_VARIABLE}={params.latency_ms}",
+            ],
+            check=False,
+        )
+        ok = result.returncode == 0
+        entry = journal.record(
+            verb="patch",
+            object=f"deployment payment-service env {DELAY_VARIABLE}={params.latency_ms}",
+            ok=ok,
+            response=result.stdout if ok else result.stderr,
+            uid=before["uid"],
+            role=ROLE_CAUSE_CREATED,
+        )
+        if not ok:
+            raise RuntimeError(f"the change was not applied: {result.stderr.strip()[:200]}")
+        self._rollout, self._last_delay = None, str(params.latency_ms)
+        return Injection("payment-service", before["uid"], "", "", entry.at, "Deployment")
+
+    def _new_rollout(self, value: int | str) -> tuple[datetime, str, str, str, str] | None:
+        """(first pod created, ReplicaSet name, ReplicaSet uid, pod name, pod uid) of the rollout whose
+        template carries the delay, once its first pod exists."""
+        sets = json.loads(
+            self._run(
+                ["kubectl", "-n", NAMESPACE, "get", "rs", "-l", "app=payment-service", "-o", "json"]
+            ).stdout
+        )["items"]
+        wanted = {"name": DELAY_VARIABLE, "value": str(value)}
+        matches = [
+            rs
+            for rs in sets
+            if wanted in rs["spec"]["template"]["spec"]["containers"][0].get("env", [])
+        ]
+        if not matches:
+            return None
+        rs = max(matches, key=lambda r: r["metadata"]["creationTimestamp"])["metadata"]
+        pods = [
+            p["metadata"]
+            for p in json.loads(
+                self._run(
+                    [
+                        "kubectl",
+                        "-n",
+                        NAMESPACE,
+                        "get",
+                        "pod",
+                        "-l",
+                        "app=payment-service",
+                        "-o",
+                        "json",
+                    ]
+                ).stdout
+            )["items"]
+            if any(o.get("uid") == rs["uid"] for o in p["metadata"].get("ownerReferences", []))
+        ]
+        if not pods:
+            return None
+        first = min(pods, key=lambda p: p["creationTimestamp"])
+        created = parse_instant(first["creationTimestamp"])
+        if created is None:
+            return None
+        return created, rs["name"], rs["uid"], first["name"], first["uid"]
+
+    def settle(self, injection: Injection) -> Injection:
+        if injection.kind != "Deployment" or self._rollout is None:
+            return injection
+        _, rs_name, rs_uid, pod_name, pod_uid = self._rollout
+        return dataclasses.replace(
+            injection,
+            execution_name=rs_name,
+            execution_uid=rs_uid,
+            target_pod=pod_name,
+            target_pod_uid=pod_uid,
+        )
+
     def applied_at(self, injection: Injection) -> datetime | None:
+        if injection.kind == "Deployment":
+            # contract §4: for a rollout the execution starts with the first new pod created
+            if self._rollout is None:
+                self._rollout = self._new_rollout(self._delay_value(injection))
+            return self._rollout[0] if self._rollout is not None else None
         selector = f"involvedObject.name={injection.name},reason=Applied"
         items = json.loads(
             self._run(
@@ -474,7 +609,20 @@ class LabWorld:
         ]
         return min(times) if times else None
 
+    def _delay_value(self, injection: Injection) -> str:
+        return self._last_delay
+
     def remove(self, injection: Injection, journal: InjectorJournal) -> None:
+        if injection.kind == "Deployment":
+            result = self._unset_delay()
+            journal.record(
+                verb="patch",
+                object=f"deployment payment-service env {DELAY_VARIABLE}-",
+                ok=result.returncode == 0,
+                response=result.stdout or result.stderr,
+                role=ROLE_CAUSE_REMOVED,
+            )
+            return
         result = self._run(
             [
                 "kubectl",
@@ -540,6 +688,8 @@ class LabWorld:
         return asked
 
     def cleanup(self) -> None:
+        if self._last_delay:
+            self._unset_delay()  # already undone by remove() on a normal run; this covers an aborted one
         self._delete_experiments()
         if self._forwarder is not None:
             self._forwarder.stop_all()
@@ -589,7 +739,32 @@ def direct_pod_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> 
     )
 
 
-SPECS = {"dependency": dependency_spec, "direct": direct_pod_spec}
+def config_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> ScenarioSpec:
+    """Slice 3 (design §4, variant A): ``FAULT_PAYMENT_DELAY_MS`` set on ``payment-service`` by a rollout."""
+    return ScenarioSpec(
+        scenario_id=CONFIG_SCENARIO_ID,
+        family="config-or-rollout",
+        tier=tier,  # type: ignore[arg-type]
+        repeats=repeats,
+        seeds=seeds,
+        parameters={
+            "baseline_seconds": ParameterRange(low=45, high=45),
+            "offset_seconds": ParameterRange(low=0, high=20),
+            "duration_seconds": ParameterRange(low=90, high=110),
+            "latency_ms": ParameterRange(low=600, high=1500),
+            "load_rps": ParameterRange(low=8, high=12),
+        },
+    )
+
+
+SPECS = {"dependency": dependency_spec, "direct": direct_pod_spec, "config": config_spec}
+
+
+def world_for(families: Collection[str], clock: RealClock) -> LabWorld:
+    """The lab set up for a family: which workload the fault lands on and how its target is probed."""
+    if "direct-pod-fault" in families:
+        return LabWorld(clock=clock, target_app="order-service")
+    return LabWorld(clock=clock, payment_probe="config-or-rollout" in families)
 
 
 def _summarize(outcome: RunOutcome) -> str:
@@ -676,10 +851,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.command == "phase0":
-        world = LabWorld(
-            clock=clock,
-            target_app="order-service" if args.scenario == "direct" else "payment-service",
-        )
+        world = world_for({SPECS[args.scenario](1, (1,)).family}, clock)
         # Phase 0 is not part of any suite: its own store, its own manifest, never scored into a result.
         from packages.rca.engine import RCA_ENGINE_VERSION
 
@@ -712,14 +884,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     store = TestbedStore(args.root)
     manifest = store.load_manifest(args.suite)
-    world = LabWorld(
-        clock=clock,
-        target_app=(
-            "order-service"
-            if any(sp.family == "direct-pod-fault" for sp in manifest.scenarios)
-            else "payment-service"
-        ),
-    )
+    world = world_for({sp.family for sp in manifest.scenarios}, clock)
     outcomes: list[RunOutcome] = []
     for spec in manifest.scenarios:
         for repeat in range(spec.repeats):

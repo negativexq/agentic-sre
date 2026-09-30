@@ -69,7 +69,10 @@ DIRECT_POD_ALERTS = DEPENDENCY_ALERTS | {
     "OrderDbQueryLatencyHigh",
     "OrderWorkerConsumerErrorsHigh",
 }
-ALERTS_BY_FAMILY: dict[str, frozenset[str]] = {"direct-pod-fault": frozenset(DIRECT_POD_ALERTS)}
+ALERTS_BY_FAMILY: dict[str, frozenset[str]] = {
+    "direct-pod-fault": frozenset(DIRECT_POD_ALERTS),
+    "config-or-rollout": DEPENDENCY_ALERTS | {"PaymentServiceLatencyCritical"},
+}
 ALERT_LATENCY_SECONDS = 0.5  # the latency of the lab's alert rules: the symptom threshold
 RECOVERY_TIMEOUT_SECONDS = 180.0
 REDIAGNOSE_SETTLE_SECONDS = (
@@ -104,7 +107,7 @@ class RunParameters:
     duration_seconds: float
     latency_ms: int
     load_rps: float
-    fault: str = "network-delay"  # or "cpu-stress" (direct-pod-fault)
+    fault: str = "network-delay"  # "cpu-stress" (direct-pod-fault), "env-delay" (config-or-rollout)
     cpu_workers: int = 16
 
 
@@ -123,7 +126,9 @@ def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
         duration_seconds=draw("duration_seconds", 100.0),
         latency_ms=int(draw("latency_ms", 400.0)),
         load_rps=draw("load_rps", 10.0),
-        fault="cpu-stress" if spec.family == "direct-pod-fault" else "network-delay",
+        fault={"direct-pod-fault": "cpu-stress", "config-or-rollout": "env-delay"}.get(
+            spec.family, "network-delay"
+        ),
         cpu_workers=int(draw("cpu_workers", 16.0)),
     )
 
@@ -149,6 +154,9 @@ class Injection:
     target_pod_uid: str
     injected_at: datetime
     kind: str = "NetworkChaos"
+    # a rollout's execution is the new ReplicaSet, known only once the controller has created it
+    execution_name: str = ""
+    execution_uid: str = ""
 
 
 @dataclass(frozen=True)
@@ -185,6 +193,10 @@ class World(Protocol):
     def inject(self, params: RunParameters, journal: InjectorJournal, name: str) -> Injection: ...
 
     def applied_at(self, injection: Injection) -> datetime | None: ...
+
+    def settle(self, injection: Injection) -> Injection:
+        """The injection with what the controller decided after it (a rollout's new ReplicaSet and pod)."""
+        ...
 
     def remove(self, injection: Injection, journal: InjectorJournal) -> None: ...
 
@@ -242,6 +254,54 @@ def direct_pod_chain(injection: Injection) -> Chain:
             ),
         )
     )
+
+
+def config_chain(injection: Injection) -> Chain:
+    """The world's chain for an environment change on ``payment-service`` (design §4, `config-or-rollout`)."""
+    change = f"sre-demo/Deployment/{injection.name}"
+    return Chain(
+        links=(
+            Link(
+                role="cause",
+                actor=change,
+                instance_uid=injection.uid,
+                knowable=True,
+                mechanism="environment change that slows payments",
+            ),
+            Link(
+                role="execution",
+                actor=f"sre-demo/ReplicaSet/{injection.execution_name}",
+                instance_uid=injection.execution_uid,
+                knowable=True,
+                mechanism="rollout of the changed template",
+                evidence_class="execution",
+            ),
+            Link(
+                role="target_effect",
+                actor=f"sre-demo/Pod/{injection.target_pod}",
+                instance_uid=injection.target_pod_uid,
+                knowable=True,
+                mechanism="payment latency at the new pod",
+                evidence_class="effect",
+            ),
+            Link(
+                role="propagation",
+                actor="sre-demo/Deployment/order-service",
+                knowable=False,
+                mechanism="dependency latency seen by the caller",
+                evidence_class="propagation",
+            ),
+            Link(
+                role="symptom",
+                actor="sre-demo/Service/order-service",
+                knowable=False,
+                mechanism="client-facing request latency",
+            ),
+        )
+    )
+
+
+CHAINS = {"direct-pod-fault": direct_pod_chain, "config-or-rollout": config_chain}
 
 
 def dependency_chain(injection: Injection) -> Chain:
@@ -418,7 +478,9 @@ def run_once(
             raise BaselineNotQuiet(
                 f"the target raised warnings before the injection: {warnings[:5]}"
             )
-        prefix = "pod-stress" if params.fault == "cpu-stress" else "dep-delay"
+        prefix = {"cpu-stress": "pod-stress", "env-delay": "env-delay"}.get(
+            params.fault, "dep-delay"
+        )
         injection = world.inject(params, run.journal, f"{prefix}-{params.seed}")
         alert_at: datetime | None = None
         applied: datetime | None = None
@@ -447,6 +509,7 @@ def run_once(
                     )
         if applied is None:
             problems.append("the controller's Applied event was never observed")
+        injection = world.settle(injection)
         # 3. removal, then recovery of every probe view
         world.remove(injection, run.journal)
         removed_at = clock.now()
@@ -542,9 +605,7 @@ def _finish(
         spec.scenario_id,
         repeat,
         timeline=timeline,
-        chain=(direct_pod_chain if spec.family == "direct-pod-fault" else dependency_chain)(
-            injection
-        ),
+        chain=CHAINS.get(spec.family, dependency_chain)(injection),
         clock_offset_seconds=0.0,  # the injector and the oracle share one host clock
         diagnosis_completed_at=(primary.first_diagnosed_at or primary.diagnosed_at)
         if primary

@@ -123,6 +123,9 @@ class FakeWorld:
             )
         ]
 
+    def settle(self, injection: Injection) -> Injection:
+        return injection
+
     def target_warnings(self) -> list[str]:
         return list(self.baseline_warnings)
 
@@ -319,3 +322,29 @@ def test_a_target_that_failed_before_the_fault_stops_the_run_before_the_injectio
         run(tmp_path, world)
     assert "inject" not in world.calls and world.calls[-2:] == ["stop_load", "cleanup"]
     assert not (tmp_path / "store" / "s1" / "dependency-delay").exists()  # no run is recorded
+
+
+def test_a_config_change_is_a_rollout_whose_execution_is_the_new_replica_set() -> None:
+    from packages.evals.live.testbed_runner import config_chain
+
+    spec = ScenarioSpec(
+        scenario_id="config-delay",
+        family="config-or-rollout",
+        tier="DEV",
+        repeats=1,
+        seeds=(4,),
+        parameters={"latency_ms": ParameterRange(low=600, high=1500)},
+    )
+    params = derive_parameters(spec, 4)
+    assert params.fault == "env-delay" and 600 <= params.latency_ms <= 1500
+    injection = Injection(
+        "payment-service", "d1", "payment-new-1", "p9", T0, "Deployment", "payment-new", "rs9"
+    )
+    chain = config_chain(injection)
+    roles = {link.role: link for link in chain.links}
+    assert roles["cause"].actor == "sre-demo/Deployment/payment-service"
+    assert (roles["execution"].actor, roles["execution"].instance_uid) == (
+        "sre-demo/ReplicaSet/payment-new",
+        "rs9",
+    )
+    assert roles["target_effect"].instance_uid == "p9" and not roles["propagation"].knowable

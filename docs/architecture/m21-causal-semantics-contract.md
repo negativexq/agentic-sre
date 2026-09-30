@@ -75,6 +75,18 @@ service-level symptom stays uncovered and `RESOLVED` is not reachable without a 
 path to it. The fault action (`spec.action`) is not observed, so the record states the
 chaos kind, never a specific action. Recovery stays `NOT_ASSESSED`.
 
+**Service-level effect relation (specified 2026-09-30; not implemented).** A second way for the
+incident-effect relation to hold, for targets that are not themselves an incident symptom: a
+direct paired non-success propagation edge whose source service is the target's service and
+whose affected service is a declared incident symptom service, with a `VERIFIED` binding at
+both ends, first observed **at or after `Applied`** and continuing no later than `Recovered`.
+An edge already present before `Applied` proves nothing about the fault. A call-graph path
+alone is never an effect: on the seen scenarios 74% of fault targets have one regardless of
+what they did. Multi-hop chains and service names derived from pod names are not defined
+here. **Implementation is deferred** until the own-testbed benchmark can measure this
+relation against world-level ground truth: on the seen scenarios it holds for 1 target in 1
+scenario, and fixing its parameters on that one case would tune the rule to it.
+
 `MECHANISM_VERIFIED_CAUSE` / legacy `RESOLVED` requires one eligible supported
 claim, execution witnesses covering **every declared incident symptom**, no
 unresolved admitted claim, and no unanswered material frontier. The decision

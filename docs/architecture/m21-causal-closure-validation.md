@@ -273,3 +273,12 @@ withheld = 0). Yanlış `RESOLVED` = 0.
 Kapsam sınırı ölçümle örtüşür: hedef pod'da aralık içi etki gözlemi 35 vakada iki claim'de vardır;
 hizmet düzeyi semptomlar örtülmediği için bu kuralla `RESOLVED` erişilebilir değildir. Bu, kuralın
 başarısızlığı değil, yol kanıtı eksikliğinin ölçümüdür.
+
+### Fault hedefinden semptoma yol kapsamı (2026-09-30, salt-okunur)
+
+12 chaos vakasında 473 hedef: hedef servisi semptom adları arasında 293, semptom servisinden
+hedefe gözlenmiş çağrı yolu 348 (hep 1 sıçrama), hedeften semptoma eşleşmiş hata yayılımı 29
+(hepsi Scenario-19), yayılım hem `Applied` sonrası başlayıp hem aralıkla çakışan 1. Çağrı yolu
+etki kanıtı sayılmaz (hedeflerin %74'ünde bulunur). Servis düzeyi etki ilişkisi sözleşmede
+tanımlandı, uygulaması own-testbed ölçümüne ertelendi; seen-35'te tek bir hedefe bakarak
+parametre seçmek kuralı o hedefe uydurmak olurdu.

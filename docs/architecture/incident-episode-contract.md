@@ -1,6 +1,6 @@
 # Alert episodes and incidents (`incident.episode.v1`)
 
-Status: **APPROVED** by the owner (2026-09-30) with the amendments of §8. Implementation follows, tests first.
+Status: **APPROVED** by the owner (2026-09-30) with the amendments of §8. **Implemented** (tests first): `IncidentManager(quiet=...)`, `ingest_occurrence`, the `ALERT_REFIRED` event and revision trigger (migration `0026`), `SRE_ALERT_QUIET_SECONDS` read by the webhook and the stream intake. The default is `0`, so no deployment changes behaviour.
 Amends the occurrence rule of `docs/architecture.md` ("Alertmanager occurrence identity").
 
 ## 1. Problem

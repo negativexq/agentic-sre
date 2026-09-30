@@ -334,3 +334,40 @@ def test_streams_are_reported_as_capabilities_only_when_configured() -> None:
     assert Connector().capabilities() == []
     connector, client, *_ = make()
     assert {"alerts", "changes"} <= set(client.capabilities())
+
+
+def test_a_refiring_within_the_quiet_interval_asks_for_a_refired_revision_not_a_new_incident() -> (
+    None
+):
+    from datetime import timedelta
+
+    connector, client, _, alerts, clock = make()
+    factory = session_factory()
+    new: list[list[Any]] = []
+    refired: list[list[Any]] = []
+    consumer = AlertStreamConsumer(
+        client,
+        factory,
+        on_incidents=new.append,
+        on_refired=refired.append,
+        quiet=timedelta(seconds=30),
+    )
+    alerts.alerts = [firing("HighLatency", "f1")]
+    connector.poll_alerts_once()
+    consumer.step()
+    alerts.alerts = []
+    clock.advance(60)
+    connector.poll_alerts_once()  # the occurrence resolves
+    consumer.step()
+    clock.advance(6)
+    alerts.alerts = [firing("HighLatency", "f1", starts=T0 + timedelta(seconds=66))]
+    connector.poll_alerts_once()  # and fires again six seconds later
+    before = len(new)
+    consumer.step()
+    from packages.storage.models import IncidentRow
+
+    with factory() as session:
+        assert session.query(IncidentRow).count() == 1
+    first = new[0][0]
+    assert refired == [[first]]  # one refired revision, for the incident that already existed
+    assert all(first not in batch for batch in new[before:])  # and no INITIAL for the re-firing

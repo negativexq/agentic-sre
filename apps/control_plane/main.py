@@ -7,7 +7,7 @@ import threading
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from dataclasses import asdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Literal
@@ -235,11 +235,16 @@ def create_app(
     )
     auto_diagnose = os.getenv("SRE_AUTO_DIAGNOSE", "").casefold() == "true"
 
-    def diagnose_in_background(incident_ids: list[UUID]) -> None:
+    # A re-firing alert continues its episode only with a positive quiet interval; 0, the product default,
+    # keeps one incident per occurrence (docs/architecture/incident-episode-contract.md, §5).
+    alert_quiet = timedelta(seconds=float(os.getenv("SRE_ALERT_QUIET_SECONDS", "0")))
+
+    def diagnose_in_background(incident_ids: list[UUID], trigger: str = "INITIAL") -> None:
         for incident_id in incident_ids:
-            threading.Thread(
-                target=diagnoser.run, args=(incident_id, "INITIAL"), daemon=True
-            ).start()
+            threading.Thread(target=diagnoser.run, args=(incident_id, trigger), daemon=True).start()
+
+    def rediagnose_refired(incident_ids: list[UUID]) -> None:
+        diagnose_in_background(incident_ids, "ALERT_REFIRED")
 
     alert_consumer = (
         AlertStreamConsumer(
@@ -247,6 +252,8 @@ def create_app(
             session_factory,
             config=AlertCoverageConfig.from_environment(),
             on_incidents=diagnose_in_background if auto_diagnose else None,
+            on_refired=rediagnose_refired if auto_diagnose else None,
+            quiet=alert_quiet,
         )
         if stream_client is not None
         else None
@@ -680,11 +687,16 @@ def create_app(
             accepted = connector.receive_webhook(payload.model_dump(mode="json", by_alias=True))
             return {"accepted": accepted, "incident_ids": []}
         now = datetime.now(UTC)
-        manager = IncidentManager(session)
-        incidents = [manager.ingest(normalize_alert(alert), now=now) for alert in payload.alerts]
+        manager = IncidentManager(session, quiet=alert_quiet)
+        outcomes = [
+            manager.ingest_occurrence(normalize_alert(alert), now=now) for alert in payload.alerts
+        ]
+        incidents = [outcome.incident for outcome in outcomes]
         if auto_diagnose:
+            refired = {o.incident.incident_id for o in outcomes if o.refired}
             for incident_id in dict.fromkeys(item.incident_id for item in incidents):
-                background.add_task(diagnoser.run, incident_id, "INITIAL")
+                trigger = "ALERT_REFIRED" if incident_id in refired else "INITIAL"
+                background.add_task(diagnoser.run, incident_id, trigger)
         return {
             "accepted": len(incidents),
             "incident_ids": [str(incident.incident_id) for incident in incidents],

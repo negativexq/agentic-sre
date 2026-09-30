@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -41,6 +41,8 @@ class AlertStreamConsumer:
         *,
         config: AlertCoverageConfig | None = None,
         on_incidents: Callable[[list[UUID]], None] | None = None,
+        on_refired: Callable[[list[UUID]], None] | None = None,
+        quiet: timedelta = timedelta(0),
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         page_limit: int = wire.MAX_BATCH,
     ) -> None:
@@ -48,6 +50,8 @@ class AlertStreamConsumer:
         self._session_factory = session_factory
         self._config = config or AlertCoverageConfig()
         self._on_incidents = on_incidents
+        self._on_refired = on_refired
+        self._quiet = quiet
         self._clock = clock
         self._limit = page_limit
         self.cursor: str | None = None
@@ -88,6 +92,7 @@ class AlertStreamConsumer:
             logger.info("alert stream available again")
         self._available = True
         incident_ids: list[UUID] = []
+        refired_ids: list[UUID] = []
         with self._session_factory() as session:
             repository = AlertCoverageRepository(session)
             recorded = self._latest_poll(session)
@@ -95,7 +100,7 @@ class AlertStreamConsumer:
                 if isinstance(item, wire.AlertItem):
                     try:
                         payload = AlertmanagerAlertPayload.model_validate(item.alert)
-                        incident = IncidentManager(session).ingest(
+                        outcome = IncidentManager(session, quiet=self._quiet).ingest_occurrence(
                             normalize_alert(payload), now=self._clock()
                         )
                     except ValueError:
@@ -103,7 +108,9 @@ class AlertStreamConsumer:
                             "skipping an alert the intake cannot normalize", exc_info=True
                         )
                         continue
-                    incident_ids.append(incident.incident_id)
+                    (refired_ids if outcome.refired else incident_ids).append(
+                        outcome.incident.incident_id
+                    )
                 elif isinstance(item, wire.HeartbeatItem):
                     if recorded is not None and _utc(item.completed_at) <= recorded:
                         continue
@@ -136,8 +143,11 @@ class AlertStreamConsumer:
                         recorded = _utc(item.at)
         # The page is persisted; only now does the cursor move (at-least-once).
         self.cursor = page.next_cursor
+        refired = list(dict.fromkeys(refired_ids))
         if incident_ids and self._on_incidents is not None:
-            self._on_incidents(list(dict.fromkeys(incident_ids)))
+            self._on_incidents([i for i in dict.fromkeys(incident_ids) if i not in refired])
+        if refired and self._on_refired is not None:
+            self._on_refired(refired)
         return len(page.items) + len(page.gaps)
 
     def run(self, stop: threading.Event, interval: float = 1.0) -> None:

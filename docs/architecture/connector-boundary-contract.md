@@ -380,3 +380,24 @@ share the deny list; observed and inferred deletions keep their source. Load, fr
 (API-server totals as context only, they cannot be attributed to the Connector): active watches, reconnects,
 relists, expirations, events per second, bytes per second, request count and rate, and the delays source time →
 Connector observation → control-plane ingestion.
+
+### 15.1 First measurement of the watch path (2026-10-01)
+
+Same experiment as §14 (ten rollouts of `lab-control/isolated-echo`, fresh control-plane database), default
+settings, the connector watching and the control plane following the stream:
+
+| Path | Events | Median | p90 | Max |
+|---|---|---|---|---|
+| Two 15 s polls (before) | 98 | 21.5 s | 27.1 s | 29.9 s |
+| Both polls at 2 s (experiment) | 88 | 2.5 s | 3.8 s | 4.1 s |
+| **Watch + follow (this amendment)** | 105 | **1.2 s** | **1.9 s** | 2.1 s |
+
+Split by stage over the 106 Event rows with a recorded arrival (every row had one): source time → Connector
+observation median 0.54 s (p90 0.90 s); Connector observation → control-plane journal median 0.74 s (p90 1.20 s).
+One outlier of 24 s in the first stage was not examined. The connector held 31 watches (one per scope) with no
+failed or expired watch and no `Gap` in the five minutes it ran.
+
+**Latency criterion met.** Not yet shown: API load from counters (the connector counts watch starts and events,
+not yet LIST calls or bytes; by construction it now issues about 31 LISTs per 10 minutes plus a watch request per
+scope every 5 minutes, against 31 LISTs every 15 s before, but that is an estimate), a watch resumed after the server
+closes it (the run was shorter than the 300 s watch timeout), and the resilience cases of §15 in the lab.

@@ -129,6 +129,19 @@ weaker success as the old definitive-resolution proof. Artifacts separately
 report observed mechanism, positive rival elimination, strong disambiguation
 and recovery. Recovery stays `NOT_ASSESSED`.
 
+**Leader selection by epistemic tier (PROPOSED 2026-09-30, not implemented; roadmap C12).** Today, unless the
+state is `RESOLVED` or exactly one claim is supported, the reported `root_cause` is the first selectable
+hypothesis in ranking order (score, then canonical name), so with two or more supported claims an unsupported
+candidate with an equal or higher score can be reported ahead of them. Proposed rule for every non-`RESOLVED`
+selection: (1) take the highest epistemic tier that contains a selectable, not eliminated hypothesis (strong,
+i.e. mechanism-verified, then supported, then the rest); (2) within that tier, rank by score; (3) break a
+remaining tie by canonical name, which keeps replay deterministic and is never causal evidence. `RESOLVED`
+selection, the ranking itself, admission and every support rule are unchanged; the operator's projection
+(`packages/rca/presentation.py`) already applies the same tiers. To be decided on a shadow measurement over the
+35 ITBench scenarios and the clean testbed incidents: changes in `root_cause`, diagnosis status, epistemic digest
+and benchmark correctness, whether any supported or strong outcome is lost, and whether a corrected case is
+merely replaced by another wrong actor.
+
 ## Preserved v2 decision contract (v3 exceptions above)
 
 The stages are observation → presentation episode → actor/instance/incident

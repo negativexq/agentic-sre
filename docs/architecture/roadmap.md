@@ -42,9 +42,22 @@ Contract: [`connector-boundary-contract.md`](connector-boundary-contract.md).
 | B1 | `Timeline` ground truth (`testbed-ground-truth-contract.md`): manifest, journal, oracle, chain and scoring implemented and tested; scenarios and runner wiring come with B4 | DONE | |
 | B2 | Recreate the lab cluster: Chaos Mesh 2.8.4 with containerd values, self-migrating Postgres, isolated control workload, gate passed (`testbed-lab-design.md` §13) | DONE | B1, A7 |
 | B3 | Control plane outside the lab, its own Postgres; the Connector inside the lab dials out (`testbed-control-plane-design.md` §10) | DONE (all seven gate items pass, including a lab recreation with the history intact) | A7, B2 |
-| B4 | Scenarios, repeats, dev and held-out split, frozen manifest, runner (`testbed-scenarios-design.md`) | ACTIVE: slices 1 (`dependency-fault`) and 2 (`direct-pod-fault`) run; `config-or-rollout` next | B1, B2, B3 |
-| B5 | Frozen engine baseline: version and acceptance criteria fixed before any run | NEXT | B4 |
+| B4 | Scenarios, repeats, dev and held-out split, frozen manifest, runner (`testbed-scenarios-design.md`) | ACTIVE: slices 1 and 2 run (3 repeats each); slice 3 (`config-or-rollout`) passed phase 0, repeats next; then `scheduled-recurring`, `competing-causes`, `negative-control` (needs the decoy amendment). No `HOLDOUT` tier yet | B1, B2, B3 |
+| B5 | Frozen engine baseline: version and acceptance criteria fixed before any run | ACTIVE: done per slice (each manifest frozen with engine 2.1.0 and the acceptance thresholds before its runs); the whole-suite freeze follows the last family | B4 |
 | B6 | Multi-cutoff recordings per run, to test timing stability against a known world | NEXT | B4 |
+
+### Testbed results so far (2026-09-30, all `DEV`, engine 2.1.0)
+
+| Slice | Fault | Valid runs | Cause and instance named | Execution witness | False strong authority / false `RESOLVED` |
+|---|---|---|---|---|---|
+| 1 | network delay on `payment-service` | 3/3 | 3/3 | 0/3 (a delay leaves no pod-level failure) | 0 / 0 |
+| 2 | CPU stress on `order-service` | 3/3 | 3/3 | 1/3 (first real witness, checked against the truth) | 0 / 0 |
+| 3 | `payment-service` environment change (rollout) | phase 0: 1/1 | 1/1 | 0 (no rollout rule yet, C5; expected) | 0 / 0 |
+
+The engine names the right cause and instance every time and has never claimed false strong authority; strong
+evidence is where it is weak, for reasons now on the C list (C2, C5, C9). Found and fixed on the way: a fault-execution
+rule that credited a stale experiment, two scorer flaws that overstated recall, and harness isolation leaks plus an
+unhealthy baseline (details in `testbed-scenarios-design.md`).
 
 Two observability tiers are reported separately: production-realistic (what a customer
 connector would supply) and instrumented (oracle channel, used only for grading). The engine

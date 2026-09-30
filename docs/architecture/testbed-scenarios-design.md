@@ -185,3 +185,27 @@ never gives it strong authority: `m21.support.observed-fault-execution` is `NOT_
 (`NO_EXECUTION_WITH_INCIDENT_EFFECT_WITNESS`) in all 10 stored diagnoses. Why it does not fire on a real run is the next
 question (engine investigation, not a scorer matter). Run 2's different first incident (`OrderDependencyLatencyHigh`
 before the payment alerts, two incidents instead of four) is alert ordering in the lab, now neutral to the links.
+
+### Why the fault-execution rule did not fire in slice 1 (2026-09-30, read-only investigation)
+
+From the stored diagnoses and each run's own database (`testbed_slice1_dependency_delay_payment_0..2`):
+
+1. **The delay leaves no pod-level failure observation (runs 0 and 1).** The rule needs a failure observation of the exact
+   target pod (`CONTAINER_FAILURE`, `RESOURCE_PRESSURE`, `DEPENDENCY_ERRORS`, `FAILURE_EVENT`) inside
+   `[Applied, Recovered]`. A 300 to 600 ms network delay produced none on `payment-service` (no `Unhealthy`, no restart);
+   its effect is latency, which is not an effect kind of the claims. Run 0 and run 1 held no payment-pod claim with a
+   failure finding. This is the known limit of roadmap C2 (first target-local effect), not a defect of the rule.
+2. **A repeated event carries its earlier history (run 2).** The payment pod did fail its liveness probe under the
+   delay (`Unhealthy` x28), so a pod claim with an effect existed. But the Kubernetes events are recurring
+   aggregates whose `firstTimestamp` (11:37:18 and 12:16:51) comes from earlier experiments on the same, long-lived pod
+   (the kubelet re-creates a deleted event with its cached first timestamp and count). The rule treats every instant of
+   an observation as covered and refuses an effect that may precede `Applied`, so it stayed `NOT_FIRED`. It is doing
+   what it was written to do; the harness gives the pod a history.
+3. **Run 0's stored diagnosis predates the closing event (unverified cause).** Its `Recovered` event exists in the run's
+   database (12:40:29) but the latest stored diagnosis (12:40:45) still had `recovered_at: null`; an interval whose end
+   is unobserved proves nothing. Not investigated further (ingestion lag or revision timing).
+
+Consequences, none acted on: the rule's non-firing here is explained by observability (1) and by the harness (2, 3),
+so no rule change is indicated, and the engine must not be adjusted to make slice 1 fire. Options for the owner:
+a fresh `payment-service` pod per run in the isolation step (removes 2), and re-reading the incident's diagnosis after
+recovery before storing it (addresses 3). Both are harness changes and would need slice 1 to be re-run as a new suite.

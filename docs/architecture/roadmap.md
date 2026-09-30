@@ -40,7 +40,7 @@ Contract: [`connector-boundary-contract.md`](connector-boundary-contract.md).
 |---|---|---|---|
 | B0 | Hygiene: `orders.created` is declared and re-created by a sidecar and Kafka keeps its data across container restarts (verified live); 88 unused Docker volumes removed and one kept | DONE | |
 | B1 | `Timeline` ground truth (`testbed-ground-truth-contract.md`): manifest, journal, oracle, chain and scoring implemented and tested; scenarios and runner wiring come with B4 | DONE | |
-| B2 | Recreate the lab cluster (destructive): Chaos Mesh 2.8.4 with containerd values, connector inside the lab, Postgres volume and declared migration (`testbed-lab-design.md`) | DECISION (design approved; chart, images, Kind config and all bring-up manifests prepared and validated; only the destructive recreation is left) | B1 (done), A7 (done) |
+| B2 | Recreate the lab cluster: Chaos Mesh 2.8.4 with containerd values, self-migrating Postgres, isolated control workload, gate passed (`testbed-lab-design.md` §13) | DONE | B1, A7 |
 | B3 | Control plane outside the lab (host or container), read-only kubeconfig, its own Postgres | NEXT | A7, B2 |
 | B4 | 4 to 6 controlled incidents, each repeated N times with randomized target and timing, dev and held-out split fixed up front: direct pod fault, dependency fault, scheduled recurring fault, config or rollout cause, negative control by construction, competing causes | NEXT | B2 |
 | B5 | Frozen engine baseline: version and acceptance criteria fixed before any run | NEXT | B4 |
@@ -149,3 +149,8 @@ Observations that shape B2:
   Do not run the 35-scenario regression harness (four workers) at the same time as a testbed batch.
 - Kind's chaos daemon needs the containerd runtime and socket settings; these are part of the
   Chaos Mesh install values, to be recorded in B2.
+
+### Measured after the recreation (2026-09-30)
+
+The recreated lab uses 2.0 GiB of the node's 9.7 GiB (container working sets 1.6 GiB); Chaos Mesh itself
+uses 34 MiB against a 0.26 GiB request. The estimate above holds with a wide margin.

@@ -160,3 +160,37 @@ Findings while writing them:
   that at once through the new sidecar; that was not done, because the cluster is about to be recreated.
 
 The destructive recreation is the only step left of B2.
+
+## 13. Recreation record (2026-09-30)
+
+The lab was recreated with `make lab-up` from the pinned inputs. Outcome of the gate of section 8:
+
+- All pods `Running`; `orders.created` present; schema at head (migrated by the sidecar); 23 Chaos Mesh
+  CRDs; the isolated workload unreachable from `sre-demo`. `make lab-check`: PASS.
+- **Chaos smoke.** A 30 s `NetworkChaos` delay on `payment-service` produced `Applied` (02:55:30) and
+  `Recovered` (02:55:59) events for one experiment UID, naming the target pod; the request latency from
+  `order-service` went from about 1 ms to about 0.6 s and returned to baseline.
+- **Alert path.** With load running, a 110 s delay fired its first alert
+  (`PaymentDbQueryLatencyHigh`) 30 s after the fault, and by 45 s the chain
+  (`OrderDependencyLatencyHigh`, `PaymentRequestLatencyHigh`, `HighRequestLatency`) was active in
+  Alertmanager; all cleared after the fault ended. The control plane is not in the lab, so webhook
+  delivery was not part of this check.
+- **Node restart.** `docker restart` of the node: the API answered after 11 s, both containers of the Kafka
+  pod restarted once, a topic that no sidecar declares (`persist-marker`) and a marker row in an
+  undeclared table survived, and `make lab-check` passed again.
+- **Resources** (after the gate): the node 2.0 GiB of 9.7 GiB and 0.45 CPU; container working sets 1,634
+  MiB (`sre-demo` 717, `kube-system` 588, `observability` 268, Chaos Mesh 34, `lab-control` 16). The
+  measured Chaos Mesh use is far below its 0.26 GiB request.
+
+Three defects surfaced during the recreation and were fixed before it passed:
+
+1. `uv.lock` was stale after the connector change added `grpcio` and `cryptography` to `pyproject.toml`, so
+   every image build (`uv export --locked`) failed. The lock was refreshed inside a container with the
+   Dockerfile's `uv` version; the diff is four lines, no version changed.
+2. `kind load` cannot import the multi-platform Chaos Mesh images from the local Docker store ("content
+   digest not found"). `make lab-images` now has the node pull the pinned tags and refuses any whose
+   digest differs from `pins.yaml`.
+3. `lab-check` failed a healthy lab because the topic converges on its own a few seconds after Kafka starts.
+   The gate now retries for up to two minutes and reports the last failure.
+
+B2 is done. What remains for the testbed is B3 (the control plane outside the lab) and B4 (scenarios).

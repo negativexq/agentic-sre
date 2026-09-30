@@ -328,6 +328,14 @@ class TestbedStore:
             raise ValueError("the stored manifest does not match its recorded digest")
         return manifest
 
+    def write_artifact(self, record: RunRecord, name: str, content: bytes) -> Path:
+        """One more file of a run (journal, series, stored diagnoses, score); written once, read-only."""
+        if "/" in name or name.startswith("."):
+            raise ValueError("an artifact name is a plain file name")
+        path = self.run_dir(record.suite_id, record.scenario_id, record.repeat) / name
+        self._write_once(path, content)
+        return path
+
     def run_dir(self, suite_id: str, scenario_id: str, repeat: int) -> Path:
         return self.root / suite_id / scenario_id / str(repeat)
 

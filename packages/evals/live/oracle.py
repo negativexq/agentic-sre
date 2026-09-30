@@ -14,7 +14,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -37,7 +37,73 @@ class ProbeResult:
 class Probe(Protocol):
     name: str
 
-    def check(self) -> ProbeResult: ...
+    def check(self) -> ProbeResult | Sequence[ProbeResult]: ...
+
+
+@dataclass(frozen=True)
+class Measurement:
+    """One timed call: whether it succeeded at all, how long it took, and when it started."""
+
+    at: datetime
+    succeeded: bool
+    latency_seconds: float | None
+    detail: str = ""
+
+
+def http_measurement(
+    url: str,
+    *,
+    method: str = "GET",
+    body: bytes | None = None,
+    timeout_seconds: float = 2.0,
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+) -> Measurement:
+    """Time one HTTP call; a transport error or a non-2xx answer is a failure, never an exception."""
+    request = urllib.request.Request(
+        url,
+        data=body,
+        method=method,
+        headers={"content-type": "application/json"} if body is not None else {},
+    )
+    started, at = time.monotonic(), clock()
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            ok, detail = 200 <= response.status < 300, f"HTTP {response.status}"
+    except urllib.error.HTTPError as error:
+        ok, detail = False, f"HTTP {error.code}"
+    except (urllib.error.URLError, TimeoutError, OSError) as error:
+        ok, detail = False, type(error).__name__
+    return Measurement(at, ok, time.monotonic() - started, detail)
+
+
+@dataclass
+class LatencyProbe:
+    """One measured call judged against several latency thresholds, one result per view.
+
+    A view is a name and a maximum latency (``None`` means only success matters). The same call can
+    therefore back a calibrated "degraded" view and the stricter "alert condition" view without a second
+    request, so both see the same instant.
+    """
+
+    name: str
+    measure: Callable[[], Measurement]
+    views: Mapping[str, float | None]
+
+    def check(self) -> list[ProbeResult]:
+        measurement = self.measure()
+        results = []
+        for view, limit in self.views.items():
+            healthy = measurement.succeeded and (
+                limit is None
+                or (
+                    measurement.latency_seconds is not None and measurement.latency_seconds <= limit
+                )
+            )
+            detail = measurement.detail if measurement.succeeded else measurement.detail or "failed"
+            results.append(
+                ProbeResult(view, measurement.at, healthy, measurement.latency_seconds, detail)
+            )
+        return results
 
 
 @dataclass
@@ -121,7 +187,10 @@ class Oracle:
         self._interval = interval_seconds
 
     def sample_once(self) -> list[ProbeResult]:
-        results = [probe.check() for probe in self._probes]
+        results: list[ProbeResult] = []
+        for probe in self._probes:
+            outcome = probe.check()
+            results.extend([outcome] if isinstance(outcome, ProbeResult) else outcome)
         for result in results:
             self._writer.write(result)
         return results

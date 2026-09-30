@@ -1,7 +1,7 @@
 .PHONY: install lock lint typecheck test test-pg check demo serve-local \
 	itbench-setup itbench-index eval-dev eval-test benchmark-qualify \
 	images cluster-up build-images deploy load status ui inject-bad-rollout recover rbac-check \
-	lab-images chaos-mesh-install chaos-mesh-uninstall lab-up lab-check lab-check-once lab-pki connector-deploy connector-check cp-up cp-down cp-reset cluster-down precommit offline-demo e2e-kind e2e-kind-clean m18a-live-validate release-check \
+	lab-images chaos-mesh-install chaos-mesh-uninstall lab-up lab-check lab-check-once lab-pki connector-deploy connector-check cp-up cp-stop cp-down cp-reset cluster-down precommit offline-demo e2e-kind e2e-kind-clean m18a-live-validate release-check \
 	verify-release-provenance product-bench-dev
 
 PY := .venv/bin/python
@@ -199,7 +199,8 @@ LAB_DIR := .local/lab
 CP_PG := agentic-sre-cp-pg
 CP_PG_VOLUME := agentic-sre-cp-pgdata
 CP_PG_PORT ?= 55433
-CP_DB := postgresql+psycopg://postgres:postgres@127.0.0.1:$(CP_PG_PORT)/agentic_sre
+CP_DB_NAME ?= agentic_sre
+CP_DB := postgresql+psycopg://postgres:postgres@127.0.0.1:$(CP_PG_PORT)/$(CP_DB_NAME)
 CONNECTOR_SA := system:serviceaccount:connector:connector
 
 lab-pki:
@@ -247,6 +248,8 @@ cp-up: lab-pki
 		-e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=agentic_sre -p 127.0.0.1:$(CP_PG_PORT):5432 \
 		-v $(CP_PG_VOLUME):/var/lib/postgresql/data postgres:16.4-alpine >/dev/null
 	@for attempt in $$(seq 1 60); do docker exec $(CP_PG) pg_isready -U postgres -d agentic_sre >/dev/null 2>&1 && break; sleep 1; done
+	@docker exec $(CP_PG) psql -U postgres -Atc "select 1 from pg_database where datname = '$(CP_DB_NAME)'" | grep -q 1 \
+		|| docker exec $(CP_PG) createdb -U postgres $(CP_DB_NAME)
 	DATABASE_URL=$(CP_DB) $(PY) -m alembic upgrade head
 	@if [ -f $(LAB_DIR)/cp.pid ] && kill -0 $$(cat $(LAB_DIR)/cp.pid) 2>/dev/null; then \
 		echo "the control plane is already running (pid $$(cat $(LAB_DIR)/cp.pid))"; \
@@ -259,6 +262,11 @@ cp-up: lab-pki
 		nohup $(CLI) serve --host 127.0.0.1 --port 8080 > $(LAB_DIR)/cp.log 2>&1 & echo $$! > $(LAB_DIR)/cp.pid; \
 		echo "control plane started (pid $$(cat $(LAB_DIR)/cp.pid)); log $(LAB_DIR)/cp.log; console http://127.0.0.1:8080/app"; \
 	fi
+
+# Stops only the control plane process (its Postgres keeps running), so a run can restart it on another
+# database (`make cp-up CP_DB_NAME=...`).
+cp-stop:
+	@if [ -f $(LAB_DIR)/cp.pid ]; then kill $$(cat $(LAB_DIR)/cp.pid) 2>/dev/null || true; rm -f $(LAB_DIR)/cp.pid; fi
 
 # Stops the control plane and its Postgres; the volume (the diagnosis history) is kept.
 cp-down:

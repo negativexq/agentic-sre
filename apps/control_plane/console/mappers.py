@@ -99,6 +99,25 @@ def _candidate_view(candidate: Candidate) -> CandidateView:
     )
 
 
+def presented_leader(
+    root_cause: str | None,
+    display: str | None,
+    candidates: tuple[str, ...],
+    withheld_reason: str | None,
+) -> tuple[str, tuple[str, ...], str | None]:
+    """(display, candidates, the single actor to show or None) for any stored diagnosis.
+
+    A document from before the projection (no candidates) keeps its old presentation: its root cause,
+    unless the earlier C10 flag withheld it.
+    """
+    if not candidates:
+        if withheld_reason:
+            return "NOT_ESTABLISHED", ((root_cause,) if root_cause else ()), None
+        return "SINGLE", ((root_cause,) if root_cause else ()), root_cause
+    display = display or "SINGLE"
+    return display, candidates, candidates[0] if display == "SINGLE" else None
+
+
 def diagnosis_view(
     diagnosis: Diagnosis,
     *,
@@ -108,10 +127,11 @@ def diagnosis_view(
 ) -> DiagnosisView:
     """Shape a stored diagnosis for the workspace, preserving its semantics."""
     is_resolved = diagnosis.resolution.value == "RESOLVED"
-    leading = (
-        diagnosis.root_cause.canonical
-        if diagnosis.root_cause and diagnosis.leading_actor_established
-        else None
+    display, candidates, leading = presented_leader(
+        diagnosis.root_cause.canonical if diagnosis.root_cause else None,
+        diagnosis.leading_actor_display,
+        tuple(ref.canonical for ref in diagnosis.leading_actor_candidates),
+        diagnosis.leading_actor_withheld_reason,
     )
     states = _epistemic_states(diagnosis.resolution_trace)
 
@@ -161,6 +181,9 @@ def diagnosis_view(
         leading_root_actor=leading,
         root_cause=leading if is_resolved else None,
         leading_actor_withheld_reason=diagnosis.leading_actor_withheld_reason,
+        leading_actor_display=display,
+        leading_actor_tier=diagnosis.leading_actor_tier,
+        leading_actor_candidates=candidates,
         is_resolved=is_resolved,
         summary=diagnosis.summary,
         resolution_rationale=trace.rationale if trace else None,
@@ -312,6 +335,14 @@ def incident_list_item(incident: Incident, view: dict[str, Any] | None) -> Incid
     now = datetime.now(incident.created_at.tzinfo)
     services = view.get("services") if view else None
     service = services[0] if isinstance(services, (tuple, list)) and services else None
+    listed = presented_leader(
+        str(view["root_cause"]) if view and view.get("root_cause") else None,
+        str(view["leading_actor_display"]) if view and view.get("leading_actor_display") else None,
+        tuple(str(c) for c in (view.get("leading_actor_candidates") or ())) if view else (),
+        str(view["leading_actor_withheld_reason"])
+        if view and view.get("leading_actor_withheld_reason")
+        else None,
+    )
     return IncidentListItem(
         incident_id=str(incident.incident_id),
         title=incident.title,
@@ -319,16 +350,14 @@ def incident_list_item(incident: Incident, view: dict[str, Any] | None) -> Incid
         severity=incident.severity.value,
         source=incident.source.value,
         service=service if isinstance(service, str) else None,
-        leading_root_actor=(
-            str(view["root_cause"])
-            if view and view.get("root_cause") and not view.get("leading_actor_withheld_reason")
-            else None
-        ),
+        leading_root_actor=listed[2],
         leading_actor_withheld_reason=(
             str(view["leading_actor_withheld_reason"])
             if view and view.get("leading_actor_withheld_reason")
             else None
         ),
+        leading_actor_display=listed[0],
+        leading_actor_candidates=listed[1],
         confidence=str(view["confidence"]) if view and view.get("confidence") else None,
         resolution=str(view["resolution"]) if view and view.get("resolution") else None,
         has_diagnosis=view is not None,

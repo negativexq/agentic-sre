@@ -106,6 +106,10 @@ export interface DiagnosisView {
   root_cause: string | null;
   /** Why the engine did not establish a leading actor (roadmap C10); the actor is then null. */
   leading_actor_withheld_reason?: string | null;
+  /** What to show (roadmap C12): SINGLE shows leading_root_actor, the others the candidates. */
+  leading_actor_display?: "SINGLE" | "COMPETING" | "NOT_ESTABLISHED";
+  leading_actor_tier?: "STRONG" | "SUPPORTED" | "UNESTABLISHED" | null;
+  leading_actor_candidates?: string[];
   is_resolved: boolean;
   summary: string;
   resolution_rationale: string | null;
@@ -179,6 +183,8 @@ export interface IncidentListItem {
   has_diagnosis: boolean;
   /** Set when the engine did not establish a leading actor (roadmap C10). */
   leading_actor_withheld_reason?: string | null;
+  leading_actor_display?: "SINGLE" | "COMPETING" | "NOT_ESTABLISHED";
+  leading_actor_candidates?: string[];
   created_at: string;
   updated_at: string;
   age_seconds: number;

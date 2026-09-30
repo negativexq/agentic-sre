@@ -321,7 +321,9 @@ def build_report(
     is_resolved = diagnosis.resolution.value == "RESOLVED"
     leading = (
         diagnosis.root_cause.canonical
-        if diagnosis.root_cause and diagnosis.leading_actor_established
+        if diagnosis.root_cause
+        and diagnosis.leading_actor_established
+        and diagnosis.leading_actor_display == "SINGLE"
         else None
     )
     states = _epistemic_states(diagnosis.resolution_trace)

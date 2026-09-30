@@ -43,8 +43,12 @@ export function IncidentsTable({ items }: { items: IncidentListItem[] }) {
             </TCell>
             <TCell className="text-muted">{item.service ?? "—"}</TCell>
             <TCell className="max-w-[14rem]">
-              {item.leading_actor_withheld_reason ? (
-                <span className="text-xs text-subtle" title="No candidate has evidence in the incident window">
+              {item.leading_actor_display === "COMPETING" ? (
+                <span className="text-xs text-muted break-anywhere" title="Competing supported causes">
+                  Competing: {(item.leading_actor_candidates ?? []).map(shortEntity).join(", ")}
+                </span>
+              ) : item.leading_actor_display === "NOT_ESTABLISHED" || item.leading_actor_withheld_reason ? (
+                <span className="text-xs text-subtle" title="No causal candidate is established">
                   Not established
                 </span>
               ) : (

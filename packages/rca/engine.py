@@ -56,6 +56,7 @@ from packages.rca.model import (
     TimingAssessment,
     TimingStability,
 )
+from packages.rca.presentation import project_leading_actor
 from packages.rca.ranking import (
     Context,
     RankingConfig,
@@ -854,19 +855,23 @@ def diagnose_case(
         if resolution_trace.state is Resolution.AMBIGUOUS
         else ()
     )
-    # Roadmap C10: an unestablished leader whose evidence all lies outside the window is not a cause.
-    windows = [finding_in_window(f.at, case.context, config.ranking) for f in selected.findings]
-    withheld = (
-        resolution_trace.claim_level == "UNESTABLISHED"
-        and any(w is False for w in windows)
-        and not any(w is True for w in windows)
+    # Roadmap C10/C12: what the operator is shown, by epistemic tier; root_cause itself is unchanged.
+    projection = project_leading_actor(
+        selectable_hypotheses,
+        supported=frozenset(resolution_trace.plausible_hypotheses),
+        strong=frozenset(resolution_trace.mechanism_verified_hypotheses),
+        in_window=lambda at: finding_in_window(at, case.context, config.ranking),
     )
+    withheld = projection.reason == "NO_EVIDENCE_IN_INCIDENT_WINDOW"
     return Diagnosis(
         decision_semantics="m21.v3",
         incident_id=case.incident_id,
         root_cause=selected.causal_actor,
-        leading_actor_established=not withheld,
-        leading_actor_withheld_reason="NO_EVIDENCE_IN_INCIDENT_WINDOW" if withheld else None,
+        leading_actor_established=projection.display != "NOT_ESTABLISHED",
+        leading_actor_withheld_reason=projection.reason,
+        leading_actor_display=projection.display,
+        leading_actor_tier=projection.tier,
+        leading_actor_candidates=projection.candidates,
         confidence=confidence,
         resolution=resolution_trace.state,
         summary=(

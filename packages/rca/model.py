@@ -1819,6 +1819,12 @@ class Diagnosis(BaseModel):
     # as a cause. ``root_cause`` itself is unchanged. True for documents written before it existed.
     leading_actor_established: bool = True
     leading_actor_withheld_reason: str | None = None
+    # What the operator is shown (roadmap C12, packages/rca/presentation.py): SINGLE, COMPETING or
+    # NOT_ESTABLISHED; the epistemic tier it was decided in; the candidates shown. Empty candidates (a
+    # document from before these fields) means: show ``root_cause`` as before.
+    leading_actor_display: str = "SINGLE"
+    leading_actor_tier: str | None = None
+    leading_actor_candidates: tuple[EntityRef, ...] = ()
 
     @model_validator(mode="before")
     @classmethod

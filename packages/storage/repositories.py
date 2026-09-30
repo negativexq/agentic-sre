@@ -1809,6 +1809,10 @@ class DiagnosisRepository:
                 "resolution": document.get("resolution"),
                 # roadmap C10: absent from documents written before the field existed
                 "leading_actor_withheld_reason": document.get("leading_actor_withheld_reason"),
+                "leading_actor_display": document.get("leading_actor_display"),
+                "leading_actor_candidates": tuple(
+                    _canonical(ref) for ref in document.get("leading_actor_candidates") or ()
+                ),
                 "services": tuple(services),
                 "created_at": row.created_at,
                 "run_id": row.run_id,

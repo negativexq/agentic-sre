@@ -148,6 +148,11 @@ class DiagnosisView(ConsoleModel):
     leading_root_actor: str | None
     root_cause: str | None
     leading_actor_withheld_reason: str | None = None
+    # What the operator is shown (roadmap C12): SINGLE shows leading_root_actor; COMPETING and
+    # NOT_ESTABLISHED show the candidates instead, never one of them chosen by name.
+    leading_actor_display: str = "SINGLE"
+    leading_actor_tier: str | None = None
+    leading_actor_candidates: tuple[str, ...] = ()
     is_resolved: bool
     summary: str
     resolution_rationale: str | None
@@ -237,6 +242,8 @@ class IncidentListItem(ConsoleModel):
     leading_root_actor: str | None
     confidence: str | None
     leading_actor_withheld_reason: str | None = None
+    leading_actor_display: str = "SINGLE"
+    leading_actor_candidates: tuple[str, ...] = ()
     resolution: str | None
     has_diagnosis: bool
     created_at: datetime

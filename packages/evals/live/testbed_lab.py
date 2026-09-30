@@ -54,6 +54,7 @@ REPO = Path(__file__).resolve().parents[3]
 NAMESPACE = "sre-demo"
 SCENARIO_ID = "dependency-delay-payment"
 DIRECT_SCENARIO_ID = "direct-stress-order"
+MAX_WARMUPS = 3
 WARMUP_SECONDS = 90.0  # a restarted pod fails probes for its first minutes under load
 WATCHED_NAMESPACES = ("sre-demo", "lab-control", "chaos-mesh")
 
@@ -173,18 +174,7 @@ class LabWorld:
         """
         self.database = database_name(run_id)
         self._delete_experiments()
-        self._fresh_target_pod()  # before the port-forwards: replacing order-service would cut its own
-        self._forwarder = PortForwarder(
-            (
-                Forward("order-service", self.order_port, 8000, NAMESPACE),
-                Forward("alertmanager", self.alertmanager_port, 9093, "observability"),
-            ),
-            timeout_seconds=30,
-        )
-        unreachable = self._forwarder.start_all()
-        if unreachable:
-            raise RuntimeError(f"port-forward failed for {', '.join(unreachable)}")
-        self._warm_up()
+        self._quiet_target_pod()
         for namespace in WATCHED_NAMESPACES:
             self._run(
                 ["kubectl", "-n", namespace, "delete", "events", "--all", "--ignore-not-found"]
@@ -257,6 +247,63 @@ class LabWorld:
             return len(items) == 1 and all("deletionTimestamp" not in i["metadata"] for i in items)
 
         self._wait(f"the old {self.target_app} pod to terminate", single_pod, 120)
+
+    def _start_forwards(self) -> None:
+        self._forwarder = PortForwarder(
+            (
+                Forward("order-service", self.order_port, 8000, NAMESPACE),
+                Forward("alertmanager", self.alertmanager_port, 9093, "observability"),
+            ),
+            timeout_seconds=30,
+        )
+        unreachable = self._forwarder.start_all()
+        if unreachable:
+            raise RuntimeError(f"port-forward failed for {', '.join(unreachable)}")
+
+    def _target_warnings(self) -> list[str]:
+        """Warning events of the current target pod (a terminated pod of the same workload is another pod)."""
+        pods = json.loads(
+            self._run(
+                [
+                    "kubectl",
+                    "-n",
+                    NAMESPACE,
+                    "get",
+                    "pod",
+                    "-l",
+                    f"app={self.target_app}",
+                    "-o",
+                    "json",
+                ]
+            ).stdout
+        )["items"]
+        names = {p["metadata"]["name"] for p in pods}
+        events = json.loads(
+            self._run(["kubectl", "-n", NAMESPACE, "get", "events", "-o", "json"]).stdout
+        )["items"]
+        return [
+            f"{e['involvedObject']['name']}: {e.get('reason')}"
+            for e in events
+            if e.get("type") == "Warning" and e["involvedObject"].get("name") in names
+        ]
+
+    def _quiet_target_pod(self) -> None:
+        """A fresh target pod that raised no warning while it warmed up, or the run does not start.
+
+        The kubelet re-creates a deleted event with its cached first timestamp and count, so any failure
+        of the pod before the injection would come back as an observation that may precede it. A pod
+        that failed while warming up is replaced and warmed up again.
+        """
+        for _ in range(MAX_WARMUPS):
+            self._fresh_target_pod()  # before the port-forwards: replacing order-service would cut its own
+            self._start_forwards()
+            self._warm_up()
+            if not self._target_warnings():
+                return
+            self._forwarder.stop_all()  # type: ignore[union-attr]
+        raise RuntimeError(
+            f"the {self.target_app} pod kept raising warnings while warming up ({MAX_WARMUPS} attempts)"
+        )
 
     def _warm_up(self) -> None:
         """Run the workload against the fresh pod, then forget it happened.

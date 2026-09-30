@@ -53,7 +53,7 @@ from packages.rca.model import Diagnosis
 REPO = Path(__file__).resolve().parents[3]
 NAMESPACE = "sre-demo"
 SCENARIO_ID = "dependency-delay-payment"
-DIRECT_SCENARIO_ID = "direct-stress-payment"
+DIRECT_SCENARIO_ID = "direct-stress-order"
 WARMUP_SECONDS = 90.0  # a restarted pod fails probes for its first minutes under load
 WATCHED_NAMESPACES = ("sre-demo", "lab-control", "chaos-mesh")
 
@@ -82,26 +82,10 @@ except Exception as error:
 print(json.dumps({"ok": ok, "latency": time.monotonic() - started, "detail": detail}))
 """
 
-# The target probe of a fault on the service itself: a real payment request, the route the lab's latency
-# alerts watch (``/health`` is excluded from them and barely uses the CPU a stress takes).
-_PAYMENT_SCRIPT = """
-import json, time, urllib.request, uuid
-started = time.monotonic()
-body = json.dumps({"order_id": str(uuid.uuid4()), "amount_cents": 4200, "currency": "USD"}).encode()
-request = urllib.request.Request(
-    "http://payment-service:8000/payments", data=body, headers={"Content-Type": "application/json"}
-)
-try:
-    response = urllib.request.urlopen(request, timeout=6)
-    ok, detail = 200 <= response.status < 300, "HTTP %d" % response.status
-except Exception as error:
-    ok, detail = False, type(error).__name__
-print(json.dumps({"ok": ok, "latency": time.monotonic() - started, "detail": detail}))
-"""
-
 _DIAGNOSES = text(
     """
-    select i.incident_id::text, i.title, i.created_at, d.created_at, d.document
+    select i.incident_id::text, i.title, i.created_at, d.created_at, d.document,
+        (select min(created_at) from diagnoses where incident_id = i.incident_id)
     from incidents i
     join lateral (
         select created_at, document from diagnoses
@@ -123,9 +107,11 @@ class LabWorld:
         control_plane: str = "http://127.0.0.1:8080",
         order_port: int = 18000,
         alertmanager_port: int = 19093,
-        payment_probe: bool = False,
+        target_app: str = "payment-service",
     ) -> None:
-        self.target_script = _PAYMENT_SCRIPT if payment_probe else _TARGET_SCRIPT
+        self.target_app = (
+            target_app  # the workload the fault lands on; its pod is replaced for every run
+        )
         self.clock = clock or RealClock()
         self.pg_container, self.pg_port = pg_container, pg_port
         self.control_plane = control_plane
@@ -186,6 +172,8 @@ class LabWorld:
         *before* the connector restarts and before the control plane starts on its empty database.
         """
         self.database = database_name(run_id)
+        self._delete_experiments()
+        self._fresh_target_pod()  # before the port-forwards: replacing order-service would cut its own
         self._forwarder = PortForwarder(
             (
                 Forward("order-service", self.order_port, 8000, NAMESPACE),
@@ -196,8 +184,6 @@ class LabWorld:
         unreachable = self._forwarder.start_all()
         if unreachable:
             raise RuntimeError(f"port-forward failed for {', '.join(unreachable)}")
-        self._delete_experiments()
-        self._fresh_target_pod()
         self._warm_up()
         for namespace in WATCHED_NAMESPACES:
             self._run(
@@ -240,12 +226,12 @@ class LabWorld:
             )
 
     def _fresh_target_pod(self) -> None:
-        """A new ``payment-service`` pod per run, so it carries no event history of an earlier run.
+        """A new pod of the target workload per run, so it carries no event history of an earlier run.
 
         The kubelet re-creates a deleted event with its cached first timestamp and count, so an old
         pod's recurring events would look as if they began before this run's injection.
         """
-        deployment = "deployment/payment-service"
+        deployment = f"deployment/{self.target_app}"
         self._run(["kubectl", "-n", NAMESPACE, "rollout", "restart", deployment])
         self._run(
             ["kubectl", "-n", NAMESPACE, "rollout", "status", deployment, "--timeout=180s"],
@@ -262,7 +248,7 @@ class LabWorld:
                         "get",
                         "pod",
                         "-l",
-                        "app=payment-service",
+                        f"app={self.target_app}",
                         "-o",
                         "json",
                     ]
@@ -270,7 +256,7 @@ class LabWorld:
             )["items"]
             return len(items) == 1 and all("deletionTimestamp" not in i["metadata"] for i in items)
 
-        self._wait("the old payment-service pod to terminate", single_pod, 120)
+        self._wait(f"the old {self.target_app} pod to terminate", single_pod, 120)
 
     def _warm_up(self) -> None:
         """Run the workload against the fresh pod, then forget it happened.
@@ -314,7 +300,7 @@ class LabWorld:
                     "--",
                     "python",
                     "-c",
-                    self.target_script,
+                    _TARGET_SCRIPT,
                 ],
                 timeout=10,
                 check=False,
@@ -348,7 +334,7 @@ class LabWorld:
                 "StressChaos",
                 (
                     "  mode: all\n"
-                    f"  selector: {{namespaces: [{NAMESPACE}], labelSelectors: {{app: payment-service}}}}\n"
+                    f"  selector: {{namespaces: [{NAMESPACE}], labelSelectors: {{app: {self.target_app}}}}}\n"
                     f"  stressors: {{cpu: {{workers: {params.cpu_workers}, load: 100}}}}\n"
                 ),
             )
@@ -401,7 +387,7 @@ class LabWorld:
                     "get",
                     "pod",
                     "-l",
-                    "app=payment-service",
+                    f"app={self.target_app}",
                     "-o",
                     "json",
                 ]
@@ -481,9 +467,27 @@ class LabWorld:
         finally:
             engine.dispose()
         return [
-            StoredDiagnosis(str(r[0]), str(r[1]), _aware(r[2]), _aware(r[3]), dict(r[4]))
+            StoredDiagnosis(
+                str(r[0]), str(r[1]), _aware(r[2]), _aware(r[3]), dict(r[4]), _aware(r[5])
+            )
             for r in rows
         ]
+
+    def rediagnose(self, alerts: Collection[str], since: datetime) -> int:
+        """Ask the control plane, through its own API, to diagnose each incident of the run once more."""
+        asked = 0
+        for stored in self.diagnoses(alerts, since):
+            request = urllib.request.Request(
+                f"{self.control_plane}/api/v1/incidents/{stored.incident_id}/diagnosis",
+                data=b"",
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(request, timeout=120).read()
+                asked += 1
+            except OSError:
+                pass  # the earlier diagnosis stays the latest; the run records how many were asked
+        return asked
 
     def cleanup(self) -> None:
         self._delete_experiments()
@@ -518,7 +522,7 @@ def dependency_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> 
 
 
 def direct_pod_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> ScenarioSpec:
-    """Slice 2 (design §10): a CPU stress on ``payment-service`` under load."""
+    """Slice 2 (design §10): a CPU stress on ``order-service`` under load."""
     return ScenarioSpec(
         scenario_id=DIRECT_SCENARIO_ID,
         family="direct-pod-fault",
@@ -529,7 +533,7 @@ def direct_pod_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> 
             "baseline_seconds": ParameterRange(low=45, high=45),
             "offset_seconds": ParameterRange(low=0, high=20),
             "duration_seconds": ParameterRange(low=90, high=110),
-            "cpu_workers": ParameterRange(low=40, high=48),
+            "cpu_workers": ParameterRange(low=20, high=28),
             "load_rps": ParameterRange(low=8, high=12),
         },
     )
@@ -622,7 +626,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.command == "phase0":
-        world = LabWorld(clock=clock, payment_probe=args.scenario == "direct")
+        world = LabWorld(
+            clock=clock,
+            target_app="order-service" if args.scenario == "direct" else "payment-service",
+        )
         # Phase 0 is not part of any suite: its own store, its own manifest, never scored into a result.
         from packages.rca.engine import RCA_ENGINE_VERSION
 
@@ -646,7 +653,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     store = TestbedStore(args.root)
     manifest = store.load_manifest(args.suite)
     world = LabWorld(
-        clock=clock, payment_probe=any(sp.family == "direct-pod-fault" for sp in manifest.scenarios)
+        clock=clock,
+        target_app=(
+            "order-service"
+            if any(sp.family == "direct-pod-fault" for sp in manifest.scenarios)
+            else "payment-service"
+        ),
     )
     outcomes: list[RunOutcome] = []
     for spec in manifest.scenarios:

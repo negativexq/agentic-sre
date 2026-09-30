@@ -62,17 +62,19 @@ DEPENDENCY_ALERTS = frozenset(
         "KafkaConsumerLag",
     }
 )
-# A CPU stress on payment-service raises the same latency alerts and may also trip its own runtime and error alerts.
+# A CPU stress on order-service raises the latency and error alerts of that service and of what hangs off it.
 DIRECT_POD_ALERTS = DEPENDENCY_ALERTS | {
-    "PaymentRuntimeInstability",
-    "PaymentServiceLatencyCritical",
-    "PaymentErrorRateHigh",
-    "HighErrorRate",
     "OrderErrorRateHigh",
+    "HighErrorRate",
+    "OrderDbQueryLatencyHigh",
+    "OrderWorkerConsumerErrorsHigh",
 }
 ALERTS_BY_FAMILY: dict[str, frozenset[str]] = {"direct-pod-fault": frozenset(DIRECT_POD_ALERTS)}
 ALERT_LATENCY_SECONDS = 0.5  # the latency of the lab's alert rules: the symptom threshold
 RECOVERY_TIMEOUT_SECONDS = 180.0
+REDIAGNOSE_SETTLE_SECONDS = (
+    20.0  # the closing events must reach the control plane before it is asked again
+)
 EXECUTION_TIMEOUT_SECONDS = 30.0
 DIAGNOSIS_TIMEOUT_SECONDS = 300.0
 DIAGNOSIS_QUIET_SECONDS = 20.0
@@ -151,6 +153,9 @@ class StoredDiagnosis:
     incident_created_at: datetime
     diagnosed_at: datetime
     document: dict[str, object]
+    first_diagnosed_at: datetime | None = (
+        None  # the incident's first diagnosis (``diagnosed_at`` is the latest)
+    )
 
 
 class World(Protocol):
@@ -176,6 +181,10 @@ class World(Protocol):
 
     def diagnoses(self, alerts: Collection[str], since: datetime) -> list[StoredDiagnosis]: ...
 
+    def rediagnose(self, alerts: Collection[str], since: datetime) -> int:
+        """Ask the control plane for a fresh diagnosis of each incident of the run; the count asked."""
+        ...
+
     def cleanup(self) -> None: ...
 
 
@@ -187,7 +196,7 @@ class RunOutcome:
 
 
 def direct_pod_chain(injection: Injection) -> Chain:
-    """The world's chain for a CPU stress on ``payment-service``: the pod is the symptom, nothing propagates."""
+    """The world's chain for a CPU stress on ``order-service``: the pod is the symptom, nothing propagates."""
     experiment = f"sre-demo/{injection.kind}/{injection.name}"
     return Chain(
         links=(
@@ -216,7 +225,7 @@ def direct_pod_chain(injection: Injection) -> Chain:
             ),
             Link(
                 role="symptom",
-                actor="sre-demo/Service/payment-service",
+                actor="sre-demo/Service/order-service",
                 knowable=False,
                 mechanism="latency of the stressed service itself",
             ),
@@ -284,7 +293,7 @@ class _Run:
             # The faulted service is the one showing the symptom: one probe, two views of it (contract §4.2).
             probes = [
                 LatencyProbe(
-                    "target", world.target_measure, _Views(self.views, ("target", "symptom"))
+                    "target", world.client_measure, _Views(self.views, ("target", "symptom"))
                 )
             ]
         else:
@@ -422,7 +431,17 @@ def run_once(
             run.wait(3.0)
             if all_recovered_at(run.writer.read(), watched_views, after=removed_at):
                 break
-        # 4. the stored diagnoses, once they stop changing
+        # 4. the closing events reach the control plane, which is asked once more for each incident: a
+        #    diagnosis stored at the alert cannot know how the experiment ended (an unobserved end proves nothing)
+        run.wait(REDIAGNOSE_SETTLE_SECONDS)
+        asked = world.rediagnose(alerts, injection.injected_at)
+        run.journal.record(
+            verb="rediagnose",
+            object="incidents",
+            role="rediagnose_requested",
+            payload={"incidents": asked},
+        )
+        # 5. the stored diagnoses, once they stop changing
         stored = _await_diagnoses(world, clock, run, alerts, injection.injected_at)
     finally:
         world.stop_load()
@@ -497,7 +516,9 @@ def _finish(
             injection
         ),
         clock_offset_seconds=0.0,  # the injector and the oracle share one host clock
-        diagnosis_completed_at=primary.diagnosed_at if primary else None,
+        diagnosis_completed_at=(primary.first_diagnosed_at or primary.diagnosed_at)
+        if primary
+        else None,
     )
     record = record.model_copy(update={"invalid_reasons": (*record.invalid_reasons, *problems)})
     directory = store.write_run(record)

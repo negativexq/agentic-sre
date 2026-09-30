@@ -122,6 +122,11 @@ class FakeWorld:
             )
         ]
 
+    def rediagnose(self, alerts: Collection[str], since: datetime) -> int:
+        self.rediagnosed_after_removal = self.removed is not None
+        self.calls.append("rediagnose")
+        return 1
+
     def cleanup(self) -> None:
         self.calls.append("cleanup")
 
@@ -216,6 +221,14 @@ def test_the_journal_records_the_calibration_and_every_call_in_order(tmp_path: P
     assert outcome.record.seed == 7
 
 
+def test_the_control_plane_is_asked_again_only_after_the_cause_is_removed(tmp_path: Path) -> None:
+    world, store, _ = run(tmp_path)
+    assert world.calls.count("rediagnose") == 1 and world.rediagnosed_after_removal
+    journal = InjectorJournal(store.run_dir("s1", "dependency-delay", 0) / "journal.jsonl")
+    roles = [e.role for e in journal.entries()]
+    assert roles.index(ROLE_CAUSE_REMOVED) < roles.index("rediagnose_requested")
+
+
 def test_everything_a_run_stores_is_write_once(tmp_path: Path) -> None:
     _, store, outcome = run(tmp_path)
     names = sorted(p.name for p in outcome.directory.iterdir())
@@ -282,10 +295,10 @@ def test_a_direct_pod_fault_is_a_cpu_stress_whose_chain_has_no_propagation() -> 
         tier="DEV",
         repeats=1,
         seeds=(3,),
-        parameters={"cpu_workers": ParameterRange(low=40, high=48)},
+        parameters={"cpu_workers": ParameterRange(low=20, high=28)},
     )
     params = derive_parameters(spec, 3)
-    assert params.fault == "cpu-stress" and 40 <= params.cpu_workers <= 48
+    assert params.fault == "cpu-stress" and 20 <= params.cpu_workers <= 28
     chain = direct_pod_chain(Injection("pod-stress-3", "u", "pay-1", "pu", T0, "StressChaos"))
     assert [link.role for link in chain.links] == ["cause", "execution", "target_effect", "symptom"]
     assert chain.of_role("cause")[0].actor == "sre-demo/StressChaos/pod-stress-3"

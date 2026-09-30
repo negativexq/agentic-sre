@@ -6,6 +6,7 @@ import importlib
 import json
 import logging
 import re
+from collections import defaultdict
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -170,6 +171,8 @@ class KubernetesClusterReader:
         self._api_client: Any | None = None
         # the resourceVersion each Event scope's last LIST returned (connector contract §15)
         self.event_resource_versions: dict[ListingScope, str] = {}
+        # API requests this reader made, by verb (connector contract §15 load measurement)
+        self.api_calls: dict[str, int] = defaultdict(int)
 
     def _client(self) -> tuple[Any, Any]:
         if self._module is None:
@@ -205,6 +208,7 @@ class KubernetesClusterReader:
                 scope = ListingScope(namespace, kind)
                 try:
                     api = getattr(kubernetes.client, group)()
+                    self.api_calls["list"] += 1
                     response = getattr(api, method)(namespace)
                     items = response.items
                 except Exception as exc:
@@ -220,6 +224,7 @@ class KubernetesClusterReader:
             for kind, plural in _CHAOS_PLURALS:
                 scope = ListingScope(namespace, kind)
                 try:
+                    self.api_calls["list"] += 1
                     listing = custom.list_namespaced_custom_object(
                         "chaos-mesh.org", "v1alpha1", namespace, plural
                     )
@@ -244,6 +249,7 @@ class KubernetesClusterReader:
         events: list[dict[str, Any]] = []
         for namespace in dict.fromkeys((*namespaces, *self.chaos_namespaces)):
             try:
+                self.api_calls["list"] += 1
                 response = core.list_namespaced_event(namespace)
             except Exception:
                 continue
@@ -274,6 +280,7 @@ class KubernetesClusterReader:
             func = getattr(getattr(kubernetes.client, group)(), method)
             args = (scope.namespace,)
         watcher = watch_module.Watch()
+        self.api_calls["watch"] += 1
         try:
             for raw in watcher.stream(
                 func,

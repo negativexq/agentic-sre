@@ -309,6 +309,9 @@ class Connector:
             ),
         )
 
+    def _count_bytes(self, body: dict[str, Any]) -> None:
+        self.watch_stats["bytes"] += len(json.dumps(body, separators=(",", ":"), default=str))
+
     def _snapshot(
         self,
         objects: list[dict[str, Any]],
@@ -328,9 +331,11 @@ class Connector:
             if key is None:
                 continue
             self._seen[key] = _digest(body)
+            self._count_bytes(body)
             self._put(self._changes, wire.ObjectItem(seq=0, observed_at=at, body=body))
         for event in events:
             self._events_seen[_event_key(event)] = _digest(event)
+            self._count_bytes(event)
             self._put(self._changes, wire.EventItem(seq=0, observed_at=at, body=event))
         self._status(listing, at, snapshot=True)
 
@@ -351,6 +356,7 @@ class Connector:
             digest = _digest(body)
             if self._seen.get(key) != digest:
                 self._seen[key] = digest
+                self._count_bytes(body)
                 self._put(self._changes, wire.ObjectItem(seq=0, observed_at=at, body=body))
         for key in sorted(self._seen):
             scope = ListingScope.from_key(key)
@@ -362,6 +368,7 @@ class Connector:
             key = _event_key(event)
             if self._events_seen.get(key) != digest:
                 self._events_seen[key] = digest
+                self._count_bytes(event)
                 self._put(self._changes, wire.EventItem(seq=0, observed_at=at, body=event))
         self._status(listing, at, snapshot=False)
 
@@ -433,6 +440,7 @@ class Connector:
                 key, digest = _event_key(body), _digest(body)
                 if self._events_seen.get(key) != digest:
                     self._events_seen[key] = digest
+                    self._count_bytes(body)
                     self._put(self._changes, wire.EventItem(seq=0, observed_at=at, body=body))
                 return True
             object_id = object_key(body)
@@ -451,6 +459,7 @@ class Connector:
             digest = _digest(body)
             if self._seen.get(object_id) != digest:
                 self._seen[object_id] = digest
+                self._count_bytes(body)
                 self._put(self._changes, wire.ObjectItem(seq=0, observed_at=at, body=body))
             return True
 
@@ -502,10 +511,11 @@ class Connector:
                         threads[scope] = thread
                         thread.start()
                         self.watch_stats["watch_starts"] += 1
-                if elapsed >= next_stats:
-                    next_stats = elapsed + 60.0
-                    live = sum(1 for t in threads.values() if t.is_alive())
-                    logger.info("watch stats: active=%d %s", live, dict(self.watch_stats))
+            if elapsed >= next_stats:
+                next_stats = elapsed + 60.0
+                live = sum(1 for t in threads.values() if t.is_alive())
+                calls = dict(getattr(self.cluster, "api_calls", {}) or {})
+                logger.info("watch stats: active=%d api=%s %s", live, calls, dict(self.watch_stats))
             if elapsed >= next_alerts:
                 self.poll_alerts_once()
                 next_alerts = elapsed + alerts_interval

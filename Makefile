@@ -209,6 +209,8 @@ CP_PG := agentic-sre-cp-pg
 CP_PG_VOLUME := agentic-sre-cp-pgdata
 CP_PG_PORT ?= 55433
 CP_DB_NAME ?= agentic_sre
+# How often the control plane takes a cluster snapshot from the connector (seconds).
+CP_WATCH_INTERVAL ?= 15
 CP_DB := postgresql+psycopg://postgres:postgres@127.0.0.1:$(CP_PG_PORT)/$(CP_DB_NAME)
 CONNECTOR_SA := system:serviceaccount:connector:connector
 
@@ -272,7 +274,7 @@ cp-up: lab-pki
 		SRE_CONNECTOR_LISTEN=0.0.0.0:8443 SRE_CONNECTOR_ALLOWED=lab \
 		SRE_CONNECTOR_TLS_CERT=$(LAB_DIR)/pki/server.crt SRE_CONNECTOR_TLS_KEY=$(LAB_DIR)/pki/server.key \
 		SRE_CONNECTOR_TLS_CLIENT_CA=$(LAB_DIR)/pki/ca.crt SRE_AUTO_DIAGNOSE=true \
-		SRE_WATCH_NAMESPACES=sre-demo,lab-control SRE_WATCH_INTERVAL_SECONDS=15 \
+		SRE_WATCH_NAMESPACES=sre-demo,lab-control SRE_WATCH_INTERVAL_SECONDS=$(CP_WATCH_INTERVAL) \
 		nohup $(CLI) serve --host 127.0.0.1 --port 8080 > $(LAB_DIR)/cp.log 2>&1 & echo $$! > $(LAB_DIR)/cp.pid; \
 		echo "control plane started (pid $$(cat $(LAB_DIR)/cp.pid)); log $(LAB_DIR)/cp.log; console http://127.0.0.1:8080/app"; \
 	fi

@@ -302,3 +302,22 @@ runs `uv lock`.
 Not done, by decision or by scope: the default of `SRE_CONNECTOR_STREAMS` is unchanged (§12.9);
 deployment manifests and Helm for the agent, enrollment and certificate rotation (roadmap A8); one
 connector per control plane; a real cluster was not connected (the lab is recreated in B2).
+
+## 14. Measured: where the event path's latency comes from (2026-09-30)
+
+An event reaches the control plane through two polls in series: the connector lists the cluster every
+`SRE_WATCH_INTERVAL_SECONDS` (15 s), and the control plane takes a snapshot of the connector's mirror on its own
+watch interval (15 s). Measured on the lab with ten rollouts of `lab-control/isolated-echo` per setting, each on
+a fresh control-plane database, delay from the event's timestamp to its row in the journal:
+
+| Both intervals | Events | Median | p90 | Max |
+|---|---|---|---|---|
+| 15 s (the default) | 98 | 21.5 s | 27.1 s | 29.9 s |
+| 2 s (experiment) | 88 | 2.5 s | 3.8 s | 4.1 s |
+
+**Result: the polling intervals are the source of the event path's latency; nothing else on the path adds more
+than about a second.** The alert path is not affected (alerts arrive by webhook; their delay is the alert
+rule's own `for`). The 2 s setting was an experiment and is not adopted: polling every object kind of every
+watched namespace that often costs API load that grows with the cluster. The fix is a Kubernetes watch on the
+connector and a push of the deltas to the control plane (roadmap C9 and the connector's A-items); until then
+the default stays 15 s. The control plane's interval is now a Makefile variable (`CP_WATCH_INTERVAL`).

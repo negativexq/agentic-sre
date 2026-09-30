@@ -11,7 +11,7 @@ Historical mechanism bridges alone intentionally grant no execution authority.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from packages.rca.claims import actor_findings, admitted, symptom_links
 from packages.rca.model import (
@@ -40,6 +40,10 @@ EXPLANATION_RULE = "m21.explanation.observed-quota-rejection"
 SPAWN_EXPLANATION_RULE = "m21.explanation.controller-spawn"
 FAULT_EXECUTION_RULE = "m21.support.observed-fault-execution"
 EXECUTION_RULES = (EXECUTION_RULE, FAULT_EXECUTION_RULE)
+# An execution interval may end this long before the incident began and still be its execution.
+EXECUTION_END_GRACE = timedelta(minutes=5)
+# Event timestamps have one-second resolution, so an `Applied` this close after the onset is not later.
+EVENT_RESOLUTION = timedelta(seconds=1)
 _EFFECT_KINDS = frozenset(
     {
         FindingKind.CONTAINER_FAILURE,
@@ -201,6 +205,9 @@ def fault_execution(
                     _instant(target["recovered_at"]),
                 )
                 if pod is None or applied is None or recovered is None:
+                    continue
+                onset = holder.episode_onset
+                if applied > onset + EVENT_RESOLUTION or recovered < onset - EXECUTION_END_GRACE:
                     continue
                 effects = [
                     (f, _effect_times(f, events))

@@ -176,3 +176,16 @@ def test_a_timing_withheld_witness_leaves_a_possible_cause_and_never_upgrades() 
     assert not weaker.mechanism_verified_hypotheses
     assert schedule.hypothesis_id in weaker.plausible_hypotheses
     assert weaker.claim_level == "POSSIBLE_INITIATING_CAUSE"
+
+
+def test_an_execution_that_ended_long_before_the_incident_confers_no_authority() -> None:
+    def shifted(start: float, end: float) -> list[ClusterEvent]:
+        return [spawned(start), applied(start), recovered(end), failure(start + 1)]
+
+    # the alert (the incident onset) is at minute 6
+    assert fired(shifted(1, 4), "Schedule")  # ended two minutes before it
+    assert not fired(shifted(-60, -50), "Schedule")  # ended an hour before it
+
+
+def test_an_execution_applied_after_the_incident_began_confers_no_authority() -> None:
+    assert not fired([spawned(8), applied(8), recovered(10), failure(9)], "Schedule")

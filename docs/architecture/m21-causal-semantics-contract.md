@@ -63,7 +63,10 @@ its controller records give the target pod, `Applied` time and an observed `Reco
 (an interval whose end is unobserved proves nothing). The effect relation holds for a target
 when the exact Pod claim of that target, in the same episode, is a declared incident symptom
 of the holder, has a failure observation inside `[Applied, Recovered]` and **none before
-`Applied`**. `Spawned`, `Applied` or a name match alone confer nothing. The witness is carried
+`Applied`**. The execution interval must also be connected to the incident's onset
+(amendment 2026-09-30, owner-approved): it must not end more than **5 minutes before** the onset and
+must not begin after it (one second of event-timestamp resolution tolerated). An experiment that ended
+long before the incident is not its execution, whatever effects it once had. `Spawned`, `Applied` or a name match alone confer nothing. The witness is carried
 to the parent **Schedule instance** only through the exact `controller-spawn` records (UID on
 both sides, same as the explanation rule); a Schedule carries the witnesses of its own
 spawned experiments and no others. An experiment with no admitted parent Schedule claim is

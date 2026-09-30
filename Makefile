@@ -1,7 +1,7 @@
 .PHONY: install lock lint typecheck test test-pg check demo serve-local \
 	itbench-setup itbench-index eval-dev eval-test benchmark-qualify \
 	images cluster-up build-images deploy load status ui inject-bad-rollout recover rbac-check \
-	cluster-down precommit offline-demo e2e-kind e2e-kind-clean m18a-live-validate release-check \
+	lab-images chaos-mesh-install chaos-mesh-uninstall cluster-down precommit offline-demo e2e-kind e2e-kind-clean m18a-live-validate release-check \
 	verify-release-provenance product-bench-dev
 
 PY := .venv/bin/python
@@ -118,6 +118,26 @@ cluster-up:
 	kind create cluster --config infra/kubernetes/kind-config.yaml
 
 IMAGES := control-plane migrator order-service payment-service order-worker
+
+# Chaos Mesh for the lab (infra/kubernetes/chaos-mesh/pins.yaml): the vendored chart, containerd
+# values, one controller. `lab-images` pulls the pinned images by digest and loads them into the
+# node so that a run never waits on a registry.
+CHAOS_DIR := infra/kubernetes/chaos-mesh
+CHAOS_TAG := v2.8.4
+
+lab-images:
+	$(PY) -c "import sys, yaml; [print(i['name'], i['tag'], i['digest']) for i in yaml.safe_load(open(sys.argv[1]))['images']]" $(CHAOS_DIR)/pins.yaml | while read image tag digest; do \
+		docker pull $$image@$$digest || exit 1; \
+		docker tag $$image@$$digest $$image:$$tag || exit 1; \
+		kind load docker-image $$image:$$tag --name agentic-sre || exit 1; \
+	done
+
+chaos-mesh-install:
+	helm upgrade --install chaos-mesh $(CHAOS_DIR)/chaos-mesh-$(CHAOS_TAG:v%=%).tgz \
+		--namespace chaos-mesh --create-namespace -f $(CHAOS_DIR)/values.yaml --wait
+
+chaos-mesh-uninstall:
+	helm uninstall chaos-mesh --namespace chaos-mesh
 
 images:
 	for image in $(IMAGES); do \

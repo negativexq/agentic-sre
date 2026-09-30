@@ -1,0 +1,17 @@
+# What the lab installs, pinned (docs/architecture/testbed-lab-design.md section 4).
+#
+# The chart archive is vendored so that installing needs no network: rendering it with helm creates
+# fresh webhook certificates every time, so a rendered manifest is deliberately not stored.
+chart:
+  name: chaos-mesh
+  version: 2.8.4
+  file: chaos-mesh-2.8.4.tgz
+  sha256: ae4abd385649771300e4d33a44627c0df3618be0780c385bf30cc2fdf2ad93fa
+# Image digests as published for these tags;  pulls by digest and loads the node.
+images:
+  - name: ghcr.io/chaos-mesh/chaos-mesh
+    tag: v2.8.4
+    digest: sha256:9e48285bb44c63be80f2fe4468c54b0f2d7cdc447ba5f5bc9ded4ab6a973cd37
+  - name: ghcr.io/chaos-mesh/chaos-daemon
+    tag: v2.8.4
+    digest: sha256:0d28dbd95b033279f65605ea88c354d25fe902409197274016dd2efc28ef25cd

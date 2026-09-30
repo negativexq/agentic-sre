@@ -2,4 +2,9 @@ kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: agentic-sre
 nodes:
+  # The node image is pinned by digest to the one the lab has run on so far (Kubernetes 1.37.0,
+  # containerd), which keeps measurements comparable across recreations and needs no pull
+  # (docs/architecture/testbed-lab-design.md section 5). No port is published: the workload and the
+  # oracle are reached through supervised `kubectl port-forward` processes.
   - role: control-plane
+    image: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5

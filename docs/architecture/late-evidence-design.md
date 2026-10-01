@@ -103,3 +103,23 @@ diagnosis does not record `NOT_PROVEN` merely because its cutoff is "now".
    gaps persisted with their start; a per-scope coverage record kept with the diagnosis.
 3. **Order:** A and B (recording) first, as one step; then the four engine readings of §5, each proposed and measured
    on its own, starting with `observed-fault-execution`, which is where the observed failure was.
+
+## 9. Live check of the recording (2026-10-01, three unscored `direct-pod-fault` runs)
+
+Commits `75d6f57`, `bd25cc6`, `8e5b067`, `5cbbb01`; connector image with heartbeats; a fresh control plane and
+database per run.
+
+- **Valid** 3/3, cause and instance named 3/3, no false strong authority, no false `RESOLVED`. The execution witness
+  formed in run 3 (the target pod failed a probe inside the interval; the coverage record is not read by the rule).
+- **Membership.** The closing `Recovered` reached the journal 0.06 s, 0.25 s and 0.58 s after the Connector
+  observed it, about 40 s before each resolution: on the watch path the race of §2 did not recur. No diagnosis
+  admitted an item observed after its cutoff.
+- **Transport completeness** `PROVEN` in all 16 diagnoses (open and resolved), none timed out. Wait from the cutoff
+  to the proof: median 1.8 s, max 7.0 s (run 3, two incidents diagnosed at once while the experiment recovered). The
+  7.0 s is within the 10 s timeout but closer than the 2 s heartbeat explains: each wait iteration runs a full
+  journal step under the snapshot lock. Open.
+- **Source continuity** `UNKNOWN` in every diagnosis: the testbed starts the control plane per run, so each window
+  begins before the stream was followed. This is the rule of §4.3 working as written, but the live check therefore
+  did not exercise `CONTINUOUS` or `GAPPED`; no gap occurred in these short runs. A rule that reads continuity
+  should read it over its own interval (for `observed-fault-execution`: before `Applied`) from the recorded
+  `stream_followed_since` and gaps, not the whole window's verdict.

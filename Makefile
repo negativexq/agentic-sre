@@ -175,6 +175,8 @@ lab-tune:
 			$(KUBECTL) -n $(NAMESPACE) patch deployment $$name --type strategic --patch-file /dev/stdin || exit 1; \
 		$(KUBECTL) -n $(NAMESPACE) rollout status deployment/$$name --timeout=180s || exit 1; \
 	done
+	$(KUBECTL) -n observability patch deployment tempo --type strategic --patch-file infra/kubernetes/lab-tempo-patch.yaml
+	$(KUBECTL) -n observability rollout status deployment/tempo --timeout=180s
 
 lab-check:
 	@for attempt in $$(seq 1 24); do \

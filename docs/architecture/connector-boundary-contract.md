@@ -471,3 +471,29 @@ Replaces, for an expired version, the global snapshot of §15 "Continuity".
 - After the relist the scope's watch resumes from the relist's version and new events continue as usual.
 - **Wire:** the scope field on `GapItem`, `SnapshotBeginItem` and `ListingStatusItem` is added to `connector.v2`,
   which has not been released beyond the lab; a released wire version would have required `v3`.
+
+### 15.5 Three-hour soak with scope-level gaps (2026-10-01)
+
+Fresh control-plane database `soak_20261001T0046`, a rollout of `lab-control/isolated-echo` every two minutes, the
+Connector watching with scope-level gaps (§15.4), 180 minutes; samples in `.local/soak/soak_20261001T0046.csv`.
+
+| Quantity | Result |
+|---|---|
+| Active watches | 31 throughout; 1116 resumes after the server closed a watch |
+| Watch or relist failures | 0 |
+| Expired versions | 35, **all Event scopes of quiet namespaces**: `chaos-mesh/Event` 17, `sre-demo/Event` 18; never `lab-control/Event` (active) nor any other kind |
+| Relists caused by them | 35 scope relists, **0 global snapshots** |
+| API requests | 593 LIST + 1182 WATCH = 1775 in 180 min (about 10 a minute; polling every 15 s made about 116 a minute) |
+| Event rows (776, first 6 min excluded) | source → Connector p50 0.48 s, p90 0.92 s, p99 1.00 s; Connector → journal p50 0.73 s, p90 1.47 s, p99 1.93 s, max 5.64 s (one control-plane journal run, not explained); end to end p50 1.19 s, p90 2.01 s |
+| Object rows (477) | Connector → journal p50 0.43 s, p90 0.88 s |
+
+Against the 36-minute baseline with global gaps (`.local/soak/baseline-global-gap.csv`): each expiry there cost 31
+LISTs and a gap of every scope; here it cost one LIST and a gap of one scope, and the other 30 scopes stayed
+continuous.
+
+**For roadmap C9.** A quiet Event scope loses continuity about every ten minutes, a predictable consequence of
+§15.3: its watch resumes from its listed version until etcd compaction passes it. By the order of events (the watch
+was open and continuous until the server closed it; the relist follows the failed resume within the same second)
+the interval without observation is the time between the closing of the last continuous watch and the end of the
+relist, about a second; that is inferred, not measured, and the gap does not yet record its start. Busy namespaces
+did not expire. Every other kind receives bookmarks and never expired.

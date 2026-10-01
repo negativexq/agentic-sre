@@ -2,7 +2,7 @@
 
 Status: **APPROVED** by the owner (2026-10-02) and **implemented** (the reader lists the kinds in every journaled
 namespace; a namespace without the CRD is skipped, not failed). Adoption waits for the measurement of §3. In the lab
-the listing grows from 22 to 40 scopes (18 Chaos scopes, none failed).
+the listing grows from 28 to 40 object scopes (12 new Chaos scopes, none failed), so from 31 to 43 watches.
 
 ## 1. Problem (measured)
 

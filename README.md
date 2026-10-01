@@ -43,19 +43,225 @@ The Connector boundary in remote mode (details under [Connector boundary](#conne
 
 ### At a glance
 
+**What it does**
+
+- **Deterministic root-cause judgment** — evidence becomes typed Findings, hypotheses are rebuilt and verified by rules; an LLM is optional and never owns the diagnosis.
+- **Bounded, read-only investigation** — when evidence is insufficient, the investigator chooses one validated read at a time within explicit budgets; it cannot change the cluster or execute remediation.
+- **A trust boundary you can deploy** — the control plane holds no customer credential. A small [Connector](#connector-boundary) inside the cluster dials out over mutually authenticated gRPC and answers typed, bounded, audited, read-only requests.
+- **Cluster changes in about a second** — the Connector watches every scope instead of polling: a change reaches the journal in **1.2 s** (median; it was 21.5 s), with about **12× fewer API requests**, and a three-hour soak ran with **0 failures** ([watch path](#watch-driven-change-stream)).
+- **It knows what it could not see** — evidence belongs to a diagnosis by when the Connector observed it, and every diagnosis records, per scope, whether observation was continuous and whether delivery was proven ([evidence timing](#evidence-timing-and-coverage)).
+- **Strong authority is earned, not assumed** — a root cause reaches strong authority only through an observed execution and its incident effect ([causal semantics](docs/architecture/m21-causal-semantics-contract.md)); ambiguity is reported as ambiguity.
+- **No false certainty in the console** — when the evidence does not single out one actor, the operator sees **Competing** candidates or **Not established**, never a ranking's least-bad guess presented as the cause ([leading actor](#how-the-leading-actor-is-presented)).
+- **Every diagnosis can be replayed** — each revision freezes its evidence manifest and the ordered tape of provider reads, and offline replay verifies the manifest, tape and epistemic digests.
+- **Measured against a known world** — an [instrumented testbed](#instrumented-testbed) injects faults whose truth is recorded (a seven-field timeline and a causal chain), freezes its manifest before running, and scores the stored diagnosis, including where the engine falls short.
+
+**What was measured**
+
 - **ITBench-Lite: [17/22 scoreable = 77.3%](evals/results/v1.1.2/README.md) on the TEST25 split, which was blind when it was frozen; 0 model calls.** Since 2026-09-28 all 35 published scenarios count as **development data**: the engine has been worked on with them in view, so they no longer measure generalization. The new held-out set is being built on our own [instrumented testbed](#instrumented-testbed).
 - **All 35 scenarios combined: 26/31 = 83.9%.** Four unmatchable published labels are excluded from the denominator.
 - **Live suite: 25/25 expected outcomes** — 16/16 correct root-cause actors, 9/9 correct abstentions, and 0 fabricated `RESOLVED` diagnoses. Actor identification and epistemic resolution are separate: `RESOLVED` 0, `AMBIGUOUS` 14, `INSUFFICIENT_EVIDENCE` 11. See the [live-suite report](evals/results/live-suite-2026-09-24.md) and [M16 validation](docs/results/m16-positive-elimination.md).
 - **0 model calls** — in both reported measurements; deterministic judgment remains authoritative.
-- **Bounded investigation** — the frozen TEST25 run used six validated physical reads per incident, one read at a time.
-- **Evidence-backed RCA** — observations become normalized Findings before they can change a diagnosis.
-- **Read-only by design** — the RCA investigator cannot mutate the cluster or execute remediation. The live benchmark harness separately stages and restores test faults.
-- **A trust boundary you can deploy** — the control plane holds no customer credential. A small [Connector](#connector-boundary) inside the cluster dials out over mutually authenticated gRPC and answers typed, bounded, audited, read-only requests.
-- **Measured against a known world** — an [instrumented testbed](#instrumented-testbed) injects faults whose truth is recorded (a seven-field timeline and a causal chain), freezes its manifest before running, and scores the stored diagnosis. It is how the engine's causal claims are checked, including where it falls short.
-- **Strong authority is earned, not assumed** — a root cause reaches strong authority only through an observed execution and its incident effect ([causal semantics](docs/architecture/m21-causal-semantics-contract.md)); ambiguity is reported as ambiguity.
-- **Cluster changes in about a second** — the Connector watches every scope instead of polling: a change reaches the journal in **1.2 s** (median; it was 21.5 s), with about **12× fewer API requests**, and a three-hour soak ran with **0 failures** ([watch path](#watch-driven-change-stream)).
-- **Late evidence is admitted, absence is not assumed** — evidence belongs to a diagnosis by when the Connector observed it, not when it happened to arrive; every diagnosis records, per scope, whether observation was continuous and whether delivery was proven ([evidence timing](#evidence-timing-and-coverage)).
-- **No false certainty in the console** — when the evidence does not single out one actor, the operator sees **Competing** candidates or **Not established**, never a ranking's least-bad guess presented as the cause ([leading actor](#how-the-leading-actor-is-presented)).
+- **Testbed (development tier):** the injected cause and its exact instance named in every valid run across three fault families, with 0 false strong authority and 0 false `RESOLVED` ([results](#instrumented-testbed)).
+
+## What is Agentic SRE?
+
+Agentic SRE is a Kubernetes incident investigation and SRE root-cause
+analysis system. It starts from an alert and an observation cutoff, identifies
+candidate causal actors, explains how they can reach the affected workload, and
+tests unresolved questions with a bounded set of legal read-only observations.
+
+The investigator gathers evidence; it does not decide the root cause. Every
+new observation returns through the same deterministic path:
+
+```text
+observation → EvidenceStore → normalization → Finding
+            → hypothesis rebuild → verification → resolution
+```
+
+This separation makes an investigation auditable. A diagnosis includes the
+selected root entity, confidence, resolution state, evidence, and causal path;
+it does not rely on an opaque model answer.
+
+## Core capabilities
+
+### Evidence before answers
+
+The engine does not ask a model to guess what caused an incident. It acquires
+bounded evidence, normalizes that evidence into typed Findings, and rebuilds
+the deterministic diagnosis.
+
+### Deterministic judgment
+
+The RCA engine owns verification, confidence, resolution, and root-cause
+selection. An optional policy can choose among already-legal observation
+actions, but it cannot create evidence, Findings, hypotheses, or a root cause.
+
+### Bounded autonomous investigation
+
+Investigation is a controlled state machine with explicit turn, tool, wall-time,
+per-gap, invalid-action, and no-progress limits. It selects one validated read
+at a time from a legal observation surface.
+
+### Causal topology
+
+The engine distinguishes structural connectivity from directional causal paths.
+Ownership, configuration use, declared dependencies, policies, fault targets,
+scaling relationships, and workload topology are interpreted as explicit
+relations rather than generic graph proximity.
+
+### Reproducible and safe by construction
+
+The deterministic path produces repeatable trajectories for the same snapshot
+and configuration. Kubernetes access is read-only, remediation is proposed
+but never executed, and `NO_DATA` is neutral rather than evidence for a theory.
+
+### Real-time evidence from inside the cluster
+
+The Connector lists each scope once and then watches it, so a change is on the stream about a second
+after the API server announces it. When a watch can no longer resume, only that scope is marked as a gap
+and listed again; every other scope stays continuous ([watch path](#watch-driven-change-stream)).
+
+### Knowing what it could not see
+
+Evidence is admitted by when the Connector observed it, so a late delivery is not lost and hindsight is
+not admitted. Each diagnosis records, per scope, whether observation was continuous and whether delivery
+was proven, and continuity survives a restart of the control plane when the stream provably resumes where
+it stopped ([evidence timing](#evidence-timing-and-coverage)).
+
+### Honest presentation of uncertainty
+
+The leader is chosen by the strength of its claim, not by a score alone, and the console shows a single
+actor, **competing** actors or **not established** accordingly
+([leading actor](#how-the-leading-actor-is-presented)).
+
+### Incidents that follow the alert
+
+An alert that resolves and fires again within a configurable quiet interval can continue its incident
+instead of opening a new one, with the history kept intact; off by default
+([alert episodes](#alert-episodes)).
+
+## Architecture
+
+Agentic SRE has five practical layers:
+
+1. **RCA engine** — deterministic signals, causal hypotheses, verification,
+   confidence, resolution, and remediation proposals.
+2. **Investigation runtime** — bounded evidence acquisition through validated,
+   read-only observation tools.
+3. **Observation sources** — Kubernetes object versions and Events, Prometheus
+   and Alertmanager context, Loki logs, traces, and configured snapshot data.
+4. **Connector** — the only component that touches the customer environment;
+   typed read-only requests and alert and change streams over an outbound mTLS
+   connection ([boundary](#connector-boundary)).
+5. **Control plane** — incident lifecycle, persistence, API, CLI, and HTML/UI
+   reporting. In remote mode it holds no customer credential.
+
+Inside the control plane, alerts and cluster changes become stored, replayable diagnoses:
+
+```mermaid
+flowchart TB
+    A["Alert stream<br/>from the Connector"] --> I["Incident intake<br/>occurrences and episodes"]
+    CS["Change stream from the Connector<br/>objects, Events, gaps, heartbeats"] --> M["Cluster mirror"]
+    M --> J["Evidence journal<br/>versions and observation times<br/>gaps and follow segments"]
+    I --> F["Evidence manifest<br/>frozen per revision"]
+    J --> F
+    F --> R["Deterministic RCA engine"]
+    R <--> B["Bounded investigator<br/>read-only reads via the Connector<br/>each one taped"]
+    R --> D["Diagnosis revision<br/>digests and coverage record"] --> U["Console, API, reports"]
+```
+
+The trust boundary is explicit:
+
+- Kubernetes observation is read-only; Secrets are deliberately not read
+  (enforced by RBAC and again by the Connector's deny list).
+- The control plane holds no customer credential; the Connector only dials out.
+- There is no arbitrary shell execution or autonomous cluster write capability.
+- Remediation text is proposed for an operator and is never executed.
+- Only in-scope, allowlisted observation capabilities can run.
+- Invalid actions, duplicate reads, tool errors, `NO_DATA`, and exhausted
+  budgets terminate safely with the current deterministic diagnosis.
+- A diagnosis changes only after typed evidence is normalized into Findings and
+  the hypotheses are rebuilt.
+
+The built-in deployment is currently a single control-plane process/replica.
+Read endpoints are unauthenticated by default and can expose operationally
+sensitive incident and log-derived data, so deployment authentication and
+network controls remain an operator responsibility.
+
+## How does Agentic SRE find a root cause?
+
+```mermaid
+flowchart TD
+    A[Alert or incident] --> B[Initial observation view]
+    B --> J1[Deterministic RCA]
+    J1 --> H[Hypotheses and information gaps]
+
+    subgraph I[Investigator: bounded evidence acquisition]
+        H --> P[Select one legal read]
+        P --> V[Validate scope and budget]
+        V --> R[Execute one read-only observation]
+    end
+
+    R --> E[EvidenceStore]
+    E --> N[Normalize observations into Findings]
+    N --> J2[Rebuild hypotheses]
+    J2 --> Q[Verify and resolve deterministically]
+    Q -->|remaining gap| P
+    Q --> O[Root cause, confidence, causal path, proposal]
+```
+
+The runtime is orchestrated as a bounded LangGraph state machine:
+
+```text
+assess → select action → validate → execute one read
+       → check novelty → normalize → rebuild hypotheses
+       → check progress → repeat or finalize
+```
+
+LangGraph coordinates this state machine; it does not determine the root
+cause. The same RCA and normalization code is used for initial observations and
+new investigation evidence.
+
+## What it investigates
+
+Supported evidence depends on the configured observation sources, but the
+engine understands these Kubernetes incident classes and signals:
+
+- Deployment, ReplicaSet, Pod, ConfigMap, image, environment, and scale changes.
+- Kubernetes Events, including warning events, failed scheduling, quota failures,
+  container failures, and HPA metric failures.
+- Dependency errors from bounded log observations and declared workload calls.
+- Runtime traces and captured Loki observations when those sources are present.
+- Network policy changes, resource pressure, quota/LimitRange behavior, and
+  traffic changes when the corresponding observation data is available.
+- Ownership, selectors, configuration references, service dependencies, HPA
+  relationships, and other topology needed to build a causal path.
+
+Captured logs are replayable evidence, not an unbounded historical log archive.
+The engine reports when a signal is missing instead of treating missing data as
+proof against a hypothesis.
+
+## Example diagnosis
+
+The offline demo produces a diagnosis in this form:
+
+```text
+Root cause   shop/Deployment/payment
+Confidence   VERIFIED
+Resolution   RESOLVED
+
+Causal path
+  Deployment/payment --serves--> Service/payment
+  Service/payment --dependency_of--> Deployment/checkout
+
+Evidence
+  Deployment/payment changed FAULT_DELAY_MS from 0 to 2500
+  diagnostic alerts began after the rollout
+
+Proposed remediation
+  kubectl rollout undo deployment/payment -n shop
+  [proposed only; not executed]
+```
 
 ## Measured root-cause performance
 
@@ -268,8 +474,11 @@ A resolved incident's window freezes at its resolution. Two questions are kept a
 - **What may it conclude from absence?** Each diagnosis records, per scope, two separate dimensions: **source
   continuity** (`CONTINUOUS`, `GAPPED` with the gap intervals, or `UNKNOWN`) and **transport completeness**
   (`PROVEN` once the change stream, kept moving by a heartbeat, has been read past the cutoff; otherwise
-  `NOT_PROVEN`). A diagnosis waits for that proof (bounded, 10 s). In a live check, delivery was proven for all
-  16 diagnoses (median 1.8 s after the cutoff, longest 7.0 s).
+  `NOT_PROVEN`). A diagnosis waits for that proof (bounded, 10 s). In live checks, delivery was proven in all
+  60 measured waits (median about 2 s after the cutoff, longest 7.0 s); none timed out.
+- **Continuity survives a restart.** The control plane records which Connector run it follows and how far it
+  has read; a restarted process that provably resumes where the previous one stopped keeps the instant the
+  stream has been followed since, instead of starting over as `UNKNOWN`.
 
 The record is provenance today; rules that infer something from absence (an effect not seen before a fault, an
 elimination, `RESOLVED`) will read it one at a time, each measured on the testbed first.
@@ -280,142 +489,6 @@ An alert that resolves and fires again within a configurable quiet interval (`SR
 continue the same incident instead of opening a new one. The history is never rewritten: the timeline shows
 `RESOLVED`, then `ALERT_REFIRED` with the gap, then `OPEN`, and the incident gets a new diagnosis revision.
 The default is off ([contract](docs/architecture/incident-episode-contract.md)).
-
-## Roadmap
-
-The ordered plan, with what blocks what, is in
-[docs/architecture/roadmap.md](docs/architecture/roadmap.md): the Connector
-boundary (mostly done), the testbed (lab, control plane and first slices done),
-engine capabilities that follow the testbed (service-level effect relation,
-first target-local effect, rollout and configuration rules, `RESOLVED` coverage)
-and the product surface (Connect Cluster flow).
-
-## What is Agentic SRE?
-
-Agentic SRE is a Kubernetes incident investigation and SRE root-cause
-analysis system. It starts from an alert and an observation cutoff, identifies
-candidate causal actors, explains how they can reach the affected workload, and
-tests unresolved questions with a bounded set of legal read-only observations.
-
-The investigator gathers evidence; it does not decide the root cause. Every
-new observation returns through the same deterministic path:
-
-```text
-observation → EvidenceStore → normalization → Finding
-            → hypothesis rebuild → verification → resolution
-```
-
-This separation makes an investigation auditable. A diagnosis includes the
-selected root entity, confidence, resolution state, evidence, and causal path;
-it does not rely on an opaque model answer.
-
-## Why Agentic SRE?
-
-### Evidence before answers
-
-The engine does not ask a model to guess what caused an incident. It acquires
-bounded evidence, normalizes that evidence into typed Findings, and rebuilds
-the deterministic diagnosis.
-
-### Deterministic judgment
-
-The RCA engine owns verification, confidence, resolution, and root-cause
-selection. An optional policy can choose among already-legal observation
-actions, but it cannot create evidence, Findings, hypotheses, or a root cause.
-
-### Bounded autonomous investigation
-
-Investigation is a controlled state machine with explicit turn, tool, wall-time,
-per-gap, invalid-action, and no-progress limits. It selects one validated read
-at a time from a legal observation surface.
-
-### Causal topology
-
-The engine distinguishes structural connectivity from directional causal paths.
-Ownership, configuration use, declared dependencies, policies, fault targets,
-scaling relationships, and workload topology are interpreted as explicit
-relations rather than generic graph proximity.
-
-### Reproducibility and safety
-
-The deterministic path produces repeatable trajectories for the same snapshot
-and configuration. Kubernetes access is read-only, remediation is proposed
-but never executed, and `NO_DATA` is neutral rather than evidence for a theory.
-
-## How does Agentic SRE find a root cause?
-
-```mermaid
-flowchart TD
-    A[Alert or incident] --> B[Initial observation view]
-    B --> J1[Deterministic RCA]
-    J1 --> H[Hypotheses and information gaps]
-
-    subgraph I[Investigator: bounded evidence acquisition]
-        H --> P[Select one legal read]
-        P --> V[Validate scope and budget]
-        V --> R[Execute one read-only observation]
-    end
-
-    R --> E[EvidenceStore]
-    E --> N[Normalize observations into Findings]
-    N --> J2[Rebuild hypotheses]
-    J2 --> Q[Verify and resolve deterministically]
-    Q -->|remaining gap| P
-    Q --> O[Root cause, confidence, causal path, proposal]
-```
-
-The runtime is orchestrated as a bounded LangGraph state machine:
-
-```text
-assess → select action → validate → execute one read
-       → check novelty → normalize → rebuild hypotheses
-       → check progress → repeat or finalize
-```
-
-LangGraph coordinates this state machine; it does not determine the root
-cause. The same RCA and normalization code is used for initial observations and
-new investigation evidence.
-
-## What it investigates
-
-Supported evidence depends on the configured observation sources, but the
-engine understands these Kubernetes incident classes and signals:
-
-- Deployment, ReplicaSet, Pod, ConfigMap, image, environment, and scale changes.
-- Kubernetes Events, including warning events, failed scheduling, quota failures,
-  container failures, and HPA metric failures.
-- Dependency errors from bounded log observations and declared workload calls.
-- Runtime traces and captured Loki observations when those sources are present.
-- Network policy changes, resource pressure, quota/LimitRange behavior, and
-  traffic changes when the corresponding observation data is available.
-- Ownership, selectors, configuration references, service dependencies, HPA
-  relationships, and other topology needed to build a causal path.
-
-Captured logs are replayable evidence, not an unbounded historical log archive.
-The engine reports when a signal is missing instead of treating missing data as
-proof against a hypothesis.
-
-## Example diagnosis
-
-The offline demo produces a diagnosis in this form:
-
-```text
-Root cause   shop/Deployment/payment
-Confidence   VERIFIED
-Resolution   RESOLVED
-
-Causal path
-  Deployment/payment --serves--> Service/payment
-  Service/payment --dependency_of--> Deployment/checkout
-
-Evidence
-  Deployment/payment changed FAULT_DELAY_MS from 0 to 2500
-  diagnostic alerts began after the rollout
-
-Proposed remediation
-  kubectl rollout undo deployment/payment -n shop
-  [proposed only; not executed]
-```
 
 ## Quick start
 
@@ -514,40 +587,6 @@ or lose one.
 > The console presents persisted incident state and the engine's diagnosis. It
 > does not make causal claims or change the RCA logic measured above.
 
-## Architecture and trust boundaries
-
-Agentic SRE has five practical layers:
-
-1. **RCA engine** — deterministic signals, causal hypotheses, verification,
-   confidence, resolution, and remediation proposals.
-2. **Investigation runtime** — bounded evidence acquisition through validated,
-   read-only observation tools.
-3. **Observation sources** — Kubernetes object versions and Events, Prometheus
-   and Alertmanager context, Loki logs, traces, and configured snapshot data.
-4. **Connector** — the only component that touches the customer environment;
-   typed read-only requests and alert and change streams over an outbound mTLS
-   connection ([boundary](#connector-boundary)).
-5. **Control plane** — incident lifecycle, persistence, API, CLI, and HTML/UI
-   reporting. In remote mode it holds no customer credential.
-
-The trust boundary is explicit:
-
-- Kubernetes observation is read-only; Secrets are deliberately not read
-  (enforced by RBAC and again by the Connector's deny list).
-- The control plane holds no customer credential; the Connector only dials out.
-- There is no arbitrary shell execution or autonomous cluster write capability.
-- Remediation text is proposed for an operator and is never executed.
-- Only in-scope, allowlisted observation capabilities can run.
-- Invalid actions, duplicate reads, tool errors, `NO_DATA`, and exhausted
-  budgets terminate safely with the current deterministic diagnosis.
-- A diagnosis changes only after typed evidence is normalized into Findings and
-  the hypotheses are rebuilt.
-
-The built-in deployment is currently a single control-plane process/replica.
-Read endpoints are unauthenticated by default and can expose operationally
-sensitive incident and log-derived data, so deployment authentication and
-network controls remain an operator responsibility.
-
 ## Real Kubernetes validation
 
 The Kind lifecycle validation exercises the product against a real cluster:
@@ -598,6 +637,15 @@ and aggregate results. The [live-suite report](evals/results/live-suite-2026-09-
 [M16 result](docs/results/m16-positive-elimination.md), and
 [methodology](docs/benchmarks/live-suite.md) provide live-run provenance and
 protocol details.
+
+## Roadmap
+
+The ordered plan, with what blocks what, is in
+[docs/architecture/roadmap.md](docs/architecture/roadmap.md): the Connector
+boundary (mostly done), the testbed (lab, control plane and three fault-family slices running),
+engine capabilities that follow the testbed (service-level effect relation,
+first target-local effect, rollout and configuration rules, `RESOLVED` coverage)
+and the product surface (Connect Cluster flow).
 
 ## FAQ
 

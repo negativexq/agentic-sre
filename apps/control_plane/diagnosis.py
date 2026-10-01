@@ -425,11 +425,11 @@ class DiagnosisService:
                 return observed_of(body) if callable(observed_of) else None
 
             def record(body: dict[str, Any], observed_at: datetime) -> bool:
-                stored = repository.record(
-                    body, observed_at, connector_observed_at=connector_time(body)
-                )
-                best_effort(lambda: lifecycle.observe(body, observed_at))
-                best_effort(lambda: indexer.observe(body, observed_at))
+                seen = connector_time(body)
+                stored = repository.record(body, observed_at, connector_observed_at=seen)
+                # the collector that saw it is the Connector, when the change came through its stream
+                best_effort(lambda: lifecycle.observe(body, seen or observed_at))
+                best_effort(lambda: indexer.observe(body, seen or observed_at))
                 return stored
 
             def repair_index() -> None:

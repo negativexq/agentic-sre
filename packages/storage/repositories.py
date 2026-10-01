@@ -8,12 +8,12 @@ from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
-from sqlalchemy import desc, func, or_, select
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from packages.contracts import (
     Alert,
@@ -71,6 +71,7 @@ from packages.storage.models import (
     ReportRow,
     SnapshotCycleObjectRow,
     SnapshotCycleRow,
+    UTCDateTime,
 )
 
 if TYPE_CHECKING:
@@ -902,6 +903,21 @@ def _nested_uid(body: dict[str, Any], parent_key: str) -> str | None:
     return uid if isinstance(uid, str) else None
 
 
+def _arrival(journal: str, row_type: Any) -> tuple[Any, Any]:
+    """An outer-join target and a row's effective observation time (late-evidence-design.md §3).
+
+    The Connector's observation when the row arrived through its stream, otherwise the control plane's
+    arrival (``observed_at``). It is never later than the arrival, and never earlier than an actual
+    observation, so it admits no hindsight.
+    """
+    arrival = aliased(JournalArrivalRow)
+    on = and_(arrival.journal == journal, arrival.version_id == row_type.version_id)
+    effective = func.coalesce(
+        arrival.connector_observed_at, row_type.observed_at, type_=UTCDateTime()
+    )
+    return (arrival, on), effective
+
+
 def _record_arrival(
     session: Session, journal: str, row: EventVersionRow | ObjectVersionRow, at: datetime | None
 ) -> None:
@@ -979,19 +995,28 @@ class EventRepository:
         keeps the incident lookback useful for Events whose occurrence began
         before the window but whose state was first observed during it.
         """
-        rows = self._session.scalars(
-            select(EventVersionRow)
-            .where(
-                EventVersionRow.namespace.in_(namespaces),
-                EventVersionRow.observed_at <= ends_at,
-                (EventVersionRow.event_at >= starts_at)
-                | (EventVersionRow.observed_at >= starts_at),
-            )
-            .order_by(EventVersionRow.observed_at, EventVersionRow.version_id)
-        ).all()
+        rows = self._window_rows(namespaces=namespaces, starts_at=starts_at, ends_at=ends_at)
         return [
             _body_with_persisted_uid(row.body, "involvedObject", row.involved_uid) for row in rows
         ]
+
+    def _window_rows(
+        self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
+    ) -> list[EventVersionRow]:
+        """Event versions observed by the cutoff, by their effective observation time (C9 §3)."""
+        (arrival, on), effective = _arrival("event", EventVersionRow)
+        return list(
+            self._session.scalars(
+                select(EventVersionRow)
+                .outerjoin(arrival, on)
+                .where(
+                    EventVersionRow.namespace.in_(namespaces),
+                    effective <= ends_at,
+                    (EventVersionRow.event_at >= starts_at) | (effective >= starts_at),
+                )
+                .order_by(effective, EventVersionRow.version_id)
+            ).all()
+        )
 
     def analysis_view(
         self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
@@ -1034,16 +1059,7 @@ class EventRepository:
     def _analysis_rows(
         self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
     ) -> list[EventVersionRow]:
-        rows = self._session.scalars(
-            select(EventVersionRow)
-            .where(
-                EventVersionRow.namespace.in_(namespaces),
-                EventVersionRow.observed_at <= ends_at,
-                (EventVersionRow.event_at >= starts_at)
-                | (EventVersionRow.observed_at >= starts_at),
-            )
-            .order_by(EventVersionRow.observed_at, EventVersionRow.version_id)
-        ).all()
+        rows = self._window_rows(namespaces=namespaces, starts_at=starts_at, ends_at=ends_at)
         latest: dict[str, EventVersionRow] = {}
         for row in rows:
             identity = event_identity(row.body, row.namespace)
@@ -1273,8 +1289,8 @@ class ObjectVersionRepository:
     ) -> list[JournalEntry]:
         """Versions in the window plus each object's last version before it, oldest first."""
         return [
-            _journal_entry(row)
-            for row in self._history_rows(
+            _journal_entry(row, effective)
+            for row, effective in self._history_rows(
                 namespaces=namespaces, starts_at=starts_at, ends_at=ends_at
             )
         ]
@@ -1285,7 +1301,7 @@ class ObjectVersionRepository:
         """Exact ids of the versions ``history`` returns for this window."""
         return [
             row.version_id
-            for row in self._history_rows(
+            for row, _effective in self._history_rows(
                 namespaces=namespaces, starts_at=starts_at, ends_at=ends_at
             )
         ]
@@ -1294,40 +1310,48 @@ class ObjectVersionRepository:
         """Exactly these journal versions, oldest first."""
         if not version_ids:
             return []
-        rows = self._session.scalars(
-            select(ObjectVersionRow)
+        (arrival, on), effective = _arrival("object", ObjectVersionRow)
+        rows = self._session.execute(
+            select(ObjectVersionRow, effective)
+            .outerjoin(arrival, on)
             .where(ObjectVersionRow.version_id.in_(version_ids))
-            .order_by(ObjectVersionRow.observed_at, ObjectVersionRow.version_id)
+            .order_by(effective, ObjectVersionRow.version_id)
         ).all()
-        return [_journal_entry(row) for row in rows]
+        typed = cast(list[tuple[ObjectVersionRow, datetime]], [tuple(r) for r in rows])
+        return [_journal_entry(row, at) for row, at in typed]
 
     def _history_rows(
         self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
-    ) -> list[ObjectVersionRow]:
-        rows = self._session.scalars(
-            select(ObjectVersionRow)
+    ) -> list[tuple[ObjectVersionRow, datetime]]:
+        """Each row with its effective observation time (late-evidence-design.md §3)."""
+        (arrival, on), effective = _arrival("object", ObjectVersionRow)
+        rows = self._session.execute(
+            select(ObjectVersionRow, effective)
+            .outerjoin(arrival, on)
             .where(
                 ObjectVersionRow.namespace.in_(namespaces | {CLUSTER_SCOPE}),
-                ObjectVersionRow.observed_at <= ends_at,
+                effective <= ends_at,
             )
-            .order_by(ObjectVersionRow.observed_at, ObjectVersionRow.version_id)
+            .order_by(effective, ObjectVersionRow.version_id)
         ).all()
-        baseline: dict[str, ObjectVersionRow] = {}
-        selected: list[ObjectVersionRow] = []
-        for row in rows:
-            if row.observed_at < starts_at:
-                baseline[row.object_key] = row
+        typed = cast(list[tuple[ObjectVersionRow, datetime]], [tuple(r) for r in rows])
+        baseline: dict[str, tuple[ObjectVersionRow, datetime]] = {}
+        selected: list[tuple[ObjectVersionRow, datetime]] = []
+        for row, at in typed:
+            if at < starts_at:
+                baseline[row.object_key] = (row, at)
             else:
-                selected.append(row)
+                selected.append((row, at))
         # Objects already deleted before the window are not part of the incident.
-        before = [row for row in baseline.values() if row.lifecycle != Lifecycle.DELETED]
-        return sorted([*before, *selected], key=lambda row: (row.observed_at, row.version_id))
+        before = [item for item in baseline.values() if item[0].lifecycle != Lifecycle.DELETED]
+        return sorted([*before, *selected], key=lambda item: (item[1], item[0].version_id))
 
 
-def _journal_entry(row: ObjectVersionRow) -> JournalEntry:
+def _journal_entry(row: ObjectVersionRow, observed_at: datetime | None = None) -> JournalEntry:
     return JournalEntry(
         object_key=row.object_key,
-        observed_at=row.observed_at,
+        # the effective observation time (C9 §3) when the caller has it
+        observed_at=observed_at if observed_at is not None else row.observed_at,
         # JournalEntry is the existing storage-to-source contract; project
         # the first-class UID column into its body for the live model mapper.
         # The stored JSON body is not used as the UID source of truth.

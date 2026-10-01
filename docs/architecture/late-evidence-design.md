@@ -80,8 +80,10 @@ they keep today's behaviour; the testbed runs supply the cases).
 
 ## 6. Not in scope
 
-Source times in membership; adding items to stored revisions; open incidents (their window is the capture time and
-coverage is recorded the same way); alert timing (Alertmanager's own times, the episode contract).
+Source times in membership; adding items to stored revisions; alert timing (Alertmanager's own times, the episode
+contract). Open incidents are in scope for coverage only: their window ends at the capture time, and their diagnosis
+waits for the same transport proof as a resolution (owner's decision 2026-10-01; about one heartbeat, 2 s), so an open
+diagnosis does not record `NOT_PROVEN` merely because its cutoff is "now".
 
 ## 7. Verification
 

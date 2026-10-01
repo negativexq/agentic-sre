@@ -532,7 +532,10 @@ class DiagnosisService:
         return self.clock() if latest is not None and latest > window_end else None
 
     def _await_transport(self, window_end: datetime) -> datetime | None:
-        """Journal the stream until it has been read past ``window_end`` or the wait times out."""
+        """Journal the stream until it has been read past ``window_end`` or the wait times out.
+
+        With a heartbeat every 2 s this normally returns within one heartbeat.
+        """
         deadline = time.monotonic() + self.late_evidence_seconds
         streamed = callable(getattr(self.reader, "connector_time", None))
         while True:
@@ -542,7 +545,8 @@ class DiagnosisService:
                 self.snapshot_result()
             except Exception:
                 logger.warning(
-                    "post-resolution journal refresh failed; using frozen evidence", exc_info=True
+                    "journal refresh before the manifest failed; using the journal as it is",
+                    exc_info=True,
                 )
                 proven = None
             if proven is not None or not streamed or time.monotonic() >= deadline:
@@ -841,7 +845,10 @@ class DiagnosisService:
             if capture_adapter.supports("logs"):
                 self._capture_logs(incident_id, alerts, listed, capture_adapter)
             window_end = self.clock()
-            transport_proven_at = self._transport_proven(window_end)
+            if self.reader is not None:
+                # the same proof as for a resolution (late-evidence-design.md §6): what the
+                # Connector observed by the capture's end is journaled before the manifest
+                transport_proven_at = self._await_transport(window_end)
         starts_at, ends_at = incident_window(alerts, window_end)
         # The manifest and the run's boundary event commit together; RCA then
         # sees exactly the manifest's members, loaded by id.

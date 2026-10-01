@@ -433,3 +433,17 @@ until the 10-minute reconciliation (now such a snapshot keeps being retried, `f3
 **Expirations happen in normal running too:** one in the twelve-minute load window, without any pause. Event scopes
 churn fastest; how often an expiry, and therefore a `Gap`, occurs in a longer run is a question for the soak and an
 input to roadmap C9. Not yet run: a soak of hours.
+
+### 15.3 Why Event watches expire (measured 2026-10-01)
+
+Two read-only watches opened side by side on the quiet `chaos-mesh` namespace for 330 s with
+`allowWatchBookmarks=true`: the ConfigMap watch received 7 bookmarks (the first after 60 s, then about one a minute);
+the Event watch received none. The API server sends bookmarks only for kinds it serves from its watch cache, and by
+Kubernetes' default Events are not cached, so an Event watch on a quiet namespace never learns a newer version. Every
+time the server closes it (300 s), the Connector resumes from the same aging version until etcd compaction (5
+minutes) has passed it, and the watch expires. In the soak this happened about every 13 minutes, always on an Event
+scope, each time followed by the global snapshot of §15 (31 LISTs). Other kinds receive bookmarks and did not
+expire. This is the default behaviour of a customer cluster too. Without bookmarks the continuity of a quiet Event
+scope cannot be proven beyond the compaction window, so the expiry is a true loss of continuity, not an artefact;
+what it costs today (a global snapshot and a global `Gap`) is a design choice to revisit. Proposed: a `Gap` that names
+its scope and a relist of that scope only (decision pending).

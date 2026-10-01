@@ -285,6 +285,33 @@ class KubernetesClusterReader:
         items = [self._serialize(item, scope.kind, "v1") for item in response.items]
         return items, str(response.metadata.resource_version)
 
+    def scope_version(self, scope: ListingScope) -> str:
+        """The current resource version of one scope from a consistent ``limit=1`` LIST (contract §15.6)."""
+        kubernetes, _api_client = self._client()
+        if scope.kind == "Event":
+            response: Any = kubernetes.client.CoreV1Api().list_namespaced_event(
+                scope.namespace, limit=1
+            )
+        elif scope.kind in _CHAOS_KINDS:
+            response = kubernetes.client.CustomObjectsApi().list_namespaced_custom_object(
+                "chaos-mesh.org", "v1alpha1", scope.namespace, _CHAOS_KINDS[scope.kind], limit=1
+            )
+        else:
+            group, method = _NAMESPACED_METHODS[scope.kind]
+            response = getattr(getattr(kubernetes.client, group)(), method)(
+                scope.namespace, limit=1
+            )
+        self.api_calls["bookmark"] += 1
+        metadata = response.get("metadata", {}) if isinstance(response, dict) else response.metadata
+        version = (
+            metadata.get("resourceVersion")
+            if isinstance(metadata, dict)
+            else getattr(metadata, "resource_version", None)
+        )
+        if not version:
+            raise RuntimeError(f"no resource version for {scope.namespace}/{scope.kind}")
+        return str(version)
+
     def watch(
         self, scope: ListingScope, resource_version: str, *, timeout_seconds: int = 300
     ) -> Iterator[WatchEvent]:

@@ -498,7 +498,7 @@ the interval without observation is the time between the closing of the last con
 relist, about a second; that is inferred, not measured, and the gap does not yet record its start. Busy namespaces
 did not expire. Every other kind receives bookmarks and never expired.
 
-### 15.6 Synthetic bookmarks for Event scopes (amendment, PROPOSED 2026-10-02)
+### 15.6 Synthetic bookmarks for Event scopes (amendment, APPROVED and implemented 2026-10-02; soak pending)
 
 **Measured.** §15.3 called a quiet Event scope's expiry "a true loss of continuity". The ten-hour product-mode run
 (`testbed_longrun_run1`) shows it is avoidable. The Connector's reconciliation LIST (every 600 s) also refreshes each

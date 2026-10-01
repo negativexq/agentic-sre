@@ -95,3 +95,28 @@ The original requests, for the record:
    well below the smallest separate episode, 90 s), to be revisited with soak data. The alternative is to
    ship with `Q = 0` (today's behaviour) until the soak exists.
 3. `Q` measured from `O1.ends_at` to `O2.starts_at` (Alertmanager's times), not from arrival times.
+
+## 9. Amendment: a replaced occurrence ends (PROPOSED, 2026-10-02)
+
+**Observed.** In the ten-hour product-mode run, two incidents (`KafkaConsumerLag`, `OrderWorkerLagHigh`) stayed
+`OPEN` for four hours after their alerts had ended. Each fingerprint resolved and fired again within about a
+minute; Alertmanager reported the new occurrence (new `startsAt`) and never a resolution of the old one, and the
+Connector's poll, keyed by fingerprint alone, saw no change. The Connector now ends a replaced occurrence itself
+(`3732b48`); the rule below makes ingestion agree, so a webhook-only deployment and a missed poll behave the same.
+
+**Rule.** Alertmanager holds at most one alert per fingerprint. When a firing occurrence `O2` of fingerprint `F`
+arrives and an earlier occurrence `O1` of `F` (`O1.starts_at < O2.starts_at`) is still `FIRING`:
+
+1. `O1` ends: its status becomes `RESOLVED` with `ends_at = O2.starts_at`. That instant is a bound (`O1` ended no
+   later than `O2` began), not an observation, and the timeline says so: the incident's `ALERT_RESOLVED` event
+   carries `{"inferred": "superseded", "by_starts_at": O2.starts_at}`. No new event type.
+2. `O1`'s incident then follows the existing rule: it resolves when none of its occurrences still fires.
+3. `O2` is ingested exactly as today: with `Q = 0` it opens a new incident; with `Q > 0` rule 1 of §3 continues
+   `O1`'s episode, which stays open through `O2`.
+
+**What it amends.** §3 says that with `Q = 0` a new occurrence "that arrives while an earlier occurrence still
+fires" opens a new incident. That stays true for `O2`; what changes is that `O1` no longer stays firing beside it.
+History is not rewritten: `O1`'s rows and earlier diagnoses remain; only its end is added.
+
+**Tests.** A replaced occurrence ends at the new start and its incident resolves (`Q = 0`); with `Q > 0` the
+episode continues and stays open; a late duplicate of `O1` does not reopen it; a different fingerprint is unaffected.

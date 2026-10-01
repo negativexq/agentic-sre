@@ -44,8 +44,8 @@ jobs:
       - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
       - name: Install kind
         run: |
-          curl -fsSL -o ./kind https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64
-          curl -fsSL -o ./kind.sha256sum https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64.sha256sum
+          curl -fsSL -o ./kind https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-amd64
+          curl -fsSL -o ./kind.sha256sum https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-amd64.sha256sum
           awk '$2 == "kind-linux-amd64" {print $1 "  kind"}' ./kind.sha256sum | sha256sum --check --status -
           chmod +x ./kind
           sudo mv ./kind /usr/local/bin/kind

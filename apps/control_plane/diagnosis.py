@@ -397,7 +397,9 @@ class DiagnosisService:
             self._last_snapshot_result = result
             return result
         journal_namespaces = tuple(dict.fromkeys((*self.namespaces, *self.evidence_namespaces)))
+        lock_requested = time.monotonic()
         with self._snapshot_lock, self.session_factory() as session:
+            _wait_measure.lock_wait = time.monotonic() - lock_requested
             repository = ObjectVersionRepository(session)
             lifecycle = _PodLifecycleRecorder(
                 LifecycleRepository(session),
@@ -536,11 +538,19 @@ class DiagnosisService:
 
         With a heartbeat every 2 s this normally returns within one heartbeat.
         """
-        deadline = time.monotonic() + self.late_evidence_seconds
-        streamed = callable(getattr(self.reader, "connector_time", None))
+        started = time.monotonic()
+        deadline = started + self.late_evidence_seconds
+        connector_time = getattr(self.reader, "connector_time", None)
+        streamed = callable(connector_time)
+        # measurement (late-evidence-design.md §9): where the wait goes, one log line per wait
+        turns: list[str] = []
         while True:
             # read the stream's time before journaling: what was read by then is journaled below
-            proven = self._transport_proven(window_end)
+            checked = time.monotonic() - started
+            latest = connector_time() if callable(connector_time) else None
+            proven = self.clock() if latest is not None and latest > window_end else None
+            _wait_measure.lock_wait = None
+            journal_started = time.monotonic()
             try:
                 self.snapshot_result()
             except Exception:
@@ -549,7 +559,22 @@ class DiagnosisService:
                     exc_info=True,
                 )
                 proven = None
+            lock_wait = _wait_measure.lock_wait
+            turns.append(
+                f"t={checked:.2f}"
+                f" stream-T={(latest - window_end).total_seconds() if latest else float('nan'):+.2f}"
+                f" lock={lock_wait if lock_wait is not None else float('nan'):.2f}"
+                f" journal={time.monotonic() - journal_started:.2f}"
+            )
             if proven is not None or not streamed or time.monotonic() >= deadline:
+                if streamed:
+                    logger.info(
+                        "transport wait for %s: %s after %.2f s; %s",
+                        window_end.isoformat(),
+                        "proven" if proven is not None else "not proven",
+                        time.monotonic() - started,
+                        " | ".join(turns),
+                    )
                 if streamed and proven is None:
                     logger.warning(
                         "the change stream was not read past %s within %.0f s; "
@@ -982,6 +1007,9 @@ class DiagnosisService:
             },
         )
         return diagnosis
+
+
+_wait_measure = threading.local()  # the snapshot lock's wait, per thread (measurement only)
 
 
 INVESTIGATION_POLICIES = ("deterministic_intent", "deterministic_observation", "llm")

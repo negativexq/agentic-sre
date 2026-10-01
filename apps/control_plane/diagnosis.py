@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from collections.abc import Callable, Mapping
+import time
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -35,6 +36,7 @@ from packages.contracts import Incident, IncidentEvent, IncidentEventType
 from packages.rca.alert_coverage import AlertCoverageConfig
 from packages.rca.engine import RCA_ENGINE_VERSION, EngineConfig, Investigator, diagnose
 from packages.rca.epistemic_digest import diagnosis_epistemic_digest
+from packages.rca.evidence_coverage import EvidenceCoverage, StreamGap, evidence_coverage
 from packages.rca.investigation.graph import investigate_diagnosis
 from packages.rca.investigation.intents import DeterministicIntentPolicy
 from packages.rca.investigation.policy import LLMInvestigationPolicy
@@ -50,6 +52,7 @@ from packages.rca.live import (
     ChangeWatcher,
     ClusterReader,
     ListingFailure,
+    ListingScope,
     LiveSource,
     ObjectSnapshot,
     capture_error_logs,
@@ -57,7 +60,7 @@ from packages.rca.live import (
 )
 from packages.rca.llm import LLMClient
 from packages.rca.manifest import alert_from_payload, event_evidence_id
-from packages.rca.model import Alert, Diagnosis
+from packages.rca.model import Alert, Diagnosis, JournalEntry
 from packages.rca.provider_adapter import ProviderAdapter, ProviderReaders
 from packages.storage import (
     AlertRepository,
@@ -361,6 +364,9 @@ class DiagnosisService:
     status_snapshot_interval: timedelta = timedelta(seconds=30)
     # How a polling gap breaks alert-channel coverage (frozen into each run boundary).
     alert_coverage_config: AlertCoverageConfig = field(default_factory=AlertCoverageConfig)
+    # how long a resolved incident's diagnosis waits for the stream to pass its window's end
+    # (late-evidence-design.md §4.1)
+    late_evidence_seconds: float = 10.0
     # Evidence retention; None (the default) keeps everything.
     retention_policy: RetentionPolicy | None = None
     # Deadline reevaluation (SRE_REEVALUATE); None (the default) never schedules.
@@ -516,6 +522,80 @@ class DiagnosisService:
                     ),
                 )
             return result
+
+    def _transport_proven(self, window_end: datetime) -> datetime | None:
+        """When the stream had been read past ``window_end``, if it had (late-evidence §4.1)."""
+        connector_time = getattr(self.reader, "connector_time", None)
+        if not callable(connector_time):
+            return None
+        latest: datetime | None = connector_time()
+        return self.clock() if latest is not None and latest > window_end else None
+
+    def _await_transport(self, window_end: datetime) -> datetime | None:
+        """Journal the stream until it has been read past ``window_end`` or the wait times out."""
+        deadline = time.monotonic() + self.late_evidence_seconds
+        streamed = callable(getattr(self.reader, "connector_time", None))
+        while True:
+            # read the stream's time before journaling: what was read by then is journaled below
+            proven = self._transport_proven(window_end)
+            try:
+                self.snapshot_result()
+            except Exception:
+                logger.warning(
+                    "post-resolution journal refresh failed; using frozen evidence", exc_info=True
+                )
+                proven = None
+            if proven is not None or not streamed or time.monotonic() >= deadline:
+                if streamed and proven is None:
+                    logger.warning(
+                        "the change stream was not read past %s within %.0f s; "
+                        "transport completeness not proven",
+                        window_end.isoformat(),
+                        self.late_evidence_seconds,
+                    )
+                return proven
+            time.sleep(0.25)
+
+    def _evidence_coverage(
+        self,
+        journal: Sequence[JournalEntry],
+        starts_at: datetime,
+        window_end: datetime,
+        transport_proven_at: datetime | None,
+    ) -> EvidenceCoverage:
+        """The per-scope coverage record of the window (late-evidence-design.md §4.3)."""
+        namespaces = {*self.namespaces, *self.evidence_namespaces}
+        scopes = {(namespace, "Event") for namespace in namespaces}
+        for entry in journal:
+            scope = ListingScope.from_key(entry.object_key)
+            if scope is not None:
+                scopes.add((scope.namespace, scope.kind))
+        followed_since = getattr(self.reader, "followed_since", None)
+        streamed = callable(followed_since)
+        gaps: list[StreamGap] = []
+        if streamed:
+            with self.session_factory() as session:
+                gaps = [
+                    StreamGap(
+                        reason=row.reason,
+                        since=row.since,
+                        at=row.at,
+                        namespace=row.namespace,
+                        kind=row.kind,
+                    )
+                    for row in ChangeStreamGapRepository(session).overlapping(
+                        namespaces=namespaces, starts_at=starts_at, ends_at=window_end
+                    )
+                ]
+        return evidence_coverage(
+            scopes,
+            gaps,
+            starts_at=starts_at,
+            window_end=window_end,
+            streamed=streamed,
+            stream_followed_since=followed_since() if callable(followed_since) else None,
+            transport_proven_at=transport_proven_at,
+        )
 
     def _record_stream_gaps(self, session: Session) -> None:
         """Persist the change-stream gaps the reader has read (late-evidence-design.md §4.2).
@@ -743,18 +823,14 @@ class DiagnosisService:
         window_end = incident.updated_at if resolved else self.clock()
         snapshot_cycle_id: int | None = None
         listed: tuple[dict[str, Any], ...] = ()
+        transport_proven_at: datetime | None = None
         if resolved:
             if self.reader is not None:
-                # Keep the shared journal current for later incidents, but do
-                # not use this live cycle as evidence for the frozen episode.
-                # A reader outage must not make historical diagnosis fail.
-                try:
-                    self.snapshot_result()
-                except Exception:
-                    logger.warning(
-                        "post-resolution journal refresh failed; using frozen evidence",
-                        exc_info=True,
-                    )
+                # Keep the shared journal current, and wait until everything the Connector
+                # observed by the resolution has been journaled (late-evidence-design.md §4.1).
+                # This live cycle is not evidence for the frozen episode: membership is by the
+                # Connector's observation time. A reader outage must not fail the diagnosis.
+                transport_proven_at = self._await_transport(window_end)
         else:
             if self.reader is not None:
                 cycle = self.snapshot_result(run_id=run_id)
@@ -765,6 +841,7 @@ class DiagnosisService:
             if capture_adapter.supports("logs"):
                 self._capture_logs(incident_id, alerts, listed, capture_adapter)
             window_end = self.clock()
+            transport_proven_at = self._transport_proven(window_end)
         starts_at, ends_at = incident_window(alerts, window_end)
         # The manifest and the run's boundary event commit together; RCA then
         # sees exactly the manifest's members, loaded by id.
@@ -806,6 +883,9 @@ class DiagnosisService:
             snapshot_observed_at=members.snapshot.observed_at if members.snapshot else None,
             alert_coverage=alert_coverage,
         )
+        coverage = self._evidence_coverage(
+            members.journal, starts_at, window_end, transport_proven_at
+        )
         bounded_policy = self.bounded_policy_factory()
         # The effective configs are explicit so the revision can record them.
         engine_config = EngineConfig()
@@ -825,6 +905,8 @@ class DiagnosisService:
             diagnosis = diagnose(
                 source, investigator=self.investigator_factory(), config=engine_config
             )
+        # provenance recorded by the control plane, outside the engine and the epistemic digest
+        diagnosis = diagnosis.model_copy(update={"evidence_coverage": coverage})
         leading = diagnosis.hypothesis.causal_actor.canonical if diagnosis.hypothesis else None
         self._emit(
             incident_id,
@@ -1021,6 +1103,7 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
         retention_policy=policy_from_environment(),
         reevaluation=reevaluation_from_environment(),
         alert_coverage_config=AlertCoverageConfig.from_environment(),
+        late_evidence_seconds=float(os.getenv("SRE_LATE_EVIDENCE_SECONDS", "10")),
     )
     if gateway is not None and remote_client is not None:
         client_for_attach = remote_client

@@ -489,3 +489,32 @@ def test_the_control_plane_records_the_gaps_it_read_and_keeps_them_when_the_writ
         )
         assert row.since == T0 - timedelta(minutes=10) and row.at == T0
     assert reader.queue == []
+
+
+def test_a_resolved_diagnosis_waits_until_the_stream_passes_the_resolution_and_no_longer() -> None:
+    from apps.control_plane.diagnosis import DiagnosisService
+
+    class Reader:
+        def __init__(self, times: list[datetime | None]) -> None:
+            self.times = times
+
+        def connector_time(self) -> datetime | None:
+            return self.times.pop(0) if len(self.times) > 1 else self.times[0]
+
+    journaled: list[bool] = []
+    service = DiagnosisService.__new__(DiagnosisService)
+    service.clock = lambda: T0 + timedelta(seconds=9)
+
+    def journal(run_id: str | None = None) -> Any:
+        journaled.append(True)
+
+    service.snapshot_result = journal  # type: ignore[method-assign]
+    service.late_evidence_seconds = 5.0
+    service.reader = Reader([T0 - timedelta(seconds=1), T0, T0 + timedelta(seconds=2)])  # type: ignore[assignment]
+    assert service._await_transport(T0) == T0 + timedelta(seconds=9)
+    assert len(journaled) == 3  # the journal step after the stream was read past T0 is the last
+    service.late_evidence_seconds = 0.0
+    service.reader = Reader([T0 - timedelta(seconds=1)])  # type: ignore[assignment]
+    journaled.clear()
+    assert service._await_transport(T0) is None  # timed out: transport completeness not proven
+    assert len(journaled) == 1

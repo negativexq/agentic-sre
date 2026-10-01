@@ -14,6 +14,33 @@ Alert → evidence → hypotheses → bounded investigation → deterministic ju
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+```mermaid
+flowchart TB
+    subgraph C["Customer cluster"]
+        K["Kubernetes API<br/>objects and Events"]
+        AM["Alertmanager"]
+        O["Prometheus · Loki · Tempo"]
+        CN["Connector<br/>holds every credential<br/>read-only RBAC, no Secrets"]
+        K -- "LIST + WATCH per scope" --> CN
+        AM -- "alerts" --> CN
+        O -- "bounded queries" --> CN
+    end
+
+    subgraph P["Control plane (no customer credential)"]
+        direction LR
+        G["Gateway"]
+        S["Change and alert streams<br/>with explicit gaps"]
+        J["Evidence journal<br/>(PostgreSQL)"]
+        E["Deterministic<br/>RCA engine"]
+        UI["Console<br/>and API"]
+        G --> S --> J --> E --> UI
+    end
+
+    CN == "dials out: gRPC over mTLS<br/>nothing exposed inbound" ==> P
+```
+
+The Connector boundary in remote mode (details under [Connector boundary](#connector-boundary)).
+
 ### At a glance
 
 - **ITBench-Lite: [17/22 scoreable = 77.3%](evals/results/v1.1.2/README.md) on the TEST25 split, which was blind when it was frozen; 0 model calls.** Since 2026-09-28 all 35 published scenarios count as **development data**: the engine has been worked on with them in view, so they no longer measure generalization. The new held-out set is being built on our own [instrumented testbed](#instrumented-testbed).

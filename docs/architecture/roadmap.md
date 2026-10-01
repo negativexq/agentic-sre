@@ -31,6 +31,7 @@ Contract: [`connector-boundary-contract.md`](connector-boundary-contract.md).
 | A5 | Partial `list_events` listing (a failed namespace is skipped silently): contract amendment and fix | DECISION | |
 | A6 | Live `query_traffic` and `query_traces` readers | PARKED | B |
 | A7 | Physical separation: gRPC over mTLS, connector dials out, static certificates (contract §12, §13) | DONE (all suites pass over gRPC; the stream-mode default flip stays a separate decision; `uv lock` left to the owner) | A4 |
+| A10 | Watch-driven change stream (contract §15, `connector-watch-design.md`): per-scope LIST then WATCH, `Gap(RESOURCE_VERSION_EXPIRED)` and a snapshot on an expired version, observed and inferred deletions, the control plane journaling as changes arrive, wire `connector.v2`. Change-to-journal median 21.5 s → 1.2 s (p90 27.1 s → 1.9 s); API requests about 6.5 times fewer; API outage, connector restart and an expired version recovered in the lab (§15.1, §15.2) | DONE (soak pending) | A7 |
 | A8 | `connectorctl preflight` with real probing, enrollment token, certificate issue and rotation, Helm | NEXT | A7 |
 | A9 | Remote and multi-tenant operation, connector version compatibility | PARKED | A8 |
 

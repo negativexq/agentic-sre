@@ -26,6 +26,9 @@ Alert → evidence → hypotheses → bounded investigation → deterministic ju
 - **A trust boundary you can deploy** — the control plane holds no customer credential. A small [Connector](#connector-boundary) inside the cluster dials out over mutually authenticated gRPC and answers typed, bounded, audited, read-only requests.
 - **Measured against a known world** — an [instrumented testbed](#instrumented-testbed) injects faults whose truth is recorded (a seven-field timeline and a causal chain), freezes its manifest before running, and scores the stored diagnosis. It is how the engine's causal claims are checked, including where it falls short.
 - **Strong authority is earned, not assumed** — a root cause reaches strong authority only through an observed execution and its incident effect ([causal semantics](docs/architecture/m21-causal-semantics-contract.md)); ambiguity is reported as ambiguity.
+- **Cluster changes in about a second** — the Connector watches every scope instead of polling: a change reaches the journal in **1.2 s** (median; it was 21.5 s), with about **12× fewer API requests**, and a three-hour soak ran with **0 failures** ([watch path](#watch-driven-change-stream)).
+- **Late evidence is admitted, absence is not assumed** — evidence belongs to a diagnosis by when the Connector observed it, not when it happened to arrive; every diagnosis records, per scope, whether observation was continuous and whether delivery was proven ([evidence timing](#evidence-timing-and-coverage)).
+- **No false certainty in the console** — when the evidence does not single out one actor, the operator sees **Competing** candidates or **Not established**, never a ranking's least-bad guess presented as the cause ([leading actor](#how-the-leading-actor-is-presented)).
 
 ## Measured root-cause performance
 
@@ -145,6 +148,25 @@ Kubernetes · Prometheus · Loki · Tempo · Alertmanager
 The stream mode is opt-in (`SRE_CONNECTOR_STREAMS`); making it the default is
 still an open decision.
 
+### Watch-driven change stream
+
+Inside the stream mode the Connector no longer polls the cluster on an interval. It lists each scope (a
+namespace and a kind) once and then **watches** it, so a change is on the stream as soon as the API server
+announces it; the control plane journals what arrives about once a second. Continuity is explicit: when the API
+server can no longer resume a watch, only **that scope** gets a `Gap` and is listed again, and every other scope
+stays continuous ([contract §15](docs/architecture/connector-boundary-contract.md),
+[design](docs/architecture/connector-watch-design.md)).
+
+| Measured on the lab (2026-09-30 / 10-01) | Polling every 15 s | Watch |
+| --- | ---: | ---: |
+| Event, source → journal, median / p90 | 21.5 s / 27.1 s | **1.2 s / 1.9 s** |
+| API requests per minute | about 116 | **about 10** |
+| Three-hour soak: failures / global re-snapshots | — | **0 / 0** |
+
+Recovery is tested, not assumed: an API outage yields one gap and one paced resync rather than a storm, a
+restarted or paused Connector resumes, and observed deletions (from a watch) are kept apart from inferred ones
+(from a listing).
+
 ## Instrumented testbed
 
 The seen benchmarks cannot supply what a verified mechanism needs: the exact
@@ -168,16 +190,20 @@ recovery. The testbed measures the engine against a world whose truth we record.
 - **Delivered in slices** ([design](docs/architecture/testbed-scenarios-design.md)),
   each validated by an unscored phase-0 run before its manifest is frozen.
 
-**First result (slice 1, a network delay on `payment-service`, 3 valid runs, development
-tier).** The engine named the injected experiment and its exact instance in 3/3
-runs, with no false strong authority and no false `RESOLVED`. It never granted
-strong authority to that cause: the execution rule did not fire in any run,
-because a network delay leaves no pod-level failure observation and because the
-harness gave the target pod an event history (since fixed by a fresh pod per
-run). The measurement also found and fixed three defects on the way: a rule that
-gave strong authority to an experiment that had ended 40 minutes before the
-incident, and two scorer flaws that overstated execution and effect recall. This is a
-small development-tier baseline, not a benchmark.
+**Results so far (development tier, engine 2.1.0).**
+
+| Slice | Fault | Valid runs | Cause and instance named | Execution witness | False strong authority / false `RESOLVED` |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 1 | network delay on `payment-service` | 3/3 | 3/3 | 0/3 (a delay leaves no pod-level failure) | 0 / 0 |
+| 2 | CPU stress on `order-service` | 3/3 | 3/3 | 1/3 (checked against the recorded truth) | 0 / 0 |
+| 3 | environment change rolled out to `payment-service` | phase 0: 1/1 | 1/1 | 0 (no rollout rule yet) | 0 / 0 |
+
+The engine named the injected cause and its exact instance in every run and never claimed false strong
+authority; where strong evidence is missing, the reason is recorded on the roadmap. A run starts only from a
+quiet baseline: if the target already holds a warning, the run is refused before anything is injected. The
+testbed has also found and fixed real defects: a rule that gave strong authority to an experiment that had
+ended 40 minutes before the incident, two scorer flaws that overstated recall, and harness isolation leaks.
+These are small development-tier results, not a benchmark.
 
 ## Causal mechanism validation
 
@@ -193,6 +219,40 @@ witness withholds strong authority. `RESOLVED` additionally requires every
 declared symptom to be covered, which is why it stays rare on purpose. Details:
 [causal semantics](docs/architecture/m21-causal-semantics-contract.md),
 [timing stability](docs/architecture/m21-timing-stability-contract.md).
+
+### How the leading actor is presented
+
+Ranking always produces a first candidate; that does not make it a cause. The engine first chooses the leader
+by the **tier of its claim** (an observed mechanism over a plausible one over an unestablished one), and the
+console then shows one of three things: a **single** actor, **competing** actors when the evidence ties them,
+or **not established** when no candidate has evidence inside the incident window. Measured on the testbed and
+Before the change, 23 of 122 testbed incidents (19%) led with an actor whose every finding was more than an hour
+old, and a tied top score was broken by name order (the reported cause was decided that way in 14 ITBench
+scenarios and 20 testbed incidents); both are now shown for what they are. The projection is presentation only: it
+does not change the stored diagnosis or its epistemic digest.
+
+### Evidence timing and coverage
+
+A resolved incident's window freezes at its resolution. Two questions are kept apart
+([design](docs/architecture/late-evidence-design.md)):
+
+- **What may a diagnosis use?** Evidence belongs to the window if the Connector **observed** it by the cutoff,
+  however late it reached the control plane. Source times never decide membership, so no hindsight leaks in.
+- **What may it conclude from absence?** Each diagnosis records, per scope, two separate dimensions: **source
+  continuity** (`CONTINUOUS`, `GAPPED` with the gap intervals, or `UNKNOWN`) and **transport completeness**
+  (`PROVEN` once the change stream, kept moving by a heartbeat, has been read past the cutoff; otherwise
+  `NOT_PROVEN`). A diagnosis waits for that proof (bounded, 10 s). In a live check, delivery was proven for all
+  16 diagnoses (median 1.8 s after the cutoff, longest 7.0 s).
+
+The record is provenance today; rules that infer something from absence (an effect not seen before a fault, an
+elimination, `RESOLVED`) will read it one at a time, each measured on the testbed first.
+
+### Alert episodes
+
+An alert that resolves and fires again within a configurable quiet interval (`SRE_ALERT_QUIET_SECONDS`) can
+continue the same incident instead of opening a new one. The history is never rewritten: the timeline shows
+`RESOLVED`, then `ALERT_REFIRED` with the gap, then `OPEN`, and the incident gets a new diagnosis revision.
+The default is off ([contract](docs/architecture/incident-episode-contract.md)).
 
 ## Roadmap
 
@@ -602,8 +662,10 @@ telemetry impose real limits.
   whose effect is only latency (for example a network delay) currently yields a
   correctly named but non-strong cause; the service-level effect relation is
   specified and deferred until the testbed can measure it.
-- The testbed has a first slice, not a suite: one fault family so far, three
-  runs, development tier. There is no held-out result yet.
+- The testbed covers three fault families so far (a few runs each, development
+  tier). There is no held-out result yet.
+- Evidence coverage is recorded but not yet read by the rules that infer from
+  absence; until each is changed and measured, they behave as before.
 - General durable high-availability deployment is not yet complete.
 - The system is evidence-driven RCA, not formal causal inference.
 - There is no autonomous remediation, arbitrary shell execution, or cluster write

@@ -219,18 +219,28 @@ class Connector:
             fingerprint = alert.get("fingerprint")
             if payload is not None and isinstance(fingerprint, str):
                 current[fingerprint] = payload
+        for fingerprint, payload in list(self._known_alerts.items()):
+            later = current.get(fingerprint)
+            if later is not None and later.get("startsAt") == payload.get("startsAt"):
+                continue  # the same occurrence, still firing
+            # Gone, or replaced: Alertmanager holds one alert per fingerprint, so a new start means
+            # this occurrence ended, at the latest when the new one began.
+            ended = later.get("startsAt") if later is not None else None
+            resolved = {
+                **payload,
+                "status": "resolved",
+                "endsAt": ended if isinstance(ended, str) else completed.isoformat(),
+            }
+            self._put(
+                self._alerts,
+                wire.AlertItem(seq=0, observed_at=completed, origin="poll", alert=resolved),
+            )
         for fingerprint, payload in current.items():
-            if fingerprint not in self._known_alerts:
+            known = self._known_alerts.get(fingerprint)
+            if known is None or known.get("startsAt") != payload.get("startsAt"):
                 self._put(
                     self._alerts,
                     wire.AlertItem(seq=0, observed_at=completed, origin="poll", alert=payload),
-                )
-        for fingerprint, payload in list(self._known_alerts.items()):
-            if fingerprint not in current:
-                resolved = {**payload, "status": "resolved", "endsAt": completed.isoformat()}
-                self._put(
-                    self._alerts,
-                    wire.AlertItem(seq=0, observed_at=completed, origin="poll", alert=resolved),
                 )
         self._known_alerts = current
         self._put(

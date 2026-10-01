@@ -401,3 +401,35 @@ failed or expired watch and no `Gap` in the five minutes it ran.
 not yet LIST calls or bytes; by construction it now issues about 31 LISTs per 10 minutes plus a watch request per
 scope every 5 minutes, against 31 LISTs every 15 s before, but that is an estimate), a watch resumed after the server
 closes it (the run was shorter than the 300 s watch timeout), and the resilience cases of §15 in the lab.
+
+### 15.2 Load and resilience in the lab (2026-10-01)
+
+**Load**, from the Connector's counters over two twelve-minute windows with one rollout a minute:
+
+| | Polling every 15 s | Watch |
+|---|---|---|
+| API requests | 1395 LIST | 216 (93 LIST, 123 WATCH) |
+| Bytes streamed | 0.65 MB | 1.45 MB |
+
+About 6.5 times fewer API requests. More bytes, because a watch delivers every intermediate state that a 15 s listing
+collapses into one difference (and the window's one expiry added a full relist); that is also more evidence. In the
+watch window 31 watches resumed twice each when the server closed them after 300 s, without a `Gap`.
+
+**Resilience** (all passed):
+
+- *API server stopped for about 25 s* (`crictl stop kube-apiserver`): one warning, one `Gap(BACKEND_UNREACHABLE)`,
+  the snapshot retried by the run loop every 5 s (four listings until the server answered for every scope), all 31
+  watches back, and changes after the recovery reached the journal.
+- *Connector pod deleted:* a new process (new epoch), the control plane reconnected and kept journaling.
+- *Connector process paused for seven minutes* (SIGSTOP from the node) with a rollout every minute: on resume 30 scopes
+  resumed from their versions and one, `chaos-mesh/Event`, had expired; it produced one
+  `Gap(RESOURCE_VERSION_EXPIRED)` and one relist, all 31 watches resumed, and journaling continued.
+
+**Two defects found by these runs and fixed before they were recorded:** an outage made every watch append its own
+gap and attempt its own snapshot in a tight loop (now one gap and a paced retry by the run loop, `25514b2`); and a
+snapshot taken while the API server was only partly back left most scopes without a version, so they went unwatched
+until the 10-minute reconciliation (now such a snapshot keeps being retried, `f3b44e5`).
+
+**Expirations happen in normal running too:** one in the twelve-minute load window, without any pause. Event scopes
+churn fastest; how often an expiry, and therefore a `Gap`, occurs in a longer run is a question for the soak and an
+input to roadmap C9. Not yet run: a soak of hours.

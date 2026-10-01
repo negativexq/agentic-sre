@@ -261,6 +261,8 @@ class EventItem(StreamItem):
 class SnapshotBeginItem(StreamItem):
     kind: Literal["snapshot_begin"] = "snapshot_begin"
     observed_at: datetime
+    # contract §15.4: set for one scope's relist; absent for a global snapshot
+    scope: ScopeWire | None = None
 
 
 class ListingStatusItem(StreamItem):
@@ -274,12 +276,16 @@ class ListingStatusItem(StreamItem):
     snapshot: bool
     completed_scopes: list[ScopeWire]
     failed_scopes: list[ScopeFailureWire]
+    # contract §15.4: the end of one scope's relist
+    scope: ScopeWire | None = None
 
 
 class GapItem(StreamItem):
     kind: Literal["gap"] = "gap"
     at: datetime
     reason: GapReason
+    # contract §15.4: the one scope whose continuity was lost; absent for a global gap
+    scope: ScopeWire | None = None
 
 
 STREAM_ITEMS: dict[str, type[StreamItem]] = {

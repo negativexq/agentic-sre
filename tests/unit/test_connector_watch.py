@@ -54,6 +54,8 @@ class FakeWatchCluster:
         self.batches: dict[ListingScope, list[Any]] = {PODS: [], EVENTS: []}
         self.watched_from: list[tuple[ListingScope, str]] = []
         self.lists = 0
+        self.scope_lists: list[ListingScope] = []
+        self.scope_down = False
 
     def list_objects(self, namespaces: Sequence[str]) -> ObjectListing:
         self.lists += 1
@@ -65,6 +67,15 @@ class FakeWatchCluster:
 
     def list_events(self, namespaces: Sequence[str]) -> list[dict[str, Any]]:
         return []
+
+    def list_scope(self, scope: ListingScope) -> tuple[list[dict[str, Any]], str]:
+        """One scope's LIST (contract §15.4): its current items and version."""
+        self.scope_lists.append(scope)
+        if self.scope_down:
+            raise RuntimeError("apiserver down")
+        self.version += 1
+        items = list(self.objects.values()) if scope == PODS else []
+        return items, str(self.version)
 
     def watch(self, scope: ListingScope, resource_version: str) -> Iterator[Any]:
         self.watched_from.append((scope, resource_version))
@@ -126,37 +137,66 @@ def test_a_watch_event_delivered_twice_is_one_item() -> None:
     assert [type(i).__name__ for i in after_snapshot(client)] == ["ObjectItem"]
 
 
-def test_an_expired_version_is_a_gap_then_a_new_snapshot() -> None:
+def test_an_expired_version_is_a_gap_of_its_scope_and_a_relist_of_that_scope_only() -> None:
     from packages.connector.watch import ResourceVersionExpired
 
     connector, client, cluster, _ = make()
-    cursor = client.read(
-        "read_changes", None
-    ).next_cursor  # a consumer that has read the first snapshot
-    cluster.batches[PODS] = [ResourceVersionExpired("410 Gone")]
+    cursor = client.read("read_changes", None).next_cursor  # a consumer past the first snapshot
+    cluster.batches[EVENTS] = [ResourceVersionExpired("410 Gone")]
     connector.watch_changes_once()
     tail = since(client, cursor)
-    gaps = [i for i in tail if isinstance(i, wire.GapItem)]
-    assert [g.reason for g in gaps] == ["RESOURCE_VERSION_EXPIRED"]
-    snapshots = [i for i in tail if isinstance(i, wire.SnapshotBeginItem)]
-    assert len(snapshots) == 1 and cluster.lists == 2  # the relist after the gap is a new snapshot
+    gaps = [
+        (g.reason, g.scope.kind if g.scope else None) for g in tail if isinstance(g, wire.GapItem)
+    ]
+    assert gaps == [("RESOURCE_VERSION_EXPIRED", "Event")]
+    begins = [b for b in tail if isinstance(b, wire.SnapshotBeginItem)]
+    assert [b.scope.kind if b.scope else None for b in begins] == ["Event"]  # no global snapshot
+    assert cluster.lists == 1 and cluster.scope_lists == [EVENTS]
+    connector.watch_changes_once()
+    assert (PODS, "10") in cluster.watched_from[
+        -2:
+    ]  # the other scope kept its version and continuity
+    assert (EVENTS, "11") in cluster.watched_from  # the relisted scope resumed from its new version
 
 
-def test_a_create_and_delete_inside_the_lost_interval_is_not_reconstructed() -> None:
+def test_a_scope_relist_restores_the_current_state_and_never_the_lost_interval() -> None:
+    from packages.connector.client import StreamedClusterReader
     from packages.connector.watch import ResourceVersionExpired
 
     connector, client, cluster, _ = make()
-    # while continuity is lost, "ghost" is created and deleted: the relist cannot see it
-    cursor = client.read("read_changes", None).next_cursor
+    reader = StreamedClusterReader(client)
+    assert {o["metadata"]["name"] for o in reader.list_objects(["shop"]).objects} == {"a", "b"}
+    # while continuity is lost, "ghost" is created and deleted and "b" is deleted: the relist sees neither
+    del cluster.objects["b"]
     cluster.batches[PODS] = [ResourceVersionExpired("410 Gone")]
     connector.watch_changes_once()
-    names = [i.body["metadata"]["name"] for i in items(client) if isinstance(i, wire.ObjectItem)]
-    assert "ghost" not in names
+    listing = reader.list_objects(["shop"])
+    assert {o["metadata"]["name"] for o in listing.objects} == {
+        "a"
+    }  # the scope is the current state
+    assert PODS in listing.completed_scopes
     assert not any(
-        isinstance(i, wire.ObjectDeletedItem) and "ghost" in i.key for i in items(client)
+        isinstance(i, wire.ObjectItem) and i.body["metadata"]["name"] == "ghost"
+        for i in items(client)
     )
-    # the stream says continuity was lost; it never claims the interval was complete
-    assert any(isinstance(i, wire.GapItem) for i in since(client, cursor))
+
+
+def test_during_a_scope_gap_only_that_scope_is_incomplete_and_the_relist_is_retried() -> None:
+    from packages.connector.client import StreamedClusterReader
+    from packages.connector.watch import ResourceVersionExpired
+
+    connector, client, cluster, _ = make()
+    reader = StreamedClusterReader(client)
+    cluster.scope_down = True
+    cluster.batches[PODS] = [ResourceVersionExpired("410 Gone")]
+    connector.watch_changes_once()
+    listing = reader.list_objects(["shop"])  # still served: the gap is not global
+    assert PODS not in listing.completed_scopes  # no deletion authority for the gapped scope
+    cluster.scope_down = False
+    assert connector.retry_snapshot_once()  # the scope relist is retried, not a global snapshot
+    assert cluster.lists == 1 and cluster.scope_lists == [PODS, PODS]
+    assert PODS in reader.list_objects(["shop"]).completed_scopes
+    assert not connector.retry_snapshot_once()
 
 
 def test_a_watch_delete_is_an_observed_deletion_and_a_listing_absence_an_inferred_one() -> None:
@@ -307,22 +347,6 @@ def test_an_api_outage_is_one_gap_and_one_snapshot_on_recovery_not_a_storm() -> 
     tail = since(client, cursor)
     assert sum(isinstance(i, wire.SnapshotBeginItem) for i in tail) == 1
     assert not connector.retry_snapshot_once()  # recovered: nothing left to retry
-
-
-def test_an_expiry_whose_relist_fails_is_retried_by_the_loop() -> None:
-    from packages.connector.watch import ResourceVersionExpired
-
-    connector, _, cluster, _ = make()
-    cluster.batches[PODS] = [ResourceVersionExpired("410 Gone")]
-    listing = cluster.list_objects
-
-    def down(namespaces: Sequence[str]) -> ObjectListing:
-        raise RuntimeError("apiserver down")
-
-    cluster.list_objects = down  # type: ignore[method-assign]
-    connector.watch_changes_once()
-    cluster.list_objects = listing  # type: ignore[method-assign]
-    assert connector.retry_snapshot_once() and not connector.retry_snapshot_once()
 
 
 def test_a_snapshot_with_failed_scopes_keeps_retrying_so_no_scope_stays_unwatched() -> None:

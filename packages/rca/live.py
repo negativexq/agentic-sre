@@ -259,6 +259,32 @@ class KubernetesClusterReader:
             events.extend(self._serialize(item, "Event", "v1") for item in response.items)
         return events
 
+    def list_scope(self, scope: ListingScope) -> tuple[list[dict[str, Any]], str]:
+        """LIST one scope: its current items, serialized as ``list_objects`` does, and its version.
+
+        Used to relist only the scope whose watch version expired (connector contract §15.4).
+        """
+        kubernetes, _api_client = self._client()
+        self.api_calls["list"] += 1
+        if scope.kind == "Event":
+            response = kubernetes.client.CoreV1Api().list_namespaced_event(scope.namespace)
+            items = [self._serialize(item, "Event", "v1") for item in response.items]
+            return items, str(response.metadata.resource_version)
+        if scope.kind in _CHAOS_KINDS:
+            listing = kubernetes.client.CustomObjectsApi().list_namespaced_custom_object(
+                "chaos-mesh.org", "v1alpha1", scope.namespace, _CHAOS_KINDS[scope.kind]
+            )
+            items = []
+            for item in listing.get("items", []):
+                item["kind"] = scope.kind
+                child(item, "metadata").pop("managedFields", None)
+                items.append(item)
+            return items, str((listing.get("metadata") or {}).get("resourceVersion"))
+        group, method = _NAMESPACED_METHODS[scope.kind]
+        response = getattr(getattr(kubernetes.client, group)(), method)(scope.namespace)
+        items = [self._serialize(item, scope.kind, "v1") for item in response.items]
+        return items, str(response.metadata.resource_version)
+
     def watch(
         self, scope: ListingScope, resource_version: str, *, timeout_seconds: int = 300
     ) -> Iterator[WatchEvent]:

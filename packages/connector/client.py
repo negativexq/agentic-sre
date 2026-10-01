@@ -226,6 +226,8 @@ class StreamedClusterReader:
         self._blocked: str | None = None
         self._lock = threading.RLock()
         self._applied = 0  # stream items applied so far
+        self._gapped: set[ListingScope] = set()  # scopes whose continuity was lost (contract §15.4)
+        self._scope_staging: tuple[ListingScope, dict[str, dict[str, Any]]] | None = None
         # when the Connector observed each object and Event (contract §15, measurement only)
         self._observed: dict[str, datetime] = {}
         self._reported = 0  # ... as of the last ``pending`` call
@@ -259,6 +261,21 @@ class StreamedClusterReader:
                 self._observed[key] = item.observed_at
         elif isinstance(item, wire.EventItem):
             self._observed[_event_id(item.body)] = item.observed_at
+        if isinstance(item, wire.GapItem) and item.scope is not None:
+            # contract §15.4: only this scope lost continuity; it is incomplete until its relist ends
+            self._gapped.add(ListingScope(item.scope.namespace, item.scope.kind))
+            return
+        if isinstance(item, wire.SnapshotBeginItem) and item.scope is not None:
+            self._scope_staging = (ListingScope(item.scope.namespace, item.scope.kind), {})
+            return
+        if isinstance(item, wire.ObjectItem) and self._scope_staging is not None:
+            key = _key(item.body)
+            if key is not None and ListingScope.from_key(key) == self._scope_staging[0]:
+                self._scope_staging[1][key] = item.body
+                return
+        if isinstance(item, wire.ListingStatusItem) and item.snapshot and item.scope is not None:
+            self._end_scope_snapshot(item)
+            return
         if isinstance(item, wire.GapItem):
             if item.reason == "BACKEND_UNREACHABLE":
                 self._blocked = f"the connector could not read the cluster at {item.at.isoformat()}"
@@ -267,6 +284,7 @@ class StreamedClusterReader:
             return
         if isinstance(item, wire.SnapshotBeginItem):
             self._staging = {}
+            self._gapped, self._scope_staging = set(), None  # a global snapshot covers every scope
         elif isinstance(item, wire.ObjectItem):
             key = _key(item.body)
             if key is not None:
@@ -291,6 +309,25 @@ class StreamedClusterReader:
             )
             self._ready, self._blocked = True, None
 
+    def _end_scope_snapshot(self, item: wire.ListingStatusItem) -> None:
+        assert item.scope is not None
+        scope = ListingScope(item.scope.namespace, item.scope.kind)
+        staging = self._scope_staging
+        if staging is None or staging[0] != scope:
+            return  # an end without its begin proves nothing
+        self._scope_staging = None
+        completed = scope in {ListingScope(s.namespace, s.kind) for s in item.completed_scopes}
+        if not completed:
+            return  # still incomplete: the gap stays until a relist completes
+        if scope.kind != "Event":
+            # the scope's content is what was listed; an object no longer listed is gone
+            for key in [k for k in self._objects if ListingScope.from_key(k) == scope]:
+                del self._objects[key]
+            self._objects.update(staging[1])
+        self._gapped.discard(scope)
+        self._completed = self._completed | {scope}
+        self._failed = tuple(f for f in self._failed if f.scope != scope)
+
     def _drain(self) -> None:
         while True:
             page = self._client.read("read_changes", self._cursor, self._limit)
@@ -314,7 +351,9 @@ class StreamedClusterReader:
             keys = sorted(k for k in self._objects if k.split("/", 1)[0] in wanted)
             return ObjectListing(
                 tuple(self._objects[k] for k in keys),
-                frozenset(s for s in self._completed if s.namespace in wanted),
+                frozenset(
+                    s for s in self._completed if s.namespace in wanted and s not in self._gapped
+                ),
                 tuple(f for f in self._failed if f.scope.namespace in wanted),
             )
 

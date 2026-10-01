@@ -126,6 +126,9 @@ class Connector:
         self._versions: dict[ListingScope, str] = {}
         self._generation = 0
         self._degraded = False  # a watch failed; the run loop retries the snapshot
+        self._pending_relists: set[ListingScope] = (
+            set()
+        )  # scope relists that failed (contract §15.4)
         self.watch_stats: dict[str, int] = defaultdict(int)
 
     def handle(self, payload: bytes) -> bytes:
@@ -330,6 +333,7 @@ class Connector:
         self._seen, self._events_seen = {}, {}
         self._versions = {**listing.resource_versions, **self._event_versions()}
         self._generation += 1  # watches of the replaced versions must not touch the new state
+        self._pending_relists = set()  # a global snapshot relists every scope
         # a scope that failed, or a watched namespace whose Events returned no version, has no watch:
         # keep retrying until every scope is listed, rather than leave it unwatched until reconciliation
         self._degraded = self._incomplete(listing)
@@ -408,9 +412,9 @@ class Connector:
         with self._changes_lock:
             version = self._versions.get(scope)
             generation = self._generation
-            degraded = self._degraded
-        if watch is None or version is None or degraded:
-            return not degraded
+            waiting = self._degraded or scope in self._pending_relists
+        if watch is None or version is None or waiting:
+            return not waiting
         try:
             for event in watch(scope, version):
                 if not self._apply_watch_event(scope, event, generation):
@@ -422,21 +426,37 @@ class Connector:
                 if generation != self._generation:
                     return True  # another scope's expiry already took the new snapshot
                 logger.warning(
-                    "watch of %s/%s expired at %s; gap and relist",
+                    "watch of %s/%s expired at %s; scope gap and relist",
                     scope.namespace,
                     scope.kind,
                     version,
                 )
                 self.watch_stats["expired"] += 1
                 self.watch_stats[f"expired:{scope.kind}"] += 1
+                if getattr(self.cluster, "list_scope", None) is None:
+                    # a reader that cannot list one scope: the global gap and snapshot of §15
+                    self._put(
+                        self._changes,
+                        wire.GapItem(seq=0, at=self.clock(), reason="RESOURCE_VERSION_EXPIRED"),
+                    )
+                    self.watch_stats["relists"] += 1
+                    self.poll_changes_once(force_snapshot=True)
+                    if self._generation == generation:
+                        self._degraded = True
+                    return False
+                # contract §15.4: the gap and the relist belong to this scope alone
                 self._put(
                     self._changes,
-                    wire.GapItem(seq=0, at=self.clock(), reason="RESOURCE_VERSION_EXPIRED"),
+                    wire.GapItem(
+                        seq=0,
+                        at=self.clock(),
+                        reason="RESOURCE_VERSION_EXPIRED",
+                        scope=wire.ScopeWire(namespace=scope.namespace, kind=scope.kind),
+                    ),
                 )
-                self.watch_stats["relists"] += 1
-                self.poll_changes_once(force_snapshot=True)
-                if self._generation == generation:
-                    self._degraded = True  # the relist failed too: the run loop retries it
+                if self._relist_scope(scope):
+                    return True
+                self._pending_relists.add(scope)
             return False
         except Exception:
             with self._changes_lock:
@@ -495,13 +515,62 @@ class Connector:
                 self._put(self._changes, wire.ObjectItem(seq=0, observed_at=at, body=body))
             return True
 
+    def _relist_scope(self, scope: ListingScope) -> bool:
+        """List one scope again and serve it as that scope's snapshot (contract §15.4); False if it failed.
+
+        Every current item of the scope is emitted, so the mirror can replace exactly that scope; what
+        happened while continuity was lost is not reconstructed.
+        """
+        self.watch_stats["scope_relists"] += 1
+        try:
+            items, version = self.cluster.list_scope(scope)  # type: ignore[union-attr]
+        except Exception:
+            logger.warning("relist of %s/%s failed", scope.namespace, scope.kind, exc_info=True)
+            return False
+        at = self.clock()
+        scope_wire = wire.ScopeWire(namespace=scope.namespace, kind=scope.kind)
+        self._put(self._changes, wire.SnapshotBeginItem(seq=0, observed_at=at, scope=scope_wire))
+        if scope.kind == "Event":
+            for body in items:
+                self._events_seen[_event_key(body)] = _digest(body)
+                self._count_bytes(body)
+                self._put(self._changes, wire.EventItem(seq=0, observed_at=at, body=body))
+        else:
+            for key in [k for k in self._seen if ListingScope.from_key(k) == scope]:
+                del self._seen[key]
+            for body in items:
+                object_id = object_key(body)
+                if object_id is None or body.get("kind") in wire.DENIED_KINDS:
+                    continue
+                self._seen[object_id] = _digest(body)
+                self._count_bytes(body)
+                self._put(self._changes, wire.ObjectItem(seq=0, observed_at=at, body=body))
+        self._put(
+            self._changes,
+            wire.ListingStatusItem(
+                seq=0,
+                observed_at=at,
+                snapshot=True,
+                completed_scopes=[scope_wire],
+                failed_scopes=[],
+                scope=scope_wire,
+            ),
+        )
+        self._versions[scope] = version
+        self._pending_relists.discard(scope)
+        return True
+
     def retry_snapshot_once(self) -> bool:
-        """After a watch failure, try the snapshot again; whether a retry was due."""
+        """After a watch failure or a failed scope relist, try again; whether a retry was due."""
         with self._changes_lock:
-            if not self._degraded:
+            if self._degraded:
+                self.watch_stats["relists"] += 1
+                self.poll_changes_once(force_snapshot=True, gap_on_failure=False)
+                return True
+            if not self._pending_relists:
                 return False
-            self.watch_stats["relists"] += 1
-            self.poll_changes_once(force_snapshot=True, gap_on_failure=False)
+            for scope in sorted(self._pending_relists, key=lambda s: (s.namespace, s.kind)):
+                self._relist_scope(scope)
             return True
 
     def _watch_loop(self, scope: ListingScope, stop: threading.Event) -> None:
@@ -513,8 +582,12 @@ class Connector:
                 generation = self._generation
             try:
                 if not self.watch_scope_once(scope):
-                    # wait for the new snapshot (after an expiry) or the loop's retry (after a failure)
-                    while not stop.is_set() and self._generation == generation:
+                    # wait for the loop's retry: a global snapshot, or this scope's relist
+                    while (
+                        not stop.is_set()
+                        and self._generation == generation
+                        and (self._degraded or scope in self._pending_relists)
+                    ):
                         stop.wait(1.0)
             except Exception:
                 logger.warning("watch loop of %s/%s", scope.namespace, scope.kind, exc_info=True)

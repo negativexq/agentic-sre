@@ -681,13 +681,17 @@ class DiagnosisService:
             return
         self._stream_health_logged = time.monotonic()
         objects, events = superseded()
+        catch_up = getattr(self.reader, "take_catch_up_superseded", None)
+        replayed = catch_up() if callable(catch_up) else (0, 0)
         lag, heartbeats = clock_sample()
         logger.info(
-            "stream health over %.0f s: superseded before journaling objects=%d events=%d; "
-            "heartbeats=%d min(control plane - connector clock)=%s s",
+            "stream health over %.0f s: superseded before journaling objects=%d events=%d "
+            "(catch-up objects=%d events=%d); heartbeats=%d min(control plane - connector clock)=%s s",
             elapsed,
             objects,
             events,
+            replayed[0],
+            replayed[1],
             heartbeats,
             f"{lag:+.3f}" if lag is not None else "n/a",
         )

@@ -733,3 +733,16 @@ def test_log_captures_of_concurrent_diagnoses_run_one_at_a_time(monkeypatch: Any
     for thread in threads:
         thread.join()
     assert peak == 1
+
+
+def test_versions_superseded_while_a_new_mirror_catches_up_are_reported_apart() -> None:
+    """A restarted control plane reads the buffer again: what it replays was journaled before it."""
+    connector, client, cluster, _ = make()
+    cluster.batches[PODS] = [
+        [event("MODIFIED", pod("a", "11"), "11"), event("MODIFIED", pod("a", "12"), "12")]
+    ]
+    connector.watch_changes_once()
+    mirror = StreamedClusterReader(client)  # starts after both versions were on the stream
+    mirror.list_objects(["shop"])
+    assert mirror.take_superseded() == (0, 0)
+    assert mirror.take_catch_up_superseded() == (1, 0)

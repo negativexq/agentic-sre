@@ -105,8 +105,57 @@ class IncidentManager:
         if self._quiet > timedelta(0) and alert.status is AlertStatus.FIRING:
             continued = self._continue_episode(alert, now=now)
             if continued is not None:
+                self._end_replaced(alert, now=now)
                 return IngestOutcome(continued, refired=True)
-        return IngestOutcome(self._ingest(alert, now=now))
+        outcome = IngestOutcome(self._ingest(alert, now=now))
+        if alert.status is AlertStatus.FIRING:
+            self._end_replaced(alert, now=now)
+        return outcome
+
+    def _end_replaced(self, alert: Alert, *, now: datetime) -> None:
+        """End earlier occurrences of the fingerprint that still fire (episode contract §9).
+
+        Alertmanager holds at most one alert per fingerprint, so a firing occurrence with a later start
+        means the earlier one ended, no later than the new start. That instant is a bound, recorded as
+        inferred. Runs after the new occurrence is in place, so an episode it continues stays open.
+        """
+        replaced = self._session.scalars(
+            select(AlertRow).where(
+                AlertRow.fingerprint == alert.fingerprint,
+                AlertRow.starts_at < alert.starts_at,
+                AlertRow.status == AlertStatus.FIRING.value,
+            )
+        ).all()
+        for row in replaced:
+            row.status = AlertStatus.RESOLVED.value
+            row.ends_at = alert.starts_at
+            incident_row = self._session.get(IncidentRow, row.incident_id)
+            if incident_row is None:
+                continue
+            still_firing = self._session.scalar(
+                select(AlertRow.alert_id).where(
+                    AlertRow.incident_id == row.incident_id,
+                    AlertRow.alert_id != row.alert_id,
+                    AlertRow.status == AlertStatus.FIRING.value,
+                )
+            )
+            if still_firing is None:
+                incident_row.status = IncidentStatus.RESOLVED.value
+                incident_row.updated_at = now
+            IncidentEventRepository(self._session).append(
+                IncidentEvent(
+                    incident_id=incident_row.incident_id,
+                    event_type=IncidentEventType.ALERT_RESOLVED,
+                    timestamp=now,
+                    correlation_id=incident_row.correlation_id,
+                    payload={
+                        "fingerprint": alert.fingerprint,
+                        "status": AlertStatus.RESOLVED.value,
+                        "inferred": "superseded",
+                        "by_starts_at": _utc(alert.starts_at).isoformat(),
+                    },
+                )
+            )
 
     def _continue_episode(self, alert: Alert, *, now: datetime) -> Incident | None:
         """Attach a new occurrence to its fingerprint's recent episode, keeping the history."""

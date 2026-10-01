@@ -96,7 +96,7 @@ The original requests, for the record:
    ship with `Q = 0` (today's behaviour) until the soak exists.
 3. `Q` measured from `O1.ends_at` to `O2.starts_at` (Alertmanager's times), not from arrival times.
 
-## 9. Amendment: a replaced occurrence ends (PROPOSED, 2026-10-02)
+## 9. Amendment: a replaced occurrence ends (APPROVED and implemented, 2026-10-02)
 
 **Observed.** In the ten-hour product-mode run, two incidents (`KafkaConsumerLag`, `OrderWorkerLagHigh`) stayed
 `OPEN` for four hours after their alerts had ended. Each fingerprint resolved and fired again within about a

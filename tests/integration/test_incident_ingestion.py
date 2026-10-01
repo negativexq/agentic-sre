@@ -291,3 +291,75 @@ def test_another_fingerprint_never_continues_an_episode(tmp_path: Path) -> None:
         )
         outcome = manager.ingest_occurrence(normalize_alert(other), now=NOW)
         assert outcome.incident.incident_id != first.incident_id and not outcome.refired
+
+
+# ---- §9: an occurrence that a newer one of its fingerprint replaced ends ----
+
+
+def _occurrence(session: Session, start: datetime) -> AlertRow:
+    row = session.scalar(select(AlertRow).where(AlertRow.starts_at == start))
+    assert row is not None
+    return row
+
+
+def test_a_replaced_occurrence_ends_at_the_new_start_and_its_incident_resolves(
+    tmp_path: Path,
+) -> None:
+    engine = _episode_db(tmp_path)
+    with Session(engine) as session:
+        manager = IncidentManager(session)  # Q = 0, the product default
+        first = manager.ingest(normalize_alert(_firing(NOW)), now=NOW)
+        later = NOW + timedelta(seconds=70)
+        second = manager.ingest(normalize_alert(_firing(later)), now=later)
+        assert second.incident_id != first.incident_id  # O2 is ingested as before
+        old = _occurrence(session, NOW)
+        assert old.status == "RESOLVED" and old.ends_at is not None
+        assert old.ends_at.replace(tzinfo=UTC) == later  # a bound: ended no later than O2 began
+        statuses = {row.incident_id: row.status for row in session.scalars(select(IncidentRow))}
+        assert statuses == {first.incident_id: "RESOLVED", second.incident_id: "OPEN"}
+        (resolved,) = session.scalars(
+            select(IncidentEventRow).where(
+                IncidentEventRow.incident_id == first.incident_id,
+                IncidentEventRow.event_type == IncidentEventType.ALERT_RESOLVED,
+            )
+        ).all()
+        assert resolved.payload["inferred"] == "superseded"
+        assert resolved.payload["by_starts_at"] == later.isoformat()
+
+
+def test_a_replaced_occurrence_inside_an_episode_keeps_the_episode_open(tmp_path: Path) -> None:
+    engine = _episode_db(tmp_path)
+    with Session(engine) as session:
+        manager = IncidentManager(session, quiet=QUIET)
+        first = manager.ingest(normalize_alert(_firing(NOW)), now=NOW)
+        later = NOW + timedelta(seconds=70)
+        outcome = manager.ingest_occurrence(normalize_alert(_firing(later)), now=later)
+        assert outcome.incident.incident_id == first.incident_id and outcome.refired
+        assert _occurrence(session, NOW).status == "RESOLVED"
+        row = session.get(IncidentRow, first.incident_id)
+        assert row is not None and row.status == "OPEN"  # O2 still fires in the same episode
+
+
+def test_a_late_duplicate_of_a_replaced_occurrence_does_not_reopen_it(tmp_path: Path) -> None:
+    engine = _episode_db(tmp_path)
+    with Session(engine) as session:
+        manager = IncidentManager(session)
+        first = manager.ingest(normalize_alert(_firing(NOW)), now=NOW)
+        later = NOW + timedelta(seconds=70)
+        manager.ingest(normalize_alert(_firing(later)), now=later)
+        manager.ingest(normalize_alert(_firing(NOW)), now=later + timedelta(seconds=5))
+        assert _occurrence(session, NOW).status == "RESOLVED"
+        row = session.get(IncidentRow, first.incident_id)
+        assert row is not None and row.status == "RESOLVED"
+
+
+def test_another_fingerprint_is_not_replaced(tmp_path: Path) -> None:
+    engine = _episode_db(tmp_path)
+    with Session(engine) as session:
+        manager = IncidentManager(session)
+        manager.ingest(normalize_alert(_firing(NOW)), now=NOW)
+        other = _firing(NOW + timedelta(seconds=70)).model_copy(
+            update={"labels": {**make_alert().labels, "alertname": "OtherAlert"}}
+        )
+        manager.ingest(normalize_alert(other), now=NOW + timedelta(seconds=70))
+        assert _occurrence(session, NOW).status == "FIRING"

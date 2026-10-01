@@ -367,6 +367,11 @@ class DiagnosisService:
     # this process's stream-follow segment: (segment id, epoch, followed since) (late-evidence §4.2)
     _follow_segment: tuple[int, str, datetime] | None = field(default=None, init=False, repr=False)
     _stream_health_logged: float = field(default_factory=time.monotonic, init=False, repr=False)
+    # One bulk log capture at a time: concurrent captures of the incidents a fault opens timed out a
+    # quarter of their Loki slices in the ten-hour run, each slice scanning about 30 MB.
+    _log_capture_slot: threading.Lock = field(
+        default_factory=threading.Lock, init=False, repr=False
+    )
     # A STATUS_SNAPSHOT with unchanged content is written at most this often.
     status_snapshot_interval: timedelta = timedelta(seconds=30)
     # How a polling gap breaks alert-channel coverage (frozen into each run boundary).
@@ -865,7 +870,8 @@ class DiagnosisService:
         # The incident history is wider than one bounded Loki read, so it is
         # captured as several <=1h reads rather than one rejected read.
         starts_at, ends_at = incident_window(alerts, self.clock())
-        capture = capture_error_logs(provider_adapter, services, starts_at, ends_at)
+        with self._log_capture_slot:
+            capture = capture_error_logs(provider_adapter, services, starts_at, ends_at)
         for failure in capture.failed:
             logger.warning(
                 "log capture slice [%s, %s) failed (%s: %s); continuing with the rest",

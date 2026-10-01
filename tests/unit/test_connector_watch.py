@@ -695,3 +695,41 @@ def test_only_scopes_without_real_bookmarks_get_synthetic_ones() -> None:
     cluster.batches[PODS] = [[connector.refresh_bookmarks_once]]
     connector.watch_changes_once()
     assert set(cluster.version_reads) == {EVENTS}
+
+
+def test_log_captures_of_concurrent_diagnoses_run_one_at_a_time(monkeypatch: Any) -> None:
+    """Concurrent captures made Loki time out a quarter of slices in the long run: they are serialized."""
+    import threading
+    import time
+
+    import apps.control_plane.diagnosis as diagnosis_module
+    from apps.control_plane.diagnosis import DiagnosisService
+    from packages.rca.live import LogCapture
+    from packages.rca.model import Alert
+
+    running = 0
+    peak = 0
+    guard = threading.Lock()
+
+    def slow_capture(*_args: Any, **_kwargs: Any) -> LogCapture:
+        nonlocal running, peak
+        with guard:
+            running += 1
+            peak = max(peak, running)
+        time.sleep(0.05)
+        with guard:
+            running -= 1
+        return LogCapture(records=(), source_read_ids=(), queried=(), failed=(), skipped=())
+
+    monkeypatch.setattr(diagnosis_module, "capture_error_logs", slow_capture)
+    service = DiagnosisService(session_factory=None, namespaces=("shop",))  # type: ignore[arg-type]
+    alert = Alert(name="HighLatency", service="checkout", starts_at=T0, labels={})
+    threads = [
+        threading.Thread(target=service._capture_logs, args=(None, [alert], (), None))
+        for _ in range(4)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert peak == 1

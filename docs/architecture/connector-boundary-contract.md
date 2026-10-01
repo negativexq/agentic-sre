@@ -447,3 +447,27 @@ expire. This is the default behaviour of a customer cluster too. Without bookmar
 scope cannot be proven beyond the compaction window, so the expiry is a true loss of continuity, not an artefact;
 what it costs today (a global snapshot and a global `Gap`) is a design choice to revisit. Proposed: a `Gap` that names
 its scope and a relist of that scope only (decision pending).
+
+### 15.4 Scope-level gaps (amendment, APPROVED 2026-10-01)
+
+Replaces, for an expired version, the global snapshot of §15 "Continuity".
+
+- **An expired watch version is a gap of its scope only.** `RESOURCE_VERSION_EXPIRED` produces a `GapItem` that names
+  its scope (namespace and kind), and only that scope is listed again. The other scopes' watches and continuity are not
+  touched, and the connector epoch does not change.
+- **A scope relist has explicit boundaries.** `SnapshotBeginItem` and the closing `ListingStatusItem(snapshot=true)`
+  carry the scope. Between them come the scope's current objects (or Events). At the end, an **object** scope's
+  content is replaced by what was listed, and an object no longer listed is an *inferred* deletion (§15) only if the
+  scope's listing completed; an **Event** scope only adds Events, since an Event's absence from a listing is not a
+  deletion.
+- **During a scope gap, only that scope is incomplete.** The control plane's mirror reports the scope as not completely
+  listed from the gap until its relist ends, so no deletion authority and no complete-scope claim is derived for it;
+  every other scope is served as usual. A failed scope relist leaves the scope incomplete and is retried.
+- **The relist reconstructs the current state of the scope only**, never what was missed or deleted in between
+  (§10 invariant). For roadmap C9, such a gap means that continuity was lost for that scope's evidence class
+  (namespace and kind) from the last continuous observation to the end of the relist, and nowhere else.
+- **Still global:** a connector restart (`CONNECTOR_RESTART`, a new epoch and a full snapshot) and an API or backend
+  outage that affects the listing (`BACKEND_UNREACHABLE`, §15.2) keep the global gap.
+- After the relist the scope's watch resumes from the relist's version and new events continue as usual.
+- **Wire:** the scope field on `GapItem`, `SnapshotBeginItem` and `ListingStatusItem` is added to `connector.v2`,
+  which has not been released beyond the lab; a released wire version would have required `v3`.

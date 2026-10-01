@@ -1,7 +1,7 @@
 # Late evidence and evidence continuity (roadmap C9)
 
-Status: **PROPOSED** (2026-10-01, second draft), awaiting the owner's decisions in §8. Nothing here is implemented.
-The first draft mixed two questions; this draft keeps them apart.
+Status: **APPROVED** by the owner (2026-10-01, second draft with the amendment of §4.3). Implementation follows in
+the order of §8. The first draft mixed two questions; this draft keeps them apart.
 
 ## 1. Two questions, not one
 
@@ -48,8 +48,20 @@ from two independent conditions:
 2. **Source continuity.** The control plane persists change-stream gaps with their scope and interval (the Connector
    adds the start: the last instant it observed the scope continuously, which `GapItem` does not carry yet). A scope
    with no gap overlapping the window was observed continuously; otherwise the record names the interval.
-3. **The record.** Per scope: `CONTINUOUS`, `GAP(from, to)` or `TRANSPORT_NOT_PROVEN`, kept with the diagnosis like
-   the alert channel's coverage `W`. It is provenance; it changes no digest field except where §5 makes a rule read it.
+3. **The record keeps the two dimensions apart** (owner's amendment): a single value would lose combinations such as
+   "the source was continuous but transport was not proven", which recover differently (waiting can prove transport;
+   nothing undoes a gap). Per scope:
+   - *source continuity*: `CONTINUOUS`, `GAPPED` (with the gap intervals) or `UNKNOWN` (no stream: polling sources,
+     rows from before `8b2d15d`, every ITBench scenario);
+   - *transport completeness*: `PROVEN` (with the instant the stream was read past `T`), `NOT_PROVEN` (timeout) or
+     `NOT_APPLICABLE` (no stream);
+   - a *summary* derived, never stored: `COVERED` only when both dimensions are positive, otherwise `NOT_COVERED` with
+     the dimension that failed.
+   Rules read the dimension they need, never the summary (it is for the console and reports). `UNKNOWN` is not
+   continuity: a rule that meets it keeps today's behaviour and records that it did so with coverage unknown, so the
+   regression scenarios do not change and no diagnosis claims continuity it does not know. The record is provenance,
+   kept with the diagnosis like the alert channel's coverage `W`; it changes no digest field except where §5 makes a
+   rule read it.
 
 ## 5. B in the engine: where absence is read
 
@@ -82,7 +94,7 @@ coverage is recorded the same way); alert timing (Alertmanager's own times, the 
    event is a member whenever the Connector observed it before the resolution, no member was observed after it, and
    the coverage record is `CONTINUOUS` for the target's scopes or names the gap that was there.
 
-## 8. Decisions requested
+## 8. Decisions (approved 2026-10-01)
 
 1. **A** as §3: membership by the Connector's observation time, today's rule for rows without one.
 2. **B** as §4: transport completeness proven from the stream with a change-stream heartbeat and a 10 s timeout;

@@ -123,3 +123,11 @@ database per run.
   did not exercise `CONTINUOUS` or `GAPPED`; no gap occurred in these short runs. A rule that reads continuity
   should read it over its own interval (for `observed-fault-execution`: before `Applied`) from the recorded
   `stream_followed_since` and gaps, not the whole window's verdict.
+
+**Measured, not assumed (2026-10-01, three more runs with `SRE_LOG_LEVEL=INFO`, commit `8f89fd6`).** Every wait now
+logs, per turn, the stream's time relative to the cutoff, the wait for the snapshot lock and the journal step. 44
+waits, all proven, none timed out: median 2.02 s, p90 2.58 s, max 3.15 s. Over 165 turns the lock wait had median
+0.00 s and max 0.48 s, the journal step median 0.24 s and max 0.98 s. In every wait the stream's time stood still
+just before the cutoff and then jumped by about 2 s: **the wait is the heartbeat interval**, not the lock. The 7.0 s
+wait of the first check did not recur and stays unexplained; the per-turn line will name its cause if it does. The
+lock hypothesis is not supported by these runs, so the wait loop is unchanged.

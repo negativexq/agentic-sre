@@ -1,7 +1,8 @@
 # Chaos experiment objects in the journal
 
-Status: **PROPOSED** (2026-10-02). Owner decision requested: it changes what the engine receives, so testbed results
-can change.
+Status: **APPROVED** by the owner (2026-10-02) and **implemented** (the reader lists the kinds in every journaled
+namespace; a namespace without the CRD is skipped, not failed). Adoption waits for the measurement of §3. In the lab
+the listing grows from 22 to 40 scopes (18 Chaos scopes, none failed).
 
 ## 1. Problem (measured)
 

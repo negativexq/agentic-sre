@@ -220,7 +220,9 @@ class KubernetesClusterReader:
                     versions[scope] = str(version)
                 objects.extend(self._serialize(item, kind, "v1") for item in items)
         custom = kubernetes.client.CustomObjectsApi()
-        for namespace in self.chaos_namespaces:
+        # Experiments live beside their targets as well as in the chaos namespaces
+        # (chaos-objects-design.md §2).
+        for namespace in dict.fromkeys((*namespaces, *self.chaos_namespaces)):
             for kind, plural in _CHAOS_PLURALS:
                 scope = ListingScope(namespace, kind)
                 try:
@@ -229,6 +231,11 @@ class KubernetesClusterReader:
                         "chaos-mesh.org", "v1alpha1", namespace, plural
                     )
                 except Exception as exc:  # CRD not installed or not readable
+                    if (
+                        namespace not in self.chaos_namespaces
+                        and getattr(exc, "status", None) == 404
+                    ):
+                        continue  # no Chaos Mesh in this cluster: the kind does not exist, nothing failed
                     failures.append(ListingFailure(scope, f"{type(exc).__name__}: {exc}"))
                     continue
                 completed.add(scope)

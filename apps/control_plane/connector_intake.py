@@ -42,6 +42,7 @@ class AlertStreamConsumer:
         config: AlertCoverageConfig | None = None,
         on_incidents: Callable[[list[UUID]], None] | None = None,
         on_refired: Callable[[list[UUID]], None] | None = None,
+        on_resolved: Callable[[list[UUID]], None] | None = None,
         quiet: timedelta = timedelta(0),
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         page_limit: int = wire.MAX_BATCH,
@@ -51,6 +52,7 @@ class AlertStreamConsumer:
         self._config = config or AlertCoverageConfig()
         self._on_incidents = on_incidents
         self._on_refired = on_refired
+        self._on_resolved = on_resolved
         self._quiet = quiet
         self._clock = clock
         self._limit = page_limit
@@ -93,6 +95,7 @@ class AlertStreamConsumer:
         self._available = True
         incident_ids: list[UUID] = []
         refired_ids: list[UUID] = []
+        resolved_ids: list[UUID] = []
         with self._session_factory() as session:
             repository = AlertCoverageRepository(session)
             recorded = self._latest_poll(session)
@@ -108,9 +111,12 @@ class AlertStreamConsumer:
                             "skipping an alert the intake cannot normalize", exc_info=True
                         )
                         continue
-                    (refired_ids if outcome.refired else incident_ids).append(
-                        outcome.incident.incident_id
-                    )
+                    # only a change of an incident starts a diagnosis (diagnosis-trigger-design.md §2)
+                    if outcome.refired:
+                        refired_ids.append(outcome.incident.incident_id)
+                    elif outcome.created:
+                        incident_ids.append(outcome.incident.incident_id)
+                    resolved_ids.extend(outcome.resolved)
                 elif isinstance(item, wire.HeartbeatItem):
                     if recorded is not None and _utc(item.completed_at) <= recorded:
                         continue
@@ -144,10 +150,14 @@ class AlertStreamConsumer:
         # The page is persisted; only now does the cursor move (at-least-once).
         self.cursor = page.next_cursor
         refired = list(dict.fromkeys(refired_ids))
-        if incident_ids and self._on_incidents is not None:
-            self._on_incidents([i for i in dict.fromkeys(incident_ids) if i not in refired])
+        created = [i for i in dict.fromkeys(incident_ids) if i not in refired]
+        if created and self._on_incidents is not None:
+            self._on_incidents(created)
         if refired and self._on_refired is not None:
             self._on_refired(refired)
+        resolved = list(dict.fromkeys(resolved_ids))
+        if resolved and self._on_resolved is not None:
+            self._on_resolved(resolved)
         return len(page.items) + len(page.gaps)
 
     def run(self, stop: threading.Event, interval: float = 1.0) -> None:

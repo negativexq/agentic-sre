@@ -134,3 +134,43 @@ def test_alertmanager_webhook_authentication_is_optional_and_bearer_protected(
     with TestClient(create_app(factory)) as client:
         assert client.post("/api/v1/webhooks/alertmanager", json=payload).status_code == 200
     engine.dispose()
+
+
+def test_the_webhook_diagnoses_an_incident_only_when_it_is_created_or_resolved(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    engine, factory, _incident_id, service = _app(tmp_path)
+    runs: list[tuple[UUID, str]] = []
+
+    def record(incident: UUID, trigger: str) -> Any:
+        runs.append((incident, trigger))
+
+    service.run = record
+    monkeypatch.setenv("SRE_AUTO_DIAGNOSE", "true")
+    alert = {
+        "status": "firing",
+        "labels": {
+            "alertname": "HighErrorRate",
+            "service": "payment-service",
+            "namespace": "sre-demo",
+        },
+        "annotations": {},
+        "startsAt": "2026-09-17T10:00:00Z",
+        "endsAt": "0001-01-01T00:00:00Z",
+        "fingerprint": "trigger-webhook",
+    }
+
+    def deliver(item: dict[str, Any]) -> list[str]:
+        body = {"receiver": "control-plane", "status": item["status"], "alerts": [item]}
+        response = client.post("/api/v1/webhooks/alertmanager", json=body)
+        assert response.status_code == 200
+        return list(response.json()["incident_ids"])
+
+    with TestClient(create_app(factory, diagnosis_service=service)) as client:
+        (incident,) = deliver(alert)
+        deliver(alert)  # Alertmanager repeats a firing notification: nothing changed
+        resolved = {**alert, "status": "resolved", "endsAt": "2026-09-17T10:05:00Z"}
+        deliver(resolved)
+        deliver(resolved)  # and retries the resolution
+    assert runs == [(UUID(incident), "INITIAL"), (UUID(incident), "RESOLVED")]
+    engine.dispose()

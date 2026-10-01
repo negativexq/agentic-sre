@@ -363,3 +363,47 @@ def test_another_fingerprint_is_not_replaced(tmp_path: Path) -> None:
         )
         manager.ingest(normalize_alert(other), now=NOW + timedelta(seconds=70))
         assert _occurrence(session, NOW).status == "FIRING"
+
+
+# ---- diagnosis-trigger-design.md §2: what a delivery changed for its incident ----
+
+
+def test_an_outcome_says_whether_the_delivery_created_or_resolved_an_incident(
+    tmp_path: Path,
+) -> None:
+    engine = _episode_db(tmp_path)
+    with Session(engine) as session:
+        manager = IncidentManager(session)
+        created = manager.ingest_occurrence(normalize_alert(_firing(NOW)), now=NOW)
+        assert created.created and created.resolved == ()
+        again = manager.ingest_occurrence(normalize_alert(_firing(NOW)), now=NOW)  # a duplicate
+        assert not again.created and again.resolved == ()
+        end = NOW + timedelta(seconds=60)
+        resolved = manager.ingest_occurrence(normalize_alert(_resolved(NOW, end)), now=end)
+        assert not resolved.created and resolved.resolved == (created.incident.incident_id,)
+        retried = manager.ingest_occurrence(normalize_alert(_resolved(NOW, end)), now=end)
+        assert retried.resolved == ()  # a retried resolution changes nothing
+
+
+def test_an_incident_resolved_because_its_occurrence_was_replaced_is_reported(
+    tmp_path: Path,
+) -> None:
+    engine = _episode_db(tmp_path)
+    with Session(engine) as session:
+        manager = IncidentManager(session)
+        first = manager.ingest_occurrence(normalize_alert(_firing(NOW)), now=NOW)
+        later = NOW + timedelta(seconds=70)
+        second = manager.ingest_occurrence(normalize_alert(_firing(later)), now=later)
+        assert second.created and second.resolved == (first.incident.incident_id,)
+
+
+def test_an_occurrence_resolving_while_another_of_its_incident_fires_resolves_nothing(
+    tmp_path: Path,
+) -> None:
+    engine = _episode_db(tmp_path)
+    with Session(engine) as session:
+        manager = IncidentManager(session, quiet=QUIET)
+        manager.ingest(normalize_alert(_firing(NOW)), now=NOW)
+        later = NOW + timedelta(seconds=70)
+        continued = manager.ingest_occurrence(normalize_alert(_firing(later)), now=later)
+        assert continued.refired and not continued.created and continued.resolved == ()

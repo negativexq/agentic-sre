@@ -246,6 +246,9 @@ def create_app(
     def rediagnose_refired(incident_ids: list[UUID]) -> None:
         diagnose_in_background(incident_ids, "ALERT_REFIRED")
 
+    def diagnose_resolved(incident_ids: list[UUID]) -> None:
+        diagnose_in_background(incident_ids, "RESOLVED")
+
     alert_consumer = (
         AlertStreamConsumer(
             stream_client,
@@ -253,6 +256,7 @@ def create_app(
             config=AlertCoverageConfig.from_environment(),
             on_incidents=diagnose_in_background if auto_diagnose else None,
             on_refired=rediagnose_refired if auto_diagnose else None,
+            on_resolved=diagnose_resolved if auto_diagnose else None,
             quiet=alert_quiet,
         )
         if stream_client is not None
@@ -697,9 +701,16 @@ def create_app(
         ]
         incidents = [outcome.incident for outcome in outcomes]
         if auto_diagnose:
-            refired = {o.incident.incident_id for o in outcomes if o.refired}
-            for incident_id in dict.fromkeys(item.incident_id for item in incidents):
-                trigger = "ALERT_REFIRED" if incident_id in refired else "INITIAL"
+            # only a change of an incident starts a diagnosis (diagnosis-trigger-design.md §2)
+            triggers: dict[tuple[UUID, str], None] = {}
+            for outcome in outcomes:
+                if outcome.refired:
+                    triggers[(outcome.incident.incident_id, "ALERT_REFIRED")] = None
+                elif outcome.created:
+                    triggers[(outcome.incident.incident_id, "INITIAL")] = None
+                for resolved in outcome.resolved:
+                    triggers[(resolved, "RESOLVED")] = None
+            for incident_id, trigger in triggers:
                 background.add_task(diagnoser.run, incident_id, trigger)
         return {
             "accepted": len(incidents),

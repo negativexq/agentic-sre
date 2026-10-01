@@ -4,7 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -76,6 +76,9 @@ def _severity(alert: Alert) -> IncidentSeverity:
 class IngestOutcome:
     incident: Incident
     refired: bool = False  # the occurrence continued an existing episode (``ALERT_REFIRED``)
+    created: bool = False  # the delivery created ``incident`` (diagnosis-trigger-design.md §2)
+    # incidents this delivery moved to RESOLVED, including one whose occurrence it replaced (§9)
+    resolved: tuple[UUID, ...] = ()
 
 
 def _utc(value: datetime) -> datetime:
@@ -105,14 +108,14 @@ class IncidentManager:
         if self._quiet > timedelta(0) and alert.status is AlertStatus.FIRING:
             continued = self._continue_episode(alert, now=now)
             if continued is not None:
-                self._end_replaced(alert, now=now)
-                return IngestOutcome(continued, refired=True)
-        outcome = IngestOutcome(self._ingest(alert, now=now))
+                ended = tuple(self._end_replaced(alert, now=now))
+                return IngestOutcome(continued, refired=True, resolved=ended)
+        incident, created, resolved = self._ingest(alert, now=now)
         if alert.status is AlertStatus.FIRING:
-            self._end_replaced(alert, now=now)
-        return outcome
+            resolved = (*resolved, *self._end_replaced(alert, now=now))
+        return IngestOutcome(incident, created=created, resolved=tuple(dict.fromkeys(resolved)))
 
-    def _end_replaced(self, alert: Alert, *, now: datetime) -> None:
+    def _end_replaced(self, alert: Alert, *, now: datetime) -> list[UUID]:
         """End earlier occurrences of the fingerprint that still fire (episode contract §9).
 
         Alertmanager holds at most one alert per fingerprint, so a firing occurrence with a later start
@@ -126,6 +129,7 @@ class IncidentManager:
                 AlertRow.status == AlertStatus.FIRING.value,
             )
         ).all()
+        resolved: list[UUID] = []
         for row in replaced:
             row.status = AlertStatus.RESOLVED.value
             row.ends_at = alert.starts_at
@@ -139,9 +143,10 @@ class IncidentManager:
                     AlertRow.status == AlertStatus.FIRING.value,
                 )
             )
-            if still_firing is None:
+            if still_firing is None and incident_row.status != IncidentStatus.RESOLVED.value:
                 incident_row.status = IncidentStatus.RESOLVED.value
                 incident_row.updated_at = now
+                resolved.append(incident_row.incident_id)
             IncidentEventRepository(self._session).append(
                 IncidentEvent(
                     incident_id=incident_row.incident_id,
@@ -156,6 +161,7 @@ class IncidentManager:
                     },
                 )
             )
+        return resolved
 
     def _continue_episode(self, alert: Alert, *, now: datetime) -> Incident | None:
         """Attach a new occurrence to its fingerprint's recent episode, keeping the history."""
@@ -230,7 +236,8 @@ class IncidentManager:
         )
         return incident
 
-    def _ingest(self, alert: Alert, *, now: datetime) -> Incident:
+    def _ingest(self, alert: Alert, *, now: datetime) -> tuple[Incident, bool, tuple[UUID, ...]]:
+        """The occurrence's incident, whether this delivery created it, and incidents it resolved."""
         row = self._session.scalar(
             select(AlertRow).where(
                 AlertRow.fingerprint == alert.fingerprint,
@@ -272,7 +279,7 @@ class IncidentManager:
                     )
                 )
                 self._session.commit()
-                return incident
+                return incident, True, ()
             except IntegrityError:
                 self._session.rollback()
                 row = self._session.scalar(
@@ -290,12 +297,12 @@ class IncidentManager:
         if row.status == alert.status.value and alert.status is AlertStatus.RESOLVED:
             # Alertmanager retries a resolved delivery; no new timeline event
             # or state mutation is needed for an already terminal occurrence.
-            return existing_incident
+            return existing_incident, False, ()
         # A late/retried firing for an already resolved occurrence is still
         # the same historical occurrence. Never reopen it and never create a
         # second incident with the same uniqueness key.
         if alert.status is AlertStatus.FIRING and row.status != AlertStatus.FIRING:
-            return existing_incident
+            return existing_incident, False, ()
         unchanged = (
             row.status == alert.status.value
             and row.ends_at == alert.ends_at
@@ -303,11 +310,12 @@ class IncidentManager:
             and row.annotations == alert.annotations
         )
         if unchanged and alert.status is AlertStatus.FIRING:
-            return existing_incident
+            return existing_incident, False, ()
         row.ends_at = alert.ends_at
         row.status = alert.status.value
         row.labels = alert.labels
         row.annotations = alert.annotations
+        resolved: tuple[UUID, ...] = ()
         if alert.status is AlertStatus.RESOLVED:
             incident_row = self._session.get(IncidentRow, existing_incident.incident_id)
             if incident_row is None:
@@ -319,9 +327,11 @@ class IncidentManager:
                     AlertRow.status == AlertStatus.FIRING.value,
                 )
             )
-            if still_firing is None:  # an episode resolves when none of its occurrences fires
+            # an episode resolves when none of its occurrences fires
+            if still_firing is None and incident_row.status != IncidentStatus.RESOLVED.value:
                 incident_row.status = IncidentStatus.RESOLVED.value
                 incident_row.updated_at = now
+                resolved = (existing_incident.incident_id,)
         event_type = (
             IncidentEventType.ALERT_RESOLVED
             if alert.status is AlertStatus.RESOLVED
@@ -335,4 +345,4 @@ class IncidentManager:
             payload={"fingerprint": alert.fingerprint, "status": alert.status.value},
         )
         IncidentEventRepository(self._session).append(event)
-        return existing_incident
+        return existing_incident, False, resolved

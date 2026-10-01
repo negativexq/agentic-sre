@@ -279,6 +279,54 @@ def test_the_incident_of_an_occurrence_replaced_between_polls_does_not_stay_open
     assert statuses == ["OPEN", "RESOLVED"]  # the earlier occurrence's incident is closed
 
 
+def test_only_a_change_of_an_incident_starts_a_diagnosis_and_a_replay_starts_none() -> None:
+    connector, client, _, alerts, clock = make()
+    factory = session_factory()
+    created: list[list[Any]] = []
+    resolved: list[list[Any]] = []
+    consumer = AlertStreamConsumer(
+        client, factory, on_incidents=created.append, on_resolved=resolved.append
+    )
+    alerts.alerts = [firing("HighLatency", "f1")]
+    connector.poll_alerts_once()
+    consumer.step()
+    (incident,) = created[0]
+    clock.advance(60)
+    connector.poll_alerts_once()  # the same occurrence, still firing: nothing new on the stream
+    consumer.step()
+    replay = AlertStreamConsumer(  # a restarted control plane reads the buffer again
+        client, factory, on_incidents=created.append, on_resolved=resolved.append
+    )
+    replay.step()
+    assert created == [[incident]] and resolved == []
+    alerts.alerts = []
+    clock.advance(60)
+    connector.poll_alerts_once()
+    consumer.step()
+    assert resolved == [[incident]] and created == [[incident]]
+
+
+def test_a_replaced_occurrence_reports_its_incident_resolved_and_the_new_one_created() -> None:
+    from datetime import timedelta
+
+    connector, client, _, alerts, clock = make()
+    factory = session_factory()
+    created: list[list[Any]] = []
+    resolved: list[list[Any]] = []
+    consumer = AlertStreamConsumer(
+        client, factory, on_incidents=created.append, on_resolved=resolved.append
+    )
+    alerts.alerts = [firing("KafkaConsumerLag", "f1")]
+    connector.poll_alerts_once()
+    consumer.step()
+    clock.advance(60)
+    alerts.alerts = [firing("KafkaConsumerLag", "f1", starts=T0 + timedelta(seconds=40))]
+    connector.poll_alerts_once()
+    consumer.step()
+    first, second = created[0][0], created[1][0]
+    assert first != second and resolved == [[first]]
+
+
 def test_a_webhook_received_locally_reaches_the_same_stream() -> None:
     connector, client, _, _, _ = make()
     delivery = {

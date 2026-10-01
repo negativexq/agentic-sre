@@ -1,7 +1,8 @@
 # When an alert delivery starts a diagnosis
 
-Status: **PROPOSED** (2026-10-02). Owner decision requested; it settles the open question on the `INITIAL`
-trigger (roadmap F-list, "revision burst").
+Status: **APPROVED** by the owner (2026-10-02, both decisions of §5) and **implemented**: ingestion reports
+`created` and `resolved` per delivery, both intake paths diagnose only on a change, trigger `RESOLVED` (migration
+`0030`). It settles the open question on the `INITIAL` trigger ("revision burst").
 
 ## 1. Problem (measured)
 

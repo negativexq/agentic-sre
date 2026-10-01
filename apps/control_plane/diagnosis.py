@@ -98,7 +98,9 @@ logger = logging.getLogger(__name__)
 
 _TERMINAL_STATUSES = frozenset({"RESOLVED", "CLOSED", "FAILED"})
 # LEGACY marks rows stored before revisions; a run never produces it.
-_REVISION_TRIGGERS = frozenset({"INITIAL", "MANUAL", "EVIDENCE_DEADLINE", "ALERT_REFIRED"})
+_REVISION_TRIGGERS = frozenset(
+    {"INITIAL", "MANUAL", "EVIDENCE_DEADLINE", "ALERT_REFIRED", "RESOLVED"}
+)
 
 
 def engine_version() -> str:

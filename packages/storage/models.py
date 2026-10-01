@@ -214,6 +214,24 @@ class ChangeStreamGapRow(Base):
     at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
 
 
+class StreamFollowRow(Base):
+    """One control-plane process following one Connector run's change stream (late-evidence §4.2).
+
+    ``followed_since`` is the Connector time from which the stream has been read without a break; a
+    process that provably resumes where an earlier one stopped (same epoch, first sequence number read
+    at most one past the earlier one's last) keeps the earlier instant.
+    """
+
+    __tablename__ = "stream_follow_segments"
+    __table_args__ = (Index("ix_stream_follow_epoch", "epoch", "last_seq"),)
+
+    segment_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    epoch: Mapped[str] = mapped_column(String(128), nullable=False)
+    first_seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    last_seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    followed_since: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
 class ObjectVersionRow(Base):
     """One observed version of a Kubernetes object: a content change or a lifecycle event.
 

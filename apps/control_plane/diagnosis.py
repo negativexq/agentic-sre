@@ -24,6 +24,7 @@ from packages.connector.client import (
     ConnectorClient,
     ConnectorError,
     StreamedClusterReader,
+    StreamPosition,
     cluster_reader,
     in_process_transport,
 )
@@ -87,6 +88,7 @@ from packages.storage.repositories import (
     LifecycleRecord,
     LifecycleRepository,
     SnapshotCycleRepository,
+    StreamFollowRepository,
 )
 from packages.storage.retention import RetentionPolicy, apply_retention, policy_from_environment
 from packages.storage.tape import load_tape_digest
@@ -360,6 +362,9 @@ class DiagnosisService:
     # lock (e.g. a Postgres advisory lock) instead, or a single writer process.
     _snapshot_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     _last_snapshot_result: SnapshotResult | None = field(default=None, init=False, repr=False)
+    # this process's stream-follow segment: (segment id, epoch, followed since) (late-evidence §4.2)
+    _follow_segment: tuple[int, str, datetime] | None = field(default=None, init=False, repr=False)
+    _stream_health_logged: float = field(default_factory=time.monotonic, init=False, repr=False)
     # A STATUS_SNAPSHOT with unchanged content is written at most this often.
     status_snapshot_interval: timedelta = timedelta(seconds=30)
     # How a polling gap breaks alert-channel coverage (frozen into each run boundary).
@@ -397,6 +402,9 @@ class DiagnosisService:
             self._last_snapshot_result = result
             return result
         journal_namespaces = tuple(dict.fromkeys((*self.namespaces, *self.evidence_namespaces)))
+        # read before this step drains the stream: everything up to it is journaled below
+        position_of = getattr(self.reader, "stream_position", None)
+        position: StreamPosition | None = position_of() if callable(position_of) else None
         lock_requested = time.monotonic()
         with self._snapshot_lock, self.session_factory() as session:
             _wait_measure.lock_wait = time.monotonic() - lock_requested
@@ -515,6 +523,8 @@ class DiagnosisService:
             )
             self._last_snapshot_result = result
             self._record_stream_gaps(session)
+            self._record_stream_follow(session, position)
+            self._log_stream_health()
             if result.failed_scopes:
                 logger.warning(
                     "cluster snapshot incomplete for scopes: %s",
@@ -599,8 +609,7 @@ class DiagnosisService:
             scope = ListingScope.from_key(entry.object_key)
             if scope is not None:
                 scopes.add((scope.namespace, scope.kind))
-        followed_since = getattr(self.reader, "followed_since", None)
-        streamed = callable(followed_since)
+        streamed = callable(getattr(self.reader, "stream_position", None))
         gaps: list[StreamGap] = []
         if streamed:
             with self.session_factory() as session:
@@ -622,8 +631,58 @@ class DiagnosisService:
             starts_at=starts_at,
             window_end=window_end,
             streamed=streamed,
-            stream_followed_since=followed_since() if callable(followed_since) else None,
+            stream_followed_since=self._followed_since(),
             transport_proven_at=transport_proven_at,
+        )
+
+    def _record_stream_follow(self, session: Session, position: StreamPosition | None) -> None:
+        """Persist how far this process has followed the stream (late-evidence-design.md §4.2)."""
+        if position is None:
+            return
+        current = self._follow_segment
+        try:
+            segment_id, since = StreamFollowRepository(session).follow(
+                current[0] if current is not None and current[1] == position.epoch else None,
+                epoch=position.epoch,
+                first_seq=position.first_seq,
+                last_seq=position.last_seq,
+                since=position.followed_since,
+            )
+        except Exception:
+            session.rollback()
+            logger.warning("recording the stream follow failed; retried next cycle", exc_info=True)
+            return
+        self._follow_segment = (segment_id, position.epoch, since)
+
+    def _followed_since(self) -> datetime | None:
+        """Since when the current Connector run's stream has been followed without a break."""
+        position_of = getattr(self.reader, "stream_position", None)
+        position: StreamPosition | None = position_of() if callable(position_of) else None
+        if position is None:
+            return None
+        segment = self._follow_segment
+        if segment is not None and segment[1] == position.epoch:
+            return min(segment[2], position.followed_since)
+        return position.followed_since  # not recorded yet: only what this process read itself
+
+    def _log_stream_health(self) -> None:
+        """About once a minute: versions superseded before journaling, and the heartbeat clock lag."""
+        elapsed = time.monotonic() - self._stream_health_logged
+        superseded = getattr(self.reader, "take_superseded", None)
+        clock_sample = getattr(self.reader, "take_clock_sample", None)
+        if elapsed < 60 or not callable(superseded) or not callable(clock_sample):
+            return
+        self._stream_health_logged = time.monotonic()
+        objects, events = superseded()
+        lag, heartbeats = clock_sample()
+        logger.info(
+            "stream health over %.0f s: superseded before journaling objects=%d events=%d; "
+            "heartbeats=%d min(control plane - connector clock)=%s s",
+            elapsed,
+            objects,
+            events,
+            heartbeats,
+            f"{lag:+.3f}" if lag is not None else "n/a",
         )
 
     def _record_stream_gaps(self, session: Session) -> None:

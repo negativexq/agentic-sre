@@ -72,6 +72,7 @@ from packages.storage.models import (
     ReportRow,
     SnapshotCycleObjectRow,
     SnapshotCycleRow,
+    StreamFollowRow,
     UTCDateTime,
 )
 
@@ -946,6 +947,20 @@ class ChangeStreamGapRepository:
         scope: tuple[str, str] | None,
     ) -> None:
         namespace, kind = scope if scope is not None else (None, None)
+        known = self._session.scalar(
+            select(ChangeStreamGapRow.gap_id).where(
+                ChangeStreamGapRow.reason == reason,
+                ChangeStreamGapRow.at == at,
+                ChangeStreamGapRow.namespace.is_(None)
+                if namespace is None
+                else ChangeStreamGapRow.namespace == namespace,
+                ChangeStreamGapRow.kind.is_(None)
+                if kind is None
+                else ChangeStreamGapRow.kind == kind,
+            )
+        )
+        if known is not None:
+            return  # read again by a restarted control plane from the Connector's buffer
         self._session.add(
             ChangeStreamGapRow(reason=reason, namespace=namespace, kind=kind, since=since, at=at)
         )
@@ -972,6 +987,42 @@ class ChangeStreamGapRepository:
                 .order_by(ChangeStreamGapRow.at, ChangeStreamGapRow.gap_id)
             )
         )
+
+
+class StreamFollowRepository:
+    """How far each control-plane process followed each Connector run's change stream."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def follow(
+        self, segment_id: int | None, *, epoch: str, first_seq: int, last_seq: int, since: datetime
+    ) -> tuple[int, datetime]:
+        """Advance this process's segment, or start one; its id and the instant it is followed since.
+
+        A new segment keeps the ``followed_since`` of the latest earlier segment of the same epoch when
+        it starts at most one item past where that one stopped: nothing between them went unread.
+        """
+        if segment_id is not None:
+            row = self._session.get(StreamFollowRow, segment_id)
+            if row is not None and row.epoch == epoch:
+                row.last_seq = max(row.last_seq, last_seq)
+                self._session.commit()
+                return row.segment_id, row.followed_since
+        earlier = self._session.scalar(
+            select(StreamFollowRow)
+            .where(StreamFollowRow.epoch == epoch)
+            .order_by(desc(StreamFollowRow.last_seq), desc(StreamFollowRow.segment_id))
+            .limit(1)
+        )
+        if earlier is not None and first_seq <= earlier.last_seq + 1:
+            since = min(since, earlier.followed_since)
+        row = StreamFollowRow(
+            epoch=epoch, first_seq=first_seq, last_seq=last_seq, followed_since=since
+        )
+        self._session.add(row)
+        self._session.commit()
+        return row.segment_id, row.followed_since
 
 
 class EventRepository:

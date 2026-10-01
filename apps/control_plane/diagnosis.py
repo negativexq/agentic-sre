@@ -29,6 +29,7 @@ from packages.connector.client import (
 from packages.connector.client import provider_readers as connector_provider_readers
 from packages.connector.service import Connector, connector_from_environment
 from packages.connector.transport import ConnectorGateway, gateway_from_environment
+from packages.connector.wire import GapItem
 from packages.contracts import Alert as ContractAlert
 from packages.contracts import Incident, IncidentEvent, IncidentEventType
 from packages.rca.alert_coverage import AlertCoverageConfig
@@ -78,6 +79,7 @@ from packages.storage.manifest import (
     load_run_boundary,
 )
 from packages.storage.repositories import (
+    ChangeStreamGapRepository,
     EntityInstanceRepository,
     LifecycleRecord,
     LifecycleRepository,
@@ -504,6 +506,7 @@ class DiagnosisService:
                 cycle_id=cycle_id,
             )
             self._last_snapshot_result = result
+            self._record_stream_gaps(session)
             if result.failed_scopes:
                 logger.warning(
                     "cluster snapshot incomplete for scopes: %s",
@@ -513,6 +516,29 @@ class DiagnosisService:
                     ),
                 )
             return result
+
+    def _record_stream_gaps(self, session: Session) -> None:
+        """Persist the change-stream gaps the reader has read (late-evidence-design.md §4.2).
+
+        A failed write keeps them with the reader for the next cycle.
+        """
+        gaps = getattr(self.reader, "gaps", None)
+        forget = getattr(self.reader, "forget_gaps", None)
+        if not callable(gaps) or not callable(forget):
+            return
+        pending: tuple[GapItem, ...] = gaps()
+        if not pending:
+            return
+        repository = ChangeStreamGapRepository(session)
+        try:
+            for gap in pending:
+                scope = (gap.scope.namespace, gap.scope.kind) if gap.scope is not None else None
+                repository.record(gap.reason, gap.at, since=gap.since, scope=scope)
+        except Exception:
+            session.rollback()
+            logger.warning("recording change-stream gaps failed; retried next cycle", exc_info=True)
+            return
+        forget(len(pending))
 
     def apply_retention(self) -> None:
         """One retention pass when a policy is configured; failures are logged."""

@@ -233,6 +233,7 @@ class StreamedClusterReader:
         self._reported = 0  # ... as of the last ``pending`` call
         # the latest Connector time read from the change stream (late-evidence-design.md §4.1)
         self._connector_time: datetime | None = None
+        self._stream_gaps: list[wire.GapItem] = []  # read, not yet recorded by the control plane
 
     def pending(self) -> bool:
         """Drain the stream; whether anything arrived since the previous call (contract §15).
@@ -260,6 +261,16 @@ class StreamedClusterReader:
         with self._lock:
             return self._connector_time
 
+    def gaps(self) -> tuple[wire.GapItem, ...]:
+        """The change-stream gaps read and not yet recorded (late-evidence-design.md §4.2)."""
+        with self._lock:
+            return tuple(self._stream_gaps)
+
+    def forget_gaps(self, count: int) -> None:
+        """Drop the first ``count`` gaps once the control plane has recorded them."""
+        with self._lock:
+            del self._stream_gaps[:count]
+
     def _apply(self, item: wire.StreamItem) -> None:
         stamp = getattr(item, "observed_at", None) or getattr(item, "at", None)
         if isinstance(stamp, datetime) and (
@@ -269,6 +280,8 @@ class StreamedClusterReader:
         if isinstance(item, wire.ChangeHeartbeatItem):
             return  # carries only the Connector's time: not a change
         self._applied += 1
+        if isinstance(item, wire.GapItem):
+            self._stream_gaps.append(item)
         if isinstance(item, wire.ObjectItem):
             key = _key(item.body)
             if key is not None:

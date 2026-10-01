@@ -181,6 +181,7 @@ def test_alembic_migration_up_and_down(tmp_path: Path) -> None:
         "alert_coverage_segments",
         "alerts",
         "change_records",
+        "change_stream_gaps",
         "diagnoses",
         "email_deliveries",
         "entity_instances",

@@ -397,3 +397,95 @@ def test_a_change_heartbeat_carries_the_connectors_time_on_a_quiet_stream() -> N
     assert isinstance(beat, wire.ChangeHeartbeatItem) and beat.observed_at == T0 + timedelta(
         seconds=5
     )
+
+
+def test_the_mirror_keeps_each_gap_until_it_is_recorded_and_a_heartbeat_is_no_change() -> None:
+    from packages.connector.client import StreamedClusterReader
+    from packages.connector.watch import ResourceVersionExpired
+
+    connector, client, cluster, clock = make()
+    mirror = StreamedClusterReader(client)
+    mirror.pending()  # drain the initial snapshot
+    clock.advance(5)
+    connector.change_heartbeat()
+    assert mirror.pending() is False  # a heartbeat carries only the Connector's time
+    assert mirror.connector_time() == T0 + timedelta(seconds=5)
+    cluster.batches[EVENTS] = [ResourceVersionExpired("410 Gone")]
+    connector.watch_changes_once()
+    assert mirror.pending() is True
+    (gap,) = mirror.gaps()
+    assert gap.scope is not None and gap.scope.kind == "Event" and gap.since == T0
+    mirror.forget_gaps(1)
+    assert mirror.gaps() == ()
+
+
+def test_the_gaps_a_window_overlaps_are_its_scopes_gaps_and_every_global_one() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from packages.storage.models import Base
+    from packages.storage.repositories import ChangeStreamGapRepository
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+
+    def at(minutes: float) -> datetime:
+        return T0 + timedelta(minutes=minutes)
+
+    with Session(engine) as session:
+        gaps = ChangeStreamGapRepository(session)
+        gaps.record("RESOURCE_VERSION_EXPIRED", at(2), since=at(1), scope=("shop", "Event"))
+        gaps.record("RESOURCE_VERSION_EXPIRED", at(20), since=at(15), scope=("shop", "Event"))
+        gaps.record("RESOURCE_VERSION_EXPIRED", at(3), since=at(1), scope=("other", "Event"))
+        gaps.record("BACKEND_UNREACHABLE", at(4), since=None, scope=None)  # start unknown
+        found = gaps.overlapping(namespaces={"shop"}, starts_at=at(0), ends_at=at(10))
+    assert [(g.namespace, g.kind, g.reason) for g in found] == [
+        ("shop", "Event", "RESOURCE_VERSION_EXPIRED"),
+        (None, None, "BACKEND_UNREACHABLE"),
+    ]
+
+
+def test_the_control_plane_records_the_gaps_it_read_and_keeps_them_when_the_write_fails() -> None:
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import Session
+
+    from apps.control_plane.diagnosis import DiagnosisService
+    from packages.storage.models import Base, ChangeStreamGapRow
+
+    class Reader:
+        def __init__(self) -> None:
+            self.queue = [
+                wire.GapItem(
+                    seq=1,
+                    at=T0,
+                    reason="RESOURCE_VERSION_EXPIRED",
+                    scope=wire.ScopeWire(namespace="shop", kind="Event"),
+                    since=T0 - timedelta(minutes=10),
+                )
+            ]
+
+        def gaps(self) -> tuple[wire.GapItem, ...]:
+            return tuple(self.queue)
+
+        def forget_gaps(self, count: int) -> None:
+            del self.queue[:count]
+
+    service = DiagnosisService.__new__(DiagnosisService)
+    reader = Reader()
+    service.reader = reader  # type: ignore[assignment]
+    broken = create_engine("sqlite://")  # no tables: the write fails
+    with Session(broken) as session:
+        service._record_stream_gaps(session)
+    assert len(reader.queue) == 1
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        service._record_stream_gaps(session)
+        (row,) = session.scalars(select(ChangeStreamGapRow))
+        assert (row.namespace, row.kind, row.reason) == (
+            "shop",
+            "Event",
+            "RESOURCE_VERSION_EXPIRED",
+        )
+        assert row.since == T0 - timedelta(minutes=10) and row.at == T0
+    assert reader.queue == []

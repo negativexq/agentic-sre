@@ -54,6 +54,7 @@ from packages.storage.models import (
     AlertCoverageSegmentRow,
     AlertRow,
     ChangeRecordRow,
+    ChangeStreamGapRow,
     DiagnosisRow,
     EmailDeliveryRow,
     EntityInstanceRow,
@@ -928,6 +929,49 @@ def _record_arrival(
     session.add(
         JournalArrivalRow(journal=journal, version_id=row.version_id, connector_observed_at=at)
     )
+
+
+class ChangeStreamGapRepository:
+    """Persisted losses of change-stream continuity (late-evidence-design.md §4.2); append-only."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def record(
+        self,
+        reason: str,
+        at: datetime,
+        *,
+        since: datetime | None,
+        scope: tuple[str, str] | None,
+    ) -> None:
+        namespace, kind = scope if scope is not None else (None, None)
+        self._session.add(
+            ChangeStreamGapRow(reason=reason, namespace=namespace, kind=kind, since=since, at=at)
+        )
+        self._session.commit()
+
+    def overlapping(
+        self, *, namespaces: set[str], starts_at: datetime, ends_at: datetime
+    ) -> list[ChangeStreamGapRow]:
+        """The gaps of these namespaces' scopes, and every global gap, that overlap the window.
+
+        A gap with no known start overlaps every window that does not end before the gap does.
+        """
+        return list(
+            self._session.scalars(
+                select(ChangeStreamGapRow)
+                .where(
+                    ChangeStreamGapRow.at >= starts_at,
+                    or_(ChangeStreamGapRow.since.is_(None), ChangeStreamGapRow.since <= ends_at),
+                    or_(
+                        ChangeStreamGapRow.namespace.is_(None),
+                        ChangeStreamGapRow.namespace.in_(sorted(namespaces)),
+                    ),
+                )
+                .order_by(ChangeStreamGapRow.at, ChangeStreamGapRow.gap_id)
+            )
+        )
 
 
 class EventRepository:

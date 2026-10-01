@@ -458,8 +458,7 @@ declared symptom to be covered, which is why it stays rare on purpose. Details:
 Ranking always produces a first candidate; that does not make it a cause. The engine first chooses the leader
 by the **tier of its claim** (an observed mechanism over a plausible one over an unestablished one), and the
 console then shows one of three things: a **single** actor, **competing** actors when the evidence ties them,
-or **not established** when no candidate has evidence inside the incident window. Measured on the testbed and
-Before the change, 23 of 122 testbed incidents (19%) led with an actor whose every finding was more than an hour
+or **not established** when no candidate has evidence inside the incident window. Before the change, 23 of 122 testbed incidents (19%) led with an actor whose every finding was more than an hour
 old, and a tied top score was broken by name order (the reported cause was decided that way in 14 ITBench
 scenarios and 20 testbed incidents); both are now shown for what they are. The projection is presentation only: it
 does not change the stored diagnosis or its epistemic digest.
@@ -619,17 +618,22 @@ The benchmark uses the pinned ITBench-Lite revision
 `08a5e56dbfa604c59eed8282683d7b3ec224cd7db9303f90618dafd436423eac`.
 
 DEV10 is the development split used while building the frozen architecture.
-TEST25 was held out until that architecture was frozen. For TEST25, all 25
-bounded predictions were persisted and hashed before any FULL_SOURCE diagnosis
-was opened. Grading then compared exact canonical entities by scenario ID.
-The run used the deterministic policy and zero model calls.
+TEST25 was held out until that architecture was frozen, and no production code
+was changed after its results were visible. Two different measurements were
+made, by different runs, and they answer different questions:
 
-**Exact root-cause accuracy** means that the predicted canonical root entity
-matches the scenario's published ITBench-Lite ground-truth entity. A
-same-workload or nearby entity does not count as a match. Separately, the
-bounded prediction agreed with the FULL_SOURCE deterministic diagnosis on
-21/25 TEST25 scenarios; that agreement measures information loss under a
-bounded read budget, not correctness.
+- **Exact root-cause accuracy** (17/22 on TEST25) compares the deterministic
+  **full-source** diagnosis with the scenario's published ITBench-Lite
+  ground-truth entity, using the repository's alias-aware grader. Only an exact
+  canonical match counts; a same-workload or nearby entity does not.
+- **FULL_SOURCE agreement** (21/25 on TEST25) compares the **bounded**
+  prediction with the same engine's own full-source diagnosis. Its blindness
+  procedure: all 25 bounded predictions were persisted and SHA256-hashed before
+  any full-source diagnosis was evaluated. Agreement measures information loss
+  under a bounded read budget, not correctness; the bounded path's own
+  ground-truth accuracy has not been established.
+
+Both runs used the deterministic policy and zero model calls.
 
 The [benchmark report](evals/results/v1.1.2/README.md) records the commit,
 dataset identity, prediction artifact hash, frozen configuration, denominator,
@@ -700,7 +704,8 @@ an unverified diagnosis.
 ### Is Agentic SRE production-ready?
 
 It is suitable for controlled evaluation and read-only incident-assistance
-workflows, with a real Kind lifecycle gate and a frozen blind benchmark. It is
+workflows, with a real Kind lifecycle gate and a frozen benchmark that was blind
+when it was frozen (and is development data now). It is
 not a universal replacement for an experienced SRE: query coverage,
 authentication, deployment high availability, bounded budgets, and captured
 telemetry impose real limits.

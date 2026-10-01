@@ -497,3 +497,41 @@ was open and continuous until the server closed it; the relist follows the faile
 the interval without observation is the time between the closing of the last continuous watch and the end of the
 relist, about a second; that is inferred, not measured, and the gap does not yet record its start. Busy namespaces
 did not expire. Every other kind receives bookmarks and never expired.
+
+### 15.6 Synthetic bookmarks for Event scopes (amendment, PROPOSED 2026-10-02)
+
+**Measured.** §15.3 called a quiet Event scope's expiry "a true loss of continuity". The ten-hour product-mode run
+(`testbed_longrun_run1`) shows it is avoidable. The Connector's reconciliation LIST (every 600 s) also refreshes each
+scope's resume version. Until 16:13 it ran just after the expiries, too late, and the quiet Event scopes expired
+about every ten minutes. Its period then drifted (the run loop counts its own sleeps, not wall time), the
+reconciliation came just before the compaction reached the version, and **no Event scope expired for 85 minutes**
+(17:03 to 18:28) until the phase moved back. A read-only check on the same namespace confirmed that the source had
+not changed: a watch resumed from one listed version, as the Connector does, still expired within ten minutes. The
+expiries are therefore a matter of how old the resume version is, not of the scope.
+
+**Rule.**
+
+1. While a scope's watch is open, the Connector may learn a newer resume version from a consistent LIST of that
+   scope with `limit=1` (no items are used): a **synthetic bookmark**. It does so for every scope that receives no
+   real bookmarks (today: Event), every `B` seconds, proposed **120 s** (well inside the 300 s compaction interval).
+2. The version is adopted only by **the same watch** that was open when the LIST ran, when that watch ends normally
+   (the server closed it). The next watch resumes from it. A synthetic bookmark taken while no watch was open, or
+   held by a watch that ended in an error or a gap, is discarded.
+3. Nothing else changes: an expiry is still a scope `Gap` and a scope relist (§15.4); real bookmarks still apply.
+
+**Why continuity holds.** Let a watch open at `S` from version `v`, the LIST run at `L` with `S < L` and return
+`r_L`, and the watch end normally at `E > L`. The watch delivered every change in `(v, E]`. Resuming from `r_L`
+delivers every change after `L` again, so changes in `(L, E]` arrive twice (the Connector drops them by digest, as it
+does for every relist) and nothing after `v` is skipped. Taken between two watches, `(E, L]` would be skipped, which
+is why rule 2 discards it.
+
+**Also.** The run loop schedules reconciliation, the paced retry and the heartbeat by wall time instead of
+summed sleeps, so their period no longer drifts.
+
+**Cost.** One `limit=1` LIST per Event scope every 120 s: in the lab 3 scopes, 1.5 requests a minute against about 10
+a minute today (§15.5).
+
+**Verification.** Unit tests: a synthetic bookmark adopted at a normal end; one taken between two watches discarded;
+one held by a watch that expired or failed discarded. Live: a soak of at least three hours on the lab, counting
+`RESOURCE_VERSION_EXPIRED` gaps of Event scopes (expected: near zero instead of about six an hour) and the extra
+requests.

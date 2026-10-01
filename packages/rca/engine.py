@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Protocol
@@ -34,7 +34,9 @@ from packages.rca.mechanism_bridge import (
     derive_runtime_mechanism_bridges,
 )
 from packages.rca.model import (
+    Alert,
     Candidate,
+    ClusterEvent,
     Confidence,
     Diagnosis,
     EntityRef,
@@ -48,13 +50,18 @@ from packages.rca.model import (
     ProviderReadFailure,
     RequirementEvaluation,
     Resolution,
+    ResolutionTrace,
     StructuralAlternative,
     Symptoms,
+    TimingAssessment,
+    TimingStability,
 )
+from packages.rca.presentation import leader_by_tier, project_leading_actor
 from packages.rca.ranking import (
     Context,
     RankingConfig,
     annotate_temporal_roles,
+    finding_in_window,
     score_findings,
     symptom_tokens,
     verification_trace,
@@ -71,6 +78,7 @@ from packages.rca.root_cause_eligibility import (
 )
 from packages.rca.runtime_evidence import RuntimeEvidence, derive_runtime_evidence
 from packages.rca.runtime_graph import (
+    CanonicalTraceIndex,
     RuntimeGraph,
     canonicalize_trace_spans,
     derive_runtime_graph_from_index,
@@ -90,6 +98,15 @@ from packages.rca.signals import (
     traffic_findings,
 )
 from packages.rca.source import ObservationSource
+from packages.rca.timing_stability import (
+    OnsetView,
+    applied_timing_masks,
+    claim_views,
+    compute_timing_assessment,
+    derive_onset_uncertainty,
+    derive_timing_masks,
+    source_alert_episodes,
+)
 from packages.rca.topology import Topology, derive_edges, with_runtime_propagation
 
 
@@ -128,6 +145,11 @@ class Case:
         default_factory=dict
     )
     requirement_evaluations: tuple[RequirementEvaluation, ...] = ()
+    # What re-assessing this case against another onset needs (never part of a decision).
+    extra_findings: tuple[Finding, ...] = ()
+    inputs: CaseInputs | None = field(default=None, repr=False, compare=False)
+    # Set when this case only re-derives the evidence against another admissible onset.
+    assessed_onset: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -150,7 +172,7 @@ class Investigator(Protocol):
 # The deterministic RCA semantics a run was diagnosed with, persisted on every
 # revision. Bump it with any change that can alter a diagnosis from the same
 # evidence; replay refuses a run recorded under another version (M20.3a).
-RCA_ENGINE_VERSION = "2.0.0"
+RCA_ENGINE_VERSION = "2.1.0"
 
 
 @dataclass(frozen=True)
@@ -162,6 +184,8 @@ class EngineConfig:
     # Explicit infrastructure namespaces that may be queried only by the
     # incident-scoped event discovery capability.
     auxiliary_event_namespaces: tuple[str, ...] = ()
+    # Assess every decision against the evidence-derived onset set (M21 timing contract).
+    timing_stability: bool = True
 
     def __post_init__(self) -> None:
         normalized = tuple(
@@ -183,11 +207,55 @@ def _pods(entities: Iterable[EntityRef], topology: Topology) -> set[EntityRef]:
     return pods
 
 
+@dataclass(frozen=True)
+class CaseInputs:
+    """The onset-independent, source-derived part of a case.
+
+    Everything here depends only on what the source observed, never on the incident onset,
+    so one diagnosis can reuse it to assess the same evidence against several onsets
+    (M21 timing contract). Building it once is the expensive step (trace-derived runtime
+    evidence); the onset-dependent assembly on top of it is comparatively cheap.
+    """
+
+    alerts: tuple[Alert, ...]
+    history: Mapping[EntityRef, Sequence[ObjectVersion]]
+    events: tuple[ClusterEvent, ...]
+    topology: Topology
+    trace_index: CanonicalTraceIndex
+    runtime_graph: RuntimeGraph
+    runtime_evidence: RuntimeEvidence
+
+
+def prepare_case_inputs(source: ObservationSource) -> CaseInputs:
+    """Read the source once and derive every onset-independent structure."""
+    alerts = tuple(source.alerts())
+    history = source.object_history()
+    events = tuple(source.events())
+    latest: dict[EntityRef, ObjectVersion] = {
+        ref: versions[-1] for ref, versions in history.items()
+    }
+    topology = Topology(derive_edges(latest, list(events)), latest)
+    trace_spans = source.trace_observations()
+    trace_index = canonicalize_trace_spans(trace_spans)
+    return CaseInputs(
+        alerts=alerts,
+        history=history,
+        events=events,
+        topology=topology,
+        trace_index=trace_index,
+        runtime_graph=derive_runtime_graph_from_index(trace_index),
+        runtime_evidence=derive_runtime_evidence(trace_index),
+    )
+
+
 def build_case(
     source: ObservationSource,
     config: EngineConfig | None = None,
     extra_findings: Sequence[Finding] = (),
     reference_onset: datetime | None = None,
+    *,
+    assessed_onset: datetime | None = None,
+    inputs: CaseInputs | None = None,
 ) -> Case:
     """Run every deterministic stage and return the ranked case.
 
@@ -195,25 +263,32 @@ def build_case(
     alerts there is no onset, so it stands in for one in the existing
     onset-relative semantics. It is refused when alerts exist, and the probe
     never persists it.
+
+    ``assessed_onset`` re-derives the case as if the incident onset were that value while
+    every observation stays as it was (M21 timing contract). It is an assessment of the same
+    evidence, never a new onset of record: the result is not persisted and not reported.
+    ``inputs`` reuses an earlier :func:`prepare_case_inputs` of the same source.
     """
     config = config or EngineConfig()
-    alerts = list(source.alerts())
+    if inputs is None:
+        inputs = prepare_case_inputs(source)
+    alerts = list(inputs.alerts)
     if reference_onset is not None and alerts:
         raise ValueError("reference_onset is only for an incident-free probe without alerts")
-    history = source.object_history()
-    events = list(source.events())
-    latest: dict[EntityRef, ObjectVersion] = {
-        ref: versions[-1] for ref, versions in history.items()
-    }
-    topology = Topology(derive_edges(latest, events), latest)
-    trace_spans = source.trace_observations()
-    trace_index = canonicalize_trace_spans(trace_spans)
-    runtime_graph = derive_runtime_graph_from_index(trace_index)
-    runtime_evidence = derive_runtime_evidence(trace_index)
+    history = inputs.history
+    events = list(inputs.events)
+    topology = inputs.topology
+    trace_index = inputs.trace_index
+    runtime_graph = inputs.runtime_graph
+    runtime_evidence = inputs.runtime_evidence
     symptoms = extract_symptoms(alerts, alert_observation_start=source.alert_observation_start())
     if reference_onset is not None:
         symptoms = symptoms.model_copy(
             update={"onset": reference_onset, "reference_time": reference_onset}
+        )
+    if assessed_onset is not None:
+        symptoms = symptoms.model_copy(
+            update={"onset": assessed_onset, "reference_time": assessed_onset}
         )
     runtime_propagation = derive_runtime_propagation(
         trace_index,
@@ -345,6 +420,9 @@ def build_case(
         structural_alternatives=structural_alternatives,
         hypothesis_diagnostics=grouping.diagnostics,
         steps=steps,
+        extra_findings=tuple(extra_findings),
+        inputs=inputs,
+        assessed_onset=assessed_onset,
         mechanism_mismatches=dict(resource_evaluations.mismatches),
         requirement_evaluations=build_requirement_evaluations(
             hypotheses,
@@ -443,6 +521,96 @@ def _requirement_provenance(case: Case) -> dict[str, Any]:
     }
 
 
+def _resolution_trace(case: Case, config: EngineConfig) -> ResolutionTrace:
+    """Resolve a non-empty case: attach signatures, verify, then resolve.
+
+    Resolution compares immutable evidence structures. The same signatures are attached to
+    the serialized hypotheses so API consumers can inspect the comparison without
+    reconstructing it from entity names.
+    """
+    case.hypotheses = [
+        hypothesis.model_copy(update={"signature": hypothesis_signature(hypothesis)})
+        for hypothesis in case.hypotheses
+    ]
+    verification_traces = {
+        hypothesis.hypothesis_id: verification_trace(
+            hypothesis_candidate(hypothesis), case.context, config.ranking
+        )
+        for hypothesis in case.hypotheses
+    }
+    return resolve_hypotheses(
+        case.hypotheses,
+        verification_traces=verification_traces,
+        onset_grace=config.ranking.verification_onset_grace,
+        root_cause_eligibilities=case.root_cause_eligibilities,
+        mechanism_mismatches=case.mechanism_mismatches,
+        rule_preconditions=case.rule_preconditions,
+        precondition_reasons=case.precondition_reasons,
+        structural_alternatives=case.structural_alternatives,
+        events=case.source.events(),
+        runtime_propagation=case.runtime_propagation,
+    )
+
+
+def _without_ended_episodes(
+    eligibilities: RootCauseEligibilities, hypothesis_ids: frozenset[str]
+) -> RootCauseEligibilities:
+    """Eligibilities without the ended-episode exclusion of the given claims."""
+    return RootCauseEligibilities(
+        eligibilities.assessments,
+        {k: v for k, v in eligibilities.ended_episodes.items() if k not in hypothesis_ids},
+    )
+
+
+def assess_case_timing(
+    case: Case, config: EngineConfig, trace: ResolutionTrace
+) -> TimingAssessment:
+    """How far this revision's decisions hold over every onset its evidence admits.
+
+    The admissible onsets come only from the alert captures at or before the revision cutoff.
+    Every onset re-derives the same observations (same source, same investigation findings)
+    against that onset; no observation changes. Without capture history, or when the case was
+    not built at the onset of record, nothing is claimed.
+    """
+    source = case.source
+    uncertainty = derive_onset_uncertainty(
+        source_alert_episodes(source),
+        alert_observation_start=source.alert_observation_start(),
+        cutoff=source.observation_cutoff(),
+    )
+    if uncertainty.assessable and uncertainty.h0 != case.symptoms.onset:
+        uncertainty = uncertainty.model_copy(
+            update={"reason": "ONSET_OF_RECORD_MISMATCH", "members": ()}
+        )
+    if not uncertainty.assessable or uncertainty.h0 is None:
+        return TimingAssessment(uncertainty=uncertainty, status=TimingStability.UNASSESSED)
+    views = {
+        uncertainty.h0: OnsetView(
+            diagnosis_status=trace.diagnosis_status,
+            claims=claim_views(case.hypotheses, trace),
+        )
+    }
+    for member in uncertainty.members:
+        if member.onset == uncertainty.h0:
+            continue
+        assessed = build_case(
+            source,
+            config,
+            extra_findings=case.extra_findings,
+            assessed_onset=member.onset,
+            inputs=case.inputs,
+        )
+        if not assessed.candidates:
+            views[member.onset] = OnsetView(diagnosis_status="INSUFFICIENT_EVIDENCE", claims={})
+            continue
+        assessed_trace = _resolution_trace(assessed, config)
+        views[member.onset] = OnsetView(
+            diagnosis_status=assessed_trace.diagnosis_status,
+            claims=claim_views(assessed.hypotheses, assessed_trace),
+        )
+    return compute_timing_assessment(uncertainty, views)
+
+
 def diagnose_case(
     case: Case,
     *,
@@ -478,7 +646,7 @@ def diagnose_case(
             discovery_change_namespaces=incident_namespaces(case),
         )
         return Diagnosis(
-            decision_semantics="m21.v2",
+            decision_semantics="m21.v3",
             incident_id=case.incident_id,
             root_cause=None,
             confidence=Confidence.UNVERIFIED,
@@ -497,29 +665,26 @@ def diagnose_case(
             alternative_hypotheses=tuple(case.hypotheses),
             **_requirement_provenance(case),
         )
-    # Resolution compares immutable evidence structures.  Attach the same
-    # signatures to the serialized hypotheses so API consumers can inspect the
-    # comparison without reconstructing it from entity names.
-    case.hypotheses = [
-        hypothesis.model_copy(update={"signature": hypothesis_signature(hypothesis)})
-        for hypothesis in case.hypotheses
+    resolution_trace = _resolution_trace(case, config)
+    timing: TimingAssessment | None = None
+    if config.timing_stability and case.assessed_onset is None:
+        timing = assess_case_timing(case, config, resolution_trace)
+        masks = derive_timing_masks(case.hypotheses, resolution_trace, timing)
+        if masks.any():
+            # Authority that is not timing-stable is withheld and the case is resolved again
+            # under that withholding. Ended-episode ineligibility is dropped for the same
+            # claims so root selection below sees them as the resolution does (§5).
+            case.root_cause_eligibilities = _without_ended_episodes(
+                case.root_cause_eligibilities, masks.ended
+            )
+            with applied_timing_masks(masks):
+                resolution_trace = _resolution_trace(case, config)
+            timing = timing.model_copy(update={"withheld": masks.withheld})
+    answers = {a.alternative_id: a for a in resolution_trace.frontier_answers}
+    case.structural_alternatives = [
+        a.model_copy(update={"answer": answers.get(a.alternative_id)})
+        for a in case.structural_alternatives
     ]
-    verification_traces = {
-        hypothesis.hypothesis_id: verification_trace(
-            hypothesis_candidate(hypothesis), case.context, config.ranking
-        )
-        for hypothesis in case.hypotheses
-    }
-    resolution_trace = resolve_hypotheses(
-        case.hypotheses,
-        verification_traces=verification_traces,
-        onset_grace=config.ranking.verification_onset_grace,
-        root_cause_eligibilities=case.root_cause_eligibilities,
-        mechanism_mismatches=case.mechanism_mismatches,
-        rule_preconditions=case.rule_preconditions,
-        precondition_reasons=case.precondition_reasons,
-        structural_alternatives=case.structural_alternatives,
-    )
     # M21 F1: influence-channel coverage records, attached after the decision (audit only).
     resolution_trace = attach_channel_assessments(
         resolution_trace,
@@ -536,6 +701,8 @@ def diagnose_case(
             events=case.source.events(),
         ),
     )
+    if timing is not None:
+        resolution_trace = resolution_trace.model_copy(update={"timing": timing})
     information_gaps = derive_information_gaps(
         case.hypotheses,
         resolution_trace,
@@ -566,7 +733,7 @@ def diagnose_case(
             )
         )
         return Diagnosis(
-            decision_semantics="m21.v2",
+            decision_semantics="m21.v3",
             incident_id=case.incident_id,
             root_cause=None,
             confidence=Confidence.UNVERIFIED,
@@ -602,12 +769,11 @@ def diagnose_case(
             if hypothesis.hypothesis_id == leader_ids[0]
         )
     else:
-        supported = [
-            h
-            for h in selectable_hypotheses
-            if h.hypothesis_id in resolution_trace.plausible_hypotheses
-        ]
-        selected = supported[0] if len(supported) == 1 else selectable_hypotheses[0]
+        selected = leader_by_tier(
+            selectable_hypotheses,
+            supported=frozenset(resolution_trace.plausible_hypotheses),
+            strong=frozenset(resolution_trace.mechanism_verified_hypotheses),
+        )
     mode = "deterministic"
     model_calls = 0
     if investigator is not None:
@@ -688,16 +854,33 @@ def diagnose_case(
         if resolution_trace.state is Resolution.AMBIGUOUS
         else ()
     )
+    # Roadmap C10/C12: what the operator is shown, by epistemic tier; root_cause itself is unchanged.
+    projection = project_leading_actor(
+        selectable_hypotheses,
+        supported=frozenset(resolution_trace.plausible_hypotheses),
+        strong=frozenset(resolution_trace.mechanism_verified_hypotheses),
+        in_window=lambda at: finding_in_window(at, case.context, config.ranking),
+    )
+    withheld = projection.reason == "NO_EVIDENCE_IN_INCIDENT_WINDOW"
     return Diagnosis(
-        decision_semantics="m21.v2",
+        decision_semantics="m21.v3",
         incident_id=case.incident_id,
         root_cause=selected.causal_actor,
+        leading_actor_established=projection.display != "NOT_ESTABLISHED",
+        leading_actor_withheld_reason=projection.reason,
+        leading_actor_display=projection.display,
+        leading_actor_tier=projection.tier,
+        leading_actor_candidates=projection.candidates,
         confidence=confidence,
         resolution=resolution_trace.state,
         summary=(
-            f"Supported possible initiating cause: {selected.causal_actor.canonical}. "
+            f"Observed quota admission rejection by {selected.causal_actor.canonical} explains the declared incident scope. Incident recovery is not assessed."
+            if resolution_trace.diagnosis_status == "MECHANISM_VERIFIED_CAUSE"
+            else f"Supported possible initiating cause: {selected.causal_actor.canonical}. "
             "Mechanism execution and incident recovery are not established."
             if resolution_trace.diagnosis_status == "SUPPORTED_CAUSE"
+            else f"No causal candidate has evidence in the incident window. Nearest observation, outside it, on {selected.causal_actor.canonical}: {selected.findings[0].summary if selected.findings else 'no actor observation'}. Causal investigation remains open: {resolution_trace.rationale}"
+            if withheld
             else f"Observed on {selected.causal_actor.canonical}: {selected.findings[0].summary if selected.findings else 'no actor observation'}. Causal investigation remains open: {resolution_trace.rationale}"
         ),
         symptoms=case.symptoms,

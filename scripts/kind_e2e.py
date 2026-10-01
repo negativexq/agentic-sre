@@ -27,7 +27,18 @@ NAMESPACE = "sre-demo"
 def command(args: Sequence[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
     """Run one visible release-gate command."""
     print("$", " ".join(args), flush=True)
-    return subprocess.run(args, cwd=ROOT, text=True, check=check, capture_output=True)
+    result = subprocess.run(args, cwd=ROOT, text=True, check=False, capture_output=True)
+    if check and result.returncode != 0:
+        # the output is captured for the callers; a failure must still show why it failed
+        for name, text in (("stdout", result.stdout), ("stderr", result.stderr)):
+            lines = (text or "").splitlines()[-200:]
+            if lines:
+                print(f"--- {name} of the failed command (last {len(lines)} lines) ---", flush=True)
+                print("\n".join(lines), flush=True)
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args, output=result.stdout, stderr=result.stderr
+        )
+    return result
 
 
 def kubectl(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:

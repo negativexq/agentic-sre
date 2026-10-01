@@ -1,12 +1,156 @@
 # M21 Causal Semantics Contract — actor-specific claims
 
-Contract version: `m21.v2`; engine `2.0.0`; D1 `m21.support.change-onset-path.v2`.
+Contract version: `m21.v3`; engine `2.1.0`; D1 remains `m21.support.change-onset-path.v2`.
 Authorized replacement of the conflicting frozen v1 clauses, 2026-09-28.
 The v2 clauses below govern current code. The original v1 text is retained below
 as historical rationale; its default competition, D1 audit-only, dominance and
 supported-leader provisions are superseded, not additional requirements.
 
-## Current decision contract
+## v3 explanation and decision closure (2026-09-29)
+
+Actor-scoped formation and positive admission stay `claim_version=m21.v2`.
+The decision trace is `m21.v3`; the additions below supersede v2's blanket
+D1-only downgrade only when the named stronger rule fires. D1 remains possible
+initiation, never observed execution.
+
+`CausalExplanation` identifies source claim, exact explained claim/observations,
+actors/instances, episode, directed mechanism, decisive raw observation IDs,
+coverage, rule version, consequence and remaining uncertainty. It does not
+transfer evidence ownership. A structural mechanism bridge alone cannot produce
+an explanation or strong support.
+
+- `m21.explanation.runtime-return.v1` records a paired non-success return with
+  positively verified endpoints, exact Pod UID, matching claim episode and
+  target observation provenance. It explains that return, not every local fact
+  or the remote failure origin. Existing m16 propagated-effect eliminations
+  remain distinct and auditable.
+- `m21.explanation.observed-quota-rejection.v1` consumes a raw rejection event
+  explicitly naming the quota and namespace and the rejected subject/UID. Its
+  source claim must be admitted; the raw `Warning/FailedCreate` establishes
+  its observed role even when incident initiation is undetermined. Later
+  rejections in the same episode can explain later effects without supplying D1
+  support. An initiating-timing contradiction does not negate a recorded later role;
+  other positive source contradictions block explanation authority. Only
+  a target whose **all** local observations are these rejection events is explained as a whole. Any other
+  local change, including ambiguous-time changes, remains a rival. The shared
+  event is one observation, not independent corroboration.
+- `m21.explanation.controller-spawn.v1` (2026-09-30) explains an experiment instance by the
+  schedule instance whose controller `Spawned` record names it, keyed by UID on both sides
+  (an owner inferred from names has no UID and explains nothing). The schedule claim must be
+  admitted, UID-bound and **supported**: an unresolved schedule never retires a supported
+  experiment. The experiment leaves competition only when **all** of its local facts are
+  that execution; any other local fact keeps it as a rival (`EXPLAINS_OBSERVATION`). The
+  claim is audited, not deleted: its targets and interval stay for later execution rules.
+  It states that executions of one recurring fault are not independent root causes; it does
+  not state that the fault initiated the incident, grants no strong authority, and **never
+  answers a frontier question**.
+- Explanation cycles remain observation records with `EXPLANATION_CYCLE`;
+  they cannot retire claims, answer frontier questions or assert independent
+  mechanisms. Explanation never supplies its own source support.
+
+`m21.support.observed-quota-rejection.v1` adds `OBSERVED_MECHANISM_CAUSE` only
+when a D1-supported quota claim has a raw, explicitly named rejection at its
+origin time and the actual rejected subject is an incident symptom. It does
+not promote quota exhaustion, selectors, generic quota→service paths, or a
+structural config bridge. Missing UID is not invented. Its supported scope is
+that observed admission rejection, not why all quota demand arose or service
+recovery.
+
+`m21.support.observed-fault-execution.v1` (2026-09-30, owner-approved carrier: Schedule
+instance) adds `OBSERVED_MECHANISM_CAUSE` from a chaos **execution witness** plus an
+**incident-effect relation**. The witness is produced at the exact experiment instance:
+its controller records give the target pod, `Applied` time and an observed `Recovered` time
+(an interval whose end is unobserved proves nothing). The effect relation holds for a target
+when the exact Pod claim of that target, in the same episode, is a declared incident symptom
+of the holder, has a failure observation inside `[Applied, Recovered]` and **none before
+`Applied`**. The execution interval must also be connected to the incident's onset
+(amendment 2026-09-30, owner-approved): it must not end more than **5 minutes before** the onset and
+must not begin after it (one second of event-timestamp resolution tolerated). An experiment that ended
+long before the incident is not its execution, whatever effects it once had. `Spawned`, `Applied` or a name match alone confer nothing. The witness is carried
+to the parent **Schedule instance** only through the exact `controller-spawn` records (UID on
+both sides, same as the explanation rule); a Schedule carries the witnesses of its own
+spawned experiments and no others. An experiment with no admitted parent Schedule claim is
+its own holder under the same conditions. The holder must already be D1-supported, and the
+timing contract's gates apply unchanged (`execution` is the fired state of this rule; a
+sensitive one withholds strong authority). Scope: only the observed effect at that target.
+The witness covers a declared symptom only where the target itself is that symptom, so a
+service-level symptom stays uncovered and `RESOLVED` is not reachable without a verified
+path to it. The fault action (`spec.action`) is not observed, so the record states the
+chaos kind, never a specific action. Recovery stays `NOT_ASSESSED`.
+
+**Service-level effect relation (specified 2026-09-30; not implemented).** A second way for the
+incident-effect relation to hold, for targets that are not themselves an incident symptom: a
+direct paired non-success propagation edge whose source service is the target's service and
+whose affected service is a declared incident symptom service, with a `VERIFIED` binding at
+both ends, first observed **at or after `Applied`** and continuing no later than `Recovered`.
+An edge already present before `Applied` proves nothing about the fault. A call-graph path
+alone is never an effect: on the seen scenarios 74% of fault targets have one regardless of
+what they did. Multi-hop chains and service names derived from pod names are not defined
+here. **Implementation is deferred** until the own-testbed benchmark can measure this
+relation against world-level ground truth: on the seen scenarios it holds for 1 target in 1
+scenario, and fixing its parameters on that one case would tune the rule to it.
+
+`MECHANISM_VERIFIED_CAUSE` / legacy `RESOLVED` requires one eligible supported
+claim, execution witnesses covering **every declared incident symptom**, no
+unresolved admitted claim, and no unanswered material frontier. The decision
+basis is `OBSERVED_MECHANISM_DISAMBIGUATED_V1`. D1-only unique support remains
+`SUPPORTED_CAUSE` / `AMBIGUOUS`. Multiple distinct actors with disjoint direct
+execution observations may be `MULTIPLE_OBSERVED_CAUSES`; they remain ambiguous
+for the legacy single-root API. Other admitted competition is `COMPETING_CAUSES`
+and does not assert causal independence merely from the presence of two claims.
+
+`FrontierAnswer` asks which observed upstream role affects the bound claims.
+A positive explanation may answer that scoped question and transfer it to its
+source claim (`ANSWERED_ROLE_TRANSFERRED`). Every bound claim question must
+be covered; partial answers retain their witnesses and remain open. The source still requires
+adjudication; this is not a proof of universal non-causality. A relevant positive
+contradiction withdraws the answer on recomputation. Unrelated observations do
+not. Quota declarations with pod-admission limits can create an investigation
+question for affected workloads; namespace membership alone still cannot admit
+or support a claim.
+
+Frontier causal answers are separate from investigation progress:
+`UNEXPLORED`, `INVESTIGATED_INCONCLUSIVE`, `ANSWERED`, `BLOCKED_ACCESS` and
+`BLOCKED_BUDGET`. NO_DATA, an empty read, PROMOTED and exhaustion never answer
+a question. Answered questions leave the material query queue; open questions
+remain visible with their terminal reason. Existing physical-read identity and
+attempt budgets prevent repeated identical unsuccessful reads.
+
+Decision-bearing explanations, execution witnesses and frontier answers enter
+the canonical digest. Terminal access/budget bookkeeping does not. Action audits
+record before/after causal digests, so scoped support/answer transitions count
+even when the legacy label stays ambiguous. Engine-version replay remains
+strict: a 2.0.0 tape is not silently interpreted by 2.1.0. Legacy documents and
+v2 digest projections remain readable as recorded. Reports are version 2.3.
+
+Product proof T4 and T5/T6 ablations explicitly identify
+`m21.unique-possible-cause.v1` for v2/v3 records, rather than presenting that
+weaker success as the old definitive-resolution proof. Artifacts separately
+report observed mechanism, positive rival elimination, strong disambiguation
+and recovery. Recovery stays `NOT_ASSESSED`.
+
+**Leader selection by epistemic tier (APPROVED and implemented 2026-10-01; roadmap C12; `leader_by_tier` in `packages/rca/presentation.py`).** Today, unless the
+state is `RESOLVED` or exactly one claim is supported, the reported `root_cause` is the first selectable
+hypothesis in ranking order (score, then canonical name), so with two or more supported claims an unsupported
+candidate with an equal or higher score can be reported ahead of them. Proposed rule for every non-`RESOLVED`
+selection: (1) take the highest epistemic tier that contains a selectable, not eliminated hypothesis (strong,
+i.e. mechanism-verified, then supported, then the rest); (2) within that tier, rank by score; (3) break a
+remaining tie by canonical name, which keeps replay deterministic and is never causal evidence. `RESOLVED`
+selection, the ranking itself, admission and every support rule are unchanged; the operator's projection
+(`packages/rca/presentation.py`) already applies the same tiers. To be decided on a shadow measurement over the
+35 ITBench scenarios and the clean testbed incidents: changes in `root_cause`, diagnosis status, epistemic digest
+and benchmark correctness, whether any supported or strong outcome is lost, and whether a corrected case is
+merely replaced by another wrong actor.
+
+*Shadow measurement (2026-10-01).* ITBench, 35 scenarios: no change at all (same `root_cause`, status, strong
+witnesses, epistemic digest and correctness; 18 of 31 scoreable correct either way). Testbed, 81 incidents
+(the four databases contaminated by the manual `diag-stress` experiment excluded whole): one `root_cause`
+changed, from an unsupported `order-service` pod to the supported `StressChaos/pod-stress-1` that the run
+injected, which is the true cause; its status (`COMPETING_CAUSES`), claim level and strong witnesses unchanged,
+its digest changed accordingly; no supported or strong outcome was lost and no case moved to another wrong actor.
+Approved by the owner on this measurement; replaying the corrected incident with the implemented rule gives the injected experiment, shown as the single supported cause.
+
+## Preserved v2 decision contract (v3 exceptions above)
 
 The stages are observation → presentation episode → actor/instance/incident
 claim → positive admission → support/contradiction → scoped diagnosis.

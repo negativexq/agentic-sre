@@ -138,11 +138,21 @@ class DiagnosisView(ConsoleModel):
     incident_recovery: str = "NOT_ASSESSED"
     context_hypothesis_ids: tuple[str, ...] = ()
     material_frontier_ids: tuple[str, ...] = ()
+    causal_explanations: tuple[dict[str, Any], ...] = ()
+    frontier_answers: tuple[dict[str, Any], ...] = ()
+    mechanism_verified_hypothesis_ids: tuple[str, ...] = ()
     confidence: str
     # The leading actor is the top-ranked actor even when unresolved; it equals
-    # the root cause only once the diagnosis is RESOLVED.
+    # the root cause only once the diagnosis is RESOLVED. It is None, with the reason
+    # below, when the engine did not establish it (roadmap C10).
     leading_root_actor: str | None
     root_cause: str | None
+    leading_actor_withheld_reason: str | None = None
+    # What the operator is shown (roadmap C12): SINGLE shows leading_root_actor; COMPETING and
+    # NOT_ESTABLISHED show the candidates instead, never one of them chosen by name.
+    leading_actor_display: str = "SINGLE"
+    leading_actor_tier: str | None = None
+    leading_actor_candidates: tuple[str, ...] = ()
     is_resolved: bool
     summary: str
     resolution_rationale: str | None
@@ -231,6 +241,9 @@ class IncidentListItem(ConsoleModel):
     service: str | None
     leading_root_actor: str | None
     confidence: str | None
+    leading_actor_withheld_reason: str | None = None
+    leading_actor_display: str = "SINGLE"
+    leading_actor_candidates: tuple[str, ...] = ()
     resolution: str | None
     has_diagnosis: bool
     created_at: datetime

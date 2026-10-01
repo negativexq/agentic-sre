@@ -28,6 +28,8 @@ dependencies = [
     "uvicorn[standard]>=0.35,<1.0",
     "langgraph>=0.6,<2.0",
     "fpdf2>=2.8,<3.0",
+    "grpcio>=1.70,<2.0",
+    "cryptography>=45.0,<51.0",
 ]
 
 [project.scripts]
@@ -68,6 +70,13 @@ packages = ["apps", "packages"]
 # explicit ignore, which is then always used).
 [[tool.mypy.overrides]]
 module = "fpdf.*"
+follow_imports = "skip"
+ignore_missing_imports = true
+
+# grpcio ships no type information and no stub package is part of the dev environment; the
+# connector transport treats it as untyped, the same way in every mypy environment.
+[[tool.mypy.overrides]]
+module = "grpc.*"
 follow_imports = "skip"
 ignore_missing_imports = true
 

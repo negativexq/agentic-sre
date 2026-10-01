@@ -6,10 +6,11 @@ import importlib
 import json
 import logging
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections import defaultdict
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -72,7 +73,25 @@ _CHAOS_PLURALS = (
     ("HTTPChaos", "httpchaos"),
     ("Schedule", "schedules"),
 )
+_NAMESPACED_METHODS = {kind: (group, method) for group, method, kind in _NAMESPACED_LISTS}
+_CHAOS_KINDS = dict(_CHAOS_PLURALS)
 _LOG_ERRORS = "(?i)(error|exception|fatal|refused|timeout|unavailable|unreachable)"
+
+
+WatchEventType = Literal["ADDED", "MODIFIED", "DELETED", "BOOKMARK"]
+
+
+@dataclass(frozen=True)
+class WatchEvent:
+    """One event of a scope's watch (connector contract §15)."""
+
+    type: WatchEventType
+    body: dict[str, Any]
+    resource_version: str
+
+
+class ResourceVersionExpired(Exception):
+    """The watch cannot resume from its version: continuity is lost (``410 Gone``)."""
 
 
 class ClusterReader(Protocol):
@@ -127,6 +146,8 @@ class ObjectListing:
     objects: tuple[dict[str, Any], ...]
     completed_scopes: frozenset[ListingScope]
     failed_scopes: tuple[ListingFailure, ...] = ()
+    # The resourceVersion each scope's LIST returned, for a watch to start from (connector contract §15).
+    resource_versions: Mapping[ListingScope, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -148,6 +169,10 @@ class KubernetesClusterReader:
         self.chaos_namespaces = tuple(chaos_namespaces)
         self._module: Any | None = None
         self._api_client: Any | None = None
+        # the resourceVersion each Event scope's last LIST returned (connector contract §15)
+        self.event_resource_versions: dict[ListingScope, str] = {}
+        # API requests this reader made, by verb (connector contract §15 load measurement)
+        self.api_calls: dict[str, int] = defaultdict(int)
 
     def _client(self) -> tuple[Any, Any]:
         if self._module is None:
@@ -177,22 +202,29 @@ class KubernetesClusterReader:
         workload_namespaces = [
             namespace for namespace in namespaces if namespace not in self.chaos_namespaces
         ]
+        versions: dict[ListingScope, str] = {}
         for group, method, kind in _NAMESPACED_LISTS:
             for namespace in workload_namespaces:
                 scope = ListingScope(namespace, kind)
                 try:
                     api = getattr(kubernetes.client, group)()
-                    items = getattr(api, method)(namespace).items
+                    self.api_calls["list"] += 1
+                    response = getattr(api, method)(namespace)
+                    items = response.items
                 except Exception as exc:
                     failures.append(ListingFailure(scope, f"{type(exc).__name__}: {exc}"))
                     continue
                 completed.add(scope)
+                version = getattr(getattr(response, "metadata", None), "resource_version", None)
+                if version:
+                    versions[scope] = str(version)
                 objects.extend(self._serialize(item, kind, "v1") for item in items)
         custom = kubernetes.client.CustomObjectsApi()
         for namespace in self.chaos_namespaces:
             for kind, plural in _CHAOS_PLURALS:
                 scope = ListingScope(namespace, kind)
                 try:
+                    self.api_calls["list"] += 1
                     listing = custom.list_namespaced_custom_object(
                         "chaos-mesh.org", "v1alpha1", namespace, plural
                     )
@@ -200,11 +232,16 @@ class KubernetesClusterReader:
                     failures.append(ListingFailure(scope, f"{type(exc).__name__}: {exc}"))
                     continue
                 completed.add(scope)
+                version = (listing.get("metadata") or {}).get("resourceVersion")
+                if version:
+                    versions[scope] = str(version)
                 for item in listing.get("items", []):
                     item["kind"] = kind
                     child(item, "metadata").pop("managedFields", None)
                     objects.append(item)
-        return ObjectListing(tuple(objects), frozenset(completed), tuple(failures))
+        return ObjectListing(
+            tuple(objects), frozenset(completed), tuple(failures), resource_versions=versions
+        )
 
     def list_events(self, namespaces: Sequence[str]) -> list[dict[str, Any]]:
         kubernetes, _api_client = self._client()
@@ -212,11 +249,95 @@ class KubernetesClusterReader:
         events: list[dict[str, Any]] = []
         for namespace in dict.fromkeys((*namespaces, *self.chaos_namespaces)):
             try:
-                items = core.list_namespaced_event(namespace).items
+                self.api_calls["list"] += 1
+                response = core.list_namespaced_event(namespace)
             except Exception:
                 continue
-            events.extend(self._serialize(item, "Event", "v1") for item in items)
+            version = getattr(getattr(response, "metadata", None), "resource_version", None)
+            if version:
+                self.event_resource_versions[ListingScope(namespace, "Event")] = str(version)
+            events.extend(self._serialize(item, "Event", "v1") for item in response.items)
         return events
+
+    def list_scope(self, scope: ListingScope) -> tuple[list[dict[str, Any]], str]:
+        """LIST one scope: its current items, serialized as ``list_objects`` does, and its version.
+
+        Used to relist only the scope whose watch version expired (connector contract §15.4).
+        """
+        kubernetes, _api_client = self._client()
+        self.api_calls["list"] += 1
+        if scope.kind == "Event":
+            response = kubernetes.client.CoreV1Api().list_namespaced_event(scope.namespace)
+            items = [self._serialize(item, "Event", "v1") for item in response.items]
+            return items, str(response.metadata.resource_version)
+        if scope.kind in _CHAOS_KINDS:
+            listing = kubernetes.client.CustomObjectsApi().list_namespaced_custom_object(
+                "chaos-mesh.org", "v1alpha1", scope.namespace, _CHAOS_KINDS[scope.kind]
+            )
+            items = []
+            for item in listing.get("items", []):
+                item["kind"] = scope.kind
+                child(item, "metadata").pop("managedFields", None)
+                items.append(item)
+            return items, str((listing.get("metadata") or {}).get("resourceVersion"))
+        group, method = _NAMESPACED_METHODS[scope.kind]
+        response = getattr(getattr(kubernetes.client, group)(), method)(scope.namespace)
+        items = [self._serialize(item, scope.kind, "v1") for item in response.items]
+        return items, str(response.metadata.resource_version)
+
+    def watch(
+        self, scope: ListingScope, resource_version: str, *, timeout_seconds: int = 300
+    ) -> Iterator[WatchEvent]:
+        """Watch one scope from ``resource_version`` until the server ends the watch (contract §15).
+
+        Bodies are serialized exactly as a LIST serializes them, so an unchanged object has the same
+        digest either way. An expired version raises ``ResourceVersionExpired``.
+        """
+        kubernetes, _api_client = self._client()
+        watch_module = importlib.import_module("kubernetes.watch")
+        if scope.kind == "Event":
+            func: Any = kubernetes.client.CoreV1Api().list_namespaced_event
+            args: tuple[Any, ...] = (scope.namespace,)
+        elif scope.kind in _CHAOS_KINDS:
+            func = kubernetes.client.CustomObjectsApi().list_namespaced_custom_object
+            args = ("chaos-mesh.org", "v1alpha1", scope.namespace, _CHAOS_KINDS[scope.kind])
+        else:
+            group, method = _NAMESPACED_METHODS[scope.kind]
+            func = getattr(getattr(kubernetes.client, group)(), method)
+            args = (scope.namespace,)
+        watcher = watch_module.Watch()
+        self.api_calls["watch"] += 1
+        try:
+            for raw in watcher.stream(
+                func,
+                *args,
+                resource_version=resource_version,
+                allow_watch_bookmarks=True,
+                timeout_seconds=timeout_seconds,
+            ):
+                kind_of_event = str(raw.get("type"))
+                item = raw.get("object")
+                if kind_of_event == "ERROR":
+                    code = item.get("code") if isinstance(item, dict) else None
+                    if code == 410:
+                        raise ResourceVersionExpired(str(item.get("message", "410 Gone")))
+                    raise RuntimeError(f"watch error: {item}")
+                if isinstance(item, dict):
+                    body = item
+                    body["kind"] = scope.kind
+                    child(body, "metadata").pop("managedFields", None)
+                else:
+                    body = self._serialize(item, scope.kind, "v1")
+                version = str(child(body, "metadata").get("resourceVersion") or resource_version)
+                yield WatchEvent(type=kind_of_event, body=body, resource_version=version)  # type: ignore[arg-type]
+        except ResourceVersionExpired:
+            raise
+        except Exception as exc:
+            if getattr(exc, "status", None) == 410:
+                raise ResourceVersionExpired(str(exc)) from exc
+            raise
+        finally:
+            watcher.stop()
 
 
 @dataclass

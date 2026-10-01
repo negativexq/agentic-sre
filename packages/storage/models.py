@@ -180,6 +180,40 @@ class EventVersionRow(Base):
     body: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 
+class JournalArrivalRow(Base):
+    """When the Connector observed a journaled object version or Event (connector contract §15).
+
+    Kept apart from the evidence rows; evidence windows admit by it (late-evidence-design.md §3).
+    """
+
+    __tablename__ = "journal_arrivals"
+    __table_args__ = (Index("ix_journal_arrivals_row", "journal", "version_id", unique=True),)
+
+    arrival_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    journal: Mapped[str] = mapped_column(String(16), nullable=False)  # "event" or "object"
+    version_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    connector_observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
+class ChangeStreamGapRow(Base):
+    """A loss of continuity on the Connector's change stream (late-evidence-design.md §4.2).
+
+    ``namespace``/``kind`` name the one scope that lost it (connector contract §15.4); both absent for a
+    global gap. ``since`` is the last instant the scope(s) were observed continuously, absent when the
+    Connector did not know it: such a gap may reach back to any time before ``at``.
+    """
+
+    __tablename__ = "change_stream_gaps"
+    __table_args__ = (Index("ix_change_stream_gaps_at", "at"),)
+
+    gap_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    namespace: Mapped[str | None] = mapped_column(String(253), nullable=True)
+    kind: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    since: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
 class ObjectVersionRow(Base):
     """One observed version of a Kubernetes object: a content change or a lifecycle event.
 
@@ -305,7 +339,7 @@ def _one_of(column: str, values: tuple[str, ...], name: str) -> CheckConstraint:
 
 
 # Why a diagnosis revision was produced; LEGACY marks rows stored before revisions.
-DIAGNOSIS_TRIGGERS = ("INITIAL", "MANUAL", "EVIDENCE_DEADLINE", "LEGACY")
+DIAGNOSIS_TRIGGERS = ("INITIAL", "MANUAL", "EVIDENCE_DEADLINE", "LEGACY", "ALERT_REFIRED")
 
 
 class DiagnosisRow(Base):

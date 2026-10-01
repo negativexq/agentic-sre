@@ -167,6 +167,7 @@ class ProductRunArtifact(_Model):
     provider_tape: ProviderTape
     transition: Transition | None
     proof: dict[ProofId, ProofStatus]
+    decision_authority: dict[str, str] = Field(default_factory=dict)
     negatives: dict[ProofId, ProofStatus]
     safety: Safety
     attempts: list[Attempt]
@@ -371,6 +372,7 @@ def build_artifact(
             provider_tape=provider_tape,
             transition=transition,
             proof=proof,
+            decision_authority=getattr(evaluation, "decision_authority", {}),
             negatives=negatives,
             safety=safety,
             attempts=list(attempts)

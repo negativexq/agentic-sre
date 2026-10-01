@@ -10,6 +10,7 @@ from typing import TypeVar
 
 from packages.rca.model import (
     Alert,
+    AlertEpisode,
     ClusterEvent,
     EntityRef,
     InvestigationObservation,
@@ -188,6 +189,11 @@ class OverlayObservationSource:
     def alert_observation_start(self) -> datetime | None:
         # An overlay never changes the base run's alert coverage boundary.
         return self.base.alert_observation_start()
+
+    def alert_episodes(self) -> Sequence[AlertEpisode] | None:
+        # Capture history is a property of the alert channel; an overlay never adds to it.
+        method = getattr(self.base, "alert_episodes", None)
+        return method() if callable(method) else None
 
     def supports(self, capability: str) -> bool:
         return capability in self.supported_capabilities

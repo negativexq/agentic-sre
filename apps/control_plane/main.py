@@ -1,12 +1,13 @@
 """FastAPI application for the deterministic incident control plane."""
 
 import json
+import logging
 import os
 import threading
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from dataclasses import asdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Literal
@@ -24,6 +25,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from apps.control_plane.auth import require_api_token
 from apps.control_plane.baseline import evaluate_baseline
+from apps.control_plane.connector_intake import AlertStreamConsumer
 from apps.control_plane.console import create_console_router
 from apps.control_plane.console.dto import SystemConnector, SystemStatus
 from apps.control_plane.console.email_delivery import EmailDelivery, email_delivery_from_env
@@ -37,6 +39,9 @@ from apps.control_plane.schemas import (
     RevisionDiffResponse,
 )
 from apps.control_plane.timeline import diagnosis_phases, newer_run_note
+from packages.connector.client import ConnectorClient, ConnectorError, in_process_transport
+from packages.connector.service import Connector
+from packages.connector.transport import ConnectorGateway
 from packages.contracts import (
     Alert,
     AlertmanagerWebhook,
@@ -47,7 +52,10 @@ from packages.contracts import (
     IncidentEvent,
 )
 from packages.incident import IncidentManager, normalize_alert
-from packages.rca.alert_coverage import alert_coverage_poller_from_environment
+from packages.rca.alert_coverage import (
+    AlertCoverageConfig,
+    alert_coverage_poller_from_environment,
+)
 from packages.rca.model import Diagnosis
 from packages.rca.report import (
     Lifecycle,
@@ -92,6 +100,9 @@ def _correlation_id(request: Request) -> str:
     return request.headers.get("X-Correlation-ID", str(uuid4()))
 
 
+logger = logging.getLogger(__name__)
+
+
 def _error(request: Request, code: str, message: str, status_code: int) -> JSONResponse:
     """Build the common error envelope."""
     body = ErrorResponse(
@@ -121,13 +132,50 @@ def _env_connector(name: str, env_var: str) -> SystemConnector:
     return SystemConnector(name=name, status="not_configured", detail=f"set {env_var} to enable")
 
 
-def build_system_status(session: Session, *, reader_configured: bool) -> SystemStatus:
-    """Assemble connector health from what the control plane can truthfully tell."""
+def build_system_status(
+    session: Session,
+    *,
+    reader_configured: bool,
+    connector_status: SystemConnector | None = None,
+    connector_capabilities: frozenset[str] | None = None,
+) -> SystemStatus:
+    """Assemble connector health from what the control plane can truthfully tell.
+
+    In remote mode the backends are configured on the connector, not here, so their rows come from
+    the capabilities the connector reports (``None`` keeps the environment-based rows).
+    """
     try:
         session.execute(text("SELECT 1"))
         database = SystemConnector(name="Database", status="connected", detail=None)
     except SQLAlchemyError:
         database = SystemConnector(name="Database", status="unavailable", detail="SELECT 1 failed")
+    if connector_capabilities is not None:
+
+        def through_connector(name: str, wanted: set[str]) -> SystemConnector:
+            if not connector_capabilities:
+                return SystemConnector(
+                    name=name, status="unavailable", detail="no connector is connected"
+                )
+            if wanted & connector_capabilities:
+                return SystemConnector(
+                    name=name, status="connected", detail="read through the connector"
+                )
+            return SystemConnector(
+                name=name, status="not_configured", detail="not configured on the connector"
+            )
+
+        return SystemStatus(
+            connectors=[
+                database,
+                through_connector("Kubernetes", {"changes", "history"}),
+                through_connector("Alertmanager", {"alerts"}),
+                through_connector("Prometheus", {"resource_pressure", "traffic"}),
+                through_connector("Loki", {"logs"}),
+                through_connector("Tempo", {"runtime_traces"}),
+                _env_connector("Email", "SRE_SMTP_HOST"),
+                *([connector_status] if connector_status is not None else []),
+            ]
+        )
     kubernetes = (
         SystemConnector(name="Kubernetes", status="connected", detail="cluster reader configured")
         if reader_configured
@@ -147,6 +195,7 @@ def build_system_status(session: Session, *, reader_configured: bool) -> SystemS
             _env_connector("Loki", "SRE_LOKI_URL"),
             _env_connector("Tempo", "TEMPO_URL"),
             _env_connector("Email", "SRE_SMTP_HOST"),
+            *([connector_status] if connector_status is not None else []),
         ]
     )
 
@@ -169,8 +218,46 @@ def create_app(
     diagnoser = diagnosis_service or service_from_environment(session_factory)
     # The webhook ingests alert occurrences; this read-only poller only records
     # when the alert channel was actually observed (coverage), never incidents.
-    alert_coverage_poller = alert_coverage_poller_from_environment(session_factory)
+    # Injected test doubles need not carry a connector; only the real service does.
+    connector: Connector | None = getattr(diagnoser, "connector", None)
+    # In stream mode (SRE_CONNECTOR_STREAMS=true) the connector owns every Alertmanager
+    # connection: it polls, receives the webhook locally and streams both here (contract §10).
+    # In remote mode (SRE_CONNECTOR_MODE=remote) a connector dials this process instead (§12).
+    gateway: ConnectorGateway | None = getattr(diagnoser, "gateway", None)
+    remote_client: ConnectorClient | None = getattr(diagnoser, "connector_client", None)
+    stream_client: ConnectorClient | None = (
+        ConnectorClient(in_process_transport(connector)) if connector is not None else remote_client
+    )
+    alert_coverage_poller = (
+        None
+        if stream_client is not None
+        else alert_coverage_poller_from_environment(session_factory)
+    )
     auto_diagnose = os.getenv("SRE_AUTO_DIAGNOSE", "").casefold() == "true"
+
+    # A re-firing alert continues its episode only with a positive quiet interval; 0, the product default,
+    # keeps one incident per occurrence (docs/architecture/incident-episode-contract.md, §5).
+    alert_quiet = timedelta(seconds=float(os.getenv("SRE_ALERT_QUIET_SECONDS", "0")))
+
+    def diagnose_in_background(incident_ids: list[UUID], trigger: str = "INITIAL") -> None:
+        for incident_id in incident_ids:
+            threading.Thread(target=diagnoser.run, args=(incident_id, trigger), daemon=True).start()
+
+    def rediagnose_refired(incident_ids: list[UUID]) -> None:
+        diagnose_in_background(incident_ids, "ALERT_REFIRED")
+
+    alert_consumer = (
+        AlertStreamConsumer(
+            stream_client,
+            session_factory,
+            config=AlertCoverageConfig.from_environment(),
+            on_incidents=diagnose_in_background if auto_diagnose else None,
+            on_refired=rediagnose_refired if auto_diagnose else None,
+            quiet=alert_quiet,
+        )
+        if stream_client is not None
+        else None
+    )
 
     def session_dependency() -> Iterator[Session]:
         session = session_factory()
@@ -191,15 +278,40 @@ def create_app(
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         stop = threading.Event()
         watcher = None
-        if watch_interval > 0 and diagnoser.reader is not None:
+        if gateway is not None:
+            logger.info("connector gateway listening on port %d", gateway.start())
+        if watch_interval > 0 and (diagnoser.reader is not None or gateway is not None):
             watcher = threading.Thread(
                 target=diagnoser.watch, args=(stop, watch_interval), daemon=True
             )
             watcher.start()
+            # contract §15: the journal follows the change stream within about a second
+            follower = getattr(diagnoser, "follow_changes", None)
+            if callable(follower) and (gateway is not None or connector is not None):
+                threading.Thread(target=follower, args=(stop, 1.0), daemon=True).start()
         poller = None
         if alert_coverage_poller is not None:
             poller = threading.Thread(target=alert_coverage_poller.run, args=(stop,), daemon=True)
             poller.start()
+        stream_threads: list[threading.Thread] = []
+        if connector is not None:
+            stream_threads.append(
+                threading.Thread(
+                    target=connector.run,
+                    args=(stop,),
+                    kwargs={
+                        "changes_interval": watch_interval if watch_interval > 0 else 15.0,
+                        "alerts_interval": AlertCoverageConfig.from_environment().poll_interval.total_seconds(),
+                    },
+                    daemon=True,
+                )
+            )
+        if alert_consumer is not None:
+            stream_threads.append(
+                threading.Thread(target=alert_consumer.run, args=(stop,), daemon=True)
+            )
+        for thread in stream_threads:
+            thread.start()
         try:
             yield
         finally:
@@ -208,6 +320,10 @@ def create_app(
                 watcher.join(timeout=5)
             if poller is not None:
                 poller.join(timeout=5)
+            for thread in stream_threads:
+                thread.join(timeout=5)
+            if gateway is not None:
+                gateway.stop()
 
     app = FastAPI(title="Agentic SRE", version=PROJECT_VERSION, lifespan=lifespan)
     app.add_middleware(TelemetryMiddleware, runtime=telemetry)
@@ -224,10 +340,35 @@ def create_app(
         response.headers.setdefault("Content-Security-Policy", CONTENT_SECURITY_POLICY)
         return response
 
-    reader_configured = diagnoser.reader is not None
+    def connector_status() -> SystemConnector | None:
+        if gateway is None:
+            return None
+        connected = sorted(gateway.connected())
+        return (
+            SystemConnector(
+                name="Connector", status="connected", detail=f"connected: {', '.join(connected)}"
+            )
+            if connected
+            else SystemConnector(
+                name="Connector", status="unavailable", detail="no connector is connected"
+            )
+        )
+
+    def connector_capabilities() -> frozenset[str] | None:
+        if remote_client is None:
+            return None
+        try:
+            return frozenset(remote_client.capabilities())
+        except ConnectorError:
+            return frozenset()
 
     def system_status_provider(session: Session) -> SystemStatus:
-        return build_system_status(session, reader_configured=reader_configured)
+        return build_system_status(
+            session,
+            reader_configured=diagnoser.reader is not None,
+            connector_status=connector_status(),
+            connector_capabilities=connector_capabilities(),
+        )
 
     app.include_router(
         create_console_router(
@@ -540,12 +681,26 @@ def create_app(
         session: Session = Depends(get_session),  # noqa: B008
     ) -> dict[str, object]:
         """Normalize and ingest an Alertmanager delivery idempotently."""
+        if gateway is not None:
+            raise HTTPException(
+                status_code=410,
+                detail="alerts reach the control plane through the connector; point Alertmanager at it",
+            )
+        if connector is not None:
+            # The connector is the local receiver; incidents follow through its alert stream.
+            accepted = connector.receive_webhook(payload.model_dump(mode="json", by_alias=True))
+            return {"accepted": accepted, "incident_ids": []}
         now = datetime.now(UTC)
-        manager = IncidentManager(session)
-        incidents = [manager.ingest(normalize_alert(alert), now=now) for alert in payload.alerts]
+        manager = IncidentManager(session, quiet=alert_quiet)
+        outcomes = [
+            manager.ingest_occurrence(normalize_alert(alert), now=now) for alert in payload.alerts
+        ]
+        incidents = [outcome.incident for outcome in outcomes]
         if auto_diagnose:
+            refired = {o.incident.incident_id for o in outcomes if o.refired}
             for incident_id in dict.fromkeys(item.incident_id for item in incidents):
-                background.add_task(diagnoser.run, incident_id, "INITIAL")
+                trigger = "ALERT_REFIRED" if incident_id in refired else "INITIAL"
+                background.add_task(diagnoser.run, incident_id, trigger)
         return {
             "accepted": len(incidents),
             "incident_ids": [str(incident.incident_id) for incident in incidents],

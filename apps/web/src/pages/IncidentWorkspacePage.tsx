@@ -45,33 +45,58 @@ function Header({ incident, live }: { incident: IncidentListItem; live: ReactNod
 function RootActor({ diagnosis }: { diagnosis: DiagnosisView }) {
   const resolved = diagnosis.is_resolved;
   const actor = diagnosis.leading_root_actor;
+  const display =
+    diagnosis.leading_actor_display ?? (diagnosis.leading_actor_withheld_reason ? "NOT_ESTABLISHED" : "SINGLE");
+  const withheld = display === "NOT_ESTABLISHED";
+  const competing = display === "COMPETING";
+  const candidates = diagnosis.leading_actor_candidates ?? [];
+  const tierLabel =
+    diagnosis.leading_actor_tier === "STRONG"
+      ? "Observed mechanism cause"
+      : diagnosis.leading_actor_tier === "SUPPORTED"
+        ? "Supported possible cause"
+        : "Possible causal actor";
   return (
     <Card>
       <CardBody className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium uppercase tracking-wide text-subtle">
-            {diagnosis.decision_semantics === "m21.v2" ? "Possible causal actor" : resolved ? "Root cause" : "Leading root actor"}
+            {withheld ? "Causal actor" : competing ? `Competing ${diagnosis.leading_actor_tier === "STRONG" ? "observed" : "supported"} causes` : diagnosis.leading_actor_tier ? tierLabel : ["m21.v2", "m21.v3"].includes(diagnosis.decision_semantics ?? "") ? (diagnosis.claim_level === "OBSERVED_MECHANISM_CAUSE" ? "Observed mechanism cause" : "Possible causal actor") : resolved ? "Root cause" : "Leading root actor"}
           </span>
           <Badge tone={confidenceTone(diagnosis.confidence)}>{diagnosis.confidence}</Badge>
           <Badge tone={resolutionTone(diagnosis.resolution)}>{diagnosis.resolution}</Badge>
         </div>
         <p className="font-mono text-lg text-text break-anywhere">
-          {actor ? shortEntity(actor) : "No single root cause identified"}
+          {withheld
+            ? "Not established"
+            : competing
+              ? candidates.map(shortEntity).join(" · ")
+              : actor
+                ? shortEntity(actor)
+                : "No single root cause identified"}
         </p>
+        {withheld && (
+          <p className="text-sm text-muted">
+            {diagnosis.leading_actor_withheld_reason === "TIED_LEADERS"
+              ? `No candidate is established and several share the top rank: ${candidates.map(shortEntity).join(", ")}. None is shown as the cause.`
+              : "No candidate has evidence in the incident window. Observations outside it stay listed below as context, not as causes."}
+          </p>
+        )}
         <p className="text-sm text-muted break-anywhere">{diagnosis.summary}</p>
-        {diagnosis.decision_semantics === "m21.v2" && (
+        {["m21.v2", "m21.v3"].includes(diagnosis.decision_semantics ?? "") && (
           <p className="text-sm text-muted">
             Diagnosis: {diagnosis.diagnosis_status}. Scope: {diagnosis.claim_level}.
             Incident recovery: {diagnosis.incident_recovery}.
             Context observations: {diagnosis.context_hypothesis_ids?.length ?? 0}.
             Open causal boundaries: {diagnosis.material_frontier_ids?.length ?? 0}.
+            Explained claims: {diagnosis.causal_explanations?.filter(r => r.consequence === "EXPLAINS_CLAIM").length ?? 0}.
+            Answered questions: {diagnosis.frontier_answers?.filter(a => a.state === "ANSWERED_ROLE_TRANSFERRED").length ?? 0}.
           </p>
         )}
 
         {!resolved && (
           <div className="rounded-lg border border-accent/30 bg-accent-soft px-3 py-2 text-sm">
-            <span className="font-medium">Ambiguous is not wrong.</span> The engine has a leading
-            actor but could not positively exclude a structural alternative.
+            <span className="font-medium">Uncertainty remains.</span> The recorded evidence leaves causal distinctions open.
             {diagnosis.resolution_rationale && (
               <p className="mt-1 text-muted break-anywhere">{diagnosis.resolution_rationale}</p>
             )}

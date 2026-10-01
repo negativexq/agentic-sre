@@ -10,6 +10,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from packages.rca.evidence_coverage import EvidenceCoverage
+
 CLUSTER_SCOPE = "_cluster"
 
 
@@ -410,6 +412,173 @@ class Finding(BaseModel):
         return self
 
 
+class AlertEpisode(BaseModel):
+    """One alert episode as the alert channel captured it (M21 timing contract §3).
+
+    An episode is a fingerprint plus one ``starts_at``. ``firing_at_cutoff`` says whether it
+    was still firing in the last capture at or before the revision cutoff; it is a fact of that
+    capture, never a prediction of how long the episode lasts.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    fingerprint: str
+    name: str
+    service: str | None = None
+    starts_at: datetime
+    first_capture: datetime
+    last_capture: datetime
+    captures: int = 1
+    firing_at_cutoff: bool = False
+    evidence_ids: tuple[str, ...] = ()
+
+
+class TimingStability(StrEnum):
+    """Whether a decision holds over every admissible onset (M21 timing contract §4)."""
+
+    STABLE = "STABLE"
+    SENSITIVE = "SENSITIVE"
+    UNASSESSED = "UNASSESSED"
+
+
+class OnsetCandidate(BaseModel):
+    """One admissible onset with the episodes that derive it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    onset: datetime
+    is_h0: bool = False
+    is_upper: bool = False
+    episodes: tuple[AlertEpisode, ...] = ()
+
+
+class OnsetUncertainty(BaseModel):
+    """The evidence-derived set ``O`` of admissible onsets at one revision cutoff.
+
+    ``h0`` is the M21 §10.2 onset of record. ``upper`` is the earliest qualified episode still
+    firing in the last capture (or, when none is, the latest qualified start). ``members`` are
+    every qualified episode start in ``[h0, upper]``. Empty ``members`` means the onset is not
+    assessable and every timing outcome is ``UNASSESSED``.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    reason: str = "ONSET_UNKNOWN"
+    cutoff: datetime | None = None
+    alert_observation_start: datetime | None = None
+    h0: datetime | None = None
+    upper: datetime | None = None
+    members: tuple[OnsetCandidate, ...] = ()
+
+    @property
+    def assessable(self) -> bool:
+        return bool(self.members)
+
+
+class RelationTiming(BaseModel):
+    """Stability of one temporal relation a decision may rely on, over every admissible onset."""
+
+    model_config = ConfigDict(frozen=True)
+
+    relation: str
+    stability: TimingStability
+    # The distinct values the relation took over the onsets where the claim exists (audit).
+    values: tuple[str, ...] = ()
+
+
+class ClaimTiming(BaseModel):
+    """Formation and adjudication stability of one exact claim (M21 timing contract §4).
+
+    Formation: the same identity forms with the same evidence set and assessed mechanism under
+    every onset. Adjudication: each relation a decision relied on holds identically. The claim
+    is matched across onsets by its onset-independent ``hypothesis_key``.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    hypothesis_key: str
+    actor: str
+    formation: TimingStability
+    adjudication: TimingStability
+    relations: tuple[RelationTiming, ...] = ()
+
+    def relation(self, name: str) -> TimingStability:
+        return next(
+            (r.stability for r in self.relations if r.relation == name), TimingStability.UNASSESSED
+        )
+
+
+class WithheldAuthority(BaseModel):
+    """One piece of temporal authority that was not granted because it was timing-sensitive.
+
+    The claim is never removed and its possible-cause support is kept; only the stronger or
+    negative authority that leaned on an unstable relation is withheld.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    hypothesis_key: str
+    actor: str
+    # TEMPORAL_ELIMINATION, ENDED_EPISODE_ELIMINATION or STRONG_MECHANISM.
+    authority: str
+    relations: tuple[str, ...] = ()
+
+
+class StatusDriver(BaseModel):
+    """One claim whose standing differs from the onset of record and so moves the status.
+
+    ``change`` says whether it enters or leaves competition under the assessed onset;
+    ``reason`` says why, in the words of the evidence, never as a contradiction unless the
+    evidence actually contradicted: ``BLOCKED_ENDED_EPISODE_RULE`` (the rule could not be
+    judged, no observations after the deadline), ``ELIMINATION_NOT_HOLDING`` (a positive
+    outcome differs), ``FORMS_ONLY_UNDER_THIS_ONSET``, ``NO_LONGER_FORMED``,
+    ``ELIMINATED_OR_EXPLAINED_UNDER_THIS_ONSET`` or ``OTHER``.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    hypothesis_key: str
+    actor: str
+    change: str
+    reason: str
+
+
+class OnsetOutcome(BaseModel):
+    """The diagnosis status the same evidence gives under one admissible onset (audit).
+
+    ``drivers`` is filled only when the status differs from the onset of record.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    onset: datetime
+    diagnosis_status: str
+    drivers: tuple[StatusDriver, ...] = ()
+
+
+class TimingAssessment(BaseModel):
+    """Timing stability of one revision's decisions, derived only from that revision's evidence.
+
+    ``uncertainty`` records how ``O`` was derived (episodes, capture evidence ids, ``H0``,
+    ``U``) so replay can audit why it produced the same set. ``status`` is the stability of
+    the diagnosis status itself; ``claims`` carries the per-claim outcomes.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    version: str = "m21.timing.v1"
+    uncertainty: OnsetUncertainty
+    status: TimingStability = TimingStability.UNASSESSED
+    outcomes: tuple[OnsetOutcome, ...] = ()
+    claims: tuple[ClaimTiming, ...] = ()
+    # Authority the onset-of-record decision would have carried but that was withheld because
+    # a relation it relied on is not stable over the onset set (M21 timing contract §5).
+    withheld: tuple[WithheldAuthority, ...] = ()
+
+    def claim(self, hypothesis_key: str) -> ClaimTiming | None:
+        return next((c for c in self.claims if c.hypothesis_key == hypothesis_key), None)
+
+
 class Symptoms(BaseModel):
     """What the incident looks like from its alerts."""
 
@@ -513,6 +682,7 @@ class HypothesisSignature(BaseModel):
 class ResolutionReasonCode(StrEnum):
     """Stable reason codes used when a hypothesis is excluded from resolution."""
 
+    POSITIVELY_EXPLAINED_OBSERVATION = "POSITIVELY_EXPLAINED_OBSERVATION"
     NO_CAUSAL_SYMPTOM_LINK = "NO_CAUSAL_SYMPTOM_LINK"
     NO_ONSET_CAPABLE_INITIATING_EVIDENCE = "NO_ONSET_CAPABLE_INITIATING_EVIDENCE"
     EXPLICIT_TEMPORAL_CONTRADICTION = "EXPLICIT_TEMPORAL_CONTRADICTION"
@@ -819,6 +989,45 @@ class CausalWitness(BaseModel):
     claim_level: str = "POSSIBLE_INITIATING_CAUSE"
 
 
+class CausalExplanation(BaseModel):
+    """Positive, scoped explanation; never a topology-derived dominance edge."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    explaining_claim: str
+    explained_claim: str
+    actor: EntityRef
+    actor_instance: EntityInstanceRef | None = None
+    manifestation: EntityRef
+    manifestation_instance: EntityInstanceRef | None = None
+    episode_onset: datetime
+    mechanism: str
+    path: tuple[CausalHop, ...]
+    evidence_ids: tuple[str, ...]
+    explained_evidence_ids: tuple[str, ...]
+    coverage: tuple[str, ...]
+    rule_id: str
+    rule_version: str = "v1"
+    consequence: str = "EXPLAINS_OBSERVATION"
+    remaining_uncertainty: tuple[str, ...] = ()
+
+
+class FrontierAnswer(BaseModel):
+    """An evidence-backed answer to one material question, not global absence."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    alternative_id: str
+    question: str
+    state: str = "OPEN"
+    investigation_state: str = "UNEXPLORED"
+    blocked_reason: str | None = None
+    evidence_ids: tuple[str, ...] = ()
+    affected_claims: tuple[str, ...] = ()
+    transferred_claims: tuple[str, ...] = ()
+    remaining_uncertainty: tuple[str, ...] = ()
+    rule_id: str = "m21.frontier.observed-role"
+    rule_version: str = "v1"
+
+
 class RootSupportRecord(BaseModel):
     """One versioned root-support rule outcome for one hypothesis.
 
@@ -943,6 +1152,45 @@ class HypothesisResolutionAudit(BaseModel):
     channel_assessment: ChannelAssessment | None = None
     admission: str = "LEGACY_UNASSESSED"
     admission_reasons: tuple[str, ...] = ()
+    causal_family_id: str = ""
+
+
+class FamilyState(StrEnum):
+    """Aggregate state of a causal family over its selectable exact members."""
+
+    SUPPORTED = "SUPPORTED"
+    UNRESOLVED = "UNRESOLVED"
+    EXCLUDED = "EXCLUDED"
+
+
+class InstanceResolution(StrEnum):
+    """How far a family's viable exact instances are resolved."""
+
+    EXACT = "EXACT"
+    MULTIPLE_VIABLE = "MULTIPLE_VIABLE"
+    UNKNOWN = "UNKNOWN"
+
+
+class CausalFamily(BaseModel):
+    """One root-cause competition unit: a logical actor and its mechanism family.
+
+    Exact claims (one per UID/lifecycle) stay separate audit records; a family only decides
+    whether incarnations of the same causal proposition compete with each other.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    family_id: str
+    actor: EntityRef
+    mechanism_family: str = ""
+    state: FamilyState
+    instance_resolution: InstanceResolution
+    members: tuple[str, ...] = ()
+    supported_members: tuple[str, ...] = ()
+    unresolved_members: tuple[str, ...] = ()
+    excluded_members: tuple[str, ...] = ()
+    # Display only (first supported member in rank order); never identity or state.
+    representative: str | None = None
 
 
 class ResolutionTrace(BaseModel):
@@ -958,6 +1206,11 @@ class ResolutionTrace(BaseModel):
     context_hypotheses: tuple[str, ...] = ()
     material_frontier_ids: tuple[str, ...] = ()
     frontier_bindings: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    explanations: tuple[CausalExplanation, ...] = ()
+    explained_hypotheses: tuple[str, ...] = ()
+    mechanism_verified_hypotheses: tuple[str, ...] = ()
+    independent_mechanism_causes: tuple[str, ...] = ()
+    frontier_answers: tuple[FrontierAnswer, ...] = ()
     leading_hypothesis_ids: tuple[str, ...] = ()
     signatures: tuple[HypothesisSignature, ...] = ()
     distinguishing_facts: tuple[str, ...] = ()
@@ -971,6 +1224,9 @@ class ResolutionTrace(BaseModel):
     discriminators: tuple[ResolutionDiscriminator, ...] = ()
     dominance_relations: tuple[DominanceRelation, ...] = ()
     hypothesis_audits: tuple[HypothesisResolutionAudit, ...] = ()
+    causal_families: tuple[CausalFamily, ...] = ()
+    # Timing stability over the evidence-derived onset set; None when not assessed at all.
+    timing: TimingAssessment | None = None
     decision_basis: str = ""
     rationale: str = ""
 
@@ -1197,6 +1453,13 @@ class Hypothesis(BaseModel):
     claim_version: str = "legacy"
     actor_instance: EntityInstanceRef | None = None
     mechanism: str = "UNKNOWN"
+    # Onset-independent: the kinds of the actor's own cause-capable findings, whatever
+    # temporal role the incident onset gives them. ``mechanism`` is the assessed result.
+    mechanism_family: str = ""
+    # Root-cause competition identity: logical actor + mechanism family. Never the instance
+    # UID, incident onset, temporal role, score or evidence ids. Empty on legacy claims.
+    causal_family_id: str = ""
+    # The onset this claim was assessed against. It is assessment context, not identity.
     episode_onset: datetime | None = None
     presentation_group_id: str = ""
     symptom_entities: tuple[EntityRef, ...] = ()
@@ -1240,6 +1503,7 @@ class StructuralAlternative(BaseModel):
     observation_targets: tuple[EntityRef, ...] = ()
     queried_dimensions: tuple[GapDimension, ...] = ()
     status: FrontierStatus = FrontierStatus.UNEXPLORED
+    answer: FrontierAnswer | None = None
 
 
 class HypothesisDiagnostics(BaseModel):
@@ -1511,6 +1775,8 @@ class InvestigationActionAudit(BaseModel):
     hypothesis_states_after: tuple[InvestigationHypothesisState, ...] = ()
     gap_states_before: tuple[InvestigationGapState, ...] = ()
     gap_states_after: tuple[InvestigationGapState, ...] = ()
+    causal_decision_before: str | None = None
+    causal_decision_after: str | None = None
     decision_state_changed: bool | None = None
     progress_classification: str = "PENDING"
 
@@ -1549,6 +1815,22 @@ class Diagnosis(BaseModel):
     # epistemic digest. Empty for documents written before it existed.
     requirement_evaluations: tuple[RequirementEvaluation, ...] = ()
     hypothesis_inventory: tuple[HypothesisInventoryEntry, ...] = ()
+    # Presentation, outside the epistemic digest (roadmap C10): whether ``root_cause`` may be shown as
+    # the leading actor. False when no claim is established and every finding of the leader whose time
+    # is known lies outside the incident window, so the ranking's least-bad candidate is never presented
+    # as a cause. ``root_cause`` itself is unchanged. True for documents written before it existed.
+    leading_actor_established: bool = True
+    leading_actor_withheld_reason: str | None = None
+    # What the operator is shown (roadmap C12, packages/rca/presentation.py): SINGLE, COMPETING or
+    # NOT_ESTABLISHED; the epistemic tier it was decided in; the candidates shown. Empty candidates (a
+    # document from before these fields) means: show ``root_cause`` as before.
+    leading_actor_display: str = "SINGLE"
+    leading_actor_tier: str | None = None
+    leading_actor_candidates: tuple[EntityRef, ...] = ()
+    # Provenance, outside the epistemic digest (late-evidence-design.md §4): per scope, whether the
+    # window was observed continuously and whether transport was proven. Recorded by the control
+    # plane, read by no rule yet. None for documents written before it existed and offline runs.
+    evidence_coverage: EvidenceCoverage | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -1641,7 +1923,9 @@ class InvestigationResult(BaseModel):
 __all__ = [
     "CLUSTER_SCOPE",
     "Alert",
+    "AlertEpisode",
     "Candidate",
+    "CausalFamily",
     "CausalHop",
     "EvidenceTemporalRole",
     "ClusterEvent",
@@ -1654,6 +1938,17 @@ __all__ = [
     "Edge",
     "EntityRef",
     "EntityInstanceRef",
+    "FamilyState",
+    "InstanceResolution",
+    "ClaimTiming",
+    "OnsetCandidate",
+    "OnsetOutcome",
+    "OnsetUncertainty",
+    "RelationTiming",
+    "StatusDriver",
+    "TimingAssessment",
+    "TimingStability",
+    "WithheldAuthority",
     "Finding",
     "FindingKind",
     "InvestigationStep",

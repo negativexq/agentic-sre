@@ -96,11 +96,20 @@ export interface DiagnosisView {
   incident_recovery?: string;
   context_hypothesis_ids?: string[];
   material_frontier_ids?: string[];
+  causal_explanations?: { explaining_claim: string; explained_claim: string; mechanism: string; consequence: string; evidence_ids: string[] }[];
+  frontier_answers?: { alternative_id: string; question: string; state: string; investigation_state: string; evidence_ids: string[]; remaining_uncertainty: string[] }[];
+  mechanism_verified_hypothesis_ids?: string[];
   incident_id: string;
   resolution: Resolution;
   confidence: Confidence;
   leading_root_actor: string | null;
   root_cause: string | null;
+  /** Why the engine did not establish a leading actor (roadmap C10); the actor is then null. */
+  leading_actor_withheld_reason?: string | null;
+  /** What to show (roadmap C12): SINGLE shows leading_root_actor, the others the candidates. */
+  leading_actor_display?: "SINGLE" | "COMPETING" | "NOT_ESTABLISHED";
+  leading_actor_tier?: "STRONG" | "SUPPORTED" | "UNESTABLISHED" | null;
+  leading_actor_candidates?: string[];
   is_resolved: boolean;
   summary: string;
   resolution_rationale: string | null;
@@ -172,6 +181,10 @@ export interface IncidentListItem {
   confidence: Confidence | null;
   resolution: Resolution | null;
   has_diagnosis: boolean;
+  /** Set when the engine did not establish a leading actor (roadmap C10). */
+  leading_actor_withheld_reason?: string | null;
+  leading_actor_display?: "SINGLE" | "COMPETING" | "NOT_ESTABLISHED";
+  leading_actor_candidates?: string[];
   created_at: string;
   updated_at: string;
   age_seconds: number;

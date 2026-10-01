@@ -99,6 +99,7 @@ class Evaluation:
     safety: dict[str, int | None]
     transition: Transition | None
     reasons: dict[str, str]  # proof id or counter -> why it failed / is unmeasured
+    decision_authority: dict[str, str] = field(default_factory=dict)
 
 
 SAFETY_COUNTERS = (
@@ -612,7 +613,25 @@ def evaluate(facts: ProofInput) -> Evaluation:
         if target is not None and ctx.key is not None
         else None
     )
-    return Evaluation(proof, negatives, safety, transition, reasons)
+    trace = ctx.r2.diagnosis.resolution_trace
+    scoped = trace is not None and trace.semantics_version in {"m21.v2", "m21.v3"}
+    authority = {
+        "T4_claim": "m21.unique-possible-cause.v1" if scoped else "legacy.resolved.v1",
+        "T5_claim": "m21.unique-possible-cause.v1" if scoped else "legacy.resolved.v1",
+        "T6_claim": "m21.unique-possible-cause.v1" if scoped else "legacy.resolved.v1",
+        "possible_cause_disambiguated": "PASS" if has_supported_cause(ctx.r2.diagnosis) else "FAIL",
+        "observed_mechanism": "PASS"
+        if trace and trace.mechanism_verified_hypotheses
+        else "NOT_ESTABLISHED",
+        "positive_rival_elimination": "PASS" if transition else "NOT_ESTABLISHED",
+        "strong_diagnosis_disambiguated": "PASS"
+        if trace
+        and trace.diagnosis_status == "MECHANISM_VERIFIED_CAUSE"
+        and ctx.r2.diagnosis.resolution is Resolution.RESOLVED
+        else "NOT_ESTABLISHED",
+        "incident_recovery": ctx.r2.diagnosis.incident_recovery,
+    }
+    return Evaluation(proof, negatives, safety, transition, reasons, authority)
 
 
 def receipts_of(timeline: Sequence[object]) -> dict[TimelineRef, ActionReceipt]:

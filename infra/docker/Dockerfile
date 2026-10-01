@@ -1,6 +1,6 @@
 # One image definition for every component. Build a component with
 #   docker build -f infra/docker/Dockerfile --target <component> -t agentic-sre/<component>:dev .
-# Targets: control-plane, migrator, order-service, payment-service, order-worker.
+# Targets: control-plane, migrator, connector, order-service, payment-service, order-worker.
 
 ARG PYTHON_IMAGE=python:3.12.13-slim-bookworm
 
@@ -35,6 +35,10 @@ FROM base AS migrator
 COPY alembic.ini ./
 COPY alembic ./alembic
 CMD ["alembic", "upgrade", "head"]
+
+# The customer-side connector (docs/architecture/connector-boundary-contract.md section 12.7).
+FROM base AS connector
+CMD ["python", "-m", "packages.connector.agent"]
 
 FROM base AS order-service
 EXPOSE 8000

@@ -1,0 +1,159 @@
+# The Connector of the testbed lab (docs/architecture/testbed-control-plane-design.md section 4).
+#
+# It holds every lab credential, dials the control plane that runs on the host, and can only read:
+# it reuses the read-only rules of `agentic-sre-reader` in `sre-demo` and `chaos-mesh` and gets the
+# same rules in `lab-control`. It never reads Secrets. The client certificate (`connector-tls`) and
+# the webhook token (`connector-webhook`) are created at bring-up by `make connector-deploy` and are
+# not part of this file.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: connector
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: connector
+  namespace: connector
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agentic-sre-reader
+  namespace: lab-control
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "events", "services", "configmaps", "resourcequotas", "limitranges"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: connector-reader
+  namespace: sre-demo
+subjects:
+  - kind: ServiceAccount
+    name: connector
+    namespace: connector
+roleRef:
+  kind: Role
+  name: agentic-sre-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: connector-reader
+  namespace: chaos-mesh
+subjects:
+  - kind: ServiceAccount
+    name: connector
+    namespace: connector
+roleRef:
+  kind: Role
+  name: agentic-sre-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: connector-reader
+  namespace: lab-control
+subjects:
+  - kind: ServiceAccount
+    name: connector
+    namespace: connector
+roleRef:
+  kind: Role
+  name: agentic-sre-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: connector-config
+  namespace: connector
+data:
+  SRE_CONNECTOR_ENDPOINT: host.docker.internal:8443
+  SRE_CONNECTOR_SERVER_NAME: host.docker.internal
+  SRE_CONNECTOR_TLS_CERT: /etc/connector/tls/client.crt
+  SRE_CONNECTOR_TLS_KEY: /etc/connector/tls/client.key
+  SRE_CONNECTOR_TLS_CA: /etc/connector/tls/ca.crt
+  SRE_CONNECTOR_WEBHOOK_LISTEN: 0.0.0.0:9095
+  SRE_CLUSTER_ACCESS: "true"
+  SRE_WATCH_NAMESPACES: sre-demo,lab-control
+  SRE_EVIDENCE_NAMESPACES: chaos-mesh
+  SRE_WATCH_INTERVAL_SECONDS: "15"
+  SRE_ALERT_COVERAGE_POLL_SECONDS: "30"
+  SRE_LOKI_URL: http://loki.observability.svc.cluster.local:3100
+  PROMETHEUS_URL: http://prometheus.observability.svc.cluster.local:9090
+  TEMPO_URL: http://tempo.observability.svc.cluster.local:3200
+  SRE_ALERTMANAGER_URL: http://alertmanager.observability.svc.cluster.local:9093
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: connector
+  namespace: connector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: connector
+  template:
+    metadata:
+      labels:
+        app: connector
+    spec:
+      serviceAccountName: connector
+      containers:
+        - name: connector
+          image: agentic-sre/connector:dev
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: connector-config
+          env:
+            - name: SRE_CONNECTOR_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: connector-webhook
+                  key: token
+          ports:
+            - containerPort: 9095
+          volumeMounts:
+            - name: tls
+              mountPath: /etc/connector/tls
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: tls
+          secret:
+            secretName: connector-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: connector-webhook
+  namespace: connector
+spec:
+  selector:
+    app: connector
+  ports:
+    - port: 9095
+      targetPort: 9095

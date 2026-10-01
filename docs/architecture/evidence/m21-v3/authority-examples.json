@@ -1,0 +1,2036 @@
+[
+  {
+    "fixture": "positive",
+    "scope": "Synthetic StatefulSet pod-admission incident; not seen35 accuracy",
+    "initial_resolution": "INSUFFICIENT_EVIDENCE",
+    "final_resolution": "RESOLVED",
+    "final_decision": "MECHANISM_VERIFIED_CAUSE",
+    "queries": 1,
+    "recovery": "NOT_ASSESSED",
+    "replay_equal": true,
+    "explanations": [
+      {
+        "explaining_claim": "hypothesis:25b96aa9dc97d2e8:912af3ec8e1e83ce",
+        "explained_claim": "hypothesis:55bbef283cac2f30:7b535914ce8f275f",
+        "actor": {
+          "kind": "ResourceQuota",
+          "name": "capacity",
+          "namespace": "shop"
+        },
+        "actor_instance": null,
+        "manifestation": {
+          "kind": "StatefulSet",
+          "name": "worker",
+          "namespace": "shop"
+        },
+        "manifestation_instance": null,
+        "episode_onset": "2026-01-01T00:00:00Z",
+        "mechanism": "QUOTA_ADMISSION_REJECTION",
+        "path": [
+          {
+            "source": {
+              "kind": "ResourceQuota",
+              "name": "capacity",
+              "namespace": "shop"
+            },
+            "relation": "quota_blocks",
+            "target": {
+              "kind": "StatefulSet",
+              "name": "worker",
+              "namespace": "shop"
+            },
+            "direction": "forward"
+          }
+        ],
+        "evidence_ids": [
+          "evt:quota"
+        ],
+        "explained_evidence_ids": [
+          "evt:quota"
+        ],
+        "coverage": [
+          "EXACT_EVENT_SUBJECT_AND_UID",
+          "ALL_LOCAL_FACTS_CHECKED"
+        ],
+        "rule_id": "m21.explanation.observed-quota-rejection",
+        "rule_version": "v1",
+        "consequence": "EXPLAINS_CLAIM",
+        "remaining_uncertainty": []
+      }
+    ],
+    "frontier_answers": [
+      {
+        "alternative_id": "alternative:fdcd1b706b05c115732e",
+        "question": "WHAT_OBSERVED_UPSTREAM_ROLE_AFFECTS_THIS_CLAIM",
+        "state": "ANSWERED_ROLE_TRANSFERRED",
+        "investigation_state": "ANSWERED",
+        "blocked_reason": null,
+        "evidence_ids": [
+          "evt:quota"
+        ],
+        "affected_claims": [
+          "hypothesis:55bbef283cac2f30:7b535914ce8f275f"
+        ],
+        "transferred_claims": [
+          "hypothesis:25b96aa9dc97d2e8:912af3ec8e1e83ce"
+        ],
+        "remaining_uncertainty": [
+          "TRANSFERRED_CLAIM_STILL_REQUIRES_ADJUDICATION"
+        ],
+        "rule_id": "m21.frontier.observed-role",
+        "rule_version": "v1"
+      }
+    ],
+    "action_audits": [
+      {
+        "turn_index": 1,
+        "action": {
+          "action": "inspect",
+          "gap_id": "gap:event_sequence:072416c5dda7318e10d5",
+          "capability": "incident_events",
+          "target": {
+            "kind": "Namespace",
+            "name": "shop",
+            "namespace": "_cluster"
+          },
+          "query": {
+            "start": "2025-12-31T22:00:00Z",
+            "end": "2026-01-01T00:05:00Z",
+            "reasons": [],
+            "contains": [],
+            "limit": 64
+          },
+          "rationale": "deterministic candidate candidate:141e857388ff6bd96f2e; utility=0/0/1/1; discovery discriminator gap=gap:event_sequence:072416c5dda7318e10d5; unknown-slots=causal_actor,relevant_event,temporal_sequence; fact-families=incident_event,event_sequence; NO_DATA/NO_MATCH are neutral"
+        },
+        "intent_id": "intent:incident_actor_discovery",
+        "intent_kind": "INCIDENT_ACTOR_DISCOVERY",
+        "selection_strategy": "BASELINE_FALLBACK",
+        "selection_reason": "active_choice_has_lower_expected_decision_impact",
+        "baseline_candidate_id": "candidate:141e857388ff6bd96f2e",
+        "active_candidate_id": "candidate:7d2c619213e07bd64803",
+        "gap_dimension": "EVENT_SEQUENCE",
+        "missing_fact": "whether incident-scoped Kubernetes events reveal an unobserved failure, autoscaling, scheduling, quota, or fault actor",
+        "discriminator": {
+          "gap_id": "gap:event_sequence:072416c5dda7318e10d5",
+          "dimension": "EVENT_SEQUENCE",
+          "missing_fact": "whether incident-scoped Kubernetes events reveal an unobserved failure, autoscaling, scheduling, quota, or fault actor",
+          "kind": "DISCOVERY_DISCRIMINATION",
+          "support_outcomes": [],
+          "comparison_hypothesis_ids": [],
+          "comparison_alternative_ids": [],
+          "no_data_outcomes": [
+            {
+              "kind": "NO_DATA",
+              "hypothesis_ids": [],
+              "alternative_ids": [],
+              "condition": "the evidence source returns no observation",
+              "implication": "does not support or contradict any hypothesis; ambiguity remains"
+            }
+          ],
+          "unknown_slots": [
+            "causal_actor",
+            "relevant_event",
+            "temporal_sequence"
+          ],
+          "expected_fact_families": [
+            "incident_event",
+            "event_sequence"
+          ],
+          "possible_outcomes": [
+            "NEW_RELEVANT_EVENT",
+            "NEW_ACTOR",
+            "TEMPORAL_SEQUENCE_DISCOVERED",
+            "NO_MATCH",
+            "NO_DATA"
+          ],
+          "no_data_is_discriminating": false
+        },
+        "selection_candidates": [
+          {
+            "intent_id": "intent:recent_source_change",
+            "intent_rank": 1,
+            "candidate_rank": 1,
+            "candidate_id": "candidate:1b3f7733e1a0fbc8594d",
+            "considered_by_physical_selector": false,
+            "gap_ids": [
+              "gap:change_timing:d532d7201feb63021441",
+              "gap:config_difference:24e07bc3e869d56ddc87"
+            ],
+            "dimensions": [
+              "CHANGE_TIMING",
+              "CONFIG_DIFFERENCE"
+            ],
+            "capability": "history",
+            "target": {
+              "kind": "StatefulSet",
+              "name": "worker",
+              "namespace": "shop"
+            },
+            "query": {
+              "start": "2025-12-31T22:00:00Z",
+              "end": "2026-01-01T00:05:00Z",
+              "reasons": [],
+              "contains": [],
+              "limit": 32
+            },
+            "hypothesis_ids": [],
+            "alternative_ids": [
+              "alternative:0c5be15e7c13b7bedd8b"
+            ],
+            "discriminators": [
+              {
+                "gap_id": "gap:change_timing:d532d7201feb63021441",
+                "dimension": "CHANGE_TIMING",
+                "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for change_timing",
+                "kind": "HYPOTHESIS_DISCRIMINATION",
+                "support_outcomes": [
+                  {
+                    "kind": "SUPPORTS",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [
+                      "alternative:0c5be15e7c13b7bedd8b"
+                    ],
+                    "condition": "the missing fact promotes alternative:0c5be15e7c13b7bedd8b into a causal explanation",
+                    "implication": "promotes shop/StatefulSet/worker for deterministic RCA evaluation"
+                  }
+                ],
+                "comparison_hypothesis_ids": [
+                  "hypothesis:3577cdf48465d856:4471439f888bc303"
+                ],
+                "comparison_alternative_ids": [
+                  "alternative:fdcd1b706b05c115732e"
+                ],
+                "no_data_outcomes": [
+                  {
+                    "kind": "NO_DATA",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [
+                      "alternative:0c5be15e7c13b7bedd8b"
+                    ],
+                    "condition": "the evidence source returns no observation",
+                    "implication": "does not support or contradict any hypothesis; ambiguity remains"
+                  }
+                ],
+                "unknown_slots": [],
+                "expected_fact_families": [],
+                "possible_outcomes": [],
+                "no_data_is_discriminating": false
+              },
+              {
+                "gap_id": "gap:config_difference:24e07bc3e869d56ddc87",
+                "dimension": "CONFIG_DIFFERENCE",
+                "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for config_difference",
+                "kind": "HYPOTHESIS_DISCRIMINATION",
+                "support_outcomes": [
+                  {
+                    "kind": "SUPPORTS",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [
+                      "alternative:0c5be15e7c13b7bedd8b"
+                    ],
+                    "condition": "the missing fact promotes alternative:0c5be15e7c13b7bedd8b into a causal explanation",
+                    "implication": "promotes shop/StatefulSet/worker for deterministic RCA evaluation"
+                  }
+                ],
+                "comparison_hypothesis_ids": [
+                  "hypothesis:3577cdf48465d856:4471439f888bc303"
+                ],
+                "comparison_alternative_ids": [
+                  "alternative:fdcd1b706b05c115732e"
+                ],
+                "no_data_outcomes": [
+                  {
+                    "kind": "NO_DATA",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [
+                      "alternative:0c5be15e7c13b7bedd8b"
+                    ],
+                    "condition": "the evidence source returns no observation",
+                    "implication": "does not support or contradict any hypothesis; ambiguity remains"
+                  }
+                ],
+                "unknown_slots": [],
+                "expected_fact_families": [],
+                "possible_outcomes": [],
+                "no_data_is_discriminating": false
+              }
+            ],
+            "transition_certificates": [
+              {
+                "source_gap_id": "gap:change_timing:d532d7201feb63021441",
+                "capability": "history",
+                "target": {
+                  "kind": "StatefulSet",
+                  "name": "worker",
+                  "namespace": "shop"
+                },
+                "observation_fact_family": "object_change",
+                "permitted_normalized_outcomes": [
+                  "CONFIG_CHANGE",
+                  "SPEC_CHANGE",
+                  "IMAGE_CHANGE",
+                  "SCALE_CHANGE",
+                  "ROLLOUT_RESTART",
+                  "OBJECT_CREATED",
+                  "OBJECT_DELETED"
+                ],
+                "affected_state_kind": "STRUCTURAL_ALTERNATIVE",
+                "affected_state_ids": [
+                  "alternative:0c5be15e7c13b7bedd8b"
+                ],
+                "normalizer_rule_id": "normalizers._history_findings\u2192signals.change_findings",
+                "transition_rule_id": "engine.rebuild_hypotheses\u2192frontier.apply_frontier_progress.promote_actor",
+                "preconditions": [
+                  "normalizer returns a fresh initiating Finding for the alternative actor",
+                  "the existing topology links that actor to a current symptom"
+                ],
+                "ordinal_value": 1
+              },
+              {
+                "source_gap_id": "gap:config_difference:24e07bc3e869d56ddc87",
+                "capability": "history",
+                "target": {
+                  "kind": "StatefulSet",
+                  "name": "worker",
+                  "namespace": "shop"
+                },
+                "observation_fact_family": "object_change",
+                "permitted_normalized_outcomes": [
+                  "CONFIG_CHANGE",
+                  "SPEC_CHANGE",
+                  "IMAGE_CHANGE",
+                  "SCALE_CHANGE",
+                  "ROLLOUT_RESTART",
+                  "OBJECT_CREATED",
+                  "OBJECT_DELETED"
+                ],
+                "affected_state_kind": "STRUCTURAL_ALTERNATIVE",
+                "affected_state_ids": [
+                  "alternative:0c5be15e7c13b7bedd8b"
+                ],
+                "normalizer_rule_id": "normalizers._history_findings\u2192signals.change_findings",
+                "transition_rule_id": "engine.rebuild_hypotheses\u2192frontier.apply_frontier_progress.promote_actor",
+                "preconditions": [
+                  "normalizer returns a fresh initiating Finding for the alternative actor",
+                  "the existing topology links that actor to a current symptom"
+                ],
+                "ordinal_value": 1
+              }
+            ],
+            "discrimination_value": 2,
+            "expected_elimination_value": 0,
+            "expected_decision_impact": 1,
+            "semantic_duplicate_risk": 0,
+            "no_data_repeat_risk": 0,
+            "known_evidence_risk": 2,
+            "frontier_coverage": 2,
+            "acquisition_cost": 0,
+            "intent_ordering_key": [
+              0,
+              -2,
+              0,
+              0,
+              0,
+              2,
+              -2,
+              0
+            ],
+            "candidate_ordering_key": [
+              0,
+              -2,
+              0,
+              0,
+              0,
+              2,
+              -2,
+              0
+            ],
+            "selected": false
+          },
+          {
+            "intent_id": "intent:recent_source_change",
+            "intent_rank": 1,
+            "candidate_rank": 2,
+            "candidate_id": "candidate:7d2c619213e07bd64803",
+            "considered_by_physical_selector": false,
+            "gap_ids": [
+              "gap:change_timing:7715ded5f0e23f5eab70"
+            ],
+            "dimensions": [
+              "CHANGE_TIMING"
+            ],
+            "capability": "incident_changes",
+            "target": {
+              "kind": "Namespace",
+              "name": "shop",
+              "namespace": "_cluster"
+            },
+            "query": {
+              "start": "2025-12-31T22:00:00Z",
+              "end": "2026-01-01T00:05:00Z",
+              "reasons": [],
+              "contains": [],
+              "limit": 64
+            },
+            "hypothesis_ids": [],
+            "alternative_ids": [],
+            "discriminators": [
+              {
+                "gap_id": "gap:change_timing:7715ded5f0e23f5eab70",
+                "dimension": "CHANGE_TIMING",
+                "missing_fact": "whether incident-scoped source changes reveal an unobserved initiating object change",
+                "kind": "DISCOVERY_DISCRIMINATION",
+                "support_outcomes": [],
+                "comparison_hypothesis_ids": [],
+                "comparison_alternative_ids": [],
+                "no_data_outcomes": [
+                  {
+                    "kind": "NO_DATA",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [],
+                    "condition": "the evidence source returns no observation",
+                    "implication": "does not support or contradict any hypothesis; ambiguity remains"
+                  }
+                ],
+                "unknown_slots": [
+                  "initiating_object",
+                  "change_timing"
+                ],
+                "expected_fact_families": [
+                  "incident_change",
+                  "object_change_timing"
+                ],
+                "possible_outcomes": [
+                  "CHANGE_BEFORE_ONSET",
+                  "NO_MATCH",
+                  "NO_DATA"
+                ],
+                "no_data_is_discriminating": false
+              }
+            ],
+            "transition_certificates": [],
+            "discrimination_value": 0,
+            "expected_elimination_value": 0,
+            "expected_decision_impact": 3,
+            "semantic_duplicate_risk": 0,
+            "no_data_repeat_risk": 0,
+            "known_evidence_risk": 0,
+            "frontier_coverage": 1,
+            "acquisition_cost": 2,
+            "intent_ordering_key": [
+              0,
+              -2,
+              0,
+              0,
+              0,
+              2,
+              -2,
+              0
+            ],
+            "candidate_ordering_key": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              -1,
+              2
+            ],
+            "selected": false
+          },
+          {
+            "intent_id": "intent:incident_actor_discovery",
+            "intent_rank": 2,
+            "candidate_rank": 1,
+            "candidate_id": "candidate:141e857388ff6bd96f2e",
+            "considered_by_physical_selector": true,
+            "gap_ids": [
+              "gap:event_sequence:072416c5dda7318e10d5"
+            ],
+            "dimensions": [
+              "EVENT_SEQUENCE"
+            ],
+            "capability": "incident_events",
+            "target": {
+              "kind": "Namespace",
+              "name": "shop",
+              "namespace": "_cluster"
+            },
+            "query": {
+              "start": "2025-12-31T22:00:00Z",
+              "end": "2026-01-01T00:05:00Z",
+              "reasons": [],
+              "contains": [],
+              "limit": 64
+            },
+            "hypothesis_ids": [],
+            "alternative_ids": [],
+            "discriminators": [
+              {
+                "gap_id": "gap:event_sequence:072416c5dda7318e10d5",
+                "dimension": "EVENT_SEQUENCE",
+                "missing_fact": "whether incident-scoped Kubernetes events reveal an unobserved failure, autoscaling, scheduling, quota, or fault actor",
+                "kind": "DISCOVERY_DISCRIMINATION",
+                "support_outcomes": [],
+                "comparison_hypothesis_ids": [],
+                "comparison_alternative_ids": [],
+                "no_data_outcomes": [
+                  {
+                    "kind": "NO_DATA",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [],
+                    "condition": "the evidence source returns no observation",
+                    "implication": "does not support or contradict any hypothesis; ambiguity remains"
+                  }
+                ],
+                "unknown_slots": [
+                  "causal_actor",
+                  "relevant_event",
+                  "temporal_sequence"
+                ],
+                "expected_fact_families": [
+                  "incident_event",
+                  "event_sequence"
+                ],
+                "possible_outcomes": [
+                  "NEW_RELEVANT_EVENT",
+                  "NEW_ACTOR",
+                  "TEMPORAL_SEQUENCE_DISCOVERED",
+                  "NO_MATCH",
+                  "NO_DATA"
+                ],
+                "no_data_is_discriminating": false
+              }
+            ],
+            "transition_certificates": [],
+            "discrimination_value": 0,
+            "expected_elimination_value": 0,
+            "expected_decision_impact": 4,
+            "semantic_duplicate_risk": 0,
+            "no_data_repeat_risk": 0,
+            "known_evidence_risk": 0,
+            "frontier_coverage": 1,
+            "acquisition_cost": 2,
+            "intent_ordering_key": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              -1,
+              2
+            ],
+            "candidate_ordering_key": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              -1,
+              2
+            ],
+            "selected": true
+          }
+        ],
+        "authorization_result": "AUTHORIZED",
+        "authorization_reason": "capability/target pair is authorized for the selected resolvable gap",
+        "backend_execution_status": "SUCCEEDED",
+        "observation_id": "investigation:incident_events:b08bd3bc8668a75d213f",
+        "observation_outcome": "UNKNOWN",
+        "returned_evidence_refs": [
+          "evt:quota"
+        ],
+        "new_evidence_refs": [
+          "evt:quota"
+        ],
+        "already_known_refs": [],
+        "normalized_finding_ids": [
+          "QUOTA_EXCEEDED:shop/ResourceQuota/capacity:obj:capacity,evt:quota",
+          "FAILURE_EVENT:shop/StatefulSet/worker:evt:quota"
+        ],
+        "affected_hypothesis_ids": [],
+        "resolution_before": "INSUFFICIENT_EVIDENCE",
+        "resolution_after": "RESOLVED",
+        "leading_actor_before": {
+          "kind": "ResourceQuota",
+          "name": "capacity",
+          "namespace": "shop"
+        },
+        "leading_actor_after": {
+          "kind": "ResourceQuota",
+          "name": "capacity",
+          "namespace": "shop"
+        },
+        "hypothesis_states_before": [
+          {
+            "hypothesis_id": "hypothesis:3577cdf48465d856:4471439f888bc303",
+            "actor": {
+              "kind": "ResourceQuota",
+              "name": "capacity",
+              "namespace": "shop"
+            },
+            "state": "UNRESOLVED"
+          }
+        ],
+        "hypothesis_states_after": [
+          {
+            "hypothesis_id": "hypothesis:25b96aa9dc97d2e8:912af3ec8e1e83ce",
+            "actor": {
+              "kind": "ResourceQuota",
+              "name": "capacity",
+              "namespace": "shop"
+            },
+            "state": "SUPPORTED"
+          },
+          {
+            "hypothesis_id": "hypothesis:55bbef283cac2f30:7b535914ce8f275f",
+            "actor": {
+              "kind": "StatefulSet",
+              "name": "worker",
+              "namespace": "shop"
+            },
+            "state": "UNRESOLVED"
+          }
+        ],
+        "gap_states_before": [
+          {
+            "gap_id": "gap:change_timing:7715ded5f0e23f5eab70",
+            "dimension": "CHANGE_TIMING",
+            "missing_fact": "whether incident-scoped source changes reveal an unobserved initiating object change",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:change_timing:d532d7201feb63021441",
+            "dimension": "CHANGE_TIMING",
+            "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for change_timing",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:config_difference:24e07bc3e869d56ddc87",
+            "dimension": "CONFIG_DIFFERENCE",
+            "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for config_difference",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:event_sequence:072416c5dda7318e10d5",
+            "dimension": "EVENT_SEQUENCE",
+            "missing_fact": "whether incident-scoped Kubernetes events reveal an unobserved failure, autoscaling, scheduling, quota, or fault actor",
+            "resolvability": "RESOLVABLE"
+          }
+        ],
+        "gap_states_after": [],
+        "causal_decision_before": "5ccdfbd77ac9e31599ffa094df15c5522bb1a9875fe94d002685d88c851c35d8",
+        "causal_decision_after": "002d6eae91d68aafb9b2bfaef4fd233e16ccac43e47f783cf6e3095ae9dcfb69",
+        "decision_state_changed": true,
+        "progress_classification": "DECISION_STATE_CHANGED"
+      }
+    ]
+  },
+  {
+    "fixture": "missing-rejection",
+    "scope": "Synthetic StatefulSet pod-admission incident; not seen35 accuracy",
+    "initial_resolution": "INSUFFICIENT_EVIDENCE",
+    "final_resolution": "INSUFFICIENT_EVIDENCE",
+    "final_decision": "INSUFFICIENT_EVIDENCE",
+    "queries": 3,
+    "recovery": "NOT_ASSESSED",
+    "replay_equal": true,
+    "explanations": [],
+    "frontier_answers": [],
+    "action_audits": [
+      {
+        "turn_index": 1,
+        "action": {
+          "action": "inspect",
+          "gap_id": "gap:event_sequence:072416c5dda7318e10d5",
+          "capability": "incident_events",
+          "target": {
+            "kind": "Namespace",
+            "name": "shop",
+            "namespace": "_cluster"
+          },
+          "query": {
+            "start": "2025-12-31T22:00:00Z",
+            "end": "2026-01-01T00:05:00Z",
+            "reasons": [],
+            "contains": [],
+            "limit": 64
+          },
+          "rationale": "deterministic candidate candidate:141e857388ff6bd96f2e; utility=0/0/1/1; discovery discriminator gap=gap:event_sequence:072416c5dda7318e10d5; unknown-slots=causal_actor,relevant_event,temporal_sequence; fact-families=incident_event,event_sequence; NO_DATA/NO_MATCH are neutral"
+        },
+        "intent_id": "intent:incident_actor_discovery",
+        "intent_kind": "INCIDENT_ACTOR_DISCOVERY",
+        "selection_strategy": "BASELINE_FALLBACK",
+        "selection_reason": "active_choice_has_lower_expected_decision_impact",
+        "baseline_candidate_id": "candidate:141e857388ff6bd96f2e",
+        "active_candidate_id": "candidate:7d2c619213e07bd64803",
+        "gap_dimension": "EVENT_SEQUENCE",
+        "missing_fact": "whether incident-scoped Kubernetes events reveal an unobserved failure, autoscaling, scheduling, quota, or fault actor",
+        "discriminator": {
+          "gap_id": "gap:event_sequence:072416c5dda7318e10d5",
+          "dimension": "EVENT_SEQUENCE",
+          "missing_fact": "whether incident-scoped Kubernetes events reveal an unobserved failure, autoscaling, scheduling, quota, or fault actor",
+          "kind": "DISCOVERY_DISCRIMINATION",
+          "support_outcomes": [],
+          "comparison_hypothesis_ids": [],
+          "comparison_alternative_ids": [],
+          "no_data_outcomes": [
+            {
+              "kind": "NO_DATA",
+              "hypothesis_ids": [],
+              "alternative_ids": [],
+              "condition": "the evidence source returns no observation",
+              "implication": "does not support or contradict any hypothesis; ambiguity remains"
+            }
+          ],
+          "unknown_slots": [
+            "causal_actor",
+            "relevant_event",
+            "temporal_sequence"
+          ],
+          "expected_fact_families": [
+            "incident_event",
+            "event_sequence"
+          ],
+          "possible_outcomes": [
+            "NEW_RELEVANT_EVENT",
+            "NEW_ACTOR",
+            "TEMPORAL_SEQUENCE_DISCOVERED",
+            "NO_MATCH",
+            "NO_DATA"
+          ],
+          "no_data_is_discriminating": false
+        },
+        "selection_candidates": [
+          {
+            "intent_id": "intent:recent_source_change",
+            "intent_rank": 1,
+            "candidate_rank": 1,
+            "candidate_id": "candidate:1b3f7733e1a0fbc8594d",
+            "considered_by_physical_selector": false,
+            "gap_ids": [
+              "gap:change_timing:d532d7201feb63021441",
+              "gap:config_difference:24e07bc3e869d56ddc87"
+            ],
+            "dimensions": [
+              "CHANGE_TIMING",
+              "CONFIG_DIFFERENCE"
+            ],
+            "capability": "history",
+            "target": {
+              "kind": "StatefulSet",
+              "name": "worker",
+              "namespace": "shop"
+            },
+            "query": {
+              "start": "2025-12-31T22:00:00Z",
+              "end": "2026-01-01T00:05:00Z",
+              "reasons": [],
+              "contains": [],
+              "limit": 32
+            },
+            "hypothesis_ids": [],
+            "alternative_ids": [
+              "alternative:0c5be15e7c13b7bedd8b"
+            ],
+            "discriminators": [
+              {
+                "gap_id": "gap:change_timing:d532d7201feb63021441",
+                "dimension": "CHANGE_TIMING",
+                "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for change_timing",
+                "kind": "HYPOTHESIS_DISCRIMINATION",
+                "support_outcomes": [
+                  {
+                    "kind": "SUPPORTS",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [
+                      "alternative:0c5be15e7c13b7bedd8b"
+                    ],
+                    "condition": "the missing fact promotes alternative:0c5be15e7c13b7bedd8b into a causal explanation",
+                    "implication": "promotes shop/StatefulSet/worker for deterministic RCA evaluation"
+                  }
+                ],
+                "comparison_hypothesis_ids": [
+                  "hypothesis:3577cdf48465d856:4471439f888bc303"
+                ],
+                "comparison_alternative_ids": [
+                  "alternative:fdcd1b706b05c115732e"
+                ],
+                "no_data_outcomes": [
+                  {
+                    "kind": "NO_DATA",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [
+                      "alternative:0c5be15e7c13b7bedd8b"
+                    ],
+                    "condition": "the evidence source returns no observation",
+                    "implication": "does not support or contradict any hypothesis; ambiguity remains"
+                  }
+                ],
+                "unknown_slots": [],
+                "expected_fact_families": [],
+                "possible_outcomes": [],
+                "no_data_is_discriminating": false
+              },
+              {
+                "gap_id": "gap:config_difference:24e07bc3e869d56ddc87",
+                "dimension": "CONFIG_DIFFERENCE",
+                "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for config_difference",
+                "kind": "HYPOTHESIS_DISCRIMINATION",
+                "support_outcomes": [
+                  {
+                    "kind": "SUPPORTS",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [
+                      "alternative:0c5be15e7c13b7bedd8b"
+                    ],
+                    "condition": "the missing fact promotes alternative:0c5be15e7c13b7bedd8b into a causal explanation",
+                    "implication": "promotes shop/StatefulSet/worker for deterministic RCA evaluation"
+                  }
+                ],
+                "comparison_hypothesis_ids": [
+                  "hypothesis:3577cdf48465d856:4471439f888bc303"
+                ],
+                "comparison_alternative_ids": [
+                  "alternative:fdcd1b706b05c115732e"
+                ],
+                "no_data_outcomes": [
+                  {
+                    "kind": "NO_DATA",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [
+                      "alternative:0c5be15e7c13b7bedd8b"
+                    ],
+                    "condition": "the evidence source returns no observation",
+                    "implication": "does not support or contradict any hypothesis; ambiguity remains"
+                  }
+                ],
+                "unknown_slots": [],
+                "expected_fact_families": [],
+                "possible_outcomes": [],
+                "no_data_is_discriminating": false
+              }
+            ],
+            "transition_certificates": [
+              {
+                "source_gap_id": "gap:change_timing:d532d7201feb63021441",
+                "capability": "history",
+                "target": {
+                  "kind": "StatefulSet",
+                  "name": "worker",
+                  "namespace": "shop"
+                },
+                "observation_fact_family": "object_change",
+                "permitted_normalized_outcomes": [
+                  "CONFIG_CHANGE",
+                  "SPEC_CHANGE",
+                  "IMAGE_CHANGE",
+                  "SCALE_CHANGE",
+                  "ROLLOUT_RESTART",
+                  "OBJECT_CREATED",
+                  "OBJECT_DELETED"
+                ],
+                "affected_state_kind": "STRUCTURAL_ALTERNATIVE",
+                "affected_state_ids": [
+                  "alternative:0c5be15e7c13b7bedd8b"
+                ],
+                "normalizer_rule_id": "normalizers._history_findings\u2192signals.change_findings",
+                "transition_rule_id": "engine.rebuild_hypotheses\u2192frontier.apply_frontier_progress.promote_actor",
+                "preconditions": [
+                  "normalizer returns a fresh initiating Finding for the alternative actor",
+                  "the existing topology links that actor to a current symptom"
+                ],
+                "ordinal_value": 1
+              },
+              {
+                "source_gap_id": "gap:config_difference:24e07bc3e869d56ddc87",
+                "capability": "history",
+                "target": {
+                  "kind": "StatefulSet",
+                  "name": "worker",
+                  "namespace": "shop"
+                },
+                "observation_fact_family": "object_change",
+                "permitted_normalized_outcomes": [
+                  "CONFIG_CHANGE",
+                  "SPEC_CHANGE",
+                  "IMAGE_CHANGE",
+                  "SCALE_CHANGE",
+                  "ROLLOUT_RESTART",
+                  "OBJECT_CREATED",
+                  "OBJECT_DELETED"
+                ],
+                "affected_state_kind": "STRUCTURAL_ALTERNATIVE",
+                "affected_state_ids": [
+                  "alternative:0c5be15e7c13b7bedd8b"
+                ],
+                "normalizer_rule_id": "normalizers._history_findings\u2192signals.change_findings",
+                "transition_rule_id": "engine.rebuild_hypotheses\u2192frontier.apply_frontier_progress.promote_actor",
+                "preconditions": [
+                  "normalizer returns a fresh initiating Finding for the alternative actor",
+                  "the existing topology links that actor to a current symptom"
+                ],
+                "ordinal_value": 1
+              }
+            ],
+            "discrimination_value": 2,
+            "expected_elimination_value": 0,
+            "expected_decision_impact": 1,
+            "semantic_duplicate_risk": 0,
+            "no_data_repeat_risk": 0,
+            "known_evidence_risk": 2,
+            "frontier_coverage": 2,
+            "acquisition_cost": 0,
+            "intent_ordering_key": [
+              0,
+              -2,
+              0,
+              0,
+              0,
+              2,
+              -2,
+              0
+            ],
+            "candidate_ordering_key": [
+              0,
+              -2,
+              0,
+              0,
+              0,
+              2,
+              -2,
+              0
+            ],
+            "selected": false
+          },
+          {
+            "intent_id": "intent:recent_source_change",
+            "intent_rank": 1,
+            "candidate_rank": 2,
+            "candidate_id": "candidate:7d2c619213e07bd64803",
+            "considered_by_physical_selector": false,
+            "gap_ids": [
+              "gap:change_timing:7715ded5f0e23f5eab70"
+            ],
+            "dimensions": [
+              "CHANGE_TIMING"
+            ],
+            "capability": "incident_changes",
+            "target": {
+              "kind": "Namespace",
+              "name": "shop",
+              "namespace": "_cluster"
+            },
+            "query": {
+              "start": "2025-12-31T22:00:00Z",
+              "end": "2026-01-01T00:05:00Z",
+              "reasons": [],
+              "contains": [],
+              "limit": 64
+            },
+            "hypothesis_ids": [],
+            "alternative_ids": [],
+            "discriminators": [
+              {
+                "gap_id": "gap:change_timing:7715ded5f0e23f5eab70",
+                "dimension": "CHANGE_TIMING",
+                "missing_fact": "whether incident-scoped source changes reveal an unobserved initiating object change",
+                "kind": "DISCOVERY_DISCRIMINATION",
+                "support_outcomes": [],
+                "comparison_hypothesis_ids": [],
+                "comparison_alternative_ids": [],
+                "no_data_outcomes": [
+                  {
+                    "kind": "NO_DATA",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [],
+                    "condition": "the evidence source returns no observation",
+                    "implication": "does not support or contradict any hypothesis; ambiguity remains"
+                  }
+                ],
+                "unknown_slots": [
+                  "initiating_object",
+                  "change_timing"
+                ],
+                "expected_fact_families": [
+                  "incident_change",
+                  "object_change_timing"
+                ],
+                "possible_outcomes": [
+                  "CHANGE_BEFORE_ONSET",
+                  "NO_MATCH",
+                  "NO_DATA"
+                ],
+                "no_data_is_discriminating": false
+              }
+            ],
+            "transition_certificates": [],
+            "discrimination_value": 0,
+            "expected_elimination_value": 0,
+            "expected_decision_impact": 3,
+            "semantic_duplicate_risk": 0,
+            "no_data_repeat_risk": 0,
+            "known_evidence_risk": 0,
+            "frontier_coverage": 1,
+            "acquisition_cost": 2,
+            "intent_ordering_key": [
+              0,
+              -2,
+              0,
+              0,
+              0,
+              2,
+              -2,
+              0
+            ],
+            "candidate_ordering_key": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              -1,
+              2
+            ],
+            "selected": false
+          },
+          {
+            "intent_id": "intent:incident_actor_discovery",
+            "intent_rank": 2,
+            "candidate_rank": 1,
+            "candidate_id": "candidate:141e857388ff6bd96f2e",
+            "considered_by_physical_selector": true,
+            "gap_ids": [
+              "gap:event_sequence:072416c5dda7318e10d5"
+            ],
+            "dimensions": [
+              "EVENT_SEQUENCE"
+            ],
+            "capability": "incident_events",
+            "target": {
+              "kind": "Namespace",
+              "name": "shop",
+              "namespace": "_cluster"
+            },
+            "query": {
+              "start": "2025-12-31T22:00:00Z",
+              "end": "2026-01-01T00:05:00Z",
+              "reasons": [],
+              "contains": [],
+              "limit": 64
+            },
+            "hypothesis_ids": [],
+            "alternative_ids": [],
+            "discriminators": [
+              {
+                "gap_id": "gap:event_sequence:072416c5dda7318e10d5",
+                "dimension": "EVENT_SEQUENCE",
+                "missing_fact": "whether incident-scoped Kubernetes events reveal an unobserved failure, autoscaling, scheduling, quota, or fault actor",
+                "kind": "DISCOVERY_DISCRIMINATION",
+                "support_outcomes": [],
+                "comparison_hypothesis_ids": [],
+                "comparison_alternative_ids": [],
+                "no_data_outcomes": [
+                  {
+                    "kind": "NO_DATA",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [],
+                    "condition": "the evidence source returns no observation",
+                    "implication": "does not support or contradict any hypothesis; ambiguity remains"
+                  }
+                ],
+                "unknown_slots": [
+                  "causal_actor",
+                  "relevant_event",
+                  "temporal_sequence"
+                ],
+                "expected_fact_families": [
+                  "incident_event",
+                  "event_sequence"
+                ],
+                "possible_outcomes": [
+                  "NEW_RELEVANT_EVENT",
+                  "NEW_ACTOR",
+                  "TEMPORAL_SEQUENCE_DISCOVERED",
+                  "NO_MATCH",
+                  "NO_DATA"
+                ],
+                "no_data_is_discriminating": false
+              }
+            ],
+            "transition_certificates": [],
+            "discrimination_value": 0,
+            "expected_elimination_value": 0,
+            "expected_decision_impact": 4,
+            "semantic_duplicate_risk": 0,
+            "no_data_repeat_risk": 0,
+            "known_evidence_risk": 0,
+            "frontier_coverage": 1,
+            "acquisition_cost": 2,
+            "intent_ordering_key": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              -1,
+              2
+            ],
+            "candidate_ordering_key": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              -1,
+              2
+            ],
+            "selected": true
+          }
+        ],
+        "authorization_result": "AUTHORIZED",
+        "authorization_reason": "capability/target pair is authorized for the selected resolvable gap",
+        "backend_execution_status": "SUCCEEDED",
+        "observation_id": "investigation:incident_events:eaa93de2ad3da3000c3f",
+        "observation_outcome": "NO_DATA",
+        "returned_evidence_refs": [],
+        "new_evidence_refs": [],
+        "already_known_refs": [],
+        "normalized_finding_ids": [],
+        "affected_hypothesis_ids": [],
+        "resolution_before": "INSUFFICIENT_EVIDENCE",
+        "resolution_after": "INSUFFICIENT_EVIDENCE",
+        "leading_actor_before": {
+          "kind": "ResourceQuota",
+          "name": "capacity",
+          "namespace": "shop"
+        },
+        "leading_actor_after": {
+          "kind": "ResourceQuota",
+          "name": "capacity",
+          "namespace": "shop"
+        },
+        "hypothesis_states_before": [
+          {
+            "hypothesis_id": "hypothesis:3577cdf48465d856:4471439f888bc303",
+            "actor": {
+              "kind": "ResourceQuota",
+              "name": "capacity",
+              "namespace": "shop"
+            },
+            "state": "UNRESOLVED"
+          }
+        ],
+        "hypothesis_states_after": [
+          {
+            "hypothesis_id": "hypothesis:3577cdf48465d856:4471439f888bc303",
+            "actor": {
+              "kind": "ResourceQuota",
+              "name": "capacity",
+              "namespace": "shop"
+            },
+            "state": "UNRESOLVED"
+          }
+        ],
+        "gap_states_before": [
+          {
+            "gap_id": "gap:change_timing:7715ded5f0e23f5eab70",
+            "dimension": "CHANGE_TIMING",
+            "missing_fact": "whether incident-scoped source changes reveal an unobserved initiating object change",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:change_timing:d532d7201feb63021441",
+            "dimension": "CHANGE_TIMING",
+            "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for change_timing",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:config_difference:24e07bc3e869d56ddc87",
+            "dimension": "CONFIG_DIFFERENCE",
+            "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for config_difference",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:event_sequence:072416c5dda7318e10d5",
+            "dimension": "EVENT_SEQUENCE",
+            "missing_fact": "whether incident-scoped Kubernetes events reveal an unobserved failure, autoscaling, scheduling, quota, or fault actor",
+            "resolvability": "RESOLVABLE"
+          }
+        ],
+        "gap_states_after": [
+          {
+            "gap_id": "gap:change_timing:7715ded5f0e23f5eab70",
+            "dimension": "CHANGE_TIMING",
+            "missing_fact": "whether incident-scoped source changes reveal an unobserved initiating object change",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:change_timing:d532d7201feb63021441",
+            "dimension": "CHANGE_TIMING",
+            "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for change_timing",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:config_difference:24e07bc3e869d56ddc87",
+            "dimension": "CONFIG_DIFFERENCE",
+            "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for config_difference",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:event_sequence:072416c5dda7318e10d5",
+            "dimension": "EVENT_SEQUENCE",
+            "missing_fact": "whether incident-scoped Kubernetes events reveal an unobserved failure, autoscaling, scheduling, quota, or fault actor",
+            "resolvability": "RESOLVABLE"
+          }
+        ],
+        "causal_decision_before": "5ccdfbd77ac9e31599ffa094df15c5522bb1a9875fe94d002685d88c851c35d8",
+        "causal_decision_after": "5ccdfbd77ac9e31599ffa094df15c5522bb1a9875fe94d002685d88c851c35d8",
+        "decision_state_changed": false,
+        "progress_classification": "FRONTIER_PROGRESS"
+      },
+      {
+        "turn_index": 2,
+        "action": {
+          "action": "inspect",
+          "gap_id": "gap:change_timing:7715ded5f0e23f5eab70",
+          "capability": "incident_changes",
+          "target": {
+            "kind": "Namespace",
+            "name": "shop",
+            "namespace": "_cluster"
+          },
+          "query": {
+            "start": "2025-12-31T22:00:00Z",
+            "end": "2026-01-01T00:05:00Z",
+            "reasons": [],
+            "contains": [],
+            "limit": 64
+          },
+          "rationale": "deterministic candidate candidate:7d2c619213e07bd64803; utility=0/0/1/1; discovery discriminator gap=gap:change_timing:7715ded5f0e23f5eab70; unknown-slots=initiating_object,change_timing; fact-families=incident_change,object_change_timing; NO_DATA/NO_MATCH are neutral"
+        },
+        "intent_id": "intent:recent_source_change",
+        "intent_kind": "RECENT_SOURCE_CHANGE",
+        "selection_strategy": "BASELINE_FALLBACK",
+        "selection_reason": "active_choice_does_not_prove_improvement",
+        "baseline_candidate_id": "candidate:7d2c619213e07bd64803",
+        "active_candidate_id": "candidate:7d2c619213e07bd64803",
+        "gap_dimension": "CHANGE_TIMING",
+        "missing_fact": "whether incident-scoped source changes reveal an unobserved initiating object change",
+        "discriminator": {
+          "gap_id": "gap:change_timing:7715ded5f0e23f5eab70",
+          "dimension": "CHANGE_TIMING",
+          "missing_fact": "whether incident-scoped source changes reveal an unobserved initiating object change",
+          "kind": "DISCOVERY_DISCRIMINATION",
+          "support_outcomes": [],
+          "comparison_hypothesis_ids": [],
+          "comparison_alternative_ids": [],
+          "no_data_outcomes": [
+            {
+              "kind": "NO_DATA",
+              "hypothesis_ids": [],
+              "alternative_ids": [],
+              "condition": "the evidence source returns no observation",
+              "implication": "does not support or contradict any hypothesis; ambiguity remains"
+            }
+          ],
+          "unknown_slots": [
+            "initiating_object",
+            "change_timing"
+          ],
+          "expected_fact_families": [
+            "incident_change",
+            "object_change_timing"
+          ],
+          "possible_outcomes": [
+            "CHANGE_BEFORE_ONSET",
+            "NO_MATCH",
+            "NO_DATA"
+          ],
+          "no_data_is_discriminating": false
+        },
+        "selection_candidates": [
+          {
+            "intent_id": "intent:recent_source_change",
+            "intent_rank": 1,
+            "candidate_rank": 1,
+            "candidate_id": "candidate:1b3f7733e1a0fbc8594d",
+            "considered_by_physical_selector": true,
+            "gap_ids": [
+              "gap:change_timing:d532d7201feb63021441",
+              "gap:config_difference:24e07bc3e869d56ddc87"
+            ],
+            "dimensions": [
+              "CHANGE_TIMING",
+              "CONFIG_DIFFERENCE"
+            ],
+            "capability": "history",
+            "target": {
+              "kind": "StatefulSet",
+              "name": "worker",
+              "namespace": "shop"
+            },
+            "query": {
+              "start": "2025-12-31T22:00:00Z",
+              "end": "2026-01-01T00:05:00Z",
+              "reasons": [],
+              "contains": [],
+              "limit": 32
+            },
+            "hypothesis_ids": [],
+            "alternative_ids": [
+              "alternative:0c5be15e7c13b7bedd8b"
+            ],
+            "discriminators": [
+              {
+                "gap_id": "gap:change_timing:d532d7201feb63021441",
+                "dimension": "CHANGE_TIMING",
+                "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for change_timing",
+                "kind": "HYPOTHESIS_DISCRIMINATION",
+                "support_outcomes": [
+                  {
+                    "kind": "SUPPORTS",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [
+                      "alternative:0c5be15e7c13b7bedd8b"
+                    ],
+                    "condition": "the missing fact promotes alternative:0c5be15e7c13b7bedd8b into a causal explanation",
+                    "implication": "promotes shop/StatefulSet/worker for deterministic RCA evaluation"
+                  }
+                ],
+                "comparison_hypothesis_ids": [
+                  "hypothesis:3577cdf48465d856:4471439f888bc303"
+                ],
+                "comparison_alternative_ids": [
+                  "alternative:fdcd1b706b05c115732e"
+                ],
+                "no_data_outcomes": [
+                  {
+                    "kind": "NO_DATA",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [
+                      "alternative:0c5be15e7c13b7bedd8b"
+                    ],
+                    "condition": "the evidence source returns no observation",
+                    "implication": "does not support or contradict any hypothesis; ambiguity remains"
+                  }
+                ],
+                "unknown_slots": [],
+                "expected_fact_families": [],
+                "possible_outcomes": [],
+                "no_data_is_discriminating": false
+              },
+              {
+                "gap_id": "gap:config_difference:24e07bc3e869d56ddc87",
+                "dimension": "CONFIG_DIFFERENCE",
+                "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for config_difference",
+                "kind": "HYPOTHESIS_DISCRIMINATION",
+                "support_outcomes": [
+                  {
+                    "kind": "SUPPORTS",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [
+                      "alternative:0c5be15e7c13b7bedd8b"
+                    ],
+                    "condition": "the missing fact promotes alternative:0c5be15e7c13b7bedd8b into a causal explanation",
+                    "implication": "promotes shop/StatefulSet/worker for deterministic RCA evaluation"
+                  }
+                ],
+                "comparison_hypothesis_ids": [
+                  "hypothesis:3577cdf48465d856:4471439f888bc303"
+                ],
+                "comparison_alternative_ids": [
+                  "alternative:fdcd1b706b05c115732e"
+                ],
+                "no_data_outcomes": [
+                  {
+                    "kind": "NO_DATA",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [
+                      "alternative:0c5be15e7c13b7bedd8b"
+                    ],
+                    "condition": "the evidence source returns no observation",
+                    "implication": "does not support or contradict any hypothesis; ambiguity remains"
+                  }
+                ],
+                "unknown_slots": [],
+                "expected_fact_families": [],
+                "possible_outcomes": [],
+                "no_data_is_discriminating": false
+              }
+            ],
+            "transition_certificates": [
+              {
+                "source_gap_id": "gap:change_timing:d532d7201feb63021441",
+                "capability": "history",
+                "target": {
+                  "kind": "StatefulSet",
+                  "name": "worker",
+                  "namespace": "shop"
+                },
+                "observation_fact_family": "object_change",
+                "permitted_normalized_outcomes": [
+                  "CONFIG_CHANGE",
+                  "SPEC_CHANGE",
+                  "IMAGE_CHANGE",
+                  "SCALE_CHANGE",
+                  "ROLLOUT_RESTART",
+                  "OBJECT_CREATED",
+                  "OBJECT_DELETED"
+                ],
+                "affected_state_kind": "STRUCTURAL_ALTERNATIVE",
+                "affected_state_ids": [
+                  "alternative:0c5be15e7c13b7bedd8b"
+                ],
+                "normalizer_rule_id": "normalizers._history_findings\u2192signals.change_findings",
+                "transition_rule_id": "engine.rebuild_hypotheses\u2192frontier.apply_frontier_progress.promote_actor",
+                "preconditions": [
+                  "normalizer returns a fresh initiating Finding for the alternative actor",
+                  "the existing topology links that actor to a current symptom"
+                ],
+                "ordinal_value": 1
+              },
+              {
+                "source_gap_id": "gap:config_difference:24e07bc3e869d56ddc87",
+                "capability": "history",
+                "target": {
+                  "kind": "StatefulSet",
+                  "name": "worker",
+                  "namespace": "shop"
+                },
+                "observation_fact_family": "object_change",
+                "permitted_normalized_outcomes": [
+                  "CONFIG_CHANGE",
+                  "SPEC_CHANGE",
+                  "IMAGE_CHANGE",
+                  "SCALE_CHANGE",
+                  "ROLLOUT_RESTART",
+                  "OBJECT_CREATED",
+                  "OBJECT_DELETED"
+                ],
+                "affected_state_kind": "STRUCTURAL_ALTERNATIVE",
+                "affected_state_ids": [
+                  "alternative:0c5be15e7c13b7bedd8b"
+                ],
+                "normalizer_rule_id": "normalizers._history_findings\u2192signals.change_findings",
+                "transition_rule_id": "engine.rebuild_hypotheses\u2192frontier.apply_frontier_progress.promote_actor",
+                "preconditions": [
+                  "normalizer returns a fresh initiating Finding for the alternative actor",
+                  "the existing topology links that actor to a current symptom"
+                ],
+                "ordinal_value": 1
+              }
+            ],
+            "discrimination_value": 2,
+            "expected_elimination_value": 0,
+            "expected_decision_impact": 1,
+            "semantic_duplicate_risk": 0,
+            "no_data_repeat_risk": 0,
+            "known_evidence_risk": 2,
+            "frontier_coverage": 2,
+            "acquisition_cost": 0,
+            "intent_ordering_key": [
+              0,
+              -2,
+              0,
+              0,
+              0,
+              2,
+              -2,
+              0
+            ],
+            "candidate_ordering_key": [
+              0,
+              -2,
+              0,
+              0,
+              0,
+              2,
+              -2,
+              0
+            ],
+            "selected": false
+          },
+          {
+            "intent_id": "intent:recent_source_change",
+            "intent_rank": 1,
+            "candidate_rank": 2,
+            "candidate_id": "candidate:7d2c619213e07bd64803",
+            "considered_by_physical_selector": true,
+            "gap_ids": [
+              "gap:change_timing:7715ded5f0e23f5eab70"
+            ],
+            "dimensions": [
+              "CHANGE_TIMING"
+            ],
+            "capability": "incident_changes",
+            "target": {
+              "kind": "Namespace",
+              "name": "shop",
+              "namespace": "_cluster"
+            },
+            "query": {
+              "start": "2025-12-31T22:00:00Z",
+              "end": "2026-01-01T00:05:00Z",
+              "reasons": [],
+              "contains": [],
+              "limit": 64
+            },
+            "hypothesis_ids": [],
+            "alternative_ids": [],
+            "discriminators": [
+              {
+                "gap_id": "gap:change_timing:7715ded5f0e23f5eab70",
+                "dimension": "CHANGE_TIMING",
+                "missing_fact": "whether incident-scoped source changes reveal an unobserved initiating object change",
+                "kind": "DISCOVERY_DISCRIMINATION",
+                "support_outcomes": [],
+                "comparison_hypothesis_ids": [],
+                "comparison_alternative_ids": [],
+                "no_data_outcomes": [
+                  {
+                    "kind": "NO_DATA",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [],
+                    "condition": "the evidence source returns no observation",
+                    "implication": "does not support or contradict any hypothesis; ambiguity remains"
+                  }
+                ],
+                "unknown_slots": [
+                  "initiating_object",
+                  "change_timing"
+                ],
+                "expected_fact_families": [
+                  "incident_change",
+                  "object_change_timing"
+                ],
+                "possible_outcomes": [
+                  "CHANGE_BEFORE_ONSET",
+                  "NO_MATCH",
+                  "NO_DATA"
+                ],
+                "no_data_is_discriminating": false
+              }
+            ],
+            "transition_certificates": [],
+            "discrimination_value": 0,
+            "expected_elimination_value": 0,
+            "expected_decision_impact": 3,
+            "semantic_duplicate_risk": 0,
+            "no_data_repeat_risk": 0,
+            "known_evidence_risk": 0,
+            "frontier_coverage": 1,
+            "acquisition_cost": 2,
+            "intent_ordering_key": [
+              0,
+              -2,
+              0,
+              0,
+              0,
+              2,
+              -2,
+              0
+            ],
+            "candidate_ordering_key": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              -1,
+              2
+            ],
+            "selected": true
+          }
+        ],
+        "authorization_result": "AUTHORIZED",
+        "authorization_reason": "capability/target pair is authorized for the selected resolvable gap",
+        "backend_execution_status": "SUCCEEDED",
+        "observation_id": "investigation:incident_changes:58170342f801e660ef2f",
+        "observation_outcome": "UNKNOWN",
+        "returned_evidence_refs": [
+          "obj:capacity",
+          "obj:worker"
+        ],
+        "new_evidence_refs": [],
+        "already_known_refs": [
+          "obj:capacity",
+          "obj:worker"
+        ],
+        "normalized_finding_ids": [],
+        "affected_hypothesis_ids": [],
+        "resolution_before": "INSUFFICIENT_EVIDENCE",
+        "resolution_after": "INSUFFICIENT_EVIDENCE",
+        "leading_actor_before": {
+          "kind": "ResourceQuota",
+          "name": "capacity",
+          "namespace": "shop"
+        },
+        "leading_actor_after": {
+          "kind": "ResourceQuota",
+          "name": "capacity",
+          "namespace": "shop"
+        },
+        "hypothesis_states_before": [
+          {
+            "hypothesis_id": "hypothesis:3577cdf48465d856:4471439f888bc303",
+            "actor": {
+              "kind": "ResourceQuota",
+              "name": "capacity",
+              "namespace": "shop"
+            },
+            "state": "UNRESOLVED"
+          }
+        ],
+        "hypothesis_states_after": [
+          {
+            "hypothesis_id": "hypothesis:3577cdf48465d856:4471439f888bc303",
+            "actor": {
+              "kind": "ResourceQuota",
+              "name": "capacity",
+              "namespace": "shop"
+            },
+            "state": "UNRESOLVED"
+          }
+        ],
+        "gap_states_before": [
+          {
+            "gap_id": "gap:change_timing:7715ded5f0e23f5eab70",
+            "dimension": "CHANGE_TIMING",
+            "missing_fact": "whether incident-scoped source changes reveal an unobserved initiating object change",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:change_timing:d532d7201feb63021441",
+            "dimension": "CHANGE_TIMING",
+            "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for change_timing",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:config_difference:24e07bc3e869d56ddc87",
+            "dimension": "CONFIG_DIFFERENCE",
+            "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for config_difference",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:event_sequence:072416c5dda7318e10d5",
+            "dimension": "EVENT_SEQUENCE",
+            "missing_fact": "whether incident-scoped Kubernetes events reveal an unobserved failure, autoscaling, scheduling, quota, or fault actor",
+            "resolvability": "RESOLVABLE"
+          }
+        ],
+        "gap_states_after": [
+          {
+            "gap_id": "gap:change_timing:7715ded5f0e23f5eab70",
+            "dimension": "CHANGE_TIMING",
+            "missing_fact": "whether incident-scoped source changes reveal an unobserved initiating object change",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:change_timing:d532d7201feb63021441",
+            "dimension": "CHANGE_TIMING",
+            "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for change_timing",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:config_difference:24e07bc3e869d56ddc87",
+            "dimension": "CONFIG_DIFFERENCE",
+            "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for config_difference",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:event_sequence:072416c5dda7318e10d5",
+            "dimension": "EVENT_SEQUENCE",
+            "missing_fact": "whether incident-scoped Kubernetes events reveal an unobserved failure, autoscaling, scheduling, quota, or fault actor",
+            "resolvability": "RESOLVABLE"
+          }
+        ],
+        "causal_decision_before": "5ccdfbd77ac9e31599ffa094df15c5522bb1a9875fe94d002685d88c851c35d8",
+        "causal_decision_after": "5ccdfbd77ac9e31599ffa094df15c5522bb1a9875fe94d002685d88c851c35d8",
+        "decision_state_changed": false,
+        "progress_classification": "FRONTIER_PROGRESS"
+      },
+      {
+        "turn_index": 3,
+        "action": {
+          "action": "inspect",
+          "gap_id": "gap:change_timing:d532d7201feb63021441",
+          "capability": "history",
+          "target": {
+            "kind": "StatefulSet",
+            "name": "worker",
+            "namespace": "shop"
+          },
+          "query": {
+            "start": "2025-12-31T22:00:00Z",
+            "end": "2026-01-01T00:05:00Z",
+            "reasons": [],
+            "contains": [],
+            "limit": 32
+          },
+          "rationale": "deterministic candidate candidate:1b3f7733e1a0fbc8594d; utility=0/2/2/2; discriminator gap=gap:change_timing:d532d7201feb63021441; positive-states=1; competing-states=2; NO_DATA/UNKNOWN are non-discriminating"
+        },
+        "intent_id": "intent:recent_source_change",
+        "intent_kind": "RECENT_SOURCE_CHANGE",
+        "selection_strategy": "BASELINE_FALLBACK",
+        "selection_reason": "active_choice_does_not_prove_improvement",
+        "baseline_candidate_id": "candidate:1b3f7733e1a0fbc8594d",
+        "active_candidate_id": "candidate:1b3f7733e1a0fbc8594d",
+        "gap_dimension": "CHANGE_TIMING",
+        "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for change_timing",
+        "discriminator": {
+          "gap_id": "gap:change_timing:d532d7201feb63021441",
+          "dimension": "CHANGE_TIMING",
+          "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for change_timing",
+          "kind": "HYPOTHESIS_DISCRIMINATION",
+          "support_outcomes": [
+            {
+              "kind": "SUPPORTS",
+              "hypothesis_ids": [],
+              "alternative_ids": [
+                "alternative:0c5be15e7c13b7bedd8b"
+              ],
+              "condition": "the missing fact promotes alternative:0c5be15e7c13b7bedd8b into a causal explanation",
+              "implication": "promotes shop/StatefulSet/worker for deterministic RCA evaluation"
+            }
+          ],
+          "comparison_hypothesis_ids": [
+            "hypothesis:3577cdf48465d856:4471439f888bc303"
+          ],
+          "comparison_alternative_ids": [
+            "alternative:fdcd1b706b05c115732e"
+          ],
+          "no_data_outcomes": [
+            {
+              "kind": "NO_DATA",
+              "hypothesis_ids": [],
+              "alternative_ids": [
+                "alternative:0c5be15e7c13b7bedd8b"
+              ],
+              "condition": "the evidence source returns no observation",
+              "implication": "does not support or contradict any hypothesis; ambiguity remains"
+            }
+          ],
+          "unknown_slots": [],
+          "expected_fact_families": [],
+          "possible_outcomes": [],
+          "no_data_is_discriminating": false
+        },
+        "selection_candidates": [
+          {
+            "intent_id": "intent:recent_source_change",
+            "intent_rank": 1,
+            "candidate_rank": 1,
+            "candidate_id": "candidate:1b3f7733e1a0fbc8594d",
+            "considered_by_physical_selector": true,
+            "gap_ids": [
+              "gap:change_timing:d532d7201feb63021441",
+              "gap:config_difference:24e07bc3e869d56ddc87"
+            ],
+            "dimensions": [
+              "CHANGE_TIMING",
+              "CONFIG_DIFFERENCE"
+            ],
+            "capability": "history",
+            "target": {
+              "kind": "StatefulSet",
+              "name": "worker",
+              "namespace": "shop"
+            },
+            "query": {
+              "start": "2025-12-31T22:00:00Z",
+              "end": "2026-01-01T00:05:00Z",
+              "reasons": [],
+              "contains": [],
+              "limit": 32
+            },
+            "hypothesis_ids": [],
+            "alternative_ids": [
+              "alternative:0c5be15e7c13b7bedd8b"
+            ],
+            "discriminators": [
+              {
+                "gap_id": "gap:change_timing:d532d7201feb63021441",
+                "dimension": "CHANGE_TIMING",
+                "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for change_timing",
+                "kind": "HYPOTHESIS_DISCRIMINATION",
+                "support_outcomes": [
+                  {
+                    "kind": "SUPPORTS",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [
+                      "alternative:0c5be15e7c13b7bedd8b"
+                    ],
+                    "condition": "the missing fact promotes alternative:0c5be15e7c13b7bedd8b into a causal explanation",
+                    "implication": "promotes shop/StatefulSet/worker for deterministic RCA evaluation"
+                  }
+                ],
+                "comparison_hypothesis_ids": [
+                  "hypothesis:3577cdf48465d856:4471439f888bc303"
+                ],
+                "comparison_alternative_ids": [
+                  "alternative:fdcd1b706b05c115732e"
+                ],
+                "no_data_outcomes": [
+                  {
+                    "kind": "NO_DATA",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [
+                      "alternative:0c5be15e7c13b7bedd8b"
+                    ],
+                    "condition": "the evidence source returns no observation",
+                    "implication": "does not support or contradict any hypothesis; ambiguity remains"
+                  }
+                ],
+                "unknown_slots": [],
+                "expected_fact_families": [],
+                "possible_outcomes": [],
+                "no_data_is_discriminating": false
+              },
+              {
+                "gap_id": "gap:config_difference:24e07bc3e869d56ddc87",
+                "dimension": "CONFIG_DIFFERENCE",
+                "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for config_difference",
+                "kind": "HYPOTHESIS_DISCRIMINATION",
+                "support_outcomes": [
+                  {
+                    "kind": "SUPPORTS",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [
+                      "alternative:0c5be15e7c13b7bedd8b"
+                    ],
+                    "condition": "the missing fact promotes alternative:0c5be15e7c13b7bedd8b into a causal explanation",
+                    "implication": "promotes shop/StatefulSet/worker for deterministic RCA evaluation"
+                  }
+                ],
+                "comparison_hypothesis_ids": [
+                  "hypothesis:3577cdf48465d856:4471439f888bc303"
+                ],
+                "comparison_alternative_ids": [
+                  "alternative:fdcd1b706b05c115732e"
+                ],
+                "no_data_outcomes": [
+                  {
+                    "kind": "NO_DATA",
+                    "hypothesis_ids": [],
+                    "alternative_ids": [
+                      "alternative:0c5be15e7c13b7bedd8b"
+                    ],
+                    "condition": "the evidence source returns no observation",
+                    "implication": "does not support or contradict any hypothesis; ambiguity remains"
+                  }
+                ],
+                "unknown_slots": [],
+                "expected_fact_families": [],
+                "possible_outcomes": [],
+                "no_data_is_discriminating": false
+              }
+            ],
+            "transition_certificates": [
+              {
+                "source_gap_id": "gap:change_timing:d532d7201feb63021441",
+                "capability": "history",
+                "target": {
+                  "kind": "StatefulSet",
+                  "name": "worker",
+                  "namespace": "shop"
+                },
+                "observation_fact_family": "object_change",
+                "permitted_normalized_outcomes": [
+                  "CONFIG_CHANGE",
+                  "SPEC_CHANGE",
+                  "IMAGE_CHANGE",
+                  "SCALE_CHANGE",
+                  "ROLLOUT_RESTART",
+                  "OBJECT_CREATED",
+                  "OBJECT_DELETED"
+                ],
+                "affected_state_kind": "STRUCTURAL_ALTERNATIVE",
+                "affected_state_ids": [
+                  "alternative:0c5be15e7c13b7bedd8b"
+                ],
+                "normalizer_rule_id": "normalizers._history_findings\u2192signals.change_findings",
+                "transition_rule_id": "engine.rebuild_hypotheses\u2192frontier.apply_frontier_progress.promote_actor",
+                "preconditions": [
+                  "normalizer returns a fresh initiating Finding for the alternative actor",
+                  "the existing topology links that actor to a current symptom"
+                ],
+                "ordinal_value": 1
+              },
+              {
+                "source_gap_id": "gap:config_difference:24e07bc3e869d56ddc87",
+                "capability": "history",
+                "target": {
+                  "kind": "StatefulSet",
+                  "name": "worker",
+                  "namespace": "shop"
+                },
+                "observation_fact_family": "object_change",
+                "permitted_normalized_outcomes": [
+                  "CONFIG_CHANGE",
+                  "SPEC_CHANGE",
+                  "IMAGE_CHANGE",
+                  "SCALE_CHANGE",
+                  "ROLLOUT_RESTART",
+                  "OBJECT_CREATED",
+                  "OBJECT_DELETED"
+                ],
+                "affected_state_kind": "STRUCTURAL_ALTERNATIVE",
+                "affected_state_ids": [
+                  "alternative:0c5be15e7c13b7bedd8b"
+                ],
+                "normalizer_rule_id": "normalizers._history_findings\u2192signals.change_findings",
+                "transition_rule_id": "engine.rebuild_hypotheses\u2192frontier.apply_frontier_progress.promote_actor",
+                "preconditions": [
+                  "normalizer returns a fresh initiating Finding for the alternative actor",
+                  "the existing topology links that actor to a current symptom"
+                ],
+                "ordinal_value": 1
+              }
+            ],
+            "discrimination_value": 2,
+            "expected_elimination_value": 0,
+            "expected_decision_impact": 1,
+            "semantic_duplicate_risk": 0,
+            "no_data_repeat_risk": 0,
+            "known_evidence_risk": 2,
+            "frontier_coverage": 2,
+            "acquisition_cost": 0,
+            "intent_ordering_key": [
+              0,
+              -2,
+              0,
+              0,
+              0,
+              2,
+              -2,
+              0
+            ],
+            "candidate_ordering_key": [
+              0,
+              -2,
+              0,
+              0,
+              0,
+              2,
+              -2,
+              0
+            ],
+            "selected": true
+          }
+        ],
+        "authorization_result": "AUTHORIZED",
+        "authorization_reason": "capability/target pair is authorized for the selected resolvable gap",
+        "backend_execution_status": "SUCCEEDED",
+        "observation_id": "investigation:history:15314ee28c03cc4f2592",
+        "observation_outcome": "UNKNOWN",
+        "returned_evidence_refs": [
+          "obj:worker"
+        ],
+        "new_evidence_refs": [],
+        "already_known_refs": [
+          "obj:worker"
+        ],
+        "normalized_finding_ids": [],
+        "affected_hypothesis_ids": [],
+        "resolution_before": "INSUFFICIENT_EVIDENCE",
+        "resolution_after": "INSUFFICIENT_EVIDENCE",
+        "leading_actor_before": {
+          "kind": "ResourceQuota",
+          "name": "capacity",
+          "namespace": "shop"
+        },
+        "leading_actor_after": {
+          "kind": "ResourceQuota",
+          "name": "capacity",
+          "namespace": "shop"
+        },
+        "hypothesis_states_before": [
+          {
+            "hypothesis_id": "hypothesis:3577cdf48465d856:4471439f888bc303",
+            "actor": {
+              "kind": "ResourceQuota",
+              "name": "capacity",
+              "namespace": "shop"
+            },
+            "state": "UNRESOLVED"
+          }
+        ],
+        "hypothesis_states_after": [
+          {
+            "hypothesis_id": "hypothesis:3577cdf48465d856:4471439f888bc303",
+            "actor": {
+              "kind": "ResourceQuota",
+              "name": "capacity",
+              "namespace": "shop"
+            },
+            "state": "UNRESOLVED"
+          }
+        ],
+        "gap_states_before": [
+          {
+            "gap_id": "gap:change_timing:7715ded5f0e23f5eab70",
+            "dimension": "CHANGE_TIMING",
+            "missing_fact": "whether incident-scoped source changes reveal an unobserved initiating object change",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:change_timing:d532d7201feb63021441",
+            "dimension": "CHANGE_TIMING",
+            "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for change_timing",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:config_difference:24e07bc3e869d56ddc87",
+            "dimension": "CONFIG_DIFFERENCE",
+            "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for config_difference",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:event_sequence:072416c5dda7318e10d5",
+            "dimension": "EVENT_SEQUENCE",
+            "missing_fact": "whether incident-scoped Kubernetes events reveal an unobserved failure, autoscaling, scheduling, quota, or fault actor",
+            "resolvability": "RESOLVABLE"
+          }
+        ],
+        "gap_states_after": [
+          {
+            "gap_id": "gap:change_timing:7715ded5f0e23f5eab70",
+            "dimension": "CHANGE_TIMING",
+            "missing_fact": "whether incident-scoped source changes reveal an unobserved initiating object change",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:change_timing:d532d7201feb63021441",
+            "dimension": "CHANGE_TIMING",
+            "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for change_timing",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:config_difference:24e07bc3e869d56ddc87",
+            "dimension": "CONFIG_DIFFERENCE",
+            "missing_fact": "whether shop/StatefulSet/worker has actor-local evidence for config_difference",
+            "resolvability": "RESOLVABLE"
+          },
+          {
+            "gap_id": "gap:event_sequence:072416c5dda7318e10d5",
+            "dimension": "EVENT_SEQUENCE",
+            "missing_fact": "whether incident-scoped Kubernetes events reveal an unobserved failure, autoscaling, scheduling, quota, or fault actor",
+            "resolvability": "RESOLVABLE"
+          }
+        ],
+        "causal_decision_before": "5ccdfbd77ac9e31599ffa094df15c5522bb1a9875fe94d002685d88c851c35d8",
+        "causal_decision_after": "5ccdfbd77ac9e31599ffa094df15c5522bb1a9875fe94d002685d88c851c35d8",
+        "decision_state_changed": false,
+        "progress_classification": "FRONTIER_PROGRESS"
+      }
+    ]
+  }
+]

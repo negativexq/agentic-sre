@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from collections.abc import Callable, Mapping
+import time
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -19,11 +20,23 @@ from apps.control_plane.scheduler import (
     reevaluation_from_environment,
     run_scheduler_pass,
 )
+from packages.connector.client import (
+    ConnectorClient,
+    ConnectorError,
+    StreamedClusterReader,
+    cluster_reader,
+    in_process_transport,
+)
+from packages.connector.client import provider_readers as connector_provider_readers
+from packages.connector.service import Connector, connector_from_environment
+from packages.connector.transport import ConnectorGateway, gateway_from_environment
+from packages.connector.wire import GapItem
 from packages.contracts import Alert as ContractAlert
 from packages.contracts import Incident, IncidentEvent, IncidentEventType
 from packages.rca.alert_coverage import AlertCoverageConfig
 from packages.rca.engine import RCA_ENGINE_VERSION, EngineConfig, Investigator, diagnose
 from packages.rca.epistemic_digest import diagnosis_epistemic_digest
+from packages.rca.evidence_coverage import EvidenceCoverage, StreamGap, evidence_coverage
 from packages.rca.investigation.graph import investigate_diagnosis
 from packages.rca.investigation.intents import DeterministicIntentPolicy
 from packages.rca.investigation.policy import LLMInvestigationPolicy
@@ -38,8 +51,8 @@ from packages.rca.lifecycle import classify, status_payload
 from packages.rca.live import (
     ChangeWatcher,
     ClusterReader,
-    KubernetesClusterReader,
     ListingFailure,
+    ListingScope,
     LiveSource,
     ObjectSnapshot,
     capture_error_logs,
@@ -47,7 +60,7 @@ from packages.rca.live import (
 )
 from packages.rca.llm import LLMClient
 from packages.rca.manifest import alert_from_payload, event_evidence_id
-from packages.rca.model import Alert, Diagnosis
+from packages.rca.model import Alert, Diagnosis, JournalEntry
 from packages.rca.provider_adapter import ProviderAdapter, ProviderReaders
 from packages.storage import (
     AlertRepository,
@@ -69,6 +82,7 @@ from packages.storage.manifest import (
     load_run_boundary,
 )
 from packages.storage.repositories import (
+    ChangeStreamGapRepository,
     EntityInstanceRepository,
     LifecycleRecord,
     LifecycleRepository,
@@ -82,7 +96,7 @@ logger = logging.getLogger(__name__)
 
 _TERMINAL_STATUSES = frozenset({"RESOLVED", "CLOSED", "FAILED"})
 # LEGACY marks rows stored before revisions; a run never produces it.
-_REVISION_TRIGGERS = frozenset({"INITIAL", "MANUAL", "EVIDENCE_DEADLINE"})
+_REVISION_TRIGGERS = frozenset({"INITIAL", "MANUAL", "EVIDENCE_DEADLINE", "ALERT_REFIRED"})
 
 
 def engine_version() -> str:
@@ -324,6 +338,9 @@ class DiagnosisService:
     namespaces: tuple[str, ...]
     evidence_namespaces: tuple[str, ...] = ("chaos-mesh",)
     reader: ClusterReader | None = None
+    connector: Connector | None = None
+    gateway: ConnectorGateway | None = None
+    connector_client: ConnectorClient | None = None
     investigator_factory: Callable[[], Investigator | None] = lambda: None
     bounded_policy_factory: Callable[[], InvestigationPolicy | None] = lambda: None
     # The product always seeds from the full source; only replay-mechanics
@@ -347,6 +364,9 @@ class DiagnosisService:
     status_snapshot_interval: timedelta = timedelta(seconds=30)
     # How a polling gap breaks alert-channel coverage (frozen into each run boundary).
     alert_coverage_config: AlertCoverageConfig = field(default_factory=AlertCoverageConfig)
+    # how long a resolved incident's diagnosis waits for the stream to pass its window's end
+    # (late-evidence-design.md §4.1)
+    late_evidence_seconds: float = 10.0
     # Evidence retention; None (the default) keeps everything.
     retention_policy: RetentionPolicy | None = None
     # Deadline reevaluation (SRE_REEVALUATE); None (the default) never schedules.
@@ -377,7 +397,9 @@ class DiagnosisService:
             self._last_snapshot_result = result
             return result
         journal_namespaces = tuple(dict.fromkeys((*self.namespaces, *self.evidence_namespaces)))
+        lock_requested = time.monotonic()
         with self._snapshot_lock, self.session_factory() as session:
+            _wait_measure.lock_wait = time.monotonic() - lock_requested
             repository = ObjectVersionRepository(session)
             lifecycle = _PodLifecycleRecorder(
                 LifecycleRepository(session),
@@ -407,10 +429,17 @@ class DiagnosisService:
                         exc_info=True,
                     )
 
+            observed_of = getattr(self.reader, "observed_at_of", None)
+
+            def connector_time(body: dict[str, Any]) -> datetime | None:
+                return observed_of(body) if callable(observed_of) else None
+
             def record(body: dict[str, Any], observed_at: datetime) -> bool:
-                stored = repository.record(body, observed_at)
-                best_effort(lambda: lifecycle.observe(body, observed_at))
-                best_effort(lambda: indexer.observe(body, observed_at))
+                seen = connector_time(body)
+                stored = repository.record(body, observed_at, connector_observed_at=seen)
+                # the collector that saw it is the Connector, when the change came through its stream
+                best_effort(lambda: lifecycle.observe(body, seen or observed_at))
+                best_effort(lambda: indexer.observe(body, seen or observed_at))
                 return stored
 
             def repair_index() -> None:
@@ -465,7 +494,8 @@ class DiagnosisService:
                 event_bodies = []
                 event_listing_failed = True
             stored = object_snapshot.stored_versions + sum(
-                events.record(body, event_observed_at) for body in event_bodies
+                events.record(body, event_observed_at, connector_observed_at=connector_time(body))
+                for body in event_bodies
             )
             cycle_failures = failures + lifecycle.failures
             cycle_repairs = lifecycle.repairs + index_repairs
@@ -484,6 +514,7 @@ class DiagnosisService:
                 cycle_id=cycle_id,
             )
             self._last_snapshot_result = result
+            self._record_stream_gaps(session)
             if result.failed_scopes:
                 logger.warning(
                     "cluster snapshot incomplete for scopes: %s",
@@ -493,6 +524,130 @@ class DiagnosisService:
                     ),
                 )
             return result
+
+    def _transport_proven(self, window_end: datetime) -> datetime | None:
+        """When the stream had been read past ``window_end``, if it had (late-evidence §4.1)."""
+        connector_time = getattr(self.reader, "connector_time", None)
+        if not callable(connector_time):
+            return None
+        latest: datetime | None = connector_time()
+        return self.clock() if latest is not None and latest > window_end else None
+
+    def _await_transport(self, window_end: datetime) -> datetime | None:
+        """Journal the stream until it has been read past ``window_end`` or the wait times out.
+
+        With a heartbeat every 2 s this normally returns within one heartbeat.
+        """
+        started = time.monotonic()
+        deadline = started + self.late_evidence_seconds
+        connector_time = getattr(self.reader, "connector_time", None)
+        streamed = callable(connector_time)
+        # measurement (late-evidence-design.md §9): where the wait goes, one log line per wait
+        turns: list[str] = []
+        while True:
+            # read the stream's time before journaling: what was read by then is journaled below
+            checked = time.monotonic() - started
+            latest = connector_time() if callable(connector_time) else None
+            proven = self.clock() if latest is not None and latest > window_end else None
+            _wait_measure.lock_wait = None
+            journal_started = time.monotonic()
+            try:
+                self.snapshot_result()
+            except Exception:
+                logger.warning(
+                    "journal refresh before the manifest failed; using the journal as it is",
+                    exc_info=True,
+                )
+                proven = None
+            lock_wait = _wait_measure.lock_wait
+            turns.append(
+                f"t={checked:.2f}"
+                f" stream-T={(latest - window_end).total_seconds() if latest else float('nan'):+.2f}"
+                f" lock={lock_wait if lock_wait is not None else float('nan'):.2f}"
+                f" journal={time.monotonic() - journal_started:.2f}"
+            )
+            if proven is not None or not streamed or time.monotonic() >= deadline:
+                if streamed:
+                    logger.info(
+                        "transport wait for %s: %s after %.2f s; %s",
+                        window_end.isoformat(),
+                        "proven" if proven is not None else "not proven",
+                        time.monotonic() - started,
+                        " | ".join(turns),
+                    )
+                if streamed and proven is None:
+                    logger.warning(
+                        "the change stream was not read past %s within %.0f s; "
+                        "transport completeness not proven",
+                        window_end.isoformat(),
+                        self.late_evidence_seconds,
+                    )
+                return proven
+            time.sleep(0.25)
+
+    def _evidence_coverage(
+        self,
+        journal: Sequence[JournalEntry],
+        starts_at: datetime,
+        window_end: datetime,
+        transport_proven_at: datetime | None,
+    ) -> EvidenceCoverage:
+        """The per-scope coverage record of the window (late-evidence-design.md §4.3)."""
+        namespaces = {*self.namespaces, *self.evidence_namespaces}
+        scopes = {(namespace, "Event") for namespace in namespaces}
+        for entry in journal:
+            scope = ListingScope.from_key(entry.object_key)
+            if scope is not None:
+                scopes.add((scope.namespace, scope.kind))
+        followed_since = getattr(self.reader, "followed_since", None)
+        streamed = callable(followed_since)
+        gaps: list[StreamGap] = []
+        if streamed:
+            with self.session_factory() as session:
+                gaps = [
+                    StreamGap(
+                        reason=row.reason,
+                        since=row.since,
+                        at=row.at,
+                        namespace=row.namespace,
+                        kind=row.kind,
+                    )
+                    for row in ChangeStreamGapRepository(session).overlapping(
+                        namespaces=namespaces, starts_at=starts_at, ends_at=window_end
+                    )
+                ]
+        return evidence_coverage(
+            scopes,
+            gaps,
+            starts_at=starts_at,
+            window_end=window_end,
+            streamed=streamed,
+            stream_followed_since=followed_since() if callable(followed_since) else None,
+            transport_proven_at=transport_proven_at,
+        )
+
+    def _record_stream_gaps(self, session: Session) -> None:
+        """Persist the change-stream gaps the reader has read (late-evidence-design.md §4.2).
+
+        A failed write keeps them with the reader for the next cycle.
+        """
+        gaps = getattr(self.reader, "gaps", None)
+        forget = getattr(self.reader, "forget_gaps", None)
+        if not callable(gaps) or not callable(forget):
+            return
+        pending: tuple[GapItem, ...] = gaps()
+        if not pending:
+            return
+        repository = ChangeStreamGapRepository(session)
+        try:
+            for gap in pending:
+                scope = (gap.scope.namespace, gap.scope.kind) if gap.scope is not None else None
+                repository.record(gap.reason, gap.at, since=gap.since, scope=scope)
+        except Exception:
+            session.rollback()
+            logger.warning("recording change-stream gaps failed; retried next cycle", exc_info=True)
+            return
+        forget(len(pending))
 
     def apply_retention(self) -> None:
         """One retention pass when a policy is configured; failures are logged."""
@@ -518,13 +673,47 @@ class DiagnosisService:
             logger.warning("deadline reevaluation pass failed", exc_info=True)
             return None
 
+    def follows_changes(self) -> bool:
+        """Whether the reader can say that changes arrived, so the journal follows them (contract §15)."""
+        return callable(getattr(self.reader, "pending", None))
+
+    def follow_changes(self, stop: threading.Event, interval_seconds: float = 1.0) -> None:
+        """Journal the cluster as soon as the change stream carries anything; no fixed batching."""
+        while not stop.is_set():
+            pending = getattr(
+                self.reader, "pending", None
+            )  # the reader may attach later (remote mode)
+            try:
+                if callable(pending) and pending():
+                    stored = self.snapshot()
+                    if stored:
+                        logger.info("object journal stored %d changed object(s)", stored)
+            except ConnectorError:
+                pass  # the slower loop reports a connector that is away, once
+            except Exception:
+                logger.warning("following the change stream failed", exc_info=True)
+            stop.wait(interval_seconds)
+
     def watch(self, stop: threading.Event, interval_seconds: float) -> None:
-        """Snapshot the cluster until ``stop`` is set; errors are logged and retried."""
+        """Snapshot the cluster until ``stop`` is set; errors are logged and retried.
+
+        When the reader follows the change stream (``follow_changes`` runs), this loop no longer
+        snapshots on its interval; it keeps retention and scheduled re-evaluation.
+        """
+        unreachable = False
         while not stop.is_set():
             try:
-                stored = self.snapshot()
+                stored = 0 if self.follows_changes() else self.snapshot()
+                if unreachable:
+                    logger.info("the connector answers again; the object journal resumes")
+                    unreachable = False
                 if stored:
                     logger.info("object journal stored %d changed object(s)", stored)
+            except ConnectorError as error:
+                # A connector that is away is an expected state, not a fault: say so once.
+                if not unreachable:
+                    logger.warning("the cluster is unreachable through the connector: %s", error)
+                unreachable = True
             except Exception:
                 logger.warning("cluster snapshot failed", exc_info=True)
             self.apply_retention()
@@ -663,18 +852,14 @@ class DiagnosisService:
         window_end = incident.updated_at if resolved else self.clock()
         snapshot_cycle_id: int | None = None
         listed: tuple[dict[str, Any], ...] = ()
+        transport_proven_at: datetime | None = None
         if resolved:
             if self.reader is not None:
-                # Keep the shared journal current for later incidents, but do
-                # not use this live cycle as evidence for the frozen episode.
-                # A reader outage must not make historical diagnosis fail.
-                try:
-                    self.snapshot_result()
-                except Exception:
-                    logger.warning(
-                        "post-resolution journal refresh failed; using frozen evidence",
-                        exc_info=True,
-                    )
+                # Keep the shared journal current, and wait until everything the Connector
+                # observed by the resolution has been journaled (late-evidence-design.md §4.1).
+                # This live cycle is not evidence for the frozen episode: membership is by the
+                # Connector's observation time. A reader outage must not fail the diagnosis.
+                transport_proven_at = self._await_transport(window_end)
         else:
             if self.reader is not None:
                 cycle = self.snapshot_result(run_id=run_id)
@@ -685,6 +870,10 @@ class DiagnosisService:
             if capture_adapter.supports("logs"):
                 self._capture_logs(incident_id, alerts, listed, capture_adapter)
             window_end = self.clock()
+            if self.reader is not None:
+                # the same proof as for a resolution (late-evidence-design.md §6): what the
+                # Connector observed by the capture's end is journaled before the manifest
+                transport_proven_at = self._await_transport(window_end)
         starts_at, ends_at = incident_window(alerts, window_end)
         # The manifest and the run's boundary event commit together; RCA then
         # sees exactly the manifest's members, loaded by id.
@@ -726,6 +915,9 @@ class DiagnosisService:
             snapshot_observed_at=members.snapshot.observed_at if members.snapshot else None,
             alert_coverage=alert_coverage,
         )
+        coverage = self._evidence_coverage(
+            members.journal, starts_at, window_end, transport_proven_at
+        )
         bounded_policy = self.bounded_policy_factory()
         # The effective configs are explicit so the revision can record them.
         engine_config = EngineConfig()
@@ -745,6 +937,8 @@ class DiagnosisService:
             diagnosis = diagnose(
                 source, investigator=self.investigator_factory(), config=engine_config
             )
+        # provenance recorded by the control plane, outside the engine and the epistemic digest
+        diagnosis = diagnosis.model_copy(update={"evidence_coverage": coverage})
         leading = diagnosis.hypothesis.causal_actor.canonical if diagnosis.hypothesis else None
         self._emit(
             incident_id,
@@ -815,6 +1009,9 @@ class DiagnosisService:
         return diagnosis
 
 
+_wait_measure = threading.local()  # the snapshot lock's wait, per thread (measurement only)
+
+
 INVESTIGATION_POLICIES = ("deterministic_intent", "deterministic_observation", "llm")
 
 
@@ -862,12 +1059,37 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
         for item in os.getenv("SRE_EVIDENCE_NAMESPACES", "chaos-mesh").split(",")
         if item.strip()
     )
-    reader = (
-        KubernetesClusterReader(chaos_namespaces=evidence_namespaces)
-        if os.getenv("SRE_CLUSTER_ACCESS") == "true"
-        else None
-    )
-    provider_readers = ProviderReaders.from_environment()
+    # The control plane reaches customer resources only through the connector (contract §1);
+    # today it runs in-process, and every call still crosses the encoded wire.
+    mode = os.getenv("SRE_CONNECTOR_MODE", "in-process").casefold()
+    if mode not in {"in-process", "remote"}:
+        raise ValueError("SRE_CONNECTOR_MODE must be 'in-process' or 'remote'")
+    streams = os.getenv("SRE_CONNECTOR_STREAMS", "").casefold() == "true"
+    connector: Connector | None = None
+    gateway: ConnectorGateway | None = None
+    remote_client: ConnectorClient | None = None
+    reader: ClusterReader | None
+    if mode == "remote":
+        # A remote connector dials this process (contract §12): the service starts with no reader
+        # and attaches them when a connector connects.
+        gateway, remote_id = gateway_from_environment()
+        remote_client = ConnectorClient(gateway.transport(remote_id))
+        reader, provider_readers = None, ProviderReaders()
+    else:
+        connector = connector_from_environment(
+            evidence_namespaces,
+            tuple(dict.fromkeys((*namespaces, *evidence_namespaces))),
+            accept_webhook=streams,
+        )
+        client = ConnectorClient(in_process_transport(connector))
+        # Stream mode rebuilds the cluster listing from the connector's change stream (§10);
+        # otherwise each listing is one request. Both answer the same ClusterReader protocol.
+        reader = (
+            StreamedClusterReader(client)
+            if streams and "changes" in client.capabilities()
+            else cluster_reader(client)
+        )
+        provider_readers = connector_provider_readers(client)
 
     # Built once and reused: OpenAIClient owns the call-budget counter, so a
     # fresh client per incident would reset SRE_LLM_MAX_CALLS every time.
@@ -899,11 +1121,14 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
             llm_client = OpenAIClient()
         return LLMInvestigationPolicy(llm_client)
 
-    return DiagnosisService(
+    service = DiagnosisService(
         session_factory=session_factory,
         namespaces=namespaces,
         evidence_namespaces=evidence_namespaces,
         reader=reader,
+        connector=connector if streams else None,
+        gateway=gateway,
+        connector_client=remote_client,
         provider_readers=provider_readers,
         investigator_factory=investigator,
         bounded_policy_factory=bounded_policy,
@@ -913,7 +1138,24 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
         retention_policy=policy_from_environment(),
         reevaluation=reevaluation_from_environment(),
         alert_coverage_config=AlertCoverageConfig.from_environment(),
+        late_evidence_seconds=float(os.getenv("SRE_LATE_EVIDENCE_SECONDS", "10")),
     )
+    if gateway is not None and remote_client is not None:
+        client_for_attach = remote_client
+
+        def attach(_connector_id: str) -> None:
+            """A connector connected: read what it offers and attach the matching readers."""
+            capabilities = client_for_attach.capabilities()
+            service.reader = (
+                StreamedClusterReader(client_for_attach)
+                if "changes" in capabilities
+                else cluster_reader(client_for_attach)
+            )
+            service.provider_readers = connector_provider_readers(client_for_attach)
+            logger.info("connector attached with capabilities %s", ", ".join(capabilities))
+
+        gateway.on_connect = attach
+    return service
 
 
 __all__ = [

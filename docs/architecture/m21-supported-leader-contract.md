@@ -1,19 +1,24 @@
 # M21 Supported-Leader Contract
 
-Contract version: `m21-leader.v2`, engine `2.0.0`, 2026-09-28.
+Contract version: `m21-leader.v3`, engine `2.1.0`, 2026-09-29.
 Supersedes the frozen, unimplemented `m21-leader.v1` proposal with the user's
 explicit authorization. The previous independent `SUPPORTED_LEADER` layer was
 not implemented in the inspected baseline and is not added on top of invalid
 D1 semantics.
 
-The authoritative definitions are in [M21 v2](m21-causal-semantics-contract.md).
+The authoritative definitions are in [M21 v3](m21-causal-semantics-contract.md).
 A leader is assessed only after actor-scoped formation, positive incident
 admission, D1 v2 witnesses and positive contradiction/effect rules.
 
 - `SUPPORTED_CAUSE`: exactly one eligible supported admitted claim and no
   unresolved admitted rival. The claim level is `POSSIBLE_INITIATING_CAUSE`.
-- `COMPETING_CAUSES`: support exists but independent supported or unresolved
+- `COMPETING_CAUSES`: support exists but supported or unresolved
   admitted rivals remain. No finding-volume dominance selects a unique root.
+- `MECHANISM_VERIFIED_CAUSE`: unique observed mechanism with all declared
+  incident symptoms covered, no unresolved admitted rival and no unanswered
+  material frontier; versioned `RESOLVED` authority.
+- `MULTIPLE_OBSERVED_CAUSES`: distinct directly observed mechanisms with disjoint
+  evidence; legacy single-root resolution stays ambiguous.
 - `INSUFFICIENT_EVIDENCE`: no eligible admitted initiating support.
 
 Material frontier IDs and claim bindings accompany the diagnosis. An unobserved
@@ -31,10 +36,15 @@ This preserves context invariance without granting false certainty.
 The full inventory, admission reasons, rule witnesses, diagnosis scope and
 material frontier bindings are deterministic and enter the epistemic digest.
 There is no eight-record measurement limit. Old documents retain their recorded
-semantics; old-engine replay is explicitly unsupported under engine 2.0.0.
+semantics; old-engine replay is explicitly unsupported under engine 2.1.0.
 
 The 35 previously seen ITBench snapshots are a development/regression set.
 Report true actor retention/admission, false and correct possible support,
 incorrect certainty, real-rival ambiguity, material boundaries, context blockage
 and replay separately. Active provider costs require a separate live/read-tape
 measurement; snapshot runs cannot establish them.
+
+Explanation and frontier transfer follow M21 v3. A supported plus unresolved
+pair alone is not proof of independence. Snapshot label matching is entity
+scoring, not mechanism validation. Recorded-source active replay is measured
+separately from repeated same-case computation.

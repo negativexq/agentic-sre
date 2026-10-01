@@ -123,7 +123,7 @@ def _hypothesis_relevance(candidate: ObservationCandidate, diagnosis: Diagnosis)
     leading, unresolved = _unresolved_hypothesis_ids(diagnosis)
     candidate_ids = set(candidate.hypothesis_ids)
     trace = diagnosis.resolution_trace
-    if trace is not None and trace.semantics_version == "m21.v2":
+    if trace is not None and trace.semantics_version in {"m21.v2", "m21.v3"}:
         candidate_ids.intersection_update(trace.admitted_hypotheses)
     if candidate_ids & leading:
         return 3

@@ -13,7 +13,83 @@ import json
 from dataclasses import dataclass
 from hashlib import sha256
 
-from packages.rca.model import Diagnosis, EliminationConsequence, Hypothesis
+from packages.rca.model import (
+    Diagnosis,
+    EliminationConsequence,
+    Hypothesis,
+    TimingAssessment,
+)
+
+
+def _iso(value: object) -> str | None:
+    return value.isoformat() if hasattr(value, "isoformat") else None
+
+
+def _timing_document(timing: TimingAssessment) -> dict[str, object]:
+    """Everything replay needs to audit why the same onset set and outcomes were produced.
+
+    Not just the computed bounds: the qualified episodes each member derives from (alert
+    fingerprint, start, capture evidence ids), the cutoff and coverage boundary, and every
+    stability outcome. Deterministic order only.
+    """
+    uncertainty = timing.uncertainty
+    return {
+        "version": timing.version,
+        "reason": uncertainty.reason,
+        "cutoff": _iso(uncertainty.cutoff),
+        "alert_observation_start": _iso(uncertainty.alert_observation_start),
+        "h0": _iso(uncertainty.h0),
+        "upper": _iso(uncertainty.upper),
+        "members": [
+            {
+                "onset": _iso(member.onset),
+                "is_h0": member.is_h0,
+                "is_upper": member.is_upper,
+                "episodes": [
+                    {
+                        "fingerprint": episode.fingerprint,
+                        "name": episode.name,
+                        "starts_at": _iso(episode.starts_at),
+                        "evidence": sorted(episode.evidence_ids),
+                    }
+                    for episode in sorted(member.episodes, key=lambda e: e.fingerprint)
+                ],
+            }
+            for member in uncertainty.members
+        ],
+        "status": timing.status.value,
+        "outcomes": [
+            {
+                "onset": _iso(o.onset),
+                "diagnosis": o.diagnosis_status,
+                "drivers": [
+                    {"key": d.hypothesis_key, "change": d.change, "reason": d.reason}
+                    for d in sorted(o.drivers, key=lambda d: (d.hypothesis_key, d.change))
+                ],
+            }
+            for o in timing.outcomes
+        ],
+        "claims": [
+            {
+                "key": claim.hypothesis_key,
+                "formation": claim.formation.value,
+                "adjudication": claim.adjudication.value,
+                "relations": [
+                    {
+                        "relation": r.relation,
+                        "stability": r.stability.value,
+                        "values": list(r.values),
+                    }
+                    for r in claim.relations
+                ],
+            }
+            for claim in sorted(timing.claims, key=lambda c: c.hypothesis_key)
+        ],
+        "withheld": [
+            {"key": w.hypothesis_key, "authority": w.authority, "relations": list(w.relations)}
+            for w in sorted(timing.withheld, key=lambda w: (w.hypothesis_key, w.authority))
+        ],
+    }
 
 
 @dataclass(frozen=True)
@@ -86,9 +162,46 @@ def epistemic_state(diagnosis: Diagnosis) -> EpistemicState:
         return hypothesis.hypothesis_key or None
 
     causal_decision = None
-    if trace is not None and trace.semantics_version == "m21.v2":
+    if trace is not None and trace.semantics_version in {"m21.v2", "m21.v3"}:
         causal_decision = json.dumps(
             {
+                **(
+                    {
+                        "explanations": [r.model_dump(mode="json") for r in trace.explanations],
+                        "frontier_answers": [
+                            a.model_dump(
+                                mode="json", exclude={"investigation_state", "blocked_reason"}
+                            )
+                            for a in trace.frontier_answers
+                        ],
+                        "mechanism_verified": sorted(trace.mechanism_verified_hypotheses),
+                        "independent_causes": sorted(trace.independent_mechanism_causes),
+                        # Family competition: identity, state, exact members and how far the
+                        # viable instances are resolved. `representative` is rank-derived
+                        # display and never enters the digest.
+                        "families": [
+                            {
+                                "id": f.family_id,
+                                "actor": f.actor.canonical,
+                                "mechanism_family": f.mechanism_family,
+                                "state": f.state.value,
+                                "instance_resolution": f.instance_resolution.value,
+                                "members": sorted(f.members),
+                                "supported": sorted(f.supported_members),
+                                "unresolved": sorted(f.unresolved_members),
+                                "excluded": sorted(f.excluded_members),
+                            }
+                            for f in sorted(trace.causal_families, key=lambda item: item.family_id)
+                        ],
+                        **(
+                            {"timing": _timing_document(trace.timing)}
+                            if trace.timing is not None
+                            else {}
+                        ),
+                    }
+                    if trace.semantics_version == "m21.v3"
+                    else {}
+                ),
                 "version": trace.semantics_version,
                 "diagnosis": trace.diagnosis_status,
                 "claim_level": trace.claim_level,
@@ -99,6 +212,11 @@ def epistemic_state(diagnosis: Diagnosis) -> EpistemicState:
                 "claims": [
                     {
                         "id": audit.hypothesis_id,
+                        **(
+                            {"family": audit.causal_family_id}
+                            if trace.semantics_version == "m21.v3"
+                            else {}
+                        ),
                         "admission": audit.admission,
                         "reasons": sorted(audit.admission_reasons),
                         "support": [

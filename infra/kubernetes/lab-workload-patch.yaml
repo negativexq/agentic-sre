@@ -1,0 +1,14 @@
+# Lab-only headroom for the services a testbed fault targets (testbed-scenarios-design.md, "Baseline health").
+# With the demo's 1 s probe timeout these services failed their probes under the ordinary test load, before
+# any fault, so a fault's effect could never be told apart from the baseline. The CPU limit stays at the
+# demo's 500m: at 1000m a CPU stress no longer crossed the latency alert nor failed a probe (measured). Applied by
+# `make lab-tune` after workload.yaml, which stays as the demo defines it.
+spec:
+  template:
+    spec:
+      containers:
+        - name: SERVICE
+          readinessProbe:
+            timeoutSeconds: 3
+          livenessProbe:
+            timeoutSeconds: 3

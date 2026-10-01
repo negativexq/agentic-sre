@@ -1,7 +1,7 @@
 .PHONY: install lock lint typecheck test test-pg check demo serve-local \
 	itbench-setup itbench-index eval-dev eval-test benchmark-qualify \
 	images cluster-up build-images deploy load status ui inject-bad-rollout recover rbac-check \
-	cluster-down precommit offline-demo e2e-kind e2e-kind-clean m18a-live-validate release-check \
+	lab-images chaos-mesh-install chaos-mesh-uninstall lab-up lab-check lab-check-once lab-pki connector-deploy connector-check cp-up cp-stop cp-down cp-reset cluster-down precommit offline-demo e2e-kind e2e-kind-clean m18a-live-validate release-check \
 	verify-release-provenance product-bench-dev
 
 PY := .venv/bin/python
@@ -117,7 +117,187 @@ verify-release-provenance:
 cluster-up:
 	kind create cluster --config infra/kubernetes/kind-config.yaml
 
-IMAGES := control-plane migrator order-service payment-service order-worker
+IMAGES := control-plane migrator connector order-service payment-service order-worker
+
+# Chaos Mesh for the lab (infra/kubernetes/chaos-mesh/pins.yaml): the vendored chart, containerd
+# values, one controller. `lab-images` has the node pull the pinned images and refuses any whose digest
+# differs from pins.yaml, so that a run never waits on a registry. (`kind load` cannot import these
+# multi-platform images from the local Docker store: "content digest not found".)
+CHAOS_DIR := infra/kubernetes/chaos-mesh
+CHAOS_TAG := v2.8.4
+
+lab-images:
+	$(PY) -c "import sys, yaml; [print(i['name'], i['tag'], i['digest']) for i in yaml.safe_load(open(sys.argv[1]))['images']]" $(CHAOS_DIR)/pins.yaml | while read image tag digest; do \
+		docker exec agentic-sre-control-plane crictl pull $$image:$$tag >/dev/null || exit 1; \
+		docker exec agentic-sre-control-plane crictl inspecti $$image:$$tag | grep -q "$$digest" \
+			|| { echo "digest mismatch for $$image:$$tag (pinned $$digest)"; exit 1; }; \
+	done
+
+chaos-mesh-install:
+	helm upgrade --install chaos-mesh $(CHAOS_DIR)/chaos-mesh-$(CHAOS_TAG:v%=%).tgz \
+		--namespace chaos-mesh --create-namespace -f $(CHAOS_DIR)/values.yaml --wait
+
+chaos-mesh-uninstall:
+	helm uninstall chaos-mesh --namespace chaos-mesh
+
+# The testbed lab (docs/architecture/testbed-lab-design.md section 8): everything except the control
+# plane, which runs outside it. Destructive only in that `cluster-up` creates the cluster; it never
+# deletes one. Postgres converges its own schema (the `migrate` sidecar), Kafka its own topic.
+# `KUBECTL` selects the context: make lab-check KUBECTL="kubectl --context kind-agentic-sre".
+KUBECTL ?= kubectl
+
+lab-up: cluster-up build-images lab-images
+	$(KUBECTL) apply -f infra/kubernetes/namespace.yaml
+	$(KUBECTL) apply -f infra/kubernetes/observability.yaml
+	$(KUBECTL) apply -f infra/kubernetes/tools-rbac.yaml
+	$(KUBECTL) apply -f infra/kubernetes/workload.yaml
+	$(KUBECTL) apply -f infra/kubernetes/dependencies.yaml
+	$(KUBECTL) apply -f infra/kubernetes/lab-control.yaml
+	for name in kafka postgres redis order-service payment-service order-worker; do \
+		$(KUBECTL) rollout status deployment/$$name -n $(NAMESPACE) --timeout=300s || exit 1; \
+	done
+	$(KUBECTL) rollout status deployment/isolated-echo -n lab-control --timeout=180s
+	for name in otel-collector prometheus kube-state-metrics loki tempo alertmanager grafana; do \
+		$(KUBECTL) rollout status deployment/$$name -n observability --timeout=180s || exit 1; \
+	done
+	$(MAKE) chaos-mesh-install
+	$(MAKE) lab-tune
+	$(MAKE) lab-check
+
+# The scriptable part of the bring-up gate; the chaos smoke, the alert path and the node restart are
+# run by hand and recorded (design section 8, step 5). The topic and the schema converge on their own
+# (sidecars), so the gate retries for up to two minutes and reports the last failure; every single
+# check still fails if kubectl itself fails.
+# Lab-only headroom for the fault targets (infra/kubernetes/lab-workload-patch.yaml); the demo manifest is untouched.
+lab-tune:
+	for name in order-service payment-service; do \
+		sed "s/SERVICE/$$name/" infra/kubernetes/lab-workload-patch.yaml | \
+			$(KUBECTL) -n $(NAMESPACE) patch deployment $$name --type strategic --patch-file /dev/stdin || exit 1; \
+		$(KUBECTL) -n $(NAMESPACE) rollout status deployment/$$name --timeout=180s || exit 1; \
+	done
+
+lab-check:
+	@for attempt in $$(seq 1 24); do \
+		out=$$($(MAKE) --no-print-directory lab-check-once 2>&1) && { echo "$$out"; exit 0; }; \
+		sleep 5; \
+	done; echo "$$out"; echo "lab check: FAIL after 2 minutes"; exit 1
+
+lab-check-once:
+	@pods=$$($(KUBECTL) get pods -A --no-headers) || { echo "kubectl could not list pods"; exit 1; }; \
+	bad=$$(echo "$$pods" | awk '$$4 != "Running" && $$4 != "Completed"'); \
+	test -n "$$pods" || { echo "no pods found"; exit 1; }; \
+	test -z "$$bad" || { echo "pods not running:"; echo "$$bad"; exit 1; }
+	@topics=$$($(KUBECTL) exec -n $(NAMESPACE) deployment/kafka -c kafka -- /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092) \
+		|| { echo "could not list Kafka topics"; exit 1; }; \
+	echo "$$topics" | grep -qx orders.created || { echo "topic orders.created is missing"; exit 1; }
+	@schema=$$($(KUBECTL) exec -n $(NAMESPACE) deployment/postgres -c postgres -- psql -U postgres -d agentic_sre -Atc "select to_regclass('public.alembic_version') is not null") \
+		|| { echo "could not query the database"; exit 1; }; \
+	test "$$schema" = t || { echo "the database schema has not been migrated"; exit 1; }
+	@crds=$$($(KUBECTL) get crd -o name) || { echo "could not list CRDs"; exit 1; }; \
+	test "$$(echo "$$crds" | grep -c chaos-mesh.org)" = 23 || { echo "expected 23 Chaos Mesh CRDs"; exit 1; }
+	@if $(KUBECTL) exec -n $(NAMESPACE) deployment/order-service -- python -c "import urllib.request; urllib.request.urlopen('http://isolated-echo.lab-control:8080', timeout=3)" >/dev/null 2>&1; then \
+		echo "the isolated workload is reachable from $(NAMESPACE)"; exit 1; fi
+	@echo "lab check: PASS"
+
+# --- the control plane outside the lab (docs/architecture/testbed-control-plane-design.md) ---------
+#
+# The control plane and its own Postgres run on the host; the Connector runs in the lab and dials
+# host.docker.internal:8443. Certificates and the webhook token are generated under .local/lab and never
+# committed; only the connector's material enters the cluster. `cp-down` keeps the Postgres volume.
+LAB_DIR := .local/lab
+CP_PG := agentic-sre-cp-pg
+CP_PG_VOLUME := agentic-sre-cp-pgdata
+CP_PG_PORT ?= 55433
+CP_DB_NAME ?= agentic_sre
+# How often the control plane takes a cluster snapshot from the connector (seconds).
+CP_WATCH_INTERVAL ?= 15
+CP_DB := postgresql+psycopg://postgres:postgres@127.0.0.1:$(CP_PG_PORT)/$(CP_DB_NAME)
+CONNECTOR_SA := system:serviceaccount:connector:connector
+
+lab-pki:
+	$(PY) -m packages.connector.lab pki --out $(LAB_DIR)/pki
+
+connector-deploy: lab-pki
+	$(KUBECTL) apply -f infra/kubernetes/chaos-mesh-rbac.yaml
+	$(KUBECTL) apply -f infra/kubernetes/connector.yaml
+	test -f $(LAB_DIR)/webhook-token || { umask 077; head -c 24 /dev/urandom | base64 | tr -d '/+=\n' > $(LAB_DIR)/webhook-token; }
+	$(KUBECTL) -n connector create secret generic connector-tls \
+		--from-file=client.crt=$(LAB_DIR)/pki/client.crt --from-file=client.key=$(LAB_DIR)/pki/client.key \
+		--from-file=ca.crt=$(LAB_DIR)/pki/ca.crt --dry-run=client -o yaml | $(KUBECTL) apply -f -
+	$(KUBECTL) -n connector create secret generic connector-webhook \
+		--from-file=token=$(LAB_DIR)/webhook-token --dry-run=client -o yaml | $(KUBECTL) apply -f -
+	$(PY) -m packages.connector.lab alertmanager --source infra/observability/alertmanager.yml \
+		--url http://connector-webhook.connector.svc.cluster.local:9095/webhook \
+		--token-file $(LAB_DIR)/webhook-token > $(LAB_DIR)/alertmanager.yml
+	$(KUBECTL) -n observability create configmap alertmanager-config \
+		--from-file=alertmanager.yml=$(LAB_DIR)/alertmanager.yml --dry-run=client -o yaml | $(KUBECTL) apply -f -
+	$(KUBECTL) -n observability rollout restart deployment/alertmanager
+	$(KUBECTL) -n connector rollout restart deployment/connector
+	$(KUBECTL) -n connector rollout status deployment/connector --timeout=180s
+	$(KUBECTL) -n observability rollout status deployment/alertmanager --timeout=180s
+
+# The connector can read but never write, never reads Secrets and can never inject a fault, in every
+# namespace it watches. What it reads differs: workloads in `sre-demo` and `lab-control`, only Chaos
+# Mesh objects in `chaos-mesh` (the evidence namespace).
+connector-check:
+	@for ns in sre-demo lab-control; do \
+		test "$$($(KUBECTL) auth can-i list pods --as=$(CONNECTOR_SA) -n $$ns)" = yes \
+			|| { echo "the connector cannot list pods in $$ns"; exit 1; }; \
+	done; \
+	test "$$($(KUBECTL) auth can-i list networkchaos.chaos-mesh.org --as=$(CONNECTOR_SA) -n chaos-mesh)" = yes \
+		|| { echo "the connector cannot list chaos objects in chaos-mesh"; exit 1; }; \
+	for ns in sre-demo lab-control chaos-mesh; do \
+		for verb in "create pods" "patch deployments" "delete pods" "get secrets" "list secrets" \
+			"create networkchaos.chaos-mesh.org" "delete networkchaos.chaos-mesh.org"; do \
+			test "$$($(KUBECTL) auth can-i $$verb --as=$(CONNECTOR_SA) -n $$ns)" = no \
+				|| { echo "the connector is not denied: $$verb in $$ns"; exit 1; }; \
+		done; \
+	done; echo "connector RBAC: read-only PASS"
+
+cp-up: lab-pki
+	@docker start $(CP_PG) >/dev/null 2>&1 || docker run -d --name $(CP_PG) \
+		-e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=agentic_sre -p 127.0.0.1:$(CP_PG_PORT):5432 \
+		-v $(CP_PG_VOLUME):/var/lib/postgresql/data postgres:16.4-alpine >/dev/null
+	@for attempt in $$(seq 1 60); do docker exec $(CP_PG) pg_isready -U postgres -d agentic_sre >/dev/null 2>&1 && break; sleep 1; done
+	@docker exec $(CP_PG) psql -U postgres -Atc "select 1 from pg_database where datname = '$(CP_DB_NAME)'" | grep -q 1 \
+		|| docker exec $(CP_PG) createdb -U postgres $(CP_DB_NAME)
+	DATABASE_URL=$(CP_DB) $(PY) -m alembic upgrade head
+	@if [ -f $(LAB_DIR)/cp.pid ] && kill -0 $$(cat $(LAB_DIR)/cp.pid) 2>/dev/null; then \
+		echo "the control plane is already running (pid $$(cat $(LAB_DIR)/cp.pid))"; \
+	else \
+		for port in 8080 8443; do \
+			if lsof -nP -iTCP:$$port -sTCP:LISTEN >/dev/null 2>&1; then \
+				echo "port $$port is already in use by another process"; exit 1; \
+			fi; \
+		done; \
+		KUBECONFIG=/dev/null DATABASE_URL=$(CP_DB) SRE_CONNECTOR_MODE=remote \
+		SRE_CONNECTOR_LISTEN=0.0.0.0:8443 SRE_CONNECTOR_ALLOWED=lab \
+		SRE_CONNECTOR_TLS_CERT=$(LAB_DIR)/pki/server.crt SRE_CONNECTOR_TLS_KEY=$(LAB_DIR)/pki/server.key \
+		SRE_CONNECTOR_TLS_CLIENT_CA=$(LAB_DIR)/pki/ca.crt SRE_AUTO_DIAGNOSE=true \
+		SRE_WATCH_NAMESPACES=sre-demo,lab-control SRE_WATCH_INTERVAL_SECONDS=$(CP_WATCH_INTERVAL) \
+		nohup $(CLI) serve --host 127.0.0.1 --port 8080 > $(LAB_DIR)/cp.log 2>&1 & echo $$! > $(LAB_DIR)/cp.pid; \
+		echo "control plane started (pid $$(cat $(LAB_DIR)/cp.pid)); log $(LAB_DIR)/cp.log; console http://127.0.0.1:8080/app"; \
+	fi
+
+# Stops only the control plane process (its Postgres keeps running), so a run can restart it on another
+# database (`make cp-up CP_DB_NAME=...`). A graceful stop waits for open connections (a browser's event
+# stream keeps one open indefinitely), so it is given ten seconds and then ended, and the port must be free
+# before the function returns: a second process would otherwise share the gateway port.
+cp-stop:
+	@if [ -f $(LAB_DIR)/cp.pid ]; then \
+		pid=$$(cat $(LAB_DIR)/cp.pid); kill $$pid 2>/dev/null || true; \
+		for i in $$(seq 1 20); do kill -0 $$pid 2>/dev/null || break; sleep 0.5; done; \
+		kill -9 $$pid 2>/dev/null || true; rm -f $(LAB_DIR)/cp.pid; \
+	fi
+
+# Stops the control plane and its Postgres; the volume (the diagnosis history) is kept.
+cp-down: cp-stop
+	@docker stop $(CP_PG) >/dev/null 2>&1 || true
+
+# Deletes the control plane's history. Explicit on purpose.
+cp-reset: cp-down
+	docker rm -f $(CP_PG) >/dev/null 2>&1 || true
+	docker volume rm $(CP_PG_VOLUME) >/dev/null 2>&1 || true
 
 images:
 	for image in $(IMAGES); do \

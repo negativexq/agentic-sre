@@ -1,0 +1,5086 @@
+{
+  "format": "m21.causal-closure-measurement.v1",
+  "baseline_commit": "d9b7cf702dd7385dcd4e57700d391b292a30b008",
+  "after_engine": "2.1.0",
+  "set": "seen35 development/regression; no held-out generalization claim",
+  "label_scope": "Actor identity only; nonmatching support is not proven false mechanism",
+  "baseline_source_replay": "NOT_RECORDED",
+  "scoreable": 31,
+  "unmatchable": [
+    "Scenario-105",
+    "Scenario-23",
+    "Scenario-29",
+    "Scenario-38"
+  ],
+  "final_replay_cases": 35,
+  "transition_replay_cases": 35,
+  "totals": {
+    "baseline_snapshot": {
+      "represented": 29,
+      "admitted": 29,
+      "matching_possible_claims": 53,
+      "nonmatching_possible_claims": 24,
+      "matching_strong_claims": 0,
+      "nonmatching_strong_claims": 0,
+      "explained_claims": 0,
+      "explanation_relations": 0,
+      "unresolved_claims": 135,
+      "independent_observed_causes": 0,
+      "frontier_answered": 0,
+      "frontier_partially_answered": 0,
+      "answered_claim_roles": 0,
+      "frontier_open": 636,
+      "statuses": {
+        "COMPETING_CAUSES": 23,
+        "INSUFFICIENT_EVIDENCE": 12
+      },
+      "resolutions": {
+        "AMBIGUOUS": 23,
+        "INSUFFICIENT_EVIDENCE": 12
+      },
+      "matching_possible_cases": 18,
+      "nonmatching_possible_cases": 13,
+      "frontier_progress": {},
+      "recovery": {
+        "NOT_ASSESSED": 35
+      }
+    },
+    "after_snapshot": {
+      "represented": 29,
+      "admitted": 29,
+      "matching_possible_claims": 53,
+      "nonmatching_possible_claims": 24,
+      "matching_strong_claims": 0,
+      "nonmatching_strong_claims": 0,
+      "explained_claims": 1,
+      "explanation_relations": 1,
+      "unresolved_claims": 134,
+      "independent_observed_causes": 0,
+      "frontier_answered": 0,
+      "frontier_partially_answered": 1,
+      "answered_claim_roles": 1,
+      "frontier_open": 637,
+      "statuses": {
+        "COMPETING_CAUSES": 23,
+        "INSUFFICIENT_EVIDENCE": 12
+      },
+      "resolutions": {
+        "AMBIGUOUS": 23,
+        "INSUFFICIENT_EVIDENCE": 12
+      },
+      "matching_possible_cases": 18,
+      "nonmatching_possible_cases": 13,
+      "frontier_progress": {
+        "UNEXPLORED": 637
+      },
+      "recovery": {
+        "NOT_ASSESSED": 35
+      }
+    },
+    "baseline_active": {
+      "represented": 17,
+      "admitted": 17,
+      "matching_possible_claims": 8,
+      "nonmatching_possible_claims": 7,
+      "matching_strong_claims": 0,
+      "nonmatching_strong_claims": 0,
+      "explained_claims": 0,
+      "explanation_relations": 0,
+      "unresolved_claims": 78,
+      "independent_observed_causes": 0,
+      "frontier_answered": 0,
+      "frontier_partially_answered": 0,
+      "answered_claim_roles": 0,
+      "frontier_open": 481,
+      "statuses": {
+        "COMPETING_CAUSES": 10,
+        "INSUFFICIENT_EVIDENCE": 24,
+        "SUPPORTED_CAUSE": 1
+      },
+      "resolutions": {
+        "AMBIGUOUS": 11,
+        "INSUFFICIENT_EVIDENCE": 24
+      },
+      "matching_possible_cases": 8,
+      "nonmatching_possible_cases": 3,
+      "frontier_progress": {},
+      "recovery": {
+        "NOT_ASSESSED": 35
+      }
+    },
+    "after_active": {
+      "represented": 17,
+      "admitted": 17,
+      "matching_possible_claims": 8,
+      "nonmatching_possible_claims": 7,
+      "matching_strong_claims": 0,
+      "nonmatching_strong_claims": 0,
+      "explained_claims": 0,
+      "explanation_relations": 0,
+      "unresolved_claims": 78,
+      "independent_observed_causes": 0,
+      "frontier_answered": 0,
+      "frontier_partially_answered": 0,
+      "answered_claim_roles": 0,
+      "frontier_open": 481,
+      "statuses": {
+        "COMPETING_CAUSES": 10,
+        "INSUFFICIENT_EVIDENCE": 24,
+        "SUPPORTED_CAUSE": 1
+      },
+      "resolutions": {
+        "AMBIGUOUS": 11,
+        "INSUFFICIENT_EVIDENCE": 24
+      },
+      "matching_possible_cases": 8,
+      "nonmatching_possible_cases": 3,
+      "frontier_progress": {
+        "BLOCKED_BUDGET": 481
+      },
+      "recovery": {
+        "NOT_ASSESSED": 35
+      }
+    },
+    "baseline_queries": {
+      "queries": 210,
+      "decision_changing_queries_reported": 47,
+      "decision_changing_queries_common_projection": 47,
+      "duplicate_physical_reads": 0,
+      "no_data": 115,
+      "frontier_questions_in_queries": 210,
+      "stop": {
+        "TURN_BUDGET_EXHAUSTED": 35
+      }
+    },
+    "after_queries": {
+      "queries": 210,
+      "decision_changing_queries_reported": 47,
+      "decision_changing_queries_common_projection": 47,
+      "duplicate_physical_reads": 0,
+      "no_data": 115,
+      "frontier_questions_in_queries": 210,
+      "stop": {
+        "TURN_BUDGET_EXHAUSTED": 35
+      }
+    }
+  },
+  "cases": [
+    {
+      "scenario": "Scenario-1",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/Pod/frontend-proxy-6b4d584985-kxvn6",
+        "otel-demo/Pod/load-generator-7d5756fbd9-zzj4z",
+        "otel-demo/Pod/load-generator-c7cbc4c99-xlnk2",
+        "otel-demo/Service/frontend-proxy",
+        "otel-demo/Service/load-generator"
+      ],
+      "root_labels": [
+        {
+          "group_id": "load-generator-pod-1",
+          "kind": "Pod",
+          "namespace": "otel-demo",
+          "name": null,
+          "filters": [
+            "load-generator-.*"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "load-generator-service-1",
+          "load-generator-pod-1",
+          "frontend-proxy-service-1",
+          "frontend-proxy-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 18,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 18,
+        "frontier_progress": {
+          "UNEXPLORED": 18
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 18,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 18,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 18
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 2,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 2,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-102",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "_cluster/Namespace/otel-demo"
+      ],
+      "root_labels": [
+        {
+          "group_id": "otel-demo-namespace-1",
+          "kind": "Namespace",
+          "namespace": null,
+          "name": null,
+          "filters": [
+            "otel-demo"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "ad-service-1",
+          "ad-pod-1",
+          "ad-deployment-1",
+          "ad-replicaset-1"
+        ],
+        [
+          "frontend-service-1",
+          "frontend-pod-1"
+        ],
+        [
+          "frontend-proxy-service-1",
+          "frontend-proxy-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 15,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 1,
+        "explanation_relations": 1,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 1,
+        "answered_claim_roles": 1,
+        "frontier_open": 16,
+        "frontier_progress": {
+          "UNEXPLORED": 16
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 0,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 0,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 0,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 0,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 0,
+        "decision_changing_queries_common_projection": 0,
+        "duplicate_physical_reads": 0,
+        "no_data": 6,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 0,
+        "decision_changing_queries_common_projection": 0,
+        "duplicate_physical_reads": 0,
+        "no_data": 6,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-105",
+      "scoreable": false,
+      "matching_observed_entities": [],
+      "root_labels": [
+        {
+          "group_id": "product-catalog-deployment",
+          "kind": "Deployment",
+          "namespace": "otel-demo",
+          "name": null,
+          "filters": [
+            "product-catalog-.*"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "product-catalog-service-1",
+          "product-catalog-pod-1"
+        ],
+        [
+          "checkout-service-1",
+          "checkout-pod-1"
+        ],
+        [
+          "payment-service-1",
+          "payment-pod-1"
+        ],
+        [
+          "shipping-service-1",
+          "shipping-pod-1"
+        ],
+        [
+          "email-service-1",
+          "email-pod-1"
+        ],
+        [
+          "currency-service-1",
+          "currency-pod-1"
+        ],
+        [
+          "accounting-service-1",
+          "accounting-pod-1"
+        ],
+        [
+          "fraud-detection-service-1",
+          "fraud-detection-pod-1"
+        ],
+        [
+          "quote-service-1",
+          "quote-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 18,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 18,
+        "frontier_progress": {
+          "UNEXPLORED": 18
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 17
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 0,
+        "decision_changing_queries_common_projection": 0,
+        "duplicate_physical_reads": 0,
+        "no_data": 6,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 0,
+        "decision_changing_queries_common_projection": 0,
+        "duplicate_physical_reads": 0,
+        "no_data": 6,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-11",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "root_labels": [
+        {
+          "group_id": "flagd-config",
+          "kind": "ConfigMap",
+          "namespace": "otel-demo",
+          "name": "flagd-config",
+          "filters": [],
+          "root_cause": true
+        }
+      ],
+      "aliases": [],
+      "baseline_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 5,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 5,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {
+          "UNEXPLORED": 13
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 5,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 5,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 13
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 3,
+        "decision_changing_queries_common_projection": 3,
+        "duplicate_physical_reads": 0,
+        "no_data": 1,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 3,
+        "decision_changing_queries_common_projection": 3,
+        "duplicate_physical_reads": 0,
+        "no_data": 1,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-12",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "root_labels": [
+        {
+          "group_id": "flagd-config-1",
+          "kind": "ConfigMap",
+          "namespace": "otel-demo",
+          "name": "flagd-config",
+          "filters": [],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "flagd-pod-1",
+          "flagd-service-1"
+        ],
+        [
+          "frontend-service-1",
+          "frontend-pod-1"
+        ],
+        [
+          "recommendation-service-1",
+          "recommendation-pod-1"
+        ],
+        [
+          "productcatalog-service-2",
+          "productcatalog-pod-2",
+          "products-endpoint-2"
+        ],
+        [
+          "checkout-service-2",
+          "checkout-pod-2"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 6,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 6,
+        "frontier_progress": {
+          "UNEXPLORED": 6
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 6,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 6,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 6
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 1,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 1,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-13",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "root_labels": [
+        {
+          "group_id": "flagd-config",
+          "kind": "ConfigMap",
+          "namespace": "otel-demo",
+          "name": "flagd-config",
+          "filters": [],
+          "root_cause": true
+        }
+      ],
+      "aliases": [],
+      "baseline_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 16,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 16,
+        "frontier_progress": {
+          "UNEXPLORED": 16
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 16,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 16,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 16
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-14",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "root_labels": [
+        {
+          "group_id": "flagd-config-1",
+          "kind": "ConfigMap",
+          "namespace": "otel-demo",
+          "name": "flagd-config",
+          "filters": [],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "flagd-pod-1",
+          "flagd-service-1"
+        ],
+        [
+          "ad-service-1",
+          "ad-pod-1",
+          "getads-endpoint-1"
+        ],
+        [
+          "frontend-service-1",
+          "frontend-pod-1"
+        ],
+        [
+          "checkout-service-2",
+          "checkout-pod-2"
+        ],
+        [
+          "payment-service-2",
+          "payment-pod-2"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 16,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 16,
+        "frontier_progress": {
+          "UNEXPLORED": 16
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 16,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 16,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 16
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-15",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "root_labels": [
+        {
+          "group_id": "flagd-config-1",
+          "kind": "ConfigMap",
+          "namespace": "otel-demo",
+          "name": "flagd-config",
+          "filters": [],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "flagd-pod-1",
+          "flagd-service-1"
+        ],
+        [
+          "ad-service-1",
+          "ad-pod-1",
+          "getads-endpoint-1"
+        ],
+        [
+          "frontend-service-1",
+          "frontend-pod-1"
+        ],
+        [
+          "checkout-service-2",
+          "checkout-pod-2"
+        ],
+        [
+          "payment-service-2",
+          "payment-pod-2"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 4,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 16,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 4,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 16,
+        "frontier_progress": {
+          "UNEXPLORED": 16
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 4,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 16,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 4,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 16,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 16
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-16",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/Deployment/shipping",
+        "otel-demo/Pod/shipping-5ffdc77bc8-755zn",
+        "otel-demo/Pod/shipping-75d58f5d84-gw77q",
+        "otel-demo/Service/shipping"
+      ],
+      "root_labels": [
+        {
+          "group_id": "shipping-deployment-1",
+          "kind": "Deployment",
+          "namespace": "otel-demo",
+          "name": null,
+          "filters": [
+            "shipping\\b"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "shipping-service-1",
+          "shipping-pod-1",
+          "shipping-deployment-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {
+          "UNEXPLORED": 17
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 17
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-17",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-26dqc",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-2k967",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-46vrp",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-4lggh",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-6m4q5",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-6rtdg",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-6vtcn",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-72dmz",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-7zw6x",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-9f7gg",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-b24p6",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-b5dxg",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-b85vv",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-btj4x",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-bx27q",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-d9vpw",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-ggzzq",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-gjgf2",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-hcwrz",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-jj42n",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-m8g2d",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-nrfgj",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-vcc9n",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-vhd25",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-whljb",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-x5l64",
+        "chaos-mesh/NetworkChaos/otel-demo-product-catalog-network-delay-xkpsg"
+      ],
+      "root_labels": [
+        {
+          "group_id": "delay-otel-demo-product-catalog-1",
+          "kind": "NetworkChaos",
+          "namespace": "chaos-mesh",
+          "name": null,
+          "filters": [
+            ".*product-catalog"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "frontend-service-1",
+          "frontend-pod-1"
+        ],
+        [
+          "productcatalog-service-1",
+          "productcatalog-pod-1"
+        ],
+        [
+          "checkout-service-1",
+          "checkout-pod-1"
+        ],
+        [
+          "recommendation-service-1",
+          "recommendation-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 9,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 6,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 26,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 9,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 6,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 26,
+        "frontier_progress": {
+          "UNEXPLORED": 26
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 7,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 7,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 17
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-18",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-2v76x",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-4k67q",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-4mxs9",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-4qbh6",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-4xblq",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-6cwbh",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-7jg6h",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-927gn",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-9mn9v",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-d2m7w",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-d7rk4",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-dc4vz",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-dwbpl",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-g5vwr",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-gl228",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-j677j",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-jgn2n",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-ktl9k",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-lfjx7",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-q5s8b",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-qgddz",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-ql64f",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-t2j8d",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-tbmt7",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-tjs2n",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-vxxwz",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-zptxw",
+        "chaos-mesh/PodChaos/otel-demo-product-catalog-network-delay-zv9mn",
+        "chaos-mesh/Schedule/otel-demo-product-catalog-network-delay"
+      ],
+      "root_labels": [
+        {
+          "group_id": "otel-demo-product-catalog-network-delay-1",
+          "kind": "PodChaos",
+          "namespace": "chaos-mesh",
+          "name": null,
+          "filters": [
+            ".*product-catalog-network-delay"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "checkout-service-1",
+          "checkout-pod-1"
+        ],
+        [
+          "frontend-service-1",
+          "frontend-pod-1"
+        ],
+        [
+          "otel-demo-product-catalog-network-delay",
+          "otel-demo-product-catalog-network-delay-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 3,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 9,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 27,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 3,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 9,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 27,
+        "frontier_progress": {
+          "UNEXPLORED": 27
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 17
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-19",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-2bs6l",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-2v2wc",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-52jxx",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-5czjs",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-5ks6l",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-769cj",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-7bzjd",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-85v74",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-9xnx8",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-b85jr",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-brt8t",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-bskkf",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-djbsv",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-fntwp",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-fsflv",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-g96p8",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-g9ck9",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-k8hqz",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-lb8gf",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-lwvxl",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-mh6bq",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-nz4lm",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-q7g8w",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-qgg98",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-rjs6d",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-rq4bs",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-rw58g",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-vd9dd",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-w4j5h",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-w5pzz",
+        "chaos-mesh/Schedule/otel-demo-email-checkout-network-partition"
+      ],
+      "root_labels": [
+        {
+          "group_id": "otel-demo-email-checkout-network-partition-1",
+          "kind": "NetworkChaos",
+          "namespace": "chaos-mesh",
+          "name": null,
+          "filters": [
+            ".*email-checkout-network-partition"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "frontend-service-1",
+          "frontend-pod-1"
+        ],
+        [
+          "checkout-service-1",
+          "checkout-pod-1"
+        ],
+        [
+          "shipping-service-1",
+          "shipping-pod-1"
+        ],
+        [
+          "quote-service-1",
+          "quote-pod-1"
+        ],
+        [
+          "otel-demo-email-checkout-network-partition-1",
+          "otel-demo-email-checkout-network-partition"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 5,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 6,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 27,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 5,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 6,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 27,
+        "frontier_progress": {
+          "UNEXPLORED": 27
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 17
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-2",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "root_labels": [
+        {
+          "group_id": "flagd-config",
+          "kind": "ConfigMap",
+          "namespace": "otel-demo",
+          "name": "flagd-config",
+          "filters": [],
+          "root_cause": true
+        }
+      ],
+      "aliases": [],
+      "baseline_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {
+          "UNEXPLORED": 17
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 17
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-20",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/Pod/product-catalog-56fbb5f966-8rw7j",
+        "otel-demo/Pod/product-catalog-56fbb5f966-h9xjk",
+        "otel-demo/Pod/product-catalog-7c7f8b68dc-qz548"
+      ],
+      "root_labels": [
+        {
+          "group_id": "productcatalog-deployment-1",
+          "kind": "Deployment",
+          "namespace": "otel-demo",
+          "name": null,
+          "filters": [
+            "product-catalog-.*"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "productcatalog-service-1",
+          "productcatalog-pod-1"
+        ],
+        [
+          "productcatalog-pod-1",
+          "productcatalog-deployment-1"
+        ],
+        [
+          "frontend-service-1",
+          "frontend-pod-1"
+        ],
+        [
+          "checkout-service-1",
+          "checkout-pod-1"
+        ],
+        [
+          "recommendation-service-1",
+          "recommendation-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 18,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 18,
+        "frontier_progress": {
+          "UNEXPLORED": 18
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 17
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 0,
+        "decision_changing_queries_common_projection": 0,
+        "duplicate_physical_reads": 0,
+        "no_data": 6,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 0,
+        "decision_changing_queries_common_projection": 0,
+        "duplicate_physical_reads": 0,
+        "no_data": 6,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-21",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-2ngwz",
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-4fvng",
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-892rc",
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-95xf6",
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-ckxt6",
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-flgz4",
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-ftn4q",
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-ltcpd",
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-ns8cj",
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-nt6th",
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-psc57",
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-s2zr9",
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-shmvh",
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-tj449",
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-tm62c",
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-v75mv",
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-w8p5x",
+        "chaos-mesh/StressChaos/otel-demo-valkey-memory-stress-zbhwg"
+      ],
+      "root_labels": [
+        {
+          "group_id": "otel-demo-valkey-memory-stress",
+          "kind": "StressChaos",
+          "namespace": "chaos-mesh",
+          "name": null,
+          "filters": [
+            "otel-demo-valkey-memory-stress"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "valkey-cart-service-1",
+          "valkey-cart-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 9,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 23,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 9,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 23,
+        "frontier_progress": {
+          "UNEXPLORED": 23
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 17
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-22",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-2gk99",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-4h7rl",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-4xjdz",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-6dgwf",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-7n9mk",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-7qcns",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-7qrjx",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-8b272",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-9ncrx",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-9szhx",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-b8zws",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-bthc9",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-cmnsv",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-dhf5p",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-jw6mq",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-n8krm",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-sh425",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-sn49z",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-w4ct8",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-w8tqb",
+        "chaos-mesh/StressChaos/otel-demo-ad-memory-stress-w98sl"
+      ],
+      "root_labels": [
+        {
+          "group_id": "otel-demo-ad-memory-stress",
+          "kind": "StressChaos",
+          "namespace": "chaos-mesh",
+          "name": null,
+          "filters": [
+            "otel-demo-ad-memory-stress"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "ad-service-1",
+          "ad-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 2,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 5,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 19,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 2,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 5,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 19,
+        "frontier_progress": {
+          "UNEXPLORED": 19
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 13
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-23",
+      "scoreable": false,
+      "matching_observed_entities": [],
+      "root_labels": [
+        {
+          "group_id": "checkout-deployment-1",
+          "kind": "Deployment",
+          "namespace": "otel-demo",
+          "name": null,
+          "filters": [
+            "checkout-.*"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "checkout-service-1",
+          "checkout-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {
+          "UNEXPLORED": 17
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 16,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 16,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 16
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-24",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/Deployment/checkout"
+      ],
+      "root_labels": [
+        {
+          "group_id": "checkout-deployment",
+          "kind": "Deployment",
+          "namespace": "otel-demo",
+          "name": null,
+          "filters": [
+            "checkout\\b"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "checkout-service-1",
+          "checkout-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {
+          "UNEXPLORED": 17
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 0,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 0,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 0,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 0,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 0,
+        "decision_changing_queries_common_projection": 0,
+        "duplicate_physical_reads": 0,
+        "no_data": 6,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 0,
+        "decision_changing_queries_common_projection": 0,
+        "duplicate_physical_reads": 0,
+        "no_data": 6,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-25",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "chaos-mesh/Schedule/otel-demo-recommendation-cpu-stress"
+      ],
+      "root_labels": [
+        {
+          "group_id": "otel-demo-recommendation-cpu-stress",
+          "kind": "Schedule",
+          "namespace": "chaos-mesh",
+          "name": null,
+          "filters": [
+            ".*recommendation"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "frontend-service-1",
+          "frontend-pod-1"
+        ],
+        [
+          "recommendation-pod-1",
+          "recommendation-service-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 6,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 4,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 22,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 6,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 4,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 22,
+        "frontier_progress": {
+          "UNEXPLORED": 22
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 13
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-29",
+      "scoreable": false,
+      "matching_observed_entities": [],
+      "root_labels": [
+        {
+          "group_id": "jvm-return-otel-demo-ad-1",
+          "kind": "JVMChaos",
+          "namespace": "chaos-mesh",
+          "name": null,
+          "filters": [
+            ".*adservice"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "frontend-service-1",
+          "frontend-pod"
+        ],
+        [
+          "ad-service-1",
+          "ad-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 2,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 8,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 24,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 2,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 8,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 24,
+        "frontier_progress": {
+          "UNEXPLORED": 24
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 15,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 15,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 15
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-31",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/NetworkPolicy/frontend-block-all-ports"
+      ],
+      "root_labels": [
+        {
+          "group_id": "frontend-block-all-ports",
+          "kind": "NetworkPolicy",
+          "namespace": "otel-demo",
+          "name": null,
+          "filters": [
+            "frontend-block-all-ports"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "frontend-service-1",
+          "frontend-pod-1"
+        ],
+        [
+          "frontend-proxy-service-1",
+          "frontend-proxy-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 4,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 14,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 4,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 14,
+        "frontier_progress": {
+          "UNEXPLORED": 14
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "SUPPORTED_CAUSE",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 0,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 6,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "SUPPORTED_CAUSE",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 0,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 6,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 6
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 0,
+        "decision_changing_queries_common_projection": 0,
+        "duplicate_physical_reads": 0,
+        "no_data": 2,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 0,
+        "decision_changing_queries_common_projection": 0,
+        "duplicate_physical_reads": 0,
+        "no_data": 2,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-33",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/Pod/ad-554b849958-42mdm",
+        "otel-demo/Pod/ad-dd7f45975-mw86p",
+        "otel-demo/Pod/load-generator-57ffcd644-tnhv5",
+        "otel-demo/Service/ad",
+        "otel-demo/Service/load-generator"
+      ],
+      "root_labels": [
+        {
+          "group_id": "ad-pod-1",
+          "kind": "Pod",
+          "namespace": "otel-demo",
+          "name": null,
+          "filters": [
+            "ad-.*"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "ad-service-1",
+          "ad-pod-1"
+        ],
+        [
+          "frontend-service-1",
+          "frontend-pod-1"
+        ],
+        [
+          "frontend-proxy-service-1",
+          "frontend-proxy-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 2,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 14,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 2,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 14,
+        "frontier_progress": {
+          "UNEXPLORED": 14
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 2,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 14,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 2,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 14,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 14
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-34",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/Pod/valkey-cart-58df56c79c-bf4lr",
+        "otel-demo/Service/valkey-cart"
+      ],
+      "root_labels": [
+        {
+          "group_id": "valkey-pod-1",
+          "kind": "Pod",
+          "namespace": "otel-demo",
+          "name": null,
+          "filters": [
+            "valkey-cart-.*"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "valkey-service-1",
+          "valkey-pod-1"
+        ],
+        [
+          "cart-service-1",
+          "cart-pod-1"
+        ],
+        [
+          "checkout-service-1",
+          "checkout-pod-1"
+        ],
+        [
+          "frontend-service-1",
+          "frontend-pod-1"
+        ],
+        [
+          "frontend-proxy-service-1",
+          "frontend-proxy-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 4,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 18,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 4,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 18,
+        "frontier_progress": {
+          "UNEXPLORED": 18
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 18,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 18,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 18
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-35",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-2jhvk",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-452d7",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-46nmp",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-4c7dg",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-4rgkm",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-6hsxh",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-7fjbx",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-7zk5w",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-8lxl7",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-9626f",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-9jglq",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-bld5p",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-g5jfg",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-g98db",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-h4swl",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-h7t8s",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-jtr9b",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-klr4w",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-kr787",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-mtw8r",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-mzrdb",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-qttkp",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-qvkxm",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-rkk5f",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-t4jlc",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-t8tf2",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-tdvvl",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-vcchf",
+        "chaos-mesh/JVMChaos/otel-demo-ad-jvm-chaos-xlfcn"
+      ],
+      "root_labels": [
+        {
+          "group_id": "otel-demo-ad-jvm-chaos",
+          "kind": "JVMChaos",
+          "namespace": "chaos-mesh",
+          "name": null,
+          "filters": [
+            "otel-demo-ad-jvm-chaos"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "ad-service-1",
+          "ad-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 2,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 8,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 22,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 2,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 8,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 22,
+        "frontier_progress": {
+          "UNEXPLORED": 22
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 13
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-38",
+      "scoreable": false,
+      "matching_observed_entities": [],
+      "root_labels": [
+        {
+          "group_id": "otel-demo-horizontal-pod-autoscalers",
+          "kind": "HorizontalPodAutoscaler",
+          "namespace": "otel-demo",
+          "name": null,
+          "filters": [
+            "*.*"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 5,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 9,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 9,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 5,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 9,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 9,
+        "frontier_progress": {
+          "UNEXPLORED": 9
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 4,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 5,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 6,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 4,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 5,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 6,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 6
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 0,
+        "decision_changing_queries_common_projection": 0,
+        "duplicate_physical_reads": 0,
+        "no_data": 2,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 0,
+        "decision_changing_queries_common_projection": 0,
+        "duplicate_physical_reads": 0,
+        "no_data": 2,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-4",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "root_labels": [
+        {
+          "group_id": "flagd-config-1",
+          "kind": "ConfigMap",
+          "namespace": "otel-demo",
+          "name": null,
+          "filters": [
+            "flagd-config\\b"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "flagd-pod-1",
+          "flagd-service-1"
+        ],
+        [
+          "product-catalog-service-1",
+          "product-catalog-pod-1"
+        ],
+        [
+          "checkout-service-1",
+          "checkout-pod-1"
+        ],
+        [
+          "frontend-service-1",
+          "frontend-pod-1"
+        ],
+        [
+          "frontend-proxy-service-1",
+          "frontend-proxy-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {
+          "UNEXPLORED": 13
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 13
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 2,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 2,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-5",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "root_labels": [
+        {
+          "group_id": "flagd-config-1",
+          "kind": "ConfigMap",
+          "namespace": "otel-demo",
+          "name": null,
+          "filters": [
+            "flagd-config"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "flagd-pod-1",
+          "flagd-service-1"
+        ],
+        [
+          "ad-service-1",
+          "ad-pod-1",
+          "getads-endpoint-1"
+        ],
+        [
+          "frontend-service-1",
+          "frontend-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 14,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 14,
+        "frontier_progress": {
+          "UNEXPLORED": 14
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 14,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 14,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 14
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-6",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "root_labels": [
+        {
+          "group_id": "flagd-config",
+          "kind": "ConfigMap",
+          "namespace": "otel-demo",
+          "name": "flagd-config",
+          "filters": [],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "ad-service-1",
+          "ad-pod-1"
+        ],
+        [
+          "frontend-service-1",
+          "frontend-pod-1"
+        ],
+        [
+          "frontend-proxy-service-1",
+          "frontend-proxy-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {
+          "UNEXPLORED": 13
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 13
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 3,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-7",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "root_labels": [
+        {
+          "group_id": "flagd-config",
+          "kind": "ConfigMap",
+          "namespace": "otel-demo",
+          "name": "flagd-config",
+          "filters": [],
+          "root_cause": true
+        }
+      ],
+      "aliases": [],
+      "baseline_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {
+          "UNEXPLORED": 17
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 17
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-8",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "root_labels": [
+        {
+          "group_id": "flagd-config",
+          "kind": "ConfigMap",
+          "namespace": "otel-demo",
+          "name": "flagd-config",
+          "filters": [],
+          "root_cause": true
+        }
+      ],
+      "aliases": [],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {
+          "UNEXPLORED": 13
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 13
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 2,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 2,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-80",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-96js2",
+        "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-c88bd",
+        "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-dtxwx",
+        "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-fkbbr",
+        "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-fnppk",
+        "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-g8m6w",
+        "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-j8wrs",
+        "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-kxfht",
+        "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-rjhbq",
+        "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-t2rzv",
+        "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-t5r6p",
+        "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-tfpsw",
+        "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-wrbzf",
+        "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-xlccz",
+        "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-zkzlw",
+        "chaos-mesh/NetworkChaos/otel-demo-checkout-kafka-network-partition-znv8m"
+      ],
+      "root_labels": [
+        {
+          "group_id": "otel-demo-checkout-kafka-network-partition",
+          "kind": "NetworkChaos",
+          "namespace": "chaos-mesh",
+          "name": null,
+          "filters": [
+            "otel-demo-checkout-kafka-network-partition"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "checkout-service-1",
+          "checkout-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 3,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 7,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 25,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 3,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 7,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 25,
+        "frontier_progress": {
+          "UNEXPLORED": 25
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 16,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 16,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 16
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 2,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 2,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-81",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-27sfq",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-2c44x",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-2trz2",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-4stjq",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-4xv8t",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-5r5pp",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-5vv7v",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-76pr2",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-78vht",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-7n45v",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-8h4xd",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-b7wl4",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-ccgqd",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-k6hfn",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-kx8th",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-m59h5",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-nh2wt",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-px958",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-qsw4z",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-r952x",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-sq968",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-w588w",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-wg96t",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-x4hvd",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-xb6sh",
+        "chaos-mesh/NetworkChaos/otel-demo-shipping-quote-network-partition-xszb6"
+      ],
+      "root_labels": [
+        {
+          "group_id": "otel-demo-shipping-quote-network-partition",
+          "kind": "NetworkChaos",
+          "namespace": "chaos-mesh",
+          "name": null,
+          "filters": [
+            "otel-demo-shipping-quote-network-partition"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "shipping-service-1",
+          "shipping-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 11,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 28,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 11,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 28,
+        "frontier_progress": {
+          "UNEXPLORED": 28
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 17,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 17
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-83",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-44zrc",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-4b4v4",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-4f5lv",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-5c2dr",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-7rvkf",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-8p7rs",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-9v6px",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-dhs27",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-dlvqv",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-drrh9",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-hddgv",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-jdmmj",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-kfb69",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-mggcl",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-mnj5h",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-mznpj",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-pkzmr",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-r4sfn",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-tcshk",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-xbmt8",
+        "chaos-mesh/NetworkChaos/otel-demo-email-checkout-network-partition-zl9p2"
+      ],
+      "root_labels": [
+        {
+          "group_id": "otel-demo-email-checkout-network-partition",
+          "kind": "NetworkChaos",
+          "namespace": "chaos-mesh",
+          "name": null,
+          "filters": [
+            "otel-demo-email-checkout-network-partition"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "email-service-1",
+          "email-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 8,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 24,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 8,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 24,
+        "frontier_progress": {
+          "UNEXPLORED": 24
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 16,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 3,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 16,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 16
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 2,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 2,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-9",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "otel-demo/ConfigMap/flagd-config"
+      ],
+      "root_labels": [
+        {
+          "group_id": "flagd-config",
+          "kind": "ConfigMap",
+          "namespace": "otel-demo",
+          "name": "flagd-config",
+          "filters": [],
+          "root_cause": true
+        }
+      ],
+      "aliases": [],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {
+          "UNEXPLORED": 13
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 2,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 13,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 13
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 2,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 2,
+        "decision_changing_queries_common_projection": 2,
+        "duplicate_physical_reads": 0,
+        "no_data": 2,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    },
+    {
+      "scenario": "Scenario-91",
+      "scoreable": true,
+      "matching_observed_entities": [
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-2sz65",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-5cqz9",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-6b7kc",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-6mlbc",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-6sks4",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-7pb78",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-8f5gf",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-957pj",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-95t2z",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-9644c",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-b86pg",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-bfcrj",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-cx947",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-dvc6c",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-h9m5q",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-hbjpb",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-lrvdg",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-mjvzp",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-p5hzr",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-p997f",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-pcqbt",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-pqjrl",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-qx6j4",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-sptc2",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-tfltv",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-vp9sx",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-vsxnk",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-xsgnv",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-z2g2s",
+        "chaos-mesh/NetworkChaos/otel-demo-fraud-detection-kafka-network-partition-z5gq4"
+      ],
+      "root_labels": [
+        {
+          "group_id": "otel-demo-fraud-detection-kafka-network-partition",
+          "kind": "NetworkChaos",
+          "namespace": "chaos-mesh",
+          "name": null,
+          "filters": [
+            "otel-demo-fraud-detection-kafka-network-partition"
+          ],
+          "root_cause": true
+        }
+      ],
+      "aliases": [
+        [
+          "fraud-detection-service-1",
+          "fraud-detection-pod-1"
+        ]
+      ],
+      "baseline_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 12,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 27,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_snapshot": {
+        "status": "COMPETING_CAUSES",
+        "resolution": "AMBIGUOUS",
+        "represented": true,
+        "admitted": true,
+        "matching_possible_claims": 1,
+        "nonmatching_possible_claims": 1,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 12,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 27,
+        "frontier_progress": {
+          "UNEXPLORED": 27
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 14,
+        "frontier_progress": {},
+        "recovery": "NOT_ASSESSED"
+      },
+      "after_active": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "resolution": "INSUFFICIENT_EVIDENCE",
+        "represented": false,
+        "admitted": false,
+        "matching_possible_claims": 0,
+        "nonmatching_possible_claims": 0,
+        "matching_strong_claims": 0,
+        "nonmatching_strong_claims": 0,
+        "explained_claims": 0,
+        "explanation_relations": 0,
+        "unresolved_claims": 1,
+        "independent_observed_causes": 0,
+        "frontier_answered": 0,
+        "frontier_partially_answered": 0,
+        "answered_claim_roles": 0,
+        "frontier_open": 14,
+        "frontier_progress": {
+          "BLOCKED_BUDGET": 14
+        },
+        "recovery": "NOT_ASSESSED"
+      },
+      "baseline_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "after_queries": {
+        "queries": 6,
+        "decision_changing_queries_reported": 1,
+        "decision_changing_queries_common_projection": 1,
+        "duplicate_physical_reads": 0,
+        "no_data": 4,
+        "stop": "TURN_BUDGET_EXHAUSTED",
+        "frontier_questions_in_queries": 6
+      },
+      "final_replay_equal": true,
+      "all_transitions_replay_equal": true
+    }
+  ]
+}

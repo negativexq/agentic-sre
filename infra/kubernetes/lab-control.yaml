@@ -1,0 +1,65 @@
+# The negative-control workload of the testbed (docs/architecture/testbed-lab-design.md section 3).
+#
+# It has no call edge to or from `sre-demo`, and a default-deny NetworkPolicy makes that a checked
+# property (`make lab-check` fails if `sre-demo` can reach it), not an assumption. A fault injected
+# here has no path to any incident symptom of the other namespaces.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lab-control
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: isolated-echo
+  namespace: lab-control
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: isolated-echo
+  template:
+    metadata:
+      labels:
+        app: isolated-echo
+    spec:
+      containers:
+        - name: echo
+          image: python:3.12.13-slim-bookworm
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "http.server", "8080"]
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 96Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: isolated-echo
+  namespace: lab-control
+spec:
+  selector:
+    app: isolated-echo
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: lab-control
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]

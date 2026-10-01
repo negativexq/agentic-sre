@@ -222,8 +222,19 @@ def cmd_demo(args: argparse.Namespace) -> int:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
+    import logging
+
     import uvicorn
 
+    level = os.getenv("SRE_LOG_LEVEL", "").strip().upper()
+    if level:
+        # opt-in: the control plane's own loggers at this level; unset keeps Python's default (WARNING)
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        for name in ("apps", "packages"):
+            logging.getLogger(name).setLevel(level)
+            logging.getLogger(name).addHandler(handler)
+            logging.getLogger(name).propagate = False
     uvicorn.run("apps.control_plane.main:app", host=args.host, port=args.port)
     return 0
 

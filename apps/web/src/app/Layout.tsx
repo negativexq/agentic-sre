@@ -4,6 +4,9 @@ import { NavLink, Outlet } from "react-router-dom";
 import { Skeleton } from "@/components/ui/States";
 import { cn } from "@/lib/cn";
 import { useTheme } from "@/lib/theme";
+import { useNotifications } from "@/notifications/context";
+import { NotificationProvider } from "@/notifications/NotificationProvider";
+import { NotificationViewport } from "@/notifications/NotificationViewport";
 
 const PRIMARY = [
   { to: "/", label: "Overview", end: true },
@@ -17,25 +20,49 @@ const SECONDARY = [
   { to: "/settings", label: "Settings" },
 ];
 
-function NavItem({ to, label, end }: { to: string; label: string; end?: boolean }) {
+function UnreadBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      aria-label={`${count} unread`}
+      className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-semibold text-accent-fg"
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
+function NavItem({
+  to,
+  label,
+  end,
+  count = 0,
+}: {
+  to: string;
+  label: string;
+  end?: boolean;
+  count?: number;
+}) {
   return (
     <NavLink
       to={to}
       end={end}
       className={({ isActive }) =>
         cn(
-          "block rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+          "flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors",
           isActive ? "bg-accent-soft text-accent" : "text-muted hover:bg-surface hover:text-text",
         )
       }
     >
       {label}
+      <UnreadBadge count={count} />
     </NavLink>
   );
 }
 
-export function Layout() {
+function LayoutFrame() {
   const { theme, toggle } = useTheme();
+  const { unreadCount } = useNotifications();
 
   return (
     <div className="flex min-h-screen">
@@ -46,7 +73,11 @@ export function Layout() {
         </div>
         <nav className="flex flex-1 flex-col gap-1">
           {PRIMARY.map((item) => (
-            <NavItem key={item.to} {...item} />
+            <NavItem
+              key={item.to}
+              {...item}
+              count={item.to === "/incidents" ? unreadCount : 0}
+            />
           ))}
           <div className="my-2 border-t border-border" />
           {SECONDARY.map((item) => (
@@ -72,12 +103,13 @@ export function Layout() {
               end={item.to === "/"}
               className={({ isActive }) =>
                 cn(
-                  "whitespace-nowrap rounded-md px-2 py-1 text-sm",
+                  "flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-sm",
                   isActive ? "bg-accent-soft text-accent" : "text-muted",
                 )
               }
             >
               {item.label}
+              {item.to === "/incidents" ? <UnreadBadge count={unreadCount} /> : null}
             </NavLink>
           ))}
         </header>
@@ -87,6 +119,15 @@ export function Layout() {
           </Suspense>
         </main>
       </div>
+      <NotificationViewport />
     </div>
+  );
+}
+
+export function Layout() {
+  return (
+    <NotificationProvider>
+      <LayoutFrame />
+    </NotificationProvider>
   );
 }

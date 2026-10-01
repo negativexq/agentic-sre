@@ -332,7 +332,13 @@ def create_console_router(
         if onset is None:
             alerts = AlertRepository(session).list_for_incident(incident_id)
             onset = min((alert.starts_at for alert in alerts), default=incident.created_at)
-        leading = diagnosis.root_cause if diagnosis else None
+        leading = (
+            diagnosis.root_cause
+            if diagnosis
+            and diagnosis.leading_actor_established
+            and diagnosis.leading_actor_display == "SINGLE"
+            else None
+        )
         records = ChangeRecordRepository(session).recent(
             starts_at=onset - timedelta(hours=2),
             ends_at=onset + timedelta(minutes=30),

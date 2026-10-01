@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 from urllib.request import Request, urlopen
 
+from packages.evals.live.journal import InjectorJournal
+
 NAMESPACE = "sre-demo"
 REQUEST_TIMEOUT_SECONDS = 15
 # A port-forward left stale by a rollout drops the connection, so a POST to a
@@ -44,6 +46,9 @@ class Context:
     control_plane_url: str = "http://localhost:18080"
     prometheus_url: str = "http://localhost:19090"
     dry_run: bool = False
+    # When set, every kubectl call is journaled (testbed contract §4.4): the timeline's
+    # injector-sourced fields are derived from this journal and never back-filled.
+    journal: InjectorJournal | None = None
 
 
 class Action(Protocol):
@@ -54,12 +59,23 @@ class Action(Protocol):
     def apply(self, context: Context) -> None: ...
 
 
-def kubectl(*args: str, context: Context, check: bool = True) -> str:
-    """Run kubectl against the scenario namespace and return stdout."""
+def kubectl(*args: str, context: Context, check: bool = True, role: str | None = None) -> str:
+    """Run kubectl against the scenario namespace and return stdout.
+
+    ``role`` tags the call in the injector journal (for example ``cause_created``).
+    """
     command = ("kubectl", "-n", context.namespace, *args)
     if context.dry_run:
         return ""
     result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if context.journal is not None:
+        context.journal.record(
+            verb=args[0] if args else "",
+            object=" ".join(args[1:3]),
+            ok=result.returncode == 0,
+            response=result.stdout if result.returncode == 0 else result.stderr,
+            role=role,
+        )
     if check and result.returncode != 0:
         raise ActionError(
             "kubectl",

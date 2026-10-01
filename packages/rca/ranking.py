@@ -115,6 +115,11 @@ def _in_window(at: datetime | None, context: Context, config: RankingConfig) -> 
     return onset - config.lookback <= at <= end + config.grace
 
 
+def finding_in_window(at: datetime | None, context: Context, config: RankingConfig) -> bool | None:
+    """Whether an instant lies in the incident window the ranking uses; ``None`` when unknowable."""
+    return _in_window(at, context, config)
+
+
 def _affected_entities(finding: Finding, topology: Topology) -> set[EntityRef]:
     """Where a finding acts: fault targets and their workloads, or the entity itself."""
     affected = {finding.entity, *finding.related}
@@ -226,24 +231,38 @@ def score_findings(
 def collapse_fault_instances(
     candidates: list[Candidate], topology: Topology, onset: datetime | None = None
 ) -> list[Candidate]:
-    """Keep one experiment per chaos schedule.
+    """Keep one experiment per chaos schedule *instance*.
 
     The kept experiment is the latest one that started at or before the onset,
     or the earliest one when all started later. It takes the place of the
-    group's best-scoring member.
+    group's best-scoring member. Two schedule incarnations that share a name
+    (different UIDs) are separate groups; without a schedule UID the group is
+    the name-derived parent, as before.
     """
     parents = {edge.target: edge.source for edge in topology.edges if edge.relation == "spawns"}
-    groups: dict[EntityRef, list[Candidate]] = {}
-    for candidate in candidates:
+
+    def group_of(candidate: Candidate) -> tuple[EntityRef, str | None] | None:
         parent = parents.get(candidate.entity)
-        if parent is not None:
-            groups.setdefault(parent, []).append(candidate)
+        if parent is None:
+            return None
+        uids = {
+            uid
+            for finding in candidate.findings
+            if isinstance(uid := finding.details.get("schedule_uid"), str)
+        }
+        return (parent, next(iter(uids)) if len(uids) == 1 else None)
+
+    groups: dict[tuple[EntityRef, str | None], list[Candidate]] = {}
+    for candidate in candidates:
+        group = group_of(candidate)
+        if group is not None:
+            groups.setdefault(group, []).append(candidate)
 
     def started(candidate: Candidate) -> datetime | None:
         return min((f.at for f in candidate.findings if f.at), default=None)
 
-    chosen: dict[EntityRef, Candidate] = {}
-    for parent, members in groups.items():
+    chosen: dict[tuple[EntityRef, str | None], Candidate] = {}
+    for group, members in groups.items():
         timed = [(started(m), m) for m in members if started(m) is not None]
         before = [(t, m) for t, m in timed if onset is None or (t is not None and t <= onset)]
         if before:
@@ -253,16 +272,16 @@ def collapse_fault_instances(
         else:
             pick = members[0]
         best_score = max(m.score for m in members)
-        chosen[parent] = pick.model_copy(update={"score": best_score})
+        chosen[group] = pick.model_copy(update={"score": best_score})
     result: list[Candidate] = []
-    placed: set[EntityRef] = set()
+    placed: set[tuple[EntityRef, str | None]] = set()
     for candidate in candidates:
-        parent = parents.get(candidate.entity)
-        if parent is None:
+        group = group_of(candidate)
+        if group is None:
             result.append(candidate)
-        elif parent not in placed:
-            result.append(chosen[parent])
-            placed.add(parent)
+        elif group not in placed:
+            result.append(chosen[group])
+            placed.add(group)
     return result
 
 

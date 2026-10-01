@@ -6,10 +6,16 @@ from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
+
+from apps.control_plane.diagnosis import DiagnosisService
 from packages.connector import wire
-from packages.connector.client import ConnectorClient, in_process_transport
+from packages.connector.client import ConnectorClient, StreamedClusterReader, in_process_transport
 from packages.connector.service import Connector
 from packages.rca.live import ListingScope, ObjectListing
+from packages.storage.models import Base, ChangeStreamGapRow
+from packages.storage.repositories import ChangeStreamGapRepository
 
 T0 = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
 PODS = ListingScope("shop", "Pod")
@@ -518,3 +524,116 @@ def test_a_resolved_diagnosis_waits_until_the_stream_passes_the_resolution_and_n
     journaled.clear()
     assert service._await_transport(T0) is None  # timed out: transport completeness not proven
     assert len(journaled) == 1
+
+
+# ---- following the stream across control-plane restarts, and the stream's health ----
+# late-evidence-design.md §4.2: a window is continuous only from the instant the stream was followed; a
+# restarted control plane keeps that instant when it provably resumes where the old process stopped.
+
+
+def database() -> Session:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    return Session(engine)
+
+
+def control_plane(mirror: StreamedClusterReader) -> DiagnosisService:
+    service = DiagnosisService.__new__(DiagnosisService)
+    service.reader = mirror
+    service._follow_segment = None
+    return service
+
+
+def follow(service: DiagnosisService, session: Session) -> datetime | None:
+    """One journal step of a control plane: read the stream, then record how far it was followed."""
+    mirror = service.reader
+    assert isinstance(mirror, StreamedClusterReader)
+    mirror.pending()
+    service._record_stream_follow(session, mirror.stream_position())
+    return service._followed_since()
+
+
+def test_a_restarted_control_plane_keeps_the_instant_it_followed_the_stream_from() -> None:
+    connector, client, cluster, clock = make()
+    with database() as session:
+        old = control_plane(StreamedClusterReader(client))
+        assert follow(old, session) == T0
+        clock.advance(60)
+        connector.poll_changes_once(
+            force_snapshot=True
+        )  # a new baseline the old process reads past
+        clock.advance(5)
+        assert follow(old, session) == T0
+        # the old process stops; a new one starts from the new baseline, which the old one had read
+        new = control_plane(StreamedClusterReader(client))
+        assert follow(new, session) == T0
+
+
+def test_a_restarted_control_plane_that_skipped_part_of_the_stream_starts_over() -> None:
+    connector, client, cluster, clock = make()
+    with database() as session:
+        old = control_plane(StreamedClusterReader(client))
+        follow(old, session)
+        clock.advance(60)
+        # the old process is gone before it reads the new baseline and what precedes it
+        cluster.batches[PODS] = [[event("MODIFIED", pod("a", "11"), "11")]]
+        connector.watch_changes_once()
+        connector.poll_changes_once(force_snapshot=True)
+        new = control_plane(StreamedClusterReader(client))
+        assert follow(new, session) == T0 + timedelta(seconds=60)
+
+
+def test_a_restarted_connector_is_a_new_stream_whose_following_starts_at_its_baseline() -> None:
+    _, client, _, clock = make()
+    with database() as session:
+        follow(control_plane(StreamedClusterReader(client)), session)
+        clock.advance(120)
+        restarted = Connector(cluster=FakeWatchCluster(), watch_namespaces=("shop",), clock=clock)
+        restarted.poll_changes_once()
+        new_client = ConnectorClient(in_process_transport(restarted))
+        new = control_plane(StreamedClusterReader(new_client))
+        assert follow(new, session) == T0 + timedelta(seconds=120)
+
+
+def test_a_gap_read_again_after_a_restart_is_recorded_once() -> None:
+    gap = wire.GapItem(
+        seq=7, at=T0, reason="RESOURCE_VERSION_EXPIRED", since=T0 - timedelta(minutes=9)
+    )
+    with database() as session:
+        for _ in range(2):
+            ChangeStreamGapRepository(session).record(
+                gap.reason, gap.at, since=gap.since, scope=("shop", "Event")
+            )
+        assert len(list(session.scalars(select(ChangeStreamGapRow)))) == 1
+
+
+def test_the_mirror_counts_versions_superseded_before_the_journal_read_them() -> None:
+    connector, client, cluster, _ = make()
+    mirror = StreamedClusterReader(client)
+    mirror.list_objects(["shop"])
+    mirror.list_events(["shop"])
+    cluster.batches[PODS] = [
+        [event("MODIFIED", pod("a", "11"), "11"), event("MODIFIED", pod("a", "12"), "12")]
+    ]
+    connector.watch_changes_once()
+    mirror.pending()
+    mirror.list_objects(["shop"])  # the journal reads only the latest of the two
+    assert mirror.take_superseded() == (1, 0)
+    assert mirror.take_superseded() == (0, 0)
+
+
+def test_the_mirror_measures_how_far_behind_the_connectors_clock_its_own_clock_reads_a_heartbeat() -> (
+    None
+):
+    connector, client, _, clock = make()
+    local = Clock()
+    mirror = StreamedClusterReader(client, clock=local)
+    mirror.pending()
+    for lag in (3.0, 1.5, 2.0):
+        clock.advance(2)
+        connector.change_heartbeat()
+        local.now = clock.now + timedelta(seconds=lag)
+        mirror.pending()
+    smallest, count = mirror.take_clock_sample()
+    assert count == 3 and smallest == 1.5
+    assert mirror.take_clock_sample() == (None, 0)

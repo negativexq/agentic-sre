@@ -11,7 +11,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from packages.connector import wire
@@ -204,6 +204,16 @@ def cluster_reader(client: ConnectorClient) -> ConnectorClusterReader | None:
     return ConnectorClusterReader(client) if "events" in client.capabilities() else None
 
 
+@dataclass(frozen=True)
+class StreamPosition:
+    """How far a reader has followed the change stream of one Connector run (late-evidence §4.2)."""
+
+    epoch: str
+    first_seq: int  # the first item this reader read in this epoch
+    last_seq: int  # the last item it read
+    followed_since: datetime  # the Connector time of ``first_seq``
+
+
 class StreamedClusterReader:
     """A ``ClusterReader`` rebuilt from the ``changes`` stream (contract §10).
 
@@ -213,8 +223,15 @@ class StreamedClusterReader:
     instead of returning what it last knew.
     """
 
-    def __init__(self, client: ConnectorClient, *, page_limit: int = wire.MAX_BATCH) -> None:
+    def __init__(
+        self,
+        client: ConnectorClient,
+        *,
+        page_limit: int = wire.MAX_BATCH,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
         self._client = client
+        self._clock = clock
         self._limit = page_limit
         self._cursor: str | None = None
         self._objects: dict[str, dict[str, Any]] = {}
@@ -233,8 +250,18 @@ class StreamedClusterReader:
         self._reported = 0  # ... as of the last ``pending`` call
         # the latest Connector time read from the change stream (late-evidence-design.md §4.1)
         self._connector_time: datetime | None = None
-        self._followed_since: datetime | None = None  # the first Connector time read
+        self._followed_since: datetime | None = None  # the first Connector time read in this epoch
         self._stream_gaps: list[wire.GapItem] = []  # read, not yet recorded by the control plane
+        # where in which Connector run this reader is (late-evidence-design.md §4.2)
+        self._epoch: str | None = None
+        self._first_seq: int | None = None
+        self._last_seq: int | None = None
+        # measurements: versions replaced before the journal read them; heartbeat clock lag
+        self._unread_objects: dict[str, int] = {}
+        self._unread_events: dict[str, int] = {}
+        self._superseded = [0, 0]
+        self._heartbeat_lag_min: float | None = None
+        self._heartbeats = 0
 
     def pending(self) -> bool:
         """Drain the stream; whether anything arrived since the previous call (contract §15).
@@ -267,6 +294,39 @@ class StreamedClusterReader:
         with self._lock:
             return self._followed_since
 
+    def stream_position(self) -> StreamPosition | None:
+        """How far this reader has followed the change stream; None before it read anything."""
+        with self._lock:
+            if (
+                self._epoch is None
+                or self._first_seq is None
+                or self._last_seq is None
+                or self._followed_since is None
+            ):
+                return None
+            return StreamPosition(
+                self._epoch, self._first_seq, self._last_seq, self._followed_since
+            )
+
+    def take_superseded(self) -> tuple[int, int]:
+        """Object and Event versions replaced in the mirror before a journal read them, since last asked."""
+        with self._lock:
+            counts = (self._superseded[0], self._superseded[1])
+            self._superseded = [0, 0]
+            return counts
+
+    def take_clock_sample(self) -> tuple[float | None, int]:
+        """The smallest (local clock - heartbeat's Connector time) in seconds, and the heartbeats seen.
+
+        Read about once a second, the smallest lag approaches the clock offset between this process
+        and the Connector (plus the minimal transport delay); a negative value means the Connector's
+        clock is ahead.
+        """
+        with self._lock:
+            sample = (self._heartbeat_lag_min, self._heartbeats)
+            self._heartbeat_lag_min, self._heartbeats = None, 0
+            return sample
+
     def gaps(self) -> tuple[wire.GapItem, ...]:
         """The change-stream gaps read and not yet recorded (late-evidence-design.md §4.2)."""
         with self._lock:
@@ -283,9 +343,15 @@ class StreamedClusterReader:
             self._connector_time is None or stamp > self._connector_time
         ):
             self._connector_time = stamp
-        if isinstance(stamp, datetime) and self._followed_since is None:
-            self._followed_since = stamp
+        if item.seq > 0:  # a buffered item, not a gap the buffer synthesised for this read
+            if self._first_seq is None and isinstance(stamp, datetime):
+                self._first_seq, self._followed_since = item.seq, stamp
+            self._last_seq = item.seq
         if isinstance(item, wire.ChangeHeartbeatItem):
+            lag = (self._clock() - item.observed_at).total_seconds()
+            if self._heartbeat_lag_min is None or lag < self._heartbeat_lag_min:
+                self._heartbeat_lag_min = lag
+            self._heartbeats += 1
             return  # carries only the Connector's time: not a change
         self._applied += 1
         if isinstance(item, wire.GapItem):
@@ -323,11 +389,16 @@ class StreamedClusterReader:
         elif isinstance(item, wire.ObjectItem):
             key = _key(item.body)
             if key is not None:
+                if self._staging is None and self._objects.get(key) != item.body:
+                    self._unread_objects[key] = self._unread_objects.get(key, 0) + 1
                 (self._staging if self._staging is not None else self._objects)[key] = item.body
         elif isinstance(item, wire.ObjectDeletedItem):
             self._objects.pop(item.key, None)
         elif isinstance(item, wire.EventItem):
-            self._events[_event_id(item.body)] = item.body
+            event_id = _event_id(item.body)
+            if self._events.get(event_id) != item.body:
+                self._unread_events[event_id] = self._unread_events.get(event_id, 0) + 1
+            self._events[event_id] = item.body
         elif isinstance(item, wire.ListingStatusItem):
             if item.snapshot:
                 if self._staging is None:
@@ -366,6 +437,10 @@ class StreamedClusterReader:
     def _drain(self) -> None:
         while True:
             page = self._client.read("read_changes", self._cursor, self._limit)
+            if page.epoch != self._epoch:
+                # another Connector run: a new stream, followed from its first item read
+                self._epoch, self._first_seq, self._last_seq = page.epoch, None, None
+                self._followed_since = None
             for item in page.ordered():
                 self._apply(item)
             self._cursor = page.next_cursor
@@ -382,6 +457,8 @@ class StreamedClusterReader:
     def list_objects(self, namespaces: Sequence[str]) -> ObjectListing:
         with self._lock:
             self._current()
+            self._superseded[0] += sum(n - 1 for n in self._unread_objects.values())
+            self._unread_objects = {}
             wanted = set(namespaces)
             keys = sorted(k for k in self._objects if k.split("/", 1)[0] in wanted)
             return ObjectListing(
@@ -395,6 +472,8 @@ class StreamedClusterReader:
     def list_events(self, namespaces: Sequence[str]) -> list[dict[str, Any]]:
         with self._lock:
             self._current()
+            self._superseded[1] += sum(n - 1 for n in self._unread_events.values())
+            self._unread_events = {}
             wanted = set(namespaces)
             return [
                 self._events[k]

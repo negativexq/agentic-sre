@@ -205,6 +205,7 @@ def test_alembic_migration_up_and_down(tmp_path: Path) -> None:
         "run_evidence_manifest",
         "snapshot_cycle_objects",
         "snapshot_cycles",
+        "stream_follow_segments",
         "tool_calls",
         "verification_results",
     }

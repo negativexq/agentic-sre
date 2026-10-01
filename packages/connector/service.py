@@ -126,9 +126,9 @@ class Connector:
         self._versions: dict[ListingScope, str] = {}
         self._generation = 0
         self._degraded = False  # a watch failed; the run loop retries the snapshot
-        self._pending_relists: set[ListingScope] = (
-            set()
-        )  # scope relists that failed (contract §15.4)
+        self._pending_relists: set[ListingScope] = set()  # failed scope relists (contract §15.4)
+        # the last instant each scope was observed continuously (late-evidence-design.md §4.2)
+        self._continuous_until: dict[ListingScope, datetime] = {}
         self.watch_stats: dict[str, int] = defaultdict(int)
 
     def handle(self, payload: bytes) -> bytes:
@@ -293,9 +293,7 @@ class Connector:
             except Exception:
                 logger.warning("change poll failed", exc_info=True)
                 if gap_on_failure:
-                    self._put(
-                        self._changes, wire.GapItem(seq=0, at=at, reason="BACKEND_UNREACHABLE")
-                    )
+                    self._put(self._changes, self._global_gap(at, "BACKEND_UNREACHABLE"))
 
     def _status(self, listing: ObjectListing, at: datetime, *, snapshot: bool) -> None:
         self._put(
@@ -332,6 +330,7 @@ class Connector:
             raise ValueError("snapshot exceeds the change buffer")
         self._seen, self._events_seen = {}, {}
         self._versions = {**listing.resource_versions, **self._event_versions()}
+        self._continuous_until = dict.fromkeys(self._versions, at)
         self._generation += 1  # watches of the replaced versions must not touch the new state
         self._pending_relists = set()  # a global snapshot relists every scope
         # a scope that failed, or a watched namespace whose Events returned no version, has no watch:
@@ -360,6 +359,8 @@ class Connector:
         at: datetime,
     ) -> None:
         self._versions.update({**listing.resource_versions, **self._event_versions()})
+        for completed in listing.completed_scopes:
+            self._continuous_until[completed] = at
         present: set[str] = set()
         for body in objects:
             key = object_key(body)
@@ -436,8 +437,7 @@ class Connector:
                 if getattr(self.cluster, "list_scope", None) is None:
                     # a reader that cannot list one scope: the global gap and snapshot of §15
                     self._put(
-                        self._changes,
-                        wire.GapItem(seq=0, at=self.clock(), reason="RESOURCE_VERSION_EXPIRED"),
+                        self._changes, self._global_gap(self.clock(), "RESOURCE_VERSION_EXPIRED")
                     )
                     self.watch_stats["relists"] += 1
                     self.poll_changes_once(force_snapshot=True)
@@ -452,6 +452,7 @@ class Connector:
                         at=self.clock(),
                         reason="RESOURCE_VERSION_EXPIRED",
                         scope=wire.ScopeWire(namespace=scope.namespace, kind=scope.kind),
+                        since=self._continuous_until.get(scope),
                     ),
                 )
                 if self._relist_scope(scope):
@@ -469,13 +470,20 @@ class Connector:
                         "watch of %s/%s failed", scope.namespace, scope.kind, exc_info=True
                     )
                     self._degraded = True
-                    self._put(
-                        self._changes,
-                        wire.GapItem(seq=0, at=self.clock(), reason="BACKEND_UNREACHABLE"),
-                    )
+                    self._put(self._changes, self._global_gap(self.clock(), "BACKEND_UNREACHABLE"))
             return False
+        with self._changes_lock:
+            if generation == self._generation and scope in self._versions:
+                # the server ended the watch normally: the scope was observed without a break until now
+                self._continuous_until[scope] = self.clock()
         self.watch_stats["resumes"] += 1
         return True
+
+    def _global_gap(self, at: datetime, reason: wire.GapReason) -> wire.GapItem:
+        # conservative start: the earliest instant up to which every scope was observed continuously
+        return wire.GapItem(
+            seq=0, at=at, reason=reason, since=min(self._continuous_until.values(), default=None)
+        )
 
     def _apply_watch_event(self, scope: ListingScope, event: WatchEvent, generation: int) -> bool:
         """Apply one watch event; False when a newer snapshot has replaced the watch it came from."""
@@ -483,6 +491,7 @@ class Connector:
             if generation != self._generation or self._versions.get(scope) is None:
                 return False
             self._versions[scope] = event.resource_version
+            self._continuous_until[scope] = self.clock()
             self.watch_stats["events"] += 1
             body = event.body
             if event.type == "BOOKMARK" or body.get("kind") in wire.DENIED_KINDS:
@@ -557,8 +566,13 @@ class Connector:
             ),
         )
         self._versions[scope] = version
+        self._continuous_until[scope] = at
         self._pending_relists.discard(scope)
         return True
+
+    def change_heartbeat(self) -> None:
+        """Stamp the change stream with the Connector's time (late-evidence-design.md §4.1)."""
+        self._put(self._changes, wire.ChangeHeartbeatItem(seq=0, observed_at=self.clock()))
 
     def retry_snapshot_once(self) -> bool:
         """After a watch failure or a failed scope relist, try again; whether a retry was due."""
@@ -611,7 +625,7 @@ class Connector:
         if watching:
             changes_interval = reconcile_interval
         threads: dict[ListingScope, threading.Thread] = {}
-        next_changes = next_alerts = next_stats = next_retry = 0.0
+        next_changes = next_alerts = next_stats = next_retry = next_beat = 0.0
         elapsed = 0.0
         while not stop.is_set():
             if elapsed >= next_changes:
@@ -629,6 +643,9 @@ class Connector:
                         threads[scope] = thread
                         thread.start()
                         self.watch_stats["watch_starts"] += 1
+            if watching and elapsed >= next_beat:
+                self.change_heartbeat()  # proves transport on a quiet stream (late-evidence §4.1)
+                next_beat = elapsed + 2.0
             if watching and elapsed >= next_retry and self.retry_snapshot_once():
                 next_retry = (
                     elapsed + 5.0

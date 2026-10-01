@@ -286,6 +286,19 @@ class GapItem(StreamItem):
     reason: GapReason
     # contract §15.4: the one scope whose continuity was lost; absent for a global gap
     scope: ScopeWire | None = None
+    # late-evidence-design.md §4.2: the last instant the gapped scope(s) were observed continuously
+    since: datetime | None = None
+
+
+class ChangeHeartbeatItem(StreamItem):
+    """The Connector's time on the change stream, so a quiet stream still proves transport completeness.
+
+    Once a reader has read past a heartbeat stamped later than ``T``, everything the Connector observed by
+    ``T`` has arrived (late-evidence-design.md §4.1).
+    """
+
+    kind: Literal["change_heartbeat"] = "change_heartbeat"
+    observed_at: datetime
 
 
 STREAM_ITEMS: dict[str, type[StreamItem]] = {
@@ -297,6 +310,7 @@ STREAM_ITEMS: dict[str, type[StreamItem]] = {
     "snapshot_begin": SnapshotBeginItem,
     "listing_status": ListingStatusItem,
     "gap": GapItem,
+    "change_heartbeat": ChangeHeartbeatItem,
 }
 
 

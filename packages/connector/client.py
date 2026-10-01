@@ -231,6 +231,8 @@ class StreamedClusterReader:
         # when the Connector observed each object and Event (contract §15, measurement only)
         self._observed: dict[str, datetime] = {}
         self._reported = 0  # ... as of the last ``pending`` call
+        # the latest Connector time read from the change stream (late-evidence-design.md §4.1)
+        self._connector_time: datetime | None = None
 
     def pending(self) -> bool:
         """Drain the stream; whether anything arrived since the previous call (contract §15).
@@ -253,7 +255,19 @@ class StreamedClusterReader:
             key = _event_id(body) if body.get("kind") == "Event" else _key(body)
             return self._observed.get(key) if key is not None else None
 
+    def connector_time(self) -> datetime | None:
+        """The latest Connector time read from the change stream: transport is complete up to it."""
+        with self._lock:
+            return self._connector_time
+
     def _apply(self, item: wire.StreamItem) -> None:
+        stamp = getattr(item, "observed_at", None) or getattr(item, "at", None)
+        if isinstance(stamp, datetime) and (
+            self._connector_time is None or stamp > self._connector_time
+        ):
+            self._connector_time = stamp
+        if isinstance(item, wire.ChangeHeartbeatItem):
+            return  # carries only the Connector's time: not a change
         self._applied += 1
         if isinstance(item, wire.ObjectItem):
             key = _key(item.body)

@@ -369,3 +369,31 @@ def test_a_snapshot_with_failed_scopes_keeps_retrying_so_no_scope_stays_unwatche
     cluster.batches[PODS] = [[event("MODIFIED", pod("a", "11"), "11")]]
     connector.watch_changes_once()
     assert (PODS, "10") in cluster.watched_from[-2:] or (PODS, "10") in cluster.watched_from
+
+
+# ---- coverage recording (late-evidence-design.md §4) ----------------------------------------------
+
+
+def test_a_scope_gap_says_since_when_its_scope_was_continuously_observed() -> None:
+    from packages.connector.watch import ResourceVersionExpired
+
+    connector, client, cluster, clock = make()
+    cursor = client.read("read_changes", None).next_cursor
+    clock.advance(30)
+    connector.watch_changes_once()  # the watches end normally at T0+30: continuity proven until then
+    clock.advance(270)
+    cluster.batches[EVENTS] = [ResourceVersionExpired("410 Gone")]
+    connector.watch_changes_once()  # the resume at T0+300 fails
+    (gap,) = [g for g in since(client, cursor) if isinstance(g, wire.GapItem)]
+    assert gap.since == T0 + timedelta(seconds=30) and gap.at == T0 + timedelta(seconds=300)
+
+
+def test_a_change_heartbeat_carries_the_connectors_time_on_a_quiet_stream() -> None:
+    connector, client, _, clock = make()
+    cursor = client.read("read_changes", None).next_cursor
+    clock.advance(5)
+    connector.change_heartbeat()
+    (beat,) = since(client, cursor)
+    assert isinstance(beat, wire.ChangeHeartbeatItem) and beat.observed_at == T0 + timedelta(
+        seconds=5
+    )

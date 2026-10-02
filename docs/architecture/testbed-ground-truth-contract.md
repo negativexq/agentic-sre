@@ -223,3 +223,89 @@ Found by rescoring slice 1 (`testbed-scenarios-design.md`, "Slice 1 result"). In
    stored. Naming, strong authority, elimination and timing still come from the primary incident (the earliest).
 
 Rescoring writes `score.v2.json` beside the original `score.json`; nothing is re-run and no record changes.
+
+## 14. Ordering and propagation amendment (2026-10-02, owner-approved)
+
+Status: **APPROVED** by the owner (2026-10-02) and implemented (§14.5); recorded runs keep their files (§8).
+
+### 14.1 What happened
+
+All three repeats of slice 3 (`config-or-rollout`, suite `slice3`) are `INVALID` with "`symptom_started_at` precedes
+`propagation_started_at`". In this family the target is probed directly (`POST /payments` on `payment-service`) and
+the client probe (`order-service`) carries two views of the same samples, `propagation` (calibrated threshold, §4.5:
+0.10 to 0.11 s here) and `symptom` (the alert's 0.5 s). The probes are sampled **concurrently** in rounds (§12.3) and
+each sample is stamped when it ends (§12.1).
+
+| Repeat | First failing round (start) | Target sample ends | Client sample ends | `propagation_started_at` |
+|---|---|---|---|---|
+| 0 | +11.3 s | +12.54 s (1.244 s) | +12.53 s (1.234 s) | +14.2 s (next round) |
+| 1 | same shape | +12.6 s | +12.6 s, a few ms earlier | +14.5 s (next round) |
+| 2 | +6.9 s | +7.84 s (0.934 s) | +6.92 s (HTTP 500 in 0.017 s) | +9.2 s (next round) |
+
+Two measurement artefacts, not two worlds:
+
+1. **Sub-round order is not observable.** Target and client fail in the same concurrent round; which sample ends
+   first depends on each request's latency (in repeat 0 the client's slow call ended 10 ms before the target's), not
+   on the order in which the world degraded. §4.1 then orders the two by noise.
+2. **Propagation is searched only after the effect's end stamp** (`oracle_stamps`: `after=effect`), while the symptom
+   is searched after the execution. A client failure in the effect's own round is therefore visible to the symptom
+   view and invisible to the propagation view, although both views read the same sample. The propagation field skips
+   to the next round and lands after the symptom of the same probe, which is impossible by construction (the
+   propagation threshold is the looser view, as in the `direct-pod-fault` amendment of §4.2).
+
+Repeat 2 also shows a real detail worth keeping in the record: the client's first failure was an HTTP 500 during the
+rollout's pod replacement, faster than the target's first slow sample of the same round. A failed sample is a failure
+under the oracle's existing rule (and an effect needs three consecutive failures, §11), so this changes no rule here.
+
+### 14.2 Amendment to §4.1 (ordering)
+
+1. Oracle instants are ordered by their **sampling round**: two oracle fields whose first samples belong to the same
+   concurrent round are simultaneous for §4.1, whatever their end stamps. A round is one `sample_once` of every probe;
+   its samples start within milliseconds of one another. The stamps themselves stay end-of-sample instants (§12.1) and are recorded
+   unchanged.
+2. An inversion across rounds stays a real inconsistency and invalidates the run, as before. Injector fields and the
+   one-second event resolution of §12.2 are unchanged.
+3. `propagation_started_at` is searched from the **execution** onwards, like `symptom_started_at`, and is then
+   checked against `target_effect_at` by rule 1. The search no longer depends on the effect's end stamp.
+
+This replaces the earlier wording "instants less than one second apart are simultaneous": a fixed second is both too
+wide when rounds are fast and too narrow when slow samples stretch a round (rounds of 1.2 to 1.7 s were recorded in
+slice 3); the round is what the oracle actually observes together.
+
+### 14.3 Amendment to §4.2 (nullable propagation)
+
+`propagation_started_at` is null **exactly when the scenario's chain declares no `propagation` link** (the fault
+and the symptom are on the same service). The chain's shape is the family's, and the family is fixed in the frozen
+manifest before the first run. This generalizes the
+`direct-pod-fault` amendment so that later families (for example `scheduled-recurring` built on a CPU stress of the
+symptom service) need no amendment of their own. A chain that declares a propagation link and a run with a null
+propagation stays `INVALID`. The other required fields are unchanged.
+
+### 14.4 Measurement before adoption
+
+1. Re-derive the timelines of every recorded run (slices 1 to 3, phase 0 runs) offline from their stored series and
+   journals with the amended rules, writing `timeline.v2.json` beside the original (§8, write-once); report every
+   run whose validity or any oracle field changes, with the reason.
+2. Expected, and to be checked rather than assumed: slice 3's three repeats become valid; no valid run of slices 1
+   and 2 becomes invalid (the rules only remove a sub-round order); some `propagation_started_at` values move one
+   round earlier.
+3. Score the valid runs with the frozen manifest and the §13 scorer on the re-derived timelines (`score.v3.json`)
+   against the acceptance thresholds (no false strong authority, no false `RESOLVED`).
+4. No engine input changes; the engine never reads a timeline.
+
+### 14.5 Implementation and measurement (2026-10-02)
+
+Oracle stamps carry `round_at`, the start of their sampling round (`round_starts`: a stretch of the series in which no
+probe repeats, as `Oracle.sample_once` writes it); `timeline_problems` orders two oracle stamps by round and every other
+pair by instant, and takes the chain to decide whether propagation may be null; every oracle effect is searched from
+the execution on. `packages.evals.live.testbed_lab rederive --suite <id>` re-derives stored runs.
+
+| Suite | Before | After | Oracle fields moved |
+|---|---|---|---|
+| `slice1` (3 runs) | 3 valid | 3 valid | none |
+| `slice2` (3 runs) | 3 valid | 3 valid | none |
+| `slice3` (3 runs) | 0 valid (symptom before propagation) | 3 valid | `propagation_started_at` one round earlier: -1.66, -1.92, -2.28 s |
+
+Slice 3 scored on the re-derived timelines (`score.v3.json`): cause named 3/3, instance named 2/3 (in repeat 1 no supported
+hypothesis carries the cause's instance UID; not yet examined), execution witness 0/3 and effect link 0/3 (no rollout rule yet, roadmap C5;
+expected), **false strong authority 0, false `RESOLVED` 0**: the frozen acceptance bar holds.

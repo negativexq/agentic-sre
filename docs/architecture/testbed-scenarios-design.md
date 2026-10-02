@@ -327,3 +327,11 @@ The runs are kept and reported as they are.
 **Amendment:** variant A spawns a 60 s delay every 90 s and stays in place 300 to 360 s (three spawns). The spawn
 interval and duration are manifest parameters (`spawn_every_seconds`, `spawn_seconds`); a manifest without them,
 like slice 4's, keeps 60 s and 20 s. Phase 0 must show a **latency alert by name** before the manifest is frozen.
+
+**Second phase 0 (2026-10-03).** With the amended spawns every spawn raised the four latency alerts
+(`PaymentDbQueryLatencyHigh`, `OrderDependencyLatencyHigh`, `PaymentRequestLatencyHigh`, `HighRequestLatency`), but the
+run was invalid: `OrderWorkerLagHigh` / `KafkaConsumerLag` fired 46 s after the Schedule was created and 43 s before its
+first experiment was applied, so the alert preceded the symptom. **The lag alerts fire without a fault in this lab**
+(produced minus consumed over 2 minutes above 10 messages; a 16-message imbalance was enough in the independent run),
+which is also a risk for every family that accepts them. Owner-approved: the `scheduled-recurring` family expects the
+latency alerts only (its designed symptom); decided before any scored run of slice 4b.

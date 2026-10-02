@@ -74,6 +74,8 @@ DIRECT_POD_ALERTS = DEPENDENCY_ALERTS | {
 ALERTS_BY_FAMILY: dict[str, frozenset[str]] = {
     "direct-pod-fault": frozenset(DIRECT_POD_ALERTS),
     "config-or-rollout": DEPENDENCY_ALERTS | {"PaymentServiceLatencyCritical"},
+    # the designed symptom is latency; the lag alerts fire without any fault in this lab (design, slice 4)
+    "scheduled-recurring": DEPENDENCY_ALERTS - {"KafkaConsumerLag", "OrderWorkerLagHigh"},
 }
 ALERT_LATENCY_SECONDS = 0.5  # the latency of the lab's alert rules: the symptom threshold
 RECOVERY_TIMEOUT_SECONDS = 180.0

@@ -39,3 +39,11 @@ def test_the_scheduled_family_draws_a_scheduled_delay_long_enough_for_several_sp
     assert params.fault == "scheduled-delay"
     assert 300 <= params.duration_seconds <= 360
     assert (params.spawn_every_seconds, params.spawn_seconds) == (90, 60)
+
+
+def test_the_scheduled_family_expects_latency_alerts_not_the_noisy_lag_alerts() -> None:
+    from packages.evals.live.testbed_runner import ALERTS_BY_FAMILY
+
+    alerts = ALERTS_BY_FAMILY["scheduled-recurring"]
+    assert "OrderDependencyLatencyHigh" in alerts
+    assert not alerts & {"KafkaConsumerLag", "OrderWorkerLagHigh"}

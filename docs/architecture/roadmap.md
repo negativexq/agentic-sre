@@ -105,7 +105,7 @@ never receives ground truth.
 | F1 | Engine version: `RCA_ENGINE_VERSION` stays 2.1.0 and a test pins it; the series is unreleased | DECISION |
 | F2 | Name of the checkpoint that authorizes a push | DECISION |
 | F3 | Old in-cluster `control-plane` deployment | DONE (moot: the recreated lab never deploys it; the control plane runs outside, B3) | |
-| F4 | `.local` upkeep: compress `baseline-rivals*.json`, prune superseded run directories after checking references | NEXT |
+| F4 | `.local` upkeep: compress `baseline-rivals*.json`, prune superseded run directories after checking references. Lab images: every `kind load` of a rebuilt image leaves the previous one on the node as an untagged `import-<date>` reference that kubelet only collects above 85% disk use (2026-10-02: 8 old Connector images, 2.3 GB of the node's 10.1 GB volume, removed by hand with `ctr -n k8s.io images rm` on the orphan references only); add that cleanup after each load to the lab targets. Host disk had 17 GiB free before an 8.5 GB build-cache prune | NEXT |
 
 ## 8. Critical path
 

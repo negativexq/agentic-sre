@@ -128,9 +128,11 @@ def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
         duration_seconds=draw("duration_seconds", 100.0),
         latency_ms=int(draw("latency_ms", 400.0)),
         load_rps=draw("load_rps", 10.0),
-        fault={"direct-pod-fault": "cpu-stress", "config-or-rollout": "env-delay"}.get(
-            spec.family, "network-delay"
-        ),
+        fault={
+            "direct-pod-fault": "cpu-stress",
+            "config-or-rollout": "env-delay",
+            "scheduled-recurring": "scheduled-delay",
+        }.get(spec.family, "network-delay"),
         cpu_workers=int(draw("cpu_workers", 16.0)),
     )
 
@@ -159,6 +161,8 @@ class Injection:
     # a rollout's execution is the new ReplicaSet, known only once the controller has created it
     execution_name: str = ""
     execution_uid: str = ""
+    # a Schedule's executions: the experiments it spawned, (name, uid), captured before it is removed
+    spawned: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -311,7 +315,63 @@ def config_chain(injection: Injection) -> Chain:
     )
 
 
-CHAINS = {"direct-pod-fault": direct_pod_chain, "config-or-rollout": config_chain}
+def scheduled_chain(injection: Injection) -> Chain:
+    """The world's chain for a ``Schedule`` spawning delays on ``payment-service`` (design §4, variant A).
+
+    The cause is the Schedule instance; each experiment it spawned is an execution with its own UID.
+    """
+    schedule = f"sre-demo/Schedule/{injection.name}"
+    mechanism = "Schedule spawning NetworkChaos delay"
+    return Chain(
+        links=(
+            Link(
+                role="cause",
+                actor=schedule,
+                instance_uid=injection.uid,
+                knowable=True,
+                mechanism=mechanism,
+            ),
+            *(
+                Link(
+                    role="execution",
+                    actor=f"sre-demo/NetworkChaos/{name}",
+                    instance_uid=uid,
+                    knowable=True,
+                    mechanism=mechanism,
+                    evidence_class="execution",
+                )
+                for name, uid in injection.spawned
+            ),
+            Link(
+                role="target_effect",
+                actor=f"sre-demo/Pod/{injection.target_pod}",
+                instance_uid=injection.target_pod_uid,
+                knowable=True,
+                mechanism="request latency at the faulted pod",
+                evidence_class="effect",
+            ),
+            Link(
+                role="propagation",
+                actor="sre-demo/Deployment/order-service",
+                knowable=False,
+                mechanism="dependency latency seen by the caller",
+                evidence_class="propagation",
+            ),
+            Link(
+                role="symptom",
+                actor="sre-demo/Service/order-service",
+                knowable=False,
+                mechanism="client-facing request latency",
+            ),
+        )
+    )
+
+
+CHAINS = {
+    "direct-pod-fault": direct_pod_chain,
+    "config-or-rollout": config_chain,
+    "scheduled-recurring": scheduled_chain,
+}
 
 
 def dependency_chain(injection: Injection) -> Chain:
@@ -491,9 +551,11 @@ def run_once(
             )
         if foreign:
             raise BaselineNotQuiet(f"faults this run did not create are present: {foreign[:5]}")
-        prefix = {"cpu-stress": "pod-stress", "env-delay": "env-delay"}.get(
-            params.fault, "dep-delay"
-        )
+        prefix = {
+            "cpu-stress": "pod-stress",
+            "env-delay": "env-delay",
+            "scheduled-delay": "sched-delay",
+        }.get(params.fault, "dep-delay")
         injection = world.inject(params, run.journal, f"{prefix}-{params.seed}")
         alert_at: datetime | None = None
         applied: datetime | None = None
@@ -523,6 +585,8 @@ def run_once(
         if applied is None:
             problems.append("the controller's Applied event was never observed")
         injection = world.settle(injection)
+        if injection.kind == "Schedule" and not injection.spawned:
+            problems.append("the schedule spawned no experiment before it was removed")
         # 3. removal, then recovery of every probe view
         world.remove(injection, run.journal)
         removed_at = clock.now()

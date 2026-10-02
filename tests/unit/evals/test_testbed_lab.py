@@ -23,3 +23,9 @@ def test_chaos_meshs_per_pod_record_of_the_runs_experiment_is_not_foreign() -> N
 
 def test_ordinary_objects_are_never_faults() -> None:
     assert not foreign_fault_event("Pod", "payment-service-7fc956765b-t57g8", set())
+
+
+def test_an_experiment_spawned_by_the_runs_schedule_is_not_foreign() -> None:
+    assert not foreign_fault_event("NetworkChaos", "sched-delay-41-x7k2p", {"sched-delay-41"})
+    assert foreign_fault_event("NetworkChaos", "sched-delay-4-x7k2p", {"sched-delay-41"})
+    assert foreign_fault_event("NetworkChaos", "other-x7k2p", {"sched-delay-41"})

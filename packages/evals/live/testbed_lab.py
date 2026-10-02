@@ -58,6 +58,7 @@ NAMESPACE = "sre-demo"
 SCENARIO_ID = "dependency-delay-payment"
 CONFIG_SCENARIO_ID = "config-delay-payment"
 DIRECT_SCENARIO_ID = "direct-stress-order"
+SCHEDULED_SCENARIO_ID = "scheduled-delay-payment"
 MAX_WARMUPS = 3
 RUN_LABEL = (
     "testbed.agentic-sre.io/run"  # every experiment the harness creates carries its run's id
@@ -71,10 +72,16 @@ CHAOS_POD_RECORDS = frozenset({"PodNetworkChaos", "PodIOChaos", "PodHttpChaos"})
 
 
 def foreign_fault_event(kind: str, name: str, experiments: Collection[str]) -> bool:
-    """An event about a fault object that this run did not create."""
+    """An event about a fault object that this run did not create.
+
+    An experiment spawned by one of the run's Schedules is the run's own: Chaos Mesh names it after the
+    Schedule (``<schedule>-<suffix>``), and the Schedule's name is unique to the run.
+    """
     if kind in CHAOS_POD_RECORDS:
         return False
-    return (kind.endswith("Chaos") or kind == "Schedule") and name not in experiments
+    if not (kind.endswith("Chaos") or kind == "Schedule"):
+        return False
+    return name not in experiments and not any(name.startswith(f"{e}-") for e in experiments)
 
 
 class RealClock:
@@ -271,7 +278,11 @@ class LabWorld:
         )
 
     def _delete_experiments(self) -> None:
-        for kind in ("networkchaos", "stresschaos"):
+        for kind in (
+            "schedules",
+            "networkchaos",
+            "stresschaos",
+        ):  # a Schedule first, so it spawns no more
             self._run(
                 ["kubectl", "-n", NAMESPACE, "delete", kind, "--all", "--ignore-not-found"],
                 check=False,
@@ -360,7 +371,12 @@ class LabWorld:
                     continue  # a kind the lab does not serve
                 for item in json.loads(result.stdout)["items"]:
                     labels = item["metadata"].get("labels") or {}
-                    if labels.get(RUN_LABEL) != self.database:
+                    owners = item["metadata"].get("ownerReferences") or []
+                    spawned = any(
+                        o.get("kind") == "Schedule" and o.get("name") in self._experiments
+                        for o in owners
+                    )
+                    if labels.get(RUN_LABEL) != self.database and not spawned:
                         found.append(f"{namespace}/{item['kind']}/{item['metadata']['name']}")
             events = json.loads(
                 self._run(["kubectl", "-n", namespace, "get", "events", "-o", "json"]).stdout
@@ -463,7 +479,21 @@ class LabWorld:
     def inject(self, params: RunParameters, journal: InjectorJournal, name: str) -> Injection:
         if params.fault == "env-delay":
             return self._inject_env_delay(params, journal)
-        if params.fault == "cpu-stress":
+        duration = f"  duration: {int(params.duration_seconds) + 60}s\n"
+        if params.fault == "scheduled-delay":
+            # design §4 `scheduled-recurring`, variant A: a 20 s delay on payment-service every minute
+            kind, duration, body = (
+                "Schedule",
+                "",
+                (
+                    '  schedule: "@every 60s"\n  type: NetworkChaos\n  historyLimit: 10\n'
+                    "  concurrencyPolicy: Forbid\n  networkChaos:\n"
+                    "    action: delay\n    mode: all\n"
+                    f"    selector: {{namespaces: [{NAMESPACE}], labelSelectors: {{app: payment-service}}}}\n"
+                    f"    delay: {{latency: {params.latency_ms}ms}}\n    duration: 20s\n"
+                ),
+            )
+        elif params.fault == "cpu-stress":
             kind, body = (
                 "StressChaos",
                 (
@@ -484,8 +514,7 @@ class LabWorld:
         manifest = (
             f"apiVersion: chaos-mesh.org/v1alpha1\nkind: {kind}\n"
             f"metadata: {{name: {name}, namespace: {NAMESPACE}, "
-            f"labels: {{{RUN_LABEL}: {self.database}}}}}\nspec:\n{body}"
-            f"  duration: {int(params.duration_seconds) + 60}s\n"
+            f"labels: {{{RUN_LABEL}: {self.database}}}}}\nspec:\n{body}{duration}"
         )
         self._experiments.add(name)
         result = self._run(["kubectl", "apply", "-f", "-"], stdin=manifest, check=False)
@@ -609,7 +638,24 @@ class LabWorld:
             return None
         return created, rs["name"], rs["uid"], first["name"], first["uid"]
 
+    def _spawned(self, injection: Injection) -> list[tuple[str, str]]:
+        """(name, uid) of the experiments a Schedule of this run has spawned so far, oldest first."""
+        items = json.loads(
+            self._run(["kubectl", "-n", NAMESPACE, "get", "networkchaos", "-o", "json"]).stdout
+        )["items"]
+        owned = [
+            i["metadata"]
+            for i in items
+            if any(
+                o.get("uid") == injection.uid for o in i["metadata"].get("ownerReferences") or []
+            )
+        ]
+        owned.sort(key=lambda m: m["creationTimestamp"])
+        return [(m["name"], m["uid"]) for m in owned]
+
     def settle(self, injection: Injection) -> Injection:
+        if injection.kind == "Schedule":
+            return dataclasses.replace(injection, spawned=tuple(self._spawned(injection)))
         if injection.kind != "Deployment" or self._rollout is None:
             return injection
         _, rs_name, rs_uid, pod_name, pod_uid = self._rollout
@@ -627,22 +673,29 @@ class LabWorld:
             if self._rollout is None:
                 self._rollout = self._new_rollout(self._delay_value(injection))
             return self._rollout[0] if self._rollout is not None else None
-        selector = f"involvedObject.name={injection.name},reason=Applied"
-        items = json.loads(
-            self._run(
-                [
-                    "kubectl",
-                    "-n",
-                    NAMESPACE,
-                    "get",
-                    "events",
-                    "--field-selector",
-                    selector,
-                    "-o",
-                    "json",
-                ]
-            ).stdout
-        )["items"]
+        # a Schedule executes through the experiments it spawns: its first child's Applied
+        names = (
+            [name for name, _ in self._spawned(injection)]
+            if injection.kind == "Schedule"
+            else [injection.name]
+        )
+        items = []
+        for name in names:
+            items += json.loads(
+                self._run(
+                    [
+                        "kubectl",
+                        "-n",
+                        NAMESPACE,
+                        "get",
+                        "events",
+                        "--field-selector",
+                        f"involvedObject.name={name},reason=Applied",
+                        "-o",
+                        "json",
+                    ]
+                ).stdout
+            )["items"]
         times = [
             t
             for item in items
@@ -802,7 +855,31 @@ def config_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> Scen
     )
 
 
-SPECS = {"dependency": dependency_spec, "direct": direct_pod_spec, "config": config_spec}
+def scheduled_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> ScenarioSpec:
+    """Slice 4 (design §4 `scheduled-recurring`, variant A): a Schedule spawning a 20 s delay on
+    ``payment-service`` every minute; the cause stays in place long enough for several spawns."""
+    return ScenarioSpec(
+        scenario_id=SCHEDULED_SCENARIO_ID,
+        family="scheduled-recurring",
+        tier=tier,  # type: ignore[arg-type]
+        repeats=repeats,
+        seeds=seeds,
+        parameters={
+            "baseline_seconds": ParameterRange(low=45, high=45),
+            "offset_seconds": ParameterRange(low=0, high=20),
+            "duration_seconds": ParameterRange(low=200, high=260),
+            "latency_ms": ParameterRange(low=300, high=600),
+            "load_rps": ParameterRange(low=8, high=12),
+        },
+    )
+
+
+SPECS = {
+    "dependency": dependency_spec,
+    "direct": direct_pod_spec,
+    "config": config_spec,
+    "scheduled": scheduled_spec,
+}
 
 
 def world_for(families: Collection[str], clock: RealClock) -> LabWorld:

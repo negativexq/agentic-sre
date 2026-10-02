@@ -481,16 +481,18 @@ class LabWorld:
             return self._inject_env_delay(params, journal)
         duration = f"  duration: {int(params.duration_seconds) + 60}s\n"
         if params.fault == "scheduled-delay":
-            # design §4 `scheduled-recurring`, variant A: a 20 s delay on payment-service every minute
+            # design §4 `scheduled-recurring`, variant A: a recurring delay on payment-service
             kind, duration, body = (
                 "Schedule",
                 "",
                 (
-                    '  schedule: "@every 60s"\n  type: NetworkChaos\n  historyLimit: 10\n'
+                    f'  schedule: "@every {params.spawn_every_seconds}s"\n'
+                    "  type: NetworkChaos\n  historyLimit: 10\n"
                     "  concurrencyPolicy: Forbid\n  networkChaos:\n"
                     "    action: delay\n    mode: all\n"
                     f"    selector: {{namespaces: [{NAMESPACE}], labelSelectors: {{app: payment-service}}}}\n"
-                    f"    delay: {{latency: {params.latency_ms}ms}}\n    duration: 20s\n"
+                    f"    delay: {{latency: {params.latency_ms}ms}}\n"
+                    f"    duration: {params.spawn_seconds}s\n"
                 ),
             )
         elif params.fault == "cpu-stress":
@@ -856,8 +858,9 @@ def config_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> Scen
 
 
 def scheduled_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> ScenarioSpec:
-    """Slice 4 (design §4 `scheduled-recurring`, variant A): a Schedule spawning a 20 s delay on
-    ``payment-service`` every minute; the cause stays in place long enough for several spawns."""
+    """Slice 4b (design §4 `scheduled-recurring`, variant A as amended 2026-10-03): a Schedule spawning a 60 s
+    delay on ``payment-service`` every 90 s, in place long enough for three spawns. The 20 s-every-minute
+    form of slice 4 never raised a latency alert (its manifest has no spawn parameters, so it keeps 60 s / 20 s)."""
     return ScenarioSpec(
         scenario_id=SCHEDULED_SCENARIO_ID,
         family="scheduled-recurring",
@@ -867,9 +870,11 @@ def scheduled_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> S
         parameters={
             "baseline_seconds": ParameterRange(low=45, high=45),
             "offset_seconds": ParameterRange(low=0, high=20),
-            "duration_seconds": ParameterRange(low=200, high=260),
+            "duration_seconds": ParameterRange(low=300, high=360),
             "latency_ms": ParameterRange(low=300, high=600),
             "load_rps": ParameterRange(low=8, high=12),
+            "spawn_every_seconds": ParameterRange(low=90, high=90),
+            "spawn_seconds": ParameterRange(low=60, high=60),
         },
     )
 

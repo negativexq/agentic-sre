@@ -37,4 +37,5 @@ def test_the_scheduled_family_draws_a_scheduled_delay_long_enough_for_several_sp
     spec = scheduled_spec(3, (41, 42, 43))
     params = derive_parameters(spec, 41)
     assert params.fault == "scheduled-delay"
-    assert 200 <= params.duration_seconds <= 260
+    assert 300 <= params.duration_seconds <= 360
+    assert (params.spawn_every_seconds, params.spawn_seconds) == (90, 60)

@@ -111,6 +111,9 @@ class RunParameters:
     load_rps: float
     fault: str = "network-delay"  # "cpu-stress" (direct-pod-fault), "env-delay" (config-or-rollout)
     cpu_workers: int = 16
+    # scheduled-recurring: how often the Schedule spawns an experiment and how long each lasts
+    spawn_every_seconds: int = 60
+    spawn_seconds: int = 20
 
 
 def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
@@ -134,6 +137,8 @@ def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
             "scheduled-recurring": "scheduled-delay",
         }.get(spec.family, "network-delay"),
         cpu_workers=int(draw("cpu_workers", 16.0)),
+        spawn_every_seconds=int(draw("spawn_every_seconds", 60.0)),
+        spawn_seconds=int(draw("spawn_seconds", 20.0)),
     )
 
 

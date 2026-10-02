@@ -61,7 +61,7 @@ engine before any of it is measured.
 |---|---|---|---|---|
 | `direct-pod-fault` | `StressChaos` (CPU) on `payment-service` / on `order-service` | cause = the experiment; execution = its target pod; effect = same workload | latency of the faulted service itself | names the experiment; effect link only if the pod is a declared symptom |
 | `dependency-fault` | `NetworkChaos` delay on `payment-service` (300 to 600 ms) / packet loss | cause = the experiment; effect at `payment-service`; propagation to `order-service` | `order-service` request latency and errors | names the experiment; **propagation recall 0** (the service-level relation is not implemented, roadmap C1) |
-| `scheduled-recurring` | a chaos `Schedule` spawning a 20 s `NetworkChaos` delay every minute on `payment-service` / a 20 s `StressChaos` every minute on `order-service` | cause = the Schedule instance; executions = its experiments (each with its own UID) | as the matching single fault | one supported family through the spawn explanation; Schedule instance named |
+| `scheduled-recurring` | a chaos `Schedule` spawning a 60 s `NetworkChaos` delay every 90 s on `payment-service`, in place for three spawns (amended 2026-10-03; the original 20 s every minute never raised a latency alert, see "Slice 4 result") / a 20 s `StressChaos` every minute on `order-service` | cause = the Schedule instance; executions = its experiments (each with its own UID) | as the matching single fault | one supported family through the spawn explanation; Schedule instance named |
 | `config-or-rollout` | `FAULT_PAYMENT_DELAY_MS` set on `payment-service` through an env change (600 to 1500 ms) / an image change to a tag that does not exist plus a pod delete, so payments fail (both are existing live actions) | cause = the Deployment change; execution = the new ReplicaSet and pods | `order-service` latency | D1 support only (no strong rule for rollouts yet, roadmap C5); variant B raises error alerts rather than latency |
 | `negative-control` | the **real** config change above **plus** a decoy: a chaos fault in `lab-control` started at about the same time | cause = the config change; the decoy is listed as a decoy; construction = "no call edge from `lab-control`, NetworkPolicy default-deny, verified by `lab-check`" | as `config-or-rollout` | must **not** name the decoy, and holds no strong claim on it |
 | `competing-causes` | two independent causes with separable symptoms: a delay on `payment-service` **and** a `pod-kill` of `order-worker` | two cause links with two chains (latency alerts; `KafkaConsumerLag`) | both alert groups | scored per cause; neither may absorb the other |
@@ -311,3 +311,19 @@ phase-0 databases (20 incidents). Every experiment the harness creates now carri
 watched namespaces lacks that label for this run, or any chaos event names an experiment this run did not create;
 after the diagnoses are stored the same check runs again, and a finding makes the run `INVALID`. Manual diagnostic
 experiments therefore cannot be scored as part of a run, whether they happen before it or during it.
+
+## Slice 4 result and amendment (2026-10-03, owner-approved)
+
+Slice 4 (`scheduled-recurring`, variant A as first designed: a 20 s delay every minute, 300 to 600 ms) failed the
+validity bar: **1 of 3 runs valid** (the bar is 90%). The phase 0 run was read as passing because an alert fired;
+that alert was `KafkaConsumerLag` / `OrderWorkerLagHigh`, not a latency alert, and the alert's name was not checked.
+In phase 0 and all three repeats no latency alert fired: the latency alerts need the 30 s average above 0.5 s for
+15 s, about 45 s of continuous delay, which a 20 s spawn never gives. The lag alerts are a side effect (`order-worker`
+calls `payment-service`): repeat 0 got one during the fault (valid: cause and Schedule instance named, no false
+strong authority, no false `RESOLVED`), repeat 1 none, repeat 2 one 50 s after the Schedule was removed, after the
+injector had stopped watching (the harness watches alerts only while the fault is in place; to be fixed separately).
+The runs are kept and reported as they are.
+
+**Amendment:** variant A spawns a 60 s delay every 90 s and stays in place 300 to 360 s (three spawns). The spawn
+interval and duration are manifest parameters (`spawn_every_seconds`, `spawn_seconds`); a manifest without them,
+like slice 4's, keeps 60 s and 20 s. Phase 0 must show a **latency alert by name** before the manifest is frozen.

@@ -65,6 +65,17 @@ CHAOS_RESOURCES = ("networkchaos", "stresschaos", "podchaos", "iochaos", "httpch
 WARMUP_SECONDS = 90.0  # a restarted pod fails probes for its first minutes under load
 WATCHED_NAMESPACES = ("sre-demo", "lab-control", "chaos-mesh")
 
+# Chaos Mesh's per-pod records of how its experiments are applied (owned by the pod, named after it): never an
+# experiment of their own, so a foreign fault shows through its experiment's object and events instead.
+CHAOS_POD_RECORDS = frozenset({"PodNetworkChaos", "PodIOChaos", "PodHttpChaos"})
+
+
+def foreign_fault_event(kind: str, name: str, experiments: Collection[str]) -> bool:
+    """An event about a fault object that this run did not create."""
+    if kind in CHAOS_POD_RECORDS:
+        return False
+    return (kind.endswith("Chaos") or kind == "Schedule") and name not in experiments
+
 
 class RealClock:
     def now(self) -> datetime:
@@ -357,7 +368,7 @@ class LabWorld:
             for event in events:
                 involved = event.get("involvedObject", {})
                 kind, name = involved.get("kind", ""), involved.get("name", "")
-                if (kind.endswith("Chaos") or kind == "Schedule") and name not in self._experiments:
+                if foreign_fault_event(kind, name, self._experiments):
                     found.append(f"{namespace}/{kind}/{name} (event {event.get('reason')})")
         return sorted(set(found))
 

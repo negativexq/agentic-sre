@@ -1027,11 +1027,16 @@ in time to the onset and causally linked to the incident. Age alone never demote
    as a definition, not changed.
 4. *Linked*: the candidate's hypothesis has at least one linked symptom or causal path to a declared incident symptom
    (`linked_symptoms` / `causal_paths` non-empty).
+5. *Displacing* (amended 2026-10-02, owner-approved after the shadow measurement): a candidate may make others
+   ineligible only from an **observation** that ties it to the onset: an initiation observed within `[T0 − W, T0]`,
+   or an execution observed in progress at `T0` (an experiment `Applied` at or before `T0` with no `Recovered` before
+   it). An unknown end keeps a candidate eligible (definition 1) but never lets it displace others: an old change
+   whose end was simply not observed is not evidence of a connection to this incident.
 
 **Rule (eligibility filter on `SUPPORTED` leadership).** Among the `SUPPORTED` candidates that leader selection
-(§ "Leader selection by epistemic tier") would present as competing: if at least one candidate is connected,
+(§ "Leader selection by epistemic tier") would present as competing: if at least one candidate is displacing,
 linked and not ended before onset, every candidate that ended before onset is not eligible to lead, and the leader
-is chosen among the eligible ones exactly as today (score, then canonical name). If no candidate is connected,
+is chosen among the eligible ones exactly as today (score, then canonical name). If no candidate is displacing,
 linked and not ended, nothing changes. The filter never produces `NOT_ESTABLISHED`, never touches the `STRONG` tier,
 `RESOLVED`, admission, eliminations or any support rule, and does not change
 `m21.support.observed-fault-execution.v1`.
@@ -1076,7 +1081,7 @@ decided 2 of the 470 testbed diagnoses; the two rules act on different cases. An
 different texts, and the first analysis did not pair them; 42 of the 252 fall outside a fault.
 
 Open before a decision: the benefit is measured on the same two runs that motivated the rule; a run with a
-different fault rhythm, or the held-out set, is the independent check. A candidate whose end is unknown counted as
-connected; in these data every candidate that made others ineligible had begun within 15 minutes of the onset, but
-the definition should require an observed initiation within `W` (or an observed execution in progress) before a
-candidate may make others ineligible, so that an old change of unknown end never does.
+different fault rhythm, or the held-out set, is the independent check. The first version let a candidate of
+unknown end make others ineligible; definition 5 now requires an observed initiation within `W` or an observed
+execution in progress. Rerun with definition 5, every number in the table above is unchanged: in these data every
+candidate that displaced others had in fact begun within the window.

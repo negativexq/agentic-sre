@@ -126,3 +126,22 @@ def test_a_single_or_strong_display_is_left_alone() -> None:
     doc = document(hypothesis("Deployment", "api", [spec(-1, "unset", "1000")]))
     doc["leading_actor_display"] = "SINGLE"
     assert not shadow_leadership(doc, [], W).acted
+
+
+def test_an_old_change_of_unknown_end_never_displaces_others() -> None:
+    """Definition 5: an unknown end keeps a candidate eligible but is no connection to this incident."""
+    doc = document(
+        hypothesis("Deployment", "api", [spec(-60, "1", "2")]),  # never reverted: end unknown
+        hypothesis("NetworkChaos", "old", [{"kind": "FAULT_INJECTION", "at": at(-90)}]),
+    )
+    shadow = shadow_leadership(doc, chaos("old", -90, -88), W)
+    assert not shadow.acted and shadow.display == "COMPETING"
+
+
+def test_an_experiment_observed_in_progress_at_onset_displaces_ended_ones() -> None:
+    doc = document(
+        hypothesis("NetworkChaos", "running", [{"kind": "FAULT_INJECTION", "at": at(-40)}]),
+        hypothesis("NetworkChaos", "old", [{"kind": "FAULT_INJECTION", "at": at(-90)}]),
+    )
+    shadow = shadow_leadership(doc, chaos("running", -40, None) + chaos("old", -90, -88), W)
+    assert shadow.eligible == (("NetworkChaos", "running"),)

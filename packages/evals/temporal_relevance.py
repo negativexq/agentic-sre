@@ -90,10 +90,35 @@ def ended_before(interval: Interval, onset: datetime, window: timedelta) -> bool
     return interval.end is not None and interval.end + window < onset
 
 
-def connected(interval: Interval, onset: datetime, window: timedelta) -> bool:
+def displacing(
+    hypothesis: Mapping[str, Any],
+    interval: Interval,
+    onset: datetime,
+    window: timedelta,
+) -> bool:
+    """§11 definition 5: tied to the onset by an observation, never by an unknown end.
+
+    An initiation observed within ``[T0 - W, T0]``, or an experiment observed in progress at ``T0``.
+    """
     if interval.start is not None and interval.start > onset + RESOLUTION:
-        return False  # began after the onset
-    return interval.end is None or interval.end + window >= onset
+        return False
+    initiations = [
+        t
+        for t in (_time(f.get("at")) for f in hypothesis.get("initiating_findings") or [])
+        if t is not None
+    ]
+    if interval.start is not None:
+        initiations.append(interval.start)
+    if any(onset - window <= t <= onset + RESOLUTION for t in initiations):
+        return True
+    actor = hypothesis.get("causal_actor") or {}
+    in_progress = (
+        actor.get("kind") in CHAOS_KINDS
+        and interval.start is not None
+        and interval.start <= onset + RESOLUTION
+        and (interval.end is None or interval.end >= onset)
+    )
+    return in_progress
 
 
 def linked(hypothesis: Mapping[str, Any]) -> bool:
@@ -134,7 +159,7 @@ def shadow_leadership(
         interval = effect_interval(hypothesis, intervals)
         state[candidate] = (
             ended_before(interval, onset, window),
-            connected(interval, onset, window) and linked(hypothesis),
+            displacing(hypothesis, interval, onset, window) and linked(hypothesis),
         )
     if not any(not ended and live for ended, live in state.values()):
         return Shadow(display, tuple(candidates), (), False)

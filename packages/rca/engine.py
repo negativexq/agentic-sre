@@ -860,6 +860,7 @@ def diagnose_case(
         supported=frozenset(resolution_trace.plausible_hypotheses),
         strong=frozenset(resolution_trace.mechanism_verified_hypotheses),
         in_window=lambda at: finding_in_window(at, case.context, config.ranking),
+        events=case.source.events(),
     )
     withheld = projection.reason == "NO_EVIDENCE_IN_INCIDENT_WINDOW"
     return Diagnosis(
@@ -871,6 +872,7 @@ def diagnose_case(
         leading_actor_display=projection.display,
         leading_actor_tier=projection.tier,
         leading_actor_candidates=projection.candidates,
+        leading_actor_set_aside=projection.set_aside,
         confidence=confidence,
         resolution=resolution_trace.state,
         summary=(

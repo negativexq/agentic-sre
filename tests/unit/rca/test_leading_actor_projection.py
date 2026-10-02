@@ -144,3 +144,83 @@ def test_within_a_tier_the_ranking_order_decides() -> None:
     pool = [hyp("a", "a", score=9.0), hyp("b", "b", score=8.0)]
     assert leader(pool, supported=("a", "b")) == "a"
     assert leader(pool) == "a"  # no supported claim: the ranking alone, as before
+
+
+# ---- temporal relevance of supported leaders (m21 §11, adopted for presentation with W = 5 min) ----
+
+from datetime import UTC, datetime, timedelta  # noqa: E402
+
+from packages.rca.model import ClusterEvent  # noqa: E402
+
+ONSET = datetime(2026, 10, 2, 20, 0, tzinfo=UTC)
+
+
+def _at(minutes: float) -> datetime:
+    return ONSET + timedelta(minutes=minutes)
+
+
+def claim(hid: str, name: str, kind: str, started: float, linked: bool = True) -> Any:
+    finding = SimpleNamespace(kind="FAULT_INJECTION", at=_at(started), summary="")
+    return SimpleNamespace(
+        hypothesis_id=hid,
+        causal_actor=actor(name, kind),
+        score=8.0,
+        findings=(finding,),
+        initiating_findings=(finding,),
+        episode_onset=ONSET,
+        linked_symptoms=("shop/Deployment/web",) if linked else (),
+        causal_paths=(),
+    )
+
+
+def chaos_event(name: str, reason: str, minutes: float) -> ClusterEvent:
+    return ClusterEvent(
+        entity=actor(name, "NetworkChaos"),
+        reason=reason,
+        first_at=_at(minutes),
+        evidence_id=f"{name}{reason}",
+    )
+
+
+def relevant(pool: list[Any], events: list[ClusterEvent], strong: tuple[str, ...] = ()) -> Any:
+    return project_leading_actor(
+        pool,
+        supported=frozenset(h.hypothesis_id for h in pool),
+        strong=frozenset(strong),
+        in_window=lambda at: True,
+        events=events,
+    )
+
+
+def test_an_experiment_recovered_long_before_the_onset_is_set_aside_for_one_in_progress() -> None:
+    pool = [claim("old", "old", "NetworkChaos", -90), claim("now", "now", "NetworkChaos", -1)]
+    events = [chaos_event("old", "Applied", -90), chaos_event("old", "Recovered", -88)]
+    events.append(chaos_event("now", "Applied", -1))
+    p = relevant(pool, events)
+    assert (p.display, p.tier, names(p)) == ("SINGLE", "SUPPORTED", ["now"])
+    assert [ref.name for ref in p.set_aside] == ["old"]
+
+
+def test_two_causes_in_effect_at_the_onset_both_stay_eligible() -> None:
+    pool = [claim("a", "a", "NetworkChaos", -12), claim("b", "b", "NetworkChaos", -1)]
+    events = [
+        chaos_event("a", "Applied", -12),
+        chaos_event("b", "Applied", -1),
+    ]  # neither recovered
+    p = relevant(pool, events)
+    assert (p.display, names(p), p.set_aside) == ("COMPETING", ["a", "b"], ())
+
+
+def test_without_a_candidate_tied_to_the_onset_nothing_is_set_aside() -> None:
+    pool = [claim("a", "a", "NetworkChaos", -90), claim("b", "b", "NetworkChaos", -45)]
+    events = [chaos_event("a", "Applied", -90), chaos_event("a", "Recovered", -88)]
+    events += [chaos_event("b", "Applied", -45), chaos_event("b", "Recovered", -43)]
+    p = relevant(pool, events)
+    assert (p.display, names(p), p.set_aside) == ("COMPETING", ["a", "b"], ())
+
+
+def test_the_strong_tier_is_never_filtered() -> None:
+    pool = [claim("old", "old", "NetworkChaos", -90), claim("now", "now", "NetworkChaos", -1)]
+    events = [chaos_event("old", "Applied", -90), chaos_event("old", "Recovered", -88)]
+    p = relevant(pool, events, strong=("old", "now"))
+    assert (p.display, p.tier, names(p), p.set_aside) == ("COMPETING", "STRONG", ["old", "now"], ())

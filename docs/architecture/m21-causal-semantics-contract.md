@@ -1085,3 +1085,35 @@ different fault rhythm, or the held-out set, is the independent check. The first
 unknown end make others ineligible; definition 5 now requires an observed initiation within `W` or an observed
 execution in progress. Rerun with definition 5, every number in the table above is unchanged: in these data every
 candidate that displaced others had in fact begun within the window.
+
+### 11.1 Independent check: pre-registration (owner-approved 2026-10-02, frozen before the run)
+
+Written and committed before the run starts; nothing below changes after its data is seen.
+
+**Run.** Product mode, three hours, `packages.evals.live.longrun` with tag `indep1`. The schedule is generated from
+a seed by `rhythm_schedule` and frozen in `.local/longrun/indep1/schedule.json`: seed **20261003** (the first seed
+from 20261002 whose schedule satisfies `schedule_problems`), sha256
+`e5ae7b2c9dcca5b567abcdba1d60c63967aaac0e4e46ec5f2922bf6f57dff6d7`. The rhythm differs on purpose
+from the runs the shadow was first measured on: gaps from three bands (4–10, 15–25, 35–50 minutes), seeded durations
+(60–300 s) and order, the same target hit twice in a row, three overlapping pairs (one with a 20-minute fault still in
+effect when the second starts), a quiet stretch of 38 minutes, and one control-plane restart. Fault kinds are the
+existing three; no injection code changes. The schedule has 11 faults (the design estimate of 15 to 18 was wrong;
+the long bands fill the time).
+
+**Frozen.** The filter as defined above, including definition 5, in `packages/evals/temporal_relevance.py` at the
+commit of this section; `W` = 5, 15 and 30 minutes; the truth rule: every fault whose
+[created − 1 min, removed + 3 min] contains the incident onset (`truth_at`), so an overlap has more than one true cause.
+
+**Hard criteria** (any violation: the filter is not adopted as it stands, and each case is reported):
+
+1. no true cause demoted;
+2. in an overlap, no cause in effect demoted;
+3. no `COMPETING` to `SINGLE` with a leader outside the truth;
+4. no `NOT_ESTABLISHED` added.
+
+**Descriptive, no threshold:** `COMPETING` to `SINGLE` per `W`; every change in a no-fault diagnosis, examined one by
+one; the number decided by the strong rule.
+
+**Choice of `W`, fixed now:** the smallest `W` among 5, 15 and 30 with no hard violation on both the development runs
+(`testbed_longrun_run1`, `testbed_longrun_verify2`) and this run. If none qualifies, nothing is adopted. Placement
+(engine or presentation) stays the owner's decision after the result.

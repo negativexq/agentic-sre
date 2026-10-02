@@ -12,9 +12,14 @@ class Missing(Exception):
     status = 404
 
 
+class Forbidden(Exception):
+    status = 403
+
+
 class FakeCustomObjects:
-    def __init__(self, absent: set[str]) -> None:
+    def __init__(self, absent: set[str], forbidden: set[str] | None = None) -> None:
         self.absent = absent
+        self.forbidden = forbidden or set()
         self.calls: list[tuple[str, str]] = []
 
     def list_namespaced_custom_object(
@@ -23,6 +28,8 @@ class FakeCustomObjects:
         self.calls.append((namespace, plural))
         if namespace in self.absent:
             raise Missing("the server could not find the requested resource")
+        if namespace in self.forbidden:
+            raise Forbidden("networkchaos.chaos-mesh.org is forbidden")
         items = []
         if (namespace, plural) == ("shop", "networkchaos"):
             items = [
@@ -38,8 +45,10 @@ class EmptyList:
         )
 
 
-def reader(absent: set[str]) -> tuple[KubernetesClusterReader, FakeCustomObjects]:
-    custom = FakeCustomObjects(absent)
+def reader(
+    absent: set[str], forbidden: set[str] | None = None
+) -> tuple[KubernetesClusterReader, FakeCustomObjects]:
+    custom = FakeCustomObjects(absent, forbidden)
     client = SimpleNamespace(
         CustomObjectsApi=lambda: custom,
         CoreV1Api=EmptyList,
@@ -72,3 +81,17 @@ def test_a_namespace_without_chaos_mesh_is_not_a_failed_scope() -> None:
     listing = kubernetes_reader.list_objects(["shop"])
     assert not [f for f in listing.failed_scopes if f.scope.namespace == "shop"]
     assert ListingScope("shop", "NetworkChaos") not in listing.completed_scopes
+
+
+def test_a_namespace_where_experiments_may_not_be_read_is_skipped_not_failed() -> None:
+    """Measured live: a 403 here made the whole listing incomplete and the Connector relisted forever."""
+    kubernetes_reader, _ = reader(absent=set(), forbidden={"shop"})
+    listing = kubernetes_reader.list_objects(["shop"])
+    assert not [f for f in listing.failed_scopes if f.scope.namespace == "shop"]
+    assert ListingScope("chaos-mesh", "NetworkChaos") in listing.completed_scopes
+
+
+def test_the_chaos_namespace_still_reports_its_failures() -> None:
+    kubernetes_reader, _ = reader(absent=set(), forbidden={"chaos-mesh"})
+    listing = kubernetes_reader.list_objects(["shop"])
+    assert {f.scope.namespace for f in listing.failed_scopes} == {"chaos-mesh"}

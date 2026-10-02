@@ -37,3 +37,12 @@ membership and coverage (C9) apply to them unchanged.
 ## 4. Decision requested
 
 The rule of §2, measured as §3 before it counts as adopted.
+
+## 5. Live finding (2026-10-02)
+
+The first live run after the change failed at once: the lab Connector's service account could read Chaos kinds in
+`chaos-mesh` only, every journaled namespace answered 403, each counted as a failed scope, the listing was never
+complete, and the Connector relisted every five seconds instead of watching (126 global relists, 5,504 LISTs in 12
+minutes). The read-only check before had run with an administrator's credentials. Fixed twice over: outside the chaos
+namespaces a 403 or 404 skips the scope with one warning instead of failing it (an optional kind must never stop the
+stream), and the lab's reader roles in `sre-demo` and `lab-control` grant read access to the Chaos kinds.

@@ -167,6 +167,7 @@ class KubernetesClusterReader:
 
     def __init__(self, *, chaos_namespaces: Sequence[str] = ("chaos-mesh",)) -> None:
         self.chaos_namespaces = tuple(chaos_namespaces)
+        self._skipped_chaos_scopes: set[ListingScope] = set()
         self._module: Any | None = None
         self._api_client: Any | None = None
         # the resourceVersion each Event scope's last LIST returned (connector contract §15)
@@ -231,11 +232,20 @@ class KubernetesClusterReader:
                         "chaos-mesh.org", "v1alpha1", namespace, plural
                     )
                 except Exception as exc:  # CRD not installed or not readable
-                    if (
-                        namespace not in self.chaos_namespaces
-                        and getattr(exc, "status", None) == 404
-                    ):
-                        continue  # no Chaos Mesh in this cluster: the kind does not exist, nothing failed
+                    status = getattr(exc, "status", None)
+                    if namespace not in self.chaos_namespaces and status in (403, 404):
+                        # Optional here: no Chaos Mesh (404) or no permission to read it (403). Skipped,
+                        # not failed, so it never makes the listing incomplete (measured: a 403 kept the
+                        # Connector relisting forever); said once per scope.
+                        if scope not in self._skipped_chaos_scopes:
+                            self._skipped_chaos_scopes.add(scope)
+                            _log.warning(
+                                "chaos experiments in %s are not listed (%s %s)",
+                                namespace,
+                                status,
+                                type(exc).__name__,
+                            )
+                        continue
                     failures.append(ListingFailure(scope, f"{type(exc).__name__}: {exc}"))
                     continue
                 completed.add(scope)

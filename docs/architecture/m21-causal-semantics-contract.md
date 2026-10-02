@@ -1117,3 +1117,32 @@ one; the number decided by the strong rule.
 **Choice of `W`, fixed now:** the smallest `W` among 5, 15 and 30 with no hard violation on both the development runs
 (`testbed_longrun_run1`, `testbed_longrun_verify2`) and this run. If none qualifies, nothing is adopted. Placement
 (engine or presentation) stays the owner's decision after the result.
+
+### 11.2 Independent check: result (2026-10-02)
+
+Run `indep1` (`testbed_longrun_indep1`) completed as scheduled: 11 faults, 41 incidents, 82 diagnoses (78
+`COMPETING`, 4 `SINGLE`), no change-stream gap, one control-plane restart. Measured once, after the run, with
+`longrun measure`; the development runs were measured with the same code.
+
+| Run | `W` | Hard violations | `COMPETING` → `SINGLE` (fault) | Changes without a fault |
+|---|---|---|---|---|
+| `indep1` (independent) | 5 | **none** | 63 of 78 | none (no incident outside a fault) |
+| `indep1` | 15 | none | 25 of 78 | none |
+| `indep1` | 30 | none | 19 of 78 | none |
+| `run1` (development) | 5 / 15 / 30 | none | 186 of 210 at every `W` | 0 / 8 / 20 of 66 |
+| `verify2` (development) | 5 / 15 / 30 | none | 30 / 30 / 12 of 30 | 0 / 4 / 4 of 8 |
+
+At `W` = 5 in `indep1`, by the number of true causes at the onset:
+
+- one true cause in the candidate pool: 49 to `SINGLE` on it, 1 left `COMPETING`;
+- two true causes (an overlap), both in the pool: 10, all left `COMPETING` with both eligible; neither was demoted;
+- two true causes, only one in the pool: 14 to `SINGLE` on that one, 4 already `SINGLE`; the other cause was never a
+  candidate, so the filter cannot have removed it;
+- one true cause not in the pool: 4, left `COMPETING`; the engine's pool missed the cause, which the filter neither
+  hides nor repairs (an engine finding for C2 or C5, not examined here).
+
+**Choice of `W` by the pre-registered rule:** 5 minutes, the smallest with no hard violation on both development
+runs and the independent run; it is also the only one of the three that changed no diagnosis outside a fault. The
+quiet stretch of `indep1` produced no incident, so the independent run says nothing about no-fault behaviour; that
+evidence comes from the development runs alone. Adoption and placement (engine or presentation) are the owner's
+decision.

@@ -53,3 +53,11 @@ intake paths (stream and webhook) behave the same.
 1. The rule of §2, including the new trigger `RESOLVED`.
 2. That a labels- or annotations-only change starts no diagnosis (the alternative is a revision with a trigger such
    as `ALERT_UPDATED`; nothing measured so far needs it).
+
+## 6. Verified live (2026-10-02, `testbed_longrun_verify2`)
+
+Two hours, six faults (two of each family), a control-plane restart at minute 60. 25 incidents produced **50
+diagnoses: 25 `INITIAL`, 25 `RESOLVED`**, two per incident (the earlier run: about four per incident, all
+`INITIAL`). **No diagnosis followed the restart** (the earlier run re-diagnosed every incident, 14 and 34, within 40
+seconds). No incident stayed open; no transport wait exceeded 10 s (46 waits, median 1.98 s, longest 6.78 s, all
+proven).

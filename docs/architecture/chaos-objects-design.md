@@ -46,3 +46,6 @@ complete, and the Connector relisted every five seconds instead of watching (126
 minutes). The read-only check before had run with an administrator's credentials. Fixed twice over: outside the chaos
 namespaces a 403 or 404 skips the scope with one warning instead of failing it (an optional kind must never stop the
 stream), and the lab's reader roles in `sre-demo` and `lab-control` grant read access to the Chaos kinds.
+
+After the fix the same run journaled every experiment it created (`NetworkChaos` `lr-0`, `lr-3`; `StressChaos` `lr-1`,
+`lr-4`) with 43 watches and no relisting. The measurement of §3 (slices 1 to 3 against their frozen results) is next.

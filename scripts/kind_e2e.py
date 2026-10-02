@@ -269,6 +269,9 @@ def main() -> None:
         wait_for(resolved, timeout=150, description="Alertmanager resolved delivery")
         replay = http_json("POST", f"/api/v1/incidents/{incident_id}/diagnosis")
         if replay.get("root_cause") != expected or replay.get("confidence") != "VERIFIED":
+            fields = ("root_cause", "confidence", "resolution", "leading_actor_display", "summary")
+            for name, document in (("first", diagnosis), ("replay", replay)):
+                print(f"{name}:", json.dumps({f: document.get(f) for f in fields}, sort_keys=True))
             raise AssertionError("resolved replay changed the expected deterministic diagnosis")
         print("resolved replay: stable VERIFIED payment Deployment")
     except Exception:

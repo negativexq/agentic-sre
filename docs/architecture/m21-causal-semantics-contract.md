@@ -997,3 +997,91 @@ Results for A4-V2:
 In S24 the alert channel is observed from 15:23:59 and records new diagnostic episodes from 15:41:08 (pending pods, request errors, no-requests on six services, crash loops), two hours before the recorded fault (17:52:10). The earlier V2 "fix" of S24 came only from its object-channel boundary hiding these observed episodes.
 
 **Owner decision (after the result, recorded as such):** S24 is a second `BENCHMARK_EVIDENCE_GROUND_TRUTH_CONFLICT` (the environment is observed degraded before the recorded fault). No scenario-specific accommodation is made. A4-V2 ships on its safety gates. The contract text above is unchanged.
+
+## 11. Temporal relevance of supported leaders (amendment, PROPOSED 2026-10-02; shadow first)
+
+**Measured problem.** In the ten-hour product-mode run (`testbed_longrun_run1`) 252 of 300 diagnoses showed
+competing leaders, every one of them in the `SUPPORTED` tier. Their 561 candidates were mostly old at the incident's
+onset (latest initiating finding: 194 within 15 minutes, 184 between 15 and 60, 183 older), and the score did not
+separate them: a configuration change one minute before the onset and an experiment that had recovered 90 minutes
+before scored the same. Where the incident began during an injected fault and exactly one candidate was recent, that
+candidate was the injected cause in 104 of 104 cases. Those numbers come from one run with a fault every 45 minutes
+and a 15-minute cut chosen after looking at the data; they motivate the rule, they do not set it.
+
+**Principle.** A `SUPPORTED` claim is never removed or invalidated for being old: its hypothesis, findings and
+evidence stay as they are. What changes is only which `SUPPORTED` candidates are **eligible to lead**: a candidate
+whose effect ended before the incident began yields leadership to a candidate that is still in effect, connected
+in time to the onset and causally linked to the incident. Age alone never demotes; recency alone never promotes.
+
+**Definitions** (`T0` is the incident's causal onset of §10.2; `W` is the connection window):
+
+1. *Effect interval* of a candidate, from observations only:
+   - a chaos experiment: `[Applied, Recovered]`; without an observed `Recovered` it is open;
+   - a specification change: from the change to an observed later change that restores the earlier value of the
+     same field (a revert); without an observed revert it is open;
+   - any other actor: open unless an end is observed. An unknown end is treated as **still in effect**.
+2. *Ended before onset*: the interval has an observed end and `end + W < T0`.
+3. *Connected*: the interval does not begin after `T0` (one second of timestamp resolution tolerated) and either
+   contains `T0` or ends no more than `W` before it. This is the onset connection that
+   `m21.support.observed-fault-execution.v1` already uses for strong authority, with `W = 5 min`; here it is reused
+   as a definition, not changed.
+4. *Linked*: the candidate's hypothesis has at least one linked symptom or causal path to a declared incident symptom
+   (`linked_symptoms` / `causal_paths` non-empty).
+5. *Displacing* (amended 2026-10-02, owner-approved after the shadow measurement): a candidate may make others
+   ineligible only from an **observation** that ties it to the onset: an initiation observed within `[T0 − W, T0]`,
+   or an execution observed in progress at `T0` (an experiment `Applied` at or before `T0` with no `Recovered` before
+   it). An unknown end keeps a candidate eligible (definition 1) but never lets it displace others: an old change
+   whose end was simply not observed is not evidence of a connection to this incident.
+
+**Rule (eligibility filter on `SUPPORTED` leadership).** Among the `SUPPORTED` candidates that leader selection
+(§ "Leader selection by epistemic tier") would present as competing: if at least one candidate is displacing,
+linked and not ended before onset, every candidate that ended before onset is not eligible to lead, and the leader
+is chosen among the eligible ones exactly as today (score, then canonical name). If no candidate is displacing,
+linked and not ended, nothing changes. The filter never produces `NOT_ESTABLISHED`, never touches the `STRONG` tier,
+`RESOLVED`, admission, eliminations or any support rule, and does not change
+`m21.support.observed-fault-execution.v1`.
+
+**Not decided here.** `W`. The shadow measurement compares `W` = 5, 15 and 30 minutes; none is adopted until a
+value is supported by data independent of the run that motivated it.
+
+**Shadow measurement (before any decision).** Applied offline to stored diagnoses, without changing the engine:
+
+- data: the scored testbed slices (ground truth from the harness), the two product-mode runs with the injector's
+  record as truth (`testbed_longrun_run1`, `testbed_longrun_verify2`), and the 35 ITBench scenarios;
+- reported per `W` and per dataset:
+  1. true-cause retention: where the true cause was a candidate, is it still eligible;
+  2. wrong-candidate removal: candidates made ineligible that are not the true cause;
+  3. `COMPETING` → `SINGLE` changes, and whether the single leader is the true cause;
+  4. `NOT_ESTABLISHED`: must not increase (by construction it cannot; checked anyway);
+  5. ITBench: every scenario whose leader or display changes, with the before and after;
+  6. incidents with no injected fault (no ground truth): how the display changes, reported apart and never scored;
+- compared explicitly with the existing 5-minute onset connection of the strong rule: which cases each one decides.
+
+Adoption, the value of `W`, and whether the filter belongs to the engine's selection (and so to the epistemic
+digest) or to the presentation only, are decided after the measurement.
+
+*Shadow measurement (2026-10-02, `packages/evals/temporal_relevance.py`).* Truth: the harness's chain for the slices,
+the injector's record for the two product-mode runs, the published labels for ITBench. `NOT_ESTABLISHED` never
+increased and the true cause was never made ineligible, at any `W`.
+
+| Dataset | Competing during a fault | → `SINGLE` (W = 5 / 15 / 30 min) | Leader is the true cause | True cause demoted | No-fault competing changed (W = 5 / 15 / 30) |
+|---|---|---|---|---|---|
+| Testbed slices 1–3, 120 diagnoses replayed with the current engine | 0 | — | — | 0 | — |
+| Product-mode run, 10 h, 300 diagnoses | 210 | 186 / 186 / 186 | all | 0 | 0 / 8 / 20 of 42 |
+| Product-mode run, 2 h after the fixes, 50 diagnoses | 30 | 30 / 30 / 12 | all | 0 | 0 / 4 / 4 of 4 |
+| ITBench, 35 scenarios | 2 competing, true cause not among the candidates | no change at any `W` | — | 0 | — |
+
+Readings. The filter decides only where several experiments overlap in the incident window (the long runs); the
+slices (one fault per clean run) and ITBench have nothing for it to do, and nothing changes there. `W = 5 min`, the
+strong rule's existing onset connection, gave the cleanest result: every decision it took was the true cause and it
+left every incident without ground truth untouched; larger windows began to change those (8 and 20) and, once wider
+than the 20-minute fault spacing of the second run, lost most of their effect (12 of 30). The strong rule itself
+decided 2 of the 470 testbed diagnoses; the two rules act on different cases. An earlier count that put half of the
+252 competing diagnoses outside any fault was wrong: the harness records a rollout's creation and removal under
+different texts, and the first analysis did not pair them; 42 of the 252 fall outside a fault.
+
+Open before a decision: the benefit is measured on the same two runs that motivated the rule; a run with a
+different fault rhythm, or the held-out set, is the independent check. The first version let a candidate of
+unknown end make others ineligible; definition 5 now requires an observed initiation within `W` or an observed
+execution in progress. Rerun with definition 5, every number in the table above is unchanged: in these data every
+candidate that displaced others had in fact begun within the window.

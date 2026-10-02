@@ -57,11 +57,18 @@ def _aware(value: datetime) -> datetime:
 class Stamp(Model):
     at: datetime
     source: Source
+    # The start of the oracle's sampling round that observed it (contract §14.2); oracle stamps only.
+    round_at: datetime | None = None
 
     @field_validator("at")
     @classmethod
     def _utc(cls, value: datetime) -> datetime:
         return _aware(value)
+
+    @field_validator("round_at")
+    @classmethod
+    def _utc_round(cls, value: datetime | None) -> datetime | None:
+        return None if value is None else _aware(value)
 
 
 # Who is allowed to have produced each field (contract §4).
@@ -99,10 +106,23 @@ class Timeline(Model):
         return getattr(self, name)  # type: ignore[no-any-return]
 
 
-def timeline_problems(timeline: Timeline, family: str, clock_offset_seconds: float) -> list[str]:
-    """Why a run's timeline is ``INVALID`` (contract §4.1 to §4.3); empty when it is valid."""
+def _precedes(right: Stamp, left: Stamp) -> bool:
+    """``right`` was observed before ``left``. Two oracle instants of one sampling round are simultaneous:
+    the probes are sampled concurrently, so their order within a round is not observable (contract §14.2)."""
+    if right.round_at is not None and left.round_at is not None:
+        return right.round_at < left.round_at
+    return right.at < left.at
+
+
+def timeline_problems(
+    timeline: Timeline, family: str, clock_offset_seconds: float, chain: Chain | None = None
+) -> list[str]:
+    """Why a run's timeline is ``INVALID`` (contract §4.1 to §4.3, §14); empty when it is valid."""
     problems: list[str] = []
     nullable = NULLABLE_BY_FAMILY.get(family, frozenset())
+    if chain is not None and not chain.of_role("propagation"):
+        # a chain without a propagation link has nothing to propagate to (contract §14.3)
+        nullable = nullable | {"propagation_started_at"}
     for name in ORDER:
         stamp = timeline.stamp(name)
         if stamp is None:
@@ -110,9 +130,9 @@ def timeline_problems(timeline: Timeline, family: str, clock_offset_seconds: flo
                 problems.append(f"missing {name}")
         elif stamp.source is not FIELD_SOURCES[name]:
             problems.append(f"{name} must come from the {FIELD_SOURCES[name].value}")
-    present = [(n, s.at) for n in ORDER if (s := timeline.stamp(n)) is not None]
-    for (left, left_at), (right, right_at) in zip(present, present[1:], strict=False):
-        if right_at < left_at:
+    present = [(n, s) for n in ORDER if (s := timeline.stamp(n)) is not None]
+    for (left, left_stamp), (right, right_stamp) in zip(present, present[1:], strict=False):
+        if _precedes(right_stamp, left_stamp):
             problems.append(f"{right} precedes {left}")
     if abs(clock_offset_seconds) > MAX_CLOCK_OFFSET_SECONDS:
         problems.append(f"clock offset {clock_offset_seconds:.3f}s exceeds the 1 s bound")
@@ -295,7 +315,7 @@ def assemble_run(
             _aware(diagnosis_completed_at) if diagnosis_completed_at is not None else None
         ),
         invalid_reasons=tuple(
-            timeline_problems(timeline, spec.family, clock_offset_seconds)
+            timeline_problems(timeline, spec.family, clock_offset_seconds, chain)
             + chain_problems(chain, spec.family)
         ),
     )

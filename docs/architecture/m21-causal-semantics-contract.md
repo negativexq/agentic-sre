@@ -1054,3 +1054,29 @@ value is supported by data independent of the run that motivated it.
 
 Adoption, the value of `W`, and whether the filter belongs to the engine's selection (and so to the epistemic
 digest) or to the presentation only, are decided after the measurement.
+
+*Shadow measurement (2026-10-02, `packages/evals/temporal_relevance.py`).* Truth: the harness's chain for the slices,
+the injector's record for the two product-mode runs, the published labels for ITBench. `NOT_ESTABLISHED` never
+increased and the true cause was never made ineligible, at any `W`.
+
+| Dataset | Competing during a fault | → `SINGLE` (W = 5 / 15 / 30 min) | Leader is the true cause | True cause demoted | No-fault competing changed (W = 5 / 15 / 30) |
+|---|---|---|---|---|---|
+| Testbed slices 1–3, 120 diagnoses replayed with the current engine | 0 | — | — | 0 | — |
+| Product-mode run, 10 h, 300 diagnoses | 210 | 186 / 186 / 186 | all | 0 | 0 / 8 / 20 of 42 |
+| Product-mode run, 2 h after the fixes, 50 diagnoses | 30 | 30 / 30 / 12 | all | 0 | 0 / 4 / 4 of 4 |
+| ITBench, 35 scenarios | 2 competing, true cause not among the candidates | no change at any `W` | — | 0 | — |
+
+Readings. The filter decides only where several experiments overlap in the incident window (the long runs); the
+slices (one fault per clean run) and ITBench have nothing for it to do, and nothing changes there. `W = 5 min`, the
+strong rule's existing onset connection, gave the cleanest result: every decision it took was the true cause and it
+left every incident without ground truth untouched; larger windows began to change those (8 and 20) and, once wider
+than the 20-minute fault spacing of the second run, lost most of their effect (12 of 30). The strong rule itself
+decided 2 of the 470 testbed diagnoses; the two rules act on different cases. An earlier count that put half of the
+252 competing diagnoses outside any fault was wrong: the harness records a rollout's creation and removal under
+different texts, and the first analysis did not pair them; 42 of the 252 fall outside a fault.
+
+Open before a decision: the benefit is measured on the same two runs that motivated the rule; a run with a
+different fault rhythm, or the held-out set, is the independent check. A candidate whose end is unknown counted as
+connected; in these data every candidate that made others ineligible had begun within 15 minutes of the onset, but
+the definition should require an observed initiation within `W` (or an observed execution in progress) before a
+candidate may make others ineligible, so that an old change of unknown end never does.

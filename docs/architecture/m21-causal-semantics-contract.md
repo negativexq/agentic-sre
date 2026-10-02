@@ -998,7 +998,7 @@ In S24 the alert channel is observed from 15:23:59 and records new diagnostic ep
 
 **Owner decision (after the result, recorded as such):** S24 is a second `BENCHMARK_EVIDENCE_GROUND_TRUTH_CONFLICT` (the environment is observed degraded before the recorded fault). No scenario-specific accommodation is made. A4-V2 ships on its safety gates. The contract text above is unchanged.
 
-## 11. Temporal relevance of supported leaders (amendment, PROPOSED 2026-10-02; shadow first)
+## 11. Temporal relevance of supported leaders (amendment; adopted for presentation 2026-10-03, `W` = 5 min)
 
 **Measured problem.** In the ten-hour product-mode run (`testbed_longrun_run1`) 252 of 300 diagnoses showed
 competing leaders, every one of them in the `SUPPORTED` tier. Their 561 candidates were mostly old at the incident's
@@ -1146,3 +1146,18 @@ runs and the independent run; it is also the only one of the three that changed 
 quiet stretch of `indep1` produced no incident, so the independent run says nothing about no-fault behaviour; that
 evidence comes from the development runs alone. Adoption and placement (engine or presentation) are the owner's
 decision.
+
+### 11.3 Adoption for presentation (owner-approved 2026-10-03)
+
+Adopted in the operator's leader projection only, with `W` = 5 minutes (§11.2): the engine's `root_cause`, ranking,
+support rules and epistemic digest are unchanged; moving the rule into leader selection itself stays a separate
+decision. One implementation serves both the projection and the shadow (`packages/rca/temporal_relevance.py`; the
+shadow in `packages/evals` only builds its inputs from stored documents), so what was measured is what is shown.
+The projection lists only the eligible supported candidates (`leading_actor_candidates`, `SINGLE` when one remains)
+and records the others in `leading_actor_set_aside`, outside the digest; their claims are untouched. A claim without
+an onset (a record from before these fields) leaves the filter inactive.
+
+**Check on real data.** The control plane with this change re-diagnosed all 41 incidents of `indep1` on a copy of its
+database (`testbed_longrun_indep1_c15`): for every incident the shown display and candidates equal the shadow's
+prediction at `W` = 5 from the earlier diagnosis (41 of 41); `root_cause` unchanged in 41, epistemic digest equal in
+41; 33 incidents now show one leader and 8 still compete (35 with a candidate set aside).

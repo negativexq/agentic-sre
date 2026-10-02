@@ -38,7 +38,7 @@ from packages.evals.live.journal import (
     InjectorJournal,
     parse_instant,
 )
-from packages.evals.live.oracle import Measurement, http_measurement
+from packages.evals.live.oracle import Measurement, SeriesWriter, http_measurement
 from packages.evals.live.runner import WorkloadDriver
 from packages.evals.live.scenarios import Target, Workload
 from packages.evals.live.testbed_grader import RunScore, aggregate, score_run
@@ -48,6 +48,7 @@ from packages.evals.live.testbed_runner import (
     RunOutcome,
     RunParameters,
     StoredDiagnosis,
+    rederive,
     run_once,
 )
 from packages.rca.model import Diagnosis
@@ -64,6 +65,16 @@ RUN_LABEL = (
 CHAOS_RESOURCES = ("networkchaos", "stresschaos", "podchaos", "iochaos", "httpchaos", "schedules")
 WARMUP_SECONDS = 90.0  # a restarted pod fails probes for its first minutes under load
 WATCHED_NAMESPACES = ("sre-demo", "lab-control", "chaos-mesh")
+# Chaos Mesh's per-pod records of how its experiments are applied (owned by the pod, named after it): never an
+# experiment of their own, so a foreign fault shows through its experiment's object and events instead.
+CHAOS_POD_RECORDS = frozenset({"PodNetworkChaos", "PodIOChaos", "PodHttpChaos"})
+
+
+def foreign_fault_event(kind: str, name: str, experiments: Collection[str]) -> bool:
+    """An event about a fault object that this run did not create."""
+    if kind in CHAOS_POD_RECORDS:
+        return False
+    return (kind.endswith("Chaos") or kind == "Schedule") and name not in experiments
 
 
 class RealClock:
@@ -357,7 +368,7 @@ class LabWorld:
             for event in events:
                 involved = event.get("involvedObject", {})
                 kind, name = involved.get("kind", ""), involved.get("name", "")
-                if (kind.endswith("Chaos") or kind == "Schedule") and name not in self._experiments:
+                if foreign_fault_event(kind, name, self._experiments):
                     found.append(f"{namespace}/{kind}/{name} (event {event.get('reason')})")
         return sorted(set(found))
 
@@ -845,6 +856,60 @@ def _rescore(store: TestbedStore, suite: str) -> int:
     return 0
 
 
+def _rederive(store: TestbedStore, suite: str) -> int:
+    """Derive every stored run's timeline again by contract §14 (``timeline.v2.json``, ``run.v2.json``) and
+    score the valid ones with the current scorer (``score.v3.json``); nothing is re-run or overwritten."""
+    manifest = store.load_manifest(suite)
+    scores: list[RunScore] = []
+    for spec in manifest.scenarios:
+        for repeat in range(spec.repeats):
+            directory = store.run_dir(suite, spec.scenario_id, repeat)
+            if not (directory / "run.json").exists():
+                continue
+            record = RunRecord.model_validate_json((directory / "run.json").read_bytes())
+            series = SeriesWriter(directory / "series.jsonl").read()
+            entries = InjectorJournal(directory / "journal.jsonl").entries()
+            again = rederive(record, series, entries)
+            body = again.model_dump(mode="json")
+            store.write_artifact(record, "timeline.v2.json", _json(body["timeline"]))
+            store.write_artifact(record, "run.v2.json", _json(body))
+            moved = [
+                f"{name} {(new.at - old.at).total_seconds():+.2f}s"
+                for name in ORACLE_FIELDS
+                if (old := record.timeline.stamp(name)) is not None
+                and (new := again.timeline.stamp(name)) is not None
+                and new.at != old.at
+            ]
+            print(
+                f"{suite} {spec.scenario_id}#{repeat}: "
+                f"{'VALID' if record.valid else 'INVALID'} -> {'VALID' if again.valid else 'INVALID'}"
+                + (f"; moved: {', '.join(moved)}" if moved else "")
+            )
+            for reason in again.invalid_reasons:
+                print(f"  invalid: {reason}")
+            stored = json.loads((directory / "diagnoses.json").read_bytes())
+            if not again.valid or not stored:
+                continue
+            documents = [Diagnosis.model_validate(d["document"]) for d in stored]
+            score = score_run(again, documents[0], tier=spec.tier, also=documents[1:])
+            store.write_artifact(record, "score.v3.json", score.model_dump_json().encode())
+            scores.append(score)
+    print(json.dumps(aggregate(scores), indent=2, sort_keys=True))
+    return 0
+
+
+def _json(document: object) -> bytes:
+    return json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
+
+
+ORACLE_FIELDS = (
+    "target_effect_at",
+    "propagation_started_at",
+    "symptom_started_at",
+    "recovery_at",
+)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="packages.evals.live.testbed_lab")
     parser.add_argument("--root", type=Path, default=REPO / ".local/testbed")
@@ -865,11 +930,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         "rescore", help="score a suite's stored runs again, keeping the old scores"
     )
     rescore.add_argument("--suite", required=True)
+    again = commands.add_parser(
+        "rederive",
+        help="derive the stored runs' timelines again by contract §14, keeping the originals",
+    )
+    again.add_argument("--suite", required=True)
     args = parser.parse_args(argv)
     clock = RealClock()
 
     if args.command == "rescore":
         return _rescore(TestbedStore(args.root), args.suite)
+    if args.command == "rederive":
+        return _rederive(TestbedStore(args.root), args.suite)
 
     if args.command == "freeze":
         seeds = tuple(int(s) for s in args.seeds.split(","))

@@ -224,6 +224,40 @@ def _of(series: Sequence[ProbeResult], probe: str) -> list[ProbeResult]:
     return sorted((r for r in series if r.probe == probe), key=lambda r: r.observed_at)
 
 
+def round_starts(series: Sequence[ProbeResult]) -> dict[ProbeResult, datetime]:
+    """Each sample's sampling round, as the start of that round (contract §14.2).
+
+    ``Oracle.sample_once`` writes every probe once, together, so a round is a stretch of the series in
+    which no probe repeats; its instant is the earliest start among its samples.
+    """
+    rounds: list[list[ProbeResult]] = []
+    for result in series:
+        if not rounds or any(r.probe == result.probe for r in rounds[-1]):
+            rounds.append([])
+        rounds[-1].append(result)
+    return {r: min(s.at for s in group) for group in rounds for r in group}
+
+
+def first_run(
+    series: Sequence[ProbeResult],
+    probe: str,
+    *,
+    ok: bool,
+    after: datetime,
+    length: int = DEFAULT_RUN_LENGTH,
+) -> ProbeResult | None:
+    """The first sample of the first run of ``length`` consecutive samples with ``ok``, at or after ``after``.
+
+    A single blip never counts.
+    """
+    samples = [r for r in _of(series, probe) if r.observed_at >= after]
+    for index in range(len(samples) - length + 1):
+        window = samples[index : index + length]
+        if all(r.ok is ok for r in window):
+            return window[0]
+    return None
+
+
 def first_run_start(
     series: Sequence[ProbeResult],
     probe: str,
@@ -232,16 +266,9 @@ def first_run_start(
     after: datetime,
     length: int = DEFAULT_RUN_LENGTH,
 ) -> datetime | None:
-    """The instant a run of ``length`` consecutive samples with ``ok`` first begins, at or after ``after``.
-
-    A single blip never counts; the instant reported is the first sample of the run.
-    """
-    samples = [r for r in _of(series, probe) if r.observed_at >= after]
-    for index in range(len(samples) - length + 1):
-        window = samples[index : index + length]
-        if all(r.ok is ok for r in window):
-            return window[0].observed_at
-    return None
+    """The instant (sample end) a run of ``length`` consecutive samples with ``ok`` first begins."""
+    found = first_run(series, probe, ok=ok, after=after, length=length)
+    return None if found is None else found.observed_at
 
 
 def all_recovered_at(
@@ -276,28 +303,28 @@ def oracle_stamps(
 ) -> dict[str, Stamp]:
     """The four oracle-sourced fields; a field the series cannot support is left out."""
     stamps: dict[str, Stamp] = {}
+    rounds = round_starts(series)
 
-    def put(name: str, at: datetime | None) -> None:
-        if at is not None:
-            stamps[name] = Stamp(at=at, source=Source.ORACLE)
+    def put(name: str, sample: ProbeResult | None) -> None:
+        if sample is not None:
+            stamps[name] = Stamp(
+                at=sample.observed_at, source=Source.ORACLE, round_at=rounds.get(sample)
+            )
 
-    effect = first_run_start(
-        series, roles.target, ok=False, after=execution_started_at, length=length
-    )
-    put("target_effect_at", effect)
-    if effect is not None and roles.downstream is not None:
-        put(
-            "propagation_started_at",
-            first_run_start(series, roles.downstream, ok=False, after=effect, length=length),
-        )
-    put(
-        "symptom_started_at",
-        first_run_start(series, roles.symptom, ok=False, after=execution_started_at, length=length),
-    )
+    def failing(probe: str) -> ProbeResult | None:
+        # every effect is searched from the execution on; their order is checked by round (contract §14.2)
+        return first_run(series, probe, ok=False, after=execution_started_at, length=length)
+
+    put("target_effect_at", failing(roles.target))
+    if roles.downstream is not None:
+        put("propagation_started_at", failing(roles.downstream))
+    put("symptom_started_at", failing(roles.symptom))
     watched = roles.everything or tuple(
         dict.fromkeys(p for p in (roles.target, roles.downstream, roles.symptom) if p is not None)
     )
-    put("recovery_at", all_recovered_at(series, watched, after=cause_removed_at, length=length))
+    recovered = all_recovered_at(series, watched, after=cause_removed_at, length=length)
+    if recovered is not None:
+        stamps["recovery_at"] = Stamp(at=recovered, source=Source.ORACLE)
     return stamps
 
 

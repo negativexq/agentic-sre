@@ -1827,6 +1827,9 @@ class Diagnosis(BaseModel):
     leading_actor_display: str = "SINGLE"
     leading_actor_tier: str | None = None
     leading_actor_candidates: tuple[EntityRef, ...] = ()
+    # Supported candidates not eligible to lead by temporal relevance (m21 contract §11): their effect ended
+    # before the onset while a linked candidate is tied to it. Their claims are unchanged; presentation only.
+    leading_actor_set_aside: tuple[EntityRef, ...] = ()
     # Provenance, outside the epistemic digest (late-evidence-design.md §4): per scope, whether the
     # window was observed continuously and whether transport was proven. Recorded by the control
     # plane, read by no rule yet. None for documents written before it existed and offline runs.

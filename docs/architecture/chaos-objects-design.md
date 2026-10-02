@@ -49,3 +49,38 @@ stream), and the lab's reader roles in `sre-demo` and `lab-control` grant read a
 
 After the fix the same run journaled every experiment it created (`NetworkChaos` `lr-0`, `lr-3`; `StressChaos` `lr-1`,
 `lr-4`) with 43 watches and no relisting. The measurement of §3 (slices 1 to 3 against their frozen results) is next.
+
+## 6. Acceptance measurement (2026-10-02)
+
+Slices 1 to 3 re-run with the same scenarios, seeds, salts and engine version (2.1.0) under new suite ids
+(`slice1-co2`, `slice2-co`, `slice3-co`), so the frozen suites and their databases are untouched. Slice 3 is
+compared with its runs re-derived under the ground-truth ordering amendment (`testbed-ground-truth-contract.md` §14).
+
+| Slice | Valid | Cause / instance named | Execution witness | False strong / false `RESOLVED` / false elimination |
+|---|---|---|---|---|
+| 1, frozen | 3/3 | 3/3 / 3/3 | 0/3 | 0 / 0 / 0 |
+| 1, now | 3/3 | 3/3 / 3/3 | **1/3** (repeat 0) | 0 / 0 / 0 |
+| 2, frozen | 3/3 | 3/3 / 3/3 | 1/3 (repeat 0) | 0 / 0 / 0 |
+| 2, now | 3/3 | 3/3 / 3/3 | 1/3 (repeat 0) | 0 / 0 / 0 |
+| 3, frozen (§14) | 3/3 | 3/3 / 2/3 | 0/3 | 0 / 0 / 0 |
+| 3, now | 3/3 | 3/3 / 3/3 | 0/3 | 0 / 0 / 0 |
+
+**The acceptance bar holds:** no false strong authority, no false `RESOLVED`, the named cause unchanged in every run.
+
+Changes, run by run:
+
+- **Slice 1 repeat 0, a new execution witness** (`m21.support.observed-fault-execution`, coverage
+  `EXACT_EXPERIMENT_INSTANCE`, `EXECUTION_INTERVAL_CLOSED`, `EFFECT_INSIDE_INTERVAL`, `NO_EFFECT_BEFORE_APPLY`): the
+  effect is a readiness-probe failure (`Unhealthy`) of the exact target pod inside the experiment's closed interval.
+  Repeats 1 and 2 had no such event, so the rule did not fire (`NO_EXECUTION_WITH_INCIDENT_EFFECT_WITNESS`). The
+  witness cites events only, not the journaled experiment objects; it is the same mechanism as slice 2's one witness
+  (a probe that also failed), and the closed interval needs the experiment's `Recovered`, which the frozen repeat 0
+  never saw (it predates C9). It is not attributed to this change.
+- **Slice 3 instance 2/3 to 3/3:** the frozen repeat 1 had no supported hypothesis carrying the cause's instance UID;
+  not examined, so it is not attributed to this change either.
+
+Found on the way and fixed in the harness, not in the product: the run-isolation check counted Chaos Mesh's per-pod
+record of the run's own experiment (`PodNetworkChaos`, named after the target pod) as a foreign fault, which made the
+first slice 1 re-run (`slice1-co`) invalid three times out of three; the engine's diagnoses there were unaffected.
+
+Not measured: the cost line of §3 (scopes and API requests before and after).

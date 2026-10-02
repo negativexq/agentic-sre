@@ -29,11 +29,13 @@ from packages.evals.live.ground_truth import (
     TestbedStore,
     Timeline,
     assemble_run,
+    timeline_problems,
 )
 from packages.evals.live.journal import (
     ROLE_ALERT_OBSERVED,
     ROLE_EXECUTION_OBSERVED,
     InjectorJournal,
+    JournalEntry,
     injector_stamps,
 )
 from packages.evals.live.oracle import (
@@ -585,6 +587,46 @@ def _stamp(at: datetime, source: Source) -> Stamp:
     return Stamp(at=at, source=source)
 
 
+def probe_roles(family: str) -> ProbeRoles:
+    """Which probe view stands for which field: a direct fault has no downstream (contract §4.2)."""
+    direct = family == "direct-pod-fault"
+    return ProbeRoles(
+        target="target",
+        downstream=None if direct else "propagation",
+        symptom="symptom",
+        everything=("target", "symptom") if direct else ("target", "propagation", "symptom"),
+    )
+
+
+def rederive(
+    record: RunRecord, series: Sequence[ProbeResult], entries: Sequence[JournalEntry]
+) -> RunRecord:
+    """The run's record with its oracle fields derived again by the current rules (contract §14.4).
+
+    The injector fields, the chain and every reason that is not about the timeline are kept as recorded.
+    """
+    recorded = set(timeline_problems(record.timeline, record.family, record.clock_offset_seconds))
+    kept = [reason for reason in record.invalid_reasons if reason not in recorded]
+    execution = record.timeline.execution_started_at or record.timeline.cause_created_at
+    if execution is None or not series:
+        return record
+    removed = next((e.at for e in entries if e.role == "cause_removed" and e.ok), None)
+    oracle = oracle_stamps(
+        series,
+        probe_roles(record.family),
+        execution_started_at=execution.at,
+        cause_removed_at=removed or series[-1].observed_at,
+    )
+    fields = {
+        name: stamp
+        for name in ("cause_created_at", "execution_started_at", "alert_fired_at")
+        if (stamp := record.timeline.stamp(name)) is not None
+    }
+    timeline = Timeline(**fields, **oracle)  # type: ignore[arg-type]
+    reasons = timeline_problems(timeline, record.family, record.clock_offset_seconds, record.chain)
+    return record.model_copy(update={"timeline": timeline, "invalid_reasons": (*reasons, *kept)})
+
+
 def _finish(
     manifest: SuiteManifest,
     spec: ScenarioSpec,
@@ -603,15 +645,9 @@ def _finish(
     removed = next((e.at for e in entries if e.role == "cause_removed" and e.ok), None)
     execution_at = injector.get("execution_started_at", injection.injected_at)
     series = run.writer.read()
-    direct = spec.family == "direct-pod-fault"
     oracle = oracle_stamps(
         series,
-        ProbeRoles(
-            target="target",
-            downstream=None if direct else "propagation",
-            symptom="symptom",
-            everything=("target", "symptom") if direct else ("target", "propagation", "symptom"),
-        ),
+        probe_roles(spec.family),
         execution_started_at=execution_at,
         cause_removed_at=removed or run.clock.now(),
     )

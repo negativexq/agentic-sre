@@ -47,6 +47,7 @@ from packages.evals.live.oracle import (
     estimate_offset_seconds,
     first_run_start,
     oracle_stamps,
+    round_starts,
 )
 
 T0 = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
@@ -499,3 +500,83 @@ def test_an_applied_event_read_within_its_one_second_resolution_is_the_creation_
     assert genuine["execution_started_at"] == at(8.0)
     later = injector_stamps(entries(at(11.0)))
     assert later["execution_started_at"] == at(11.0)
+
+
+# ---- contract §14: ordering by sampling round, propagation only where the chain has it ---------
+
+
+def test_two_oracle_instants_of_one_round_are_simultaneous_whatever_their_end_stamps() -> None:
+    round_at = at(11.3)
+    effect = Stamp(at=at(12.54), source=Source.ORACLE, round_at=round_at)
+    earlier_end = Stamp(at=at(12.53), source=Source.ORACLE, round_at=round_at)
+    same_round = timeline(
+        target_effect_at=effect, propagation_started_at=earlier_end, symptom_started_at=earlier_end
+    )
+    assert timeline_problems(same_round, "config-or-rollout", 0) == []
+    # an inversion across rounds is still a real inconsistency
+    a_round_before = Stamp(at=at(12.53), source=Source.ORACLE, round_at=at(10.0))
+    across = timeline(target_effect_at=effect, propagation_started_at=a_round_before)
+    assert "propagation_started_at precedes target_effect_at" in timeline_problems(
+        across, "config-or-rollout", 0
+    )
+
+
+def test_a_round_is_a_stretch_of_the_series_in_which_no_probe_repeats() -> None:
+    first = [ProbeResult("target", at(0.002), True), ProbeResult("client", at(0.0), True)]
+    second = [ProbeResult("target", at(1.001), True), ProbeResult("client", at(1.003), True)]
+    rounds = round_starts(first + second)
+    assert {rounds[r] for r in first} == {at(0.0)}
+    assert {rounds[r] for r in second} == {at(1.001)}
+
+
+def concurrent(rounds: list[tuple[float, dict[str, tuple[bool, float]]]]) -> list[ProbeResult]:
+    """Rounds as the oracle writes them: every probe once per round, with its outcome and latency."""
+    return [
+        ProbeResult(probe, at(start), ok, latency)
+        for start, outcomes in rounds
+        for probe, (ok, latency) in outcomes.items()
+    ]
+
+
+def test_propagation_in_the_effects_own_round_is_not_pushed_to_the_next_one() -> None:
+    """Slice 3 repeat 0: the client's slow sample ended 10 ms before the target's in the same round."""
+    healthy = {"target": (True, 0.02), "propagation": (True, 0.01), "symptom": (True, 0.01)}
+    slow = {"target": (False, 1.244), "propagation": (False, 1.234), "symptom": (False, 1.234)}
+    rounds = [(float(i), healthy) for i in range(3)] + [(3.0 + 1.6 * i, slow) for i in range(4)]
+    stamps = oracle_stamps(
+        concurrent(rounds),
+        ProbeRoles(target="target", downstream="propagation", symptom="symptom"),
+        execution_started_at=at(0.5),
+        cause_removed_at=at(30),
+    )
+    assert stamps["propagation_started_at"].round_at == stamps["target_effect_at"].round_at == at(3)
+    assert stamps["propagation_started_at"].at < stamps["target_effect_at"].at
+    recorded = timeline(
+        execution_started_at=stamp("execution_started_at", 0.5),
+        target_effect_at=stamps["target_effect_at"],
+        propagation_started_at=stamps["propagation_started_at"],
+        symptom_started_at=stamps["symptom_started_at"],
+    )
+    assert timeline_problems(recorded, "config-or-rollout", 0) == []
+
+
+def _chain(*roles: str) -> Chain:
+    return Chain(
+        links=tuple(
+            Link(role=role, actor=f"shop/Deployment/{role}", knowable=False, mechanism="delay")  # type: ignore[arg-type]
+            for role in roles
+        )
+    )
+
+
+def test_propagation_may_be_null_exactly_when_the_chain_has_no_propagation_link() -> None:
+    without = timeline(propagation_started_at=None)
+    assert (
+        timeline_problems(
+            without, "scheduled-recurring", 0, _chain("cause", "execution", "symptom")
+        )
+        == []
+    )
+    assert "missing propagation_started_at" in timeline_problems(
+        without, "scheduled-recurring", 0, _chain("cause", "propagation", "symptom")
+    )

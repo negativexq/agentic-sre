@@ -998,7 +998,7 @@ In S24 the alert channel is observed from 15:23:59 and records new diagnostic ep
 
 **Owner decision (after the result, recorded as such):** S24 is a second `BENCHMARK_EVIDENCE_GROUND_TRUTH_CONFLICT` (the environment is observed degraded before the recorded fault). No scenario-specific accommodation is made. A4-V2 ships on its safety gates. The contract text above is unchanged.
 
-## 11. Temporal relevance of supported leaders (amendment, PROPOSED 2026-10-02; shadow first)
+## 11. Temporal relevance of supported leaders (amendment; adopted for presentation 2026-10-03, `W` = 5 min)
 
 **Measured problem.** In the ten-hour product-mode run (`testbed_longrun_run1`) 252 of 300 diagnoses showed
 competing leaders, every one of them in the `SUPPORTED` tier. Their 561 candidates were mostly old at the incident's
@@ -1085,3 +1085,79 @@ different fault rhythm, or the held-out set, is the independent check. The first
 unknown end make others ineligible; definition 5 now requires an observed initiation within `W` or an observed
 execution in progress. Rerun with definition 5, every number in the table above is unchanged: in these data every
 candidate that displaced others had in fact begun within the window.
+
+### 11.1 Independent check: pre-registration (owner-approved 2026-10-02, frozen before the run)
+
+Written and committed before the run starts; nothing below changes after its data is seen.
+
+**Run.** Product mode, three hours, `packages.evals.live.longrun` with tag `indep1`. The schedule is generated from
+a seed by `rhythm_schedule` and frozen in `.local/longrun/indep1/schedule.json`: seed **20261003** (the first seed
+from 20261002 whose schedule satisfies `schedule_problems`), sha256
+`e5ae7b2c9dcca5b567abcdba1d60c63967aaac0e4e46ec5f2922bf6f57dff6d7`. The rhythm differs on purpose
+from the runs the shadow was first measured on: gaps from three bands (4–10, 15–25, 35–50 minutes), seeded durations
+(60–300 s) and order, the same target hit twice in a row, three overlapping pairs (one with a 20-minute fault still in
+effect when the second starts), a quiet stretch of 38 minutes, and one control-plane restart. Fault kinds are the
+existing three; no injection code changes. The schedule has 11 faults (the design estimate of 15 to 18 was wrong;
+the long bands fill the time).
+
+**Frozen.** The filter as defined above, including definition 5, in `packages/evals/temporal_relevance.py` at the
+commit of this section; `W` = 5, 15 and 30 minutes; the truth rule: every fault whose
+[created − 1 min, removed + 3 min] contains the incident onset (`truth_at`), so an overlap has more than one true cause.
+
+**Hard criteria** (any violation: the filter is not adopted as it stands, and each case is reported):
+
+1. no true cause demoted;
+2. in an overlap, no cause in effect demoted;
+3. no `COMPETING` to `SINGLE` with a leader outside the truth;
+4. no `NOT_ESTABLISHED` added.
+
+**Descriptive, no threshold:** `COMPETING` to `SINGLE` per `W`; every change in a no-fault diagnosis, examined one by
+one; the number decided by the strong rule.
+
+**Choice of `W`, fixed now:** the smallest `W` among 5, 15 and 30 with no hard violation on both the development runs
+(`testbed_longrun_run1`, `testbed_longrun_verify2`) and this run. If none qualifies, nothing is adopted. Placement
+(engine or presentation) stays the owner's decision after the result.
+
+### 11.2 Independent check: result (2026-10-02)
+
+Run `indep1` (`testbed_longrun_indep1`) completed as scheduled: 11 faults, 41 incidents, 82 diagnoses (78
+`COMPETING`, 4 `SINGLE`), no change-stream gap, one control-plane restart. Measured once, after the run, with
+`longrun measure`; the development runs were measured with the same code.
+
+| Run | `W` | Hard violations | `COMPETING` → `SINGLE` (fault) | Changes without a fault |
+|---|---|---|---|---|
+| `indep1` (independent) | 5 | **none** | 63 of 78 | none (no incident outside a fault) |
+| `indep1` | 15 | none | 25 of 78 | none |
+| `indep1` | 30 | none | 19 of 78 | none |
+| `run1` (development) | 5 / 15 / 30 | none | 186 of 210 at every `W` | 0 / 8 / 20 of 66 |
+| `verify2` (development) | 5 / 15 / 30 | none | 30 / 30 / 12 of 30 | 0 / 4 / 4 of 8 |
+
+At `W` = 5 in `indep1`, by the number of true causes at the onset:
+
+- one true cause in the candidate pool: 49 to `SINGLE` on it, 1 left `COMPETING`;
+- two true causes (an overlap), both in the pool: 10, all left `COMPETING` with both eligible; neither was demoted;
+- two true causes, only one in the pool: 14 to `SINGLE` on that one, 4 already `SINGLE`; the other cause was never a
+  candidate, so the filter cannot have removed it;
+- one true cause not in the pool: 4, left `COMPETING`; the engine's pool missed the cause, which the filter neither
+  hides nor repairs (an engine finding for C2 or C5, not examined here).
+
+**Choice of `W` by the pre-registered rule:** 5 minutes, the smallest with no hard violation on both development
+runs and the independent run; it is also the only one of the three that changed no diagnosis outside a fault. The
+quiet stretch of `indep1` produced no incident, so the independent run says nothing about no-fault behaviour; that
+evidence comes from the development runs alone. Adoption and placement (engine or presentation) are the owner's
+decision.
+
+### 11.3 Adoption for presentation (owner-approved 2026-10-03)
+
+Adopted in the operator's leader projection only, with `W` = 5 minutes (§11.2): the engine's `root_cause`, ranking,
+support rules and epistemic digest are unchanged; moving the rule into leader selection itself stays a separate
+decision. One implementation serves both the projection and the shadow (`packages/rca/temporal_relevance.py`; the
+shadow in `packages/evals` only builds its inputs from stored documents), so what was measured is what is shown.
+The projection lists only the eligible supported candidates (`leading_actor_candidates`, `SINGLE` when one remains)
+and records the others in `leading_actor_set_aside`, outside the digest; their claims are untouched. A claim without
+an onset (a record from before these fields) leaves the filter inactive.
+
+**Check on real data.** The control plane with this change re-diagnosed all 41 incidents of `indep1` on a copy of its
+database (`testbed_longrun_indep1_c15`): for every incident the shown display and candidates equal the shadow's
+prediction at `W` = 5 from the earlier diagnosis (41 of 41); `root_cause` unchanged in 41, epistemic digest equal in
+41; 33 incidents now show one leader and 8 still compete (35 with a candidate set aside).

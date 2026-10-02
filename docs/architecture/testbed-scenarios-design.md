@@ -335,3 +335,10 @@ first experiment was applied, so the alert preceded the symptom. **The lag alert
 (produced minus consumed over 2 minutes above 10 messages; a 16-message imbalance was enough in the independent run),
 which is also a risk for every family that accepts them. Owner-approved: the `scheduled-recurring` family expects the
 latency alerts only (its designed symptom); decided before any scored run of slice 4b.
+
+**Slice 4b result (2026-10-03, engine 2.1.0, `DEV`, manifest `dd0603f8…`, seeds 44 to 46).** Third phase 0 valid with
+`PaymentDbQueryLatencyHigh` as the first alert (the lag alerts fired again before the Schedule existed). The three
+repeats: **3 of 3 valid**, each with three spawned experiments and its first latency alert 119 to 121 s after the
+Schedule was created (30 s after the first spawn); cause (the Schedule) and its instance named 3 of 3; **false strong
+authority 0, false `RESOLVED` 0, false elimination 0**; execution witness 0 of 3 and effect link 0 of 3 (a delay leaves
+no pod-level failure, as in slice 1); median 8 s to the diagnosis. The acceptance bar holds.

@@ -498,7 +498,7 @@ the interval without observation is the time between the closing of the last con
 relist, about a second; that is inferred, not measured, and the gap does not yet record its start. Busy namespaces
 did not expire. Every other kind receives bookmarks and never expired.
 
-### 15.6 Synthetic bookmarks for Event scopes (amendment, APPROVED and implemented 2026-10-02; soak pending)
+### 15.6 Synthetic bookmarks for Event scopes (amendment, APPROVED and implemented 2026-10-02; soak passed)
 
 **Measured.** §15.3 called a quiet Event scope's expiry "a true loss of continuity". The ten-hour product-mode run
 (`testbed_longrun_run1`) shows it is avoidable. The Connector's reconciliation LIST (every 600 s) also refreshes each
@@ -535,3 +535,18 @@ a minute today (§15.5).
 one held by a watch that expired or failed discarded. Live: a soak of at least three hours on the lab, counting
 `RESOURCE_VERSION_EXPIRED` gaps of Event scopes (expected: near zero instead of about six an hour) and the extra
 requests.
+
+**Soak (2026-10-02, `soak_20261001T2214`, stopped by the owner after 137 of 180 minutes).** Same load as §15.5 (a
+rollout of `lab-control/isolated-echo` every two minutes), 31 watches throughout.
+
+| Quantity | §15.5 (180 min, no synthetic bookmarks) | This soak (137 min) |
+|---|---|---|
+| Event watch expiries | 35 | **0** |
+| Change-stream gaps recorded | 35 | **0** |
+| Watch or relist failures | 0 | 0 |
+| Synthetic bookmarks taken / adopted | — | 207 / 53 |
+| API requests per minute | about 9.9 | about 11.0 (434 LIST, 868 WATCH, 207 `limit=1` LIST) |
+
+At the earlier rate about 26 expiries were due in 137 minutes; none occurred. The extra cost matches the estimate
+(about 1.5 requests a minute).
+

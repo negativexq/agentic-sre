@@ -160,11 +160,31 @@ class Link(Model):
         return self
 
 
+class SymptomGroup(Model):
+    """Contract §15.2: the incidents raised by ``alerts`` belong here; ``causes`` really contribute to them and
+    ``required`` must be named for the group to count as found. Written from the scenario, never from the engine."""
+
+    alerts: tuple[str, ...]
+    causes: tuple[str, ...]
+    required: tuple[str, ...]
+
+    @model_validator(mode="after")
+    def _required_are_causes(self) -> SymptomGroup:
+        if not set(self.required) <= set(self.causes):
+            raise ValueError("a required cause must be one of the group's causes")
+        return self
+
+
 class Chain(Model):
     version: Literal["testbed.chain.v1"] = "testbed.chain.v1"
     links: tuple[Link, ...] = ()
     # A negative control states why no path exists (checked, not asserted: contract §2.5).
     construction: str | None = None
+    # Competing causes (contract §15): which incidents belong to which causes.
+    symptom_groups: tuple[SymptomGroup, ...] = ()
+
+    def group_of(self, alert: str) -> SymptomGroup | None:
+        return next((g for g in self.symptom_groups if alert in g.alerts), None)
 
     def actors(self) -> frozenset[str]:
         return frozenset(link.actor for link in self.links)
@@ -179,6 +199,12 @@ def chain_problems(chain: Chain, family: str) -> list[str]:
         problems.append("a negative control must state its construction")
     if family == "competing-causes" and len(chain.of_role("cause")) < 2:
         problems.append("competing causes need at least two cause links")
+    if family == "competing-causes" and len(chain.symptom_groups) < 2:
+        problems.append("competing causes need at least two symptom groups")
+    causes = {link.actor for link in chain.of_role("cause")}
+    for group in chain.symptom_groups:
+        if not set(group.causes) <= causes:
+            problems.append("a symptom group names a cause the chain does not have")
     if family not in {"negative-control"} and not chain.of_role("cause"):
         problems.append("the chain names no cause")
     return problems

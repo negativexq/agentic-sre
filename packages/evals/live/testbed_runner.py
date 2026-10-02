@@ -9,6 +9,7 @@ back-filled. The engine is only ever *read* (its stored diagnosis); it never see
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import random
 import shutil
@@ -26,6 +27,7 @@ from packages.evals.live.ground_truth import (
     Source,
     Stamp,
     SuiteManifest,
+    SymptomGroup,
     TestbedStore,
     Timeline,
     assemble_run,
@@ -71,12 +73,18 @@ DIRECT_POD_ALERTS = DEPENDENCY_ALERTS | {
     "OrderDbQueryLatencyHigh",
     "OrderWorkerConsumerErrorsHigh",
 }
+LAG_ALERTS = frozenset({"KafkaConsumerLag", "OrderWorkerLagHigh"})
+LATENCY_ALERTS = DEPENDENCY_ALERTS - LAG_ALERTS
 ALERTS_BY_FAMILY: dict[str, frozenset[str]] = {
     "direct-pod-fault": frozenset(DIRECT_POD_ALERTS),
     "config-or-rollout": DEPENDENCY_ALERTS | {"PaymentServiceLatencyCritical"},
     # the designed symptom is latency; the lag alerts fire without any fault in this lab (design, slice 4)
-    "scheduled-recurring": DEPENDENCY_ALERTS - {"KafkaConsumerLag", "OrderWorkerLagHigh"},
+    "scheduled-recurring": LATENCY_ALERTS,
+    "competing-causes": DEPENDENCY_ALERTS,
 }
+# The alerts that stamp the timeline when they differ from the collected ones: a competing run's timeline is the
+# payment delay's (contract §15.4), so only its latency alerts may be its ``alert_fired_at``.
+TIMELINE_ALERTS_BY_FAMILY: dict[str, frozenset[str]] = {"competing-causes": LATENCY_ALERTS}
 ALERT_LATENCY_SECONDS = 0.5  # the latency of the lab's alert rules: the symptom threshold
 RECOVERY_TIMEOUT_SECONDS = 180.0
 REDIAGNOSE_SETTLE_SECONDS = (
@@ -116,6 +124,8 @@ class RunParameters:
     # scheduled-recurring: how often the Schedule spawns an experiment and how long each lasts
     spawn_every_seconds: int = 60
     spawn_seconds: int = 20
+    # competing-causes: when the second cause follows the first
+    second_offset_seconds: float = 0.0
 
 
 def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
@@ -137,10 +147,12 @@ def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
             "direct-pod-fault": "cpu-stress",
             "config-or-rollout": "env-delay",
             "scheduled-recurring": "scheduled-delay",
+            "competing-causes": "competing",
         }.get(spec.family, "network-delay"),
         cpu_workers=int(draw("cpu_workers", 16.0)),
         spawn_every_seconds=int(draw("spawn_every_seconds", 60.0)),
         spawn_seconds=int(draw("spawn_seconds", 20.0)),
+        second_offset_seconds=draw("second_offset_seconds", 0.0),
     )
 
 
@@ -170,6 +182,8 @@ class Injection:
     execution_uid: str = ""
     # a Schedule's executions: the experiments it spawned, (name, uid), captured before it is removed
     spawned: tuple[tuple[str, str], ...] = ()
+    # competing causes: the second cause, injected after a seeded offset (contract §15)
+    companion: Injection | None = None
 
 
 @dataclass(frozen=True)
@@ -374,7 +388,53 @@ def scheduled_chain(injection: Injection) -> Chain:
     )
 
 
+def competing_chain(injection: Injection) -> Chain:
+    """The world's chain for a delay on ``payment-service`` plus a pod-kill of ``order-worker`` (contract §15)."""
+    delay = dependency_chain(injection)
+    kill = injection.companion
+    if kill is None:
+        return delay
+    experiment = f"sre-demo/{injection.kind}/{injection.name}"
+    killer = f"sre-demo/{kill.kind}/{kill.name}"
+    return Chain(
+        links=(
+            *delay.links,
+            Link(
+                role="cause",
+                actor=killer,
+                instance_uid=kill.uid,
+                knowable=True,
+                mechanism="PodChaos pod-kill",
+            ),
+            Link(
+                role="execution",
+                actor=f"sre-demo/Pod/{kill.target_pod}",
+                instance_uid=kill.target_pod_uid,
+                knowable=True,
+                mechanism="PodChaos pod-kill",
+                evidence_class="execution",
+            ),
+            Link(
+                role="symptom",
+                actor="sre-demo/Deployment/order-worker",
+                knowable=False,
+                mechanism="consumer lag while the worker is gone",
+            ),
+        ),
+        symptom_groups=(
+            SymptomGroup(
+                alerts=tuple(sorted(LATENCY_ALERTS)), causes=(experiment,), required=(experiment,)
+            ),
+            # the delay slows order-worker's calls to payment-service, so it adds to the lag too (§15.1)
+            SymptomGroup(
+                alerts=tuple(sorted(LAG_ALERTS)), causes=(killer, experiment), required=(killer,)
+            ),
+        ),
+    )
+
+
 CHAINS = {
+    "competing-causes": competing_chain,
     "direct-pod-fault": direct_pod_chain,
     "config-or-rollout": config_chain,
     "scheduled-recurring": scheduled_chain,
@@ -508,6 +568,7 @@ def run_once(
     spec = manifest.spec(scenario_id)
     alerts = alerts or ALERTS_BY_FAMILY.get(spec.family, DEPENDENCY_ALERTS)
     params = derive_parameters(spec, spec.seeds[repeat])
+    timeline_alerts = TIMELINE_ALERTS_BY_FAMILY.get(spec.family, alerts)
     run_id = f"{manifest.suite_id}-{scenario_id}-{repeat}"
     work = work_root / run_id
     if work.exists():
@@ -568,8 +629,20 @@ def run_once(
         applied: datetime | None = None
         deadline = clock.now().timestamp() + params.duration_seconds
         next_alert_poll = 0.0
+        companion: Injection | None = None
         while clock.now().timestamp() < deadline:
             run.wait(1.0)
+            if (
+                params.fault == "competing"
+                and companion is None
+                and (clock.now() - injection.injected_at).total_seconds()
+                >= params.second_offset_seconds
+            ):
+                companion = world.inject(
+                    dataclasses.replace(params, fault="pod-kill"),
+                    run.journal,
+                    f"pod-kill-{params.seed}",
+                )
             if applied is None:
                 applied = world.applied_at(injection)
                 if applied is not None:
@@ -581,7 +654,7 @@ def run_once(
                     )
             if alert_at is None and clock.now().timestamp() >= next_alert_poll:
                 next_alert_poll = clock.now().timestamp() + ALERT_POLL_SECONDS
-                alert_at = world.alert_started_at(alerts, injection.injected_at)
+                alert_at = world.alert_started_at(timeline_alerts, injection.injected_at)
                 if alert_at is not None:
                     run.journal.record(
                         verb="observe",
@@ -591,11 +664,15 @@ def run_once(
                     )
         if applied is None:
             problems.append("the controller's Applied event was never observed")
-        injection = world.settle(injection)
+        injection = dataclasses.replace(world.settle(injection), companion=companion)
+        if params.fault == "competing" and companion is None:
+            problems.append("the second cause was never injected")
         if injection.kind == "Schedule" and not injection.spawned:
             problems.append("the schedule spawned no experiment before it was removed")
         # 3. removal, then recovery of every probe view
         world.remove(injection, run.journal)
+        if injection.companion is not None:
+            world.remove(injection.companion, run.journal)
         removed_at = clock.now()
         recover_by = removed_at.timestamp() + RECOVERY_TIMEOUT_SECONDS
         while clock.now().timestamp() < recover_by:
@@ -767,6 +844,7 @@ def _finish(
             Diagnosis.model_validate(primary.document),
             tier=spec.tier,
             also=[Diagnosis.model_validate(d.document) for d in stored if d is not primary],
+            incidents=[(d.alert, Diagnosis.model_validate(d.document)) for d in stored],
         )
         store.write_artifact(record, "score.json", score.model_dump_json().encode())
     shutil.rmtree(work, ignore_errors=True)

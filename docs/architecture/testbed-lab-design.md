@@ -194,3 +194,10 @@ Three defects surfaced during the recreation and were fixed before it passed:
    The gate now retries for up to two minutes and reports the last failure.
 
 B2 is done. What remains for the testbed is B3 (the control plane outside the lab) and B4 (scenarios).
+
+## 14. Tempo memory headroom (2026-10-02, owner-approved)
+
+In the ten-hour product-mode run Tempo, limited to 1 GiB, had been OOM-killed 23 times in 35 hours; 46 of 408 trace
+reads (11%) failed within half a second of being made, all in the minutes of a restart. `make lab-tune` now raises
+Tempo's memory limit to 2 GiB (`infra/kubernetes/lab-tempo-patch.yaml`); the observability manifest is unchanged.
+The node had 5 GiB free. Restarts are counted again in the next fault run.

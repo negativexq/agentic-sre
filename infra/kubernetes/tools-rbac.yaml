@@ -25,6 +25,10 @@ rules:
   - apiGroups: ["autoscaling"]
     resources: ["horizontalpodautoscalers"]
     verbs: ["get", "list", "watch"]
+  # experiments created beside their targets (docs/architecture/chaos-objects-design.md)
+  - apiGroups: ["chaos-mesh.org"]
+    resources: ["networkchaos", "podchaos", "stresschaos", "iochaos", "httpchaos", "schedules"]
+    verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

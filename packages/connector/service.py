@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import threading
+import time
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -42,6 +43,9 @@ from packages.rca.provider_adapter import ProviderReaders
 logger = logging.getLogger(__name__)
 
 CONNECTOR_VERSION = "0.1"
+# contract §15.6: kinds the API server sends no bookmarks for, and how often to learn a newer version
+SYNTHETIC_BOOKMARK_KINDS = frozenset({"Event"})
+SYNTHETIC_BOOKMARK_SECONDS = 120.0
 _MESSAGE_LIMIT = 500
 
 
@@ -129,6 +133,10 @@ class Connector:
         self._pending_relists: set[ListingScope] = set()  # failed scope relists (contract §15.4)
         # the last instant each scope was observed continuously (late-evidence-design.md §4.2)
         self._continuous_until: dict[ListingScope, datetime] = {}
+        # contract §15.6: the watch open per scope, and a synthetic bookmark held for that watch
+        self._open_watches: dict[ListingScope, int] = {}
+        self._watch_ids = 0
+        self._synthetic: dict[ListingScope, tuple[int, str]] = {}
         self.watch_stats: dict[str, int] = defaultdict(int)
 
     def handle(self, payload: bytes) -> bytes:
@@ -219,18 +227,28 @@ class Connector:
             fingerprint = alert.get("fingerprint")
             if payload is not None and isinstance(fingerprint, str):
                 current[fingerprint] = payload
+        for fingerprint, payload in list(self._known_alerts.items()):
+            later = current.get(fingerprint)
+            if later is not None and later.get("startsAt") == payload.get("startsAt"):
+                continue  # the same occurrence, still firing
+            # Gone, or replaced: Alertmanager holds one alert per fingerprint, so a new start means
+            # this occurrence ended, at the latest when the new one began.
+            ended = later.get("startsAt") if later is not None else None
+            resolved = {
+                **payload,
+                "status": "resolved",
+                "endsAt": ended if isinstance(ended, str) else completed.isoformat(),
+            }
+            self._put(
+                self._alerts,
+                wire.AlertItem(seq=0, observed_at=completed, origin="poll", alert=resolved),
+            )
         for fingerprint, payload in current.items():
-            if fingerprint not in self._known_alerts:
+            known = self._known_alerts.get(fingerprint)
+            if known is None or known.get("startsAt") != payload.get("startsAt"):
                 self._put(
                     self._alerts,
                     wire.AlertItem(seq=0, observed_at=completed, origin="poll", alert=payload),
-                )
-        for fingerprint, payload in list(self._known_alerts.items()):
-            if fingerprint not in current:
-                resolved = {**payload, "status": "resolved", "endsAt": completed.isoformat()}
-                self._put(
-                    self._alerts,
-                    wire.AlertItem(seq=0, observed_at=completed, origin="poll", alert=resolved),
                 )
         self._known_alerts = current
         self._put(
@@ -409,6 +427,48 @@ class Connector:
 
     def watch_scope_once(self, scope: ListingScope) -> bool:
         """Consume one scope's watch until it ends; False when continuity was lost (a gap and a snapshot)."""
+        with self._changes_lock:
+            self._watch_ids += 1
+            watch_id = self._watch_ids
+            self._open_watches[scope] = watch_id
+            self._synthetic.pop(scope, None)
+        try:
+            return self._watch_scope(scope, watch_id)
+        finally:
+            with self._changes_lock:
+                if self._open_watches.get(scope) == watch_id:
+                    del self._open_watches[scope]
+                held = self._synthetic.get(scope)
+                if held is not None and held[0] == watch_id:
+                    del self._synthetic[scope]  # not adopted at a normal end: discarded
+
+    def refresh_bookmarks_once(self) -> None:
+        """Synthetic bookmarks (contract §15.6): a newer resume version for each open watch of a scope
+        that receives no real bookmarks, learned from a ``limit=1`` LIST while that watch is open."""
+        read_version = getattr(self.cluster, "scope_version", None)
+        if read_version is None:
+            return
+        with self._changes_lock:
+            open_watches = [
+                (scope, watch_id)
+                for scope, watch_id in self._open_watches.items()
+                if scope.kind in SYNTHETIC_BOOKMARK_KINDS
+            ]
+        for scope, watch_id in open_watches:
+            try:
+                version = str(read_version(scope))
+            except Exception:
+                logger.warning(
+                    "synthetic bookmark of %s/%s failed", scope.namespace, scope.kind, exc_info=True
+                )
+                continue
+            with self._changes_lock:
+                # open before and after the LIST, and the same watch: the LIST ran while it was open
+                if self._open_watches.get(scope) == watch_id:
+                    self._synthetic[scope] = (watch_id, version)
+                    self.watch_stats["synthetic_bookmarks"] += 1
+
+    def _watch_scope(self, scope: ListingScope, watch_id: int) -> bool:
         watch = getattr(self.cluster, "watch", None)
         with self._changes_lock:
             version = self._versions.get(scope)
@@ -476,6 +536,11 @@ class Connector:
             if generation == self._generation and scope in self._versions:
                 # the server ended the watch normally: the scope was observed without a break until now
                 self._continuous_until[scope] = self.clock()
+                held = self._synthetic.pop(scope, None)
+                current = self._versions[scope]
+                if held is not None and held[0] == watch_id and _newer(held[1], current):
+                    self._versions[scope] = held[1]  # contract §15.6: resume from the newer version
+                    self.watch_stats["synthetic_adopted"] += 1
         self.watch_stats["resumes"] += 1
         return True
 
@@ -625,9 +690,10 @@ class Connector:
         if watching:
             changes_interval = reconcile_interval
         threads: dict[ListingScope, threading.Thread] = {}
-        next_changes = next_alerts = next_stats = next_retry = next_beat = 0.0
-        elapsed = 0.0
+        next_changes = next_alerts = next_stats = next_retry = next_beat = next_bookmark = 0.0
+        started = time.monotonic()  # wall time, so the periods do not drift (contract §15.6)
         while not stop.is_set():
+            elapsed = time.monotonic() - started
             if elapsed >= next_changes:
                 self.poll_changes_once()
                 next_changes = elapsed + changes_interval
@@ -643,6 +709,9 @@ class Connector:
                         threads[scope] = thread
                         thread.start()
                         self.watch_stats["watch_starts"] += 1
+            if watching and elapsed >= next_bookmark:
+                self.refresh_bookmarks_once()
+                next_bookmark = elapsed + SYNTHETIC_BOOKMARK_SECONDS
             if watching and elapsed >= next_beat:
                 self.change_heartbeat()  # proves transport on a quiet stream (late-evidence §4.1)
                 next_beat = elapsed + 2.0
@@ -661,7 +730,6 @@ class Connector:
             step = min(changes_interval, alerts_interval, 1.0)
             if stop.wait(step):
                 break
-            elapsed += step
 
     def _dispatch(self, request: wire.Request) -> dict[str, Any]:
         args = request.args
@@ -731,6 +799,14 @@ class Connector:
         return wire.records_to_wire(
             "traffic", self.providers.prometheus.query_traffic(query.target, query.query)
         )
+
+
+def _newer(candidate: str, current: str) -> bool:
+    """Whether a resource version is later than another; opaque (non-numeric) versions never are."""
+    try:
+        return int(candidate) > int(current)
+    except ValueError:
+        return False
 
 
 def _failure(error_type: str, message: str) -> wire.Response:

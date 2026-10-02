@@ -357,7 +357,14 @@ def _one_of(column: str, values: tuple[str, ...], name: str) -> CheckConstraint:
 
 
 # Why a diagnosis revision was produced; LEGACY marks rows stored before revisions.
-DIAGNOSIS_TRIGGERS = ("INITIAL", "MANUAL", "EVIDENCE_DEADLINE", "LEGACY", "ALERT_REFIRED")
+DIAGNOSIS_TRIGGERS = (
+    "INITIAL",
+    "MANUAL",
+    "EVIDENCE_DEADLINE",
+    "LEGACY",
+    "ALERT_REFIRED",
+    "RESOLVED",
+)
 
 
 class DiagnosisRow(Base):

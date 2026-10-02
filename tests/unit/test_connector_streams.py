@@ -235,6 +235,98 @@ def test_a_poll_yields_the_occurrence_and_a_heartbeat_then_the_resolution() -> N
     assert [a.alert["status"] for a in resolved] == ["resolved"]
 
 
+def test_a_fingerprint_that_resolved_and_fired_again_between_two_polls_ends_its_old_occurrence() -> (
+    None
+):
+    from datetime import timedelta
+
+    connector, client, _, alerts, clock = make()
+    alerts.alerts = [firing("KafkaConsumerLag", "f1")]
+    connector.poll_alerts_once()
+    cursor = client.read("read_alerts", None).next_cursor
+    clock.advance(60)
+    # Alertmanager holds one alert per fingerprint: a new start means the earlier occurrence ended
+    restart = T0 + timedelta(seconds=40)
+    alerts.alerts = [firing("KafkaConsumerLag", "f1", starts=restart)]
+    connector.poll_alerts_once()
+    later = [
+        i.alert for i in client.read("read_alerts", cursor).items if isinstance(i, wire.AlertItem)
+    ]
+    assert [(a["status"], a["startsAt"]) for a in later] == [
+        ("resolved", T0.isoformat()),
+        ("firing", restart.isoformat()),
+    ]
+    assert later[0]["endsAt"] == restart.isoformat()  # ended by the time the new occurrence began
+
+
+def test_the_incident_of_an_occurrence_replaced_between_polls_does_not_stay_open() -> None:
+    from datetime import timedelta
+
+    from packages.storage.models import IncidentRow
+
+    connector, client, _, alerts, clock = make()
+    factory = session_factory()
+    consumer = AlertStreamConsumer(client, factory)
+    alerts.alerts = [firing("KafkaConsumerLag", "f1")]
+    connector.poll_alerts_once()
+    consumer.step()
+    clock.advance(60)
+    alerts.alerts = [firing("KafkaConsumerLag", "f1", starts=T0 + timedelta(seconds=40))]
+    connector.poll_alerts_once()
+    consumer.step()
+    with factory() as session:
+        statuses = sorted(row.status for row in session.query(IncidentRow))
+    assert statuses == ["OPEN", "RESOLVED"]  # the earlier occurrence's incident is closed
+
+
+def test_only_a_change_of_an_incident_starts_a_diagnosis_and_a_replay_starts_none() -> None:
+    connector, client, _, alerts, clock = make()
+    factory = session_factory()
+    created: list[list[Any]] = []
+    resolved: list[list[Any]] = []
+    consumer = AlertStreamConsumer(
+        client, factory, on_incidents=created.append, on_resolved=resolved.append
+    )
+    alerts.alerts = [firing("HighLatency", "f1")]
+    connector.poll_alerts_once()
+    consumer.step()
+    (incident,) = created[0]
+    clock.advance(60)
+    connector.poll_alerts_once()  # the same occurrence, still firing: nothing new on the stream
+    consumer.step()
+    replay = AlertStreamConsumer(  # a restarted control plane reads the buffer again
+        client, factory, on_incidents=created.append, on_resolved=resolved.append
+    )
+    replay.step()
+    assert created == [[incident]] and resolved == []
+    alerts.alerts = []
+    clock.advance(60)
+    connector.poll_alerts_once()
+    consumer.step()
+    assert resolved == [[incident]] and created == [[incident]]
+
+
+def test_a_replaced_occurrence_reports_its_incident_resolved_and_the_new_one_created() -> None:
+    from datetime import timedelta
+
+    connector, client, _, alerts, clock = make()
+    factory = session_factory()
+    created: list[list[Any]] = []
+    resolved: list[list[Any]] = []
+    consumer = AlertStreamConsumer(
+        client, factory, on_incidents=created.append, on_resolved=resolved.append
+    )
+    alerts.alerts = [firing("KafkaConsumerLag", "f1")]
+    connector.poll_alerts_once()
+    consumer.step()
+    clock.advance(60)
+    alerts.alerts = [firing("KafkaConsumerLag", "f1", starts=T0 + timedelta(seconds=40))]
+    connector.poll_alerts_once()
+    consumer.step()
+    first, second = created[0][0], created[1][0]
+    assert first != second and resolved == [[first]]
+
+
 def test_a_webhook_received_locally_reaches_the_same_stream() -> None:
     connector, client, _, _, _ = make()
     delivery = {

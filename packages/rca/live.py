@@ -167,6 +167,7 @@ class KubernetesClusterReader:
 
     def __init__(self, *, chaos_namespaces: Sequence[str] = ("chaos-mesh",)) -> None:
         self.chaos_namespaces = tuple(chaos_namespaces)
+        self._skipped_chaos_scopes: set[ListingScope] = set()
         self._module: Any | None = None
         self._api_client: Any | None = None
         # the resourceVersion each Event scope's last LIST returned (connector contract §15)
@@ -220,7 +221,9 @@ class KubernetesClusterReader:
                     versions[scope] = str(version)
                 objects.extend(self._serialize(item, kind, "v1") for item in items)
         custom = kubernetes.client.CustomObjectsApi()
-        for namespace in self.chaos_namespaces:
+        # Experiments live beside their targets as well as in the chaos namespaces
+        # (chaos-objects-design.md §2).
+        for namespace in dict.fromkeys((*namespaces, *self.chaos_namespaces)):
             for kind, plural in _CHAOS_PLURALS:
                 scope = ListingScope(namespace, kind)
                 try:
@@ -229,6 +232,20 @@ class KubernetesClusterReader:
                         "chaos-mesh.org", "v1alpha1", namespace, plural
                     )
                 except Exception as exc:  # CRD not installed or not readable
+                    status = getattr(exc, "status", None)
+                    if namespace not in self.chaos_namespaces and status in (403, 404):
+                        # Optional here: no Chaos Mesh (404) or no permission to read it (403). Skipped,
+                        # not failed, so it never makes the listing incomplete (measured: a 403 kept the
+                        # Connector relisting forever); said once per scope.
+                        if scope not in self._skipped_chaos_scopes:
+                            self._skipped_chaos_scopes.add(scope)
+                            _log.warning(
+                                "chaos experiments in %s are not listed (%s %s)",
+                                namespace,
+                                status,
+                                type(exc).__name__,
+                            )
+                        continue
                     failures.append(ListingFailure(scope, f"{type(exc).__name__}: {exc}"))
                     continue
                 completed.add(scope)
@@ -284,6 +301,33 @@ class KubernetesClusterReader:
         response = getattr(getattr(kubernetes.client, group)(), method)(scope.namespace)
         items = [self._serialize(item, scope.kind, "v1") for item in response.items]
         return items, str(response.metadata.resource_version)
+
+    def scope_version(self, scope: ListingScope) -> str:
+        """The current resource version of one scope from a consistent ``limit=1`` LIST (contract §15.6)."""
+        kubernetes, _api_client = self._client()
+        if scope.kind == "Event":
+            response: Any = kubernetes.client.CoreV1Api().list_namespaced_event(
+                scope.namespace, limit=1
+            )
+        elif scope.kind in _CHAOS_KINDS:
+            response = kubernetes.client.CustomObjectsApi().list_namespaced_custom_object(
+                "chaos-mesh.org", "v1alpha1", scope.namespace, _CHAOS_KINDS[scope.kind], limit=1
+            )
+        else:
+            group, method = _NAMESPACED_METHODS[scope.kind]
+            response = getattr(getattr(kubernetes.client, group)(), method)(
+                scope.namespace, limit=1
+            )
+        self.api_calls["bookmark"] += 1
+        metadata = response.get("metadata", {}) if isinstance(response, dict) else response.metadata
+        version = (
+            metadata.get("resourceVersion")
+            if isinstance(metadata, dict)
+            else getattr(metadata, "resource_version", None)
+        )
+        if not version:
+            raise RuntimeError(f"no resource version for {scope.namespace}/{scope.kind}")
+        return str(version)
 
     def watch(
         self, scope: ListingScope, resource_version: str, *, timeout_seconds: int = 300

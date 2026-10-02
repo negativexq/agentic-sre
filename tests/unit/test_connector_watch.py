@@ -62,6 +62,8 @@ class FakeWatchCluster:
         self.lists = 0
         self.scope_lists: list[ListingScope] = []
         self.scope_down = False
+        self.latest = "10"  # what a ``limit=1`` LIST of a scope reports as its version
+        self.version_reads: list[ListingScope] = []
 
     def list_objects(self, namespaces: Sequence[str]) -> ObjectListing:
         self.lists += 1
@@ -83,6 +85,11 @@ class FakeWatchCluster:
         items = list(self.objects.values()) if scope == PODS else []
         return items, str(self.version)
 
+    def scope_version(self, scope: ListingScope) -> str:
+        """A consistent ``limit=1`` LIST of one scope: only its version (contract §15.6)."""
+        self.version_reads.append(scope)
+        return self.latest
+
     def watch(self, scope: ListingScope, resource_version: str) -> Iterator[Any]:
         self.watched_from.append((scope, resource_version))
         queue = self.batches.get(scope) or []
@@ -91,7 +98,18 @@ class FakeWatchCluster:
         batch = queue.pop(0)
         if isinstance(batch, BaseException):
             raise batch
-        return iter(batch)
+        return self._replay(batch)
+
+    @staticmethod
+    def _replay(batch: list[Any]) -> Iterator[Any]:
+        """Yield the scripted events; a callable runs while the watch is open, an exception ends it."""
+        for item in batch:
+            if isinstance(item, BaseException):
+                raise item
+            if callable(item):
+                item()
+                continue
+            yield item
 
 
 def event(kind: Any, body: dict[str, Any], version: str) -> Any:
@@ -637,3 +655,94 @@ def test_the_mirror_measures_how_far_behind_the_connectors_clock_its_own_clock_r
     smallest, count = mirror.take_clock_sample()
     assert count == 3 and smallest == 1.5
     assert mirror.take_clock_sample() == (None, 0)
+
+
+# ---- contract §15.6: synthetic bookmarks for scopes without real bookmarks ----
+
+
+def test_a_synthetic_bookmark_taken_while_the_watch_was_open_is_its_next_resume_version() -> None:
+    connector, _, cluster, _ = make()
+    cluster.latest = "50"
+    cluster.batches[EVENTS] = [[connector.refresh_bookmarks_once]]  # the LIST runs mid-watch
+    connector.watch_scope_once(EVENTS)  # the server then ends the watch normally
+    connector.watch_scope_once(EVENTS)
+    assert [v for s, v in cluster.watched_from if s == EVENTS] == ["10", "50"]
+
+
+def test_a_synthetic_bookmark_taken_between_two_watches_is_discarded() -> None:
+    connector, _, cluster, _ = make()
+    connector.watch_scope_once(EVENTS)
+    cluster.latest = "50"
+    connector.refresh_bookmarks_once()  # no Event watch is open: (end, list] would be skipped
+    connector.watch_scope_once(EVENTS)
+    assert [v for s, v in cluster.watched_from if s == EVENTS] == ["10", "10"]
+
+
+def test_a_synthetic_bookmark_held_by_a_watch_that_expired_is_discarded() -> None:
+    from packages.connector.watch import ResourceVersionExpired
+
+    connector, _, cluster, _ = make()
+    cluster.latest = "50"
+    cluster.batches[EVENTS] = [[connector.refresh_bookmarks_once, ResourceVersionExpired("410")]]
+    connector.watch_scope_once(EVENTS)  # expires: a scope gap and a relist to version 11
+    connector.watch_scope_once(EVENTS)
+    assert [v for s, v in cluster.watched_from if s == EVENTS] == ["10", "11"]
+
+
+def test_only_scopes_without_real_bookmarks_get_synthetic_ones() -> None:
+    connector, _, cluster, _ = make()
+    cluster.batches[EVENTS] = [[connector.refresh_bookmarks_once]]
+    cluster.batches[PODS] = [[connector.refresh_bookmarks_once]]
+    connector.watch_changes_once()
+    assert set(cluster.version_reads) == {EVENTS}
+
+
+def test_log_captures_of_concurrent_diagnoses_run_one_at_a_time(monkeypatch: Any) -> None:
+    """Concurrent captures made Loki time out a quarter of slices in the long run: they are serialized."""
+    import threading
+    import time
+
+    import apps.control_plane.diagnosis as diagnosis_module
+    from apps.control_plane.diagnosis import DiagnosisService
+    from packages.rca.live import LogCapture
+    from packages.rca.model import Alert
+
+    running = 0
+    peak = 0
+    guard = threading.Lock()
+
+    def slow_capture(*_args: Any, **_kwargs: Any) -> LogCapture:
+        nonlocal running, peak
+        with guard:
+            running += 1
+            peak = max(peak, running)
+        time.sleep(0.05)
+        with guard:
+            running -= 1
+        return LogCapture(records=(), source_read_ids=(), queried=(), failed=(), skipped=())
+
+    monkeypatch.setattr(diagnosis_module, "capture_error_logs", slow_capture)
+    service = DiagnosisService(session_factory=None, namespaces=("shop",))  # type: ignore[arg-type]
+    alert = Alert(name="HighLatency", service="checkout", starts_at=T0, labels={})
+    threads = [
+        threading.Thread(target=service._capture_logs, args=(None, [alert], (), None))
+        for _ in range(4)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert peak == 1
+
+
+def test_versions_superseded_while_a_new_mirror_catches_up_are_reported_apart() -> None:
+    """A restarted control plane reads the buffer again: what it replays was journaled before it."""
+    connector, client, cluster, _ = make()
+    cluster.batches[PODS] = [
+        [event("MODIFIED", pod("a", "11"), "11"), event("MODIFIED", pod("a", "12"), "12")]
+    ]
+    connector.watch_changes_once()
+    mirror = StreamedClusterReader(client)  # starts after both versions were on the stream
+    mirror.list_objects(["shop"])
+    assert mirror.take_superseded() == (0, 0)
+    assert mirror.take_catch_up_superseded() == (1, 0)

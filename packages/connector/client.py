@@ -260,6 +260,10 @@ class StreamedClusterReader:
         self._unread_objects: dict[str, int] = {}
         self._unread_events: dict[str, int] = {}
         self._superseded = [0, 0]
+        # the first journal read of a new reader replays the buffer: what it supersedes was journaled
+        # by an earlier process if one was following, so it is counted apart
+        self._catch_up_superseded = [0, 0]
+        self._folded = [False, False]
         self._heartbeat_lag_min: float | None = None
         self._heartbeats = 0
 
@@ -314,6 +318,19 @@ class StreamedClusterReader:
             counts = (self._superseded[0], self._superseded[1])
             self._superseded = [0, 0]
             return counts
+
+    def take_catch_up_superseded(self) -> tuple[int, int]:
+        """Object and Event versions superseded during this reader's first, catch-up journal read."""
+        with self._lock:
+            counts = (self._catch_up_superseded[0], self._catch_up_superseded[1])
+            self._catch_up_superseded = [0, 0]
+            return counts
+
+    def _fold(self, index: int, unread: dict[str, int]) -> None:
+        superseded = sum(n - 1 for n in unread.values())
+        bucket = self._superseded if self._folded[index] else self._catch_up_superseded
+        bucket[index] += superseded
+        self._folded[index] = True
 
     def take_clock_sample(self) -> tuple[float | None, int]:
         """The smallest (local clock - heartbeat's Connector time) in seconds, and the heartbeats seen.
@@ -457,7 +474,7 @@ class StreamedClusterReader:
     def list_objects(self, namespaces: Sequence[str]) -> ObjectListing:
         with self._lock:
             self._current()
-            self._superseded[0] += sum(n - 1 for n in self._unread_objects.values())
+            self._fold(0, self._unread_objects)
             self._unread_objects = {}
             wanted = set(namespaces)
             keys = sorted(k for k in self._objects if k.split("/", 1)[0] in wanted)
@@ -472,7 +489,7 @@ class StreamedClusterReader:
     def list_events(self, namespaces: Sequence[str]) -> list[dict[str, Any]]:
         with self._lock:
             self._current()
-            self._superseded[1] += sum(n - 1 for n in self._unread_events.values())
+            self._fold(1, self._unread_events)
             self._unread_events = {}
             wanted = set(namespaces)
             return [

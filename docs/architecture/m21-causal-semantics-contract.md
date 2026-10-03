@@ -1186,8 +1186,9 @@ service `S`, the **service-level effect** holds when either form holds, with a `
    outcomes first observed at or after `start` and not later than `end`, absent before `start`.
 2. **Latency** (new): paired calls from `S` (client span) to `T` (server span carrying `T`'s exact pod name) that begin
    inside `[start, end]`, compared with the paired calls `S` → `T`'s service in the run's **baseline window** before
-   `start`: at least `N` calls on each side, and the fault calls' median duration above both `F` × the baseline's p95
-   and `D` in absolute terms.
+   `start`: at least `N` calls on each side, and the fault calls' median duration above both `F` × the baseline's
+   **median** and `D` in absolute terms; a baseline whose median already exceeds `D` leaves the relation unknown
+   (amended §12.5).
 
 The server span binds the effect to the **exact pod** of the witness, so an effect on another replica, or on the same
 service before the fault, is not this fault's. A call-graph path alone remains no effect. An incomplete trace read
@@ -1211,3 +1212,32 @@ no change to admission or elimination.
    and never makes a strong claim on an off-chain actor.
 3. Choice, fixed now: the **most permissive** grid point with no hard violation on `DEV`; then confirmed once on a new
    `HOLDOUT` with the engine frozen. If none qualifies, nothing is adopted.
+
+### 12.5 Baseline by its median (amendment, owner-approved 2026-10-03)
+
+Found on the `DEV` shadow: in five of the cases where the true target's effect was real, the relation read false
+because the baseline window held slow calls that were not this incident's: the runs are back to back and Tempo is
+shared, so the window ten to five minutes before an onset can hold the previous run's fault (slice 5 repeat 0: a
+3.35 s tail from the scheduled run before it; slice 4b repeat 2: the previous repeat's spawns). A real cluster has the
+same exposure to an earlier, unrelated slowdown. The p95 of the baseline is moved by a few such calls; the **median**
+is not, unless they fill half the window. The relation therefore compares the fault calls' median with `F` × the
+baseline's median, and a baseline whose median is itself above `D` cannot show a rise: the relation is unknown there.
+
+### 12.6 DEV shadow result (2026-10-04)
+
+All six `DEV` families with the trace read on (slices 1 and 3 from `tr4`, slice 2 from `tr5`, slices 4b, 5 and 6 from
+`tr6`; every run valid), the relation computed for every witnessed target and symptom service of every incident, with
+the baseline by its median (§12.5):
+
+| Truth | Holds / false / unknown, at every grid point |
+|---|---|
+| target on the chain, symptom of its own cause | **7 / 0 / 16** |
+| target off the chain | **0** / 0 / 30 |
+| the negative control's decoy | **0** / 0 / 19 |
+
+No hard violation at any grid point; the grid points do not differ on this data. By the rule fixed in §12.4 the
+choice is the most permissive: **`N` = 3, `F` = 3, `D` = 0.2 s**, to be confirmed once on a new `HOLDOUT` with the
+engine frozen. Limits stated plainly: the decoy is never contradicted, only never reached (no symptom service calls
+the isolated workload, so its relation is always unknown, which is its construction); the unknown cases are incidents
+whose captured spans held no fault or no baseline calls between that pair of services (for example a lag incident,
+whose service never calls the target); the rollout families have no execution witness until C5.

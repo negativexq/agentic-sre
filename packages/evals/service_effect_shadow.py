@@ -36,6 +36,25 @@ GRID = tuple(
 )
 
 
+BASELINE_FROM, BASELINE_TO = timedelta(minutes=10), timedelta(minutes=5)
+
+
+def effects_by_target(record: RunRecord) -> dict[str, set[str]]:
+    """Target pod -> the services its own cause's chain reaches (propagation and symptom links after it, up to the
+    next cause): a competing run's targets are judged only against their own cause's symptoms."""
+    reached: dict[str, set[str]] = {}
+    current: str | None = None
+    for link in record.chain.links:
+        if link.role == "cause":
+            current = None
+        elif link.role == "target_effect":
+            current = link.actor
+            reached.setdefault(current, set())
+        elif link.role in ("propagation", "symptom") and current is not None:
+            reached[current].add(link.actor.split("/")[-1])
+    return reached
+
+
 def workload(pod: str) -> str:
     parts = pod.rsplit("-", 2)
     return parts[0] if len(parts) == 3 else pod
@@ -43,11 +62,10 @@ def workload(pod: str) -> str:
 
 def judge_run(record: RunRecord, source: Any) -> list[dict[str, Any]]:
     """One row per (witnessed target, symptom service) with the relation's value at every grid point."""
-    chain_actors = record.chain.actors()
-    on_chain_services = {
-        a.split("/")[-1] for a in chain_actors if "/Service/" in a or "/Deployment/" in a
-    }
+    reached = effects_by_target(record)
     decoys = {d.actor for d in record.chain.decoys}
+    onset = min((a.starts_at for a in source.alerts()), default=source.observation_cutoff())
+    baseline = (onset - BASELINE_FROM, onset - BASELINE_TO)  # the trace read's baseline window
     spans = list(source.trace_observations())
     services = sorted({a.service for a in source.alerts() if a.service})
     rows = []
@@ -68,11 +86,12 @@ def judge_run(record: RunRecord, source: Any) -> list[dict[str, Any]]:
                         target_pod=target.pod.name,
                         start=target.applied_at,
                         end=end,
+                        baseline=baseline,
                         parameters=parameters,
                     )
                     for parameters in GRID
                 ]
-                on_chain = target.pod.canonical in chain_actors and symptom in on_chain_services
+                on_chain = symptom in reached.get(target.pod.canonical, set())
                 rows.append(
                     {
                         "experiment": experiment,

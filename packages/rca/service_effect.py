@@ -19,7 +19,7 @@ from packages.rca.model import TraceSpanObservation
 @dataclass(frozen=True)
 class EffectParameters:
     calls: int  # N: paired calls needed on each side
-    factor: float  # F: the fault calls' median above F x the baseline's p95
+    factor: float  # F: the fault calls' median above F x the baseline's median
     floor: timedelta  # D: and above this in absolute terms
 
 
@@ -68,33 +68,35 @@ def call_pairs(
     return pairs
 
 
-def _p95(values: Sequence[float]) -> float:
-    ordered = sorted(values)
-    return ordered[min(len(ordered) - 1, int(0.95 * (len(ordered) - 1) + 0.5))]
-
-
 def service_effect(
     pairs: Sequence[CallPair],
     *,
     target_pod: str,
     start: datetime,
     end: datetime,
+    baseline: tuple[datetime, datetime],
     parameters: EffectParameters,
 ) -> bool | None:
     """§12.2 for one witness target and one symptom service, from that service's calls to the target's service.
 
-    Fault calls go to the exact ``target_pod`` and begin inside ``[start, end]``; baseline calls begin before
-    ``start``. ``None`` when either side has fewer than ``parameters.calls`` calls.
+    Fault calls go to the exact ``target_pod`` and begin inside ``[start, end]``; baseline calls begin inside the
+    run's ``baseline`` window, which lies before every execution of the incident (an execution acts seconds before
+    its ``Applied`` is recorded, and a recurring fault slows the calls between its executions too). The baseline is
+    read by its median, which an earlier, unrelated slowdown in the window cannot move unless it fills half of it
+    (§12.5). ``None`` when either side has fewer than ``parameters.calls`` calls, or when the baseline itself is
+    already slow (its median above the floor ``D``): such a window cannot show a rise.
     """
     fault = [p for p in pairs if p.target_pod == target_pod and start <= p.started <= end]
-    baseline = [p for p in pairs if p.started < start]
-    if len(fault) < parameters.calls or len(baseline) < parameters.calls:
+    calm = [p for p in pairs if baseline[0] <= p.started <= baseline[1]]
+    if len(fault) < parameters.calls or len(calm) < parameters.calls:
         return None
-    if any(p.non_success for p in fault) and not any(p.non_success for p in baseline):
+    if any(p.non_success for p in fault) and not any(p.non_success for p in calm):
         return True
     fault_median = statistics.median(p.duration.total_seconds() for p in fault)
-    baseline_p95 = _p95([p.duration.total_seconds() for p in baseline])
+    baseline_median = statistics.median(p.duration.total_seconds() for p in calm)
+    if baseline_median > parameters.floor.total_seconds():
+        return None
     return (
-        fault_median > parameters.factor * baseline_p95
+        fault_median > parameters.factor * baseline_median
         and fault_median > parameters.floor.total_seconds()
     )

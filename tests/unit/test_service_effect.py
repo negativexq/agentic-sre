@@ -50,6 +50,7 @@ def judge(all_spans: list[TraceSpanObservation], pod: str = "payment-1") -> bool
         target_pod=pod,
         start=T0 + timedelta(minutes=10),
         end=T0 + timedelta(minutes=12),
+        baseline=(T0, T0 + timedelta(minutes=5)),
         parameters=PARAMS,
     )
 
@@ -82,3 +83,23 @@ def test_too_few_calls_leave_the_relation_unknown() -> None:
 def test_failures_that_appear_only_with_the_fault_are_an_effect() -> None:
     fault = [call(10 + i, 10.5 + i * 0.2, 0.005, code="503") for i in range(4)]
     assert judge(spans(*BASELINE, *fault)) is True
+
+
+def test_slow_calls_just_before_the_recorded_start_do_not_count_as_baseline() -> None:
+    """An execution acts seconds before its Applied event: those calls are neither fault nor baseline."""
+    early = [call(20 + i, 9.9, 2.0) for i in range(4)]  # inside neither window
+    fault = [call(10 + i, 10.5 + i * 0.2, 2.0) for i in range(4)]
+    assert judge(spans(*BASELINE, *early, *fault)) is True
+
+
+def test_a_minority_of_slow_calls_in_the_baseline_does_not_hide_the_effect() -> None:
+    """An earlier, unrelated slowdown in the baseline window (§12.5) moves the median only if it fills half."""
+    contaminated = [*BASELINE, *[call(30 + i, 1 + i * 0.3, 3.3) for i in range(3)]]
+    fault = [call(10 + i, 10.5 + i * 0.2, 3.3) for i in range(4)]
+    assert judge(spans(*contaminated, *fault)) is True
+
+
+def test_a_baseline_that_is_already_slow_leaves_the_relation_unknown() -> None:
+    slow = [call(i, i * 0.5, 2.0) for i in range(5)]
+    fault = [call(10 + i, 10.5 + i * 0.2, 3.3) for i in range(4)]
+    assert judge(spans(*slow, *fault)) is None

@@ -443,3 +443,18 @@ recur), `dependency-loss-payment`, `direct-stress-payment` (payment latency aler
   control plane, although 63 events did; the connector's log of that run was lost to the next run's restart. The
   same change without the decoy (`config-image-payment`) delivered its alert. The CPU-stress decoy is capped at 100m
   by the isolated workload's limit, so a starved node is not the explanation. Rerun unchanged.
+
+### 12.6 Blind phase 0, third round (2026-10-03)
+
+Valid: both loss variants at 50 to 70% (`dependency-loss-payment`, `competing-loss-podkill`). `negative-image-decoy`
+was invalid again and was rerun with the control plane's log on: the alert stream was attached, and the only alert
+that fired (`OrderErrorRateHigh`) was active for about 20 s. **The lab connector polls Alertmanager every 30 s**
+(`SRE_ALERT_COVERAGE_POLL_SECONDS`), so an alert shorter than that can fall between two polls and never reach the
+control plane; the injector, polling every 5 s, saw it. The decoy was not the cause (the earlier hypothesis is
+withdrawn). The outage was short because, after the image change and the pod delete, the old ReplicaSet brought its
+pod straight back; `config-image-payment` passed only because its alert happened to span a poll.
+
+Redefined for both image variants: the broken image goes in one patch with a rollout strategy of `maxSurge: 0`,
+`maxUnavailable: 1`, so the old pod goes first and the outage lasts until the change is undone; undoing restores the
+image and the original strategy. Both are rerun blind. The short-alert loss is a product finding of its own (alert
+coverage; roadmap).

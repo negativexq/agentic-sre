@@ -172,6 +172,7 @@ class LabWorld:
         self._rollout: tuple[datetime, str, str, str, str] | None = None
         self._last_delay = ""
         self._original_image = ""
+        self._original_strategy: dict[str, Any] = {}
         self._broken_image = ""
         self._experiments: set[str] = set()  # the experiments this run created
         self.clock = clock or RealClock()
@@ -723,26 +724,19 @@ class LabWorld:
         return Injection("payment-service", before["uid"], "", "", entry.at, "Deployment")
 
     def _inject_image_break(self, params: RunParameters, journal: InjectorJournal) -> Injection:
-        """Design §12.2.2, `config-or-rollout` variant B: an image that does not exist, then the pods deleted so
-        the broken template has to go live (the existing live action, `SetImage` plus `DeletePod`)."""
+        """Design §12.2.2, `config-or-rollout` variant B: an image that does not exist, in one patch with a
+        rollout strategy that takes the old pod away first (design §12.6: with a pod delete alone the old
+        ReplicaSet brought its pod straight back, and the outage lasted about 20 s)."""
         before = json.loads(
             self._run(
                 ["kubectl", "-n", NAMESPACE, "get", "deployment", "payment-service", "-o", "json"]
             ).stdout
         )
         self._original_image = before["spec"]["template"]["spec"]["containers"][0]["image"]
+        self._original_strategy = before["spec"]["strategy"]
         broken = f"{self._original_image.rsplit(':', 1)[0]}:missing-{params.seed}"
-        result = self._run(
-            [
-                "kubectl",
-                "-n",
-                NAMESPACE,
-                "set",
-                "image",
-                "deployment/payment-service",
-                f"payment-service={broken}",
-            ],
-            check=False,
+        result = self._patch_payment(
+            broken, {"type": "RollingUpdate", "rollingUpdate": {"maxSurge": 0, "maxUnavailable": 1}}
         )
         ok = result.returncode == 0
         entry = journal.record(
@@ -755,39 +749,38 @@ class LabWorld:
         )
         if not ok:
             raise RuntimeError(f"the image was not changed: {result.stderr.strip()[:200]}")
-        self._run(
-            [
-                "kubectl",
-                "-n",
-                NAMESPACE,
-                "delete",
-                "pod",
-                "-l",
-                "app=payment-service",
-                "--wait=false",
-            ],
-            check=False,
-        )
         self._rollout, self._broken_image = None, broken
         return Injection(
             "payment-service", before["metadata"]["uid"], "", "", entry.at, "Deployment"
         )
 
-    def _restore_image(self) -> subprocess.CompletedProcess[str] | None:
-        if not self._broken_image or not self._original_image:
-            return None
-        result = self._run(
+    def _patch_payment(
+        self, image: str, strategy: dict[str, Any]
+    ) -> subprocess.CompletedProcess[str]:
+        body = {
+            "spec": {
+                "strategy": strategy,
+                "template": {"spec": {"containers": [{"name": "payment-service", "image": image}]}},
+            }
+        }
+        return self._run(
             [
                 "kubectl",
                 "-n",
                 NAMESPACE,
-                "set",
-                "image",
+                "patch",
                 "deployment/payment-service",
-                f"payment-service={self._original_image}",
+                "--type=strategic",
+                "-p",
+                json.dumps(body),
             ],
             check=False,
         )
+
+    def _restore_image(self) -> subprocess.CompletedProcess[str] | None:
+        if not self._broken_image or not self._original_image:
+            return None
+        result = self._patch_payment(self._original_image, self._original_strategy)
         self._broken_image = ""
         return result
 

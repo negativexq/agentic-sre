@@ -465,3 +465,28 @@ With the lasting outage both image variants are valid (`config-image-payment`: `
 `OrderErrorRateHigh`; `negative-image-decoy` likewise plus the lag alerts) and the deployment's image and strategy are
 restored after each. All six variants B passed a blind phase 0; no diagnosis or score of any of them was read. The
 engine is frozen at the commit recorded in the six `HOLDOUT` manifests.
+
+### 12.8 First HOLDOUT result (2026-10-03, engine frozen at `96a10c3c`, 18 runs)
+
+Measured once, reported as it is; nothing below selects a rule or a parameter (§12.2.6).
+
+| Family (variant B) | Valid | Cause / instance | Execution witness / effect link | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `dependency-fault` (packet loss) | 3/3 | 1.0 / 1.0 | **1.0 / 1.0** | 0 / 0 / 0 | |
+| `direct-pod-fault` (CPU stress on payment) | 3/3 | 1.0 / 1.0 | 0.67 / 0.67 | 0 / 0 / 0 | |
+| `scheduled-recurring` (Schedule spawning CPU stress) | 3/3 | 1.0 / 1.0 | 0.33 / 0.33 | 0 / 0 / 0 | |
+| `config-or-rollout` (broken image) | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | |
+| `negative-control` (broken image + CPU-stress decoy) | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | decoy named 0 |
+| `competing-causes` (packet loss + pod-kill) | 3/3 | **0.83** / 0.83 | 1.0 / 1.0 | 0 / 0 / 0 | group recall 1.0, cross-attribution 0 |
+
+**The acceptance bar holds in every family**: 18 of 18 runs valid, no false strong authority, no false `RESOLVED`, the
+decoy never named. Cause recall is 1.0 everywhere except `competing-causes`: in its repeat 2 (seed 88) the pod-kill
+raised no lag above the threshold during the run (at most 29 messages; the loss had already cut the order traffic), the
+lag alerts fired only at 07:10:30, after the run had ended, so no incident of the pod-kill's group existed and the
+pod-kill could not be named; this is the world's outcome, counted as the frozen rule counts it.
+
+Compared with `DEV` (variant A, three repeats each): cause and instance recall the same (1.0 where the symptom exists),
+the bar held in both. Execution witnesses are **higher** on these variants (loss and CPU stress leave probe failures on
+the target pod, which the observed-fault-execution rule can bind), and still absent for the rollout and the control,
+where no strong rule exists yet (roadmap C5). The held-out set confirms the dev picture rather than contradicting it:
+the engine names the cause and does not overclaim; strong evidence depends on the fault leaving pod-level failures.

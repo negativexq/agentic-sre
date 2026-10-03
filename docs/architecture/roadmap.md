@@ -46,7 +46,7 @@ Contract: [`connector-boundary-contract.md`](connector-boundary-contract.md).
 | B2 | Recreate the lab cluster: Chaos Mesh 2.8.4 with containerd values, self-migrating Postgres, isolated control workload, gate passed (`testbed-lab-design.md` §13) | DONE | B1, A7 |
 | B3 | Control plane outside the lab, its own Postgres; the Connector inside the lab dials out (`testbed-control-plane-design.md` §10) | DONE (all seven gate items pass, including a lab recreation with the history intact) | A7, B2 |
 | B4 | Scenarios, repeats, dev and held-out split, frozen manifest, runner (`testbed-scenarios-design.md`) | ACTIVE: slices 1 and 2 run (3 repeats each); slice 3 (`config-or-rollout`) run (3 repeats), invalid under the old ordering rule and valid after the owner-approved ordering amendment (`testbed-ground-truth-contract.md` §14, sub-round order is not observable); slice 4 (`scheduled-recurring`) failed validity (1/3: a 20 s spawn never raised a latency alert) and was amended (60 s every 90 s, latency alerts only, since the lag alerts fire without a fault); slice 4b 3/3 valid, acceptance holds; slice 5 (`competing-causes`, contract §15: symptom groups scored per incident) 3/3 valid, group recall 1.0, cross-attribution 0, acceptance holds; slice 6 (`negative-control`, contract §16: a real change plus a decoy on the isolated workload) 3/3 valid, decoy never named, acceptance holds; **all six families measured in `DEV`**. No `HOLDOUT` tier yet | B1, B2, B3 |
-| B5 | Frozen engine baseline: version and acceptance criteria fixed before any run | ACTIVE: done per slice (each manifest frozen with engine 2.1.0 and the acceptance thresholds before its runs); the whole-suite freeze follows the last family | B4 |
+| B5 | Frozen engine baseline: version and acceptance criteria fixed before any run | DONE: manifests carry `engine_commit` and the runner refuses an engine that differs from it (design §12.2.3); the first `HOLDOUT` ran frozen at `96a10c3c` | B4 |
 | B6 | Multi-cutoff recordings per run, to test timing stability against a known world | NEXT | B4 |
 | B7 | Product-mode long run: the lab with a randomized fault injector and the control plane as a customer would run it | DONE (10 hours, 300 diagnoses; findings fixed in A12, C9, C13 and the lab's Tempo limit of 2 GiB; a 2-hour run after the fixes: 25 incidents, 50 diagnoses, 0 Loki or Tempo failures, transport wait median 1.98 s, max 6.78 s) | B3 |
 
@@ -104,7 +104,7 @@ never receives ground truth.
 | # | Work | Status |
 |---|---|---|
 | E1 | Metamorphic tests (identity, onset shift, renaming) and multi-cutoff tests | NEXT |
-| E2 | Held-out set: own live scenarios with world-level ground truth (the same work as B4) | NEXT |
+| E2 | Held-out set: own live scenarios with world-level ground truth (the same work as B4) | DONE for the first `HOLDOUT` (`testbed-scenarios-design.md` §12): variant B of every family, engine frozen by commit, blind phase 0; 18/18 valid, no false strong authority or false `RESOLVED`, decoy never named, cause recall 1.0 except one competing run whose second cause raised no symptom in time (0.83). Next `HOLDOUT` only after an engine change, with new variants or seeds |
 | E3 | Metrics: execution witness recall, effect-link recall, propagation-link recall, correct causal family, correct exact instance when knowable, false strong authority, false `RESOLVED`, time to resolution, evidence and read cost | NEXT |
 
 ## 7. F. Decisions and maintenance

@@ -502,13 +502,50 @@ def test_an_occurrence_that_resolves_young_produces_nothing() -> None:
     assert alert_items(client.read("read_alerts", None)) == []
 
 
-def test_the_webhook_path_is_unchanged_by_the_poll_rule() -> None:
-    connector, client, _, _, _ = make()
+def delivery(*alerts: dict[str, Any]) -> dict[str, Any]:
+    return {"receiver": "sre", "status": alerts[0]["status"], "alerts": list(alerts)}
+
+
+def test_a_short_alert_delivered_resolved_by_the_webhook_is_not_admitted() -> None:
+    """§16.6: a group notified before sends a later short alert at its group_interval flush, already resolved."""
+    connector, client, _, _, clock = make()
     connector.alert_min_active = timedelta(seconds=30)
-    delivery = {
-        "receiver": "sre",
-        "status": "firing",
-        "alerts": [{**firing("HighLatency", "f1"), "status": "firing"}],
+    clock.advance(40)
+    short = {
+        **firing("OrderErrorRateHigh", "f1"),
+        "status": "resolved",
+        "endsAt": (T0 + timedelta(seconds=20)).isoformat(),
     }
-    assert connector.receive_webhook(delivery) == 1  # sent by Alertmanager: admitted at any age
-    assert [status for status, _ in alert_items(client.read("read_alerts", None))] == ["firing"]
+    assert connector.receive_webhook(delivery(short)) == 1  # the delivery is accepted
+    assert alert_items(client.read("read_alerts", None)) == []  # but the alert is not admitted
+
+
+def test_a_young_firing_alert_from_the_webhook_waits_for_the_poll() -> None:
+    connector, client, _, alerts, clock = make()
+    connector.alert_min_active = timedelta(seconds=30)
+    young = {**firing("HighLatency", "f1"), "status": "firing"}
+    connector.receive_webhook(delivery(young))  # 0 s old
+    first = client.read("read_alerts", None)
+    assert alert_items(first) == []
+    clock.advance(30)
+    alerts.alerts = [firing("HighLatency", "f1")]
+    connector.poll_alerts_once()  # still firing and old enough: the poll admits it
+    assert [s for s, _ in alert_items(client.read("read_alerts", first.next_cursor))] == ["firing"]
+
+
+def test_an_admitted_occurrence_passes_on_either_path_afterwards() -> None:
+    connector, client, _, alerts, clock = make()
+    connector.alert_min_active = timedelta(seconds=30)
+    clock.advance(30)
+    alerts.alerts = [firing("HighLatency", "f1")]
+    connector.poll_alerts_once()  # admitted by the poll
+    first = client.read("read_alerts", None)
+    resolved = {
+        **firing("HighLatency", "f1"),
+        "status": "resolved",
+        "endsAt": (T0 + timedelta(seconds=45)).isoformat(),
+    }
+    connector.receive_webhook(delivery(resolved))  # its resolution, by the webhook
+    assert [s for s, _ in alert_items(client.read("read_alerts", first.next_cursor))] == [
+        "resolved"
+    ]

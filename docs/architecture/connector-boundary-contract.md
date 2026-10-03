@@ -602,3 +602,35 @@ whatever the poll's phase.
 ### 16.5 Not changed
 
 The engine, the wire schema and the webhook path. The next `HOLDOUT` is measured with this Connector.
+
+### 16.6 Lab measurement (2026-10-03): the poll rule alone is not enough
+
+Ten cycles on one control-plane database (`testbed_admit_120456`), alternating a short outage (broken image plus a pod
+delete: `OrderErrorRateHigh` active about 20 s) and a lasting one (90 s), with the Connector running §16.2:
+
+| Cycles | Alertmanager | Reached the control plane |
+|---|---|---|
+| 5 lasting | 105 to 145 s (and the latency alert, 65 to 104 s) | 5 of 5 |
+| short, cycle 0 (the group never notified before) | 20 s | no |
+| short, cycles 2, 4, 6, 8 (the group notified in the lasting cycle before) | 15 to 20 s | **4 of 4**, each stored resolved with its 15 to 20 s end, each opening an incident |
+
+The short alerts that arrived came by the **webhook**, not the poll (the poll no longer reports an occurrence that
+resolved young, and these were stored with their end): once Alertmanager has notified a group, a new alert of that
+group goes out at the group's `group_interval` flush, resolved or not, without a fresh `group_wait`. So the premise of
+§16.1, that the webhook never delivers an alert shorter than `group_wait`, is wrong; the outcome now depends on the
+group's history instead of the poll's phase.
+
+### 16.7 Revised rule (APPROVED and implemented 2026-10-03)
+
+Admission depends on the alert's own active time, the same on both paths, applied in the Connector before anything is
+put on the alert stream:
+
+- a **resolved** occurrence that was never admitted and whose `endsAt − startsAt` is shorter than `min_active` is
+  dropped, from the webhook as from the poll;
+- a **firing** occurrence younger than `min_active` is not admitted from either path; the poll admits it once it is old
+  enough and still firing (the poll is therefore required whenever `min_active` > 0; a Connector without an Alertmanager
+  poll keeps `min_active` = 0 and behaves as before);
+- everything already admitted is unaffected (its later notifications and its resolution pass as today).
+
+Measured as §16.4 again: the same ten cycles, expecting no short alert and every lasting alert in the control plane,
+whatever the group's history.

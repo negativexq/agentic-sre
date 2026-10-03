@@ -106,6 +106,19 @@ class AuditEntry:
     at: datetime
 
 
+ADMITTED_MEMORY = 50_000  # admitted occurrences remembered (contract §16.7)
+
+
+def _instant(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
 @dataclass
 class Connector:
     cluster: ClusterReader | None = None
@@ -126,6 +139,8 @@ class Connector:
         self._alerts = StreamBuffer(self.epoch, self.alerts_buffer_len, self.clock)
         self._changes = StreamBuffer(self.epoch, self.changes_buffer_len, self.clock)
         self._known_alerts: dict[str, dict[str, Any]] = {}
+        # contract §16.7: occurrences (fingerprint, startsAt) admitted on either path; insertion-ordered, bounded
+        self._admitted: dict[tuple[str, str], None] = {}
         self._seen: dict[str, str] = {}
         self._events_seen: dict[str, str] = {}
         self._changes_lock = threading.RLock()
@@ -202,22 +217,27 @@ class Connector:
     def _put(self, buffer: StreamBuffer, model: wire.WireModel) -> int:
         return buffer.append(model.model_dump(mode="json"))
 
-    def _admissible(self, fingerprint: str, payload: dict[str, Any], now: datetime) -> bool:
-        known = self._known_alerts.get(fingerprint)
-        if known is not None and known.get("startsAt") == payload.get("startsAt"):
-            return True  # already admitted, still firing
-        if self.alert_min_active <= timedelta(0):
+    def _admit(self, fingerprint: str, payload: dict[str, Any], now: datetime) -> bool:
+        """Contract §16.7: one admission rule for both paths, on the occurrence's own active time.
+
+        An occurrence already admitted passes. Otherwise a resolved one shorter than ``alert_min_active`` and a
+        firing one younger than it are not admitted (the poll admits a firing one later, once old enough).
+        """
+        key = (fingerprint, str(payload.get("startsAt")))
+        if key in self._admitted:
             return True
-        starts = payload.get("startsAt")
-        if not isinstance(starts, str):
-            return True  # no start to age from: admitted as before
-        try:
-            began = datetime.fromisoformat(starts.replace("Z", "+00:00"))
-        except ValueError:
-            return True
-        if began.tzinfo is None:
-            began = began.replace(tzinfo=UTC)
-        return now - began >= self.alert_min_active
+        began = _instant(payload.get("startsAt"))
+        if self.alert_min_active > timedelta(0) and began is not None:
+            if payload.get("status") == "resolved":
+                ended = _instant(payload.get("endsAt")) or now
+                if ended - began < self.alert_min_active:
+                    return False
+            elif now - began < self.alert_min_active:
+                return False
+        self._admitted[key] = None
+        while len(self._admitted) > ADMITTED_MEMORY:
+            del self._admitted[next(iter(self._admitted))]
+        return True
 
     def poll_alerts_once(self) -> None:
         """One Alertmanager poll: occurrences that appeared or resolved, then its heartbeat."""
@@ -252,7 +272,7 @@ class Connector:
         admitted = {
             fingerprint: payload
             for fingerprint, payload in current.items()
-            if self._admissible(fingerprint, payload, completed)
+            if self._admit(fingerprint, payload, completed)
         }
         for fingerprint, payload in list(self._known_alerts.items()):
             later = current.get(fingerprint)
@@ -296,16 +316,14 @@ class Connector:
         webhook = AlertmanagerWebhook.model_validate(payload)
         now = self.clock()
         for alert in webhook.alerts:
+            body = alert.model_dump(mode="json", by_alias=True)
+            if not self._admit(str(body.get("fingerprint") or ""), body, now):
+                continue  # contract §16.7: shorter or younger than min_active; never reaches the stream
             self._put(
                 self._alerts,
-                wire.AlertItem(
-                    seq=0,
-                    observed_at=now,
-                    origin="webhook",
-                    alert=alert.model_dump(mode="json", by_alias=True),
-                ),
+                wire.AlertItem(seq=0, observed_at=now, origin="webhook", alert=body),
             )
-        return len(webhook.alerts)
+        return len(webhook.alerts)  # the delivery was accepted, whatever it admitted
 
     # ---- change stream --------------------------------------------------------------------
 

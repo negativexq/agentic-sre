@@ -1156,7 +1156,10 @@ WORKERS = ParameterRange(low=20, high=28)
 
 SPECS: dict[str, Callable[..., ScenarioSpec]] = {
     "dependency-b": _variant_b(dependency_spec, "dependency-loss-payment", loss_percent=LOSS),
-    "direct-b": _variant_b(direct_pod_spec, "direct-stress-payment"),
+    # blind phase 0 (design §12.4): at 20 to 28 workers payment-service stayed at 0.24 to 0.31 s, under every alert
+    "direct-b": _variant_b(
+        direct_pod_spec, "direct-stress-payment", cpu_workers=ParameterRange(low=56, high=72)
+    ),
     "scheduled-b": _variant_b(scheduled_spec, "scheduled-stress-order", cpu_workers=WORKERS),
     "config-b": _variant_b(config_spec, "config-image-payment"),
     "negative-b": _variant_b(negative_spec, "negative-image-decoy", cpu_workers=WORKERS),
@@ -1179,6 +1182,9 @@ def world_for(
     if "scheduled-stress-order" in scenario_ids:
         return LabWorld(clock=clock, target_app="order-service")
     if {"config-image-payment", "negative-image-decoy"} & set(scenario_ids):
+        return LabWorld(clock=clock, payment_probe=True)
+    if {"dependency-loss-payment", "competing-loss-podkill"} & set(scenario_ids):
+        # blind phase 0 (design §12.4): a single short /health exchange sees packet loss only now and then
         return LabWorld(clock=clock, payment_probe=True)
     if "direct-pod-fault" in families:
         return LabWorld(clock=clock, target_app="order-service")

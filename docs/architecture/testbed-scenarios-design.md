@@ -414,3 +414,19 @@ of them in `HOLDOUT` would label seen data as unseen. The variants B of §4 have
 - the variants B of the table;
 - the engine freeze by commit with the runner's check (a `testbed.suite.v1` field addition);
 - 3 repeats (instead of the 5 of §5) for this first `HOLDOUT`.
+
+### 12.4 Blind phase 0, first round (2026-10-03)
+
+Only validity, the timeline, alert names and harness-side series (oracle, Prometheus, journal) were read; no
+diagnosis or score of a variant B.
+
+- `dependency-loss-payment`: invalid, propagation before the target effect. The target probe (`/health`) failed only
+  now and then (about 1 s TCP retransmissions on a lost packet) and met the three-failures rule at 78.8 s, while the
+  client failed almost every sample from 0.3 s. Redefined: the loss variants probe the target with `POST /payments`,
+  as the configuration family does.
+- `direct-stress-payment`: invalid, no alert fired. Under 20 to 28 workers `payment-service` averaged 0.24 to 0.31 s
+  (heavy CPU throttling) and the caller's dependency latency 0.35 to 0.40 s, under every 0.5 s alert threshold.
+  Redefined: 56 to 72 workers.
+- `scheduled-stress-order`: the run stopped at calibration: every baseline sample failed in under a millisecond
+  (`URLError`), so the local port-forward to `order-service` was not serving after the pod was replaced during
+  isolation. Rerun unchanged first.

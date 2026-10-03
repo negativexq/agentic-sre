@@ -17,7 +17,7 @@ import sys
 import time
 import urllib.request
 import uuid
-from collections.abc import Collection, Sequence
+from collections.abc import Callable, Collection, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -26,6 +26,7 @@ from sqlalchemy import bindparam, create_engine, text
 
 from packages.evals.live.actions import Context, Forward, PortForwarder
 from packages.evals.live.ground_truth import (
+    ORDER,
     ParameterRange,
     RunRecord,
     ScenarioSpec,
@@ -170,6 +171,9 @@ class LabWorld:
         self.target_script = _PAYMENT_SCRIPT if payment_probe else _TARGET_SCRIPT
         self._rollout: tuple[datetime, str, str, str, str] | None = None
         self._last_delay = ""
+        self._original_image = ""
+        self._original_strategy: dict[str, Any] = {}
+        self._broken_image = ""
         self._experiments: set[str] = set()  # the experiments this run created
         self.clock = clock or RealClock()
         self.pg_container, self.pg_port = pg_container, pg_port
@@ -234,6 +238,7 @@ class LabWorld:
         self._experiments.clear()
         self._delete_experiments()
         self._unset_delay()  # a run that died mid-way may have left the change in place
+        self._restore_image()
         self._quiet_target_pod()
         for namespace in WATCHED_NAMESPACES:
             self._run(
@@ -527,7 +532,10 @@ class LabWorld:
     def inject(self, params: RunParameters, journal: InjectorJournal, name: str) -> Injection:
         if params.fault == "env-delay":
             return self._inject_env_delay(params, journal)
+        if params.fault == "image-break":
+            return self._inject_image_break(params, journal)
         duration = f"  duration: {int(params.duration_seconds) + 60}s\n"
+        spawn_kind = "NetworkChaos"
         if params.fault == "scheduled-delay":
             # design §4 `scheduled-recurring`, variant A: a recurring delay on payment-service
             kind, duration, body = (
@@ -541,6 +549,41 @@ class LabWorld:
                     f"    selector: {{namespaces: [{NAMESPACE}], labelSelectors: {{app: payment-service}}}}\n"
                     f"    delay: {{latency: {params.latency_ms}ms}}\n"
                     f"    duration: {params.spawn_seconds}s\n"
+                ),
+            )
+        elif params.fault == "scheduled-stress":
+            # design §12.2.2, `scheduled-recurring` variant B: recurring CPU stress on order-service
+            spawn_kind = "StressChaos"
+            kind, duration, body = (
+                "Schedule",
+                "",
+                (
+                    f'  schedule: "@every {params.spawn_every_seconds}s"\n'
+                    "  type: StressChaos\n  historyLimit: 10\n"
+                    "  concurrencyPolicy: Forbid\n  stressChaos:\n    mode: all\n"
+                    f"    selector: {{namespaces: [{NAMESPACE}], labelSelectors: {{app: order-service}}}}\n"
+                    f"    stressors: {{cpu: {{workers: {params.cpu_workers}, load: 100}}}}\n"
+                    f"    duration: {params.spawn_seconds}s\n"
+                ),
+            )
+        elif params.fault in ("network-loss", "competing-loss"):
+            # design §12.2.2: packet loss instead of delay on payment-service
+            kind, body = (
+                "NetworkChaos",
+                (
+                    "  action: loss\n  mode: all\n"
+                    f"  selector: {{namespaces: [{NAMESPACE}], labelSelectors: {{app: payment-service}}}}\n"
+                    f'  loss: {{loss: "{params.loss_percent}"}}\n'
+                ),
+            )
+        elif params.fault == "decoy-stress":
+            # design §12.2.2, `negative-control` variant B: a CPU-stress decoy on the isolated workload
+            kind, body = (
+                "StressChaos",
+                (
+                    "  mode: all\n"
+                    f"  selector: {{namespaces: [{DECOY_NAMESPACE}], labelSelectors: {{app: isolated-echo}}}}\n"
+                    f"  stressors: {{cpu: {{workers: {params.cpu_workers}, load: 100}}}}\n"
                 ),
             )
         elif params.fault == "decoy-delay":
@@ -581,7 +624,7 @@ class LabWorld:
                     f"  delay: {{latency: {params.latency_ms}ms}}\n"
                 ),
             )
-        decoy = params.fault == "decoy-delay"
+        decoy = params.fault in ("decoy-delay", "decoy-stress")
         namespace = DECOY_NAMESPACE if decoy else NAMESPACE
         manifest = (
             f"apiVersion: chaos-mesh.org/v1alpha1\nkind: {kind}\n"
@@ -590,9 +633,11 @@ class LabWorld:
         )
         self._experiments.add(name)
         # the pod a pod-kill will remove is known only before it is killed
-        app = {"pod-kill": "order-worker", "decoy-delay": "isolated-echo"}.get(
-            params.fault, self.target_app
-        )
+        app = {
+            "pod-kill": "order-worker",
+            "decoy-delay": "isolated-echo",
+            "decoy-stress": "isolated-echo",
+        }.get(params.fault, self.target_app)
         before = json.loads(
             self._run(
                 ["kubectl", "-n", namespace, "get", "pod", "-l", f"app={app}", "-o", "json"]
@@ -634,7 +679,16 @@ class LabWorld:
             )["items"]
         )
         pod = pods[0]["metadata"]
-        return Injection(name, uid, pod["name"], pod["uid"], entry.at, kind, namespace=namespace)
+        return Injection(
+            name,
+            uid,
+            pod["name"],
+            pod["uid"],
+            entry.at,
+            kind,
+            namespace=namespace,
+            spawn_kind=spawn_kind,
+        )
 
     def _inject_env_delay(self, params: RunParameters, journal: InjectorJournal) -> Injection:
         """Change the Deployment's environment; the rollout it starts is the execution."""
@@ -669,9 +723,72 @@ class LabWorld:
         self._rollout, self._last_delay = None, str(params.latency_ms)
         return Injection("payment-service", before["uid"], "", "", entry.at, "Deployment")
 
-    def _new_rollout(self, value: int | str) -> tuple[datetime, str, str, str, str] | None:
+    def _inject_image_break(self, params: RunParameters, journal: InjectorJournal) -> Injection:
+        """Design §12.2.2, `config-or-rollout` variant B: an image that does not exist, in one patch with a
+        rollout strategy that takes the old pod away first (design §12.6: with a pod delete alone the old
+        ReplicaSet brought its pod straight back, and the outage lasted about 20 s)."""
+        before = json.loads(
+            self._run(
+                ["kubectl", "-n", NAMESPACE, "get", "deployment", "payment-service", "-o", "json"]
+            ).stdout
+        )
+        self._original_image = before["spec"]["template"]["spec"]["containers"][0]["image"]
+        self._original_strategy = before["spec"]["strategy"]
+        broken = f"{self._original_image.rsplit(':', 1)[0]}:missing-{params.seed}"
+        result = self._patch_payment(
+            broken, {"type": "RollingUpdate", "rollingUpdate": {"maxSurge": 0, "maxUnavailable": 1}}
+        )
+        ok = result.returncode == 0
+        entry = journal.record(
+            verb="patch",
+            object=f"deployment payment-service image {broken}",
+            ok=ok,
+            response=result.stdout if ok else result.stderr,
+            uid=before["metadata"]["uid"],
+            role=ROLE_CAUSE_CREATED,
+        )
+        if not ok:
+            raise RuntimeError(f"the image was not changed: {result.stderr.strip()[:200]}")
+        self._rollout, self._broken_image = None, broken
+        return Injection(
+            "payment-service", before["metadata"]["uid"], "", "", entry.at, "Deployment"
+        )
+
+    def _patch_payment(
+        self, image: str, strategy: dict[str, Any]
+    ) -> subprocess.CompletedProcess[str]:
+        body = {
+            "spec": {
+                "strategy": strategy,
+                "template": {"spec": {"containers": [{"name": "payment-service", "image": image}]}},
+            }
+        }
+        return self._run(
+            [
+                "kubectl",
+                "-n",
+                NAMESPACE,
+                "patch",
+                "deployment/payment-service",
+                "--type=strategic",
+                "-p",
+                json.dumps(body),
+            ],
+            check=False,
+        )
+
+    def _restore_image(self) -> subprocess.CompletedProcess[str] | None:
+        if not self._broken_image or not self._original_image:
+            return None
+        result = self._patch_payment(self._original_image, self._original_strategy)
+        self._broken_image = ""
+        return result
+
+    def _new_rollout(
+        self, value: int | str, image: str = ""
+    ) -> tuple[datetime, str, str, str, str] | None:
         """(first pod created, ReplicaSet name, ReplicaSet uid, pod name, pod uid) of the rollout whose
-        template carries the delay, once its first pod exists."""
+        template carries the delay (or the broken ``image``), once its first pod exists."""
         sets = json.loads(
             self._run(
                 ["kubectl", "-n", NAMESPACE, "get", "rs", "-l", "app=payment-service", "-o", "json"]
@@ -681,7 +798,11 @@ class LabWorld:
         matches = [
             rs
             for rs in sets
-            if wanted in rs["spec"]["template"]["spec"]["containers"][0].get("env", [])
+            if (
+                rs["spec"]["template"]["spec"]["containers"][0].get("image") == image
+                if image
+                else wanted in rs["spec"]["template"]["spec"]["containers"][0].get("env", [])
+            )
         ]
         if not matches:
             return None
@@ -716,7 +837,9 @@ class LabWorld:
     def _spawned(self, injection: Injection) -> list[tuple[str, str]]:
         """(name, uid) of the experiments a Schedule of this run has spawned so far, oldest first."""
         items = json.loads(
-            self._run(["kubectl", "-n", NAMESPACE, "get", "networkchaos", "-o", "json"]).stdout
+            self._run(
+                ["kubectl", "-n", NAMESPACE, "get", injection.spawn_kind.lower(), "-o", "json"]
+            ).stdout
         )["items"]
         owned = [
             i["metadata"]
@@ -746,7 +869,7 @@ class LabWorld:
         if injection.kind == "Deployment":
             # contract §4: for a rollout the execution starts with the first new pod created
             if self._rollout is None:
-                self._rollout = self._new_rollout(self._delay_value(injection))
+                self._rollout = self._new_rollout(self._delay_value(injection), self._broken_image)
             return self._rollout[0] if self._rollout is not None else None
         # a Schedule executes through the experiments it spawns: its first child's Applied
         names = (
@@ -786,6 +909,17 @@ class LabWorld:
         return self._last_delay
 
     def remove(self, injection: Injection, journal: InjectorJournal) -> None:
+        if injection.kind == "Deployment" and self._broken_image:
+            restored = self._original_image
+            result = self._restore_image()
+            journal.record(
+                verb="patch",
+                object=f"deployment payment-service image {restored}",
+                ok=result is not None and result.returncode == 0,
+                response=(result.stdout or result.stderr) if result is not None else "",
+                role=ROLE_CAUSE_REMOVED,
+            )
+            return
         if injection.kind == "Deployment":
             result = self._unset_delay()
             journal.record(
@@ -865,6 +999,7 @@ class LabWorld:
     def cleanup(self) -> None:
         if self._last_delay:
             self._unset_delay()  # already undone by remove() on a normal run; this covers an aborted one
+        self._restore_image()
         self._delete_experiments()
         if self._forwarder is not None:
             self._forwarder.stop_all()
@@ -994,7 +1129,35 @@ def negative_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> Sc
     )
 
 
-SPECS = {
+def _variant_b(
+    base: Callable[..., ScenarioSpec], scenario_id: str, **extra: ParameterRange
+) -> Callable[..., ScenarioSpec]:
+    """A variant B of design §12.2.2: the family's variant A parameters, a new scenario and its own extras.
+    Declared ``HOLDOUT`` by default (split by construction, §12.2.1)."""
+
+    def spec(repeats: int, seeds: tuple[int, ...], tier: str = "HOLDOUT") -> ScenarioSpec:
+        a = base(repeats, seeds, tier=tier)
+        return a.model_copy(
+            update={"scenario_id": scenario_id, "parameters": {**a.parameters, **extra}}
+        )
+
+    return spec
+
+
+# blind phase 0 (design §12.4): at 20 to 40% the target saw the loss only now and then
+LOSS = ParameterRange(low=50, high=70)
+WORKERS = ParameterRange(low=20, high=28)
+
+SPECS: dict[str, Callable[..., ScenarioSpec]] = {
+    "dependency-b": _variant_b(dependency_spec, "dependency-loss-payment", loss_percent=LOSS),
+    # blind phase 0 (design §12.4): at 20 to 28 workers payment-service stayed at 0.24 to 0.31 s, under every alert
+    "direct-b": _variant_b(
+        direct_pod_spec, "direct-stress-payment", cpu_workers=ParameterRange(low=56, high=72)
+    ),
+    "scheduled-b": _variant_b(scheduled_spec, "scheduled-stress-order", cpu_workers=WORKERS),
+    "config-b": _variant_b(config_spec, "config-image-payment"),
+    "negative-b": _variant_b(negative_spec, "negative-image-decoy", cpu_workers=WORKERS),
+    "competing-b": _variant_b(competing_spec, "competing-loss-podkill", loss_percent=LOSS),
     "negative": negative_spec,
     "competing": competing_spec,
     "dependency": dependency_spec,
@@ -1004,8 +1167,19 @@ SPECS = {
 }
 
 
-def world_for(families: Collection[str], clock: RealClock) -> LabWorld:
+def world_for(
+    families: Collection[str], clock: RealClock, scenario_ids: Collection[str] = ()
+) -> LabWorld:
     """The lab set up for a family: which workload the fault lands on and how its target is probed."""
+    if "direct-stress-payment" in scenario_ids:
+        return LabWorld(clock=clock, target_app="payment-service", payment_probe=True)
+    if "scheduled-stress-order" in scenario_ids:
+        return LabWorld(clock=clock, target_app="order-service")
+    if {"config-image-payment", "negative-image-decoy"} & set(scenario_ids):
+        return LabWorld(clock=clock, payment_probe=True)
+    if {"dependency-loss-payment", "competing-loss-podkill"} & set(scenario_ids):
+        # blind phase 0 (design §12.4): a single short /health exchange sees packet loss only now and then
+        return LabWorld(clock=clock, payment_probe=True)
     if "direct-pod-fault" in families:
         return LabWorld(clock=clock, target_app="order-service")
     return LabWorld(
@@ -1127,6 +1301,47 @@ ORACLE_FIELDS = (
 )
 
 
+ENGINE_PATHS = ("packages/rca", "apps/control_plane")
+
+
+def engine_drift(commit: str) -> list[str]:
+    """Files of the engine that differ from ``commit`` in the working tree (design §12.2.3); empty when frozen
+    there or when the manifest predates the freeze."""
+    if not commit:
+        return []
+    changed = subprocess.run(
+        ["git", "diff", "--name-only", commit, "--", *ENGINE_PATHS],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    untracked = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard", "--", *ENGINE_PATHS],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    return sorted(set(changed) | set(untracked))
+
+
+def _blind_summary(outcome: RunOutcome, store: TestbedStore) -> str:
+    """Validity, the timeline and the incidents' alert names; nothing the engine concluded."""
+    record = outcome.record
+    lines = [f"run {record.scenario_id}#{record.repeat}: {'VALID' if record.valid else 'INVALID'}"]
+    lines += [f"  invalid: {reason}" for reason in record.invalid_reasons]
+    base = record.timeline.cause_created_at
+    for name in ORDER:
+        stamp = record.timeline.stamp(name)
+        offset = f"+{(stamp.at - base.at).total_seconds():6.1f}s" if stamp and base else "  -    "
+        lines.append(f"  {name:24s} {offset}")
+    directory = store.run_dir(record.suite_id, record.scenario_id, record.repeat)
+    stored = json.loads((directory / "diagnoses.json").read_bytes())
+    lines.append("  incident alerts: " + ", ".join(sorted({str(d["alert"]) for d in stored})))
+    return "\n".join(lines)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="packages.evals.live.testbed_lab")
     parser.add_argument("--root", type=Path, default=REPO / ".local/testbed")
@@ -1135,12 +1350,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         "phase0", help="one unscored validation run, stored apart from the suite"
     )
     phase0.add_argument("--scenario", choices=sorted(SPECS), default="dependency")
+    phase0.add_argument(
+        "--blind",
+        action="store_true",
+        help="report validity and alert names only, never the engine's diagnosis (design §12.2.4)",
+    )
     freeze = commands.add_parser("freeze", help="write the frozen manifest of slice 1")
     freeze.add_argument("--suite", required=True)
     freeze.add_argument("--salt", required=True)
     freeze.add_argument("--seeds", required=True, help="comma separated, one per repeat")
     freeze.add_argument("--engine-version", required=True)
     freeze.add_argument("--scenario", choices=sorted(SPECS), default="dependency")
+    freeze.add_argument(
+        "--tier", choices=("DEV", "HOLDOUT"), default=None, help="default: the scenario's own tier"
+    )
+    freeze.add_argument(
+        "--engine-commit", default="", help="freeze the engine at this git commit (design §12.2.3)"
+    )
     run = commands.add_parser("run", help="run the missing repeats of a frozen suite")
     run.add_argument("--suite", required=True)
     rescore = commands.add_parser(
@@ -1170,14 +1396,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             engine_version=args.engine_version,
             created_at=clock.now(),
             salt=args.salt,
-            scenarios=(SPECS[args.scenario](len(seeds), seeds),),
+            scenarios=(
+                SPECS[args.scenario](
+                    len(seeds), seeds, **({"tier": args.tier} if args.tier else {})
+                ),
+            ),
             acceptance=acceptance,
+            engine_commit=args.engine_commit,
         ).frozen()
         print(TestbedStore(args.root).write_manifest(manifest), manifest.sha256)
         return 0
 
     if args.command == "phase0":
-        world = world_for({SPECS[args.scenario](1, (1,)).family}, clock)
+        probe = SPECS[args.scenario](1, (1,))
+        world = world_for({probe.family}, clock, {probe.scenario_id})
         # Phase 0 is not part of any suite: its own store, its own manifest, never scored into a result.
         from packages.rca.engine import RCA_ENGINE_VERSION
 
@@ -1205,12 +1437,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         except BaselineNotQuiet as refused:
             print(f"run refused before the injection: {refused}")
             return 2
-        print(_summarize(outcome))
+        print(_blind_summary(outcome, store) if args.blind else _summarize(outcome))
         return 0 if outcome.record.valid else 1
 
     store = TestbedStore(args.root)
     manifest = store.load_manifest(args.suite)
-    world = world_for({sp.family for sp in manifest.scenarios}, clock)
+    drift = engine_drift(manifest.engine_commit)
+    if drift:
+        print(
+            f"run refused: the engine differs from the frozen commit {manifest.engine_commit}: {drift}"
+        )
+        return 2
+    world = world_for(
+        {sp.family for sp in manifest.scenarios},
+        clock,
+        {sp.scenario_id for sp in manifest.scenarios},
+    )
     outcomes: list[RunOutcome] = []
     for spec in manifest.scenarios:
         for repeat in range(spec.repeats):

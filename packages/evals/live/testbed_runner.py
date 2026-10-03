@@ -130,6 +130,32 @@ class RunParameters:
     second_offset_seconds: float = 0.0
     # negative-control: when the decoy starts relative to the cause (negative: before it)
     decoy_offset_seconds: float = 0.0
+    # packet-loss variants: the share of packets dropped
+    loss_percent: int = 0
+
+
+# The HOLDOUT variants B (design §12.2.2): the injection differs from the family's variant A.
+FAULT_BY_SCENARIO: dict[str, str] = {
+    "dependency-loss-payment": "network-loss",
+    "direct-stress-payment": "cpu-stress",
+    "scheduled-stress-order": "scheduled-stress",
+    "config-image-payment": "image-break",
+    "negative-image-decoy": "image-break",
+    "competing-loss-podkill": "competing-loss",
+}
+# Variants whose faulted service is also the one showing the symptom: one probe, two views (contract §4.2).
+DIRECT_SCENARIOS = frozenset({"direct-stress-payment", "scheduled-stress-order"})
+ERROR_ALERTS = frozenset({"OrderErrorRateHigh", "HighErrorRate", "PaymentErrorRateHigh"})
+# Alert sets of the variants B, fixed before their phase 0 (design §12.2.2).
+ALERTS_BY_SCENARIO: dict[str, frozenset[str]] = {
+    "dependency-loss-payment": DEPENDENCY_ALERTS | ERROR_ALERTS,
+    "config-image-payment": DEPENDENCY_ALERTS | {"PaymentServiceLatencyCritical"} | ERROR_ALERTS,
+    "negative-image-decoy": DEPENDENCY_ALERTS | {"PaymentServiceLatencyCritical"} | ERROR_ALERTS,
+    "competing-loss-podkill": DEPENDENCY_ALERTS | ERROR_ALERTS,
+}
+TIMELINE_ALERTS_BY_SCENARIO: dict[str, frozenset[str]] = {
+    "competing-loss-podkill": LATENCY_ALERTS | ERROR_ALERTS,
+}
 
 
 def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
@@ -147,7 +173,8 @@ def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
         duration_seconds=draw("duration_seconds", 100.0),
         latency_ms=int(draw("latency_ms", 400.0)),
         load_rps=draw("load_rps", 10.0),
-        fault={
+        fault=FAULT_BY_SCENARIO.get(spec.scenario_id)
+        or {
             "direct-pod-fault": "cpu-stress",
             "config-or-rollout": "env-delay",
             "negative-control": "env-delay",
@@ -159,6 +186,7 @@ def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
         spawn_seconds=int(draw("spawn_seconds", 20.0)),
         second_offset_seconds=draw("second_offset_seconds", 0.0),
         decoy_offset_seconds=draw("decoy_offset_seconds", 0.0),
+        loss_percent=int(draw("loss_percent", 0.0)),
     )
 
 
@@ -193,6 +221,7 @@ class Injection:
     # negative control: the decoy injected around the cause (contract §16)
     decoy: Injection | None = None
     namespace: str = "sre-demo"
+    spawn_kind: str = "NetworkChaos"  # what a Schedule spawns
 
 
 @dataclass(frozen=True)
@@ -266,6 +295,12 @@ class RunOutcome:
     directory: Path
 
 
+def _workload(pod: str) -> str:
+    """``payment-service-84ff5d9795-zhw6l`` -> ``payment-service`` (a Deployment's pod name)."""
+    parts = pod.rsplit("-", 2)
+    return parts[0] if len(parts) == 3 else ""
+
+
 def direct_pod_chain(injection: Injection) -> Chain:
     """The world's chain for a CPU stress on ``order-service``: the pod is the symptom, nothing propagates."""
     experiment = f"sre-demo/{injection.kind}/{injection.name}"
@@ -296,7 +331,7 @@ def direct_pod_chain(injection: Injection) -> Chain:
             ),
             Link(
                 role="symptom",
-                actor="sre-demo/Service/order-service",
+                actor=f"sre-demo/Service/{_workload(injection.target_pod) or 'order-service'}",
                 knowable=False,
                 mechanism="latency of the stressed service itself",
             ),
@@ -471,6 +506,83 @@ def negative_chain(injection: Injection) -> Chain:
     return Chain(links=real.links, construction=NEGATIVE_CONSTRUCTION, decoys=decoys)
 
 
+def _remechanised(chain: Chain, old: str, new: str) -> Chain:
+    links = tuple(
+        link.model_copy(update={"mechanism": link.mechanism.replace(old, new)})
+        for link in chain.links
+    )
+    return chain.model_copy(update={"links": links})
+
+
+def loss_chain(injection: Injection) -> Chain:
+    """Variant B of `dependency-fault`: packet loss instead of delay on ``payment-service``."""
+    return _remechanised(dependency_chain(injection), "NetworkChaos delay", "NetworkChaos loss")
+
+
+def competing_loss_chain(injection: Injection) -> Chain:
+    """Variant B of `competing-causes`: packet loss on ``payment-service`` plus the pod-kill (§15). Loss can
+    raise error alerts as well as latency ones, so the loss's group holds both."""
+    chain = _remechanised(competing_chain(injection), "NetworkChaos delay", "NetworkChaos loss")
+    groups = tuple(
+        group.model_copy(update={"alerts": tuple(sorted(set(group.alerts) | ERROR_ALERTS))})
+        if set(group.alerts) & LATENCY_ALERTS
+        else group
+        for group in chain.symptom_groups
+    )
+    return chain.model_copy(update={"symptom_groups": groups})
+
+
+def scheduled_stress_chain(injection: Injection) -> Chain:
+    """Variant B of `scheduled-recurring`: a Schedule spawning CPU stress on ``order-service``, which is also
+    the service showing the symptom, so the chain has no propagation link (contract §14.3)."""
+    schedule = f"sre-demo/Schedule/{injection.name}"
+    mechanism = f"Schedule spawning {injection.spawn_kind} cpu"
+    return Chain(
+        links=(
+            Link(
+                role="cause",
+                actor=schedule,
+                instance_uid=injection.uid,
+                knowable=True,
+                mechanism=mechanism,
+            ),
+            *(
+                Link(
+                    role="execution",
+                    actor=f"sre-demo/{injection.spawn_kind}/{name}",
+                    instance_uid=uid,
+                    knowable=True,
+                    mechanism=mechanism,
+                    evidence_class="execution",
+                )
+                for name, uid in injection.spawned
+            ),
+            Link(
+                role="target_effect",
+                actor=f"sre-demo/Pod/{injection.target_pod}",
+                instance_uid=injection.target_pod_uid,
+                knowable=True,
+                mechanism="request latency at the stressed pod",
+                evidence_class="effect",
+            ),
+            Link(
+                role="symptom",
+                actor="sre-demo/Service/order-service",
+                knowable=False,
+                mechanism="latency of the stressed service itself",
+            ),
+        )
+    )
+
+
+# variants whose chain differs from their family's (design §12.2.2)
+CHAINS_BY_SCENARIO = {
+    "dependency-loss-payment": loss_chain,
+    "scheduled-stress-order": scheduled_stress_chain,
+    "competing-loss-podkill": competing_loss_chain,
+}
+
+
 CHAINS = {
     "negative-control": negative_chain,
     "competing-causes": competing_chain,
@@ -529,7 +641,14 @@ class _Run:
     """One repeat in progress: the shared state of the protocol steps."""
 
     def __init__(
-        self, world: World, clock: Clock, work: Path, params: RunParameters, *, direct: bool = False
+        self,
+        world: World,
+        clock: Clock,
+        work: Path,
+        params: RunParameters,
+        *,
+        direct: bool = False,
+        direct_on_target: bool = False,
     ) -> None:
         self.world, self.clock, self.params = world, clock, params
         self.journal = InjectorJournal(work / "journal.jsonl", clock=clock.now)
@@ -538,11 +657,9 @@ class _Run:
         self.views: dict[str, float | None] = {"target": None, "propagation": None, "symptom": None}
         if direct:
             # The faulted service is the one showing the symptom: one probe, two views of it (contract §4.2).
-            probes = [
-                LatencyProbe(
-                    "target", world.client_measure, _Views(self.views, ("target", "symptom"))
-                )
-            ]
+            # the faulted service's own probe: the client's for order-service, the target's otherwise
+            measure = world.target_measure if direct_on_target else world.client_measure
+            probes = [LatencyProbe("target", measure, _Views(self.views, ("target", "symptom")))]
         else:
             probes = [
                 LatencyProbe("target", world.target_measure, _Views(self.views, ("target",))),
@@ -605,17 +722,30 @@ def run_once(
     alerts: Collection[str] | None = None,
 ) -> RunOutcome:
     spec = manifest.spec(scenario_id)
-    alerts = alerts or ALERTS_BY_FAMILY.get(spec.family, DEPENDENCY_ALERTS)
+    alerts = (
+        alerts
+        or ALERTS_BY_SCENARIO.get(spec.scenario_id)
+        or ALERTS_BY_FAMILY.get(spec.family, DEPENDENCY_ALERTS)
+    )
     params = derive_parameters(spec, spec.seeds[repeat])
-    timeline_alerts = TIMELINE_ALERTS_BY_FAMILY.get(spec.family, alerts)
+    timeline_alerts = TIMELINE_ALERTS_BY_SCENARIO.get(
+        spec.scenario_id, TIMELINE_ALERTS_BY_FAMILY.get(spec.family, alerts)
+    )
     run_id = f"{manifest.suite_id}-{scenario_id}-{repeat}"
     work = work_root / run_id
     if work.exists():
         raise FileExistsError(f"{work} exists; a re-run is a new repeat")
     work.mkdir(parents=True)
-    direct = spec.family == "direct-pod-fault"
+    direct = spec.family == "direct-pod-fault" or spec.scenario_id in DIRECT_SCENARIOS
     watched_views = ("target", "symptom") if direct else ("target", "propagation", "symptom")
-    run = _Run(world, clock, work, params, direct=direct)
+    run = _Run(
+        world,
+        clock,
+        work,
+        params,
+        direct=direct,
+        direct_on_target=spec.scenario_id == "direct-stress-payment",
+    )
     problems: list[str] = []
     injection: Injection | None = None
     stored: list[StoredDiagnosis] = []
@@ -662,9 +792,15 @@ def run_once(
             "cpu-stress": "pod-stress",
             "env-delay": "env-delay",
             "scheduled-delay": "sched-delay",
+            "scheduled-stress": "sched-stress",
+            "network-loss": "dep-loss",
+            "competing-loss": "dep-loss",
         }.get(params.fault, "dep-delay")
         decoy: Injection | None = None
-        decoy_params = dataclasses.replace(params, fault="decoy-delay")
+        decoy_params = dataclasses.replace(
+            params,
+            fault="decoy-stress" if spec.scenario_id == "negative-image-decoy" else "decoy-delay",
+        )
         if spec.family == "negative-control":
             construction = world.construction_problems()
             run.journal.record(
@@ -687,7 +823,7 @@ def run_once(
         while clock.now().timestamp() < deadline:
             run.wait(1.0)
             if (
-                params.fault == "competing"
+                params.fault in ("competing", "competing-loss")
                 and companion is None
                 and (clock.now() - injection.injected_at).total_seconds()
                 >= params.second_offset_seconds
@@ -728,7 +864,7 @@ def run_once(
         injection = dataclasses.replace(world.settle(injection), companion=companion, decoy=decoy)
         if spec.family == "negative-control" and decoy is None:
             problems.append("the decoy was never injected")
-        if params.fault == "competing" and companion is None:
+        if params.fault in ("competing", "competing-loss") and companion is None:
             problems.append("the second cause was never injected")
         if injection.kind == "Schedule" and not injection.spawned:
             problems.append("the schedule spawned no experiment before it was removed")
@@ -800,9 +936,9 @@ def _stamp(at: datetime, source: Source) -> Stamp:
     return Stamp(at=at, source=source)
 
 
-def probe_roles(family: str) -> ProbeRoles:
+def probe_roles(family: str, scenario_id: str = "") -> ProbeRoles:
     """Which probe view stands for which field: a direct fault has no downstream (contract §4.2)."""
-    direct = family == "direct-pod-fault"
+    direct = family == "direct-pod-fault" or scenario_id in DIRECT_SCENARIOS
     return ProbeRoles(
         target="target",
         downstream=None if direct else "propagation",
@@ -826,7 +962,7 @@ def rederive(
     removed = next((e.at for e in entries if e.role == "cause_removed" and e.ok), None)
     oracle = oracle_stamps(
         series,
-        probe_roles(record.family),
+        probe_roles(record.family, record.scenario_id),
         execution_started_at=execution.at,
         cause_removed_at=removed or series[-1].observed_at,
     )
@@ -860,7 +996,7 @@ def _finish(
     series = run.writer.read()
     oracle = oracle_stamps(
         series,
-        probe_roles(spec.family),
+        probe_roles(spec.family, spec.scenario_id),
         execution_started_at=execution_at,
         cause_removed_at=removed or run.clock.now(),
     )
@@ -875,7 +1011,9 @@ def _finish(
         spec.scenario_id,
         repeat,
         timeline=timeline,
-        chain=CHAINS.get(spec.family, dependency_chain)(injection),
+        chain=(
+            CHAINS_BY_SCENARIO.get(spec.scenario_id) or CHAINS.get(spec.family, dependency_chain)
+        )(injection),
         clock_offset_seconds=0.0,  # the injector and the oracle share one host clock
         diagnosis_completed_at=(primary.first_diagnosed_at or primary.diagnosed_at)
         if primary

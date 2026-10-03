@@ -365,3 +365,128 @@ hypotheses on it per incident and kept them `UNLINKED`, admitted only as context
 strong authority 0, false `RESOLVED` 0, false elimination 0. The acceptance bar (with `decoy_named` = 0) holds.
 Limitation: the seeds drew positive offsets only (decoy 13, 25 and 16 s after the change), so the decoy-first case was
 exercised in phase 0 alone, not in a scored run.
+
+## 12. Engine freeze and the first HOLDOUT (2026-10-03, owner-approved)
+
+Status: **APPROVED** by the owner (2026-10-03) and implemented. Roadmap B5 (frozen engine baseline) and E2 (held-out
+set).
+
+### 12.1 Why the split of §6 cannot be applied as written
+
+§6 assigns each scenario to `DEV` or `HOLDOUT` by `assign_tier(salt, scenario_id)`. Every scenario run so far (variant A
+of each family, slices 1 to 6) was declared `DEV` and its results were seen; several rules were decided on them (the
+ordering amendment §14, the scheduled amendment, the competing groups §15, the decoy §16). A salted hash that put any
+of them in `HOLDOUT` would label seen data as unseen. The variants B of §4 have never been run.
+
+### 12.2 Proposal
+
+1. **Split by construction, not by hash:** variant A of every family stays `DEV`; variant B of every family is the
+   first `HOLDOUT`. The rule is written into the manifests before any variant B runs; `assign_tier` stays for later
+   suites built from scratch.
+2. **Variants B** (from §4, made concrete; same families, same harness, new injections):
+
+   | Family | Variant B (`HOLDOUT`) | Expected symptom alerts |
+   |---|---|---|
+   | `dependency-fault` | packet loss (not delay) on `payment-service` | latency and error alerts of `order-service` |
+   | `direct-pod-fault` | `StressChaos` (CPU) on `payment-service` (A was `order-service`) | `payment-service` latency |
+   | `scheduled-recurring` | `Schedule` spawning a `StressChaos` on `order-service` (60 s every 90 s) | `order-service` latency |
+   | `config-or-rollout` | image change to a tag that does not exist plus a pod delete | payment error alerts |
+   | `negative-control` | variant B's image change plus a decoy `StressChaos` on `lab-control/isolated-echo` | as `config-or-rollout` B |
+   | `competing-causes` | packet loss on `payment-service` plus a pod-kill of `order-worker` (symptom groups as §15) | latency and errors / lag |
+
+   The alert set of each variant is fixed in code and the manifest before its phase 0, not from what phase 0 shows.
+3. **Engine frozen by commit:** `RCA_ENGINE_VERSION` stays 2.1.0 (owner decision F1), but that string has not
+   identified the code (the §11 presentation change landed after slices 1 to 3). The manifest gains `engine_commit`
+   (the git commit of the engine at freeze), and the runner refuses a run whose working tree differs from it in
+   `packages/rca` or `apps/control_plane`. No engine change lands until the `HOLDOUT` suite is complete.
+4. **Blind phase 0:** each variant B gets a phase 0 that checks only the run's validity and the alert names; the
+   engine's diagnosis and score are not printed or read. A variant whose phase 0 fails is redefined, still blind,
+   before the manifest is frozen.
+5. **Repeats:** 3 per variant (as `DEV`), 18 runs, about four hours. The acceptance bar is the frozen one (no false
+   strong authority, no false `RESOLVED`, at least 90% valid; `decoy_named` = 0 for the control).
+6. **Use of the result:** reported per family beside `DEV`, never merged. A `HOLDOUT` result never selects a rule or a
+   parameter; a failure is recorded as it is, and any fix is measured on a new `HOLDOUT` (new variants or seeds) after
+   it.
+
+### 12.3 Decisions requested
+
+- the split by construction (12.2.1) instead of the salted hash for this suite;
+- the variants B of the table;
+- the engine freeze by commit with the runner's check (a `testbed.suite.v1` field addition);
+- 3 repeats (instead of the 5 of §5) for this first `HOLDOUT`.
+
+### 12.4 Blind phase 0, first round (2026-10-03)
+
+Only validity, the timeline, alert names and harness-side series (oracle, Prometheus, journal) were read; no
+diagnosis or score of a variant B.
+
+- `dependency-loss-payment`: invalid, propagation before the target effect. The target probe (`/health`) failed only
+  now and then (about 1 s TCP retransmissions on a lost packet) and met the three-failures rule at 78.8 s, while the
+  client failed almost every sample from 0.3 s. Redefined: the loss variants probe the target with `POST /payments`,
+  as the configuration family does.
+- `direct-stress-payment`: invalid, no alert fired. Under 20 to 28 workers `payment-service` averaged 0.24 to 0.31 s
+  (heavy CPU throttling) and the caller's dependency latency 0.35 to 0.40 s, under every 0.5 s alert threshold.
+  Redefined: 56 to 72 workers.
+- `scheduled-stress-order`: the run stopped at calibration: every baseline sample failed in under a millisecond
+  (`URLError`), so the local port-forward to `order-service` was not serving after the pod was replaced during
+  isolation. Rerun unchanged first.
+
+### 12.5 Blind phase 0, second round (2026-10-03)
+
+Valid with their alert names: `scheduled-stress-order` (`OrderRequestLatencyHigh`; the port-forward problem did not
+recur), `dependency-loss-payment`, `direct-stress-payment` (payment latency alerts fire at 56 to 72 workers),
+`config-image-payment` (`OrderErrorRateHigh`). Invalid:
+
+- `competing-loss-podkill`: the target still met the three-failures rule late (11.9 s against 0.7 s for the client);
+  `POST /payments` sees 20 to 40% loss only intermittently as well. Redefined for both loss variants: 50 to 70% loss.
+- `negative-image-decoy`: the alert reached Alertmanager (18 s after the change) but no alert or incident reached the
+  control plane, although 63 events did; the connector's log of that run was lost to the next run's restart. The
+  same change without the decoy (`config-image-payment`) delivered its alert. The CPU-stress decoy is capped at 100m
+  by the isolated workload's limit, so a starved node is not the explanation. Rerun unchanged.
+
+### 12.6 Blind phase 0, third round (2026-10-03)
+
+Valid: both loss variants at 50 to 70% (`dependency-loss-payment`, `competing-loss-podkill`). `negative-image-decoy`
+was invalid again and was rerun with the control plane's log on: the alert stream was attached, and the only alert
+that fired (`OrderErrorRateHigh`) was active for about 20 s. **The lab connector polls Alertmanager every 30 s**
+(`SRE_ALERT_COVERAGE_POLL_SECONDS`), so an alert shorter than that can fall between two polls and never reach the
+control plane; the injector, polling every 5 s, saw it. The decoy was not the cause (the earlier hypothesis is
+withdrawn). The outage was short because, after the image change and the pod delete, the old ReplicaSet brought its
+pod straight back; `config-image-payment` passed only because its alert happened to span a poll.
+
+Redefined for both image variants: the broken image goes in one patch with a rollout strategy of `maxSurge: 0`,
+`maxUnavailable: 1`, so the old pod goes first and the outage lasts until the change is undone; undoing restores the
+image and the original strategy. Both are rerun blind. The short-alert loss is a product finding of its own (alert
+coverage; roadmap).
+
+### 12.7 Blind phase 0 complete; freeze
+
+With the lasting outage both image variants are valid (`config-image-payment`: `OrderDependencyLatencyHigh`,
+`OrderErrorRateHigh`; `negative-image-decoy` likewise plus the lag alerts) and the deployment's image and strategy are
+restored after each. All six variants B passed a blind phase 0; no diagnosis or score of any of them was read. The
+engine is frozen at the commit recorded in the six `HOLDOUT` manifests.
+
+### 12.8 First HOLDOUT result (2026-10-03, engine frozen at `96a10c3c`, 18 runs)
+
+Measured once, reported as it is; nothing below selects a rule or a parameter (§12.2.6).
+
+| Family (variant B) | Valid | Cause / instance | Execution witness / effect link | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `dependency-fault` (packet loss) | 3/3 | 1.0 / 1.0 | **1.0 / 1.0** | 0 / 0 / 0 | |
+| `direct-pod-fault` (CPU stress on payment) | 3/3 | 1.0 / 1.0 | 0.67 / 0.67 | 0 / 0 / 0 | |
+| `scheduled-recurring` (Schedule spawning CPU stress) | 3/3 | 1.0 / 1.0 | 0.33 / 0.33 | 0 / 0 / 0 | |
+| `config-or-rollout` (broken image) | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | |
+| `negative-control` (broken image + CPU-stress decoy) | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | decoy named 0 |
+| `competing-causes` (packet loss + pod-kill) | 3/3 | **0.83** / 0.83 | 1.0 / 1.0 | 0 / 0 / 0 | group recall 1.0, cross-attribution 0 |
+
+**The acceptance bar holds in every family**: 18 of 18 runs valid, no false strong authority, no false `RESOLVED`, the
+decoy never named. Cause recall is 1.0 everywhere except `competing-causes`: in its repeat 2 (seed 88) the pod-kill
+raised no lag above the threshold during the run (at most 29 messages; the loss had already cut the order traffic), the
+lag alerts fired only at 07:10:30, after the run had ended, so no incident of the pod-kill's group existed and the
+pod-kill could not be named; this is the world's outcome, counted as the frozen rule counts it.
+
+Compared with `DEV` (variant A, three repeats each): cause and instance recall the same (1.0 where the symptom exists),
+the bar held in both. Execution witnesses are **higher** on these variants (loss and CPU stress leave probe failures on
+the target pod, which the observed-fault-execution rule can bind), and still absent for the rollout and the control,
+where no strong rule exists yet (roadmap C5). The held-out set confirms the dev picture rather than contradicting it:
+the engine names the cause and does not overclaim; strong evidence depends on the fault leaving pod-level failures.

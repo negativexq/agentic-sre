@@ -883,6 +883,17 @@ def run_once(
         # 4. the closing events reach the control plane, which is asked once more for each incident: a
         #    diagnosis stored at the alert cannot know how the experiment ended (an unobserved end proves nothing)
         run.wait(REDIAGNOSE_SETTLE_SECONDS)
+        if alert_at is None:
+            # the control plane admits an alert only once it is old enough (connector contract §16), which can be
+            # after the cause is gone: the alert's start is still its start
+            alert_at = world.alert_started_at(timeline_alerts, injection.injected_at)
+            if alert_at is not None:
+                run.journal.record(
+                    verb="observe",
+                    object="alertmanager/alerts",
+                    role=ROLE_ALERT_OBSERVED,
+                    payload={"starts_at": alert_at.isoformat()},
+                )
         asked = world.rediagnose(alerts, injection.injected_at)
         run.journal.record(
             verb="rediagnose",

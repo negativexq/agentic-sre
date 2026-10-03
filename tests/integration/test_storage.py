@@ -207,6 +207,8 @@ def test_alembic_migration_up_and_down(tmp_path: Path) -> None:
         "snapshot_cycles",
         "stream_follow_segments",
         "tool_calls",
+        "trace_captures",
+        "trace_observations",
         "verification_results",
     }
     assert set(inspect_database(engine).get_table_names()) == expected_tables | {"alembic_version"}

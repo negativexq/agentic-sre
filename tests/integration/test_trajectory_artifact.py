@@ -32,6 +32,7 @@ BOUNDARY_KEYS = {
     "objects",
     "journal",
     "events",
+    "traces",
     "logs",
     "provider_capabilities",
     "alert_coverage",

@@ -472,6 +472,10 @@ class LabWorld:
             self.stop_load()
 
     def start_load(self, rps: float) -> None:
+        # a forward dies with its pod connection (kubectl port-forward exits on a lost connection), and nothing
+        # else would stand it up again: every request of the run would then fail at localhost
+        if self._forwarder is not None and not _port_open(self.order_port):
+            self._forwarder.refresh(("order-service",))
         workload = Workload(
             target=Target.ORDERS,
             count=1,
@@ -1013,6 +1017,14 @@ class LabWorld:
         if self._forwarder is not None:
             self._forwarder.stop_all()
             self._forwarder = None
+
+
+def _port_open(port: int) -> bool:
+    import socket
+
+    with socket.socket() as probe:
+        probe.settimeout(0.5)
+        return probe.connect_ex(("127.0.0.1", port)) == 0
 
 
 def _aware(value: datetime) -> datetime:

@@ -515,6 +515,45 @@ class EmailDeliveryRow(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
 
 
+class TraceObservationRow(Base):
+    """One span captured for an incident's diagnosis and replay (live-trace-design.md §3)."""
+
+    __tablename__ = "trace_observations"
+    __table_args__ = (
+        UniqueConstraint("incident_id", "dedup_key", name="uq_trace_observation_incident_key"),
+    )
+
+    observation_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    incident_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("incidents.incident_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    service: Mapped[str] = mapped_column(String(255), nullable=False)
+    event_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False, index=True)
+    observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False, index=True)
+    span: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    dedup_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_system: Mapped[str] = mapped_column(String(255), nullable=False, default="tempo")
+
+
+class TraceCaptureRow(Base):
+    """How complete one service's trace read was (live-trace-design.md §3.2): coverage, never absence."""
+
+    __tablename__ = "trace_captures"
+
+    capture_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    incident_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("incidents.incident_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    namespace: Mapped[str] = mapped_column(String(253), nullable=False)
+    service: Mapped[str] = mapped_column(String(255), nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    completeness: Mapped[str] = mapped_column(String(32), nullable=False)
+    spans: Mapped[int] = mapped_column(Integer, nullable=False)
+    error: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    captured_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
 class LogObservationRow(Base):
     """One bounded, normalized log observation captured for replay."""
 

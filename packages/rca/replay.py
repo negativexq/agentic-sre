@@ -445,6 +445,7 @@ class ReplaySource:
             event_bodies=[body for _, body in members.events],
             event_evidence_ids=[event_evidence_id(version_id) for version_id, _ in members.events],
             error_items=list(members.logs),
+            trace_items=list(members.traces),
             observed_at=boundary.window_end,
             # The live run used its snapshot exactly when it captured one.
             current_is_live=snapshot is not None,

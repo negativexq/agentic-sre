@@ -71,3 +71,34 @@ A first read of the lab's Tempo (2026-10-03) found the spans the engine needs: `
 `http.response.status_code`, `server.address` on the client side, and `order-worker`'s consumer span inside the same
 trace as `order-service`'s request, so the asynchronous edge of C3 is present in the data. Span status is unset
 (`UNKNOWN`); success has to be read from the HTTP status code.
+
+## 7. Shadow measurement (2026-10-03)
+
+The six `DEV` families (variant A, the frozen seeds) re-run with `SRE_TRACE_CAPTURE=true`, the engine frozen at
+`a92ee1f`; slices 2 and 3 were rerun after two harness fixes (`4dfd4e1`: a dead port-forward is stood up again; an
+alert the control plane admits after the cause is gone still stamps the timeline). **18 of 18 runs valid.**
+
+Every stored diagnosis was replayed twice from its own manifest, with its captured spans and with them removed, so the
+difference is due to the spans alone (the Connector's alert-admission change of §16 is the same on both sides):
+
+| Diagnoses | With spans | Changed by the spans (root cause, confidence, resolution, shown leader, support, strong, digest) |
+|---|---|---|
+| 271 | 271 | **0** |
+
+The spans reach the engine: in one run 216 spans, all bound to a service, gave a runtime graph of 3 services and 2
+edges (`order-service` → `payment-service` by client and server spans; `order-service` → `order-worker` by a fallback
+parent link) and 27 call pairs. Nothing changed because no rule consumes trace evidence yet (C1 is not implemented).
+The base read is therefore safe to turn on: it adds evidence and disturbs no decision.
+
+Two findings for C1, which the specified relation does not yet handle:
+
+1. **Latency faults leave no non-success call.** The 27 call pairs of that run were all successful (HTTP 201) while
+   `payment-service` was delayed; the specified relation reads non-success edges only, so it can never hold for the
+   delay and loss families. A latency relation (span duration against the run's own baseline) has to be specified.
+2. **The sample can miss the fault.** One read per service returns at most 32 traces from the newest hour of the
+   window, not necessarily from the fault's interval. A relation that needs the fault interval has to read around the
+   onset.
+
+Separate finding, not caused by the spans: replaying with spans reproduced the live diagnosis's digest for 200 of 271
+diagnoses; the other 71 differ with and without spans alike, so the gap lies between live and replay, and is to be
+examined on its own.

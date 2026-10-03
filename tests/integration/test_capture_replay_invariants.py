@@ -160,6 +160,7 @@ def test_live_capture_manifest_engine_calls_are_ordered_and_taped(
         reader=cluster,
         provider_readers=readers.configured(),
         clock=clock,
+        trace_capture=False,
     ).run(incident_id, "MANUAL")
     with factory() as session:
         run_id = DiagnosisRepository(session).latest_run_id(incident_id)

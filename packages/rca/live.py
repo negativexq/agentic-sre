@@ -8,6 +8,7 @@ import logging
 import re
 from collections import defaultdict
 from collections.abc import Callable, Iterator, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, Protocol
@@ -874,7 +875,7 @@ def capture_traces(
     max_services: int = TRACE_CAPTURE_MAX_SERVICES,
     max_spans: int = TRACE_CAPTURE_MAX_SPANS,
 ) -> TraceCapture:
-    """One bounded Tempo read per ``(namespace, service)`` Deployment over the newest hour of the window.
+    """One bounded Tempo read per ``(namespace, service)`` Deployment over the newest hour of the window, concurrently.
 
     A read that failed or was cut is recorded as such; it is coverage, never absence of spans.
     """
@@ -882,28 +883,29 @@ def capture_traces(
     from packages.rca.model import InvestigationQuery, ProviderReadFailure
 
     start = max(starts_at, ends_at - TRACE_QUERY_MAX_SPAN)
-    seen: dict[tuple[str, str], TraceSpanObservation] = {}
-    reads: list[TraceServiceCapture] = []
-    for namespace, service in list(dict.fromkeys(services))[:max_services]:
+
+    def read(
+        namespace: str, service: str
+    ) -> tuple[TraceServiceCapture, list[TraceSpanObservation]]:
         target = EntityRef(kind="Deployment", name=service, namespace=namespace)
         try:
             result = reader.query_tempo(
                 target, InvestigationQuery(start=start, end=ends_at, limit=32)
             )
         except Exception as error:  # noqa: BLE001 - a failed read is recorded, never fatal
-            reads.append(
+            return (
                 TraceServiceCapture(
                     service, namespace, start, ends_at, "FAILED", 0, type(error).__name__
-                )
+                ),
+                [],
             )
-            continue
         if isinstance(result, ProviderReadFailure):
-            reads.append(
+            return (
                 TraceServiceCapture(
                     service, namespace, start, ends_at, "FAILED", 0, result.error_type
-                )
+                ),
+                [],
             )
-            continue
         spans = result.spans if isinstance(result, TempoTraceBatch) else tuple(result)
         completeness = (
             str(result.diagnostics.completeness.value)
@@ -913,11 +915,21 @@ def capture_traces(
         ordered = sorted(spans, key=lambda span: (span.start_at, span.trace_id, span.span_id))
         if len(ordered) > max_spans:
             ordered, completeness = ordered[:max_spans], "TRUNCATED"
+        return (
+            TraceServiceCapture(service, namespace, start, ends_at, completeness, len(ordered)),
+            ordered,
+        )
+
+    # live-trace-design.md §11: the reads run concurrently; results are kept in the services' order
+    targets = list(dict.fromkeys(services))[:max_services]
+    with ThreadPoolExecutor(max_workers=max(1, len(targets))) as pool:
+        results = list(pool.map(lambda pair: read(*pair), targets))
+    seen: dict[tuple[str, str], TraceSpanObservation] = {}
+    reads: list[TraceServiceCapture] = []
+    for capture_read, ordered in results:
         for span in ordered:
             seen.setdefault((span.trace_id, span.span_id), span)
-        reads.append(
-            TraceServiceCapture(service, namespace, start, ends_at, completeness, len(ordered))
-        )
+        reads.append(capture_read)
     spans_out = tuple(
         sorted(seen.values(), key=lambda span: (span.start_at, span.trace_id, span.span_id))
     )

@@ -79,6 +79,7 @@ def _record(world: Any, policy: Any, minutes: int = 30) -> Run:
         namespaces=("sre-demo",),
         reader=cluster,
         clock=clock,
+        trace_capture=False,
         provider_readers=readers.configured(),
         bounded_policy_factory=policy,
         # A non-trivial recorded trajectory exists only on the bounded benchmark seed.

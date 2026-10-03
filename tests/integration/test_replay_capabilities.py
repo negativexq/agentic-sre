@@ -81,6 +81,7 @@ def _live_run(
         reader=cluster,
         provider_readers=readers,
         clock=clock,
+        trace_capture=False,
     ).run(incident_id, "MANUAL")
     with factory() as session:
         run_id = DiagnosisRepository(session).latest_run_id(incident_id)

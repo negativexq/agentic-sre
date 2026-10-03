@@ -56,6 +56,7 @@ from packages.rca.live import (
     ListingScope,
     LiveSource,
     ObjectSnapshot,
+    TraceCapture,
     capture_error_logs,
     capture_traces,
     incident_window,
@@ -335,6 +336,22 @@ class SnapshotResult:
     lifecycle_repairs: int = 0
     # The persisted snapshot cycle, when this cycle captured evidence for a run.
     cycle_id: int | None = None
+
+
+TRACE_FAULT_LEAD = timedelta(minutes=2)  # an alert fires about a minute after its fault begins
+TRACE_FAULT_TAIL = timedelta(minutes=5)
+TRACE_BASELINE_FROM = timedelta(minutes=10)
+TRACE_BASELINE_TO = timedelta(minutes=5)
+
+
+def _instrumented(body: dict[str, Any]) -> bool:
+    """A Deployment whose pod template configures OpenTelemetry, so its pods emit traces."""
+    containers = body.get("spec", {}).get("template", {}).get("spec", {}).get("containers") or []
+    return any(
+        str(env.get("name", "")).startswith("OTEL_")
+        for container in containers
+        for env in container.get("env") or []
+    )
 
 
 @dataclass
@@ -923,13 +940,40 @@ class DiagnosisService:
             for alert in alerts
             if alert.service and alert.namespace
         ]
+        # only workloads that emit traces: a Deployment whose pod template configures OpenTelemetry
+        # (live-trace-design.md §8: reads of uninstrumented workloads cost time and return nothing)
         services += sorted(
             (str(body["metadata"].get("namespace", "")), str(body["metadata"].get("name")))
             for body in listed
-            if body.get("kind") == "Deployment" and body.get("metadata", {}).get("namespace")
+            if body.get("kind") == "Deployment"
+            and body.get("metadata", {}).get("namespace")
+            and _instrumented(body)
         )
-        starts_at, ends_at = incident_window(alerts, self.clock())
-        capture = capture_traces(provider_adapter, services, starts_at, ends_at)
+        # live-trace-design.md §9: Tempo returns a window's oldest traces first, so one wide read only ever held
+        # the quiet minutes before the fault. Two narrow reads instead: the fault around the first alert, and a
+        # baseline before it to compare the fault's calls with.
+        onset = min((alert.starts_at for alert in alerts), default=self.clock())
+        now = self.clock()
+        fault = capture_traces(
+            provider_adapter,
+            services,
+            onset - TRACE_FAULT_LEAD,
+            min(now, onset + TRACE_FAULT_TAIL),
+        )
+        baseline = capture_traces(
+            provider_adapter,
+            services,
+            onset - TRACE_BASELINE_FROM,
+            onset - TRACE_BASELINE_TO,
+        )
+        capture = TraceCapture(
+            tuple(
+                {
+                    (span.trace_id, span.span_id): span for span in (*baseline.spans, *fault.spans)
+                }.values()
+            ),
+            (*fault.reads, *baseline.reads),
+        )
         for read in capture.reads:
             if read.completeness == "FAILED":
                 logger.warning(

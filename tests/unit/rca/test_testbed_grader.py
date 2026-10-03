@@ -198,3 +198,59 @@ def test_a_propagation_link_that_cannot_yet_be_observed_is_not_measured() -> Non
         )
     )
     assert score_run(record(with_propagation), diagnosis(), tier="DEV").propagation_link is None
+
+
+# ---- competing causes: every incident against its own symptom group (testbed contract §15) ----
+
+OTHER = "shop/PodChaos/worker-kill"
+
+
+def competing(
+    groups: tuple[tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]], ...],
+) -> Chain:
+    from packages.evals.live.ground_truth import SymptomGroup
+
+    base = truth_chain()
+    kill = Link(role="cause", actor=OTHER, instance_uid="k1", knowable=True, mechanism="PodChaos")
+    return Chain(
+        links=(*base.links, kill),
+        symptom_groups=tuple(SymptomGroup(alerts=a, causes=c, required=r) for a, c, r in groups),
+    )
+
+
+def test_each_incident_is_scored_against_its_own_group() -> None:
+    chain = competing(
+        (
+            (("Latency",), (SCHEDULE,), (SCHEDULE,)),
+            (("Lag",), (OTHER, SCHEDULE), (OTHER,)),
+        )
+    )
+    d = diagnosis()
+    score = score_run(
+        record(chain, family="competing-causes"),
+        d,
+        tier="DEV",
+        incidents=[("Latency", d), ("Lag", d), ("Unrelated", d)],
+    )
+    # the latency group is found; the lag group needs the pod-kill, which this diagnosis never names
+    assert (score.groups_found, score.groups_total, score.unscored_incidents) == (1, 2, 1)
+    assert (
+        score.cross_attribution == 0
+    )  # naming the delay for a lag incident is allowed (it contributes)
+    assert (score.causes_named, score.causes_total) == (1, 2)
+    # instances are read where the cause's group requires it: the delay's instance is named, the pod-kill's is not
+    assert (score.instances_named, score.instances_total) == (1, 2)
+
+
+def test_naming_a_cause_outside_the_incidents_group_is_a_cross_attribution() -> None:
+    chain = competing(
+        (
+            (("Lag",), (OTHER,), (OTHER,)),
+            (("Latency",), (SCHEDULE,), (SCHEDULE,)),
+        )
+    )
+    d = diagnosis()
+    score = score_run(
+        record(chain, family="competing-causes"), d, tier="DEV", incidents=[("Lag", d)]
+    )
+    assert score.cross_attribution == 1 and score.groups_found == 0

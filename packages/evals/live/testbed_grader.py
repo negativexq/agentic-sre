@@ -40,6 +40,11 @@ class RunScore(BaseModel):
     abstained: bool | None = None
     reads: int = 0
     time_to_diagnosis_seconds: float | None = None
+    # contract §15: chains with symptom groups are scored per incident against the incident's own group
+    groups_total: int = 0
+    groups_found: int = 0
+    cross_attribution: int = 0
+    unscored_incidents: int = 0
 
 
 def _identity(diagnosis: Diagnosis) -> dict[str, tuple[str, frozenset[str]]]:
@@ -71,17 +76,87 @@ def _fired_witnesses(diagnosis: Diagnosis) -> list[Any]:
     ]
 
 
+def _named(diagnosis: Diagnosis) -> set[str]:
+    """Actors the diagnosis names: those of its supported hypotheses, and ``root_cause``."""
+    identity = _identity(diagnosis)
+    trace = diagnosis.resolution_trace
+    supported = set(trace.plausible_hypotheses) if trace is not None else set()
+    named = {identity[h][0] for h in supported if h in identity}
+    if diagnosis.root_cause is not None:
+        named.add(diagnosis.root_cause.canonical)
+    return named
+
+
+def _grouped(record: RunRecord, incidents: Sequence[tuple[str, Diagnosis]]) -> dict[str, Any]:
+    """Contract §15.3: every incident against its own symptom group."""
+    chain = record.chain
+    cause_actors = {link.actor for link in chain.of_role("cause")}
+    chain_actors = chain.actors()
+    found_causes: set[str] = set()
+    instances = {link.actor: link.instance_uid for link in chain.of_role("cause") if link.knowable}
+    found_instances: set[str] = set()
+    out = {
+        "groups_total": 0,
+        "groups_found": 0,
+        "cross_attribution": 0,
+        "unscored_incidents": 0,
+        "false_strong_authority": 0,
+        "false_resolved": False,
+    }
+    for alert, diagnosis in incidents:
+        group = chain.group_of(alert)
+        if group is None:
+            out["unscored_incidents"] += 1
+            continue
+        named = _named(diagnosis)
+        identity, trace = _identity(diagnosis), diagnosis.resolution_trace
+        supported = set(trace.plausible_hypotheses) if trace is not None else set()
+        for cause in set(group.required) & set(instances):
+            if any(
+                identity[h][0] == cause and instances[cause] in identity[h][1]
+                for h in supported
+                if h in identity
+            ):
+                found_instances.add(cause)
+        out["groups_total"] += 1
+        if all(cause in named for cause in group.required):
+            out["groups_found"] += 1
+        found_causes |= set(group.required) & named
+        others = cause_actors - set(group.causes)
+        if named & others:
+            out["cross_attribution"] += 1
+        strong = set(trace.mechanism_verified_hypotheses) if trace is not None else set()
+        allowed = (
+            chain_actors - others
+        )  # a strong claim on the other cause is false for this incident
+        out["false_strong_authority"] += sum(
+            1 for h in strong if identity.get(h, ("", frozenset()))[0] not in allowed
+        )
+        if diagnosis.resolution is Resolution.RESOLVED and (
+            diagnosis.root_cause is None or diagnosis.root_cause.canonical not in group.causes
+        ):
+            out["false_resolved"] = True
+    out["causes_named"] = len(found_causes & cause_actors)
+    out["instances_named"] = len(
+        found_instances
+    )  # each cause's instance, read where its group requires it
+    return out
+
+
 def score_run(
     record: RunRecord,
     diagnosis: Diagnosis,
     *,
     tier: str,
     also: Sequence[Diagnosis] = (),
+    incidents: Sequence[tuple[str, Diagnosis]] = (),
 ) -> RunScore:
     """Score ``diagnosis`` (the run's primary incident); ``also`` are the run's other incidents.
 
     Naming, strong authority and timing come from the primary incident. The links of the chain
     belong to the whole fault, so they are read from the witnesses of every incident of the run.
+    A chain with symptom groups (competing causes, contract §15) scores naming, strong authority and
+    ``RESOLVED`` per incident instead, from ``incidents`` (each with its alert name).
     """
     if not record.valid:
         return RunScore(
@@ -142,7 +217,8 @@ def score_run(
         else set()
     )
     finished, alerted = record.diagnosis_completed_at, record.timeline.alert_fired_at
-    return RunScore(
+    grouped = _grouped(record, incidents) if chain.symptom_groups else {}
+    score = RunScore(
         scenario_id=record.scenario_id,
         repeat=record.repeat,
         family=record.family,
@@ -179,6 +255,7 @@ def score_run(
             else None
         ),
     )
+    return score.model_copy(update=grouped) if grouped else score
 
 
 def _rate(values: Iterable[bool | None]) -> float | None:
@@ -222,4 +299,10 @@ def aggregate(scores: Sequence[RunScore]) -> dict[str, dict[str, Any]]:
             "median_reads": sorted(s.reads for s in valid)[len(valid) // 2] if valid else None,
             "median_time_to_diagnosis_seconds": _median(s.time_to_diagnosis_seconds for s in valid),
         }
+        if any(s.groups_total for s in valid):
+            out[key]["group_recall"] = sum(s.groups_found for s in valid) / sum(
+                s.groups_total for s in valid
+            )
+            out[key]["cross_attribution"] = sum(s.cross_attribution for s in valid)
+            out[key]["unscored_incidents"] = sum(s.unscored_incidents for s in valid)
     return out

@@ -59,6 +59,7 @@ SCENARIO_ID = "dependency-delay-payment"
 CONFIG_SCENARIO_ID = "config-delay-payment"
 DIRECT_SCENARIO_ID = "direct-stress-order"
 SCHEDULED_SCENARIO_ID = "scheduled-delay-payment"
+COMPETING_SCENARIO_ID = "competing-delay-podkill"
 MAX_WARMUPS = 3
 RUN_LABEL = (
     "testbed.agentic-sre.io/run"  # every experiment the harness creates carries its run's id
@@ -282,6 +283,7 @@ class LabWorld:
             "schedules",
             "networkchaos",
             "stresschaos",
+            "podchaos",
         ):  # a Schedule first, so it spawns no more
             self._run(
                 ["kubectl", "-n", NAMESPACE, "delete", kind, "--all", "--ignore-not-found"],
@@ -495,6 +497,16 @@ class LabWorld:
                     f"    duration: {params.spawn_seconds}s\n"
                 ),
             )
+        elif params.fault == "pod-kill":
+            # contract §15: the second competing cause, one pod of order-worker killed once
+            kind, duration, body = (
+                "PodChaos",
+                "",
+                (
+                    "  action: pod-kill\n  mode: one\n"
+                    f"  selector: {{namespaces: [{NAMESPACE}], labelSelectors: {{app: order-worker}}}}\n"
+                ),
+            )
         elif params.fault == "cpu-stress":
             kind, body = (
                 "StressChaos",
@@ -519,6 +531,13 @@ class LabWorld:
             f"labels: {{{RUN_LABEL}: {self.database}}}}}\nspec:\n{body}{duration}"
         )
         self._experiments.add(name)
+        # the pod a pod-kill will remove is known only before it is killed
+        app = "order-worker" if params.fault == "pod-kill" else self.target_app
+        before = json.loads(
+            self._run(
+                ["kubectl", "-n", NAMESPACE, "get", "pod", "-l", f"app={app}", "-o", "json"]
+            ).stdout
+        )["items"]
         result = self._run(["kubectl", "apply", "-f", "-"], stdin=manifest, check=False)
         ok = result.returncode == 0
         uid = ""
@@ -545,21 +564,15 @@ class LabWorld:
         )
         if not ok:
             raise RuntimeError(f"the experiment was not created: {result.stderr.strip()[:200]}")
-        pods = json.loads(
-            self._run(
-                [
-                    "kubectl",
-                    "-n",
-                    NAMESPACE,
-                    "get",
-                    "pod",
-                    "-l",
-                    f"app={self.target_app}",
-                    "-o",
-                    "json",
-                ]
-            ).stdout
-        )["items"]
+        pods = (
+            before
+            if params.fault == "pod-kill"
+            else json.loads(
+                self._run(
+                    ["kubectl", "-n", NAMESPACE, "get", "pod", "-l", f"app={app}", "-o", "json"]
+                ).stdout
+            )["items"]
+        )
         pod = pods[0]["metadata"]
         return Injection(name, uid, pod["name"], pod["uid"], entry.at, kind)
 
@@ -879,7 +892,28 @@ def scheduled_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> S
     )
 
 
+def competing_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> ScenarioSpec:
+    """Slice 5 (design §4 `competing-causes`, contract §15): a delay on ``payment-service`` and, after a seeded
+    offset, a pod-kill of ``order-worker``; scored per incident against its symptom group."""
+    return ScenarioSpec(
+        scenario_id=COMPETING_SCENARIO_ID,
+        family="competing-causes",
+        tier=tier,  # type: ignore[arg-type]
+        repeats=repeats,
+        seeds=seeds,
+        parameters={
+            "baseline_seconds": ParameterRange(low=45, high=45),
+            "offset_seconds": ParameterRange(low=0, high=20),
+            "duration_seconds": ParameterRange(low=120, high=160),
+            "latency_ms": ParameterRange(low=300, high=600),
+            "load_rps": ParameterRange(low=8, high=12),
+            "second_offset_seconds": ParameterRange(low=0, high=60),
+        },
+    )
+
+
 SPECS = {
+    "competing": competing_spec,
     "dependency": dependency_spec,
     "direct": direct_pod_spec,
     "config": config_spec,
@@ -931,7 +965,15 @@ def _rescore(store: TestbedStore, suite: str) -> int:
             if not record.valid or not stored:
                 continue
             documents = [Diagnosis.model_validate(d["document"]) for d in stored]
-            score = score_run(record, documents[0], tier=spec.tier, also=documents[1:])
+            score = score_run(
+                record,
+                documents[0],
+                tier=spec.tier,
+                also=documents[1:],
+                incidents=[
+                    (str(d["alert"]), doc) for d, doc in zip(stored, documents, strict=True)
+                ],
+            )
             store.write_artifact(record, "score.v2.json", score.model_dump_json().encode())
             scores.append(score)
     print(json.dumps(aggregate(scores), indent=2, sort_keys=True))
@@ -973,7 +1015,15 @@ def _rederive(store: TestbedStore, suite: str) -> int:
             if not again.valid or not stored:
                 continue
             documents = [Diagnosis.model_validate(d["document"]) for d in stored]
-            score = score_run(again, documents[0], tier=spec.tier, also=documents[1:])
+            score = score_run(
+                again,
+                documents[0],
+                tier=spec.tier,
+                also=documents[1:],
+                incidents=[
+                    (str(d["alert"]), doc) for d, doc in zip(stored, documents, strict=True)
+                ],
+            )
             store.write_artifact(record, "score.v3.json", score.model_dump_json().encode())
             scores.append(score)
     print(json.dumps(aggregate(scores), indent=2, sort_keys=True))

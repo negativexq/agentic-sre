@@ -309,3 +309,70 @@ the execution on. `packages.evals.live.testbed_lab rederive --suite <id>` re-der
 Slice 3 scored on the re-derived timelines (`score.v3.json`): cause named 3/3, instance named 2/3 (in repeat 1 no supported
 hypothesis carries the cause's instance UID; not yet examined), execution witness 0/3 and effect link 0/3 (no rollout rule yet, roadmap C5;
 expected), **false strong authority 0, false `RESOLVED` 0**: the frozen acceptance bar holds.
+
+## 15. Competing causes: symptom groups and per-incident scoring (2026-10-03, owner-approved)
+
+Status: **APPROVED** by the owner (2026-10-03) and implemented (`SymptomGroup`, `Chain.symptom_groups`, per-incident scoring in `testbed_grader.py`, scenario `competing-delay-podkill`).
+
+### 15.1 Why
+
+The `competing-causes` family (`testbed-scenarios-design.md` §4) injects a delay on `payment-service` and a pod-kill of
+`order-worker` and assumes their symptoms are separable. A measurement on 2026-10-03 (unscored, nothing frozen) shows
+they are separable only in one direction:
+
+- **A pod-kill of `order-worker` alone** raised the lag of the alert expression (produced minus consumed over 2 minutes)
+  from 0 to 42–114 for about 2 minutes, 4 to 11 times the threshold of 10; both lag alerts (`KafkaConsumerLag`,
+  `OrderWorkerLagHigh`) fired about 50 s after the kill and lasted about 75 s. It cannot cause a payment latency.
+- **A delay on `payment-service` alone** also moves the lag, weakly and intermittently, because `order-worker` calls
+  `payment-service`: between −34 and +31 in slice 4 repeat 0 (crossing the threshold now and then, so a lag alert can
+  fire), within ±9 in slice 4b repeat 0.
+- No lag above 1 was seen during isolation or in four quiet minutes under load, so the pre-injection lag alerts of two
+  phase 0 runs are not explained by isolation; their origin stays open.
+
+A single cause per run, or one chain read from the primary incident (§7, §13.3), cannot score this: a lag incident has
+two real contributors, and the run's incidents belong to different causes.
+
+### 15.2 Symptom groups in the chain
+
+The chain (`testbed.chain.v1`) gains an optional list of **symptom groups**, written by the harness from the scenario
+definition before the run, never from what the engine reports:
+
+```
+symptom_groups: [ { alerts: [alert names], causes: [cause actors], required: [cause actors] } ... ]
+```
+
+- `alerts`: the alert names that make an incident belong to the group (an incident belongs to the group of its alert);
+- `causes`: every cause actor that really contributes to those symptoms (the true cause set of the group);
+- `required`: the subset that must be named for the group to count as found.
+
+For the scenario of §4: a **latency group** (the latency alerts; causes and required: the payment delay) and a **lag
+group** (`KafkaConsumerLag`, `OrderWorkerLagHigh`; causes: the pod-kill and the payment delay; required: the pod-kill).
+`competing-causes` requires at least two cause links (unchanged) and, with this amendment, at least two groups.
+An incident whose alert belongs to no group is reported and not scored.
+
+### 15.3 Scoring per incident
+
+For a chain with symptom groups, every stored incident of the run is scored against its own group, with the existing
+meaning of *named* (an actor of a supported hypothesis, or `root_cause`):
+
+- `group_found`: every `required` cause of the group is named;
+- `cross_attribution`: a cause of the run that is **not** in the group's `causes` is named (for example the pod-kill
+  named for a latency incident);
+- false strong authority and false `RESOLVED` as in §7, per incident, against the group's `causes`.
+
+Per run: `causes_named` counts a cause as named when it is found in at least one group that requires it (so neither
+cause may be absorbed by the other), and `instances_named` counts a cause's exact instance the same way (a supported
+hypothesis of that actor carrying its UID, in an incident of a group that requires it; owner-approved 2026-10-03); `cross_attribution` is the number of incidents with one. Reported per family with
+the other metrics; the acceptance bar stays the frozen one (no false strong authority, no false `RESOLVED`), and
+`cross_attribution` is reported without a threshold for this baseline.
+
+### 15.4 Timeline
+
+The timeline stays one per run and describes the cause the oracle probes (the payment delay: target, propagation and
+symptom views as in `dependency-fault`). The pod-kill's instants (created, the pod's deletion, the new pod) are in the
+injector journal and its chain links; they carry no oracle fields, and time-to-diagnosis is reported for the latency
+group only. The second cause starts after a seeded offset of 0 to 60 s, so the two overlap.
+
+### 15.5 Not changed
+
+Families without symptom groups are scored exactly as today. The engine never reads the chain.

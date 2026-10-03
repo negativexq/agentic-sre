@@ -549,6 +549,7 @@ def _resolution_trace(case: Case, config: EngineConfig) -> ResolutionTrace:
         structural_alternatives=case.structural_alternatives,
         events=case.source.events(),
         runtime_propagation=case.runtime_propagation,
+        trace_spans=case.source.trace_observations(),
     )
 
 

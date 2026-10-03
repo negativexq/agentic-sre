@@ -19,6 +19,7 @@ from packages.rca.model import (
     CausalHop,
     CausalWitness,
     ClusterEvent,
+    EntityRef,
     Finding,
     FindingKind,
     FrontierAnswer,
@@ -26,11 +27,20 @@ from packages.rca.model import (
     RootSupportRecord,
     RootSupportStatus,
     StructuralAlternative,
+    TraceSpanObservation,
 )
 from packages.rca.runtime_propagation import (
     RuntimeBindingVerificationState,
     RuntimePropagation,
     RuntimePropagationEdge,
+)
+from packages.rca.service_effect import (
+    BASELINE_FROM,
+    BASELINE_TO,
+    SERVICE_EFFECT,
+    call_pairs,
+    fault_calls,
+    service_effect,
 )
 from packages.rca.signals import _QUOTA_MESSAGE
 from packages.rca.topology import is_chaos_kind
@@ -174,11 +184,83 @@ def _effect_times(finding: Finding, events: Sequence[ClusterEvent]) -> list[date
     return [*times, *([finding.at] if finding.at is not None else [])]
 
 
+def _service_effect_witness(
+    holder: Hypothesis,
+    injection: Finding,
+    target_pod: EntityRef,
+    applied: datetime,
+    recovered: datetime,
+    spans: Sequence[TraceSpanObservation],
+) -> list[CausalWitness]:
+    """m21 contract §12: the target is not itself a symptom, but a declared symptom service's calls to the exact
+    target pod show the effect (non-success, or latency far above the baseline). The witness covers that service."""
+    assert holder.episode_onset is not None
+    onset = holder.episode_onset
+    target_service = target_pod.name.rsplit("-", 2)[0]
+    witnesses = []
+    for symptom in holder.symptom_entities:
+        if symptom.kind != "Service" or symptom.name == target_service:
+            continue
+        if symptom.namespace != target_pod.namespace:
+            continue
+        pairs = call_pairs(spans, symptom.name, target_service)
+        holds = service_effect(
+            pairs,
+            target_pod=target_pod.name,
+            start=applied,
+            end=recovered,
+            baseline=(onset - BASELINE_FROM, onset - BASELINE_TO),
+            parameters=SERVICE_EFFECT,
+        )
+        if holds is not True:
+            continue
+        calls = fault_calls(pairs, target_pod=target_pod.name, start=applied, end=recovered)
+        spawned = tuple(injection.details.get("spawn_evidence_ids", ()))
+        witnesses.append(
+            CausalWitness(
+                actor=holder.causal_actor,
+                actor_instance=holder.actor_instance,
+                origin=injection,
+                mechanism="FAULT_EXECUTION_EFFECT_AT_CALLER",
+                attribution=(
+                    "EXPERIMENT_EXECUTION_CARRIED_BY_SPAWN_RECORD"
+                    if spawned
+                    else "EXPERIMENT_EXECUTION"
+                ),
+                symptom=symptom,
+                path=(
+                    CausalHop(
+                        source=holder.causal_actor, relation="fault_targets", target=target_pod
+                    ),
+                    CausalHop(source=target_pod, relation="called_by", target=symptom),
+                ),
+                onset=onset,
+                evidence_ids=tuple(
+                    sorted({*injection.evidence_ids, *(e for c in calls for e in c.evidence_ids)})
+                ),
+                relation_evidence_ids=spawned,
+                coverage=(
+                    "EXACT_EXPERIMENT_INSTANCE",
+                    "EXECUTION_INTERVAL_CLOSED",
+                    "SERVICE_LEVEL_EFFECT_AT_EXACT_POD",
+                    "BASELINE_BEFORE_ONSET",
+                    *(("EXACT_SPAWN_RECORD_UIDS",) if spawned else ()),
+                ),
+                missing=("FAULT_ACTION_NOT_OBSERVED", "INCIDENT_RECOVERY_NOT_ASSESSED"),
+                rule_id=FAULT_EXECUTION_RULE,
+                rule_version="v1",
+                claim_level="OBSERVED_MECHANISM_CAUSE",
+            )
+        )
+    return witnesses
+
+
 def fault_execution(
     holder: Hypothesis,
     possible: RootSupportRecord,
     hypotheses: Sequence[Hypothesis],
     events: Sequence[ClusterEvent],
+    spans: Sequence[TraceSpanObservation] = (),
 ) -> RootSupportRecord:
     """Execution witness plus incident effect at the exact target, never Spawned/Applied alone."""
     witnesses: list[CausalWitness] = []
@@ -204,10 +286,23 @@ def fault_execution(
                     _instant(target["applied_at"]),
                     _instant(target["recovered_at"]),
                 )
-                if pod is None or applied is None or recovered is None:
+                if applied is None or recovered is None:
                     continue
                 onset = holder.episode_onset
                 if applied > onset + EVENT_RESOLUTION or recovered < onset - EXECUTION_END_GRACE:
+                    continue
+                if pod is None:
+                    # not itself a symptom: the effect may still show at a symptom service (§12)
+                    name = rest.partition("/")[0]
+                    if spans and name:
+                        witnesses += _service_effect_witness(
+                            holder,
+                            injection,
+                            EntityRef(kind="Pod", name=name, namespace=namespace),
+                            applied,
+                            recovered,
+                            spans,
+                        )
                     continue
                 effects = [
                     (f, _effect_times(f, events))

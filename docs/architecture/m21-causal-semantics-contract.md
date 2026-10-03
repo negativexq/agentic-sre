@@ -1161,3 +1161,83 @@ an onset (a record from before these fields) leaves the filter inactive.
 database (`testbed_longrun_indep1_c15`): for every incident the shown display and candidates equal the shadow's
 prediction at `W` = 5 from the earlier diagnosis (41 of 41); `root_cause` unchanged in 41, epistemic digest equal in
 41; 33 incidents now show one leader and 8 still compete (35 with a candidate set aside).
+
+## 12. Service-level effect relation, revised with latency (amendment, owner-approved 2026-10-03)
+
+Status: **APPROVED** by the owner (2026-10-03) for the shadow measurement of §12.4; adoption follows it. Roadmap C1. It revises the specified, unimplemented "Service-level effect
+relation" above, now that live traces exist (`live-trace-design.md`). Nothing below is implemented.
+
+### 12.1 What the traces show
+
+The relation as specified reads only **non-success** call edges. In the lab's trace runs (slices 1 and 3, the base read
+of `live-trace-design.md` §9) every `order-service` → `payment-service` call was HTTP 201, before and during the
+fault, so it would never hold for the delay and loss families. Their effect is latency, and it is large: the caller's
+call duration had a median of 4 to 5 ms in the baseline window and **0.86 to 3.3 s** during the fault in five of six
+runs. In the sixth (a configuration change) the calls inside the change's interval were still fast, because a rollout
+slows calls only once its new pod serves them: the interval that matters is the execution's, not the change's.
+
+### 12.2 Relation
+
+For an execution witness at a fault target `T` (a Pod, with its execution interval `[start, end]`: for chaos
+`[Applied, Recovered]`; for a rollout, from its first new pod serving, defined with C5) and a declared incident symptom
+service `S`, the **service-level effect** holds when either form holds, with a `VERIFIED` binding at both ends:
+
+1. **Non-success** (as specified): a direct paired call edge `S` (client) → `T`'s service (server) with non-success
+   outcomes first observed at or after `start` and not later than `end`, absent before `start`.
+2. **Latency** (new): paired calls from `S` (client span) to `T` (server span carrying `T`'s exact pod name) that begin
+   inside `[start, end]`, compared with the paired calls `S` → `T`'s service in the run's **baseline window** before
+   `start`: at least `N` calls on each side, and the fault calls' median duration above both `F` × the baseline's
+   **median** and `D` in absolute terms; a baseline whose median already exceeds `D` leaves the relation unknown
+   (amended §12.5).
+
+The server span binds the effect to the **exact pod** of the witness, so an effect on another replica, or on the same
+service before the fault, is not this fault's. A call-graph path alone remains no effect. An incomplete trace read
+(`TRUNCATED`, `FAILED`, or no calls on a side) leaves the relation **unknown**, never false.
+
+### 12.3 Consequence for the rules
+
+`m21.support.observed-fault-execution.v1`'s incident-effect relation may then hold through the service-level effect, for
+a target that is not itself a symptom: the witness covers `S`. Strong authority follows only under the rule's other
+conditions (onset connection, timing gates); `RESOLVED` still needs every declared symptom covered. No new claim kind,
+no change to admission or elimination.
+
+### 12.4 Parameters and measurement (pre-registered before any number is looked at for them)
+
+`N`, `F`, `D` are not fixed here. Shadow first, as for §11:
+
+1. Development: the `DEV` slices re-run with the trace read on; for every candidate `(T, S)` the relation is computed
+   offline for a grid (`N` ∈ {3, 5}, `F` ∈ {3, 10}, `D` ∈ {0.2 s, 0.5 s}); reported against the world's chain (the
+   propagation links of the ground truth) and against the decoy and every off-chain target.
+2. **Hard criteria**: the relation never holds for a target off the chain (in particular the negative control's decoy),
+   and never makes a strong claim on an off-chain actor.
+3. Choice, fixed now: the **most permissive** grid point with no hard violation on `DEV`; then confirmed once on a new
+   `HOLDOUT` with the engine frozen. If none qualifies, nothing is adopted.
+
+### 12.5 Baseline by its median (amendment, owner-approved 2026-10-03)
+
+Found on the `DEV` shadow: in five of the cases where the true target's effect was real, the relation read false
+because the baseline window held slow calls that were not this incident's: the runs are back to back and Tempo is
+shared, so the window ten to five minutes before an onset can hold the previous run's fault (slice 5 repeat 0: a
+3.35 s tail from the scheduled run before it; slice 4b repeat 2: the previous repeat's spawns). A real cluster has the
+same exposure to an earlier, unrelated slowdown. The p95 of the baseline is moved by a few such calls; the **median**
+is not, unless they fill half the window. The relation therefore compares the fault calls' median with `F` × the
+baseline's median, and a baseline whose median is itself above `D` cannot show a rise: the relation is unknown there.
+
+### 12.6 DEV shadow result (2026-10-04)
+
+All six `DEV` families with the trace read on (slices 1 and 3 from `tr4`, slice 2 from `tr5`, slices 4b, 5 and 6 from
+`tr6`; every run valid), the relation computed for every witnessed target and symptom service of every incident, with
+the baseline by its median (§12.5):
+
+| Truth | Holds / false / unknown, at every grid point |
+|---|---|
+| target on the chain, symptom of its own cause | **7 / 0 / 16** |
+| target off the chain | **0** / 0 / 30 |
+| the negative control's decoy | **0** / 0 / 19 |
+
+No hard violation at any grid point; the grid points do not differ on this data. By the rule fixed in §12.4 the
+choice is the most permissive: **`N` = 3, `F` = 3, `D` = 0.2 s**, to be confirmed once on a new `HOLDOUT` with the
+engine frozen. Limits stated plainly: the decoy is never contradicted, only never reached (no symptom service calls
+the isolated workload, so its relation is always unknown, which is its construction); the unknown cases are incidents
+whose captured spans held no fault or no baseline calls between that pair of services (for example a lag incident,
+whose service never calls the target); the rollout families have no execution witness until C5.

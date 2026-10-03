@@ -43,6 +43,7 @@ from packages.rca.model import (
     RequirementAuditReason,
     RequirementEvaluation,
     Symptoms,
+    TraceSpanObservation,
     object_key,
     snapshot_evidence_id,
 )
@@ -73,6 +74,8 @@ from packages.storage.models import (
     SnapshotCycleObjectRow,
     SnapshotCycleRow,
     StreamFollowRow,
+    TraceCaptureRow,
+    TraceObservationRow,
     UTCDateTime,
 )
 
@@ -538,6 +541,94 @@ class EvidenceRepository:
             )
             for row in rows
         ]
+
+
+class TraceObservationRepository:
+    """Append-only spans captured for an incident, frozen by a run's manifest (live-trace-design.md §3)."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def record(
+        self, incident_id: object, spans: Sequence[TraceSpanObservation], observed_at: datetime
+    ) -> int:
+        """Persist the spans not yet held for this incident; return how many were added."""
+        stored = 0
+        for span in spans:
+            key = hashlib.sha256(f"{span.trace_id}|{span.span_id}".encode()).hexdigest()
+            exists = self._session.scalar(
+                select(TraceObservationRow.observation_id).where(
+                    TraceObservationRow.incident_id == incident_id,
+                    TraceObservationRow.dedup_key == key,
+                )
+            )
+            if exists is not None:
+                continue
+            self._session.add(
+                TraceObservationRow(
+                    incident_id=incident_id,
+                    service=span.service,
+                    event_at=span.start_at,
+                    observed_at=observed_at,
+                    span=span.model_dump(mode="json"),
+                    dedup_key=key,
+                )
+            )
+            stored += 1
+        self._session.flush()
+        return stored
+
+    def incident_observation_ids(
+        self, *, incident_id: object, starts_at: datetime, ends_at: datetime
+    ) -> list[int]:
+        """Spans of the incident that began inside the window and were captured by its end."""
+        return list(
+            self._session.scalars(
+                select(TraceObservationRow.observation_id)
+                .where(
+                    TraceObservationRow.incident_id == incident_id,
+                    TraceObservationRow.event_at >= starts_at,
+                    TraceObservationRow.event_at <= ends_at,
+                    TraceObservationRow.observed_at <= ends_at,
+                )
+                .order_by(TraceObservationRow.event_at, TraceObservationRow.observation_id)
+            ).all()
+        )
+
+    def spans(self, observation_ids: Sequence[int]) -> list[TraceSpanObservation]:
+        """Exactly these spans, in start order."""
+        if not observation_ids:
+            return []
+        rows = self._session.scalars(
+            select(TraceObservationRow)
+            .where(TraceObservationRow.observation_id.in_(observation_ids))
+            .order_by(TraceObservationRow.event_at, TraceObservationRow.observation_id)
+        ).all()
+        return [TraceSpanObservation.model_validate(row.span) for row in rows]
+
+
+class TraceCaptureRepository:
+    """How complete each service's trace read was (live-trace-design.md §3.2)."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def record(self, incident_id: object, reads: Sequence[Any], captured_at: datetime) -> None:
+        for read in reads:
+            self._session.add(
+                TraceCaptureRow(
+                    incident_id=incident_id,
+                    namespace=read.namespace,
+                    service=read.service,
+                    starts_at=read.starts_at,
+                    ends_at=read.ends_at,
+                    completeness=read.completeness,
+                    spans=read.spans,
+                    error=read.error[:255],
+                    captured_at=captured_at,
+                )
+            )
+        self._session.flush()
 
 
 class LogObservationRepository:

@@ -26,7 +26,7 @@ from packages.contracts import (
 )
 from packages.rca.live import LiveSource
 from packages.rca.manifest import SOURCE_TYPES
-from packages.rca.model import LogRecord
+from packages.rca.model import LogRecord, TraceSpanObservation
 from packages.rca.provider_adapter import ProviderReaders
 from packages.storage.database import create_session_factory
 from packages.storage.evidence_guard import AuthoritativeEvidenceMutation
@@ -44,6 +44,7 @@ from packages.storage.models import (
     ObjectVersionRow,
     RunEvidenceManifestRow,
     SnapshotCycleRow,
+    TraceObservationRow,
 )
 from packages.storage.repositories import (
     AlertRepository,
@@ -95,11 +96,22 @@ class Seen:
         return self.sources[0]
 
 
+class FakeTempo:
+    """One bounded Tempo read: the given spans that began inside the query's window."""
+
+    def __init__(self, spans: tuple[TraceSpanObservation, ...]) -> None:
+        self.spans = spans
+
+    def query(self, target: Any, query: Any) -> tuple[TraceSpanObservation, ...]:
+        return tuple(s for s in self.spans if query.start <= s.start_at <= query.end)
+
+
 def _run(
     world: Any,
     monkeypatch: pytest.MonkeyPatch,
     *,
     before_manifest: Callable[[], None] | None = None,
+    traces: bool = False,
 ) -> tuple[sessionmaker[Session], UUID, str, Seen]:
     factory, cluster, clock, incident_id = world
     cluster.objects.append(dict(POD))
@@ -128,12 +140,21 @@ def _run(
             )
         ]
     )
+    span = TraceSpanObservation(
+        trace_id="t1",
+        span_id="s1",
+        service="payment-service",
+        span_kind="SERVER",
+        start_at=T0 + timedelta(minutes=10),
+        evidence_id="tempo:t1:s1",
+    )
     service = DiagnosisService(
         session_factory=factory,
         namespaces=("sre-demo",),
         reader=cluster,
-        provider_readers=ProviderReaders(loki=logs),
+        provider_readers=ProviderReaders(loki=logs, tempo=FakeTempo((span,)) if traces else None),
         clock=clock,
+        trace_capture=traces,
     )
     seen = Seen(monkeypatch)
     if before_manifest is not None:
@@ -201,7 +222,7 @@ def test_manifest_rows_are_exact_persistent_ids(
     setup: Any,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    factory, incident_id, run_id, _ = _run(setup, monkeypatch)
+    factory, incident_id, run_id, _ = _run(setup, monkeypatch, traces=True)
     tables: dict[str, tuple[Any, Callable[[str], Any]]] = {
         "SNAPSHOT_CYCLE": (SnapshotCycleRow, int),
         "ALERT": (AlertRow, UUID),
@@ -210,6 +231,7 @@ def test_manifest_rows_are_exact_persistent_ids(
         "LIFECYCLE": (LifecycleObservationRow, int),
         "CHANGE": (ChangeRecordRow, UUID),
         "LOG": (LogObservationRow, int),
+        "TRACE": (TraceObservationRow, int),
     }
     with factory() as session:
         entries = load_manifest(session, run_id)

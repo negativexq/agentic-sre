@@ -20,6 +20,8 @@ from packages.storage.repositories import (
     LogObservationRepository,
     ObjectVersionRepository,
     ReportRepository,
+    TraceCaptureRepository,
+    TraceObservationRepository,
 )
 
 __all__ = [
@@ -36,6 +38,8 @@ __all__ = [
     "IncidentRepository",
     "InvestigationRunRepository",
     "LogObservationRepository",
+    "TraceCaptureRepository",
+    "TraceObservationRepository",
     "JournalEntry",
     "ObjectVersionRepository",
     "ReportRepository",

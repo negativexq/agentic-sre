@@ -29,7 +29,7 @@ from packages.rca.alert_coverage import (
     AlertCoverageConfig,
 )
 from packages.rca.manifest import ManifestEntry, manifest_membership_digest, ordered_entries
-from packages.rca.model import JournalEntry, LogRecord
+from packages.rca.model import JournalEntry, LogRecord, TraceSpanObservation
 from packages.rca.provider_adapter import PROVIDER_CAPABILITIES, ProviderIntegrityError
 from packages.storage.models import (
     AlertRow,
@@ -49,6 +49,7 @@ from packages.storage.repositories import (
     ObjectVersionRepository,
     PersistedSnapshotCycle,
     SnapshotCycleRepository,
+    TraceObservationRepository,
     _lifecycle_record,
 )
 
@@ -100,6 +101,8 @@ class ManifestMembers:
     lifecycle: tuple[LifecycleRecord, ...]
     logs: tuple[LogRecord, ...]
     snapshot: PersistedSnapshotCycle | None
+    # spans captured for the incident (live-trace-design.md §3); empty before trace capture existed
+    traces: tuple[TraceSpanObservation, ...] = ()
 
 
 def alert_payload(row: AlertRow) -> dict[str, Any]:
@@ -172,6 +175,12 @@ def select_members(session: Session, request: ManifestRequest) -> list[ManifestE
             incident_id=request.incident_id, **window
         ),
     )
+    entries += _entries(
+        "TRACE",
+        TraceObservationRepository(session).incident_observation_ids(
+            incident_id=request.incident_id, **window
+        ),
+    )
     return entries
 
 
@@ -216,6 +225,7 @@ def build_manifest(
                     "journal": counts["OBJECT_VERSION"],
                     "events": counts["EVENT_VERSION"],
                     "logs": counts["LOG"],
+                    "traces": counts["TRACE"],
                     "provider_capabilities": canonical_provider_capabilities(
                         request.provider_capabilities
                     ),
@@ -383,6 +393,7 @@ def load_replay_run(session: Session, run_id: str) -> tuple[RunBoundary, Manifes
         "EVENT_VERSION": len(members.events),
         "LIFECYCLE": len(members.lifecycle),
         "LOG": len(members.logs),
+        "TRACE": len(members.traces),
     }
     for source_type, count in loaded.items():
         if count != wanted[source_type]:
@@ -430,6 +441,7 @@ def load_members(session: Session, entries: Sequence[ManifestEntry]) -> Manifest
         lifecycle=tuple(_lifecycle_record(row) for row in lifecycle_rows),
         logs=tuple(LogObservationRepository(session).records(ints("LOG"))),
         snapshot=SnapshotCycleRepository(session).load(cycles[0]) if cycles else None,
+        traces=tuple(TraceObservationRepository(session).spans(ints("TRACE"))),
     )
 
 

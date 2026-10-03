@@ -57,6 +57,7 @@ from packages.rca.live import (
     LiveSource,
     ObjectSnapshot,
     capture_error_logs,
+    capture_traces,
     incident_window,
 )
 from packages.rca.llm import LLMClient
@@ -74,6 +75,8 @@ from packages.storage import (
     InvestigationRunRepository,
     LogObservationRepository,
     ObjectVersionRepository,
+    TraceCaptureRepository,
+    TraceObservationRepository,
 )
 from packages.storage.manifest import (
     ManifestRequest,
@@ -352,6 +355,10 @@ class DiagnosisService:
     investigation_seed_mode: str = SEED_FULL_SOURCE
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
     provider_readers: ProviderReaders = field(default_factory=ProviderReaders)
+    # live-trace-design.md §3: the base trace read, off until the shadow measurement of §4 adopts it
+    trace_capture: bool = field(
+        default_factory=lambda: os.getenv("SRE_TRACE_CAPTURE", "false").casefold() == "true"
+    )
     # Serializes ChangeWatcher.snapshot() runs: the periodic watch() loop and a
     # run()-triggered snapshot can otherwise race on the same read-then-write
     # (latest version, then insert) in ObjectVersionRepository.
@@ -903,6 +910,36 @@ class DiagnosisService:
                 source_read_ids=capture.source_read_ids,
             )
 
+    def _capture_traces(
+        self,
+        incident_id: UUID,
+        alerts: list[Alert],
+        listed: tuple[dict[str, Any], ...],
+        provider_adapter: ProviderAdapter,
+    ) -> None:
+        """Base trace read for an open incident (live-trace-design.md §3), persisted before the manifest."""
+        services = [
+            (alert.namespace, alert.service)
+            for alert in alerts
+            if alert.service and alert.namespace
+        ]
+        services += sorted(
+            (str(body["metadata"].get("namespace", "")), str(body["metadata"].get("name")))
+            for body in listed
+            if body.get("kind") == "Deployment" and body.get("metadata", {}).get("namespace")
+        )
+        starts_at, ends_at = incident_window(alerts, self.clock())
+        capture = capture_traces(provider_adapter, services, starts_at, ends_at)
+        for read in capture.reads:
+            if read.completeness == "FAILED":
+                logger.warning(
+                    "trace read for %s/%s failed (%s)", read.namespace, read.service, read.error
+                )
+        with self.session_factory() as session:
+            TraceCaptureRepository(session).record(incident_id, capture.reads, self.clock())
+            TraceObservationRepository(session).record(incident_id, capture.spans, self.clock())
+            session.commit()
+
     def _diagnose(
         self,
         run_id: str,
@@ -940,6 +977,8 @@ class DiagnosisService:
                     listed = SnapshotCycleRepository(session).load(snapshot_cycle_id).objects
             if capture_adapter.supports("logs"):
                 self._capture_logs(incident_id, alerts, listed, capture_adapter)
+            if self.trace_capture and capture_adapter.supports("runtime_traces"):
+                self._capture_traces(incident_id, alerts, listed, capture_adapter)
             window_end = self.clock()
             if self.reader is not None:
                 # the same proof as for a resolution (late-evidence-design.md §6): what the
@@ -978,6 +1017,7 @@ class DiagnosisService:
             event_bodies=[body for _, body in members.events],
             event_evidence_ids=[event_evidence_id(version_id) for version_id, _ in members.events],
             error_items=list(members.logs),
+            trace_items=list(members.traces),
             observed_at=window_end,
             current_is_live=not resolved,
             provider_adapter=capture_adapter.for_caller("ENGINE"),

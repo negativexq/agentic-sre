@@ -620,6 +620,8 @@ class LiveSource:
     alert_coverage: AlertCoverageBoundary | None = None
     # Persisted ``event:<version_pk>`` ids, one per ``event_bodies`` item.
     event_evidence_ids: Sequence[str] | None = None
+    # Spans captured for the incident and frozen by the run's manifest (live-trace-design.md §3).
+    trace_items: Sequence[TraceSpanObservation] = ()
 
     def incident_id(self) -> str:
         return self.incident
@@ -738,8 +740,8 @@ class LiveSource:
         return []
 
     def trace_observations(self) -> Sequence[TraceSpanObservation]:
-        # Live trace ingestion is not part of this source contract yet.
-        return []
+        """The spans of the run's manifest, exactly as captured (live-trace-design.md §3)."""
+        return list(self.trace_items)
 
     def pod_status_observations(self) -> Sequence[PodStatusObservation]:
         """Pod status exactly as the lifecycle ledger recorded it.
@@ -835,6 +837,91 @@ def bounded_slices(
         slices.append((start, end))
         end = start
     return tuple(slices)
+
+
+TRACE_CAPTURE_MAX_SERVICES = 8
+TRACE_CAPTURE_MAX_SPANS = 500
+TRACE_QUERY_MAX_SPAN = timedelta(hours=1)  # the Tempo reader's bound
+
+
+@dataclass(frozen=True)
+class TraceServiceCapture:
+    """One service's bounded trace read: how complete it was, never repaired."""
+
+    service: str
+    namespace: str
+    starts_at: datetime
+    ends_at: datetime
+    completeness: str  # BEST_EFFORT, TRUNCATED or FAILED
+    spans: int
+    error: str = ""
+
+
+@dataclass(frozen=True)
+class TraceCapture:
+    """Spans read for one incident (live-trace-design.md §3); duplicates across services removed."""
+
+    spans: tuple[TraceSpanObservation, ...]
+    reads: tuple[TraceServiceCapture, ...]
+
+
+def capture_traces(
+    reader: Any,
+    services: Sequence[tuple[str, str]],
+    starts_at: datetime,
+    ends_at: datetime,
+    *,
+    max_services: int = TRACE_CAPTURE_MAX_SERVICES,
+    max_spans: int = TRACE_CAPTURE_MAX_SPANS,
+) -> TraceCapture:
+    """One bounded Tempo read per ``(namespace, service)`` Deployment over the newest hour of the window.
+
+    A read that failed or was cut is recorded as such; it is coverage, never absence of spans.
+    """
+    from packages.rca.investigation.tempo import TempoTraceBatch
+    from packages.rca.model import InvestigationQuery, ProviderReadFailure
+
+    start = max(starts_at, ends_at - TRACE_QUERY_MAX_SPAN)
+    seen: dict[tuple[str, str], TraceSpanObservation] = {}
+    reads: list[TraceServiceCapture] = []
+    for namespace, service in list(dict.fromkeys(services))[:max_services]:
+        target = EntityRef(kind="Deployment", name=service, namespace=namespace)
+        try:
+            result = reader.query_tempo(
+                target, InvestigationQuery(start=start, end=ends_at, limit=32)
+            )
+        except Exception as error:  # noqa: BLE001 - a failed read is recorded, never fatal
+            reads.append(
+                TraceServiceCapture(
+                    service, namespace, start, ends_at, "FAILED", 0, type(error).__name__
+                )
+            )
+            continue
+        if isinstance(result, ProviderReadFailure):
+            reads.append(
+                TraceServiceCapture(
+                    service, namespace, start, ends_at, "FAILED", 0, result.error_type
+                )
+            )
+            continue
+        spans = result.spans if isinstance(result, TempoTraceBatch) else tuple(result)
+        completeness = (
+            str(result.diagnostics.completeness.value)
+            if isinstance(result, TempoTraceBatch)
+            else "BEST_EFFORT"
+        )
+        ordered = sorted(spans, key=lambda span: (span.start_at, span.trace_id, span.span_id))
+        if len(ordered) > max_spans:
+            ordered, completeness = ordered[:max_spans], "TRUNCATED"
+        for span in ordered:
+            seen.setdefault((span.trace_id, span.span_id), span)
+        reads.append(
+            TraceServiceCapture(service, namespace, start, ends_at, completeness, len(ordered))
+        )
+    spans_out = tuple(
+        sorted(seen.values(), key=lambda span: (span.start_at, span.trace_id, span.span_id))
+    )
+    return TraceCapture(spans_out, tuple(reads))
 
 
 @dataclass(frozen=True)

@@ -24,6 +24,7 @@ SOURCE_TYPES = (
     "LIFECYCLE",
     "CHANGE",
     "LOG",
+    "TRACE",
 )
 
 

@@ -342,3 +342,14 @@ repeats: **3 of 3 valid**, each with three spawned experiments and its first lat
 Schedule was created (30 s after the first spawn); cause (the Schedule) and its instance named 3 of 3; **false strong
 authority 0, false `RESOLVED` 0, false elimination 0**; execution witness 0 of 3 and effect link 0 of 3 (a delay leaves
 no pod-level failure, as in slice 1); median 8 s to the diagnosis. The acceptance bar holds.
+
+## Slice 5 result (`competing-causes`, 2026-10-03, engine 2.1.0, `DEV`, manifest `19e7e570…`, seeds 51 to 53)
+
+Scenario as in testbed contract §15: a 300 to 600 ms delay on `payment-service` and, 0 to 60 s later, a `PodChaos`
+pod-kill of `order-worker`. Phase 0 valid (first alert `PaymentDbQueryLatencyHigh`; four latency and two lag
+incidents). The three repeats: **3 of 3 valid**; every incident scored against its own group, **group recall 1.0**
+(6 of 6 incidents per run), **cross-attribution 0** (the pod-kill was never named for a latency incident), both causes
+named in every run; **false strong authority 0, false `RESOLVED` 0, false elimination 0**. Execution witness and
+effect link 0 (as slice 1). Instance recall reads 0.5 because instances are still taken from the primary (latency)
+incident only, where the pod-kill is not a candidate; both causes' exact instances are named in their own groups'
+incidents in all three runs. Scoring instances per group is a proposed refinement of §15.3, not yet adopted.

@@ -634,3 +634,15 @@ put on the alert stream:
 
 Measured as §16.4 again: the same ten cycles, expecting no short alert and every lasting alert in the control plane,
 whatever the group's history.
+
+### 16.8 Lab measurement of §16.7 (2026-10-03)
+
+The same ten cycles on a fresh database (`testbed_admit_125023`), with the Connector running §16.7:
+
+| Cycles | Alertmanager | Reached the control plane |
+|---|---|---|
+| 5 short (cycle 0 with the group never notified; cycles 2, 4, 6, 8 after a lasting cycle had notified it) | 20 to 25 s | **0 of 5** |
+| 5 lasting | 110 to 115 s (and the latency alert, 60 to 70 s) | **5 of 5** (10 alerts, 10 incidents) |
+
+The admission no longer depends on the poll's phase or on the group's history: a short alert never becomes an incident
+and a lasting one always does. Adopted.

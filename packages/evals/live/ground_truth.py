@@ -120,6 +120,9 @@ def timeline_problems(
     """Why a run's timeline is ``INVALID`` (contract §4.1 to §4.3, §14); empty when it is valid."""
     problems: list[str] = []
     nullable = NULLABLE_BY_FAMILY.get(family, frozenset())
+    if family == "negative-control" and chain is not None and chain.of_role("cause"):
+        # a control with a real cause is validated like that cause's family (contract §16.5)
+        nullable = frozenset()
     if chain is not None and not chain.of_role("propagation"):
         # a chain without a propagation link has nothing to propagate to (contract §14.3)
         nullable = nullable | {"propagation_started_at"}
@@ -160,6 +163,21 @@ class Link(Model):
         return self
 
 
+class Decoy(Model):
+    """Contract §16.2: an actor injected at about the same time as the cause but with no path to the symptom."""
+
+    actor: str = Field(min_length=1)
+    instance_uid: str | None = None
+    knowable: bool
+    mechanism: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _uid_matches_knowability(self) -> Decoy:
+        if self.knowable and not self.instance_uid:
+            raise ValueError("a knowable decoy must record its instance_uid")
+        return self
+
+
 class SymptomGroup(Model):
     """Contract §15.2: the incidents raised by ``alerts`` belong here; ``causes`` really contribute to them and
     ``required`` must be named for the group to count as found. Written from the scenario, never from the engine."""
@@ -182,6 +200,8 @@ class Chain(Model):
     construction: str | None = None
     # Competing causes (contract §15): which incidents belong to which causes.
     symptom_groups: tuple[SymptomGroup, ...] = ()
+    # Negative control (contract §16): actors injected alongside the cause, never links, so never chain actors.
+    decoys: tuple[Decoy, ...] = ()
 
     def group_of(self, alert: str) -> SymptomGroup | None:
         return next((g for g in self.symptom_groups if alert in g.alerts), None)
@@ -197,6 +217,8 @@ def chain_problems(chain: Chain, family: str) -> list[str]:
     problems: list[str] = []
     if family == "negative-control" and not chain.construction:
         problems.append("a negative control must state its construction")
+    if family == "negative-control" and chain.of_role("cause") and not chain.decoys:
+        problems.append("a negative control with a cause must list its decoy")
     if family == "competing-causes" and len(chain.of_role("cause")) < 2:
         problems.append("competing causes need at least two cause links")
     if family == "competing-causes" and len(chain.symptom_groups) < 2:

@@ -254,3 +254,27 @@ def test_naming_a_cause_outside_the_incidents_group_is_a_cross_attribution() -> 
         record(chain, family="competing-causes"), d, tier="DEV", incidents=[("Lag", d)]
     )
     assert score.cross_attribution == 1 and score.groups_found == 0
+
+
+# ---- negative control: a decoy beside a real cause (testbed contract §16) ----
+
+
+def test_naming_a_decoy_is_counted_and_abstention_does_not_apply_with_a_cause() -> None:
+    from packages.evals.live.ground_truth import Decoy
+
+    named = Chain(
+        links=truth_chain(cause=EXPERIMENT).links,
+        construction="isolated",
+        decoys=(Decoy(actor=SCHEDULE, instance_uid="s1", knowable=True, mechanism="decoy"),),
+    )
+    d = diagnosis()
+    score = score_run(record(named, family="negative-control"), d, tier="DEV")
+    assert score.abstained is None  # the chain has a cause
+    assert score.decoy_named == 1  # the diagnosis names the Schedule, here the decoy
+    unnamed = named.model_copy(
+        update={
+            "decoys": (Decoy(actor="lab/NetworkChaos/other", knowable=False, mechanism="decoy"),)
+        }
+    )
+    assert score_run(record(unnamed, family="negative-control"), d, tier="DEV").decoy_named == 0
+    assert score_run(record(truth_chain()), d, tier="DEV").decoy_named is None

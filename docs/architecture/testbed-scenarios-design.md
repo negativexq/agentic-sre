@@ -354,3 +354,14 @@ effect link 0 (as slice 1). Instance recall first read 0.5 because instances wer
 incident only, where the pod-kill is not a candidate. With instances scored per group (§15.3, owner-approved) and the
 runs rescored (`score.v2.json`, nothing re-run): **instance recall 1.0**, both causes' exact instances named in their
 own groups' incidents in all three runs.
+
+## Slice 6 result (`negative-control`, 2026-10-03, engine 2.1.0, `DEV`, manifest `2e293cce…`, seeds 61 to 63)
+
+Scenario as in testbed contract §16: slice 3's real configuration change on `payment-service` and a decoy
+`NetworkChaos` delay on `lab-control/isolated-echo`, started −30 to +30 s around it. Phase 0 valid with the decoy
+3 s **before** the change; the engine saw it (object versions and `Applied` / `Recovered` events journaled), built two
+hypotheses on it per incident and kept them `UNLINKED`, admitted only as context, never supported. The three repeats:
+**3 of 3 valid**, construction check clean every time, cause and instance named 3 of 3, **`decoy_named` 0**, false
+strong authority 0, false `RESOLVED` 0, false elimination 0. The acceptance bar (with `decoy_named` = 0) holds.
+Limitation: the seeds drew positive offsets only (decoy 13, 25 and 16 s after the change), so the decoy-first case was
+exercised in phase 0 alone, not in a scored run.

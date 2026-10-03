@@ -45,6 +45,8 @@ class RunScore(BaseModel):
     groups_found: int = 0
     cross_attribution: int = 0
     unscored_incidents: int = 0
+    # contract §16.5: incidents of the run that name a decoy (None when the chain has no decoy)
+    decoy_named: int | None = None
 
 
 def _identity(diagnosis: Diagnosis) -> dict[str, tuple[str, frozenset[str]]]:
@@ -245,7 +247,16 @@ def score_run(
         ),
         abstained=(
             diagnosis.root_cause is None and not strong
-            if record.family == "negative-control"
+            if record.family == "negative-control" and not causes
+            else None
+        ),
+        decoy_named=(
+            sum(
+                1
+                for d in ([d for _, d in incidents] or [diagnosis, *also])
+                if _named(d) & {decoy.actor for decoy in chain.decoys}
+            )
+            if chain.decoys
             else None
         ),
         reads=len(diagnosis.steps),
@@ -299,6 +310,8 @@ def aggregate(scores: Sequence[RunScore]) -> dict[str, dict[str, Any]]:
             "median_reads": sorted(s.reads for s in valid)[len(valid) // 2] if valid else None,
             "median_time_to_diagnosis_seconds": _median(s.time_to_diagnosis_seconds for s in valid),
         }
+        if any(s.decoy_named is not None for s in valid):
+            out[key]["decoy_named"] = sum(s.decoy_named or 0 for s in valid)
         if any(s.groups_total for s in valid):
             out[key]["group_recall"] = sum(s.groups_found for s in valid) / sum(
                 s.groups_total for s in valid

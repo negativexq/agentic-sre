@@ -376,3 +376,60 @@ group only. The second cause starts after a seeded offset of 0 to 60 s, so the t
 ### 15.5 Not changed
 
 Families without symptom groups are scored exactly as today. The engine never reads the chain.
+
+## 16. Negative control: a real cause plus a decoy (2026-10-03, owner-approved)
+
+Status: **APPROVED** by the owner (2026-10-03) and implemented (`Decoy`, `Chain.decoys`, `decoy_named`, the construction check and scenario `negative-config-decoy`; the decoy is journaled under its own roles so it never stamps the cause). It makes concrete the amendment sketched in
+`testbed-scenarios-design.md` §6 for the `negative-control` family of §4.
+
+### 16.1 What the family tests
+
+The engine must not blame something that happened at the same time but cannot have caused the symptom. The run injects
+the **real** cause of `config-or-rollout` (the `FAULT_PAYMENT_DELAY_MS` change on `payment-service`, slice 3) and, at
+about the same time, a **decoy**: a chaos experiment on the isolated workload `lab-control/isolated-echo`. The decoy
+is visible to the engine through the same channels as any experiment (its object and its `Applied` / `Recovered`
+events in a journaled namespace), so it is a real temptation, not an invisible one.
+
+### 16.2 Decoys in the chain
+
+The chain gains an optional list of **decoys**, separate from its links:
+
+```
+decoys: [ { actor, instance_uid, knowable, mechanism } ... ]
+```
+
+A decoy is never a link, so `Chain.actors()` does not contain it: a strong claim on a decoy is therefore false strong
+authority under §7 unchanged. A run of `negative-control` must list at least one decoy and keep its `construction`
+(§5), now stating why **the decoy** has no path to the symptom.
+
+### 16.3 Construction, checked before the injection
+
+The harness records and checks, before every run, and the run is `INVALID` if any check fails:
+
+1. the isolation of `lab-check` holds (the isolated workload is unreachable from `sre-demo`; `NetworkPolicy`
+   `default-deny` in `lab-control`);
+2. no workload in `sre-demo` references the decoy's namespace or service in its configuration (environment values and
+   mounted configuration), so the engine's configured-call relation cannot link them either.
+
+### 16.4 Timing
+
+The decoy is created at a seeded offset of −30 to +30 s around the real change, so that it is as close to the onset
+as the real cause, sometimes before it. Its duration covers the real change's.
+
+### 16.5 Validity and scoring
+
+- **Validity.** A `negative-control` run **with** a cause link is validated like its cause's family
+  (`config-or-rollout`: every oracle field required, §4.2). The nullable fields of §4.2 for a negative control apply
+  only to a chain **without** a cause (the original "no effect path at all" control, not used by this suite).
+- **`decoy_named`** (new, per run): the number of incidents of the run in which a decoy is *named* (an actor of a
+  supported hypothesis, or `root_cause`). A strong claim on a decoy counts in `false_strong_authority` as well.
+- **`abstained`** applies only to a run whose chain has no cause; for this family it is `None`.
+- Everything else is scored as for `config-or-rollout`.
+
+**Acceptance**, fixed in the manifest before any run: the frozen bar (no false strong authority, no false
+`RESOLVED`, at least 90% of runs valid) **plus `decoy_named` = 0**.
+
+### 16.6 Not changed
+
+Other families are untouched (they have no decoys). The engine never reads the chain, the decoy list or the
+construction.

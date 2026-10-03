@@ -131,6 +131,9 @@ class FakeWorld:
     def target_warnings(self) -> list[str]:
         return list(self.baseline_warnings)
 
+    def construction_problems(self) -> list[str]:
+        return []
+
     def foreign_faults(self) -> list[str]:
         return list(self.foreign_before if self.injected is None else self.foreign_after)
 

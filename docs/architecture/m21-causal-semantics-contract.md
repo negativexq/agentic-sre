@@ -1161,3 +1161,53 @@ an onset (a record from before these fields) leaves the filter inactive.
 database (`testbed_longrun_indep1_c15`): for every incident the shown display and candidates equal the shadow's
 prediction at `W` = 5 from the earlier diagnosis (41 of 41); `root_cause` unchanged in 41, epistemic digest equal in
 41; 33 incidents now show one leader and 8 still compete (35 with a candidate set aside).
+
+## 12. Service-level effect relation, revised with latency (amendment, owner-approved 2026-10-03)
+
+Status: **APPROVED** by the owner (2026-10-03) for the shadow measurement of §12.4; adoption follows it. Roadmap C1. It revises the specified, unimplemented "Service-level effect
+relation" above, now that live traces exist (`live-trace-design.md`). Nothing below is implemented.
+
+### 12.1 What the traces show
+
+The relation as specified reads only **non-success** call edges. In the lab's trace runs (slices 1 and 3, the base read
+of `live-trace-design.md` §9) every `order-service` → `payment-service` call was HTTP 201, before and during the
+fault, so it would never hold for the delay and loss families. Their effect is latency, and it is large: the caller's
+call duration had a median of 4 to 5 ms in the baseline window and **0.86 to 3.3 s** during the fault in five of six
+runs. In the sixth (a configuration change) the calls inside the change's interval were still fast, because a rollout
+slows calls only once its new pod serves them: the interval that matters is the execution's, not the change's.
+
+### 12.2 Relation
+
+For an execution witness at a fault target `T` (a Pod, with its execution interval `[start, end]`: for chaos
+`[Applied, Recovered]`; for a rollout, from its first new pod serving, defined with C5) and a declared incident symptom
+service `S`, the **service-level effect** holds when either form holds, with a `VERIFIED` binding at both ends:
+
+1. **Non-success** (as specified): a direct paired call edge `S` (client) → `T`'s service (server) with non-success
+   outcomes first observed at or after `start` and not later than `end`, absent before `start`.
+2. **Latency** (new): paired calls from `S` (client span) to `T` (server span carrying `T`'s exact pod name) that begin
+   inside `[start, end]`, compared with the paired calls `S` → `T`'s service in the run's **baseline window** before
+   `start`: at least `N` calls on each side, and the fault calls' median duration above both `F` × the baseline's p95
+   and `D` in absolute terms.
+
+The server span binds the effect to the **exact pod** of the witness, so an effect on another replica, or on the same
+service before the fault, is not this fault's. A call-graph path alone remains no effect. An incomplete trace read
+(`TRUNCATED`, `FAILED`, or no calls on a side) leaves the relation **unknown**, never false.
+
+### 12.3 Consequence for the rules
+
+`m21.support.observed-fault-execution.v1`'s incident-effect relation may then hold through the service-level effect, for
+a target that is not itself a symptom: the witness covers `S`. Strong authority follows only under the rule's other
+conditions (onset connection, timing gates); `RESOLVED` still needs every declared symptom covered. No new claim kind,
+no change to admission or elimination.
+
+### 12.4 Parameters and measurement (pre-registered before any number is looked at for them)
+
+`N`, `F`, `D` are not fixed here. Shadow first, as for §11:
+
+1. Development: the `DEV` slices re-run with the trace read on; for every candidate `(T, S)` the relation is computed
+   offline for a grid (`N` ∈ {3, 5}, `F` ∈ {3, 10}, `D` ∈ {0.2 s, 0.5 s}); reported against the world's chain (the
+   propagation links of the ground truth) and against the decoy and every off-chain target.
+2. **Hard criteria**: the relation never holds for a target off the chain (in particular the negative control's decoy),
+   and never makes a strong claim on an off-chain actor.
+3. Choice, fixed now: the **most permissive** grid point with no hard violation on `DEV`; then confirmed once on a new
+   `HOLDOUT` with the engine frozen. If none qualifies, nothing is adopted.

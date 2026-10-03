@@ -15,7 +15,7 @@ import time
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from typing import Any, Protocol
 from uuid import uuid4
@@ -106,6 +106,19 @@ class AuditEntry:
     at: datetime
 
 
+ADMITTED_MEMORY = 50_000  # admitted occurrences remembered (contract §16.7)
+
+
+def _instant(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
 @dataclass
 class Connector:
     cluster: ClusterReader | None = None
@@ -115,6 +128,9 @@ class Connector:
     watch_namespaces: tuple[str, ...] = ()
     alert_source: AlertSource | None = None
     accept_webhook: bool = False
+    # contract §16: the poll admits a firing occurrence only once it has been active this long, so both alert
+    # paths agree on a short alert (Alertmanager notifies a group only after its group_wait)
+    alert_min_active: timedelta = timedelta(0)
     alerts_buffer_len: int = 10_000
     changes_buffer_len: int = 50_000
     epoch: str = field(default_factory=lambda: uuid4().hex)
@@ -123,6 +139,8 @@ class Connector:
         self._alerts = StreamBuffer(self.epoch, self.alerts_buffer_len, self.clock)
         self._changes = StreamBuffer(self.epoch, self.changes_buffer_len, self.clock)
         self._known_alerts: dict[str, dict[str, Any]] = {}
+        # contract §16.7: occurrences (fingerprint, startsAt) admitted on either path; insertion-ordered, bounded
+        self._admitted: dict[tuple[str, str], None] = {}
         self._seen: dict[str, str] = {}
         self._events_seen: dict[str, str] = {}
         self._changes_lock = threading.RLock()
@@ -199,6 +217,28 @@ class Connector:
     def _put(self, buffer: StreamBuffer, model: wire.WireModel) -> int:
         return buffer.append(model.model_dump(mode="json"))
 
+    def _admit(self, fingerprint: str, payload: dict[str, Any], now: datetime) -> bool:
+        """Contract §16.7: one admission rule for both paths, on the occurrence's own active time.
+
+        An occurrence already admitted passes. Otherwise a resolved one shorter than ``alert_min_active`` and a
+        firing one younger than it are not admitted (the poll admits a firing one later, once old enough).
+        """
+        key = (fingerprint, str(payload.get("startsAt")))
+        if key in self._admitted:
+            return True
+        began = _instant(payload.get("startsAt"))
+        if self.alert_min_active > timedelta(0) and began is not None:
+            if payload.get("status") == "resolved":
+                ended = _instant(payload.get("endsAt")) or now
+                if ended - began < self.alert_min_active:
+                    return False
+            elif now - began < self.alert_min_active:
+                return False
+        self._admitted[key] = None
+        while len(self._admitted) > ADMITTED_MEMORY:
+            del self._admitted[next(iter(self._admitted))]
+        return True
+
     def poll_alerts_once(self) -> None:
         """One Alertmanager poll: occurrences that appeared or resolved, then its heartbeat."""
         if self.alert_source is None:
@@ -227,6 +267,13 @@ class Connector:
             fingerprint = alert.get("fingerprint")
             if payload is not None and isinstance(fingerprint, str):
                 current[fingerprint] = payload
+        # contract §16: an occurrence younger than ``alert_min_active`` is not admitted yet; a later poll admits
+        # it if it is still firing, and one that resolves young is never reported
+        admitted = {
+            fingerprint: payload
+            for fingerprint, payload in current.items()
+            if self._admit(fingerprint, payload, completed)
+        }
         for fingerprint, payload in list(self._known_alerts.items()):
             later = current.get(fingerprint)
             if later is not None and later.get("startsAt") == payload.get("startsAt"):
@@ -243,14 +290,14 @@ class Connector:
                 self._alerts,
                 wire.AlertItem(seq=0, observed_at=completed, origin="poll", alert=resolved),
             )
-        for fingerprint, payload in current.items():
+        for fingerprint, payload in admitted.items():
             known = self._known_alerts.get(fingerprint)
             if known is None or known.get("startsAt") != payload.get("startsAt"):
                 self._put(
                     self._alerts,
                     wire.AlertItem(seq=0, observed_at=completed, origin="poll", alert=payload),
                 )
-        self._known_alerts = current
+        self._known_alerts = admitted
         self._put(
             self._alerts,
             wire.HeartbeatItem(
@@ -269,16 +316,14 @@ class Connector:
         webhook = AlertmanagerWebhook.model_validate(payload)
         now = self.clock()
         for alert in webhook.alerts:
+            body = alert.model_dump(mode="json", by_alias=True)
+            if not self._admit(str(body.get("fingerprint") or ""), body, now):
+                continue  # contract §16.7: shorter or younger than min_active; never reaches the stream
             self._put(
                 self._alerts,
-                wire.AlertItem(
-                    seq=0,
-                    observed_at=now,
-                    origin="webhook",
-                    alert=alert.model_dump(mode="json", by_alias=True),
-                ),
+                wire.AlertItem(seq=0, observed_at=now, origin="webhook", alert=body),
             )
-        return len(webhook.alerts)
+        return len(webhook.alerts)  # the delivery was accepted, whatever it admitted
 
     # ---- change stream --------------------------------------------------------------------
 
@@ -842,6 +887,7 @@ def connector_from_environment(
     return Connector(
         watch_namespaces=watch_namespaces,
         accept_webhook=accept_webhook,
+        alert_min_active=timedelta(seconds=float(os.getenv("SRE_ALERT_MIN_ACTIVE_SECONDS", "30"))),
         alert_source=(
             AlertmanagerAlerts(AlertmanagerReader(alertmanager))
             if alertmanager is not None

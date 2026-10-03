@@ -550,3 +550,99 @@ rollout of `lab-control/isolated-echo` every two minutes), 31 watches throughout
 At the earlier rate about 26 expiries were due in 137 minutes; none occurred. The extra cost matches the estimate
 (about 1.5 requests a minute).
 
+
+## 16. One admission rule for both alert paths (amendment, APPROVED 2026-10-03)
+
+Status: **APPROVED** by the owner (2026-10-03) and implemented (`Connector.alert_min_active`, `SRE_ALERT_MIN_ACTIVE_SECONDS`; the testbed reads the alert from the control plane). Roadmap F7. The lab measurement of §16.4 follows.
+
+### 16.1 Measured problem
+
+Alerts reach the Connector on two paths: Alertmanager's **webhook** (§10) and the Connector's **poll** of
+`GET /api/v2/alerts`, the backstop for a lost delivery (every `SRE_ALERT_COVERAGE_POLL_SECONDS`, 30 s in the lab, 60 s by
+default). They disagree on a short alert:
+
+- the webhook delivers a group's first notification only after `group_wait` (Alertmanager's default is 30 s; the lab
+  sets none); an alert that resolves before that is never notified, and `send_resolved` only follows a notified one;
+- the poll reads every **active** alert, including one still inside `group_wait`.
+
+So an alert active for less than about 30 s becomes an incident only if a poll happens to fall inside its life. Seen in
+the lab on 2026-10-03 (`testbed-scenarios-design.md` §12.6): `OrderErrorRateHigh`, active about 20 s, became an
+incident in one run and reached nothing in two others, with the same fault. The outcome depended on timing, not on a
+rule.
+
+### 16.2 Rule
+
+The product diagnoses what the customer's alerting delivers. Both paths admit the same alerts:
+
+- the **webhook** is unchanged: what Alertmanager sends is admitted;
+- the **poll** admits a firing occurrence only once it has been active for at least `min_active`
+  (`now − startsAt ≥ min_active`); a younger one is not remembered, so a later poll admits it if it is still firing.
+  Its resolution is reported only for an occurrence the poll admitted (as today, for known occurrences).
+
+`min_active` is a Connector setting, `SRE_ALERT_MIN_ACTIVE_SECONDS`, defaulting to **30 s**, Alertmanager's default
+`group_wait`; an installation sets it to its own `group_wait`. With it, an alert shorter than the customer's grouping
+window never becomes an incident on either path, and a longer one always does: the same alert gives the same result
+whatever the poll's phase.
+
+### 16.3 Consequences
+
+- A blip shorter than `min_active` is not diagnosed. This is the customer's alerting choice made explicit, and the limit
+  is stated in the product documentation and the console's coverage text.
+- Admission by the poll is at most one poll interval later than `min_active`; a webhook delivery is unaffected.
+- The testbed injector reads the alert from the incident the control plane opened, not from Alertmanager's API, so a
+  run measures what the product can see.
+
+### 16.4 Measurement before adoption
+
+1. Unit tests: a young occurrence is not admitted and is admitted by a later poll once old enough; an occurrence that
+   resolved young produces nothing; the webhook path is unchanged.
+2. Lab: five short outages (about 20 s, the broken image with a pod delete) and five lasting ones; expected, and
+   checked rather than assumed: none of the short ones and all of the lasting ones become incidents, on every repeat.
+
+### 16.5 Not changed
+
+The engine, the wire schema and the webhook path. The next `HOLDOUT` is measured with this Connector.
+
+### 16.6 Lab measurement (2026-10-03): the poll rule alone is not enough
+
+Ten cycles on one control-plane database (`testbed_admit_120456`), alternating a short outage (broken image plus a pod
+delete: `OrderErrorRateHigh` active about 20 s) and a lasting one (90 s), with the Connector running §16.2:
+
+| Cycles | Alertmanager | Reached the control plane |
+|---|---|---|
+| 5 lasting | 105 to 145 s (and the latency alert, 65 to 104 s) | 5 of 5 |
+| short, cycle 0 (the group never notified before) | 20 s | no |
+| short, cycles 2, 4, 6, 8 (the group notified in the lasting cycle before) | 15 to 20 s | **4 of 4**, each stored resolved with its 15 to 20 s end, each opening an incident |
+
+The short alerts that arrived came by the **webhook**, not the poll (the poll no longer reports an occurrence that
+resolved young, and these were stored with their end): once Alertmanager has notified a group, a new alert of that
+group goes out at the group's `group_interval` flush, resolved or not, without a fresh `group_wait`. So the premise of
+§16.1, that the webhook never delivers an alert shorter than `group_wait`, is wrong; the outcome now depends on the
+group's history instead of the poll's phase.
+
+### 16.7 Revised rule (APPROVED and implemented 2026-10-03)
+
+Admission depends on the alert's own active time, the same on both paths, applied in the Connector before anything is
+put on the alert stream:
+
+- a **resolved** occurrence that was never admitted and whose `endsAt − startsAt` is shorter than `min_active` is
+  dropped, from the webhook as from the poll;
+- a **firing** occurrence younger than `min_active` is not admitted from either path; the poll admits it once it is old
+  enough and still firing (the poll is therefore required whenever `min_active` > 0; a Connector without an Alertmanager
+  poll keeps `min_active` = 0 and behaves as before);
+- everything already admitted is unaffected (its later notifications and its resolution pass as today).
+
+Measured as §16.4 again: the same ten cycles, expecting no short alert and every lasting alert in the control plane,
+whatever the group's history.
+
+### 16.8 Lab measurement of §16.7 (2026-10-03)
+
+The same ten cycles on a fresh database (`testbed_admit_125023`), with the Connector running §16.7:
+
+| Cycles | Alertmanager | Reached the control plane |
+|---|---|---|
+| 5 short (cycle 0 with the group never notified; cycles 2, 4, 6, 8 after a lasting cycle had notified it) | 20 to 25 s | **0 of 5** |
+| 5 lasting | 110 to 115 s (and the latency alert, 60 to 70 s) | **5 of 5** (10 alerts, 10 incidents) |
+
+The admission no longer depends on the poll's phase or on the group's history: a short alert never becomes an incident
+and a lasting one always does. Adopted.

@@ -463,3 +463,89 @@ def test_a_refiring_within_the_quiet_interval_asks_for_a_refired_revision_not_a_
     first = new[0][0]
     assert refired == [[first]]  # one refired revision, for the incident that already existed
     assert all(first not in batch for batch in new[before:])  # and no INITIAL for the re-firing
+
+
+# ---- contract §16: one admission rule for both alert paths ----
+
+
+def alert_items(page: Any) -> list[tuple[str, str]]:
+    return [
+        (i.alert["status"], i.alert["startsAt"])
+        for i in page.items
+        if isinstance(i, wire.AlertItem)
+    ]
+
+
+def test_a_young_occurrence_is_admitted_by_a_later_poll_once_old_enough() -> None:
+    connector, client, _, alerts, clock = make()
+    connector.alert_min_active = timedelta(seconds=30)
+    alerts.alerts = [firing("HighLatency", "f1")]
+    connector.poll_alerts_once()  # 0 s old: not admitted yet
+    first = client.read("read_alerts", None)
+    assert alert_items(first) == []
+    clock.advance(30)
+    connector.poll_alerts_once()  # 30 s old and still firing: admitted
+    second = client.read("read_alerts", first.next_cursor)
+    assert alert_items(second) == [("firing", T0.isoformat())]
+
+
+def test_an_occurrence_that_resolves_young_produces_nothing() -> None:
+    connector, client, _, alerts, clock = make()
+    connector.alert_min_active = timedelta(seconds=30)
+    alerts.alerts = [firing("OrderErrorRateHigh", "f1")]
+    connector.poll_alerts_once()
+    clock.advance(20)
+    alerts.alerts = []  # gone after about 20 s, before Alertmanager's grouping window
+    connector.poll_alerts_once()
+    clock.advance(30)
+    connector.poll_alerts_once()
+    assert alert_items(client.read("read_alerts", None)) == []
+
+
+def delivery(*alerts: dict[str, Any]) -> dict[str, Any]:
+    return {"receiver": "sre", "status": alerts[0]["status"], "alerts": list(alerts)}
+
+
+def test_a_short_alert_delivered_resolved_by_the_webhook_is_not_admitted() -> None:
+    """§16.6: a group notified before sends a later short alert at its group_interval flush, already resolved."""
+    connector, client, _, _, clock = make()
+    connector.alert_min_active = timedelta(seconds=30)
+    clock.advance(40)
+    short = {
+        **firing("OrderErrorRateHigh", "f1"),
+        "status": "resolved",
+        "endsAt": (T0 + timedelta(seconds=20)).isoformat(),
+    }
+    assert connector.receive_webhook(delivery(short)) == 1  # the delivery is accepted
+    assert alert_items(client.read("read_alerts", None)) == []  # but the alert is not admitted
+
+
+def test_a_young_firing_alert_from_the_webhook_waits_for_the_poll() -> None:
+    connector, client, _, alerts, clock = make()
+    connector.alert_min_active = timedelta(seconds=30)
+    young = {**firing("HighLatency", "f1"), "status": "firing"}
+    connector.receive_webhook(delivery(young))  # 0 s old
+    first = client.read("read_alerts", None)
+    assert alert_items(first) == []
+    clock.advance(30)
+    alerts.alerts = [firing("HighLatency", "f1")]
+    connector.poll_alerts_once()  # still firing and old enough: the poll admits it
+    assert [s for s, _ in alert_items(client.read("read_alerts", first.next_cursor))] == ["firing"]
+
+
+def test_an_admitted_occurrence_passes_on_either_path_afterwards() -> None:
+    connector, client, _, alerts, clock = make()
+    connector.alert_min_active = timedelta(seconds=30)
+    clock.advance(30)
+    alerts.alerts = [firing("HighLatency", "f1")]
+    connector.poll_alerts_once()  # admitted by the poll
+    first = client.read("read_alerts", None)
+    resolved = {
+        **firing("HighLatency", "f1"),
+        "status": "resolved",
+        "endsAt": (T0 + timedelta(seconds=45)).isoformat(),
+    }
+    connector.receive_webhook(delivery(resolved))  # its resolution, by the webhook
+    assert [s for s, _ in alert_items(client.read("read_alerts", first.next_cursor))] == [
+        "resolved"
+    ]

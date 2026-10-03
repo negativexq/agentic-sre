@@ -550,3 +550,55 @@ rollout of `lab-control/isolated-echo` every two minutes), 31 watches throughout
 At the earlier rate about 26 expiries were due in 137 minutes; none occurred. The extra cost matches the estimate
 (about 1.5 requests a minute).
 
+
+## 16. One admission rule for both alert paths (amendment, APPROVED 2026-10-03)
+
+Status: **APPROVED** by the owner (2026-10-03) and implemented (`Connector.alert_min_active`, `SRE_ALERT_MIN_ACTIVE_SECONDS`; the testbed reads the alert from the control plane). Roadmap F7. The lab measurement of §16.4 follows.
+
+### 16.1 Measured problem
+
+Alerts reach the Connector on two paths: Alertmanager's **webhook** (§10) and the Connector's **poll** of
+`GET /api/v2/alerts`, the backstop for a lost delivery (every `SRE_ALERT_COVERAGE_POLL_SECONDS`, 30 s in the lab, 60 s by
+default). They disagree on a short alert:
+
+- the webhook delivers a group's first notification only after `group_wait` (Alertmanager's default is 30 s; the lab
+  sets none); an alert that resolves before that is never notified, and `send_resolved` only follows a notified one;
+- the poll reads every **active** alert, including one still inside `group_wait`.
+
+So an alert active for less than about 30 s becomes an incident only if a poll happens to fall inside its life. Seen in
+the lab on 2026-10-03 (`testbed-scenarios-design.md` §12.6): `OrderErrorRateHigh`, active about 20 s, became an
+incident in one run and reached nothing in two others, with the same fault. The outcome depended on timing, not on a
+rule.
+
+### 16.2 Rule
+
+The product diagnoses what the customer's alerting delivers. Both paths admit the same alerts:
+
+- the **webhook** is unchanged: what Alertmanager sends is admitted;
+- the **poll** admits a firing occurrence only once it has been active for at least `min_active`
+  (`now − startsAt ≥ min_active`); a younger one is not remembered, so a later poll admits it if it is still firing.
+  Its resolution is reported only for an occurrence the poll admitted (as today, for known occurrences).
+
+`min_active` is a Connector setting, `SRE_ALERT_MIN_ACTIVE_SECONDS`, defaulting to **30 s**, Alertmanager's default
+`group_wait`; an installation sets it to its own `group_wait`. With it, an alert shorter than the customer's grouping
+window never becomes an incident on either path, and a longer one always does: the same alert gives the same result
+whatever the poll's phase.
+
+### 16.3 Consequences
+
+- A blip shorter than `min_active` is not diagnosed. This is the customer's alerting choice made explicit, and the limit
+  is stated in the product documentation and the console's coverage text.
+- Admission by the poll is at most one poll interval later than `min_active`; a webhook delivery is unaffected.
+- The testbed injector reads the alert from the incident the control plane opened, not from Alertmanager's API, so a
+  run measures what the product can see.
+
+### 16.4 Measurement before adoption
+
+1. Unit tests: a young occurrence is not admitted and is admitted by a later poll once old enough; an occurrence that
+   resolved young produces nothing; the webhook path is unchanged.
+2. Lab: five short outages (about 20 s, the broken image with a pod delete) and five lasting ones; expected, and
+   checked rather than assumed: none of the short ones and all of the lasting ones become incidents, on every repeat.
+
+### 16.5 Not changed
+
+The engine, the wire schema and the webhook path. The next `HOLDOUT` is measured with this Connector.

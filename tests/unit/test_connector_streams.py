@@ -463,3 +463,52 @@ def test_a_refiring_within_the_quiet_interval_asks_for_a_refired_revision_not_a_
     first = new[0][0]
     assert refired == [[first]]  # one refired revision, for the incident that already existed
     assert all(first not in batch for batch in new[before:])  # and no INITIAL for the re-firing
+
+
+# ---- contract §16: one admission rule for both alert paths ----
+
+
+def alert_items(page: Any) -> list[tuple[str, str]]:
+    return [
+        (i.alert["status"], i.alert["startsAt"])
+        for i in page.items
+        if isinstance(i, wire.AlertItem)
+    ]
+
+
+def test_a_young_occurrence_is_admitted_by_a_later_poll_once_old_enough() -> None:
+    connector, client, _, alerts, clock = make()
+    connector.alert_min_active = timedelta(seconds=30)
+    alerts.alerts = [firing("HighLatency", "f1")]
+    connector.poll_alerts_once()  # 0 s old: not admitted yet
+    first = client.read("read_alerts", None)
+    assert alert_items(first) == []
+    clock.advance(30)
+    connector.poll_alerts_once()  # 30 s old and still firing: admitted
+    second = client.read("read_alerts", first.next_cursor)
+    assert alert_items(second) == [("firing", T0.isoformat())]
+
+
+def test_an_occurrence_that_resolves_young_produces_nothing() -> None:
+    connector, client, _, alerts, clock = make()
+    connector.alert_min_active = timedelta(seconds=30)
+    alerts.alerts = [firing("OrderErrorRateHigh", "f1")]
+    connector.poll_alerts_once()
+    clock.advance(20)
+    alerts.alerts = []  # gone after about 20 s, before Alertmanager's grouping window
+    connector.poll_alerts_once()
+    clock.advance(30)
+    connector.poll_alerts_once()
+    assert alert_items(client.read("read_alerts", None)) == []
+
+
+def test_the_webhook_path_is_unchanged_by_the_poll_rule() -> None:
+    connector, client, _, _, _ = make()
+    connector.alert_min_active = timedelta(seconds=30)
+    delivery = {
+        "receiver": "sre",
+        "status": "firing",
+        "alerts": [{**firing("HighLatency", "f1"), "status": "firing"}],
+    }
+    assert connector.receive_webhook(delivery) == 1  # sent by Alertmanager: admitted at any age
+    assert [status for status, _ in alert_items(client.read("read_alerts", None))] == ["firing"]

@@ -98,6 +98,8 @@ data:
   SRE_EVIDENCE_NAMESPACES: chaos-mesh
   SRE_WATCH_INTERVAL_SECONDS: "15"
   SRE_ALERT_COVERAGE_POLL_SECONDS: "30"
+  # contract §16: the poll admits an alert only once it is as old as Alertmanager's group_wait (default 30 s)
+  SRE_ALERT_MIN_ACTIVE_SECONDS: "30"
   SRE_LOKI_URL: http://loki.observability.svc.cluster.local:3100
   PROMETHEUS_URL: http://prometheus.observability.svc.cluster.local:9090
   TEMPO_URL: http://tempo.observability.svc.cluster.local:3200

@@ -953,14 +953,23 @@ class LabWorld:
         )
 
     def alert_started_at(self, alerts: Collection[str], since: datetime) -> datetime | None:
-        starts = [
-            t
-            for alert in self._alerts()
-            if alert["labels"].get("alertname") in alerts
-            and (t := parse_instant(alert.get("startsAt"))) is not None
-            and t >= since - timedelta(seconds=1)
-        ]
-        return min(starts) if starts else None
+        """The first expected alert the **control plane** received (connector contract §16.3): a run measures
+        what the product can see, not what Alertmanager's API shows to a faster poller."""
+        engine = create_engine(
+            f"postgresql+psycopg://postgres:postgres@127.0.0.1:{self.pg_port}/{self.database}"
+        )
+        try:
+            with engine.connect() as connection:
+                first = connection.execute(
+                    text(
+                        "select min(starts_at) from alerts"
+                        " where alert_name = any(:alerts) and starts_at >= :since"
+                    ),
+                    {"alerts": sorted(alerts), "since": since - timedelta(seconds=1)},
+                ).scalar()
+        finally:
+            engine.dispose()
+        return _aware(first) if first is not None else None
 
     def diagnoses(self, alerts: Collection[str], since: datetime) -> list[StoredDiagnosis]:
         engine = create_engine(

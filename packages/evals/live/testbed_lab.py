@@ -17,7 +17,7 @@ import sys
 import time
 import urllib.request
 import uuid
-from collections.abc import Collection, Sequence
+from collections.abc import Callable, Collection, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -1136,7 +1136,31 @@ def negative_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> Sc
     )
 
 
-SPECS = {
+def _variant_b(
+    base: Callable[..., ScenarioSpec], scenario_id: str, **extra: ParameterRange
+) -> Callable[..., ScenarioSpec]:
+    """A variant B of design §12.2.2: the family's variant A parameters, a new scenario and its own extras.
+    Declared ``HOLDOUT`` by default (split by construction, §12.2.1)."""
+
+    def spec(repeats: int, seeds: tuple[int, ...], tier: str = "HOLDOUT") -> ScenarioSpec:
+        a = base(repeats, seeds, tier=tier)
+        return a.model_copy(
+            update={"scenario_id": scenario_id, "parameters": {**a.parameters, **extra}}
+        )
+
+    return spec
+
+
+LOSS = ParameterRange(low=20, high=40)
+WORKERS = ParameterRange(low=20, high=28)
+
+SPECS: dict[str, Callable[..., ScenarioSpec]] = {
+    "dependency-b": _variant_b(dependency_spec, "dependency-loss-payment", loss_percent=LOSS),
+    "direct-b": _variant_b(direct_pod_spec, "direct-stress-payment"),
+    "scheduled-b": _variant_b(scheduled_spec, "scheduled-stress-order", cpu_workers=WORKERS),
+    "config-b": _variant_b(config_spec, "config-image-payment"),
+    "negative-b": _variant_b(negative_spec, "negative-image-decoy", cpu_workers=WORKERS),
+    "competing-b": _variant_b(competing_spec, "competing-loss-podkill", loss_percent=LOSS),
     "negative": negative_spec,
     "competing": competing_spec,
     "dependency": dependency_spec,
@@ -1146,8 +1170,16 @@ SPECS = {
 }
 
 
-def world_for(families: Collection[str], clock: RealClock) -> LabWorld:
+def world_for(
+    families: Collection[str], clock: RealClock, scenario_ids: Collection[str] = ()
+) -> LabWorld:
     """The lab set up for a family: which workload the fault lands on and how its target is probed."""
+    if "direct-stress-payment" in scenario_ids:
+        return LabWorld(clock=clock, target_app="payment-service", payment_probe=True)
+    if "scheduled-stress-order" in scenario_ids:
+        return LabWorld(clock=clock, target_app="order-service")
+    if {"config-image-payment", "negative-image-decoy"} & set(scenario_ids):
+        return LabWorld(clock=clock, payment_probe=True)
     if "direct-pod-fault" in families:
         return LabWorld(clock=clock, target_app="order-service")
     return LabWorld(
@@ -1329,7 +1361,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     freeze.add_argument("--seeds", required=True, help="comma separated, one per repeat")
     freeze.add_argument("--engine-version", required=True)
     freeze.add_argument("--scenario", choices=sorted(SPECS), default="dependency")
-    freeze.add_argument("--tier", choices=("DEV", "HOLDOUT"), default="DEV")
+    freeze.add_argument(
+        "--tier", choices=("DEV", "HOLDOUT"), default=None, help="default: the scenario's own tier"
+    )
     freeze.add_argument(
         "--engine-commit", default="", help="freeze the engine at this git commit (design §12.2.3)"
     )
@@ -1362,7 +1396,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             engine_version=args.engine_version,
             created_at=clock.now(),
             salt=args.salt,
-            scenarios=(SPECS[args.scenario](len(seeds), seeds, tier=args.tier),),
+            scenarios=(
+                SPECS[args.scenario](
+                    len(seeds), seeds, **({"tier": args.tier} if args.tier else {})
+                ),
+            ),
             acceptance=acceptance,
             engine_commit=args.engine_commit,
         ).frozen()
@@ -1370,7 +1408,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.command == "phase0":
-        world = world_for({SPECS[args.scenario](1, (1,)).family}, clock)
+        probe = SPECS[args.scenario](1, (1,))
+        world = world_for({probe.family}, clock, {probe.scenario_id})
         # Phase 0 is not part of any suite: its own store, its own manifest, never scored into a result.
         from packages.rca.engine import RCA_ENGINE_VERSION
 
@@ -1409,7 +1448,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"run refused: the engine differs from the frozen commit {manifest.engine_commit}: {drift}"
         )
         return 2
-    world = world_for({sp.family for sp in manifest.scenarios}, clock)
+    world = world_for(
+        {sp.family for sp in manifest.scenarios},
+        clock,
+        {sp.scenario_id for sp in manifest.scenarios},
+    )
     outcomes: list[RunOutcome] = []
     for spec in manifest.scenarios:
         for repeat in range(spec.repeats):

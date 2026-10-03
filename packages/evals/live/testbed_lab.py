@@ -1151,7 +1151,8 @@ def _variant_b(
     return spec
 
 
-LOSS = ParameterRange(low=20, high=40)
+# blind phase 0 (design §12.4): at 20 to 40% the target saw the loss only now and then
+LOSS = ParameterRange(low=50, high=70)
 WORKERS = ParameterRange(low=20, high=28)
 
 SPECS: dict[str, Callable[..., ScenarioSpec]] = {

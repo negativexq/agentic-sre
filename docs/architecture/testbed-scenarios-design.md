@@ -430,3 +430,16 @@ diagnosis or score of a variant B.
 - `scheduled-stress-order`: the run stopped at calibration: every baseline sample failed in under a millisecond
   (`URLError`), so the local port-forward to `order-service` was not serving after the pod was replaced during
   isolation. Rerun unchanged first.
+
+### 12.5 Blind phase 0, second round (2026-10-03)
+
+Valid with their alert names: `scheduled-stress-order` (`OrderRequestLatencyHigh`; the port-forward problem did not
+recur), `dependency-loss-payment`, `direct-stress-payment` (payment latency alerts fire at 56 to 72 workers),
+`config-image-payment` (`OrderErrorRateHigh`). Invalid:
+
+- `competing-loss-podkill`: the target still met the three-failures rule late (11.9 s against 0.7 s for the client);
+  `POST /payments` sees 20 to 40% loss only intermittently as well. Redefined for both loss variants: 50 to 70% loss.
+- `negative-image-decoy`: the alert reached Alertmanager (18 s after the change) but no alert or incident reached the
+  control plane, although 63 events did; the connector's log of that run was lost to the next run's restart. The
+  same change without the decoy (`config-image-payment`) delivered its alert. The CPU-stress decoy is capped at 100m
+  by the isolated workload's limit, so a starved node is not the explanation. Rerun unchanged.

@@ -104,3 +104,15 @@ def test_the_live_source_serves_exactly_the_captured_spans() -> None:
         trace_items=spans,
     )
     assert list(source.trace_observations()) == list(spans)
+
+
+def test_only_workloads_configured_for_opentelemetry_are_read() -> None:
+    from apps.control_plane.diagnosis import _instrumented
+
+    def deployment(*env: str) -> dict[str, Any]:
+        containers = [{"name": "app", "env": [{"name": name, "value": "x"} for name in env]}]
+        return {"kind": "Deployment", "spec": {"template": {"spec": {"containers": containers}}}}
+
+    assert _instrumented(deployment("OTEL_RESOURCE_ATTRIBUTES", "PORT"))
+    assert not _instrumented(deployment("POSTGRES_PASSWORD"))
+    assert not _instrumented({"kind": "Deployment", "spec": {}})

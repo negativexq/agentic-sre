@@ -50,6 +50,7 @@ from packages.rca.investigation.state import (
 )
 from packages.rca.lifecycle import classify, status_payload
 from packages.rca.live import (
+    TRACE_QUERY_MAX_SPAN,
     ChangeWatcher,
     ClusterReader,
     ListingFailure,
@@ -335,6 +336,19 @@ class SnapshotResult:
     lifecycle_repairs: int = 0
     # The persisted snapshot cycle, when this cycle captured evidence for a run.
     cycle_id: int | None = None
+
+
+TRACE_ONSET_LEAD = timedelta(minutes=10)
+
+
+def _instrumented(body: dict[str, Any]) -> bool:
+    """A Deployment whose pod template configures OpenTelemetry, so its pods emit traces."""
+    containers = body.get("spec", {}).get("template", {}).get("spec", {}).get("containers") or []
+    return any(
+        str(env.get("name", "")).startswith("OTEL_")
+        for container in containers
+        for env in container.get("env") or []
+    )
 
 
 @dataclass
@@ -923,12 +937,19 @@ class DiagnosisService:
             for alert in alerts
             if alert.service and alert.namespace
         ]
+        # only workloads that emit traces: a Deployment whose pod template configures OpenTelemetry
+        # (live-trace-design.md §8: reads of uninstrumented workloads cost time and return nothing)
         services += sorted(
             (str(body["metadata"].get("namespace", "")), str(body["metadata"].get("name")))
             for body in listed
-            if body.get("kind") == "Deployment" and body.get("metadata", {}).get("namespace")
+            if body.get("kind") == "Deployment"
+            and body.get("metadata", {}).get("namespace")
+            and _instrumented(body)
         )
-        starts_at, ends_at = incident_window(alerts, self.clock())
+        # around the onset, not the newest hour of the two-hour lookback (§8)
+        onset = min((alert.starts_at for alert in alerts), default=self.clock())
+        starts_at = onset - TRACE_ONSET_LEAD
+        ends_at = min(self.clock(), starts_at + TRACE_QUERY_MAX_SPAN)
         capture = capture_traces(provider_adapter, services, starts_at, ends_at)
         for read in capture.reads:
             if read.completeness == "FAILED":

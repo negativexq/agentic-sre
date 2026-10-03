@@ -102,3 +102,17 @@ Two findings for C1, which the specified relation does not yet handle:
 Separate finding, not caused by the spans: replaying with spans reproduced the live diagnosis's digest for 200 of 271
 diagnoses; the other 71 differ with and without spans alike, so the gap lies between live and replay, and is to be
 examined on its own.
+
+## 8. Read time, and a focused read (2026-10-03)
+
+The read time §4.1 asked for, from the provider read records of the shadow runs: one Tempo read took 0.8 s median,
+4.7 s at p90 and 19.5 s at worst (1,134 reads, 29 failed); **the trace read of one diagnosis took 8.6 s median, 27 s
+at p90, 45 s at worst** (162 diagnoses). Too long to turn on for no decision yet. Two causes, both changed:
+
+- every listed Deployment was read, including Kafka, Postgres, Redis and the isolated workload, which emit no traces
+  and always returned none: only the alert services and the Deployments whose pod template configures OpenTelemetry
+  (an `OTEL_*` environment variable) are read now;
+- each read searched the newest hour of the two-hour lookback, which is slow and can miss the fault: the read now
+  covers ten minutes before the first alert through the capture, at most one hour.
+
+Measured again before the default changes.

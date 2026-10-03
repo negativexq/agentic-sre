@@ -361,7 +361,8 @@ meaning of *named* (an actor of a supported hypothesis, or `root_cause`):
 - false strong authority and false `RESOLVED` as in §7, per incident, against the group's `causes`.
 
 Per run: `causes_named` counts a cause as named when it is found in at least one group that requires it (so neither
-cause may be absorbed by the other); `cross_attribution` is the number of incidents with one. Reported per family with
+cause may be absorbed by the other), and `instances_named` counts a cause's exact instance the same way (a supported
+hypothesis of that actor carrying its UID, in an incident of a group that requires it; owner-approved 2026-10-03); `cross_attribution` is the number of incidents with one. Reported per family with
 the other metrics; the acceptance bar stays the frozen one (no false strong authority, no false `RESOLVED`), and
 `cross_attribution` is reported without a threshold for this baseline.
 

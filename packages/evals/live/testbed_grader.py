@@ -93,6 +93,8 @@ def _grouped(record: RunRecord, incidents: Sequence[tuple[str, Diagnosis]]) -> d
     cause_actors = {link.actor for link in chain.of_role("cause")}
     chain_actors = chain.actors()
     found_causes: set[str] = set()
+    instances = {link.actor: link.instance_uid for link in chain.of_role("cause") if link.knowable}
+    found_instances: set[str] = set()
     out = {
         "groups_total": 0,
         "groups_found": 0,
@@ -107,6 +109,15 @@ def _grouped(record: RunRecord, incidents: Sequence[tuple[str, Diagnosis]]) -> d
             out["unscored_incidents"] += 1
             continue
         named = _named(diagnosis)
+        identity, trace = _identity(diagnosis), diagnosis.resolution_trace
+        supported = set(trace.plausible_hypotheses) if trace is not None else set()
+        for cause in set(group.required) & set(instances):
+            if any(
+                identity[h][0] == cause and instances[cause] in identity[h][1]
+                for h in supported
+                if h in identity
+            ):
+                found_instances.add(cause)
         out["groups_total"] += 1
         if all(cause in named for cause in group.required):
             out["groups_found"] += 1
@@ -114,7 +125,6 @@ def _grouped(record: RunRecord, incidents: Sequence[tuple[str, Diagnosis]]) -> d
         others = cause_actors - set(group.causes)
         if named & others:
             out["cross_attribution"] += 1
-        identity, trace = _identity(diagnosis), diagnosis.resolution_trace
         strong = set(trace.mechanism_verified_hypotheses) if trace is not None else set()
         allowed = (
             chain_actors - others
@@ -127,6 +137,9 @@ def _grouped(record: RunRecord, incidents: Sequence[tuple[str, Diagnosis]]) -> d
         ):
             out["false_resolved"] = True
     out["causes_named"] = len(found_causes & cause_actors)
+    out["instances_named"] = len(
+        found_instances
+    )  # each cause's instance, read where its group requires it
     return out
 
 

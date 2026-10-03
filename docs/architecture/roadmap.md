@@ -58,7 +58,7 @@ Contract: [`connector-boundary-contract.md`](connector-boundary-contract.md).
 | 2 | CPU stress on `order-service` | 3/3 | 3/3 | 1/3 (first real witness, checked against the truth) | 0 / 0 |
 | 3 | `payment-service` environment change (rollout) | 3/3 (after §14; 0/3 before) | 3/3, instance 2/3 | 0 (no rollout rule yet, C5; expected) | 0 / 0 |
 | 4b | `Schedule` spawning a 60 s delay on `payment-service` every 90 s | 3/3 (slice 4, 20 s every minute: 1/3) | 3/3, Schedule instance 3/3 | 0/3 (a delay leaves no pod failure, as slice 1) | 0 / 0 |
-| 5 | delay on `payment-service` + pod-kill of `order-worker` (competing) | 3/3 | 2/2 causes per run, each in its own group (cross-attribution 0) | 0/3 | 0 / 0 |
+| 5 | delay on `payment-service` + pod-kill of `order-worker` (competing) | 3/3 | 2/2 causes and instances per run, each in its own group (cross-attribution 0) | 0/3 | 0 / 0 |
 
 The engine names the right cause and instance every time and has never claimed false strong authority; strong
 evidence is where it is weak, for reasons now on the C list (C2, C5, C9). Found and fixed on the way: a fault-execution

@@ -350,6 +350,7 @@ pod-kill of `order-worker`. Phase 0 valid (first alert `PaymentDbQueryLatencyHig
 incidents). The three repeats: **3 of 3 valid**; every incident scored against its own group, **group recall 1.0**
 (6 of 6 incidents per run), **cross-attribution 0** (the pod-kill was never named for a latency incident), both causes
 named in every run; **false strong authority 0, false `RESOLVED` 0, false elimination 0**. Execution witness and
-effect link 0 (as slice 1). Instance recall reads 0.5 because instances are still taken from the primary (latency)
-incident only, where the pod-kill is not a candidate; both causes' exact instances are named in their own groups'
-incidents in all three runs. Scoring instances per group is a proposed refinement of §15.3, not yet adopted.
+effect link 0 (as slice 1). Instance recall first read 0.5 because instances were taken from the primary (latency)
+incident only, where the pod-kill is not a candidate. With instances scored per group (§15.3, owner-approved) and the
+runs rescored (`score.v2.json`, nothing re-run): **instance recall 1.0**, both causes' exact instances named in their
+own groups' incidents in all three runs.

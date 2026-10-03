@@ -238,6 +238,8 @@ def test_each_incident_is_scored_against_its_own_group() -> None:
         score.cross_attribution == 0
     )  # naming the delay for a lag incident is allowed (it contributes)
     assert (score.causes_named, score.causes_total) == (1, 2)
+    # instances are read where the cause's group requires it: the delay's instance is named, the pod-kill's is not
+    assert (score.instances_named, score.instances_total) == (1, 2)
 
 
 def test_naming_a_cause_outside_the_incidents_group_is_a_cross_attribution() -> None:

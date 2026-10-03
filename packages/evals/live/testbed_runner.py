@@ -21,6 +21,7 @@ from typing import Protocol
 
 from packages.evals.live.ground_truth import (
     Chain,
+    Decoy,
     Link,
     RunRecord,
     ScenarioSpec,
@@ -81,6 +82,7 @@ ALERTS_BY_FAMILY: dict[str, frozenset[str]] = {
     # the designed symptom is latency; the lag alerts fire without any fault in this lab (design, slice 4)
     "scheduled-recurring": LATENCY_ALERTS,
     "competing-causes": DEPENDENCY_ALERTS,
+    "negative-control": DEPENDENCY_ALERTS | {"PaymentServiceLatencyCritical"},
 }
 # The alerts that stamp the timeline when they differ from the collected ones: a competing run's timeline is the
 # payment delay's (contract §15.4), so only its latency alerts may be its ``alert_fired_at``.
@@ -126,6 +128,8 @@ class RunParameters:
     spawn_seconds: int = 20
     # competing-causes: when the second cause follows the first
     second_offset_seconds: float = 0.0
+    # negative-control: when the decoy starts relative to the cause (negative: before it)
+    decoy_offset_seconds: float = 0.0
 
 
 def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
@@ -146,6 +150,7 @@ def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
         fault={
             "direct-pod-fault": "cpu-stress",
             "config-or-rollout": "env-delay",
+            "negative-control": "env-delay",
             "scheduled-recurring": "scheduled-delay",
             "competing-causes": "competing",
         }.get(spec.family, "network-delay"),
@@ -153,6 +158,7 @@ def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
         spawn_every_seconds=int(draw("spawn_every_seconds", 60.0)),
         spawn_seconds=int(draw("spawn_seconds", 20.0)),
         second_offset_seconds=draw("second_offset_seconds", 0.0),
+        decoy_offset_seconds=draw("decoy_offset_seconds", 0.0),
     )
 
 
@@ -184,6 +190,9 @@ class Injection:
     spawned: tuple[tuple[str, str], ...] = ()
     # competing causes: the second cause, injected after a seeded offset (contract §15)
     companion: Injection | None = None
+    # negative control: the decoy injected around the cause (contract §16)
+    decoy: Injection | None = None
+    namespace: str = "sre-demo"
 
 
 @dataclass(frozen=True)
@@ -226,6 +235,10 @@ class World(Protocol):
         ...
 
     def inject(self, params: RunParameters, journal: InjectorJournal, name: str) -> Injection: ...
+
+    def construction_problems(self) -> list[str]:
+        """Why the decoy could reach the symptom (contract §16.3); empty when the construction holds."""
+        ...
 
     def applied_at(self, injection: Injection) -> datetime | None: ...
 
@@ -433,7 +446,33 @@ def competing_chain(injection: Injection) -> Chain:
     )
 
 
+NEGATIVE_CONSTRUCTION = (
+    "the decoy runs on lab-control/isolated-echo: no sre-demo workload references lab-control in its configuration "
+    "and NetworkPolicy default-deny isolates the namespace, both checked before the injection (contract §16.3)"
+)
+
+
+def negative_chain(injection: Injection) -> Chain:
+    """The real configuration change of slice 3 plus a decoy experiment on the isolated workload (contract §16)."""
+    real = config_chain(injection)
+    decoy = injection.decoy
+    decoys = (
+        (
+            Decoy(
+                actor=f"{decoy.namespace}/{decoy.kind}/{decoy.name}",
+                instance_uid=decoy.uid,
+                knowable=True,
+                mechanism="NetworkChaos delay on an isolated workload",
+            ),
+        )
+        if decoy is not None
+        else ()
+    )
+    return Chain(links=real.links, construction=NEGATIVE_CONSTRUCTION, decoys=decoys)
+
+
 CHAINS = {
+    "negative-control": negative_chain,
     "competing-causes": competing_chain,
     "direct-pod-fault": direct_pod_chain,
     "config-or-rollout": config_chain,
@@ -624,6 +663,21 @@ def run_once(
             "env-delay": "env-delay",
             "scheduled-delay": "sched-delay",
         }.get(params.fault, "dep-delay")
+        decoy: Injection | None = None
+        decoy_params = dataclasses.replace(params, fault="decoy-delay")
+        if spec.family == "negative-control":
+            construction = world.construction_problems()
+            run.journal.record(
+                verb="check",
+                object="decoy/construction",
+                role="construction_check",
+                ok=not construction,
+                payload={"problems": construction},
+            )
+            problems.extend(f"construction: {p}" for p in construction)
+            if params.decoy_offset_seconds < 0:
+                decoy = world.inject(decoy_params, run.journal, f"decoy-{params.seed}")
+                run.wait(-params.decoy_offset_seconds)
         injection = world.inject(params, run.journal, f"{prefix}-{params.seed}")
         alert_at: datetime | None = None
         applied: datetime | None = None
@@ -643,6 +697,13 @@ def run_once(
                     run.journal,
                     f"pod-kill-{params.seed}",
                 )
+            if (
+                spec.family == "negative-control"
+                and decoy is None
+                and (clock.now() - injection.injected_at).total_seconds()
+                >= params.decoy_offset_seconds
+            ):
+                decoy = world.inject(decoy_params, run.journal, f"decoy-{params.seed}")
             if applied is None:
                 applied = world.applied_at(injection)
                 if applied is not None:
@@ -664,7 +725,9 @@ def run_once(
                     )
         if applied is None:
             problems.append("the controller's Applied event was never observed")
-        injection = dataclasses.replace(world.settle(injection), companion=companion)
+        injection = dataclasses.replace(world.settle(injection), companion=companion, decoy=decoy)
+        if spec.family == "negative-control" and decoy is None:
+            problems.append("the decoy was never injected")
         if params.fault == "competing" and companion is None:
             problems.append("the second cause was never injected")
         if injection.kind == "Schedule" and not injection.spawned:
@@ -673,6 +736,8 @@ def run_once(
         world.remove(injection, run.journal)
         if injection.companion is not None:
             world.remove(injection.companion, run.journal)
+        if injection.decoy is not None:
+            world.remove(injection.decoy, run.journal)
         removed_at = clock.now()
         recover_by = removed_at.timestamp() + RECOVERY_TIMEOUT_SECONDS
         while clock.now().timestamp() < recover_by:

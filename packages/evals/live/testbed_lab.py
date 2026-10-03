@@ -60,6 +60,7 @@ CONFIG_SCENARIO_ID = "config-delay-payment"
 DIRECT_SCENARIO_ID = "direct-stress-order"
 SCHEDULED_SCENARIO_ID = "scheduled-delay-payment"
 COMPETING_SCENARIO_ID = "competing-delay-podkill"
+NEGATIVE_SCENARIO_ID = "negative-config-decoy"
 MAX_WARMUPS = 3
 RUN_LABEL = (
     "testbed.agentic-sre.io/run"  # every experiment the harness creates carries its run's id
@@ -67,6 +68,11 @@ RUN_LABEL = (
 CHAOS_RESOURCES = ("networkchaos", "stresschaos", "podchaos", "iochaos", "httpchaos", "schedules")
 WARMUP_SECONDS = 90.0  # a restarted pod fails probes for its first minutes under load
 WATCHED_NAMESPACES = ("sre-demo", "lab-control", "chaos-mesh")
+DECOY_NAMESPACE = "lab-control"  # the isolated workload of the negative control (contract §16)
+ROLE_DECOY_CREATED, ROLE_DECOY_REMOVED = (
+    "decoy_created",
+    "decoy_removed",
+)  # never the cause's instants
 # Chaos Mesh's per-pod records of how its experiments are applied (owned by the pod, named after it): never an
 # experiment of their own, so a foreign fault shows through its experiment's object and events instead.
 CHAOS_POD_RECORDS = frozenset({"PodNetworkChaos", "PodIOChaos", "PodHttpChaos"})
@@ -285,10 +291,50 @@ class LabWorld:
             "stresschaos",
             "podchaos",
         ):  # a Schedule first, so it spawns no more
+            for namespace in (NAMESPACE, DECOY_NAMESPACE):
+                self._run(
+                    ["kubectl", "-n", namespace, "delete", kind, "--all", "--ignore-not-found"],
+                    check=False,
+                )
+
+    def construction_problems(self) -> list[str]:
+        """Contract §16.3: the decoy's workload is isolated and nothing in sre-demo is configured to reach it."""
+        problems: list[str] = []
+        policies = json.loads(
             self._run(
-                ["kubectl", "-n", NAMESPACE, "delete", kind, "--all", "--ignore-not-found"],
-                check=False,
-            )
+                ["kubectl", "-n", DECOY_NAMESPACE, "get", "networkpolicy", "-o", "json"]
+            ).stdout
+        )["items"]
+        if not any(p["metadata"]["name"] == "default-deny" for p in policies):
+            problems.append(f"no default-deny NetworkPolicy in {DECOY_NAMESPACE}")
+        reached = self._run(
+            [
+                "kubectl",
+                "-n",
+                NAMESPACE,
+                "exec",
+                "deployment/order-service",
+                "--",
+                "python",
+                "-c",
+                "import urllib.request; urllib.request.urlopen("
+                f"'http://isolated-echo.{DECOY_NAMESPACE}:8080', timeout=3)",
+            ],
+            check=False,
+        )
+        if reached.returncode == 0:
+            problems.append(f"the isolated workload is reachable from {NAMESPACE}")
+        for resource in ("deployments", "configmaps"):
+            items = json.loads(
+                self._run(["kubectl", "-n", NAMESPACE, "get", resource, "-o", "json"]).stdout
+            )["items"]
+            for item in items:
+                text = json.dumps(item.get("spec", {}).get("template", {}) or item.get("data", {}))
+                if DECOY_NAMESPACE in text or "isolated-echo" in text:
+                    problems.append(
+                        f"{resource}/{item['metadata']['name']} refers to {DECOY_NAMESPACE}"
+                    )
+        return problems
 
     def _fresh_target_pod(self) -> None:
         """A new pod of the target workload per run, so it carries no event history of an earlier run.
@@ -497,6 +543,16 @@ class LabWorld:
                     f"    duration: {params.spawn_seconds}s\n"
                 ),
             )
+        elif params.fault == "decoy-delay":
+            # contract §16: a decoy on the isolated workload, at about the same time as the real cause
+            kind, body = (
+                "NetworkChaos",
+                (
+                    "  action: delay\n  mode: all\n"
+                    f"  selector: {{namespaces: [{DECOY_NAMESPACE}], labelSelectors: {{app: isolated-echo}}}}\n"
+                    f"  delay: {{latency: {params.latency_ms}ms}}\n"
+                ),
+            )
         elif params.fault == "pod-kill":
             # contract §15: the second competing cause, one pod of order-worker killed once
             kind, duration, body = (
@@ -525,17 +581,21 @@ class LabWorld:
                     f"  delay: {{latency: {params.latency_ms}ms}}\n"
                 ),
             )
+        decoy = params.fault == "decoy-delay"
+        namespace = DECOY_NAMESPACE if decoy else NAMESPACE
         manifest = (
             f"apiVersion: chaos-mesh.org/v1alpha1\nkind: {kind}\n"
-            f"metadata: {{name: {name}, namespace: {NAMESPACE}, "
+            f"metadata: {{name: {name}, namespace: {namespace}, "
             f"labels: {{{RUN_LABEL}: {self.database}}}}}\nspec:\n{body}{duration}"
         )
         self._experiments.add(name)
         # the pod a pod-kill will remove is known only before it is killed
-        app = "order-worker" if params.fault == "pod-kill" else self.target_app
+        app = {"pod-kill": "order-worker", "decoy-delay": "isolated-echo"}.get(
+            params.fault, self.target_app
+        )
         before = json.loads(
             self._run(
-                ["kubectl", "-n", NAMESPACE, "get", "pod", "-l", f"app={app}", "-o", "json"]
+                ["kubectl", "-n", namespace, "get", "pod", "-l", f"app={app}", "-o", "json"]
             ).stdout
         )["items"]
         result = self._run(["kubectl", "apply", "-f", "-"], stdin=manifest, check=False)
@@ -546,7 +606,7 @@ class LabWorld:
                 [
                     "kubectl",
                     "-n",
-                    NAMESPACE,
+                    namespace,
                     "get",
                     kind.lower(),
                     name,
@@ -560,7 +620,7 @@ class LabWorld:
             ok=ok,
             response=result.stdout if ok else result.stderr,
             uid=uid or None,
-            role=ROLE_CAUSE_CREATED,
+            role=ROLE_DECOY_CREATED if decoy else ROLE_CAUSE_CREATED,
         )
         if not ok:
             raise RuntimeError(f"the experiment was not created: {result.stderr.strip()[:200]}")
@@ -569,12 +629,12 @@ class LabWorld:
             if params.fault == "pod-kill"
             else json.loads(
                 self._run(
-                    ["kubectl", "-n", NAMESPACE, "get", "pod", "-l", f"app={app}", "-o", "json"]
+                    ["kubectl", "-n", namespace, "get", "pod", "-l", f"app={app}", "-o", "json"]
                 ).stdout
             )["items"]
         )
         pod = pods[0]["metadata"]
-        return Injection(name, uid, pod["name"], pod["uid"], entry.at, kind)
+        return Injection(name, uid, pod["name"], pod["uid"], entry.at, kind, namespace=namespace)
 
     def _inject_env_delay(self, params: RunParameters, journal: InjectorJournal) -> Injection:
         """Change the Deployment's environment; the rollout it starts is the execution."""
@@ -740,7 +800,7 @@ class LabWorld:
             [
                 "kubectl",
                 "-n",
-                NAMESPACE,
+                injection.namespace,
                 "delete",
                 injection.kind.lower(),
                 injection.name,
@@ -753,7 +813,9 @@ class LabWorld:
             object=f"{injection.kind.lower()} {injection.name}",
             ok=result.returncode == 0,
             response=result.stdout or result.stderr,
-            role=ROLE_CAUSE_REMOVED,
+            role=ROLE_DECOY_REMOVED
+            if injection.namespace == DECOY_NAMESPACE
+            else ROLE_CAUSE_REMOVED,
         )
 
     def alert_started_at(self, alerts: Collection[str], since: datetime) -> datetime | None:
@@ -912,7 +974,28 @@ def competing_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> S
     )
 
 
+def negative_spec(repeats: int, seeds: tuple[int, ...], tier: str = "DEV") -> ScenarioSpec:
+    """Slice 6 (design §4 `negative-control`, contract §16): slice 3's real configuration change plus a decoy
+    delay on the isolated workload, started 30 s before to 30 s after it."""
+    return ScenarioSpec(
+        scenario_id=NEGATIVE_SCENARIO_ID,
+        family="negative-control",
+        tier=tier,  # type: ignore[arg-type]
+        repeats=repeats,
+        seeds=seeds,
+        parameters={
+            "baseline_seconds": ParameterRange(low=45, high=45),
+            "offset_seconds": ParameterRange(low=0, high=20),
+            "duration_seconds": ParameterRange(low=90, high=110),
+            "latency_ms": ParameterRange(low=600, high=1500),
+            "load_rps": ParameterRange(low=8, high=12),
+            "decoy_offset_seconds": ParameterRange(low=-30, high=30),
+        },
+    )
+
+
 SPECS = {
+    "negative": negative_spec,
     "competing": competing_spec,
     "dependency": dependency_spec,
     "direct": direct_pod_spec,
@@ -925,7 +1008,9 @@ def world_for(families: Collection[str], clock: RealClock) -> LabWorld:
     """The lab set up for a family: which workload the fault lands on and how its target is probed."""
     if "direct-pod-fault" in families:
         return LabWorld(clock=clock, target_app="order-service")
-    return LabWorld(clock=clock, payment_probe="config-or-rollout" in families)
+    return LabWorld(
+        clock=clock, payment_probe=bool({"config-or-rollout", "negative-control"} & set(families))
+    )
 
 
 def _summarize(outcome: RunOutcome) -> str:
@@ -1077,13 +1162,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "freeze":
         seeds = tuple(int(s) for s in args.seeds.split(","))
+        acceptance: dict[str, float] = {"false_resolved": 0, "false_strong_authority": 0}
+        if SPECS[args.scenario](1, (1,)).family == "negative-control":
+            acceptance["decoy_named"] = 0  # contract §16.5
         manifest = SuiteManifest(
             suite_id=args.suite,
             engine_version=args.engine_version,
             created_at=clock.now(),
             salt=args.salt,
             scenarios=(SPECS[args.scenario](len(seeds), seeds),),
-            acceptance={"false_resolved": 0, "false_strong_authority": 0},
+            acceptance=acceptance,
         ).frozen()
         print(TestbedStore(args.root).write_manifest(manifest), manifest.sha256)
         return 0

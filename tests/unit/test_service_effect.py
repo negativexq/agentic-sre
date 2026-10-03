@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from packages.rca.model import TraceSpanObservation
 from packages.rca.service_effect import EffectParameters, call_pairs, service_effect
@@ -103,3 +104,62 @@ def test_a_baseline_that_is_already_slow_leaves_the_relation_unknown() -> None:
     slow = [call(i, i * 0.5, 2.0) for i in range(5)]
     fault = [call(10 + i, 10.5 + i * 0.2, 3.3) for i in range(4)]
     assert judge(spans(*slow, *fault)) is None
+
+
+# ---- the fault-execution rule through the service-level effect (m21 §12.3) ----
+
+
+def _holder() -> object:
+    from packages.rca.model import EntityInstanceRef, EntityRef, Hypothesis
+
+    actor = EntityRef(kind="NetworkChaos", name="delay", namespace="shop")
+    return Hypothesis(
+        hypothesis_id="h1",
+        causal_actor=actor,
+        actor_instance=EntityInstanceRef(entity=actor, uid="u1"),
+        episode_onset=T0 + timedelta(minutes=11),
+        symptom_entities=(
+            EntityRef(kind="Service", name="order-service", namespace="shop"),
+            EntityRef(kind="Pod", name="order-service-abc-1", namespace="shop"),
+        ),
+    )
+
+
+POD = "payment-service-abc-1"  # a Deployment's pod: the target service is read from its name
+
+
+def _witnesses(all_spans: list[TraceSpanObservation], pod: str = POD) -> list[Any]:
+    from packages.rca.causal_closure import _service_effect_witness
+    from packages.rca.model import EntityRef, Finding, FindingKind
+
+    injection = Finding(
+        kind=FindingKind.FAULT_INJECTION,
+        entity=EntityRef(kind="NetworkChaos", name="delay", namespace="shop"),
+        at=T0 + timedelta(minutes=10),
+        summary="NetworkChaos applied",
+        evidence_ids=("event:1",),
+    )
+    return _service_effect_witness(
+        _holder(),  # type: ignore[arg-type]
+        injection,
+        EntityRef(kind="Pod", name=pod, namespace="shop"),
+        T0 + timedelta(minutes=10),
+        T0 + timedelta(minutes=12),
+        all_spans,
+    )
+
+
+def test_slow_calls_from_a_symptom_service_to_the_exact_target_give_a_witness_for_that_service() -> (
+    None
+):
+    fault = [call(10 + i, 10.5 + i * 0.2, 2.0, pod=POD) for i in range(4)]
+    (witness,) = _witnesses(spans(*BASELINE, *fault))
+    assert witness.symptom.kind == "Service" and witness.symptom.name == "order-service"
+    assert witness.mechanism == "FAULT_EXECUTION_EFFECT_AT_CALLER"
+    assert "c10" in witness.evidence_ids  # the calls are the evidence
+
+
+def test_no_witness_for_calls_to_another_replica_or_without_traces() -> None:
+    fault = [call(10 + i, 10.5 + i * 0.2, 2.0, pod="payment-service-abc-2") for i in range(4)]
+    assert _witnesses(spans(*BASELINE, *fault)) == []
+    assert _witnesses([]) == []

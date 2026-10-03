@@ -29,6 +29,13 @@ class CallPair:
     duration: timedelta
     target_pod: str
     non_success: bool
+    evidence_ids: tuple[str, ...] = ()
+
+
+# §12.6: the most permissive grid point with no hard violation on DEV, to be confirmed on a new HOLDOUT
+SERVICE_EFFECT = EffectParameters(calls=3, factor=3.0, floor=timedelta(seconds=0.2))
+# the trace read's baseline window, relative to the incident's onset (live-trace-design.md §9)
+BASELINE_FROM, BASELINE_TO = timedelta(minutes=10), timedelta(minutes=5)
 
 
 def _duration(span: TraceSpanObservation) -> timedelta | None:
@@ -63,9 +70,16 @@ def call_pairs(
                 duration,
                 server.semantic_attributes.get("k8s.pod.name", ""),
                 _non_success(client) or _non_success(server),
+                (client.evidence_id, server.evidence_id),
             )
         )
     return pairs
+
+
+def fault_calls(
+    pairs: Sequence[CallPair], *, target_pod: str, start: datetime, end: datetime
+) -> list[CallPair]:
+    return [p for p in pairs if p.target_pod == target_pod and start <= p.started <= end]
 
 
 def service_effect(

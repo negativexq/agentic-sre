@@ -1241,3 +1241,23 @@ engine frozen. Limits stated plainly: the decoy is never contradicted, only neve
 the isolated workload, so its relation is always unknown, which is its construction); the unknown cases are incidents
 whose captured spans held no fault or no baseline calls between that pair of services (for example a lag incident,
 whose service never calls the target); the rollout families have no execution witness until C5.
+
+### 12.7 Engine wiring (2026-10-04)
+
+The relation is wired into the fault-execution witness: when the exact target pod of a closed execution interval is
+not itself a symptom pod and the interval connects to the onset, each symptom `Service` of the same namespace other
+than the target's own service is tested with §12.2 at `N` = 3, `F` = 3, `D` = 0.2 s and the baseline
+`[onset − 10 min, onset − 5 min]`. When it holds, a witness `FAULT_EXECUTION_EFFECT_AT_CALLER` names that service as
+the symptom (`OBSERVED_MECHANISM_CAUSE`); unknown or false adds nothing. `RCA_ENGINE_VERSION` is unchanged.
+
+Replay of the §12.6 `DEV` incidents with the wired engine against their stored diagnoses: 6 new witnesses, all on the
+chain, none off it; 6 leaders `SUPPORTED` → `STRONG`, 2 `COMPETING` → `SINGLE`, 2 root causes moved to the
+experiment's `Schedule`; no resolution changed.
+
+ITBench-Lite (35 scenarios, `DEV`): the relation never holds, and this is a limit of the data, not of the rule. 12
+scenarios carry closed chaos intervals; in all 12 the recorded executions lie either about an hour before the onset
+(last `Applied` 16:40–16:51 UTC, on pods replaced around 17:16, absent from every captured span) or 17–26 minutes
+after it (first `Applied` 17:52–18:01, on the current pods). No execution is recorded around the onset (17:26–17:35),
+so no interval connects to it; and the captured traces begin only 5–9 minutes before the onset, leaving the
+baseline window empty or partial. ITBench-Lite can therefore neither confirm nor contradict §12; the confirmation stays
+with the new `HOLDOUT` of §12.6.

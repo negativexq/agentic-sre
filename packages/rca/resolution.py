@@ -54,6 +54,7 @@ from packages.rca.model import (
     RootSupportStatus,
     RulePreconditionAudit,
     StructuralAlternative,
+    TraceSpanObservation,
     VerificationTrace,
 )
 from packages.rca.ranking import RankingConfig
@@ -821,6 +822,7 @@ def resolve_hypotheses(
     structural_alternatives: Sequence[StructuralAlternative] = (),
     events: Sequence[ClusterEvent] = (),
     runtime_propagation: RuntimePropagation | None = None,
+    trace_spans: Sequence[TraceSpanObservation] = (),
 ) -> ResolutionTrace:
     """Resolve distinguishability without treating missing proof as contradiction.
 
@@ -893,7 +895,7 @@ def resolve_hypotheses(
         )
     execution = {
         h.hypothesis_id: (
-            fault_execution(h, change_onset_path_support(h), hypotheses, events)
+            fault_execution(h, change_onset_path_support(h), hypotheses, events, trace_spans)
             if is_chaos_kind(h.causal_actor.kind)
             else quota_execution(h, change_onset_path_support(h), events)
         )

@@ -374,3 +374,20 @@ def test_a_fault_that_appears_during_the_run_invalidates_it(tmp_path: Path) -> N
     _, _, outcome = run(tmp_path, world)
     assert not outcome.record.valid
     assert any("did not create" in reason for reason in outcome.record.invalid_reasons)
+
+
+class LateAlertWorld(FakeWorld):
+    """The control plane admits the alert only after the cause is gone (connector contract §16)."""
+
+    def alert_started_at(self, alerts: Collection[str], since: datetime) -> datetime | None:
+        return since + timedelta(seconds=25) if self.removed is not None else None
+
+
+def test_an_alert_admitted_after_the_cause_is_removed_still_stamps_the_timeline(
+    tmp_path: Path,
+) -> None:
+    world = LateAlertWorld(FakeClock())
+    _, _, outcome = run(tmp_path, world)
+    alerted = outcome.record.timeline.alert_fired_at
+    assert alerted is not None and world.injected is not None
+    assert alerted.at == world.injected + timedelta(seconds=25)

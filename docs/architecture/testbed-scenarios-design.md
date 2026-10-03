@@ -365,3 +365,52 @@ hypotheses on it per incident and kept them `UNLINKED`, admitted only as context
 strong authority 0, false `RESOLVED` 0, false elimination 0. The acceptance bar (with `decoy_named` = 0) holds.
 Limitation: the seeds drew positive offsets only (decoy 13, 25 and 16 s after the change), so the decoy-first case was
 exercised in phase 0 alone, not in a scored run.
+
+## 12. Engine freeze and the first HOLDOUT (2026-10-03, PROPOSED)
+
+Status: **PROPOSED**, waiting for the owner. Roadmap B5 (frozen engine baseline) and E2 (held-out set). Nothing below
+is implemented or run.
+
+### 12.1 Why the split of §6 cannot be applied as written
+
+§6 assigns each scenario to `DEV` or `HOLDOUT` by `assign_tier(salt, scenario_id)`. Every scenario run so far (variant A
+of each family, slices 1 to 6) was declared `DEV` and its results were seen; several rules were decided on them (the
+ordering amendment §14, the scheduled amendment, the competing groups §15, the decoy §16). A salted hash that put any
+of them in `HOLDOUT` would label seen data as unseen. The variants B of §4 have never been run.
+
+### 12.2 Proposal
+
+1. **Split by construction, not by hash:** variant A of every family stays `DEV`; variant B of every family is the
+   first `HOLDOUT`. The rule is written into the manifests before any variant B runs; `assign_tier` stays for later
+   suites built from scratch.
+2. **Variants B** (from §4, made concrete; same families, same harness, new injections):
+
+   | Family | Variant B (`HOLDOUT`) | Expected symptom alerts |
+   |---|---|---|
+   | `dependency-fault` | packet loss (not delay) on `payment-service` | latency and error alerts of `order-service` |
+   | `direct-pod-fault` | `StressChaos` (CPU) on `payment-service` (A was `order-service`) | `payment-service` latency |
+   | `scheduled-recurring` | `Schedule` spawning a `StressChaos` on `order-service` (60 s every 90 s) | `order-service` latency |
+   | `config-or-rollout` | image change to a tag that does not exist plus a pod delete | payment error alerts |
+   | `negative-control` | variant B's image change plus a decoy `StressChaos` on `lab-control/isolated-echo` | as `config-or-rollout` B |
+   | `competing-causes` | packet loss on `payment-service` plus a pod-kill of `order-worker` (symptom groups as §15) | latency and errors / lag |
+
+   The alert set of each variant is fixed in code and the manifest before its phase 0, not from what phase 0 shows.
+3. **Engine frozen by commit:** `RCA_ENGINE_VERSION` stays 2.1.0 (owner decision F1), but that string has not
+   identified the code (the §11 presentation change landed after slices 1 to 3). The manifest gains `engine_commit`
+   (the git commit of the engine at freeze), and the runner refuses a run whose working tree differs from it in
+   `packages/rca` or `apps/control_plane`. No engine change lands until the `HOLDOUT` suite is complete.
+4. **Blind phase 0:** each variant B gets a phase 0 that checks only the run's validity and the alert names; the
+   engine's diagnosis and score are not printed or read. A variant whose phase 0 fails is redefined, still blind,
+   before the manifest is frozen.
+5. **Repeats:** 3 per variant (as `DEV`), 18 runs, about four hours. The acceptance bar is the frozen one (no false
+   strong authority, no false `RESOLVED`, at least 90% valid; `decoy_named` = 0 for the control).
+6. **Use of the result:** reported per family beside `DEV`, never merged. A `HOLDOUT` result never selects a rule or a
+   parameter; a failure is recorded as it is, and any fix is measured on a new `HOLDOUT` (new variants or seeds) after
+   it.
+
+### 12.3 Decisions requested
+
+- the split by construction (12.2.1) instead of the salted hash for this suite;
+- the variants B of the table;
+- the engine freeze by commit with the runner's check (a `testbed.suite.v1` field addition);
+- 3 repeats (instead of the 5 of §5) for this first `HOLDOUT`.

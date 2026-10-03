@@ -275,6 +275,9 @@ class SuiteManifest(Model):
     version: Literal["testbed.suite.v1"] = "testbed.suite.v1"
     suite_id: str = Field(min_length=1)
     engine_version: str = Field(min_length=1)
+    # The engine's git commit at freeze (design §12.2.3); the version string alone has not identified the code.
+    # Empty on manifests frozen before it existed, and then left out of the digest so they still verify.
+    engine_commit: str = ""
     contract_version: str = CONTRACT_VERSION
     created_at: datetime
     salt: str = Field(min_length=1)
@@ -296,7 +299,10 @@ class SuiteManifest(Model):
         return self
 
     def digest(self) -> str:
-        body = self.model_dump(mode="json", exclude={"sha256"})
+        body = self.model_dump(
+            mode="json",
+            exclude={"sha256"} | ({"engine_commit"} if not self.engine_commit else set()),
+        )
         return hashlib.sha256(_canonical(body)).hexdigest()
 
     def frozen(self) -> SuiteManifest:

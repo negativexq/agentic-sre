@@ -116,3 +116,16 @@ at p90, 45 s at worst** (162 diagnoses). Too long to turn on for no decision yet
   covers ten minutes before the first alert through the capture, at most one hour.
 
 Measured again before the default changes.
+
+## 9. The focused read held only the quiet minutes (2026-10-03)
+
+Remeasured on slices 1 and 3 (6 runs, 51 diagnoses, all valid): three reads per diagnosis, **2.8 s median, 11.2 s at
+p90, 20.5 s at worst**, no failed read. But all **5,598 stored spans began before the fault**, none during it: Tempo
+returns a window's oldest traces first, and with the window opening ten minutes before the first alert, the 32
+traces of each read were always the quiet traffic before the fault. The earlier newest-hour read had the same flaw, so
+the shadow result of §7 ("0 of 271 changed") is weaker than it looked: the engine may never have been shown the fault.
+
+Changed: two narrow reads per instrumented service, the **fault** from two minutes before the first alert to five
+minutes after it (an alert fires about a minute after its fault begins), and a **baseline** from ten to five minutes
+before it, which a latency relation (§7, finding 1) has to compare the fault's calls with. Measured again: the share of
+spans inside the fault's interval and the read time.

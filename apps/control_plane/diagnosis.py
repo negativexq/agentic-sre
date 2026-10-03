@@ -50,13 +50,13 @@ from packages.rca.investigation.state import (
 )
 from packages.rca.lifecycle import classify, status_payload
 from packages.rca.live import (
-    TRACE_QUERY_MAX_SPAN,
     ChangeWatcher,
     ClusterReader,
     ListingFailure,
     ListingScope,
     LiveSource,
     ObjectSnapshot,
+    TraceCapture,
     capture_error_logs,
     capture_traces,
     incident_window,
@@ -338,7 +338,10 @@ class SnapshotResult:
     cycle_id: int | None = None
 
 
-TRACE_ONSET_LEAD = timedelta(minutes=10)
+TRACE_FAULT_LEAD = timedelta(minutes=2)  # an alert fires about a minute after its fault begins
+TRACE_FAULT_TAIL = timedelta(minutes=5)
+TRACE_BASELINE_FROM = timedelta(minutes=10)
+TRACE_BASELINE_TO = timedelta(minutes=5)
 
 
 def _instrumented(body: dict[str, Any]) -> bool:
@@ -946,11 +949,31 @@ class DiagnosisService:
             and body.get("metadata", {}).get("namespace")
             and _instrumented(body)
         )
-        # around the onset, not the newest hour of the two-hour lookback (§8)
+        # live-trace-design.md §9: Tempo returns a window's oldest traces first, so one wide read only ever held
+        # the quiet minutes before the fault. Two narrow reads instead: the fault around the first alert, and a
+        # baseline before it to compare the fault's calls with.
         onset = min((alert.starts_at for alert in alerts), default=self.clock())
-        starts_at = onset - TRACE_ONSET_LEAD
-        ends_at = min(self.clock(), starts_at + TRACE_QUERY_MAX_SPAN)
-        capture = capture_traces(provider_adapter, services, starts_at, ends_at)
+        now = self.clock()
+        fault = capture_traces(
+            provider_adapter,
+            services,
+            onset - TRACE_FAULT_LEAD,
+            min(now, onset + TRACE_FAULT_TAIL),
+        )
+        baseline = capture_traces(
+            provider_adapter,
+            services,
+            onset - TRACE_BASELINE_FROM,
+            onset - TRACE_BASELINE_TO,
+        )
+        capture = TraceCapture(
+            tuple(
+                {
+                    (span.trace_id, span.span_id): span for span in (*baseline.spans, *fault.spans)
+                }.values()
+            ),
+            (*fault.reads, *baseline.reads),
+        )
         for read in capture.reads:
             if read.completeness == "FAILED":
                 logger.warning(

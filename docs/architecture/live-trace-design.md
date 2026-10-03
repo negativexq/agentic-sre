@@ -129,3 +129,18 @@ Changed: two narrow reads per instrumented service, the **fault** from two minut
 minutes after it (an alert fires about a minute after its fault begins), and a **baseline** from ten to five minutes
 before it, which a latency relation (§7, finding 1) has to compare the fault's calls with. Measured again: the share of
 spans inside the fault's interval and the read time.
+
+## 10. Two narrow windows: result and decision (2026-10-03)
+
+Slices 1 and 3 again (6 runs, all valid) with the fault and baseline reads of §9:
+
+- **the fault is read now**: 1,096 stored spans began inside the fault's interval (124 to 208 per run), where the
+  earlier reads held none;
+- **still no decision changes**: 77 diagnoses replayed with and without their spans, 0 changed, now with the fault in
+  the spans, which confirms §7 on evidence that shows the fault;
+- **read time**: 6 reads per diagnosis, 7.8 s median, 24.8 s at p90, 32.2 s at worst (45 diagnoses); Tempo's read
+  time varies widely between runs, and the reads are sequential.
+
+**Decision (owner, 2026-10-03): the default stays off.** The read adds about eight seconds to a diagnosis and changes
+nothing until a rule consumes traces. It is turned on in the measurement runs of C1, and the reads are made concurrent
+with C1, when the evidence starts to matter.

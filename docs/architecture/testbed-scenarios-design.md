@@ -366,10 +366,10 @@ strong authority 0, false `RESOLVED` 0, false elimination 0. The acceptance bar 
 Limitation: the seeds drew positive offsets only (decoy 13, 25 and 16 s after the change), so the decoy-first case was
 exercised in phase 0 alone, not in a scored run.
 
-## 12. Engine freeze and the first HOLDOUT (2026-10-03, PROPOSED)
+## 12. Engine freeze and the first HOLDOUT (2026-10-03, owner-approved)
 
-Status: **PROPOSED**, waiting for the owner. Roadmap B5 (frozen engine baseline) and E2 (held-out set). Nothing below
-is implemented or run.
+Status: **APPROVED** by the owner (2026-10-03) and implemented. Roadmap B5 (frozen engine baseline) and E2 (held-out
+set).
 
 ### 12.1 Why the split of §6 cannot be applied as written
 
@@ -458,3 +458,10 @@ Redefined for both image variants: the broken image goes in one patch with a rol
 `maxUnavailable: 1`, so the old pod goes first and the outage lasts until the change is undone; undoing restores the
 image and the original strategy. Both are rerun blind. The short-alert loss is a product finding of its own (alert
 coverage; roadmap).
+
+### 12.7 Blind phase 0 complete; freeze
+
+With the lasting outage both image variants are valid (`config-image-payment`: `OrderDependencyLatencyHigh`,
+`OrderErrorRateHigh`; `negative-image-decoy` likewise plus the lag alerts) and the deployment's image and strategy are
+restored after each. All six variants B passed a blind phase 0; no diagnosis or score of any of them was read. The
+engine is frozen at the commit recorded in the six `HOLDOUT` manifests.

@@ -166,7 +166,7 @@ def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
         given = spec.parameters.get(name)
         return default if given is None else round(rng.uniform(given.low, given.high), 3)
 
-    return RunParameters(
+    params = RunParameters(
         seed=seed,
         baseline_seconds=draw("baseline_seconds", 45.0),
         offset_seconds=draw("offset_seconds", 10.0),
@@ -188,6 +188,14 @@ def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
         decoy_offset_seconds=draw("decoy_offset_seconds", 0.0),
         loss_percent=int(draw("loss_percent", 0.0)),
     )
+    if "second_before_end_seconds" in spec.parameters:
+        # design §18: the second cause lands this long before the first one is removed (drawn last, so the
+        # other draws of a seed stay as they were)
+        before = draw("second_before_end_seconds", 0.0)
+        params = dataclasses.replace(
+            params, second_offset_seconds=max(0.0, params.duration_seconds - before)
+        )
+    return params
 
 
 def calibrate(latencies: Sequence[float], *, floor: float = 0.1) -> float:

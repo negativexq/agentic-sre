@@ -1187,7 +1187,14 @@ SPECS: dict[str, Callable[..., ScenarioSpec]] = {
     ),
     "config-b": _variant_b(config_spec, "config-image-payment"),
     "negative-b": _variant_b(negative_spec, "negative-image-decoy", cpu_workers=WORKERS),
-    "competing-b": _variant_b(competing_spec, "competing-loss-podkill", loss_percent=LOSS),
+    # design §18: at 80 to 90% loss almost no order reached Kafka, so a pod-kill early in the loss built no lag;
+    # it now lands 10 to 40 s before the loss is removed, when the orders come back
+    "competing-b": _variant_b(
+        competing_spec,
+        "competing-loss-podkill",
+        loss_percent=LOSS,
+        second_before_end_seconds=ParameterRange(low=10, high=40),
+    ),
     "negative": negative_spec,
     "competing": competing_spec,
     "dependency": dependency_spec,

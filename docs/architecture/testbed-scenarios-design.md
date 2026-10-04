@@ -661,13 +661,24 @@ cause outside the engine's judgment:
 | phase 0 910, 911 | none | – | world: no lag (see below) |
 | `HOLDOUT` 5 #1 (seed 159) | none | – | world: no lag |
 | `HOLDOUT` 5 #2 (seed 160) | firing 15 s | no | shorter than the 30 s admission (connector-boundary §16) |
-| `HOLDOUT` 5 #0 (seed 158) | firing about 60 s | yes, 14:20:34 | harness: it stopped collecting at 14:20:32, after `DIAGNOSIS_QUIET_SECONDS` without a new diagnosis; the two lag incidents were diagnosed at 14:24:59, both naming `pod-kill-158` (`COMPETING`), outside the run |
+| `HOLDOUT` 5 #0 (seed 158) | firing 30 s (14:20:34 to 14:21:04) | late: the incidents opened at 14:24:49, by Alertmanager's webhook | at the edge of the 30 s admission, no poll admitted it; the harness had stopped collecting at 14:23:20, so the two lag incidents (diagnosed at 14:24:59, both naming `pod-kill-158`, `COMPETING`) fell outside the run |
 
 **No lag:** the pod-kill falls 0 to 60 s into the loss, which lasts 120 to 160 s. At 80–90% loss the successful orders
 drop from about 20 to about 0.6 per second, so almost nothing reaches Kafka and killing the consumer builds no lag above
 the threshold; at 50–70% enough orders got through. Raising the loss for `dependency-b` (§17) starved the second
 fault's symptom in `competing-b`, which shares the range.
 
-So the 0.5 is two world outcomes (a fault with no symptom, an alert under the admission) and one harness artefact (a
-collection window that closed two seconds before the second group's incidents). Nothing here is selected from the
+So the 0.5 is the world, twice over: a fault with no symptom, and lag alerts at or under the 30 s admission (one of
+them delivered by the webhook minutes later, after the run). A first reading of seed 158 blamed the harness's
+collection window; the incidents' own creation time (14:24:49, after the harness's 14:23:20) corrects it. Nothing here is selected from the
 `HOLDOUT`; any change is a harness or variant change, measured on a new `HOLDOUT`.
+
+## 18. The competing variant's pod-kill near the end of the loss (owner-approved 2026-10-04)
+
+From §17.2: the pod-kill's symptom needs orders flowing into Kafka. `competing-b` keeps 80–90% loss (§17) and its
+pod-kill now lands **10 to 40 s before the loss is removed** (`second_before_end_seconds`, drawn after every other
+parameter so a seed's other draws are unchanged), so the two causes still overlap and the consumer is down as the
+orders return. The harness's collection window is unchanged: the late incident of §17.2 came from an alert at the
+edge of the admission, which a longer window would not have caught. Only validity decides: a blind phase 0 of three
+runs (seeds 913 to 915) in which every run is valid **and** a lag alert opens an incident. Then a sixth `HOLDOUT`,
+as §16 in every point, with seeds 161–178 (suites `holdout6-<variant>`), the engine frozen at `58eadf38`.

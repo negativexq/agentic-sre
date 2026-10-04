@@ -713,3 +713,47 @@ before this run); one `FAULT_EXECUTION_EFFECT_AT_CALLER` witness in 250 diagnose
 cause, none off the chain. With the pod-kill's symptom present and collected (§18), the engine named both competing
 causes in all three runs, which settles §17.2: the 0.5 of the fifth `HOLDOUT` came from the world and the collection,
 not from the engine.
+
+## 19. Seventh HOLDOUT: pre-registration for C5a (2026-10-04, frozen before the run)
+
+The engine changed (the rollout execution witness, m21 §13), so it is measured once on a new `HOLDOUT`. Fixed before
+any run:
+
+1. **Scenarios:** the six variants B as in §18, and the two variants C of m21 §13.4, each of which passed a blind phase
+   0 of three runs (`config-c`, `FAULT_PAYMENT_ERROR`, seeds 919 to 921; `negative-c`, `FAULT_PAYMENT_DB_QUERY_DELAY_MS`
+   beside the isolated decoy, seeds 922 to 924; 6 of 6 valid, no diagnosis read). Seeds: `dependency-b` 179–181,
+   `direct-b` 182–184, `scheduled-b` 185–187, `config-b` 188–190, `negative-b` 191–193, `competing-b` 194–196,
+   `config-c` 197–199, `negative-c` 200–202; 3 repeats each, 24 runs, suites `holdout7-<variant>`.
+2. **Engine frozen** at the commit in every manifest (the rollout witness wired), trace read on.
+3. **Acceptance, the frozen bar:** no false strong authority, no false `RESOLVED`, at least 90% valid, `decoy_named` = 0.
+4. **C5a confirmation (m21 §13.4):** no `ROLLOUT_EXECUTION_EFFECT_AT_CALLER` witness names a `Deployment` change off the
+   chain, no strong claim rests on one, and at least 90% of the valid runs read their traces without a failed read.
+   Reported beside it: the rollout witnesses per family, and C1's witnesses (which must still hold §16.4).
+
+### 19.1 Seventh HOLDOUT result (2026-10-05, engine frozen at `36e3cb4b`, 24 runs)
+
+Measured once, reported as it is (§12.2.6).
+
+| Variant | Valid | Cause / instance | Execution witness / effect link (grader) | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `dependency-b` | 3/3 | 1.0 / 1.0 | 0.33 / 0.33 | 0 / 0 / 0 | |
+| `direct-b` | 3/3 | 1.0 / 1.0 | 1.0 / 1.0 | 0 / 0 / 0 | |
+| `scheduled-b` | 3/3 | 1.0 / 1.0 | 0.67 / 0.67 | 0 / 0 / 0 | |
+| `config-b` (missing image) | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | |
+| `negative-b` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | decoy named 0 |
+| `competing-b` | 3/3 | 1.0 / 1.0 | 0.33 / 0 | 0 / 0 / 0 | group recall 1.0 |
+| `config-c` (error) | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | 6 rollout witnesses, all on the chain |
+| `negative-c` (database delay) | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | decoy named 0; 7 rollout witnesses, all on the chain |
+
+**The acceptance bar holds**: 24 of 24 valid, no false strong authority, no false `RESOLVED`, the decoy never named.
+
+**C5a is confirmed** (m21 §13.4): 13 `ROLLOUT_EXECUTION_EFFECT_AT_CALLER` witnesses in 313 stored diagnoses, all in
+the two variants C, each naming the run's own `Deployment` change, none off the chain; 23 of the 24 valid runs read
+their traces without a failed read (96%; `config-b` #0 lost 18 of 60 reads while Tempo restarted at 00:06). C1 held as
+well: 10 witnesses (`direct-b` 8, `competing-b` 2), none off the chain.
+
+Recorded beside it: the grader credits an execution witness only when the witness's actor or origin is the chain's
+`execution` link, which for a rollout is the `ReplicaSet`, while the rule's witness is carried by the `Deployment` and
+names the ReplicaSet and pod as its relation evidence. So the table's 0 for the variants C understates them; how the
+grader should read a rollout witness is a scoring change, decided before the next `HOLDOUT`, not applied to this one.
+The rollout rule does not reach `config-b` (its new pods never serve, C5b).

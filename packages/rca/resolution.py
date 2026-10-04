@@ -10,13 +10,14 @@ from __future__ import annotations
 
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from packages.rca.causal_closure import (
     answer_frontier,
     explanations,
     fault_execution,
     quota_execution,
+    rollout_execution,
 )
 from packages.rca.causal_roles import HypothesisCausalRole
 from packages.rca.claims import actor_findings, admission_reasons, admitted, symptom_links
@@ -33,6 +34,7 @@ from packages.rca.model import (
     EliminationConsequence,
     EliminationPrecondition,
     EliminationTimeBasis,
+    EntityRef,
     EvidenceTemporalRole,
     FamilyState,
     Finding,
@@ -42,6 +44,7 @@ from packages.rca.model import (
     HypothesisResolutionAudit,
     HypothesisSignature,
     InstanceResolution,
+    ObjectVersion,
     PreconditionAuditReason,
     PreconditionResult,
     PreconditionStatus,
@@ -823,6 +826,8 @@ def resolve_hypotheses(
     events: Sequence[ClusterEvent] = (),
     runtime_propagation: RuntimePropagation | None = None,
     trace_spans: Sequence[TraceSpanObservation] = (),
+    object_history: Mapping[EntityRef, Sequence[ObjectVersion]] | None = None,
+    observation_cutoff: datetime | None = None,
 ) -> ResolutionTrace:
     """Resolve distinguishability without treating missing proof as contradiction.
 
@@ -897,6 +902,14 @@ def resolve_hypotheses(
         h.hypothesis_id: (
             fault_execution(h, change_onset_path_support(h), hypotheses, events, trace_spans)
             if is_chaos_kind(h.causal_actor.kind)
+            else rollout_execution(
+                h,
+                change_onset_path_support(h),
+                object_history or {},
+                trace_spans,
+                observation_cutoff,
+            )
+            if h.causal_actor.kind == "Deployment"
             else quota_execution(h, change_onset_path_support(h), events)
         )
         for h in hypotheses

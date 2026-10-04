@@ -45,6 +45,7 @@ D1_RULE_ID = "m21.support.change-onset-path"
 EXECUTION_RULE_IDS = (
     "m21.support.observed-quota-rejection",
     "m21.support.observed-fault-execution",
+    "m21.support.observed-rollout-execution",
 )
 RELATION_D1 = "d1"
 RELATION_EXECUTION = "execution"

@@ -550,6 +550,8 @@ def _resolution_trace(case: Case, config: EngineConfig) -> ResolutionTrace:
         events=case.source.events(),
         runtime_propagation=case.runtime_propagation,
         trace_spans=case.source.trace_observations(),
+        object_history=case.source.object_history(),
+        observation_cutoff=case.source.observation_cutoff(),
     )
 
 

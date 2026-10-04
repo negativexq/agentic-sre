@@ -144,6 +144,8 @@ FAULT_BY_SCENARIO: dict[str, str] = {
     "config-image-payment": "image-break",
     "negative-image-decoy": "image-break",
     "competing-loss-podkill": "competing-loss",
+    "config-error-payment": "env-error",
+    "negative-dbdelay-decoy": "env-db-delay",
 }
 # Variants whose faulted service is also the one showing the symptom: one probe, two views (contract §4.2).
 DIRECT_SCENARIOS = frozenset({"direct-stress-payment", "scheduled-stress-order"})
@@ -154,6 +156,8 @@ ALERTS_BY_SCENARIO: dict[str, frozenset[str]] = {
     "config-image-payment": DEPENDENCY_ALERTS | {"PaymentServiceLatencyCritical"} | ERROR_ALERTS,
     "negative-image-decoy": DEPENDENCY_ALERTS | {"PaymentServiceLatencyCritical"} | ERROR_ALERTS,
     "competing-loss-podkill": DEPENDENCY_ALERTS | ERROR_ALERTS,
+    "config-error-payment": DEPENDENCY_ALERTS | ERROR_ALERTS,
+    "negative-dbdelay-decoy": DEPENDENCY_ALERTS | {"PaymentServiceLatencyCritical"},
 }
 TIMELINE_ALERTS_BY_SCENARIO: dict[str, frozenset[str]] = {
     "competing-loss-podkill": LATENCY_ALERTS | ERROR_ALERTS,
@@ -586,7 +590,23 @@ def scheduled_stress_chain(injection: Injection) -> Chain:
 
 
 # variants whose chain differs from their family's (design §12.2.2)
+def error_config_chain(injection: Injection) -> Chain:
+    """m21 §13.4, `config-or-rollout` variant C: the change makes the new revision fail payments."""
+    return _remechanised(
+        _remechanised(config_chain(injection), "slows payments", "fails payments"),
+        "payment latency",
+        "payment failures",
+    )
+
+
+def dbdelay_negative_chain(injection: Injection) -> Chain:
+    """m21 §13.4, `negative-control` variant C: the real change slows payments through the database."""
+    return _remechanised(negative_chain(injection), "slows payments", "slows payment queries")
+
+
 CHAINS_BY_SCENARIO = {
+    "config-error-payment": error_config_chain,
+    "negative-dbdelay-decoy": dbdelay_negative_chain,
     "dependency-loss-payment": loss_chain,
     "scheduled-stress-order": scheduled_stress_chain,
     "competing-loss-podkill": competing_loss_chain,
@@ -801,6 +821,8 @@ def run_once(
         prefix = {
             "cpu-stress": "pod-stress",
             "env-delay": "env-delay",
+            "env-error": "env-error",
+            "env-db-delay": "env-db-delay",
             "scheduled-delay": "sched-delay",
             "scheduled-stress": "sched-stress",
             "network-loss": "dep-loss",

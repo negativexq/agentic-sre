@@ -1,7 +1,7 @@
 # Live traces in the base diagnosis (design, owner-approved 2026-10-03)
 
-Status: **APPROVED** by the owner (2026-10-03) and implemented behind `SRE_TRACE_CAPTURE` (off by default until the
-shadow measurement of §4 adopts it). Roadmap A6, prerequisite of C1, C3 and the effect side of C5.
+Status: **APPROVED** by the owner (2026-10-03) and implemented behind `SRE_TRACE_CAPTURE` (on by default since 2026-10-04,
+§11). Roadmap A6, prerequisite of C1, C3 and the effect side of C5.
 
 ## 1. Measured problem
 
@@ -144,3 +144,10 @@ Slices 1 and 3 again (6 runs, all valid) with the fault and baseline reads of §
 **Decision (owner, 2026-10-03): the default stays off.** The read adds about eight seconds to a diagnosis and changes
 nothing until a rule consumes traces. It is turned on in the measurement runs of C1, and the reads are made concurrent
 with C1, when the evidence starts to matter.
+
+## 11. On by default, concurrent reads (owner, 2026-10-04)
+
+C1 (m21 §12.7) now consumes the spans, so the read is on by default (`SRE_TRACE_CAPTURE=false` turns it off). The
+reads run concurrently, one per service and both windows at once; results are kept in the services' order, so the
+stored capture does not depend on which read finishes first. Tests that assert a run's exact provider-read sequence
+for another purpose turn the read off explicitly.

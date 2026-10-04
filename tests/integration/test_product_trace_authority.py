@@ -271,13 +271,13 @@ def _run(
             return ObjectListing(listing.objects, frozenset(complete), listing.failed_scopes)
 
         cluster.list_objects = with_pod_scope
-        _service(world, readers).snapshot()
+        _service(world, readers, trace_capture=False).snapshot()
     clock.now = T0 + timedelta(minutes=12)
     cluster.events = [_event(uid, index) for index, uid in enumerate(event_uids)]
-    _service(world, readers).snapshot()
+    _service(world, readers, trace_capture=False).snapshot()
     clock.now = T0 + timedelta(minutes=13)
 
-    _service(world, readers).run(incident_id, "MANUAL")
+    _service(world, readers, trace_capture=False).run(incident_id, "MANUAL")
     base_run, base = _latest(factory, incident_id)
 
     # Record, never alter, what the engine derives on each case rebuild.
@@ -293,9 +293,9 @@ def _run(
 
     with monkeypatch.context() as patch:
         patch.setattr(engine_module, "derive_hypothesis_causal_roles", recording)
-        _service(world, readers, bounded_policy_factory=DeterministicIntentPolicy).run(
-            incident_id, "MANUAL"
-        )
+        _service(
+            world, readers, trace_capture=False, bounded_policy_factory=DeterministicIntentPolicy
+        ).run(incident_id, "MANUAL")
     run_id, investigated = _latest(factory, incident_id)
 
     with factory() as session:

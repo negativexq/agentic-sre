@@ -490,3 +490,20 @@ the bar held in both. Execution witnesses are **higher** on these variants (loss
 the target pod, which the observed-fault-execution rule can bind), and still absent for the rollout and the control,
 where no strong rule exists yet (roadmap C5). The held-out set confirms the dev picture rather than contradicting it:
 the engine names the cause and does not overclaim; strong evidence depends on the fault leaving pod-level failures.
+
+## 13. Second HOLDOUT: pre-registration (2026-10-04, frozen before the run)
+
+The engine changed after the first `HOLDOUT` (C1 wired, m21 §12.7; the trace read on by default, live-trace-design
+§11), so by §12.2.6 it is measured once on a new `HOLDOUT` with new seeds. Fixed before any run:
+
+1. **Scenarios:** the six variants B of §12.2.2, unchanged (each passed a blind phase 0, §12.7), with new seeds:
+   `dependency-b` 89–91, `direct-b` 92–94, `scheduled-b` 95–97, `config-b` 98–100, `negative-b` 101–103,
+   `competing-b` 104–106; 3 repeats each, 18 runs, suites `holdout2-<variant>`. No new phase 0: the seeds draw from
+   the same parameter ranges.
+2. **Engine frozen** at `1cb9d2b6` (`engine_commit` in every manifest), trace read on.
+3. **Acceptance, the frozen bar:** no false strong authority, no false `RESOLVED`, at least 90% valid,
+   `decoy_named` = 0 for the control.
+4. **C1 confirmation (m21 §12.4.2–3):** `N` = 3, `F` = 3, `D` = 0.2 s are confirmed if no
+   `FAULT_EXECUTION_EFFECT_AT_CALLER` witness names an actor off the world's chain (the decoy included) and no strong
+   claim rests on one. Reported per family: witnesses on and off the chain, and the execution witness / effect link
+   recall beside the first `HOLDOUT`. A violation is recorded as it is; nothing is tuned on this result.

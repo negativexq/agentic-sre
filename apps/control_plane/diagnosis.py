@@ -7,6 +7,7 @@ import os
 import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -374,7 +375,7 @@ class DiagnosisService:
     provider_readers: ProviderReaders = field(default_factory=ProviderReaders)
     # live-trace-design.md §3: the base trace read, off until the shadow measurement of §4 adopts it
     trace_capture: bool = field(
-        default_factory=lambda: os.getenv("SRE_TRACE_CAPTURE", "false").casefold() == "true"
+        default_factory=lambda: os.getenv("SRE_TRACE_CAPTURE", "true").casefold() == "true"
     )
     # Serializes ChangeWatcher.snapshot() runs: the periodic watch() loop and a
     # run()-triggered snapshot can otherwise race on the same read-then-write
@@ -954,18 +955,22 @@ class DiagnosisService:
         # baseline before it to compare the fault's calls with.
         onset = min((alert.starts_at for alert in alerts), default=self.clock())
         now = self.clock()
-        fault = capture_traces(
-            provider_adapter,
-            services,
-            onset - TRACE_FAULT_LEAD,
-            min(now, onset + TRACE_FAULT_TAIL),
-        )
-        baseline = capture_traces(
-            provider_adapter,
-            services,
-            onset - TRACE_BASELINE_FROM,
-            onset - TRACE_BASELINE_TO,
-        )
+        with ThreadPoolExecutor(max_workers=2) as pool:  # the two windows read concurrently (§11)
+            fault_read = pool.submit(
+                capture_traces,
+                provider_adapter,
+                services,
+                onset - TRACE_FAULT_LEAD,
+                min(now, onset + TRACE_FAULT_TAIL),
+            )
+            baseline_read = pool.submit(
+                capture_traces,
+                provider_adapter,
+                services,
+                onset - TRACE_BASELINE_FROM,
+                onset - TRACE_BASELINE_TO,
+            )
+            fault, baseline = fault_read.result(), baseline_read.result()
         capture = TraceCapture(
             tuple(
                 {

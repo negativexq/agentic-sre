@@ -587,3 +587,14 @@ Both findings of §14.1 are lab-side; neither is chosen from an engine score (an
 
 The fourth `HOLDOUT` then follows §14 with new seeds (125–142, suites `holdout4-<variant>`), the engine frozen at the
 same engine commit (the fixes are lab and harness, outside `packages/rca` and `apps/control_plane`).
+
+**Blind phase 0 of the amended `scheduled-b` (2026-10-04):** 3 of 3 valid (seeds 904 to 906), each opening an incident
+on `OrderRequestLatencyHigh` about 165 s after the cause; no diagnosis was read. The variant is accepted.
+
+## 16. Fourth HOLDOUT: pre-registration (2026-10-04, frozen before the run)
+
+As §14 in every point, with the fixes of §15: the six variants B (`scheduled-b` as amended), seeds `dependency-b`
+125–127, `direct-b` 128–130, `scheduled-b` 131–133, `config-b` 134–136, `negative-b` 137–139, `competing-b` 140–142,
+suites `holdout4-<variant>`; engine frozen at `58eadf38`; the frozen acceptance bar; C1 confirmed only if no
+`FAULT_EXECUTION_EFFECT_AT_CALLER` witness names an actor off the chain, no strong claim rests on one, and at least
+90% of the valid runs read their traces without a failed read.

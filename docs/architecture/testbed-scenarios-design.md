@@ -531,3 +531,17 @@ of the `DEV` runs never failed. The lab's Tempo (CPU limit 500m) failed its live
 run; the concurrent reads of live-trace-design §11 (up to 16 searches at once) are the likely load. The read is a
 product change made with C1, so this is recorded as a finding of this `HOLDOUT`, not explained away; C1's
 confirmation needs a new `HOLDOUT` after the read is fixed.
+
+## 14. Third HOLDOUT: pre-registration (2026-10-04, frozen before the run)
+
+After §13.1 the trace read is limited to two reads at once (live-trace-design §11). The second `HOLDOUT` is repeated
+with new seeds; fixed before any run:
+
+1. **Scenarios:** the six variants B unchanged; seeds `dependency-b` 107–109, `direct-b` 110–112, `scheduled-b`
+   113–115, `config-b` 116–118, `negative-b` 119–121, `competing-b` 122–124; 3 repeats each, suites
+   `holdout3-<variant>`.
+2. **Engine frozen** at `58eadf38`, trace read on (the default).
+3. **Acceptance:** the frozen bar, as §13.3.
+4. **C1 confirmation:** as §13.4, and only if the relation was exercised: the trace read completed without a failed
+   read in at least 90% of the valid runs. Otherwise C1 is again neither confirmed nor contradicted, and the read's
+   failures are reported per run.

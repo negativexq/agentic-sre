@@ -648,3 +648,26 @@ Recorded beside it, not explained away: in `competing-causes` every symptom grou
 pod-kill) was named in none of the three runs (0.5, against 0.83 in the first and third `HOLDOUT`s with the same
 engine). The variant changed (80–90% loss, §17), not the engine; why the pod-kill is no longer named is open and is
 looked at on `DEV` data, never selected from this result.
+
+### 17.2 Why the pod-kill was not named (investigation, 2026-10-04)
+
+Read on the three `competing-b` phase 0 runs at 80–90% (seeds 910 to 912, never a `HOLDOUT`) and, for the world and the
+harness only, on the fifth `HOLDOUT`'s three runs. The engine named the pod-kill whenever an incident of its group was
+collected: phase 0 seed 912 (`KafkaConsumerLag`, `OrderWorkerLagHigh` → `pod-kill-912`, `COMPETING`). Each miss has a
+cause outside the engine's judgment:
+
+| Run | Lag alert in Prometheus | Reached the control plane | Why the pod-kill was not named |
+|---|---|---|---|
+| phase 0 910, 911 | none | – | world: no lag (see below) |
+| `HOLDOUT` 5 #1 (seed 159) | none | – | world: no lag |
+| `HOLDOUT` 5 #2 (seed 160) | firing 15 s | no | shorter than the 30 s admission (connector-boundary §16) |
+| `HOLDOUT` 5 #0 (seed 158) | firing about 60 s | yes, 14:20:34 | harness: it stopped collecting at 14:20:32, after `DIAGNOSIS_QUIET_SECONDS` without a new diagnosis; the two lag incidents were diagnosed at 14:24:59, both naming `pod-kill-158` (`COMPETING`), outside the run |
+
+**No lag:** the pod-kill falls 0 to 60 s into the loss, which lasts 120 to 160 s. At 80–90% loss the successful orders
+drop from about 20 to about 0.6 per second, so almost nothing reaches Kafka and killing the consumer builds no lag above
+the threshold; at 50–70% enough orders got through. Raising the loss for `dependency-b` (§17) starved the second
+fault's symptom in `competing-b`, which shares the range.
+
+So the 0.5 is two world outcomes (a fault with no symptom, an alert under the admission) and one harness artefact (a
+collection window that closed two seconds before the second group's incidents). Nothing here is selected from the
+`HOLDOUT`; any change is a harness or variant change, measured on a new `HOLDOUT`.

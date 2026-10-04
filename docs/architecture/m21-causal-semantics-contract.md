@@ -1334,3 +1334,9 @@ incidents) against their stored diagnoses: **3 new rollout witnesses, all on the
 #0 and #1, each `payment-service` → `order-service`), **none off it**; with C1's earlier changes the tier moved
 `SUPPORTED` → `STRONG` in 9 incidents (6 from C1, 3 from this rule), no resolution changed. Next: the variants C of
 §13.4 through a blind phase 0, then a `HOLDOUT` with the engine frozen.
+
+### 13.6 HOLDOUT confirmation (2026-10-05)
+
+Confirmed on the seventh testbed `HOLDOUT` (`testbed-scenarios-design.md` §19.1), the engine frozen at `36e3cb4b`: 24 of
+24 runs valid, 23 with every trace read complete; 13 rollout witnesses, all in the variants C and each naming the run's
+own change, none off the chain; no false strong authority or false `RESOLVED`. A failed rollout (C5b) stays open.

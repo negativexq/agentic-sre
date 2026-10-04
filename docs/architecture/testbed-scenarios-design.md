@@ -713,3 +713,19 @@ before this run); one `FAULT_EXECUTION_EFFECT_AT_CALLER` witness in 250 diagnose
 cause, none off the chain. With the pod-kill's symptom present and collected (§18), the engine named both competing
 causes in all three runs, which settles §17.2: the 0.5 of the fifth `HOLDOUT` came from the world and the collection,
 not from the engine.
+
+## 19. Seventh HOLDOUT: pre-registration for C5a (2026-10-04, frozen before the run)
+
+The engine changed (the rollout execution witness, m21 §13), so it is measured once on a new `HOLDOUT`. Fixed before
+any run:
+
+1. **Scenarios:** the six variants B as in §18, and the two variants C of m21 §13.4, each of which passed a blind phase
+   0 of three runs (`config-c`, `FAULT_PAYMENT_ERROR`, seeds 919 to 921; `negative-c`, `FAULT_PAYMENT_DB_QUERY_DELAY_MS`
+   beside the isolated decoy, seeds 922 to 924; 6 of 6 valid, no diagnosis read). Seeds: `dependency-b` 179–181,
+   `direct-b` 182–184, `scheduled-b` 185–187, `config-b` 188–190, `negative-b` 191–193, `competing-b` 194–196,
+   `config-c` 197–199, `negative-c` 200–202; 3 repeats each, 24 runs, suites `holdout7-<variant>`.
+2. **Engine frozen** at the commit in every manifest (the rollout witness wired), trace read on.
+3. **Acceptance, the frozen bar:** no false strong authority, no false `RESOLVED`, at least 90% valid, `decoy_named` = 0.
+4. **C5a confirmation (m21 §13.4):** no `ROLLOUT_EXECUTION_EFFECT_AT_CALLER` witness names a `Deployment` change off the
+   chain, no strong claim rests on one, and at least 90% of the valid runs read their traces without a failed read.
+   Reported beside it: the rollout witnesses per family, and C1's witnesses (which must still hold §16.4).

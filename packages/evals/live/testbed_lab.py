@@ -133,6 +133,13 @@ except Exception as error:
 print(json.dumps({"ok": ok, "latency": time.monotonic() - started, "detail": detail}))
 """
 DELAY_VARIABLE = "FAULT_PAYMENT_DELAY_MS"
+# m21 §13.4: the configuration changes a rollout carries, by fault (variant A delays the handler; variants C fail
+# the calls, or slow them through the database)
+ENV_VARIABLES = {
+    "env-delay": DELAY_VARIABLE,
+    "env-error": "FAULT_PAYMENT_ERROR",
+    "env-db-delay": "FAULT_PAYMENT_DB_QUERY_DELAY_MS",
+}
 
 _DIAGNOSES = text(
     """
@@ -171,6 +178,7 @@ class LabWorld:
         self.target_script = _PAYMENT_SCRIPT if payment_probe else _TARGET_SCRIPT
         self._rollout: tuple[datetime, str, str, str, str] | None = None
         self._last_delay = ""
+        self._env_variable = DELAY_VARIABLE
         self._original_image = ""
         self._original_strategy: dict[str, Any] = {}
         self._broken_image = ""
@@ -284,7 +292,7 @@ class LabWorld:
                 "set",
                 "env",
                 "deployment/payment-service",
-                f"{DELAY_VARIABLE}-",
+                *(f"{variable}-" for variable in ENV_VARIABLES.values()),
             ],
             check=False,
         )
@@ -534,7 +542,7 @@ class LabWorld:
         )
 
     def inject(self, params: RunParameters, journal: InjectorJournal, name: str) -> Injection:
-        if params.fault == "env-delay":
+        if params.fault in ENV_VARIABLES:
             return self._inject_env_delay(params, journal)
         if params.fault == "image-break":
             return self._inject_image_break(params, journal)
@@ -696,6 +704,8 @@ class LabWorld:
 
     def _inject_env_delay(self, params: RunParameters, journal: InjectorJournal) -> Injection:
         """Change the Deployment's environment; the rollout it starts is the execution."""
+        variable = ENV_VARIABLES[params.fault]
+        value = "true" if params.fault == "env-error" else str(params.latency_ms)
         before = json.loads(
             self._run(
                 ["kubectl", "-n", NAMESPACE, "get", "deployment", "payment-service", "-o", "json"]
@@ -709,14 +719,14 @@ class LabWorld:
                 "set",
                 "env",
                 "deployment/payment-service",
-                f"{DELAY_VARIABLE}={params.latency_ms}",
+                f"{variable}={value}",
             ],
             check=False,
         )
         ok = result.returncode == 0
         entry = journal.record(
             verb="patch",
-            object=f"deployment payment-service env {DELAY_VARIABLE}={params.latency_ms}",
+            object=f"deployment payment-service env {variable}={value}",
             ok=ok,
             response=result.stdout if ok else result.stderr,
             uid=before["uid"],
@@ -724,7 +734,7 @@ class LabWorld:
         )
         if not ok:
             raise RuntimeError(f"the change was not applied: {result.stderr.strip()[:200]}")
-        self._rollout, self._last_delay = None, str(params.latency_ms)
+        self._rollout, self._last_delay, self._env_variable = None, value, variable
         return Injection("payment-service", before["uid"], "", "", entry.at, "Deployment")
 
     def _inject_image_break(self, params: RunParameters, journal: InjectorJournal) -> Injection:
@@ -798,7 +808,7 @@ class LabWorld:
                 ["kubectl", "-n", NAMESPACE, "get", "rs", "-l", "app=payment-service", "-o", "json"]
             ).stdout
         )["items"]
-        wanted = {"name": DELAY_VARIABLE, "value": str(value)}
+        wanted = {"name": self._env_variable, "value": str(value)}
         matches = [
             rs
             for rs in sets
@@ -928,7 +938,7 @@ class LabWorld:
             result = self._unset_delay()
             journal.record(
                 verb="patch",
-                object=f"deployment payment-service env {DELAY_VARIABLE}-",
+                object=f"deployment payment-service env {self._env_variable}-",
                 ok=result.returncode == 0,
                 response=result.stdout or result.stderr,
                 role=ROLE_CAUSE_REMOVED,
@@ -1186,6 +1196,9 @@ SPECS: dict[str, Callable[..., ScenarioSpec]] = {
         spawn_every_seconds=ParameterRange(low=120, high=120),
     ),
     "config-b": _variant_b(config_spec, "config-image-payment"),
+    # m21 §13.4: the rollout witness's held-out variants, mechanisms variant A did not use
+    "config-c": _variant_b(config_spec, "config-error-payment"),
+    "negative-c": _variant_b(negative_spec, "negative-dbdelay-decoy"),
     "negative-b": _variant_b(negative_spec, "negative-image-decoy", cpu_workers=WORKERS),
     # design §18: at 80 to 90% loss almost no order reached Kafka, so a pod-kill early in the loss built no lag;
     # it now lands 10 to 40 s before the loss is removed, when the orders come back

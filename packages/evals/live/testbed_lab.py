@@ -1175,9 +1175,14 @@ SPECS: dict[str, Callable[..., ScenarioSpec]] = {
     "direct-b": _variant_b(
         direct_pod_spec, "direct-stress-payment", cpu_workers=ParameterRange(low=56, high=72)
     ),
-    # design §15: at 20 to 28 workers the order latency alert failed to fire in three of nine HOLDOUT runs
+    # design §15: a 60 s spawn kept the order latency alert firing for only 15 to 25 s, under the 30 s admission of
+    # connector-boundary §16, so 90 s spawns every 120 s
     "scheduled-b": _variant_b(
-        scheduled_spec, "scheduled-stress-order", cpu_workers=ParameterRange(low=56, high=72)
+        scheduled_spec,
+        "scheduled-stress-order",
+        cpu_workers=WORKERS,
+        spawn_seconds=ParameterRange(low=90, high=90),
+        spawn_every_seconds=ParameterRange(low=120, high=120),
     ),
     "config-b": _variant_b(config_spec, "config-image-payment"),
     "negative-b": _variant_b(negative_spec, "negative-image-decoy", cpu_workers=WORKERS),

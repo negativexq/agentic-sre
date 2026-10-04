@@ -572,15 +572,18 @@ findings are lab-side and are fixed before another `HOLDOUT`, never selected fro
 
 ## 15. Before the fourth HOLDOUT: two lab fixes (owner-approved 2026-10-04)
 
-Both findings of §14.1 are lab-side; neither is chosen from an engine score.
+Both findings of §14.1 are lab-side; neither is chosen from an engine score (and no phase 0 diagnosis is read).
 
 1. **Tempo:** the CPU limit goes from 500m to 2 (request 500m, memory 2 Gi as deployed), and the probes' timeout from
    1 s to 5 s, the liveness probe failing after six misses, not three (`infra/kubernetes/observability.yaml`). A
    3-minute load of 16 concurrent searches did not restart it.
-2. **`scheduled-b`:** the spawned `StressChaos` on `order-service` uses 56 to 72 workers instead of 20 to 28. At 20 to
-   28 workers its latency alert (`OrderRequestLatencyHigh`, order latency above 0.5 s) failed to fire in three of
-   nine `HOLDOUT` runs (§13.1, §14.1), the same reason `direct-b` was raised to 56 to 72 in §12.4. Only validity
-   decides this: the variant is accepted after a blind phase 0 of three runs in which the alert fires every time.
+2. **`scheduled-b`:** first raised to 56 to 72 workers, as `direct-b` in §12.4; its blind phase 0 failed (2 of 3
+   runs valid, seeds 901 to 903), and the series showed why workers were not the cause: order latency already rose to
+   2 to 3 s in every spawn, and `OrderRequestLatencyHigh` fired in Prometheus, but each 60 s spawn kept it firing for
+   only 15 to 25 s (30 s ramp of the rate window plus the 15 s `for`), under the 30 s admission of
+   connector-boundary §16, so no incident opened unless two spawns ran together. The amended variant keeps 20 to 28
+   workers and spawns for **90 s every 120 s**, so each spawn's alert is active well past 30 s with a quiet gap
+   between. Only validity decides it: a blind phase 0 of three runs in which the alert opens an incident every time.
 
 The fourth `HOLDOUT` then follows §14 with new seeds (125–142, suites `holdout4-<variant>`), the engine frozen at the
 same engine commit (the fixes are lab and harness, outside `packages/rca` and `apps/control_plane`).

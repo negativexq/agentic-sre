@@ -480,21 +480,26 @@ spec:
               subPath: config.yaml
             - name: data
               mountPath: /tmp/tempo
+          # Searches under load answer /ready slowly; the default 1 s timeout restarted Tempo mid-run
+          # (testbed-scenarios-design.md §14.1).
           readinessProbe:
             httpGet:
               path: /ready
               port: tempo-http
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /ready
               port: tempo-http
+            timeoutSeconds: 5
+            failureThreshold: 6
           resources:
             requests:
-              cpu: 100m
-              memory: 256Mi
-            limits:
               cpu: 500m
-              memory: 1Gi
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
       volumes:
         - name: config
           configMap:

@@ -148,6 +148,7 @@ with C1, when the evidence starts to matter.
 ## 11. On by default, concurrent reads (owner, 2026-10-04)
 
 C1 (m21 §12.7) now consumes the spans, so the read is on by default (`SRE_TRACE_CAPTURE=false` turns it off). The
-reads run concurrently, one per service and both windows at once; results are kept in the services' order, so the
-stored capture does not depend on which read finishes first. Tests that assert a run's exact provider-read sequence
+two windows are read at once, each one service after another, so at most two reads reach Tempo together. Reads of
+every service at once (up to 16 searches) overloaded the lab's Tempo in the second `HOLDOUT` (testbed-scenarios-design
+§13.1: 15 of 18 runs had failed reads, Tempo restarted), so the owner set the limit at two (2026-10-04). Tests that assert a run's exact provider-read sequence
 for another purpose turn the read off explicitly.

@@ -1175,7 +1175,15 @@ SPECS: dict[str, Callable[..., ScenarioSpec]] = {
     "direct-b": _variant_b(
         direct_pod_spec, "direct-stress-payment", cpu_workers=ParameterRange(low=56, high=72)
     ),
-    "scheduled-b": _variant_b(scheduled_spec, "scheduled-stress-order", cpu_workers=WORKERS),
+    # design §15: a 60 s spawn kept the order latency alert firing for only 15 to 25 s, under the 30 s admission of
+    # connector-boundary §16, so 90 s spawns every 120 s
+    "scheduled-b": _variant_b(
+        scheduled_spec,
+        "scheduled-stress-order",
+        cpu_workers=WORKERS,
+        spawn_seconds=ParameterRange(low=90, high=90),
+        spawn_every_seconds=ParameterRange(low=120, high=120),
+    ),
     "config-b": _variant_b(config_spec, "config-image-payment"),
     "negative-b": _variant_b(negative_spec, "negative-image-decoy", cpu_workers=WORKERS),
     "competing-b": _variant_b(competing_spec, "competing-loss-podkill", loss_percent=LOSS),
@@ -1371,6 +1379,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "phase0", help="one unscored validation run, stored apart from the suite"
     )
     phase0.add_argument("--scenario", choices=sorted(SPECS), default="dependency")
+    phase0.add_argument("--seed", type=int, default=1, help="the run's seed (never a suite's)")
     phase0.add_argument(
         "--blind",
         action="store_true",
@@ -1441,7 +1450,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             engine_version=RCA_ENGINE_VERSION,
             created_at=clock.now(),
             salt="phase0",
-            scenarios=(spec := SPECS[args.scenario](1, (1,)),),
+            scenarios=(spec := SPECS[args.scenario](1, (args.seed,)),),
             acceptance={},
         ).frozen()
         store.write_manifest(manifest)

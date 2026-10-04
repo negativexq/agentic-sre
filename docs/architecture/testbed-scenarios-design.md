@@ -507,3 +507,83 @@ The engine changed after the first `HOLDOUT` (C1 wired, m21 §12.7; the trace re
    `FAULT_EXECUTION_EFFECT_AT_CALLER` witness names an actor off the world's chain (the decoy included) and no strong
    claim rests on one. Reported per family: witnesses on and off the chain, and the execution witness / effect link
    recall beside the first `HOLDOUT`. A violation is recorded as it is; nothing is tuned on this result.
+
+### 13.1 Second HOLDOUT result (2026-10-04, engine frozen at `1cb9d2b6`, 18 runs)
+
+Measured once, reported as it is (§12.2.6).
+
+| Family (variant B) | Valid | Cause / instance | Execution witness / effect link | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `dependency-fault` | 3/3 | 1.0 / 1.0 | 1.0 / 1.0 | 0 / 0 / 0 | |
+| `direct-pod-fault` | 3/3 | 1.0 / 1.0 | 0.67 / 0.67 | 0 / 0 / 0 | |
+| `scheduled-recurring` | 2/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | seed 96: no alert fired |
+| `config-or-rollout` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | |
+| `negative-control` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | decoy named 0 |
+| `competing-causes` | 3/3 | 0.83 / 0.83 | 1.0 / 1.0 | 0 / 0 / 0 | group recall 1.0, cross-attribution 0 |
+
+**The acceptance bar holds**: 17 of 18 valid (94%), no false strong authority, no false `RESOLVED`, the decoy never
+named.
+
+**C1 is neither confirmed nor contradicted.** Its witness appears in none of the 262 stored diagnoses, on or off the
+chain. The relation was barely exercised: the trace read failed in 15 of the 18 runs (`ConnectorReadError`, "Tempo
+HTTP request failed"), wholly in four (`direct-b` 0 and 1, `config-b` 2, `negative-b` 0), where the sequential reads
+of the `DEV` runs never failed. The lab's Tempo (CPU limit 500m) failed its liveness probe and restarted during the
+run; the concurrent reads of live-trace-design §11 (up to 16 searches at once) are the likely load. The read is a
+product change made with C1, so this is recorded as a finding of this `HOLDOUT`, not explained away; C1's
+confirmation needs a new `HOLDOUT` after the read is fixed.
+
+## 14. Third HOLDOUT: pre-registration (2026-10-04, frozen before the run)
+
+After §13.1 the trace read is limited to two reads at once (live-trace-design §11). The second `HOLDOUT` is repeated
+with new seeds; fixed before any run:
+
+1. **Scenarios:** the six variants B unchanged; seeds `dependency-b` 107–109, `direct-b` 110–112, `scheduled-b`
+   113–115, `config-b` 116–118, `negative-b` 119–121, `competing-b` 122–124; 3 repeats each, suites
+   `holdout3-<variant>`.
+2. **Engine frozen** at `58eadf38`, trace read on (the default).
+3. **Acceptance:** the frozen bar, as §13.3.
+4. **C1 confirmation:** as §13.4, and only if the relation was exercised: the trace read completed without a failed
+   read in at least 90% of the valid runs. Otherwise C1 is again neither confirmed nor contradicted, and the read's
+   failures are reported per run.
+
+### 14.1 Third HOLDOUT result (2026-10-04, engine frozen at `58eadf38`, 18 runs)
+
+Measured once, reported as it is (§12.2.6).
+
+| Family (variant B) | Valid | Cause / instance | Execution witness / effect link | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `dependency-fault` | 3/3 | 1.0 / 1.0 | 1.0 / 1.0 | 0 / 0 / 0 | |
+| `direct-pod-fault` | 3/3 | 1.0 / 1.0 | 1.0 / 0.67 | 0 / 0 / 0 | |
+| `scheduled-recurring` | 1/3 | 1.0 / 1.0 | 1.0 / 1.0 | 0 / 0 / 0 | seeds 113, 115: no alert fired |
+| `config-or-rollout` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | |
+| `negative-control` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | decoy named 0 |
+| `competing-causes` | 3/3 | 0.83 / 0.83 | 1.0 / 1.0 | 0 / 0 / 0 | group recall 1.0, cross-attribution 0 |
+
+**The acceptance bar does not hold on validity**: 16 of 18 runs valid (89%, under 90%); both invalid runs are
+`scheduled-b`, whose alert did not fire (as seed 96 in §13.1), so the world raised no symptom. No false strong
+authority, no false `RESOLVED`, the decoy never named.
+
+**C1 is not confirmed; its condition of exercise fails.** Five `FAULT_EXECUTION_EFFECT_AT_CALLER` witnesses appear in
+295 stored diagnoses (`direct-b` 1 and 2, `competing-b` 0), each naming the run's own cause, none off the chain. But
+only 12 of the 16 valid runs read their traces without a failed read (75%, under the 90% of §14.4): `dependency-b` 2
+(29 of 90), `config-b` 1 (4 of 30), `competing-b` 0 (46 of 90) and 1 (57 of 108). The lab's Tempo restarted three
+times during the run (liveness probe, CPU limit 500m), also under the investigation's own pod-level searches. Both
+findings are lab-side and are fixed before another `HOLDOUT`, never selected from this result.
+
+## 15. Before the fourth HOLDOUT: two lab fixes (owner-approved 2026-10-04)
+
+Both findings of §14.1 are lab-side; neither is chosen from an engine score (and no phase 0 diagnosis is read).
+
+1. **Tempo:** the CPU limit goes from 500m to 2 (request 500m, memory 2 Gi as deployed), and the probes' timeout from
+   1 s to 5 s, the liveness probe failing after six misses, not three (`infra/kubernetes/observability.yaml`). A
+   3-minute load of 16 concurrent searches did not restart it.
+2. **`scheduled-b`:** first raised to 56 to 72 workers, as `direct-b` in §12.4; its blind phase 0 failed (2 of 3
+   runs valid, seeds 901 to 903), and the series showed why workers were not the cause: order latency already rose to
+   2 to 3 s in every spawn, and `OrderRequestLatencyHigh` fired in Prometheus, but each 60 s spawn kept it firing for
+   only 15 to 25 s (30 s ramp of the rate window plus the 15 s `for`), under the 30 s admission of
+   connector-boundary §16, so no incident opened unless two spawns ran together. The amended variant keeps 20 to 28
+   workers and spawns for **90 s every 120 s**, so each spawn's alert is active well past 30 s with a quiet gap
+   between. Only validity decides it: a blind phase 0 of three runs in which the alert opens an incident every time.
+
+The fourth `HOLDOUT` then follows §14 with new seeds (125–142, suites `holdout4-<variant>`), the engine frozen at the
+same engine commit (the fixes are lab and harness, outside `packages/rca` and `apps/control_plane`).

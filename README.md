@@ -61,7 +61,7 @@ The Connector boundary in remote mode (details under [Connector boundary](#conne
 - **All 35 scenarios combined: 26/31 = 83.9%.** Four unmatchable published labels are excluded from the denominator.
 - **Live suite: 25/25 expected outcomes** — 16/16 correct root-cause actors, 9/9 correct abstentions, and 0 fabricated `RESOLVED` diagnoses. Actor identification and epistemic resolution are separate: `RESOLVED` 0, `AMBIGUOUS` 14, `INSUFFICIENT_EVIDENCE` 11. See the [live-suite report](evals/results/live-suite-2026-09-24.md) and [M16 validation](docs/results/m16-positive-elimination.md).
 - **0 model calls** — in both reported measurements; deterministic judgment remains authoritative.
-- **Testbed (development tier):** the injected cause and its exact instance named in every valid run across three fault families, with 0 false strong authority and 0 false `RESOLVED` ([results](#instrumented-testbed)).
+- **Testbed, six fault families:** in development (18 runs) and in the first held-out set (18 runs, engine frozen by commit), every injected cause was named in 35 of 36 runs, with 0 false strong authority, 0 false `RESOLVED` and a decoy never named ([results](#instrumented-testbed)).
 
 ## What is Agentic SRE?
 
@@ -417,26 +417,41 @@ recovery. The testbed measures the engine against a world whose truth we record.
   causal chain. Runs that contradict themselves are `INVALID`, never scored.
   The engine never sees any of it ([contract](docs/architecture/testbed-ground-truth-contract.md)).
 - **Discipline:** a fresh control-plane database, a connector restart and a
-  fresh target pod per run; manifests frozen with a hash and the engine version
-  before any run; write-once results; acceptance criteria fixed in advance
-  (`false_resolved = 0`, `false_strong_authority = 0`, at least 90% valid runs).
+  fresh target pod per run; manifests frozen with a hash, the engine version and
+  the engine's git commit before any run (the runner refuses an engine that
+  differs); write-once results; acceptance criteria fixed in advance
+  (`false_resolved = 0`, `false_strong_authority = 0`, at least 90% valid runs,
+  a decoy never named).
+- **Held-out by construction:** variant A of every family is development data;
+  variant B (a different injection) is the held-out set, run once with the
+  engine frozen, after a blind phase 0 that checks only validity. A held-out
+  result never selects a rule or a parameter.
 - **Delivered in slices** ([design](docs/architecture/testbed-scenarios-design.md)),
   each validated by an unscored phase-0 run before its manifest is frozen.
 
-**Results so far (development tier, engine 2.1.0).**
+**Results (engine 2.1.0).** Development is variant A of each family, held-out is variant B; three runs each.
 
-| Slice | Fault | Valid runs | Cause and instance named | Execution witness | False strong authority / false `RESOLVED` |
-| --- | --- | ---: | ---: | ---: | ---: |
-| 1 | network delay on `payment-service` | 3/3 | 3/3 | 0/3 (a delay leaves no pod-level failure) | 0 / 0 |
-| 2 | CPU stress on `order-service` | 3/3 | 3/3 | 1/3 (checked against the recorded truth) | 0 / 0 |
-| 3 | environment change rolled out to `payment-service` | phase 0: 1/1 | 1/1 | 0 (no rollout rule yet) | 0 / 0 |
+| Family | Development: fault | Cause / instance | Held-out: fault | Cause / instance | Execution witness (dev / held-out) |
+| --- | --- | ---: | --- | ---: | ---: |
+| dependency fault | network delay on `payment-service` | 3/3 / 3/3 | packet loss on `payment-service` | 3/3 / 3/3 | 0/3 / 3/3 |
+| direct pod fault | CPU stress on `order-service` | 3/3 / 3/3 | CPU stress on `payment-service` | 3/3 / 3/3 | 1/3 / 2/3 |
+| scheduled recurring | `Schedule` spawning a delay | 3/3 / 3/3 | `Schedule` spawning CPU stress | 3/3 / 3/3 | 0/3 / 1/3 |
+| configuration rollout | environment change rolled out | 3/3 / 2/3 | image change to a missing tag | 3/3 / 3/3 | 0/3 / 0/3 |
+| negative control | a real change plus a decoy on an isolated workload | 3/3 / 3/3 | the same with a CPU-stress decoy | 3/3 / 3/3 | 0/3 / 0/3 |
+| competing causes | two independent faults, scored per symptom group | 6/6 / 6/6 | packet loss plus a pod kill | 5/6 / 5/6 | 0/3 / 3/3 |
 
-The engine named the injected cause and its exact instance in every run and never claimed false strong
-authority; where strong evidence is missing, the reason is recorded on the roadmap. A run starts only from a
-quiet baseline: if the target already holds a warning, the run is refused before anything is injected. The
-testbed has also found and fixed real defects: a rule that gave strong authority to an experiment that had
-ended 40 minutes before the incident, two scorer flaws that overstated recall, and harness isolation leaks.
-These are small development-tier results, not a benchmark.
+All 36 runs were valid, with 0 false strong authority, 0 false `RESOLVED` and the decoy never named. The one
+held-out miss is a pod kill whose symptom never reached its alert threshold before the run ended, so no incident
+of that group existed. Strong evidence depends on the fault leaving an execution witness at the exact target; the
+rollout families have no strong rule yet (roadmap C5). A run starts only from a quiet baseline: if the target
+already holds a warning, the run is refused before anything is injected.
+
+The service-level effect relation (below) was wired into the engine after this measurement; its confirmation on a
+new held-out set is still open: two attempts did not meet their pre-registered conditions (the lab's Tempo failed
+reads under load, and the scheduled variant's alert did not always fire), both lab-side and being fixed. The
+testbed has also found and fixed real defects: a rule that gave strong authority to an experiment that had ended
+40 minutes before the incident, scorer flaws that overstated recall, harness isolation leaks, and short alerts that
+could fall between two Alertmanager polls. These are small results, not a benchmark.
 
 ## Causal mechanism validation
 
@@ -447,8 +462,13 @@ instance: for example a recorded quota rejection, or a chaos experiment with an
 observed `Applied`/`Recovered` interval, connected to the incident's onset, and
 an effect at the target inside that interval. `Spawned` or `Applied` alone confer
 nothing; a Schedule carries the witness of the experiments it spawned by exact
-UID. Timing stability is assessed across observation cutoffs, and a sensitive
-witness withholds strong authority. `RESOLVED` additionally requires every
+UID. When the target pod is not itself a symptom, the witness may instead come
+from the **service-level effect** read from live traces: calls from a symptom
+service to that exact pod, inside the execution interval, fail or take far
+longer than the same calls before the onset (at least three calls on each side,
+a median above three times the baseline and above 0.2 s); too few calls leave
+it unknown, never false. Timing stability is assessed across observation
+cutoffs, and a sensitive witness withholds strong authority. `RESOLVED` additionally requires every
 declared symptom to be covered, which is why it stays rare on purpose. Details:
 [causal semantics](docs/architecture/m21-causal-semantics-contract.md),
 [timing stability](docs/architecture/m21-timing-stability-contract.md).
@@ -646,10 +666,11 @@ protocol details.
 
 The ordered plan, with what blocks what, is in
 [docs/architecture/roadmap.md](docs/architecture/roadmap.md): the Connector
-boundary (mostly done), the testbed (lab, control plane and three fault-family slices running),
-engine capabilities that follow the testbed (service-level effect relation,
-first target-local effect, rollout and configuration rules, `RESOLVED` coverage)
-and the product surface (Connect Cluster flow).
+boundary (mostly done), the testbed (six fault families in development and a
+first held-out set), engine capabilities that follow the testbed (the
+service-level effect relation, wired and awaiting held-out confirmation; rollout
+and configuration rules; `RESOLVED` coverage) and the product surface (Connect
+Cluster flow).
 
 ## FAQ
 
@@ -689,8 +710,9 @@ was blind when frozen, and **26/31 (83.9%)** across all 35 scenarios, with zero
 model calls. Denominators exclude four scenarios whose published labels match
 nothing in their own snapshots. Since 2026-09-28 those 35 are development data,
 so these figures are regression evidence, not a generalization estimate; the
-held-out measurement is the own testbed, whose first results are small and
-reported honestly above. `VERIFIED` predictions were 13/16 correct against
+held-out measurement is the own testbed: across six fault families every injected
+cause was named in 35 of 36 runs with no false strong authority, a small result
+reported with its limits above. `VERIFIED` predictions were 13/16 correct against
 ground truth.
 
 ### What makes it different from an AI SRE agent?
@@ -731,19 +753,21 @@ telemetry impose real limits.
 - Live collection interruptions can create evidence gaps. Replay can reproduce
   only the persisted epistemic universe and cannot recover evidence that was
   unavailable or later removed.
-- Live base RCA does not currently consume bounded traffic or trace
-  observations through `LiveSource`; some observability queries and signal
-  mappings remain demo-workload-specific (`query_traffic` and `query_traces`
-  have no live readers yet).
+- Live traces enter the base diagnosis through two bounded Tempo reads per
+  instrumented service (the minutes around the onset and a baseline before it),
+  at most two at a time; bounded traffic is not yet read live, and some
+  observability queries and signal mappings remain demo-workload-specific.
 - The Connector uses static 90-day certificates; enrollment, rotation, Helm
   packaging, `preflight` probing and multi-tenant operation are not built, and
   the stream mode is opt-in.
-- Strong authority needs an observed execution and a pod-level effect. A fault
-  whose effect is only latency (for example a network delay) currently yields a
-  correctly named but non-strong cause; the service-level effect relation is
-  specified and deferred until the testbed can measure it.
-- The testbed covers three fault families so far (a few runs each, development
-  tier). There is no held-out result yet.
+- Strong authority needs an observed execution and an effect at the exact
+  target: a pod-level effect, or the service-level effect read from traces. The
+  service-level relation is in the engine but not yet confirmed on a held-out
+  set, and it needs traced calls to the target; a fault whose effect shows in
+  neither still yields a correctly named but non-strong cause.
+- The testbed covers six fault families with three runs per variant, on one
+  demo workload; the held-out set is small, and rollout faults have no strong
+  rule yet.
 - Evidence coverage is recorded but not yet read by the rules that infer from
   absence; until each is changed and measured, they behave as before.
 - General durable high-availability deployment is not yet complete.

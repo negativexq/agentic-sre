@@ -545,3 +545,27 @@ with new seeds; fixed before any run:
 4. **C1 confirmation:** as §13.4, and only if the relation was exercised: the trace read completed without a failed
    read in at least 90% of the valid runs. Otherwise C1 is again neither confirmed nor contradicted, and the read's
    failures are reported per run.
+
+### 14.1 Third HOLDOUT result (2026-10-04, engine frozen at `58eadf38`, 18 runs)
+
+Measured once, reported as it is (§12.2.6).
+
+| Family (variant B) | Valid | Cause / instance | Execution witness / effect link | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `dependency-fault` | 3/3 | 1.0 / 1.0 | 1.0 / 1.0 | 0 / 0 / 0 | |
+| `direct-pod-fault` | 3/3 | 1.0 / 1.0 | 1.0 / 0.67 | 0 / 0 / 0 | |
+| `scheduled-recurring` | 1/3 | 1.0 / 1.0 | 1.0 / 1.0 | 0 / 0 / 0 | seeds 113, 115: no alert fired |
+| `config-or-rollout` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | |
+| `negative-control` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | decoy named 0 |
+| `competing-causes` | 3/3 | 0.83 / 0.83 | 1.0 / 1.0 | 0 / 0 / 0 | group recall 1.0, cross-attribution 0 |
+
+**The acceptance bar does not hold on validity**: 16 of 18 runs valid (89%, under 90%); both invalid runs are
+`scheduled-b`, whose alert did not fire (as seed 96 in §13.1), so the world raised no symptom. No false strong
+authority, no false `RESOLVED`, the decoy never named.
+
+**C1 is not confirmed; its condition of exercise fails.** Five `FAULT_EXECUTION_EFFECT_AT_CALLER` witnesses appear in
+295 stored diagnoses (`direct-b` 1 and 2, `competing-b` 0), each naming the run's own cause, none off the chain. But
+only 12 of the 16 valid runs read their traces without a failed read (75%, under the 90% of §14.4): `dependency-b` 2
+(29 of 90), `config-b` 1 (4 of 30), `competing-b` 0 (46 of 90) and 1 (57 of 108). The lab's Tempo restarted three
+times during the run (liveness probe, CPU limit 500m), also under the investigation's own pod-level searches. Both
+findings are lab-side and are fixed before another `HOLDOUT`, never selected from this result.

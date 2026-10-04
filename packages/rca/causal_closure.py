@@ -10,7 +10,7 @@ Historical mechanism bridges alone intentionally grant no execution authority.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 
 from packages.rca.claims import actor_findings, admitted, symptom_links
@@ -24,6 +24,7 @@ from packages.rca.model import (
     FindingKind,
     FrontierAnswer,
     Hypothesis,
+    ObjectVersion,
     RootSupportRecord,
     RootSupportStatus,
     StructuralAlternative,
@@ -49,7 +50,10 @@ EXECUTION_RULE = "m21.support.observed-quota-rejection"
 EXPLANATION_RULE = "m21.explanation.observed-quota-rejection"
 SPAWN_EXPLANATION_RULE = "m21.explanation.controller-spawn"
 FAULT_EXECUTION_RULE = "m21.support.observed-fault-execution"
-EXECUTION_RULES = (EXECUTION_RULE, FAULT_EXECUTION_RULE)
+ROLLOUT_EXECUTION_RULE = "m21.support.observed-rollout-execution"
+EXECUTION_RULES = (EXECUTION_RULE, FAULT_EXECUTION_RULE, ROLLOUT_EXECUTION_RULE)
+# m21 §13.2: the ReplicaSet a Deployment change created is first observed within this long of the change.
+ROLLOUT_REPLICASET_WINDOW = timedelta(seconds=10)
 # An execution interval may end this long before the incident began and still be its execution.
 EXECUTION_END_GRACE = timedelta(minutes=5)
 # Event timestamps have one-second resolution, so an `Applied` this close after the onset is not later.
@@ -360,6 +364,168 @@ def fault_execution(
         decisive_evidence_ids=tuple(sorted({e for w in witnesses for e in w.evidence_ids})),
         witnesses=tuple(witnesses),
     )
+
+
+def _owner_uid(version: ObjectVersion) -> str | None:
+    metadata = version.body.get("metadata")
+    owners = metadata.get("ownerReferences") if isinstance(metadata, dict) else None
+    for owner in owners if isinstance(owners, list) else ():
+        if isinstance(owner, dict) and owner.get("controller") is not False and owner.get("uid"):
+            return str(owner["uid"])
+    return None
+
+
+def _created(versions: Sequence[ObjectVersion]) -> ObjectVersion | None:
+    return next((v for v in versions if v.lifecycle.value == "CREATED"), None)
+
+
+def _deleted_at(versions: Sequence[ObjectVersion]) -> datetime | None:
+    return next((v.observed_at for v in versions if v.lifecycle.value == "DELETED"), None)
+
+
+def rollout_execution(
+    holder: Hypothesis,
+    possible: RootSupportRecord,
+    history: Mapping[EntityRef, Sequence[ObjectVersion]],
+    spans: Sequence[TraceSpanObservation],
+    cutoff: datetime | None,
+) -> RootSupportRecord:
+    """m21 contract §13: a Deployment change's execution, its new pods, through the service-level effect.
+
+    The witness is the exact change (a D1 origin of the holder), the ReplicaSet created within
+    ``ROLLOUT_REPLICASET_WINDOW`` of it and owned by the holder's UID, and each pod that ReplicaSet owns,
+    over ``[its creation, its deletion or the cutoff]``, connected to the onset. The effect is §12.2 at that
+    exact pod, against the baseline calls that began before the change. Names, revisions and events confer nothing.
+    """
+    witnesses: list[CausalWitness] = []
+    instance = holder.actor_instance
+    onset = holder.episode_onset
+    if (
+        possible.status is RootSupportStatus.FIRED
+        and holder.causal_actor.kind == "Deployment"
+        and instance is not None
+        and instance.uid
+        and onset is not None
+        and spans
+    ):
+        namespace = holder.causal_actor.namespace
+        replicasets = [
+            created
+            for ref, versions in history.items()
+            if ref.kind == "ReplicaSet" and ref.namespace == namespace
+            for created in (_created(versions),)
+            if created is not None and _owner_uid(created) == instance.uid
+        ]
+        pods = [
+            (ref, versions)
+            for ref, versions in history.items()
+            if ref.kind == "Pod" and ref.namespace == namespace
+        ]
+        origins = {w.origin.evidence_ids: w.origin for w in possible.witnesses}
+        for origin in origins.values():
+            if origin.kind is not FindingKind.SPEC_CHANGE or origin.at is None:
+                continue
+            for rs_created in replicasets:
+                if abs(rs_created.observed_at - origin.at) > ROLLOUT_REPLICASET_WINDOW:
+                    continue
+                rs_uid = rs_created.instance_uid
+                for pod, versions in pods:
+                    pod_created = _created(versions)
+                    if pod_created is None or rs_uid is None or _owner_uid(pod_created) != rs_uid:
+                        continue
+                    start = pod_created.observed_at
+                    end = _deleted_at(versions) or cutoff
+                    if (
+                        end is None
+                        or start > onset + EVENT_RESOLUTION
+                        or end < onset - EXECUTION_END_GRACE
+                    ):
+                        continue
+                    witnesses += _rollout_effect_witnesses(
+                        holder,
+                        origin,
+                        pod,
+                        (rs_created.evidence_id, pod_created.evidence_id),
+                        start,
+                        end,
+                        spans,
+                    )
+    return RootSupportRecord(
+        rule_id=ROLLOUT_EXECUTION_RULE,
+        rule_version="v1",
+        support_kind="OBSERVED_MECHANISM_CAUSE",
+        status=RootSupportStatus.FIRED if witnesses else RootSupportStatus.NOT_FIRED,
+        reasons=() if witnesses else ("NO_ROLLOUT_EXECUTION_WITH_INCIDENT_EFFECT_WITNESS",),
+        decisive_evidence_ids=tuple(sorted({e for w in witnesses for e in w.evidence_ids})),
+        witnesses=tuple(witnesses),
+    )
+
+
+def _rollout_effect_witnesses(
+    holder: Hypothesis,
+    origin: Finding,
+    pod: EntityRef,
+    relation_ids: tuple[str, str],
+    start: datetime,
+    end: datetime,
+    spans: Sequence[TraceSpanObservation],
+) -> list[CausalWitness]:
+    assert holder.episode_onset is not None and origin.at is not None
+    onset = holder.episode_onset
+    target_service = pod.name.rsplit("-", 2)[0]
+    # baseline calls began before the change: calls to the previous revision (§13.2)
+    baseline = (onset - BASELINE_FROM, min(onset - BASELINE_TO, origin.at))
+    witnesses = []
+    for symptom in holder.symptom_entities:
+        if symptom.kind != "Service" or symptom.name == target_service:
+            continue
+        if symptom.namespace != pod.namespace:
+            continue
+        pairs = call_pairs(spans, symptom.name, target_service)
+        holds = service_effect(
+            pairs,
+            target_pod=pod.name,
+            start=start,
+            end=end,
+            baseline=baseline,
+            parameters=SERVICE_EFFECT,
+        )
+        if holds is not True:
+            continue
+        calls = fault_calls(pairs, target_pod=pod.name, start=start, end=end)
+        witnesses.append(
+            CausalWitness(
+                actor=holder.causal_actor,
+                actor_instance=holder.actor_instance,
+                origin=origin,
+                mechanism="ROLLOUT_EXECUTION_EFFECT_AT_CALLER",
+                attribution="ROLLOUT_OWNERSHIP_BY_UID",
+                symptom=symptom,
+                path=(
+                    CausalHop(source=holder.causal_actor, relation="rolls_out", target=pod),
+                    CausalHop(source=pod, relation="called_by", target=symptom),
+                ),
+                onset=onset,
+                evidence_ids=tuple(
+                    sorted({*origin.evidence_ids, *(e for c in calls for e in c.evidence_ids)})
+                ),
+                relation_evidence_ids=relation_ids,
+                coverage=(
+                    "EXACT_CHANGE_INSTANCE",
+                    "REPLICASET_AND_POD_OWNED_BY_UID",
+                    "SERVICE_LEVEL_EFFECT_AT_EXACT_POD",
+                    "BASELINE_BEFORE_CHANGE",
+                ),
+                missing=(
+                    "CHANGED_FIELD_CONSUMPTION_NOT_OBSERVED",
+                    "INCIDENT_RECOVERY_NOT_ASSESSED",
+                ),
+                rule_id=ROLLOUT_EXECUTION_RULE,
+                rule_version="v1",
+                claim_level="OBSERVED_MECHANISM_CAUSE",
+            )
+        )
+    return witnesses
 
 
 def _same_episode(left: Hypothesis, right: Hypothesis) -> bool:

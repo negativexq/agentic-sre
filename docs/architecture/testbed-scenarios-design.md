@@ -682,3 +682,11 @@ orders return. The harness's collection window is unchanged: the late incident o
 edge of the admission, which a longer window would not have caught. Only validity decides: a blind phase 0 of three
 runs (seeds 913 to 915) in which every run is valid **and** a lag alert opens an incident. Then a sixth `HOLDOUT`,
 as §16 in every point, with seeds 161–178 (suites `holdout6-<variant>`), the engine frozen at `58eadf38`.
+
+**Blind phase 0, first round (seeds 913 to 915):** 3 of 3 valid; a lag incident in 913 and 914, not in 915. Its lag
+alerts fired for 190 s and opened their incidents at 15:32:21, three seconds after the harness stopped collecting
+(15:32:18): with the pod-kill near the loss's end, its symptom now arrives after the first cause is removed. So the
+harness's collection does change after all (§17.2's first reading was right for this variant, though not for seed
+158): when a second cause was injected, collection lasts at least until **180 s after it** (lag builds about a minute
+after a pod-kill, then 30 s of admission, a poll and a diagnosis), as well as until 20 s without a new diagnosis. Other
+families are unchanged. Second round: seeds 916 to 918, under the same condition.

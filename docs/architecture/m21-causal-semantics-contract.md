@@ -1320,6 +1320,8 @@ to the new pod.
 
 Hard criteria as §12.4: the relation never holds for a `Deployment` change off the chain, and no strong claim rests on
 one. Confirmed once on a new `HOLDOUT` with the engine frozen; the families whose cause is a serving rollout are
-`config-or-rollout` and `negative-control` in variant A, so the `HOLDOUT` adds a **variant C** of both (an environment
-change that slows the new revision, as variant A, on `order-service` instead of `payment-service`), each through a blind
-phase 0. The other six families run as in §16 of the scenarios design to check that nothing else moves.
+`config-or-rollout` and `negative-control` in variant A, so the `HOLDOUT` adds a **variant C** of both, each through a
+blind phase 0. The target stays `payment-service` (only its callers are traced: a change to `order-service` would make
+the symptom service the target, which the relation excludes), with mechanisms that variant A did not use:
+`config-c` sets `FAULT_PAYMENT_ERROR` (the new revision fails calls: the relation's non-success form), `negative-c` sets
+`FAULT_PAYMENT_DB_QUERY_DELAY_MS` (slow through the database) beside the isolated decoy. The other six families run as in §16 of the scenarios design to check that nothing else moves.

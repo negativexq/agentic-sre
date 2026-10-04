@@ -690,3 +690,6 @@ harness's collection does change after all (§17.2's first reading was right for
 158): when a second cause was injected, collection lasts at least until **180 s after it** (lag builds about a minute
 after a pod-kill, then 30 s of admission, a poll and a diagnosis), as well as until 20 s without a new diagnosis. Other
 families are unchanged. Second round: seeds 916 to 918, under the same condition.
+
+**Blind phase 0, second round (seeds 916 to 918):** 3 of 3 valid, each with a lag incident (`KafkaConsumerLag`,
+`OrderWorkerLagHigh`); no diagnosis was read. The variant is accepted and the sixth `HOLDOUT` is frozen as stated.

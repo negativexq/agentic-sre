@@ -1340,3 +1340,51 @@ incidents) against their stored diagnoses: **3 new rollout witnesses, all on the
 Confirmed on the seventh testbed `HOLDOUT` (`testbed-scenarios-design.md` §19.1), the engine frozen at `36e3cb4b`: 24 of
 24 runs valid, 23 with every trace read complete; 13 rollout witnesses, all in the variants C and each naming the run's
 own change, none off the chain; no false strong authority or false `RESOLVED`. A failed rollout (C5b) stays open.
+
+## 14. Failed rollout execution witness (C5b; proposal, 2026-10-05, awaiting the owner)
+
+### 14.1 Measured problem
+
+§13 needs the new revision to serve: its effect is read from calls to the exact new pod. A rollout whose new pods never
+serve (an image that cannot be pulled, a process that cannot start) leaves no such call; its effect is the loss of the
+old revision. The held-out `config-b` and `negative-b` (a missing image tag) are of this kind and have had no execution
+witness in any `HOLDOUT`. They are not used to design this rule: a `DEV` scenario of its own was added (`config-d`,
+`FAULT_PAYMENT_DELAY_MS` set to a value the payment service cannot start with, with the image variant's strategy that
+removes the old pod first), one phase 0 and three `DEV` runs, all valid (`dev5b-config-d`).
+
+What those runs show, by UID on every link: the change, its new ReplicaSet and pod; that pod's own `Warning` events
+(`BackOff`, "Back-off restarting failed container"); the old revision's pod deleted two seconds after the change; and
+in the traces, the order service's calls to `payment-service` (`server.address`) failing with **no server span**
+during the outage, against successful paired calls before the change.
+
+### 14.2 Rule (`m21.support.observed-failed-rollout.v1`)
+
+1. **Execution witness**, at the exact change, as §13.2.1 (the change, the ReplicaSet created within 10 s and owned by
+   the `Deployment`'s UID, its pods by owner UID), and in addition, for the new pod: a `Warning` event of that pod's own
+   UID with reason `BackOff`, `Failed`, `ErrImagePull` or `ImagePullBackOff` inside its life; and a pod of **another**
+   ReplicaSet of the same `Deployment` (owner UIDs) deleted within 5 minutes after the change. The execution interval is
+   `[that deletion, the new pod's deletion or the cutoff]`, connected to the onset as §13.2.1.
+2. **Effect relation**: a symptom service (other than the target's) whose client spans to the target service
+   (`server.address`) inside the interval include at least `N` non-success calls **with no server span**, while at
+   least `N` of its calls to that service in the trace read's baseline window, before the change, include no
+   non-success. `N` = 3 as §12; fewer calls on either side leave it unknown, never false.
+3. **Carrier and scope** as §13.2.3: the `Deployment` claim, D1-supported, the timing gates unchanged; the witness's
+   path is `rolls_out` to the new pod, then `called_by` to the symptom service. A rollout that keeps some capacity
+   (more replicas, a surge) shows no unpaired failures and gets no witness from this rule.
+
+### 14.3 Exploratory shadow on `DEV` (run before this text, stated as such)
+
+The three `dev5b-config-d` runs, its phase 0 and the six `DEV` trace suites (151 incidents):
+
+| Change | Holds | False | Unknown |
+|---|---|---|---|
+| the run's cause (`payment-service`), symptom `order-service` | **2** | 0 | 5 (no failed call or no baseline call captured) |
+| the run's cause, symptom `order-worker` (never calls it) | 0 | 0 | 10 |
+| any other change | **0** | 0 | 0 (no other change has a failing new pod and a removed old one) |
+
+### 14.4 Measurement, pre-registered
+
+Hard criteria as §12.4 and §13.4: never holds for a change off the chain, no strong claim rests on one. Confirmed
+once on a new `HOLDOUT` with the engine frozen, the `config-b` and `negative-b` variants (a missing image) being the
+held-out failed rollouts, beside the other variants as in testbed-scenarios-design §19; scored with the grader of §20
+(a `rolls_out` hop to the chain's target pod).

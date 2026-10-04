@@ -693,3 +693,23 @@ families are unchanged. Second round: seeds 916 to 918, under the same condition
 
 **Blind phase 0, second round (seeds 916 to 918):** 3 of 3 valid, each with a lag incident (`KafkaConsumerLag`,
 `OrderWorkerLagHigh`); no diagnosis was read. The variant is accepted and the sixth `HOLDOUT` is frozen as stated.
+
+### 18.1 Sixth HOLDOUT result (2026-10-04, engine frozen at `58eadf38`, 18 runs)
+
+Measured once, reported as it is (§12.2.6).
+
+| Family (variant B) | Valid | Cause / instance | Execution witness / effect link | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `dependency-fault` (80–90% loss) | 3/3 | 1.0 / 1.0 | 0.33 / 0.33 | 0 / 0 / 0 | |
+| `direct-pod-fault` | 3/3 | 1.0 / 1.0 | 1.0 / 1.0 | 0 / 0 / 0 | |
+| `scheduled-recurring` (90 s every 120 s) | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | |
+| `config-or-rollout` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | |
+| `negative-control` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | decoy named 0 |
+| `competing-causes` (pod-kill near the loss's end) | 3/3 | **1.0** / 1.0 | 0.67 / 0.67 | 0 / 0 / 0 | both causes named in every run, group recall 1.0, cross-attribution 0 |
+
+**The acceptance bar holds**: 18 of 18 valid, no false strong authority, no false `RESOLVED`, the decoy never named.
+**C1 holds again**: every valid run read its traces without a failed read (Tempo's last restart was during the phase 0
+before this run); one `FAULT_EXECUTION_EFFECT_AT_CALLER` witness in 250 diagnoses (`direct-b`), naming the run's own
+cause, none off the chain. With the pod-kill's symptom present and collected (§18), the engine named both competing
+causes in all three runs, which settles §17.2: the 0.5 of the fifth `HOLDOUT` came from the world and the collection,
+not from the engine.

@@ -449,8 +449,11 @@ already holds a warning, the run is refused before anything is injected.
 The service-level effect relation (below) was wired into the engine after this measurement and confirmed on a later
 held-out set with new seeds (18/18 valid, every trace read complete, eight witnesses, all naming the run's own cause).
 Two earlier attempts could not decide it (the lab's Tempo failed reads under load; the scheduled variant's alert did
-not always fire), both fixed in the lab. That same set found a regression to look at: with the loss raised to 80–90%,
-the competing-causes runs no longer named their second cause (a pod kill). The
+not always fire), both fixed in the lab. That same set showed the competing-causes runs no longer naming their second
+cause (a pod kill); the cause was the variant, not the engine (the raised loss
+starved the pod kill's symptom, and its late incident fell outside the run), and
+a sixth held-out set with the variant fixed named both causes in every run, again
+18/18 valid with no false strong authority. The
 testbed has also found and fixed real defects: a rule that gave strong authority to an experiment that had ended
 40 minutes before the incident, scorer flaws that overstated recall, harness isolation leaks, and short alerts that
 could fall between two Alertmanager polls. These are small results, not a benchmark.

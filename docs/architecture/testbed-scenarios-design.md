@@ -598,3 +598,24 @@ As §14 in every point, with the fixes of §15: the six variants B (`scheduled-b
 suites `holdout4-<variant>`; engine frozen at `58eadf38`; the frozen acceptance bar; C1 confirmed only if no
 `FAULT_EXECUTION_EFFECT_AT_CALLER` witness names an actor off the chain, no strong claim rests on one, and at least
 90% of the valid runs read their traces without a failed read.
+
+### 16.1 Fourth HOLDOUT stopped (2026-10-04)
+
+The owner stopped the run after its first two runs, both `INVALID` (`dependency-b`, seeds 125 and 126); no diagnosis or
+score was read, and the lab was left clean (no chaos object, every pod running). Only the harness series were read:
+
+- under 50 to 70% loss each probe sample takes 3 to 4 s, so the first 35 s hold 8 to 10 samples per probe, and the
+  oracle's rule of three consecutive failures (contract §11) is reset by a single lucky success;
+- seed 125: the target probe read `.xx.xxxxx`, its effect landed at +13.4 s, rounds after the client's propagation at
+  +3.1 s (an inversion across rounds, contract §14.2.2); seed 126: the symptom probe read `.xx.xxx`, its symptom
+  landed at +27.4 s, after the alert at +22.6 s;
+- the earlier nine runs of this variant were valid because their sequences broke only after three failures; alert
+  and propagation times are as in the earlier `HOLDOUT`s, so §15's lab fixes are not the cause.
+
+## 17. Loss variants at 80 to 90% (owner-approved 2026-10-04)
+
+Both loss variants (`dependency-b`, `competing-b`) draw their loss from 80 to 90% instead of 50 to 70%, so that a
+success inside the first three samples becomes rare and the oracle's fields follow the world rather than chance. Only
+validity decides: a blind phase 0 of three runs per variant (seeds 907 to 912), every run valid. Then a fifth
+`HOLDOUT` replaces the stopped fourth, as §16 in every point, with seeds 143–160 (suites `holdout5-<variant>`), the
+engine still frozen at `58eadf38`.

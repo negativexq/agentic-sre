@@ -507,3 +507,27 @@ The engine changed after the first `HOLDOUT` (C1 wired, m21 §12.7; the trace re
    `FAULT_EXECUTION_EFFECT_AT_CALLER` witness names an actor off the world's chain (the decoy included) and no strong
    claim rests on one. Reported per family: witnesses on and off the chain, and the execution witness / effect link
    recall beside the first `HOLDOUT`. A violation is recorded as it is; nothing is tuned on this result.
+
+### 13.1 Second HOLDOUT result (2026-10-04, engine frozen at `1cb9d2b6`, 18 runs)
+
+Measured once, reported as it is (§12.2.6).
+
+| Family (variant B) | Valid | Cause / instance | Execution witness / effect link | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `dependency-fault` | 3/3 | 1.0 / 1.0 | 1.0 / 1.0 | 0 / 0 / 0 | |
+| `direct-pod-fault` | 3/3 | 1.0 / 1.0 | 0.67 / 0.67 | 0 / 0 / 0 | |
+| `scheduled-recurring` | 2/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | seed 96: no alert fired |
+| `config-or-rollout` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | |
+| `negative-control` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | decoy named 0 |
+| `competing-causes` | 3/3 | 0.83 / 0.83 | 1.0 / 1.0 | 0 / 0 / 0 | group recall 1.0, cross-attribution 0 |
+
+**The acceptance bar holds**: 17 of 18 valid (94%), no false strong authority, no false `RESOLVED`, the decoy never
+named.
+
+**C1 is neither confirmed nor contradicted.** Its witness appears in none of the 262 stored diagnoses, on or off the
+chain. The relation was barely exercised: the trace read failed in 15 of the 18 runs (`ConnectorReadError`, "Tempo
+HTTP request failed"), wholly in four (`direct-b` 0 and 1, `config-b` 2, `negative-b` 0), where the sequential reads
+of the `DEV` runs never failed. The lab's Tempo (CPU limit 500m) failed its liveness probe and restarted during the
+run; the concurrent reads of live-trace-design §11 (up to 16 searches at once) are the likely load. The read is a
+product change made with C1, so this is recorded as a finding of this `HOLDOUT`, not explained away; C1's
+confirmation needs a new `HOLDOUT` after the read is fixed.

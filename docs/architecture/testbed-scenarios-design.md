@@ -622,3 +622,29 @@ engine still frozen at `58eadf38`.
 
 **Blind phase 0 at 80 to 90% (2026-10-04):** 6 of 6 valid (`dependency-b` seeds 907 to 909, `competing-b` 910 to 912);
 no diagnosis was read. Both variants are accepted, and the fifth `HOLDOUT` is frozen as stated above.
+
+### 17.1 Fifth HOLDOUT result (2026-10-04, engine frozen at `58eadf38`, 18 runs)
+
+Measured once, reported as it is (§12.2.6). `scheduled-b` stopped before its first injection (the baseline probe of
+`order-service` read only `URLError`, the port-forward of §12.4); its work directory was set aside as
+`.refused-20261004T163932`, as the harness does for a refused baseline, and the suite was rerun unchanged.
+
+| Family (variant B) | Valid | Cause / instance | Execution witness / effect link | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `dependency-fault` (80–90% loss) | 3/3 | 1.0 / 1.0 | 0.33 / 0.33 | 0 / 0 / 0 | |
+| `direct-pod-fault` | 3/3 | 1.0 / 1.0 | 1.0 / 0.67 | 0 / 0 / 0 | |
+| `scheduled-recurring` (90 s every 120 s) | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | |
+| `config-or-rollout` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | |
+| `negative-control` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | decoy named 0 |
+| `competing-causes` (80–90% loss) | 3/3 | **0.5** / 0.5 | 0.67 / 0.67 | 0 / 0 / 0 | group recall 1.0, cross-attribution 0 |
+
+**The acceptance bar holds**: 18 of 18 valid, no false strong authority, no false `RESOLVED`, the decoy never named.
+
+**C1 is confirmed** (m21 §12.4.3, §16): every one of the 18 valid runs read its traces without a failed read; eight
+`FAULT_EXECUTION_EFFECT_AT_CALLER` witnesses appear in 274 stored diagnoses (`direct-b`), each naming the run's own
+cause, none off the chain, so no strong claim rests on an off-chain one. `N` = 3, `F` = 3, `D` = 0.2 s stand.
+
+Recorded beside it, not explained away: in `competing-causes` every symptom group was found but the second cause (the
+pod-kill) was named in none of the three runs (0.5, against 0.83 in the first and third `HOLDOUT`s with the same
+engine). The variant changed (80–90% loss, §17), not the engine; why the pod-kill is no longer named is open and is
+looked at on `DEV` data, never selected from this result.

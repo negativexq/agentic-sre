@@ -446,9 +446,11 @@ of that group existed. Strong evidence depends on the fault leaving an execution
 rollout families have no strong rule yet (roadmap C5). A run starts only from a quiet baseline: if the target
 already holds a warning, the run is refused before anything is injected.
 
-The service-level effect relation (below) was wired into the engine after this measurement; its confirmation on a
-new held-out set is still open: two attempts did not meet their pre-registered conditions (the lab's Tempo failed
-reads under load, and the scheduled variant's alert did not always fire), both lab-side and being fixed. The
+The service-level effect relation (below) was wired into the engine after this measurement and confirmed on a later
+held-out set with new seeds (18/18 valid, every trace read complete, eight witnesses, all naming the run's own cause).
+Two earlier attempts could not decide it (the lab's Tempo failed reads under load; the scheduled variant's alert did
+not always fire), both fixed in the lab. That same set found a regression to look at: with the loss raised to 80–90%,
+the competing-causes runs no longer named their second cause (a pod kill). The
 testbed has also found and fixed real defects: a rule that gave strong authority to an experiment that had ended
 40 minutes before the incident, scorer flaws that overstated recall, harness isolation leaks, and short alerts that
 could fall between two Alertmanager polls. These are small results, not a benchmark.
@@ -668,7 +670,7 @@ The ordered plan, with what blocks what, is in
 [docs/architecture/roadmap.md](docs/architecture/roadmap.md): the Connector
 boundary (mostly done), the testbed (six fault families in development and a
 first held-out set), engine capabilities that follow the testbed (the
-service-level effect relation, wired and awaiting held-out confirmation; rollout
+service-level effect relation, wired and confirmed on a held-out set; rollout
 and configuration rules; `RESOLVED` coverage) and the product surface (Connect
 Cluster flow).
 
@@ -762,8 +764,8 @@ telemetry impose real limits.
   the stream mode is opt-in.
 - Strong authority needs an observed execution and an effect at the exact
   target: a pod-level effect, or the service-level effect read from traces. The
-  service-level relation is in the engine but not yet confirmed on a held-out
-  set, and it needs traced calls to the target; a fault whose effect shows in
+  service-level relation is confirmed on one small held-out set and needs
+  traced calls to the target; a fault whose effect shows in
   neither still yields a correctly named but non-strong cause.
 - The testbed covers six fault families with three runs per variant, on one
   demo workload; the held-out set is small, and rollout faults have no strong

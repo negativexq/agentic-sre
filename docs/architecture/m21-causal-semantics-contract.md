@@ -1325,3 +1325,12 @@ blind phase 0. The target stays `payment-service` (only its callers are traced: 
 the symptom service the target, which the relation excludes), with mechanisms that variant A did not use:
 `config-c` sets `FAULT_PAYMENT_ERROR` (the new revision fails calls: the relation's non-success form), `negative-c` sets
 `FAULT_PAYMENT_DB_QUERY_DELAY_MS` (slow through the database) beside the isolated decoy. The other six families run as in §16 of the scenarios design to check that nothing else moves.
+
+### 13.5 Engine wiring and `DEV` replay (2026-10-04, owner-approved)
+
+Wired as `m21.support.observed-rollout-execution.v1` for `Deployment` holders (resolution passes the source's object
+history and cutoff; the timing gates count it as an execution rule). The six `DEV` trace suites replayed (123
+incidents) against their stored diagnoses: **3 new rollout witnesses, all on the chain** (`tr4-slice3` #2, `tr6-slice6`
+#0 and #1, each `payment-service` → `order-service`), **none off it**; with C1's earlier changes the tier moved
+`SUPPORTED` → `STRONG` in 9 incidents (6 from C1, 3 from this rule), no resolution changed. Next: the variants C of
+§13.4 through a blind phase 0, then a `HOLDOUT` with the engine frozen.

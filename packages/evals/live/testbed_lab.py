@@ -1374,6 +1374,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "phase0", help="one unscored validation run, stored apart from the suite"
     )
     phase0.add_argument("--scenario", choices=sorted(SPECS), default="dependency")
+    phase0.add_argument("--seed", type=int, default=1, help="the run's seed (never a suite's)")
     phase0.add_argument(
         "--blind",
         action="store_true",
@@ -1444,7 +1445,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             engine_version=RCA_ENGINE_VERSION,
             created_at=clock.now(),
             salt="phase0",
-            scenarios=(spec := SPECS[args.scenario](1, (1,)),),
+            scenarios=(spec := SPECS[args.scenario](1, (args.seed,)),),
             acceptance={},
         ).frozen()
         store.write_manifest(manifest)

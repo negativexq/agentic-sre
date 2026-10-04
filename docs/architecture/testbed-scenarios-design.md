@@ -619,3 +619,6 @@ success inside the first three samples becomes rare and the oracle's fields foll
 validity decides: a blind phase 0 of three runs per variant (seeds 907 to 912), every run valid. Then a fifth
 `HOLDOUT` replaces the stopped fourth, as §16 in every point, with seeds 143–160 (suites `holdout5-<variant>`), the
 engine still frozen at `58eadf38`.
+
+**Blind phase 0 at 80 to 90% (2026-10-04):** 6 of 6 valid (`dependency-b` seeds 907 to 909, `competing-b` 910 to 912);
+no diagnosis was read. Both variants are accepted, and the fifth `HOLDOUT` is frozen as stated above.

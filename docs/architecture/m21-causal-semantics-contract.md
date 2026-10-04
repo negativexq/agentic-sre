@@ -1388,3 +1388,10 @@ Hard criteria as §12.4 and §13.4: never holds for a change off the chain, no s
 once on a new `HOLDOUT` with the engine frozen, the `config-b` and `negative-b` variants (a missing image) being the
 held-out failed rollouts, beside the other variants as in testbed-scenarios-design §19; scored with the grader of §20
 (a `rolls_out` hop to the chain's target pod).
+
+### 14.5 Engine wiring and `DEV` replay (2026-10-05, owner-approved)
+
+Wired as `m21.support.observed-failed-rollout.v1` beside §13 for `Deployment` holders (a claim's execution rules are
+read together for strong authority; each keeps its own record in the audit). `DEV` replay (`dev5b-config-d` and the six
+trace suites, 147 incidents): **2 new witnesses, both on the chain** (`dev5b-config-d` #2, `payment-service` →
+`order-service`), **none off it**; no resolution changed.

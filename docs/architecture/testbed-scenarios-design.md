@@ -765,3 +765,16 @@ From §19.1: a rollout's execution link is the `ReplicaSet`, while the rule's wi
 its hops is `rolls_out` to the chain's `target_effect` pod, the pod the harness recorded as created by that
 ReplicaSet. Nothing else changes; the seventh `HOLDOUT` keeps the scores it was measured with, and the next `HOLDOUT`
 is scored with this rule.
+
+## 21. Eighth HOLDOUT: pre-registration for C5b (2026-10-05, frozen before the run)
+
+As §19 in every point, with the engine that carries both rollout rules (m21 §13, §14) and the grader of §20: the eight
+variants, seeds `dependency-b` 203–205, `direct-b` 206–208, `scheduled-b` 209–211, `config-b` 212–214, `negative-b`
+215–217, `competing-b` 218–220, `config-c` 221–223, `negative-c` 224–226; suites `holdout8-<variant>`.
+
+- **Acceptance:** the frozen bar.
+- **C5b confirmation (m21 §14.4):** no `FAILED_ROLLOUT_EFFECT_AT_CALLER` witness names a change off the chain, no
+  strong claim rests on one, and at least 90% of the valid runs read their traces without a failed read. Its held-out
+  cases are `config-b` and `negative-b` (a missing image).
+- Reported beside it: C1's and C5a's witnesses, which must still hold their criteria, and execution-witness recall per
+  family with §20's grader.

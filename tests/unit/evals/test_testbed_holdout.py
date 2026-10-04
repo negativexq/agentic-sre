@@ -34,7 +34,7 @@ def test_every_variant_b_is_a_holdout_with_its_own_injection() -> None:
         spec = SPECS[key](3, (1, 2, 3))
         assert (spec.scenario_id, spec.tier) == (scenario_id, "HOLDOUT")
         assert derive_parameters(spec, 1).fault == fault
-    assert 50 <= derive_parameters(SPECS["dependency-b"](3, (1, 2, 3)), 1).loss_percent <= 70
+    assert 80 <= derive_parameters(SPECS["dependency-b"](3, (1, 2, 3)), 1).loss_percent <= 90
 
 
 def test_a_manifest_without_an_engine_commit_keeps_its_old_digest() -> None:

@@ -1261,3 +1261,10 @@ after it (first `Applied` 17:52–18:01, on the current pods). No execution is r
 so no interval connects to it; and the captured traces begin only 5–9 minutes before the onset, leaving the
 baseline window empty or partial. ITBench-Lite can therefore neither confirm nor contradict §12; the confirmation stays
 with the new `HOLDOUT` of §12.6.
+
+### 12.8 HOLDOUT confirmation (2026-10-04)
+
+Confirmed on the fifth testbed `HOLDOUT` (`testbed-scenarios-design.md` §17.1), the engine frozen at `58eadf38`: all 18
+runs valid and read their traces without a failed read; eight witnesses of the relation, each naming the run's own
+cause, none off the chain. `N` = 3, `F` = 3, `D` = 0.2 s stand. The second and third `HOLDOUT`s could not decide it
+(failed trace reads, §13.1 and §14.1); the fourth was stopped (§16.1).

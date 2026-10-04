@@ -15,7 +15,7 @@ import random
 import shutil
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
@@ -95,6 +95,8 @@ REDIAGNOSE_SETTLE_SECONDS = (
 EXECUTION_TIMEOUT_SECONDS = 30.0
 DIAGNOSIS_TIMEOUT_SECONDS = 300.0
 DIAGNOSIS_QUIET_SECONDS = 20.0
+# design §18: lag builds about a minute after a pod-kill, then 30 s of admission, a poll and a diagnosis
+SECOND_CAUSE_COLLECT_SECONDS = 180.0
 ALERT_POLL_SECONDS = 5.0
 
 
@@ -166,7 +168,7 @@ def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
         given = spec.parameters.get(name)
         return default if given is None else round(rng.uniform(given.low, given.high), 3)
 
-    return RunParameters(
+    params = RunParameters(
         seed=seed,
         baseline_seconds=draw("baseline_seconds", 45.0),
         offset_seconds=draw("offset_seconds", 10.0),
@@ -188,6 +190,14 @@ def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
         decoy_offset_seconds=draw("decoy_offset_seconds", 0.0),
         loss_percent=int(draw("loss_percent", 0.0)),
     )
+    if "second_before_end_seconds" in spec.parameters:
+        # design §18: the second cause lands this long before the first one is removed (drawn last, so the
+        # other draws of a seed stay as they were)
+        before = draw("second_before_end_seconds", 0.0)
+        params = dataclasses.replace(
+            params, second_offset_seconds=max(0.0, params.duration_seconds - before)
+        )
+    return params
 
 
 def calibrate(latencies: Sequence[float], *, floor: float = 0.1) -> float:
@@ -902,7 +912,15 @@ def run_once(
             payload={"incidents": asked},
         )
         # 5. the stored diagnoses, once they stop changing
-        stored = _await_diagnoses(world, clock, run, alerts, injection.injected_at)
+        # design §18: a second cause's symptom can open its incident well after the first one is removed
+        not_before = (
+            injection.companion.injected_at + timedelta(seconds=SECOND_CAUSE_COLLECT_SECONDS)
+            if injection.companion is not None
+            else None
+        )
+        stored = _await_diagnoses(
+            world, clock, run, alerts, injection.injected_at, not_before=not_before
+        )
         foreign = world.foreign_faults()
         run.journal.record(
             verb="check",
@@ -926,7 +944,13 @@ def run_once(
 
 
 def _await_diagnoses(
-    world: World, clock: Clock, run: _Run, alerts: Collection[str], since: datetime
+    world: World,
+    clock: Clock,
+    run: _Run,
+    alerts: Collection[str],
+    since: datetime,
+    *,
+    not_before: datetime | None = None,
 ) -> list[StoredDiagnosis]:
     give_up = clock.now().timestamp() + DIAGNOSIS_TIMEOUT_SECONDS
     last_change = clock.now().timestamp()
@@ -937,7 +961,8 @@ def _await_diagnoses(
         state = tuple(sorted((d.incident_id, d.diagnosed_at) for d in found))
         if state != seen:
             seen, last_change = state, clock.now().timestamp()
-        if found and clock.now().timestamp() - last_change >= DIAGNOSIS_QUIET_SECONDS:
+        quiet = clock.now().timestamp() - last_change >= DIAGNOSIS_QUIET_SECONDS
+        if found and quiet and (not_before is None or clock.now() >= not_before):
             break
         run.wait(3.0)
     return found

@@ -1166,7 +1166,8 @@ def _variant_b(
 
 
 # blind phase 0 (design §12.4): at 20 to 40% the target saw the loss only now and then
-LOSS = ParameterRange(low=50, high=70)
+# design §17: at 50 to 70% a lucky success inside the first three samples reset the oracle's rule
+LOSS = ParameterRange(low=80, high=90)
 WORKERS = ParameterRange(low=20, high=28)
 
 SPECS: dict[str, Callable[..., ScenarioSpec]] = {
@@ -1186,7 +1187,14 @@ SPECS: dict[str, Callable[..., ScenarioSpec]] = {
     ),
     "config-b": _variant_b(config_spec, "config-image-payment"),
     "negative-b": _variant_b(negative_spec, "negative-image-decoy", cpu_workers=WORKERS),
-    "competing-b": _variant_b(competing_spec, "competing-loss-podkill", loss_percent=LOSS),
+    # design §18: at 80 to 90% loss almost no order reached Kafka, so a pod-kill early in the loss built no lag;
+    # it now lands 10 to 40 s before the loss is removed, when the orders come back
+    "competing-b": _variant_b(
+        competing_spec,
+        "competing-loss-podkill",
+        loss_percent=LOSS,
+        second_before_end_seconds=ParameterRange(low=10, high=40),
+    ),
     "negative": negative_spec,
     "competing": competing_spec,
     "dependency": dependency_spec,

@@ -587,3 +587,129 @@ Both findings of §14.1 are lab-side; neither is chosen from an engine score (an
 
 The fourth `HOLDOUT` then follows §14 with new seeds (125–142, suites `holdout4-<variant>`), the engine frozen at the
 same engine commit (the fixes are lab and harness, outside `packages/rca` and `apps/control_plane`).
+
+**Blind phase 0 of the amended `scheduled-b` (2026-10-04):** 3 of 3 valid (seeds 904 to 906), each opening an incident
+on `OrderRequestLatencyHigh` about 165 s after the cause; no diagnosis was read. The variant is accepted.
+
+## 16. Fourth HOLDOUT: pre-registration (2026-10-04, frozen before the run)
+
+As §14 in every point, with the fixes of §15: the six variants B (`scheduled-b` as amended), seeds `dependency-b`
+125–127, `direct-b` 128–130, `scheduled-b` 131–133, `config-b` 134–136, `negative-b` 137–139, `competing-b` 140–142,
+suites `holdout4-<variant>`; engine frozen at `58eadf38`; the frozen acceptance bar; C1 confirmed only if no
+`FAULT_EXECUTION_EFFECT_AT_CALLER` witness names an actor off the chain, no strong claim rests on one, and at least
+90% of the valid runs read their traces without a failed read.
+
+### 16.1 Fourth HOLDOUT stopped (2026-10-04)
+
+The owner stopped the run after its first two runs, both `INVALID` (`dependency-b`, seeds 125 and 126); no diagnosis or
+score was read, and the lab was left clean (no chaos object, every pod running). Only the harness series were read:
+
+- under 50 to 70% loss each probe sample takes 3 to 4 s, so the first 35 s hold 8 to 10 samples per probe, and the
+  oracle's rule of three consecutive failures (contract §11) is reset by a single lucky success;
+- seed 125: the target probe read `.xx.xxxxx`, its effect landed at +13.4 s, rounds after the client's propagation at
+  +3.1 s (an inversion across rounds, contract §14.2.2); seed 126: the symptom probe read `.xx.xxx`, its symptom
+  landed at +27.4 s, after the alert at +22.6 s;
+- the earlier nine runs of this variant were valid because their sequences broke only after three failures; alert
+  and propagation times are as in the earlier `HOLDOUT`s, so §15's lab fixes are not the cause.
+
+## 17. Loss variants at 80 to 90% (owner-approved 2026-10-04)
+
+Both loss variants (`dependency-b`, `competing-b`) draw their loss from 80 to 90% instead of 50 to 70%, so that a
+success inside the first three samples becomes rare and the oracle's fields follow the world rather than chance. Only
+validity decides: a blind phase 0 of three runs per variant (seeds 907 to 912), every run valid. Then a fifth
+`HOLDOUT` replaces the stopped fourth, as §16 in every point, with seeds 143–160 (suites `holdout5-<variant>`), the
+engine still frozen at `58eadf38`.
+
+**Blind phase 0 at 80 to 90% (2026-10-04):** 6 of 6 valid (`dependency-b` seeds 907 to 909, `competing-b` 910 to 912);
+no diagnosis was read. Both variants are accepted, and the fifth `HOLDOUT` is frozen as stated above.
+
+### 17.1 Fifth HOLDOUT result (2026-10-04, engine frozen at `58eadf38`, 18 runs)
+
+Measured once, reported as it is (§12.2.6). `scheduled-b` stopped before its first injection (the baseline probe of
+`order-service` read only `URLError`, the port-forward of §12.4); its work directory was set aside as
+`.refused-20261004T163932`, as the harness does for a refused baseline, and the suite was rerun unchanged.
+
+| Family (variant B) | Valid | Cause / instance | Execution witness / effect link | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `dependency-fault` (80–90% loss) | 3/3 | 1.0 / 1.0 | 0.33 / 0.33 | 0 / 0 / 0 | |
+| `direct-pod-fault` | 3/3 | 1.0 / 1.0 | 1.0 / 0.67 | 0 / 0 / 0 | |
+| `scheduled-recurring` (90 s every 120 s) | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | |
+| `config-or-rollout` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | |
+| `negative-control` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | decoy named 0 |
+| `competing-causes` (80–90% loss) | 3/3 | **0.5** / 0.5 | 0.67 / 0.67 | 0 / 0 / 0 | group recall 1.0, cross-attribution 0 |
+
+**The acceptance bar holds**: 18 of 18 valid, no false strong authority, no false `RESOLVED`, the decoy never named.
+
+**C1 is confirmed** (m21 §12.4.3, §16): every one of the 18 valid runs read its traces without a failed read; eight
+`FAULT_EXECUTION_EFFECT_AT_CALLER` witnesses appear in 274 stored diagnoses (`direct-b`), each naming the run's own
+cause, none off the chain, so no strong claim rests on an off-chain one. `N` = 3, `F` = 3, `D` = 0.2 s stand.
+
+Recorded beside it, not explained away: in `competing-causes` every symptom group was found but the second cause (the
+pod-kill) was named in none of the three runs (0.5, against 0.83 in the first and third `HOLDOUT`s with the same
+engine). The variant changed (80–90% loss, §17), not the engine; why the pod-kill is no longer named is open and is
+looked at on `DEV` data, never selected from this result.
+
+### 17.2 Why the pod-kill was not named (investigation, 2026-10-04)
+
+Read on the three `competing-b` phase 0 runs at 80–90% (seeds 910 to 912, never a `HOLDOUT`) and, for the world and the
+harness only, on the fifth `HOLDOUT`'s three runs. The engine named the pod-kill whenever an incident of its group was
+collected: phase 0 seed 912 (`KafkaConsumerLag`, `OrderWorkerLagHigh` → `pod-kill-912`, `COMPETING`). Each miss has a
+cause outside the engine's judgment:
+
+| Run | Lag alert in Prometheus | Reached the control plane | Why the pod-kill was not named |
+|---|---|---|---|
+| phase 0 910, 911 | none | – | world: no lag (see below) |
+| `HOLDOUT` 5 #1 (seed 159) | none | – | world: no lag |
+| `HOLDOUT` 5 #2 (seed 160) | firing 15 s | no | shorter than the 30 s admission (connector-boundary §16) |
+| `HOLDOUT` 5 #0 (seed 158) | firing 30 s (14:20:34 to 14:21:04) | late: the incidents opened at 14:24:49, by Alertmanager's webhook | at the edge of the 30 s admission, no poll admitted it; the harness had stopped collecting at 14:23:20, so the two lag incidents (diagnosed at 14:24:59, both naming `pod-kill-158`, `COMPETING`) fell outside the run |
+
+**No lag:** the pod-kill falls 0 to 60 s into the loss, which lasts 120 to 160 s. At 80–90% loss the successful orders
+drop from about 20 to about 0.6 per second, so almost nothing reaches Kafka and killing the consumer builds no lag above
+the threshold; at 50–70% enough orders got through. Raising the loss for `dependency-b` (§17) starved the second
+fault's symptom in `competing-b`, which shares the range.
+
+So the 0.5 is the world, twice over: a fault with no symptom, and lag alerts at or under the 30 s admission (one of
+them delivered by the webhook minutes later, after the run). A first reading of seed 158 blamed the harness's
+collection window; the incidents' own creation time (14:24:49, after the harness's 14:23:20) corrects it. Nothing here is selected from the
+`HOLDOUT`; any change is a harness or variant change, measured on a new `HOLDOUT`.
+
+## 18. The competing variant's pod-kill near the end of the loss (owner-approved 2026-10-04)
+
+From §17.2: the pod-kill's symptom needs orders flowing into Kafka. `competing-b` keeps 80–90% loss (§17) and its
+pod-kill now lands **10 to 40 s before the loss is removed** (`second_before_end_seconds`, drawn after every other
+parameter so a seed's other draws are unchanged), so the two causes still overlap and the consumer is down as the
+orders return. The harness's collection window is unchanged: the late incident of §17.2 came from an alert at the
+edge of the admission, which a longer window would not have caught. Only validity decides: a blind phase 0 of three
+runs (seeds 913 to 915) in which every run is valid **and** a lag alert opens an incident. Then a sixth `HOLDOUT`,
+as §16 in every point, with seeds 161–178 (suites `holdout6-<variant>`), the engine frozen at `58eadf38`.
+
+**Blind phase 0, first round (seeds 913 to 915):** 3 of 3 valid; a lag incident in 913 and 914, not in 915. Its lag
+alerts fired for 190 s and opened their incidents at 15:32:21, three seconds after the harness stopped collecting
+(15:32:18): with the pod-kill near the loss's end, its symptom now arrives after the first cause is removed. So the
+harness's collection does change after all (§17.2's first reading was right for this variant, though not for seed
+158): when a second cause was injected, collection lasts at least until **180 s after it** (lag builds about a minute
+after a pod-kill, then 30 s of admission, a poll and a diagnosis), as well as until 20 s without a new diagnosis. Other
+families are unchanged. Second round: seeds 916 to 918, under the same condition.
+
+**Blind phase 0, second round (seeds 916 to 918):** 3 of 3 valid, each with a lag incident (`KafkaConsumerLag`,
+`OrderWorkerLagHigh`); no diagnosis was read. The variant is accepted and the sixth `HOLDOUT` is frozen as stated.
+
+### 18.1 Sixth HOLDOUT result (2026-10-04, engine frozen at `58eadf38`, 18 runs)
+
+Measured once, reported as it is (§12.2.6).
+
+| Family (variant B) | Valid | Cause / instance | Execution witness / effect link | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `dependency-fault` (80–90% loss) | 3/3 | 1.0 / 1.0 | 0.33 / 0.33 | 0 / 0 / 0 | |
+| `direct-pod-fault` | 3/3 | 1.0 / 1.0 | 1.0 / 1.0 | 0 / 0 / 0 | |
+| `scheduled-recurring` (90 s every 120 s) | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | |
+| `config-or-rollout` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | |
+| `negative-control` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | decoy named 0 |
+| `competing-causes` (pod-kill near the loss's end) | 3/3 | **1.0** / 1.0 | 0.67 / 0.67 | 0 / 0 / 0 | both causes named in every run, group recall 1.0, cross-attribution 0 |
+
+**The acceptance bar holds**: 18 of 18 valid, no false strong authority, no false `RESOLVED`, the decoy never named.
+**C1 holds again**: every valid run read its traces without a failed read (Tempo's last restart was during the phase 0
+before this run); one `FAULT_EXECUTION_EFFECT_AT_CALLER` witness in 250 diagnoses (`direct-b`), naming the run's own
+cause, none off the chain. With the pod-kill's symptom present and collected (§18), the engine named both competing
+causes in all three runs, which settles §17.2: the 0.5 of the fifth `HOLDOUT` came from the world and the collection,
+not from the engine.

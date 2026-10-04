@@ -8,7 +8,6 @@ import logging
 import re
 from collections import defaultdict
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, Protocol
@@ -875,7 +874,7 @@ def capture_traces(
     max_services: int = TRACE_CAPTURE_MAX_SERVICES,
     max_spans: int = TRACE_CAPTURE_MAX_SPANS,
 ) -> TraceCapture:
-    """One bounded Tempo read per ``(namespace, service)`` Deployment over the newest hour of the window, concurrently.
+    """One bounded Tempo read per ``(namespace, service)`` Deployment over the newest hour of the window.
 
     A read that failed or was cut is recorded as such; it is coverage, never absence of spans.
     """
@@ -920,10 +919,10 @@ def capture_traces(
             ordered,
         )
 
-    # live-trace-design.md §11: the reads run concurrently; results are kept in the services' order
-    targets = list(dict.fromkeys(services))[:max_services]
-    with ThreadPoolExecutor(max_workers=max(1, len(targets))) as pool:
-        results = list(pool.map(lambda pair: read(*pair), targets))
+    results = [
+        read(namespace, service)
+        for namespace, service in list(dict.fromkeys(services))[:max_services]
+    ]
     seen: dict[tuple[str, str], TraceSpanObservation] = {}
     reads: list[TraceServiceCapture] = []
     for capture_read, ordered in results:

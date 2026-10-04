@@ -955,7 +955,8 @@ class DiagnosisService:
         # baseline before it to compare the fault's calls with.
         onset = min((alert.starts_at for alert in alerts), default=self.clock())
         now = self.clock()
-        with ThreadPoolExecutor(max_workers=2) as pool:  # the two windows read concurrently (§11)
+        # §11: the two windows at once, each read sequentially, so at most two reads reach Tempo
+        with ThreadPoolExecutor(max_workers=2) as pool:
             fault_read = pool.submit(
                 capture_traces,
                 provider_adapter,

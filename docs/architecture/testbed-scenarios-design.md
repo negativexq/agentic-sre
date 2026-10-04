@@ -569,3 +569,18 @@ only 12 of the 16 valid runs read their traces without a failed read (75%, under
 (29 of 90), `config-b` 1 (4 of 30), `competing-b` 0 (46 of 90) and 1 (57 of 108). The lab's Tempo restarted three
 times during the run (liveness probe, CPU limit 500m), also under the investigation's own pod-level searches. Both
 findings are lab-side and are fixed before another `HOLDOUT`, never selected from this result.
+
+## 15. Before the fourth HOLDOUT: two lab fixes (owner-approved 2026-10-04)
+
+Both findings of §14.1 are lab-side; neither is chosen from an engine score.
+
+1. **Tempo:** the CPU limit goes from 500m to 2 (request 500m, memory 2 Gi as deployed), and the probes' timeout from
+   1 s to 5 s, the liveness probe failing after six misses, not three (`infra/kubernetes/observability.yaml`). A
+   3-minute load of 16 concurrent searches did not restart it.
+2. **`scheduled-b`:** the spawned `StressChaos` on `order-service` uses 56 to 72 workers instead of 20 to 28. At 20 to
+   28 workers its latency alert (`OrderRequestLatencyHigh`, order latency above 0.5 s) failed to fire in three of
+   nine `HOLDOUT` runs (§13.1, §14.1), the same reason `direct-b` was raised to 56 to 72 in §12.4. Only validity
+   decides this: the variant is accepted after a blind phase 0 of three runs in which the alert fires every time.
+
+The fourth `HOLDOUT` then follows §14 with new seeds (125–142, suites `holdout4-<variant>`), the engine frozen at the
+same engine commit (the fixes are lab and harness, outside `packages/rca` and `apps/control_plane`).

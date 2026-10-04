@@ -1175,7 +1175,10 @@ SPECS: dict[str, Callable[..., ScenarioSpec]] = {
     "direct-b": _variant_b(
         direct_pod_spec, "direct-stress-payment", cpu_workers=ParameterRange(low=56, high=72)
     ),
-    "scheduled-b": _variant_b(scheduled_spec, "scheduled-stress-order", cpu_workers=WORKERS),
+    # design §15: at 20 to 28 workers the order latency alert failed to fire in three of nine HOLDOUT runs
+    "scheduled-b": _variant_b(
+        scheduled_spec, "scheduled-stress-order", cpu_workers=ParameterRange(low=56, high=72)
+    ),
     "config-b": _variant_b(config_spec, "config-image-payment"),
     "negative-b": _variant_b(negative_spec, "negative-image-decoy", cpu_workers=WORKERS),
     "competing-b": _variant_b(competing_spec, "competing-loss-podkill", loss_percent=LOSS),

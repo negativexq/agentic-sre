@@ -195,8 +195,19 @@ def score_run(
     execution = None
     if any(link.evidence_class == "execution" for link in chain.links):
         execution_links = {link.actor for link in chain.links if link.evidence_class == "execution"}
+        targets = {link.actor for link in chain.of_role("target_effect")}
         execution = any(
-            w.origin.entity.canonical in execution_links or w.actor.canonical in execution_links
+            w.origin.entity.canonical in execution_links
+            or w.actor.canonical in execution_links
+            # m21 §13: a rollout witness is carried by the changed Deployment and reaches the chain's target pod,
+            # which the execution link's ReplicaSet owns (testbed-scenarios-design §20)
+            or (
+                w.actor.canonical in cause_actors
+                and any(
+                    hop.relation == "rolls_out" and hop.target.canonical in targets
+                    for hop in w.path
+                )
+            )
             for w in witnesses
         )
     instances_total = sum(1 for link in causes if link.knowable)

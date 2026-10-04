@@ -757,3 +757,11 @@ Recorded beside it: the grader credits an execution witness only when the witnes
 names the ReplicaSet and pod as its relation evidence. So the table's 0 for the variants C understates them; how the
 grader should read a rollout witness is a scoring change, decided before the next `HOLDOUT`, not applied to this one.
 The rollout rule does not reach `config-b` (its new pods never serve, C5b).
+
+## 20. The grader reads a rollout witness (2026-10-05, before the next `HOLDOUT`)
+
+From §19.1: a rollout's execution link is the `ReplicaSet`, while the rule's witness is carried by the changed
+`Deployment`. The grader now also credits the execution link when a witness's actor is the chain's cause and one of
+its hops is `rolls_out` to the chain's `target_effect` pod, the pod the harness recorded as created by that
+ReplicaSet. Nothing else changes; the seventh `HOLDOUT` keeps the scores it was measured with, and the next `HOLDOUT`
+is scored with this rule.

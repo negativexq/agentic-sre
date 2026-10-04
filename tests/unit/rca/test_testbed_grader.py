@@ -278,3 +278,93 @@ def test_naming_a_decoy_is_counted_and_abstention_does_not_apply_with_a_cause() 
     )
     assert score_run(record(unnamed, family="negative-control"), d, tier="DEV").decoy_named == 0
     assert score_run(record(truth_chain()), d, tier="DEV").decoy_named is None
+
+
+def _as_rollout(plain: Diagnosis, deployment: str, pod: str) -> Diagnosis:
+    """The chaos case's execution witnesses recast as a rollout's: carried by a Deployment, reaching ``pod``."""
+    from packages.rca.causal_closure import EXECUTION_RULES
+    from packages.rca.model import CausalHop, EntityRef
+
+    namespace, kind, name = deployment.split("/")
+    actor = EntityRef(kind=kind, name=name, namespace=namespace)
+    pod_ns, pod_kind, pod_name = pod.split("/")
+    target = EntityRef(kind=pod_kind, name=pod_name, namespace=pod_ns)
+    assert plain.resolution_trace is not None
+    audits = tuple(
+        audit.model_copy(
+            update={
+                "root_support": tuple(
+                    r.model_copy(
+                        update={
+                            "witnesses": tuple(
+                                w.model_copy(
+                                    update={
+                                        "actor": actor,
+                                        "origin": w.origin.model_copy(update={"entity": actor}),
+                                        "path": (
+                                            CausalHop(
+                                                source=actor, relation="rolls_out", target=target
+                                            ),
+                                        ),
+                                    }
+                                )
+                                for w in r.witnesses
+                            )
+                        }
+                    )
+                    if r.rule_id in EXECUTION_RULES
+                    else r
+                    for r in audit.root_support
+                )
+            }
+        )
+        for audit in plain.resolution_trace.hypothesis_audits
+    )
+    return plain.model_copy(
+        update={
+            "resolution_trace": plain.resolution_trace.model_copy(
+                update={"hypothesis_audits": audits}
+            )
+        }
+    )
+
+
+def rollout_chain() -> Chain:
+    return Chain(
+        links=(
+            Link(
+                role="cause",
+                actor="shop/Deployment/checkout",
+                instance_uid="d1",
+                knowable=True,
+                mechanism="environment change",
+            ),
+            Link(
+                role="execution",
+                actor="shop/ReplicaSet/checkout-rs",
+                instance_uid="r1",
+                knowable=True,
+                mechanism="rollout",
+                evidence_class="execution",
+            ),
+            Link(
+                role="target_effect",
+                actor=POD,
+                knowable=False,
+                mechanism="latency",
+                evidence_class="effect",
+            ),
+        )
+    )
+
+
+def test_a_rollout_witness_reaching_the_chains_target_pod_is_its_execution() -> None:
+    witnessed = _as_rollout(diagnosis(), "shop/Deployment/checkout", POD)
+    assert score_run(record(rollout_chain()), witnessed, tier="DEV").execution_witness is True
+
+
+def test_a_rollout_witness_of_another_change_or_pod_is_not_the_execution() -> None:
+    other_change = _as_rollout(diagnosis(), "shop/Deployment/other", POD)
+    other_pod = _as_rollout(diagnosis(), "shop/Deployment/checkout", "shop/Pod/checkout-rs-zzzzz")
+    assert score_run(record(rollout_chain()), other_change, tier="DEV").execution_witness is False
+    assert score_run(record(rollout_chain()), other_pod, tier="DEV").execution_witness is False

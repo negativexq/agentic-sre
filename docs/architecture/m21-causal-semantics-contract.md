@@ -1268,3 +1268,58 @@ Confirmed on the fifth testbed `HOLDOUT` (`testbed-scenarios-design.md` §17.1),
 runs valid and read their traces without a failed read; eight witnesses of the relation, each naming the run's own
 cause, none off the chain. `N` = 3, `F` = 3, `D` = 0.2 s stand. The second and third `HOLDOUT`s could not decide it
 (failed trace reads, §13.1 and §14.1); the fourth was stopped (§16.1).
+
+## 13. Rollout execution witness (C5a; proposal, 2026-10-04, awaiting the owner)
+
+### 13.1 Measured problem
+
+On the testbed, the configuration families (`config-or-rollout`, `negative-control`) name their cause, a `Deployment`
+change, in every run but never with strong authority: the only execution witnesses are chaos records (§ observed fault
+execution) and quota rejections, and a rollout has neither. Execution-witness recall is 0 in every `DEV` and `HOLDOUT`
+run of both families (`testbed-scenarios-design.md` §12.8 to §18.1).
+
+A rollout's execution is observable in the change stream, by UID on every link: the `Deployment` change (generation
+up), the `ReplicaSet` it creates (owner UID = the `Deployment`'s), and that ReplicaSet's pods (owner UID = the
+ReplicaSet's), each with its creation and deletion time. Its effect is observable in the traces: in `DEV` run `tr4-slice3`
+#0 the order service's calls to the new pod took 1.22 s at the median against 0.004 s to the old pod before the change.
+
+### 13.2 Rule (`m21.support.observed-rollout-execution.v1`)
+
+1. **Execution witness**, at the exact change: a `Deployment` version whose `metadata.generation` rose, a `ReplicaSet`
+   created within 10 s of it whose owner UID is that `Deployment`'s, and each pod created by that ReplicaSet (owner UID).
+   The pod's **execution interval** is `[its creation, its deletion]`, or `[its creation, cutoff]` while it lives; it
+   must be connected to the onset as in the fault-execution rule (begin no later than the onset, end no earlier than
+   5 minutes before it). Names, image tags, revisions and a `ScalingReplicaSet` event alone confer nothing.
+2. **Effect relation**: §12.2 unchanged, at the exact new pod: a symptom service's calls to that pod inside its
+   interval against the baseline window of the trace read, restricted to calls that began **before the change**
+   (calls to the old revision). `N` = 3, `F` = 3, `D` = 0.2 s, as confirmed in §12.8; no new parameter. Unknown or
+   false adds nothing.
+3. **Carrier**: the `Deployment` claim, which must already be D1-supported; the timing gates apply unchanged. Scope:
+   the observed effect at the callers of the new revision; `RESOLVED` stays out of reach as for §12.
+4. **Out of scope (C5b)**: a rollout whose new pods never serve (an image that cannot be pulled, a crash) and whose
+   effect is the loss of the old revision. Its witness is the new pods' container state and the old ReplicaSet's
+   scale-down, its effect an outage at the callers (failed client calls with no server span), and it needs its own
+   `DEV` scenario before any rule; the held-out `config-b` (a missing image tag) is that kind and is not used to design it.
+
+### 13.3 Exploratory shadow on `DEV` (run before this text, stated as such)
+
+All six `DEV` trace suites (`tr4-slice1`, `tr4-slice3`, `tr5-slice2`, `tr6-slice4b`, `tr6-slice5`, `tr6-slice6`; 123
+incidents), the relation computed for every connected new pod of every `Deployment` change and every other symptom
+service:
+
+| Change | Holds | False | Unknown |
+|---|---|---|---|
+| the run's cause (`payment-service`), symptom `order-service` | **3** | 0 | 3 (no call to the new pod captured) |
+| the run's cause, symptom `order-worker` (never calls it) | 0 | 0 | 8 |
+| not a cause (`order-service`, the harness's fresh pod) | **0** | 0 | 4 |
+
+No off-chain change holds; half of the cause's pairs are unknown because the fault window of the trace read held no call
+to the new pod.
+
+### 13.4 Measurement, pre-registered
+
+Hard criteria as §12.4: the relation never holds for a `Deployment` change off the chain, and no strong claim rests on
+one. Confirmed once on a new `HOLDOUT` with the engine frozen; the families whose cause is a serving rollout are
+`config-or-rollout` and `negative-control` in variant A, so the `HOLDOUT` adds a **variant C** of both (an environment
+change that slows the new revision, as variant A, on `order-service` instead of `payment-service`), each through a blind
+phase 0. The other six families run as in §16 of the scenarios design to check that nothing else moves.

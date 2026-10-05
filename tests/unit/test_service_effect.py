@@ -126,6 +126,8 @@ def _holder() -> object:
 
 
 POD = "payment-service-abc-1"  # a Deployment's pod: the target service is read from its name
+# m21 §16: the witness's baseline is the five minutes before the fault's first execution (here, minute 10)
+JUST_BEFORE = [call(i, 5.5 + i * 0.5, 0.005) for i in range(5)]
 
 
 def _witnesses(all_spans: list[TraceSpanObservation], pod: str = POD) -> list[Any]:
@@ -153,7 +155,7 @@ def test_slow_calls_from_a_symptom_service_to_the_exact_target_give_a_witness_fo
     None
 ):
     fault = [call(10 + i, 10.5 + i * 0.2, 2.0, pod=POD) for i in range(4)]
-    (witness,) = _witnesses(spans(*BASELINE, *fault))
+    (witness,) = _witnesses(spans(*JUST_BEFORE, *fault))
     assert witness.symptom.kind == "Service" and witness.symptom.name == "order-service"
     assert witness.mechanism == "FAULT_EXECUTION_EFFECT_AT_CALLER"
     assert "c10" in witness.evidence_ids  # the calls are the evidence
@@ -161,5 +163,13 @@ def test_slow_calls_from_a_symptom_service_to_the_exact_target_give_a_witness_fo
 
 def test_no_witness_for_calls_to_another_replica_or_without_traces() -> None:
     fault = [call(10 + i, 10.5 + i * 0.2, 2.0, pod="payment-service-abc-2") for i in range(4)]
-    assert _witnesses(spans(*BASELINE, *fault)) == []
+    assert _witnesses(spans(*JUST_BEFORE, *fault)) == []
     assert _witnesses([]) == []
+
+
+def test_calls_long_before_the_first_execution_are_not_its_baseline() -> None:
+    """§16: a window ten minutes back (another run's traffic, a quiet period) is not the fault's baseline."""
+    fault = [call(10 + i, 10.5 + i * 0.2, 2.0, pod=POD) for i in range(4)]
+    assert (
+        _witnesses(spans(*BASELINE, *fault)) == []
+    )  # minutes 0 to 2: before the window, so unknown

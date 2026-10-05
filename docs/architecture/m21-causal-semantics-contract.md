@@ -1479,3 +1479,57 @@ are both supported, two links of one cause. These runs were seen, so this is a r
 Confirmed on the targeted tenth `HOLDOUT` (testbed-scenarios-design §24.1): 6 of 6 valid, 2 of 30 incidents rooted at
 the run's own spawned experiment through the relation, none moved off the chain, no false strong authority or false
 `RESOLVED`. A small set, as §23 intends for a targeted run.
+
+## 16. The baseline just before the first execution (C16; proposal, 2026-10-05, awaiting the owner)
+
+### 16.1 Measured problem
+
+§12's baseline is a fixed window of the trace read, `[onset − 10 min, onset − 5 min]`. On `DEV`, with the current
+engine, two of the six `dependency-fault` and `scheduled-recurring` runs miss their execution witness because of it:
+
+- `tr4-slice1` #0: the order service's eight calls to the delayed pod took 2.65 s at the median, but the window held
+  no call at all (the run's load starts about a minute before the fault), so the relation is unknown;
+- `tr6-slice4b` #2: the window held ten calls at 2.4 s from the run before (Tempo keeps every run's traces) beside eight
+  at 0.006 s, so its median was already slow and the relation unknown.
+
+A baseline is meant to show the calls as they were just before the fault; the fixed window looks further back than the
+fault's own start and ignores it.
+
+### 16.2 Amendment
+
+The baseline is the calls that began in the **five minutes before the first execution** of the holder's fault
+(`[first execution − 5 min, first execution)`, the first `Applied` of any of its experiments, or for a rollout the
+change itself), read from the trace read's two windows. `N`, `F`, `D` and the median (§12.5) are unchanged; fewer than
+`N` calls there leave the relation unknown, as before. §13 and §14 take the same window before their change.
+
+### 16.3 Exploratory shadow on `DEV` (run before this text, stated as such)
+
+The six `DEV` trace suites, every connected execution target and every other symptom service, three baselines:
+
+| Baseline | Holds on the chain | Holds off the chain | Unknown off the chain |
+|---|---|---|---|
+| fixed window (§12) | 6 | 0 | 39 |
+| every call before the first execution | 7 | 0 | 39 |
+| **five minutes before the first execution** | **8** | **0** | 39 |
+
+The seven remaining unknowns on the chain have no fault call or no baseline call captured at all.
+
+### 16.4 Measurement, pre-registered (testbed-scenarios-design §23)
+
+The offline replay of every stored run first: no root moves off the chain, no new witness off the chain, no new false
+strong authority or false `RESOLVED`. Then a targeted `HOLDOUT` of the variants it reaches (`dependency-b`,
+`direct-b`, `scheduled-b`, `config-c`, `negative-c`) with new seeds, under the same criteria as §12.4, §13.4 and §14.4.
+
+### 16.5 Offline regression replay (2026-10-05, owner-approved)
+
+Implemented for §12, §13 and §14. Every stored testbed run (1,333 incidents), the engine on `main` against this one:
+**10 new witnesses, all on the chain** (6 of §12, 4 of §14), **2 lost, both on the chain** (one of §12, one of §14:
+their old window happened to hold a usable baseline that the five minutes before the change do not), **none off the
+chain**; the tier rises `SUPPORTED` → `STRONG` in 10 incidents and falls in 2; one root moves from another actor to the
+run's cause; no root moves off the chain, no resolution changes. A regression check on seen runs, not held-out
+evidence.
+
+### 16.6 HOLDOUT confirmation (2026-10-05)
+
+Confirmed on the targeted eleventh `HOLDOUT` (testbed-scenarios-design §25.1): 15 of 15 valid, 19 witnesses of §12 and
+§13, none off the chain, no false strong authority or false `RESOLVED`, 14 of 15 runs with every trace read complete.

@@ -873,3 +873,26 @@ and without the relation, 2 change (`scheduled-b` #0, two lag incidents), the ro
 the run's `Schedule` spawned (`SUPPORTED`, shown `COMPETING` beside the `Schedule`); nothing moves off the chain, and no
 false strong authority or false `RESOLVED` appears. The other lag incidents of these runs did not reach the relation
 (their captured spans held no delivery from the stressed pod, or the incident had no lag).
+
+## 25. Eleventh HOLDOUT, targeted: pre-registration for C16 (2026-10-05, frozen before the run)
+
+Per §23, the variants the baseline change (m21 §16) can reach: `dependency-b` 257–259, `direct-b` 260–262,
+`scheduled-b` 263–265, `config-c` 266–268, `negative-c` 269–271; suites `holdout11-<variant>`, the engine frozen at
+the commit in the manifests. Acceptance: the frozen bar. Criteria as m21 §12.4, §13.4 and §14.4 (no witness off the
+chain, no strong claim on one, at least 90% of the valid runs with every trace read complete); reported beside them:
+execution-witness recall per variant against the earlier `HOLDOUT`s (for information, nothing selected from it).
+
+### 25.1 Eleventh HOLDOUT result (2026-10-05, engine frozen at `e25153c4`, 15 runs)
+
+| Variant | Valid | Cause / instance | Execution witness | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `dependency-b` | 3/3 | 1.0 / 1.0 | 0.67 | 0 / 0 / 0 | |
+| `direct-b` | 3/3 | 1.0 / 1.0 | 1.0 | 0 / 0 / 0 | |
+| `scheduled-b` | 3/3 | 1.0 / 1.0 | 0 | 0 / 0 / 0 | |
+| `config-c` | 3/3 | 1.0 / 1.0 | 0.67 | 0 / 0 / 0 | |
+| `negative-c` | 3/3 | 1.0 / 1.0 | 0.33 | 0 / 0 / 0 | decoy named 0 |
+
+**The acceptance bar holds and C16 is confirmed**: 15 of 15 valid, no false strong authority, no false `RESOLVED`, the
+decoy never named; 19 witnesses of the effect relations (§12: 11, §13: 8), none off the chain; 14 of 15 runs read
+their traces without a failed read (93%; `negative-c` #1 lost 16 of 48). `scheduled-b` still has no execution witness
+in this `HOLDOUT`; recorded, not selected from.

@@ -36,6 +36,16 @@ class CallPair:
 SERVICE_EFFECT = EffectParameters(calls=3, factor=3.0, floor=timedelta(seconds=0.2))
 # the trace read's baseline window, relative to the incident's onset (live-trace-design.md §9)
 BASELINE_FROM, BASELINE_TO = timedelta(minutes=10), timedelta(minutes=5)
+# m21 §16: the relation's baseline is the calls that began this long before the fault's first execution
+BASELINE_BEFORE_EXECUTION = timedelta(minutes=5)
+
+
+def baseline_before(first_execution: datetime) -> tuple[datetime, datetime]:
+    """The baseline window ending just before ``first_execution`` (calls that began at it are not baseline)."""
+    return (
+        first_execution - BASELINE_BEFORE_EXECUTION,
+        first_execution - timedelta(microseconds=1),
+    )
 
 
 def _duration(span: TraceSpanObservation) -> timedelta | None:

@@ -12,6 +12,7 @@ from packages.rca.channels import attach_channel_assessments, channel_assessment
 from packages.rca.claims import admitted
 from packages.rca.episode_end import RULE_ID as EPISODE_END_RULE_ID
 from packages.rca.episode_end import evaluate_ended_episodes
+from packages.rca.executing import executing_instances
 from packages.rca.frontier import (
     apply_frontier_progress,
     derive_structural_frontier,
@@ -179,7 +180,7 @@ class Investigator(Protocol):
 # evidence; replay refuses a run recorded under another version (M20.3a).
 # Rule (owner, 2026-10-05; roadmap F1): minor for a change that can alter a diagnosis,
 # patch for one that cannot change any digest, major when the contract version moves.
-RCA_ENGINE_VERSION = "2.2.0"
+RCA_ENGINE_VERSION = "2.2.1"
 
 
 @dataclass(frozen=True)
@@ -885,6 +886,12 @@ def diagnose_case(
         leading_actor_tier=projection.tier,
         leading_actor_candidates=projection.candidates,
         leading_actor_set_aside=projection.set_aside,
+        # m21 §17: what ran for the leader, and for each candidate shown when competing
+        executing_instances=executing_instances(
+            resolution_trace,
+            {selected.causal_actor, *projection.candidates},
+            case.source.object_history(),
+        ),
         confidence=confidence,
         resolution=resolution_trace.state,
         summary=(

@@ -1463,3 +1463,13 @@ the run whose alerts are the lag alerts and reports whether its root is the run'
 On by default (`engine.build_case` adds the relation after runtime propagation). `DEV` replay, the engine with and
 without it on the same 147 incidents: the same 5 changes as §15.3, all `tr5-slice2` lag incidents now rooted at the
 run's own stress experiment (4 `SUPPORTED`, 1 `UNESTABLISHED`), no other incident changed, nothing off the chain.
+
+### 15.6 Offline regression replay (testbed-scenarios-design §23, 2026-10-05)
+
+Every stored testbed run, nine `HOLDOUT`s and seven `DEV` suites (1,333 incidents, 6 minutes), with and without the
+relation: **44 incidents change, all lag incidents** (`scheduled-b` of `HOLDOUT`s 2, 3, 5, 6, 7, 9 and `tr5-slice2`),
+the root moving from none, or in four from an `UNESTABLISHED` `payment-service`, to the run's own `Schedule` or one of
+its spawned experiments; **no root moves off the chain**. Two `holdout3-competing-b` incidents now lead with
+`Deployment/order-service` as `UNESTABLISHED` (a propagation link of the chain, not its cause; shown as not
+established). Many `scheduled-b` displays move from `SINGLE` to `COMPETING`: the `Schedule` and its spawned experiment
+are both supported, two links of one cause. These runs were seen, so this is a regression check, not held-out evidence.

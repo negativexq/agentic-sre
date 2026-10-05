@@ -849,3 +849,14 @@ A full `HOLDOUT` (eight variants, about 2.5 hours) for every engine change is mo
    seeds, engine frozen by commit), scored as before.
 3. **Full `HOLDOUT`:** when several changes have accumulated, before a release, or after any change to the lab (Tempo,
    harness, alert rules).
+
+## 24. Tenth HOLDOUT, targeted: pre-registration for C3a (2026-10-05, frozen before the run)
+
+Per §23: the variants the message-delivery relation (m21 §15) can reach, `scheduled-b` (a `Schedule` stressing
+`order-service`, whose consumer lags) seeds 251–253 and `competing-b` (a pod-kill of the consumer beside the loss)
+seeds 254–256; suites `holdout10-<variant>`, the engine frozen at the commit in the manifests.
+
+- **Acceptance:** the frozen bar.
+- **C3a confirmation:** in every incident of these runs, diagnosed with and without the relation on the same stored
+  run, no root moves to an actor off the chain, and no new false strong authority or false `RESOLVED`. Reported beside
+  it: the lag incidents (`KafkaConsumerLag`, `OrderWorkerLagHigh`) whose root is the run's own cause, with and without.

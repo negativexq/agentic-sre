@@ -1582,3 +1582,12 @@ Unit tests per witness kind; offline replay of every stored run with the field o
 version without it, and every executing instance one of the chain's `execution` or `target_effect` actors (or the
 experiments a `Schedule` in the chain spawned), none off the chain. No live `HOLDOUT` is needed for a field that changes
 no judgement; the next full `HOLDOUT` reports it beside the scores.
+
+### 17.6 Implementation and validation (2026-10-05, owner-approved)
+
+`Diagnosis.executing_instances` (`packages/rca/executing.py`), engine 2.2.1 (a patch: no digest moves). The fault
+witness names the experiment instance, its exact pod and `[Applied, Recovered]`; the rollout witnesses name the
+ReplicaSet that owns the witnessed pod by UID, over the pod's life, and nothing when that ReplicaSet is not in the
+evidence; the quota witness names the rejected subject. Offline over every stored testbed run, the engine on `main`
+(2.2.0) against this one: **1,333 of 1,333 digests equal**; **254 incidents name an executing instance, all 254 on
+the chain** (the chain's execution link, its target, or an experiment its `Schedule` spawned), none off it.

@@ -1519,3 +1519,12 @@ The seven remaining unknowns on the chain have no fault call or no baseline call
 The offline replay of every stored run first: no root moves off the chain, no new witness off the chain, no new false
 strong authority or false `RESOLVED`. Then a targeted `HOLDOUT` of the variants it reaches (`dependency-b`,
 `direct-b`, `scheduled-b`, `config-c`, `negative-c`) with new seeds, under the same criteria as §12.4, §13.4 and §14.4.
+
+### 16.5 Offline regression replay (2026-10-05, owner-approved)
+
+Implemented for §12, §13 and §14. Every stored testbed run (1,333 incidents), the engine on `main` against this one:
+**10 new witnesses, all on the chain** (6 of §12, 4 of §14), **2 lost, both on the chain** (one of §12, one of §14:
+their old window happened to hold a usable baseline that the five minutes before the change do not), **none off the
+chain**; the tier rises `SUPPORTED` → `STRONG` in 10 incidents and falls in 2; one root moves from another actor to the
+run's cause; no root moves off the chain, no resolution changes. A regression check on seen runs, not held-out
+evidence.

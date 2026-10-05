@@ -778,3 +778,30 @@ variants, seeds `dependency-b` 203–205, `direct-b` 206–208, `scheduled-b` 20
   cases are `config-b` and `negative-b` (a missing image).
 - Reported beside it: C1's and C5a's witnesses, which must still hold their criteria, and execution-witness recall per
   family with §20's grader.
+
+### 21.1 Eighth HOLDOUT result (2026-10-05, engine frozen at `1bd368d4`, 24 runs)
+
+Measured once, reported as it is (§12.2.6), scored with §20's grader.
+
+| Variant | Valid | Cause / instance | Execution witness / effect link | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `dependency-b` | 3/3 | 1.0 / 1.0 | 0.67 / 0.67 | 0 / 0 / 0 | |
+| `direct-b` | 3/3 | 1.0 / 1.0 | 1.0 / 0.67 | 0 / 0 / 0 | |
+| `scheduled-b` | 3/3 | 1.0 / 1.0 | 0.67 / 0.67 | 0 / 0 / 0 | |
+| `config-b` (missing image) | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | no failed-rollout witness |
+| `negative-b` (missing image) | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | decoy named 0; no failed-rollout witness |
+| `competing-b` | 3/3 | 1.0 / 1.0 | 0.67 / 0.67 | 0 / 0 / 0 | group recall 1.0 |
+| `config-c` | 3/3 | 1.0 / 1.0 | **1.0** / 0 | 0 / 0 / 0 | 6 rollout witnesses, all on the chain |
+| `negative-c` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | decoy named 0; 2 rollout witnesses on the chain, outside the diagnoses the run collected |
+
+**The acceptance bar holds**: 24 of 24 valid, no false strong authority, no false `RESOLVED`, the decoy never named;
+23 of 24 runs read their traces without a failed read (`competing-b` #0 lost 2 of 90). C1 (11 witnesses) and C5a (8)
+held: none off the chain.
+
+**C5b was not exercised, so it is neither confirmed nor contradicted.** The world of every `config-b` run had what
+m21 §14.2 asks for (in #0: three `Failed` warnings of the new pod's own UID, the old pod deleted two seconds after the
+change, eight order calls to `payment-service` failing with no server span, a calm baseline). The rule never looked:
+the implementation accepts only a `SPEC_CHANGE` origin, while an image change is recorded as `IMAGE_CHANGE`. The
+contract says "a `Deployment` version whose generation rose", which an image change is; the implementation was
+narrower than the text, and the `DEV` scenario (an environment value) could not show it. The same restriction applies
+to §13's rule. Recorded as a defect found by this `HOLDOUT`; the fix is measured on a new one.

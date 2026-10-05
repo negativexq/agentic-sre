@@ -1395,3 +1395,11 @@ Wired as `m21.support.observed-failed-rollout.v1` beside §13 for `Deployment` h
 read together for strong authority; each keeps its own record in the audit). `DEV` replay (`dev5b-config-d` and the six
 trace suites, 147 incidents): **2 new witnesses, both on the chain** (`dev5b-config-d` #2, `payment-service` →
 `order-service`), **none off it**; no resolution changed.
+
+### 14.6 Eighth HOLDOUT: not exercised (2026-10-05)
+
+The held-out failed rollouts (`config-b`, `negative-b`) got no witness because the implementation of §13 and §14
+accepts only a `SPEC_CHANGE` origin, and an image change is an `IMAGE_CHANGE` (testbed-scenarios-design §21.1). The text
+of §13.2.1 ("a version whose `metadata.generation` rose") includes it; the implementation is brought to the text by
+accepting every change finding of the `Deployment` that changes its pod template, and C5b is measured again on a new
+`HOLDOUT`.

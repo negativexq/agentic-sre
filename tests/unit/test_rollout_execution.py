@@ -57,7 +57,8 @@ def call(i: int, minute: float, seconds: float, pod: str) -> list[TraceSpanObser
     ]
 
 
-BASELINE = [s for i in range(5) for s in call(i, 1.5 + i * 0.5, 0.005, OLD_POD)]
+# m21 §16: the baseline is the five minutes before the change (minute 9.5)
+BASELINE = [s for i in range(5) for s in call(i, 5.0 + i * 0.5, 0.005, OLD_POD)]
 SLOW = [s for i in range(4) for s in call(10 + i, 10.0 + i * 0.2, 1.5, NEW_POD)]
 FAST = [s for i in range(4) for s in call(10 + i, 10.0 + i * 0.2, 0.005, NEW_POD)]
 
@@ -198,7 +199,7 @@ def unserved(i: int, minute: float, failed: bool) -> list[TraceSpanObservation]:
     return [client, server]
 
 
-CALM = [s for i in range(5) for s in unserved(i, 1.5 + i * 0.5, failed=False)]
+CALM = [s for i in range(5) for s in unserved(i, 5.0 + i * 0.5, failed=False)]
 OUTAGE = [s for i in range(4) for s in unserved(10 + i, 10.0 + i * 0.2, failed=True)]
 
 
@@ -266,7 +267,7 @@ def test_no_failed_rollout_without_the_new_pods_own_failure_or_the_old_revisions
 
 
 def test_failures_that_were_already_there_before_the_change_are_no_effect() -> None:
-    failing_before = [s for i in range(5) for s in unserved(i, 1.5 + i * 0.5, failed=True)]
+    failing_before = [s for i in range(5) for s in unserved(i, 5.0 + i * 0.5, failed=True)]
     assert judge_failed(failing_before + OUTAGE).status is RootSupportStatus.NOT_FIRED
     assert (
         judge_failed(CALM).status is RootSupportStatus.NOT_FIRED

@@ -36,9 +36,8 @@ from packages.rca.runtime_propagation import (
     RuntimePropagationEdge,
 )
 from packages.rca.service_effect import (
-    BASELINE_FROM,
-    BASELINE_TO,
     SERVICE_EFFECT,
+    baseline_before,
     call_pairs,
     fault_calls,
     service_effect,
@@ -212,9 +211,12 @@ def _service_effect_witness(
     applied: datetime,
     recovered: datetime,
     spans: Sequence[TraceSpanObservation],
+    first_execution: datetime | None = None,
 ) -> list[CausalWitness]:
     """m21 contract §12: the target is not itself a symptom, but a declared symptom service's calls to the exact
-    target pod show the effect (non-success, or latency far above the baseline). The witness covers that service."""
+    target pod show the effect (non-success, or latency far above the baseline). The witness covers that service.
+    The baseline is the calls just before the fault's first execution (§16), ``applied`` when none is given."""
+    first_execution = first_execution or applied
     assert holder.episode_onset is not None
     onset = holder.episode_onset
     target_service = target_pod.name.rsplit("-", 2)[0]
@@ -230,7 +232,7 @@ def _service_effect_witness(
             target_pod=target_pod.name,
             start=applied,
             end=recovered,
-            baseline=(onset - BASELINE_FROM, onset - BASELINE_TO),
+            baseline=baseline_before(first_execution),
             parameters=SERVICE_EFFECT,
         )
         if holds is not True:
@@ -299,7 +301,18 @@ def fault_execution(
             and _same_episode(holder, h)
             and h.causal_actor in holder.symptom_entities
         }
-        for injection in _fault_executions(holder, hypotheses):
+        injections = _fault_executions(holder, hypotheses)
+        # §16: the baseline ends at the first execution of any experiment this holder carries
+        first_execution = min(
+            (
+                at
+                for injection in injections
+                for target in injection.details.get("execution_targets", ())
+                if (at := _instant(target["applied_at"])) is not None
+            ),
+            default=None,
+        )
+        for injection in injections:
             for target in injection.details.get("execution_targets", ()):
                 namespace, _, rest = str(target["target"]).partition("/")
                 pod = pods.get((namespace, rest.partition("/")[0]))
@@ -323,6 +336,7 @@ def fault_execution(
                             applied,
                             recovered,
                             spans,
+                            first_execution,
                         )
                     continue
                 effects = [
@@ -598,7 +612,7 @@ def _unserved_witnesses(
     assert holder.episode_onset is not None and origin.at is not None
     onset = holder.episode_onset
     target_service = pod.name.rsplit("-", 2)[0]
-    baseline = (onset - BASELINE_FROM, min(onset - BASELINE_TO, origin.at))
+    baseline = baseline_before(origin.at)  # §16: the calls just before the change
     served = {(s.trace_id, s.parent_span_id) for s in spans if s.span_kind == "SERVER"}
     witnesses = []
     for symptom in holder.symptom_entities:
@@ -677,7 +691,7 @@ def _rollout_effect_witnesses(
     onset = holder.episode_onset
     target_service = pod.name.rsplit("-", 2)[0]
     # baseline calls began before the change: calls to the previous revision (§13.2)
-    baseline = (onset - BASELINE_FROM, min(onset - BASELINE_TO, origin.at))
+    baseline = baseline_before(origin.at)  # §16: the calls just before the change
     witnesses = []
     for symptom in holder.symptom_entities:
         if symptom.kind != "Service" or symptom.name == target_service:

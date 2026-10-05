@@ -1407,3 +1407,9 @@ accepting every change finding of the `Deployment` that changes its pod template
 The implementation now accepts `SPEC_CHANGE`, `IMAGE_CHANGE` and `ROLLOUT_RESTART` origins for both rules (a
 `SCALE_CHANGE` rolls nothing out). `DEV` replay unchanged: §13 three witnesses, §14 two, all on the chain; the
 harness's own restarts are now candidates and give no witness.
+
+### 14.7 HOLDOUT confirmation (2026-10-05)
+
+Confirmed on the ninth testbed `HOLDOUT` (testbed-scenarios-design §22.1), the engine frozen at `ca29eeea`: 24 of 24
+valid; the held-out failed rollouts (a missing image) got 12 witnesses in 4 of 6 runs, each naming the run's own change,
+none off the chain; no false strong authority or false `RESOLVED`.

@@ -813,3 +813,26 @@ As §21 in every point, with the engine that accepts every template-changing ori
 242–244, `config-c` 245–247, `negative-c` 248–250; suites `holdout9-<variant>`. C5b is exercised only if a
 `FAILED_ROLLOUT_EFFECT_AT_CALLER` witness can be judged: if `config-b` and `negative-b` produce none, it stays neither
 confirmed nor contradicted, and the reason is recorded per run.
+
+### 22.1 Ninth HOLDOUT result (2026-10-05, engine frozen at `ca29eeea`, 24 runs)
+
+Measured once, reported as it is (§12.2.6), scored with §20's grader.
+
+| Variant | Valid | Cause / instance | Execution witness / effect link | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `dependency-b` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | |
+| `direct-b` | 3/3 | 1.0 / 1.0 | 1.0 / 1.0 | 0 / 0 / 0 | |
+| `scheduled-b` | 3/3 | 1.0 / 1.0 | 0.33 / 0.33 | 0 / 0 / 0 | |
+| `config-b` (missing image) | 3/3 | 1.0 / 1.0 | **0.33** / 0 | 0 / 0 / 0 | failed-rollout witnesses in 2 runs (4), all on the chain |
+| `negative-b` (missing image) | 3/3 | 1.0 / 1.0 | **0.67** / 0 | 0 / 0 / 0 | decoy named 0; failed-rollout witnesses in 2 runs (8), all on the chain |
+| `competing-b` | 3/3 | 0.83 / 0.83 | 0.33 / 0.33 | 0 / 0 / 0 | group recall 1.0 |
+| `config-c` | 3/3 | 1.0 / 1.0 | 1.0 / 0 | 0 / 0 / 0 | 7 rollout witnesses, all on the chain |
+| `negative-c` | 3/3 | 1.0 / 1.0 | 0.33 / 0 | 0 / 0 / 0 | decoy named 0; 5 rollout witnesses, all on the chain |
+
+**The acceptance bar holds**: 24 of 24 valid, no false strong authority, no false `RESOLVED`, the decoy never named;
+23 of 24 runs read their traces without a failed read (`competing-b` #1 lost 28 of 120).
+
+**C5b is confirmed** (m21 §14.4, §22): 12 `FAILED_ROLLOUT_EFFECT_AT_CALLER` witnesses in 328 diagnoses, in 4 of the 6
+held-out failed-rollout runs, each naming the run's own image change, none off the chain. C5a (12 witnesses) and C1
+(2) held, none off the chain. The `dependency-b` execution witness was 0 this time and the competing second cause was
+missed once (0.83); both are recorded, not selected from.

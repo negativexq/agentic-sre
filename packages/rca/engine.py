@@ -114,9 +114,6 @@ from packages.rca.topology import (
     with_runtime_propagation,
 )
 
-# m21 §15 (proposed): observed message delivery as a structural path; off until the owner adopts it
-MESSAGE_DELIVERY = False
-
 
 @dataclass
 class Case:
@@ -304,8 +301,8 @@ def build_case(
         incident_onset=symptoms.onset,
     )
     topology = with_runtime_propagation(topology, runtime_propagation)
-    if MESSAGE_DELIVERY:
-        topology = with_message_delivery(topology, trace_index, history)
+    # m21 §15: observed message delivery, producer -> consumer, as a structural path only
+    topology = with_message_delivery(topology, trace_index, history)
     entities = symptom_entities(alerts, topology)
     context = Context(
         symptoms=symptoms,

@@ -1,6 +1,6 @@
 # M21 Causal Semantics Contract — actor-specific claims
 
-Contract version: `m21.v3`; engine `2.1.0`; D1 remains `m21.support.change-onset-path.v2`.
+Contract version: `m21.v3`; engine `2.2.0` (2.1.0 until 2026-10-05, roadmap F1); D1 remains `m21.support.change-onset-path.v2`.
 Authorized replacement of the conflicting frozen v1 clauses, 2026-09-28.
 The v2 clauses below govern current code. The original v1 text is retained below
 as historical rationale; its default competition, D1 audit-only, dominance and

@@ -177,7 +177,9 @@ class Investigator(Protocol):
 # The deterministic RCA semantics a run was diagnosed with, persisted on every
 # revision. Bump it with any change that can alter a diagnosis from the same
 # evidence; replay refuses a run recorded under another version (M20.3a).
-RCA_ENGINE_VERSION = "2.1.0"
+# Rule (owner, 2026-10-05; roadmap F1): minor for a change that can alter a diagnosis,
+# patch for one that cannot change any digest, major when the contract version moves.
+RCA_ENGINE_VERSION = "2.2.0"
 
 
 @dataclass(frozen=True)

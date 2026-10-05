@@ -1413,3 +1413,47 @@ harness's own restarts are now candidates and give no witness.
 Confirmed on the ninth testbed `HOLDOUT` (testbed-scenarios-design §22.1), the engine frozen at `ca29eeea`: 24 of 24
 valid; the held-out failed rollouts (a missing image) got 12 witnesses in 4 of 6 runs, each naming the run's own change,
 none off the chain; no false strong authority or false `RESOLVED`.
+
+## 15. Observed message delivery as a structural path (C3a; proposal, 2026-10-05, awaiting the owner)
+
+### 15.1 Measured problem
+
+A fault on a producer cannot reach a consumer-side symptom: the topology has no producer → consumer relation (roadmap
+C3, run `indep1`). On `DEV` the same holds: in `tr5-slice2` (CPU stress on `order-service`), the lag incidents of
+`order-worker` (`KafkaConsumerLag`, `OrderWorkerLagHigh`) list the stress experiment only as `UNLINKED` context, and
+their root cause is empty.
+
+The traces show the delivery per message. The workload emits no `PRODUCER` span: the order service injects its request
+context into the message, so each `order-worker` `CONSUMER` span's direct parent is the producing request's span in
+`order-service` (391 of 391 consumer spans on `DEV`). This is Topic C's MSG-1 (message-level parent/child), with the
+parent span of the producing request rather than of kind `PRODUCER`.
+
+### 15.2 Relation (`delivers_to`)
+
+1. **Derived from captured spans only:** a `CONSUMER` span whose direct parent (same trace, not a conflicting key) is a
+   span of another service, starting no later than the consumer. Each pair adds `delivers_to` edges from the parent's
+   endpoints to the consumer's, with both spans as edge evidence.
+2. **Endpoints:** the `Deployment` named by the span's binding when verified present at the span's time (as runtime
+   propagation), and the `Pod` of the exact name observed present at that time. Runtime propagation also requires the pod
+   UID because it can exclude; this relation only opens a path, and the spans carry no pod UID.
+3. **Semantics:** forward only, producer → consumer (a consumer's failure never travels back). A **structural path**
+   for D1 (a possible initiating cause) and nothing else: it excludes no actor, retires no claim, grants no execution
+   witness and no strong authority. Topic C's exclusion rule (`m21.async-propagated-effect.v1`) and its owner
+   decisions are unchanged; lag or silence stays neutral for exclusion.
+4. **Not covered:** destination-level co-occurrence (MSG-3), span links (MSG-2, none emitted here), a broker as root.
+
+### 15.3 Exploratory shadow on `DEV` (run before this text, stated as such)
+
+Every `DEV` incident (the six trace suites and `dev5b-config-d`, 147) diagnosed with and without the relation: **5
+change, all `tr5-slice2` lag incidents**: in 4 the root moves from none to the run's own stress experiment
+(`SUPPORTED`, resolution `INSUFFICIENT_EVIDENCE` → `AMBIGUOUS`), in 1 to the same experiment as `UNESTABLISHED`. **No
+other incident changes; no root moves to an actor off the chain.** An earlier draft admitted pods only with a UID and
+linked nothing (the stress experiment disrupts the pod, which never reached the `Deployment`-level edge).
+
+### 15.4 Measurement, pre-registered
+
+Hard criteria: no incident's root moves to an actor off the chain because of the relation, and no new false strong
+authority or false `RESOLVED`. Confirmed once on a new `HOLDOUT` with the engine frozen, the relation on; the held-out
+cases are the variants whose cause sits on the producer and raises consumer lag. `scheduled-b` (a `Schedule` stressing
+`order-service`) is one; its lag incidents are outside its scored alert set, so the measurement reads every incident of
+the run whose alerts are the lag alerts and reports whether its root is the run's own cause, beside the usual scores.

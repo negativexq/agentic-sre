@@ -16,9 +16,23 @@ from packages.rca.model import (
     Edge,
     EntityRef,
     ObjectVersion,
+    TraceSpanObservation,
 )
-from packages.rca.runtime_evidence import RuntimeKubernetesBinding
-from packages.rca.runtime_propagation import RuntimeBindingVerificationState, RuntimePropagation
+from packages.rca.runtime_evidence import RuntimeKubernetesBinding, trace_kubernetes_binding
+from packages.rca.runtime_graph import (
+    CanonicalTraceIndex,
+    RuntimeSpanKind,
+    normalize_runtime_span_kind,
+)
+from packages.rca.runtime_propagation import (
+    RuntimeBindingVerificationState,
+    RuntimeEntityState,
+    RuntimePropagation,
+    verify_runtime_binding,
+)
+
+_VERIFIED = RuntimeBindingVerificationState.VERIFIED
+_PRESENT = RuntimeEntityState.PRESENT
 
 WORKLOAD_KINDS = frozenset({"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"})
 _CHAOS_TARGET = re.compile(r"apply chaos for ([a-z0-9.-]+)/([a-z0-9.-]+)", re.IGNORECASE)
@@ -50,6 +64,13 @@ RELATION_SEMANTICS: dict[str, RelationSemantics] = {
         backward=False,
         forward_relation="runtime_propagates",
         backward_relation="runtime_affected_by",
+    ),
+    "delivers_to": RelationSemantics(
+        "observed message from producer to consumer (m21 §15)",
+        forward=True,
+        backward=False,
+        forward_relation="delivers_to",
+        backward_relation="delivered_from",
     ),
     "owned_by": RelationSemantics(
         "owner and managed child",
@@ -640,3 +661,69 @@ __all__ = [
     "is_chaos_kind",
     "pod_workload_name",
 ]
+
+
+def with_message_delivery(
+    topology: Topology,
+    index: CanonicalTraceIndex,
+    history: Mapping[EntityRef, Sequence[ObjectVersion]],
+) -> Topology:
+    """m21 §15: a consumer span whose direct parent is a span of another service is that message's delivery.
+
+    The parent carries the producing request's context into the message, so the pair is per message (MSG-1 of
+    Topic C, whatever the parent span's kind). Both ends are admitted only at positively verified binding levels, as
+    for runtime propagation. The relation is a structural path for a possible cause: it excludes nothing and proves
+    no execution.
+    """
+
+    def endpoints(span: TraceSpanObservation) -> tuple[EntityRef, ...]:
+        binding = trace_kubernetes_binding(span)
+        verification = verify_runtime_binding(binding, at=span.start_at, history=history)
+        if binding is None or verification is None:
+            return ()
+        refs = []
+        if binding.deployment and verification.deployment_verification is _VERIFIED:
+            refs.append(
+                EntityRef(kind="Deployment", name=binding.deployment, namespace=binding.namespace)
+            )
+        if binding.pod and verification.pod is not None and verification.pod.state is _PRESENT:
+            # support only, so the exact pod name observed present at the span's time is enough; spans here carry
+            # no pod UID, and synchronous propagation, which can exclude, keeps requiring one
+            refs.append(EntityRef(kind="Pod", name=binding.pod, namespace=binding.namespace))
+        return tuple(refs)
+
+    evidence: dict[tuple[EntityRef, str, EntityRef], set[str]] = {}
+    edges = set(topology.edges)
+    for consumer in index.spans.values():
+        if normalize_runtime_span_kind(consumer.span_kind) is not RuntimeSpanKind.CONSUMER:
+            continue
+        if consumer.parent_span_id is None:
+            continue
+        key = (consumer.trace_id, consumer.parent_span_id)
+        parent = index.spans.get(key)
+        if parent is None or key in index.conflicting_keys:
+            continue
+        if parent.service.strip() == consumer.service.strip():
+            continue
+        if parent.start_at > consumer.start_at:
+            continue  # a message is consumed after it was produced
+        for source in endpoints(parent):
+            for target in endpoints(consumer):
+                edge = Edge(source=source, relation="delivers_to", target=target)
+                edges.add(edge)
+                evidence.setdefault((source, edge.relation, target), set()).update(
+                    (parent.evidence_id, consumer.evidence_id)
+                )
+    if not evidence:
+        return topology
+    result = Topology(
+        sorted(
+            edges, key=lambda edge: (edge.source.canonical, edge.relation, edge.target.canonical)
+        ),
+        topology.latest,
+    )
+    result.edge_evidence = {
+        **topology.edge_evidence,
+        **{key: tuple(sorted(ids)) for key, ids in evidence.items()},
+    }
+    return result

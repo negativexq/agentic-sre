@@ -93,9 +93,11 @@ def holder() -> Hypothesis:
     )
 
 
-def possible(status: RootSupportStatus = RootSupportStatus.FIRED) -> RootSupportRecord:
+def possible(
+    status: RootSupportStatus = RootSupportStatus.FIRED, kind: FindingKind = FindingKind.SPEC_CHANGE
+) -> RootSupportRecord:
     change = Finding(
-        kind=FindingKind.SPEC_CHANGE,
+        kind=kind,
         entity=DEPLOYMENT,
         at=CHANGE_AT,
         summary="Deployment spec changed",
@@ -269,3 +271,10 @@ def test_failures_that_were_already_there_before_the_change_are_no_effect() -> N
     assert (
         judge_failed(CALM).status is RootSupportStatus.NOT_FIRED
     )  # nothing failed during the outage
+
+
+def test_an_image_change_rolls_out_as_a_spec_change_does_and_a_scale_change_does_not() -> None:
+    image = judge(BASELINE + SLOW, support=possible(kind=FindingKind.IMAGE_CHANGE))
+    scale = judge(BASELINE + SLOW, support=possible(kind=FindingKind.SCALE_CHANGE))
+    assert image.status is RootSupportStatus.FIRED
+    assert scale.status is RootSupportStatus.NOT_FIRED

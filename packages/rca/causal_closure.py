@@ -61,6 +61,14 @@ EXECUTION_RULES = (
 # m21 §14.2: the new pod's own records that it never served, and how soon after the change the old revision goes
 FAILED_POD_REASONS = frozenset({"BackOff", "Failed", "ErrImagePull", "ImagePullBackOff"})
 OLD_REVISION_REMOVAL = timedelta(minutes=5)
+# m21 §13.2.1, §14.6: a change that rolls the pod template out, whatever part of it changed (a replica count does not)
+ROLLOUT_ORIGIN_KINDS = frozenset(
+    {
+        FindingKind.SPEC_CHANGE,
+        FindingKind.IMAGE_CHANGE,
+        FindingKind.ROLLOUT_RESTART,
+    }
+)
 # m21 §13.2: the ReplicaSet a Deployment change created is first observed within this long of the change.
 ROLLOUT_REPLICASET_WINDOW = timedelta(seconds=10)
 # An execution interval may end this long before the incident began and still be its execution.
@@ -432,7 +440,7 @@ def rollout_execution(
         ]
         origins = {w.origin.evidence_ids: w.origin for w in possible.witnesses}
         for origin in origins.values():
-            if origin.kind is not FindingKind.SPEC_CHANGE or origin.at is None:
+            if origin.kind not in ROLLOUT_ORIGIN_KINDS or origin.at is None:
                 continue
             for rs_created in replicasets:
                 if abs(rs_created.observed_at - origin.at) > ROLLOUT_REPLICASET_WINDOW:
@@ -511,7 +519,7 @@ def failed_rollout(
         ]
         origins = {w.origin.evidence_ids: w.origin for w in possible.witnesses}
         for origin in origins.values():
-            if origin.kind is not FindingKind.SPEC_CHANGE or origin.at is None:
+            if origin.kind not in ROLLOUT_ORIGIN_KINDS or origin.at is None:
                 continue
             for rs_uid, rs_created in owned.items():
                 if (

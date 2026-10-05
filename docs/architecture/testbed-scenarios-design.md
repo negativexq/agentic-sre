@@ -836,3 +836,40 @@ Measured once, reported as it is (§12.2.6), scored with §20's grader.
 held-out failed-rollout runs, each naming the run's own image change, none off the chain. C5a (12 witnesses) and C1
 (2) held, none off the chain. The `dependency-b` execution witness was 0 this time and the competing second cause was
 missed once (0.83); both are recorded, not selected from.
+
+## 23. Two-layer validation of an engine change (owner-approved 2026-10-05)
+
+A full `HOLDOUT` (eight variants, about 2.5 hours) for every engine change is more than each change needs. From now on:
+
+1. **Offline regression replay, every change, minutes:** the new engine against the previous one on every stored `DEV`
+   and `HOLDOUT` run of the testbed (each run keeps its manifest, traces and change journal), per incident: root cause,
+   tier, display, resolution, witnesses. It answers whether anything else moved; it is not held-out evidence, since
+   those runs were seen.
+2. **Targeted live `HOLDOUT`, new seeds:** only the variants the change can reach, pre-registered as before (criteria,
+   seeds, engine frozen by commit), scored as before.
+3. **Full `HOLDOUT`:** when several changes have accumulated, before a release, or after any change to the lab (Tempo,
+   harness, alert rules).
+
+## 24. Tenth HOLDOUT, targeted: pre-registration for C3a (2026-10-05, frozen before the run)
+
+Per §23: the variants the message-delivery relation (m21 §15) can reach, `scheduled-b` (a `Schedule` stressing
+`order-service`, whose consumer lags) seeds 251–253 and `competing-b` (a pod-kill of the consumer beside the loss)
+seeds 254–256; suites `holdout10-<variant>`, the engine frozen at the commit in the manifests.
+
+- **Acceptance:** the frozen bar.
+- **C3a confirmation:** in every incident of these runs, diagnosed with and without the relation on the same stored
+  run, no root moves to an actor off the chain, and no new false strong authority or false `RESOLVED`. Reported beside
+  it: the lag incidents (`KafkaConsumerLag`, `OrderWorkerLagHigh`) whose root is the run's own cause, with and without.
+
+### 24.1 Tenth HOLDOUT result (2026-10-05, engine frozen at `b660b782`, 6 runs)
+
+| Variant | Valid | Cause / instance | Execution witness | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `scheduled-b` | 3/3 | 1.0 / 1.0 | 0.33 | 0 / 0 / 0 | |
+| `competing-b` | 3/3 | 1.0 / 1.0 | 0.33 | 0 / 0 / 0 | group recall 1.0 |
+
+**The acceptance bar holds; C3a is confirmed** on this small set: of the 30 incidents of the six runs, diagnosed with
+and without the relation, 2 change (`scheduled-b` #0, two lag incidents), the root moving from none to an experiment
+the run's `Schedule` spawned (`SUPPORTED`, shown `COMPETING` beside the `Schedule`); nothing moves off the chain, and no
+false strong authority or false `RESOLVED` appears. The other lag incidents of these runs did not reach the relation
+(their captured spans held no delivery from the stressed pod, or the incident had no lag).

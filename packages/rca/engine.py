@@ -107,7 +107,12 @@ from packages.rca.timing_stability import (
     derive_timing_masks,
     source_alert_episodes,
 )
-from packages.rca.topology import Topology, derive_edges, with_runtime_propagation
+from packages.rca.topology import (
+    Topology,
+    derive_edges,
+    with_message_delivery,
+    with_runtime_propagation,
+)
 
 
 @dataclass
@@ -296,6 +301,8 @@ def build_case(
         incident_onset=symptoms.onset,
     )
     topology = with_runtime_propagation(topology, runtime_propagation)
+    # m21 §15: observed message delivery, producer -> consumer, as a structural path only
+    topology = with_message_delivery(topology, trace_index, history)
     entities = symptom_entities(alerts, topology)
     context = Context(
         symptoms=symptoms,

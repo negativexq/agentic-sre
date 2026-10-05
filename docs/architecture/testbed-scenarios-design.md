@@ -836,3 +836,16 @@ Measured once, reported as it is (§12.2.6), scored with §20's grader.
 held-out failed-rollout runs, each naming the run's own image change, none off the chain. C5a (12 witnesses) and C1
 (2) held, none off the chain. The `dependency-b` execution witness was 0 this time and the competing second cause was
 missed once (0.83); both are recorded, not selected from.
+
+## 23. Two-layer validation of an engine change (owner-approved 2026-10-05)
+
+A full `HOLDOUT` (eight variants, about 2.5 hours) for every engine change is more than each change needs. From now on:
+
+1. **Offline regression replay, every change, minutes:** the new engine against the previous one on every stored `DEV`
+   and `HOLDOUT` run of the testbed (each run keeps its manifest, traces and change journal), per incident: root cause,
+   tier, display, resolution, witnesses. It answers whether anything else moved; it is not held-out evidence, since
+   those runs were seen.
+2. **Targeted live `HOLDOUT`, new seeds:** only the variants the change can reach, pre-registered as before (criteria,
+   seeds, engine frozen by commit), scored as before.
+3. **Full `HOLDOUT`:** when several changes have accumulated, before a release, or after any change to the lab (Tempo,
+   harness, alert rules).

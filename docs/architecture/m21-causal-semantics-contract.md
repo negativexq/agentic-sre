@@ -1473,3 +1473,9 @@ its spawned experiments; **no root moves off the chain**. Two `holdout3-competin
 `Deployment/order-service` as `UNESTABLISHED` (a propagation link of the chain, not its cause; shown as not
 established). Many `scheduled-b` displays move from `SINGLE` to `COMPETING`: the `Schedule` and its spawned experiment
 are both supported, two links of one cause. These runs were seen, so this is a regression check, not held-out evidence.
+
+### 15.7 HOLDOUT confirmation (2026-10-05)
+
+Confirmed on the targeted tenth `HOLDOUT` (testbed-scenarios-design §24.1): 6 of 6 valid, 2 of 30 incidents rooted at
+the run's own spawned experiment through the relation, none moved off the chain, no false strong authority or false
+`RESOLVED`. A small set, as §23 intends for a targeted run.

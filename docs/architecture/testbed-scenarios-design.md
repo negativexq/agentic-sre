@@ -860,3 +860,16 @@ seeds 254–256; suites `holdout10-<variant>`, the engine frozen at the commit i
 - **C3a confirmation:** in every incident of these runs, diagnosed with and without the relation on the same stored
   run, no root moves to an actor off the chain, and no new false strong authority or false `RESOLVED`. Reported beside
   it: the lag incidents (`KafkaConsumerLag`, `OrderWorkerLagHigh`) whose root is the run's own cause, with and without.
+
+### 24.1 Tenth HOLDOUT result (2026-10-05, engine frozen at `b660b782`, 6 runs)
+
+| Variant | Valid | Cause / instance | Execution witness | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `scheduled-b` | 3/3 | 1.0 / 1.0 | 0.33 | 0 / 0 / 0 | |
+| `competing-b` | 3/3 | 1.0 / 1.0 | 0.33 | 0 / 0 / 0 | group recall 1.0 |
+
+**The acceptance bar holds; C3a is confirmed** on this small set: of the 30 incidents of the six runs, diagnosed with
+and without the relation, 2 change (`scheduled-b` #0, two lag incidents), the root moving from none to an experiment
+the run's `Schedule` spawned (`SUPPORTED`, shown `COMPETING` beside the `Schedule`); nothing moves off the chain, and no
+false strong authority or false `RESOLVED` appears. The other lag incidents of these runs did not reach the relation
+(their captured spans held no delivery from the stressed pod, or the incident had no lag).

@@ -279,3 +279,60 @@ def test_an_image_change_rolls_out_as_a_spec_change_does_and_a_scale_change_does
     scale = judge(BASELINE + SLOW, support=possible(kind=FindingKind.SCALE_CHANGE))
     assert image.status is RootSupportStatus.FIRED
     assert scale.status is RootSupportStatus.NOT_FIRED
+
+
+# ---- the executing instance beside the root cause (m21 §17) ----
+
+from packages.rca.executing import executing_instances  # noqa: E402
+from packages.rca.model import HypothesisResolutionAudit, ResolutionTrace  # noqa: E402
+
+
+def _trace(record: RootSupportRecord) -> ResolutionTrace:
+    audit = HypothesisResolutionAudit.model_construct(hypothesis_id="h1", root_support=(record,))
+    return ResolutionTrace.model_construct(hypothesis_audits=(audit,))
+
+
+def _rollout_record() -> tuple[RootSupportRecord, dict[EntityRef, list[ObjectVersion]]]:
+    record = judge(BASELINE + SLOW)
+    return record, history()
+
+
+def test_a_rollouts_executing_instance_is_the_replicaset_that_owns_the_witnessed_pod() -> None:
+    record, hist = _rollout_record()
+    actor = record.witnesses[0].actor
+    (instance,) = executing_instances(_trace(record), {actor}, hist)
+    assert instance.instance.kind == "ReplicaSet" and instance.instance_uid == "rs-1"
+    assert instance.target is not None and instance.target.name == "payment-service-new-1"
+
+
+def test_no_instance_for_another_actor_or_a_pod_whose_replicaset_is_not_in_the_evidence() -> None:
+    record, hist = _rollout_record()
+    other = EntityRef(kind="Deployment", name="other", namespace="shop")
+    assert executing_instances(_trace(record), {other}, hist) == ()
+    pods_only: dict[EntityRef, Any] = {ref: v for ref, v in hist.items() if ref.kind == "Pod"}
+    assert executing_instances(_trace(record), {record.witnesses[0].actor}, pods_only) == ()
+
+
+def test_a_witness_that_did_not_fire_names_nothing() -> None:
+    record, hist = _rollout_record()
+    not_fired = record.model_copy(update={"status": record.status.__class__("NOT_FIRED")})
+    assert executing_instances(_trace(not_fired), {record.witnesses[0].actor}, hist) == ()
+    assert executing_instances(None, {record.witnesses[0].actor}, hist) == ()
+
+
+def test_the_rollout_interval_is_the_pods_life() -> None:
+    record, hist = _rollout_record()
+    pod = next(ref for ref in hist if ref.kind == "Pod")
+    created = hist[pod][0]
+    gone = ObjectVersion(
+        entity=pod,
+        uid="pod-1",
+        observed_at=created.observed_at + timedelta(minutes=2),
+        body=created.body,
+        evidence_id="object:gone",
+        lifecycle=Lifecycle.DELETED,
+    )
+    (instance,) = executing_instances(
+        _trace(record), {record.witnesses[0].actor}, {**hist, pod: [created, gone]}
+    )
+    assert instance.started_at == created.observed_at and instance.ended_at == gone.observed_at

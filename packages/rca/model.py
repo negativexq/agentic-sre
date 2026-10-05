@@ -968,6 +968,20 @@ class RootSupportStatus(StrEnum):
     INAPPLICABLE = "INAPPLICABLE"
 
 
+class ExecutingInstance(BaseModel):
+    """What actually ran for a cause (m21 contract §17): named only by a fired execution witness."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    actor: EntityRef  # the cause whose witness names it
+    instance: EntityRef  # the experiment instance, the rollout's ReplicaSet, the rejected subject
+    instance_uid: str | None = None
+    target: EntityRef | None = None  # the exact pod the execution reached
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    rule_id: str
+    evidence_ids: tuple[str, ...] = ()
+
+
 class CausalWitness(BaseModel):
     """Actor-local, incident-anchored evidence; topology supports a possible cause."""
 
@@ -1830,6 +1844,10 @@ class Diagnosis(BaseModel):
     # Supported candidates not eligible to lead by temporal relevance (m21 contract §11): their effect ended
     # before the onset while a linked candidate is tied to it. Their claims are unchanged; presentation only.
     leading_actor_set_aside: tuple[EntityRef, ...] = ()
+    # Presentation, outside the epistemic digest (m21 contract §17): what ran for the leader (and for each
+    # candidate shown when competing), from fired execution witnesses only. Empty when none fired, and for
+    # documents written before it existed.
+    executing_instances: tuple[ExecutingInstance, ...] = ()
     # Provenance, outside the epistemic digest (late-evidence-design.md §4): per scope, whether the
     # window was observed continuously and whether transport was proven. Recorded by the control
     # plane, read by no rule yet. None for documents written before it existed and offline runs.

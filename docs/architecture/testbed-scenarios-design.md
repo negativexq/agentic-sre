@@ -881,3 +881,18 @@ Per §23, the variants the baseline change (m21 §16) can reach: `dependency-b` 
 the commit in the manifests. Acceptance: the frozen bar. Criteria as m21 §12.4, §13.4 and §14.4 (no witness off the
 chain, no strong claim on one, at least 90% of the valid runs with every trace read complete); reported beside them:
 execution-witness recall per variant against the earlier `HOLDOUT`s (for information, nothing selected from it).
+
+### 25.1 Eleventh HOLDOUT result (2026-10-05, engine frozen at `e25153c4`, 15 runs)
+
+| Variant | Valid | Cause / instance | Execution witness | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `dependency-b` | 3/3 | 1.0 / 1.0 | 0.67 | 0 / 0 / 0 | |
+| `direct-b` | 3/3 | 1.0 / 1.0 | 1.0 | 0 / 0 / 0 | |
+| `scheduled-b` | 3/3 | 1.0 / 1.0 | 0 | 0 / 0 / 0 | |
+| `config-c` | 3/3 | 1.0 / 1.0 | 0.67 | 0 / 0 / 0 | |
+| `negative-c` | 3/3 | 1.0 / 1.0 | 0.33 | 0 / 0 / 0 | decoy named 0 |
+
+**The acceptance bar holds and C16 is confirmed**: 15 of 15 valid, no false strong authority, no false `RESOLVED`, the
+decoy never named; 19 witnesses of the effect relations (§12: 11, §13: 8), none off the chain; 14 of 15 runs read
+their traces without a failed read (93%; `negative-c` #1 lost 16 of 48). `scheduled-b` still has no execution witness
+in this `HOLDOUT`; recorded, not selected from.

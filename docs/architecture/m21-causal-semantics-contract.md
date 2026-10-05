@@ -1528,3 +1528,8 @@ their old window happened to hold a usable baseline that the five minutes before
 chain**; the tier rises `SUPPORTED` → `STRONG` in 10 incidents and falls in 2; one root moves from another actor to the
 run's cause; no root moves off the chain, no resolution changes. A regression check on seen runs, not held-out
 evidence.
+
+### 16.6 HOLDOUT confirmation (2026-10-05)
+
+Confirmed on the targeted eleventh `HOLDOUT` (testbed-scenarios-design §25.1): 15 of 15 valid, 19 witnesses of §12 and
+§13, none off the chain, no false strong authority or false `RESOLVED`, 14 of 15 runs with every trace read complete.

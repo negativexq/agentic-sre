@@ -1457,3 +1457,9 @@ authority or false `RESOLVED`. Confirmed once on a new `HOLDOUT` with the engine
 cases are the variants whose cause sits on the producer and raises consumer lag. `scheduled-b` (a `Schedule` stressing
 `order-service`) is one; its lag incidents are outside its scored alert set, so the measurement reads every incident of
 the run whose alerts are the lag alerts and reports whether its root is the run's own cause, beside the usual scores.
+
+### 15.5 Engine wiring and `DEV` replay (2026-10-05, owner-approved)
+
+On by default (`engine.build_case` adds the relation after runtime propagation). `DEV` replay, the engine with and
+without it on the same 147 incidents: the same 5 changes as §15.3, all `tr5-slice2` lag incidents now rooted at the
+run's own stress experiment (4 `SUPPORTED`, 1 `UNESTABLISHED`), no other incident changed, nothing off the chain.

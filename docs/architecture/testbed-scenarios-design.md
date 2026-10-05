@@ -896,3 +896,18 @@ execution-witness recall per variant against the earlier `HOLDOUT`s (for informa
 decoy never named; 19 witnesses of the effect relations (§12: 11, §13: 8), none off the chain; 14 of 15 runs read
 their traces without a failed read (93%; `negative-c` #1 lost 16 of 48). `scheduled-b` still has no execution witness
 in this `HOLDOUT`; recorded, not selected from.
+
+## 26. Twelfth HOLDOUT, full: pre-registration (2026-10-05, frozen before the run)
+
+Per §23, a full measurement after several engine changes (C3a, C16) and the version raised to 2.2.0 (roadmap F1): the
+eight variants, seeds `dependency-b` 272–274, `direct-b` 275–277, `scheduled-b` 278–280, `config-b` 281–283,
+`negative-b` 284–286, `competing-b` 287–289, `config-c` 290–292, `negative-c` 293–295; suites `holdout12-<variant>`,
+engine 2.2.0 frozen at the commit in the manifests, scored with §20's grader.
+
+- **Acceptance:** the frozen bar (no false strong authority, no false `RESOLVED`, at least 90% valid, the decoy never
+  named).
+- **The effect relations (m21 §12, §13, §14):** no witness off the chain, no strong claim on one, at least 90% of the
+  valid runs with every trace read complete.
+- **Message delivery (m21 §15):** no incident's root is an actor off the chain.
+- Reported beside them, for information: cause, instance and execution-witness recall per variant against the earlier
+  `HOLDOUT`s, and the lag incidents rooted at the run's own cause.

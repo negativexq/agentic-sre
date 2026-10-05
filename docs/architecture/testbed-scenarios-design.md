@@ -805,3 +805,11 @@ the implementation accepts only a `SPEC_CHANGE` origin, while an image change is
 contract says "a `Deployment` version whose generation rose", which an image change is; the implementation was
 narrower than the text, and the `DEV` scenario (an environment value) could not show it. The same restriction applies
 to §13's rule. Recorded as a defect found by this `HOLDOUT`; the fix is measured on a new one.
+
+## 22. Ninth HOLDOUT: pre-registration for C5b, again (2026-10-05, frozen before the run)
+
+As §21 in every point, with the engine that accepts every template-changing origin (m21 §14.6): seeds `dependency-b`
+227–229, `direct-b` 230–232, `scheduled-b` 233–235, `config-b` 236–238, `negative-b` 239–241, `competing-b`
+242–244, `config-c` 245–247, `negative-c` 248–250; suites `holdout9-<variant>`. C5b is exercised only if a
+`FAILED_ROLLOUT_EFFECT_AT_CALLER` witness can be judged: if `config-b` and `negative-b` produce none, it stays neither
+confirmed nor contradicted, and the reason is recorded per run.

@@ -1403,3 +1403,7 @@ accepts only a `SPEC_CHANGE` origin, and an image change is an `IMAGE_CHANGE` (t
 of §13.2.1 ("a version whose `metadata.generation` rose") includes it; the implementation is brought to the text by
 accepting every change finding of the `Deployment` that changes its pod template, and C5b is measured again on a new
 `HOLDOUT`.
+
+The implementation now accepts `SPEC_CHANGE`, `IMAGE_CHANGE` and `ROLLOUT_RESTART` origins for both rules (a
+`SCALE_CHANGE` rolls nothing out). `DEV` replay unchanged: §13 three witnesses, §14 two, all on the chain; the
+harness's own restarts are now candidates and give no witness.

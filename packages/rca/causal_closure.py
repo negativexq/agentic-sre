@@ -51,7 +51,24 @@ EXPLANATION_RULE = "m21.explanation.observed-quota-rejection"
 SPAWN_EXPLANATION_RULE = "m21.explanation.controller-spawn"
 FAULT_EXECUTION_RULE = "m21.support.observed-fault-execution"
 ROLLOUT_EXECUTION_RULE = "m21.support.observed-rollout-execution"
-EXECUTION_RULES = (EXECUTION_RULE, FAULT_EXECUTION_RULE, ROLLOUT_EXECUTION_RULE)
+FAILED_ROLLOUT_RULE = "m21.support.observed-failed-rollout"
+EXECUTION_RULES = (
+    EXECUTION_RULE,
+    FAULT_EXECUTION_RULE,
+    ROLLOUT_EXECUTION_RULE,
+    FAILED_ROLLOUT_RULE,
+)
+# m21 §14.2: the new pod's own records that it never served, and how soon after the change the old revision goes
+FAILED_POD_REASONS = frozenset({"BackOff", "Failed", "ErrImagePull", "ImagePullBackOff"})
+OLD_REVISION_REMOVAL = timedelta(minutes=5)
+# m21 §13.2.1, §14.6: a change that rolls the pod template out, whatever part of it changed (a replica count does not)
+ROLLOUT_ORIGIN_KINDS = frozenset(
+    {
+        FindingKind.SPEC_CHANGE,
+        FindingKind.IMAGE_CHANGE,
+        FindingKind.ROLLOUT_RESTART,
+    }
+)
 # m21 §13.2: the ReplicaSet a Deployment change created is first observed within this long of the change.
 ROLLOUT_REPLICASET_WINDOW = timedelta(seconds=10)
 # An execution interval may end this long before the incident began and still be its execution.
@@ -423,7 +440,7 @@ def rollout_execution(
         ]
         origins = {w.origin.evidence_ids: w.origin for w in possible.witnesses}
         for origin in origins.values():
-            if origin.kind is not FindingKind.SPEC_CHANGE or origin.at is None:
+            if origin.kind not in ROLLOUT_ORIGIN_KINDS or origin.at is None:
                 continue
             for rs_created in replicasets:
                 if abs(rs_created.observed_at - origin.at) > ROLLOUT_REPLICASET_WINDOW:
@@ -459,6 +476,192 @@ def rollout_execution(
         decisive_evidence_ids=tuple(sorted({e for w in witnesses for e in w.evidence_ids})),
         witnesses=tuple(witnesses),
     )
+
+
+def failed_rollout(
+    holder: Hypothesis,
+    possible: RootSupportRecord,
+    history: Mapping[EntityRef, Sequence[ObjectVersion]],
+    events: Sequence[ClusterEvent],
+    spans: Sequence[TraceSpanObservation],
+    cutoff: datetime | None,
+) -> RootSupportRecord:
+    """m21 contract §14: a Deployment change whose new pod never served while the old revision was removed.
+
+    The witness is the exact change, its ReplicaSet and pod by owner UID (as §13), a ``Warning`` of that pod's own UID
+    saying it could not run, and a pod of another ReplicaSet of the same Deployment deleted soon after the change.
+    The effect is the callers' calls to the service failing with no server span, against calls before the change
+    that did not fail.
+    """
+    witnesses: list[CausalWitness] = []
+    instance = holder.actor_instance
+    onset = holder.episode_onset
+    if (
+        possible.status is RootSupportStatus.FIRED
+        and holder.causal_actor.kind == "Deployment"
+        and instance is not None
+        and instance.uid
+        and onset is not None
+        and spans
+    ):
+        namespace = holder.causal_actor.namespace
+        owned = {
+            created.instance_uid: created
+            for ref, versions in history.items()
+            if ref.kind == "ReplicaSet" and ref.namespace == namespace
+            for created in (_created(versions) or versions[0],)
+            if _owner_uid(created) == instance.uid and created.instance_uid
+        }
+        pods = [
+            (ref, versions)
+            for ref, versions in history.items()
+            if ref.kind == "Pod" and ref.namespace == namespace
+        ]
+        origins = {w.origin.evidence_ids: w.origin for w in possible.witnesses}
+        for origin in origins.values():
+            if origin.kind not in ROLLOUT_ORIGIN_KINDS or origin.at is None:
+                continue
+            for rs_uid, rs_created in owned.items():
+                if (
+                    rs_created.lifecycle.value != "CREATED"
+                    or abs(rs_created.observed_at - origin.at) > ROLLOUT_REPLICASET_WINDOW
+                ):
+                    continue
+                removed = [
+                    version
+                    for _, versions in pods
+                    for version in versions
+                    if version.lifecycle.value == "DELETED"
+                    and _owner_uid(version) in owned
+                    and _owner_uid(version) != rs_uid
+                    and origin.at <= version.observed_at <= origin.at + OLD_REVISION_REMOVAL
+                ]
+                if not removed:
+                    continue
+                first_removed = min(removed, key=lambda v: v.observed_at)
+                for pod, versions in pods:
+                    pod_created = _created(versions)
+                    if pod_created is None or _owner_uid(pod_created) != rs_uid:
+                        continue
+                    failures = [
+                        e
+                        for e in events
+                        if e.involved_uid is not None
+                        and e.involved_uid == pod_created.instance_uid
+                        and e.type == "Warning"
+                        and e.reason in FAILED_POD_REASONS
+                    ]
+                    if not failures:
+                        continue
+                    start = first_removed.observed_at
+                    end = _deleted_at(versions) or cutoff
+                    if (
+                        end is None
+                        or start > onset + EVENT_RESOLUTION
+                        or end < onset - EXECUTION_END_GRACE
+                    ):
+                        continue
+                    witnesses += _unserved_witnesses(
+                        holder,
+                        origin,
+                        pod,
+                        (
+                            rs_created.evidence_id,
+                            pod_created.evidence_id,
+                            first_removed.evidence_id,
+                            *sorted({e.evidence_id for e in failures}),
+                        ),
+                        start,
+                        end,
+                        spans,
+                    )
+    return RootSupportRecord(
+        rule_id=FAILED_ROLLOUT_RULE,
+        rule_version="v1",
+        support_kind="OBSERVED_MECHANISM_CAUSE",
+        status=RootSupportStatus.FIRED if witnesses else RootSupportStatus.NOT_FIRED,
+        reasons=() if witnesses else ("NO_FAILED_ROLLOUT_WITH_INCIDENT_EFFECT_WITNESS",),
+        decisive_evidence_ids=tuple(sorted({e for w in witnesses for e in w.evidence_ids})),
+        witnesses=tuple(witnesses),
+    )
+
+
+def _unserved_witnesses(
+    holder: Hypothesis,
+    origin: Finding,
+    pod: EntityRef,
+    relation_ids: tuple[str, ...],
+    start: datetime,
+    end: datetime,
+    spans: Sequence[TraceSpanObservation],
+) -> list[CausalWitness]:
+    assert holder.episode_onset is not None and origin.at is not None
+    onset = holder.episode_onset
+    target_service = pod.name.rsplit("-", 2)[0]
+    baseline = (onset - BASELINE_FROM, min(onset - BASELINE_TO, origin.at))
+    served = {(s.trace_id, s.parent_span_id) for s in spans if s.span_kind == "SERVER"}
+    witnesses = []
+    for symptom in holder.symptom_entities:
+        if symptom.kind != "Service" or symptom.name == target_service:
+            continue
+        if symptom.namespace != pod.namespace:
+            continue
+        calls = [
+            s
+            for s in spans
+            if s.service == symptom.name
+            and s.span_kind == "CLIENT"
+            and s.semantic_attributes.get("server.address") == target_service
+        ]
+        failed = [
+            s
+            for s in calls
+            if start <= s.start_at <= end
+            and str(s.status).endswith("ERROR")
+            and (s.trace_id, s.span_id) not in served
+        ]
+        calm = [s for s in calls if baseline[0] <= s.start_at <= baseline[1]]
+        if (
+            len(failed) < SERVICE_EFFECT.calls
+            or len(calm) < SERVICE_EFFECT.calls
+            or any(str(s.status).endswith("ERROR") for s in calm)
+        ):
+            continue
+        witnesses.append(
+            CausalWitness(
+                actor=holder.causal_actor,
+                actor_instance=holder.actor_instance,
+                origin=origin,
+                mechanism="FAILED_ROLLOUT_EFFECT_AT_CALLER",
+                attribution="ROLLOUT_OWNERSHIP_BY_UID",
+                symptom=symptom,
+                path=(
+                    CausalHop(source=holder.causal_actor, relation="rolls_out", target=pod),
+                    CausalHop(source=pod, relation="called_by", target=symptom),
+                ),
+                onset=onset,
+                evidence_ids=tuple(
+                    sorted({*origin.evidence_ids, *(s.evidence_id for s in failed)})
+                ),
+                relation_evidence_ids=relation_ids,
+                coverage=(
+                    "EXACT_CHANGE_INSTANCE",
+                    "REPLICASET_AND_POD_OWNED_BY_UID",
+                    "NEW_POD_NEVER_SERVED",
+                    "OLD_REVISION_REMOVED",
+                    "UNSERVED_CALLS_AT_CALLER",
+                    "BASELINE_BEFORE_CHANGE",
+                ),
+                missing=(
+                    "CHANGED_FIELD_CONSUMPTION_NOT_OBSERVED",
+                    "INCIDENT_RECOVERY_NOT_ASSESSED",
+                ),
+                rule_id=FAILED_ROLLOUT_RULE,
+                rule_version="v1",
+                claim_level="OBSERVED_MECHANISM_CAUSE",
+            )
+        )
+    return witnesses
 
 
 def _rollout_effect_witnesses(

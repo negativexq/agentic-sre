@@ -179,6 +179,7 @@ class LabWorld:
         self._rollout: tuple[datetime, str, str, str, str] | None = None
         self._last_delay = ""
         self._env_variable = DELAY_VARIABLE
+        self._crash_strategy = False
         self._original_image = ""
         self._original_strategy: dict[str, Any] = {}
         self._broken_image = ""
@@ -544,6 +545,8 @@ class LabWorld:
     def inject(self, params: RunParameters, journal: InjectorJournal, name: str) -> Injection:
         if params.fault in ENV_VARIABLES:
             return self._inject_env_delay(params, journal)
+        if params.fault == "env-crash":
+            return self._inject_env_crash(params, journal)
         if params.fault == "image-break":
             return self._inject_image_break(params, journal)
         duration = f"  duration: {int(params.duration_seconds) + 60}s\n"
@@ -736,6 +739,84 @@ class LabWorld:
             raise RuntimeError(f"the change was not applied: {result.stderr.strip()[:200]}")
         self._rollout, self._last_delay, self._env_variable = None, value, variable
         return Injection("payment-service", before["uid"], "", "", entry.at, "Deployment")
+
+    def _inject_env_crash(self, params: RunParameters, journal: InjectorJournal) -> Injection:
+        """m21 §14, the `DEV` scenario of a failed rollout: a value the new revision cannot start with (the payment
+        service's fault settings are strict, so a delay that is not a number stops it at start-up), in one patch
+        with a rollout strategy that takes the old pod away first, as the image variant does (§12.6)."""
+        before = json.loads(
+            self._run(
+                ["kubectl", "-n", NAMESPACE, "get", "deployment", "payment-service", "-o", "json"]
+            ).stdout
+        )
+        self._original_strategy = before["spec"]["strategy"]
+        value = f"crash-{params.seed}"
+        body = {
+            "spec": {
+                "strategy": {
+                    "type": "RollingUpdate",
+                    "rollingUpdate": {"maxSurge": 0, "maxUnavailable": 1},
+                },
+                "template": {
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": "payment-service",
+                                "env": [{"name": DELAY_VARIABLE, "value": value}],
+                            }
+                        ]
+                    }
+                },
+            }
+        }
+        result = self._run(
+            [
+                "kubectl",
+                "-n",
+                NAMESPACE,
+                "patch",
+                "deployment/payment-service",
+                "--type=strategic",
+                "-p",
+                json.dumps(body),
+            ],
+            check=False,
+        )
+        ok = result.returncode == 0
+        entry = journal.record(
+            verb="patch",
+            object=f"deployment payment-service env {DELAY_VARIABLE}={value}",
+            ok=ok,
+            response=result.stdout if ok else result.stderr,
+            uid=before["metadata"]["uid"],
+            role=ROLE_CAUSE_CREATED,
+        )
+        if not ok:
+            raise RuntimeError(f"the change was not applied: {result.stderr.strip()[:200]}")
+        self._rollout, self._last_delay, self._env_variable = None, value, DELAY_VARIABLE
+        self._crash_strategy = True
+        return Injection(
+            "payment-service", before["metadata"]["uid"], "", "", entry.at, "Deployment"
+        )
+
+    def _restore_strategy(self) -> None:
+        if not self._crash_strategy or not self._original_strategy:
+            return
+        body = {"spec": {"strategy": self._original_strategy}}
+        self._run(
+            [
+                "kubectl",
+                "-n",
+                NAMESPACE,
+                "patch",
+                "deployment/payment-service",
+                "--type=merge",
+                "-p",
+                json.dumps(body),
+            ],
+            check=False,
+        )
+        self._crash_strategy = False
 
     def _inject_image_break(self, params: RunParameters, journal: InjectorJournal) -> Injection:
         """Design §12.2.2, `config-or-rollout` variant B: an image that does not exist, in one patch with a
@@ -943,6 +1024,7 @@ class LabWorld:
                 response=result.stdout or result.stderr,
                 role=ROLE_CAUSE_REMOVED,
             )
+            self._restore_strategy()
             return
         result = self._run(
             [
@@ -1022,6 +1104,7 @@ class LabWorld:
     def cleanup(self) -> None:
         if self._last_delay:
             self._unset_delay()  # already undone by remove() on a normal run; this covers an aborted one
+        self._restore_strategy()
         self._restore_image()
         self._delete_experiments()
         if self._forwarder is not None:
@@ -1198,6 +1281,10 @@ SPECS: dict[str, Callable[..., ScenarioSpec]] = {
     "config-b": _variant_b(config_spec, "config-image-payment"),
     # m21 §13.4: the rollout witness's held-out variants, mechanisms variant A did not use
     "config-c": _variant_b(config_spec, "config-error-payment"),
+    # m21 §14: the failed rollout's `DEV` scenario, a mechanism the held-out `config-b` (a missing image) does not use
+    "config-d": lambda repeats, seeds, tier="DEV": _variant_b(config_spec, "config-crash-payment")(
+        repeats, seeds, tier=tier
+    ),
     "negative-c": _variant_b(negative_spec, "negative-dbdelay-decoy"),
     "negative-b": _variant_b(negative_spec, "negative-image-decoy", cpu_workers=WORKERS),
     # design §18: at 80 to 90% loss almost no order reached Kafka, so a pod-kill early in the loss built no lag;

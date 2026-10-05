@@ -46,6 +46,7 @@ EXECUTION_RULE_IDS = (
     "m21.support.observed-quota-rejection",
     "m21.support.observed-fault-execution",
     "m21.support.observed-rollout-execution",
+    "m21.support.observed-failed-rollout",
 )
 RELATION_D1 = "d1"
 RELATION_EXECUTION = "execution"

@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from packages.rca.causal_closure import (
     answer_frontier,
     explanations,
+    failed_rollout,
     fault_execution,
     quota_execution,
     rollout_execution,
@@ -898,21 +899,34 @@ def resolve_hypotheses(
             mismatches=mismatches,
             explained=explained,
         )
-    execution = {
-        h.hypothesis_id: (
-            fault_execution(h, change_onset_path_support(h), hypotheses, events, trace_spans)
-            if is_chaos_kind(h.causal_actor.kind)
-            else rollout_execution(
-                h,
-                change_onset_path_support(h),
-                object_history or {},
-                trace_spans,
-                observation_cutoff,
+
+    def executions(h: Hypothesis) -> tuple[RootSupportRecord, ...]:
+        possible = change_onset_path_support(h)
+        if is_chaos_kind(h.causal_actor.kind):
+            return (fault_execution(h, possible, hypotheses, events, trace_spans),)
+        if h.causal_actor.kind == "Deployment":
+            history = object_history or {}
+            return (
+                rollout_execution(h, possible, history, trace_spans, observation_cutoff),
+                failed_rollout(h, possible, history, events, trace_spans, observation_cutoff),
             )
-            if h.causal_actor.kind == "Deployment"
-            else quota_execution(h, change_onset_path_support(h), events)
+        return (quota_execution(h, possible, events),)
+
+    execution = {h.hypothesis_id: executions(h) for h in hypotheses}
+    # one view per claim across its execution rules: fired when any fired, with every witness and decisive id
+    observed = {
+        hid: records[0].model_copy(
+            update={
+                "status": RootSupportStatus.FIRED
+                if any(r.status is RootSupportStatus.FIRED for r in records)
+                else RootSupportStatus.NOT_FIRED,
+                "witnesses": tuple(w for r in records for w in r.witnesses),
+                "decisive_evidence_ids": tuple(
+                    sorted({e for r in records for e in r.decisive_evidence_ids})
+                ),
+            }
         )
-        for h in hypotheses
+        for hid, records in execution.items()
     }
     trace = _attach_audits(trace, hypotheses, verification_traces, onset_grace)
     audits = tuple(
@@ -926,7 +940,7 @@ def resolve_hypotheses(
                     if audit.hypothesis_id in mismatches
                     else {}
                 ),
-                "root_support": (*audit.root_support, execution[audit.hypothesis_id]),
+                "root_support": (*audit.root_support, *execution[audit.hypothesis_id]),
                 "precondition_audit": tuple(
                     [
                         RulePreconditionAudit(rule_id=rule_id, result=result)
@@ -959,15 +973,15 @@ def resolve_hypotheses(
     strong_ids = {
         hid
         for hid in supported_ids
-        if execution[hid].status is RootSupportStatus.FIRED
+        if observed[hid].status is RootSupportStatus.FIRED
         and hid not in current_timing_masks().strong
     }
     independent = (
         len(strong_ids) > 1
         and not any("EXPLANATION_CYCLE" in r.remaining_uncertainty for r in relations)
         and all(
-            set(execution[left].decisive_evidence_ids).isdisjoint(
-                execution[right].decisive_evidence_ids
+            set(observed[left].decisive_evidence_ids).isdisjoint(
+                observed[right].decisive_evidence_ids
             )
             and next(h.causal_actor for h in hypotheses if h.hypothesis_id == left)
             != next(h.causal_actor for h in hypotheses if h.hypothesis_id == right)
@@ -1016,7 +1030,7 @@ def resolve_hypotheses(
         and strong_ids == supported_ids
         and all(
             set(h.symptom_entities).issubset(
-                {w.symptom for w in execution[h.hypothesis_id].witnesses}
+                {w.symptom for w in observed[h.hypothesis_id].witnesses}
             )
             for h in hypotheses
             if h.hypothesis_id in supported_ids

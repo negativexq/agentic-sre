@@ -765,3 +765,74 @@ From §19.1: a rollout's execution link is the `ReplicaSet`, while the rule's wi
 its hops is `rolls_out` to the chain's `target_effect` pod, the pod the harness recorded as created by that
 ReplicaSet. Nothing else changes; the seventh `HOLDOUT` keeps the scores it was measured with, and the next `HOLDOUT`
 is scored with this rule.
+
+## 21. Eighth HOLDOUT: pre-registration for C5b (2026-10-05, frozen before the run)
+
+As §19 in every point, with the engine that carries both rollout rules (m21 §13, §14) and the grader of §20: the eight
+variants, seeds `dependency-b` 203–205, `direct-b` 206–208, `scheduled-b` 209–211, `config-b` 212–214, `negative-b`
+215–217, `competing-b` 218–220, `config-c` 221–223, `negative-c` 224–226; suites `holdout8-<variant>`.
+
+- **Acceptance:** the frozen bar.
+- **C5b confirmation (m21 §14.4):** no `FAILED_ROLLOUT_EFFECT_AT_CALLER` witness names a change off the chain, no
+  strong claim rests on one, and at least 90% of the valid runs read their traces without a failed read. Its held-out
+  cases are `config-b` and `negative-b` (a missing image).
+- Reported beside it: C1's and C5a's witnesses, which must still hold their criteria, and execution-witness recall per
+  family with §20's grader.
+
+### 21.1 Eighth HOLDOUT result (2026-10-05, engine frozen at `1bd368d4`, 24 runs)
+
+Measured once, reported as it is (§12.2.6), scored with §20's grader.
+
+| Variant | Valid | Cause / instance | Execution witness / effect link | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `dependency-b` | 3/3 | 1.0 / 1.0 | 0.67 / 0.67 | 0 / 0 / 0 | |
+| `direct-b` | 3/3 | 1.0 / 1.0 | 1.0 / 0.67 | 0 / 0 / 0 | |
+| `scheduled-b` | 3/3 | 1.0 / 1.0 | 0.67 / 0.67 | 0 / 0 / 0 | |
+| `config-b` (missing image) | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | no failed-rollout witness |
+| `negative-b` (missing image) | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | decoy named 0; no failed-rollout witness |
+| `competing-b` | 3/3 | 1.0 / 1.0 | 0.67 / 0.67 | 0 / 0 / 0 | group recall 1.0 |
+| `config-c` | 3/3 | 1.0 / 1.0 | **1.0** / 0 | 0 / 0 / 0 | 6 rollout witnesses, all on the chain |
+| `negative-c` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | decoy named 0; 2 rollout witnesses on the chain, outside the diagnoses the run collected |
+
+**The acceptance bar holds**: 24 of 24 valid, no false strong authority, no false `RESOLVED`, the decoy never named;
+23 of 24 runs read their traces without a failed read (`competing-b` #0 lost 2 of 90). C1 (11 witnesses) and C5a (8)
+held: none off the chain.
+
+**C5b was not exercised, so it is neither confirmed nor contradicted.** The world of every `config-b` run had what
+m21 §14.2 asks for (in #0: three `Failed` warnings of the new pod's own UID, the old pod deleted two seconds after the
+change, eight order calls to `payment-service` failing with no server span, a calm baseline). The rule never looked:
+the implementation accepts only a `SPEC_CHANGE` origin, while an image change is recorded as `IMAGE_CHANGE`. The
+contract says "a `Deployment` version whose generation rose", which an image change is; the implementation was
+narrower than the text, and the `DEV` scenario (an environment value) could not show it. The same restriction applies
+to §13's rule. Recorded as a defect found by this `HOLDOUT`; the fix is measured on a new one.
+
+## 22. Ninth HOLDOUT: pre-registration for C5b, again (2026-10-05, frozen before the run)
+
+As §21 in every point, with the engine that accepts every template-changing origin (m21 §14.6): seeds `dependency-b`
+227–229, `direct-b` 230–232, `scheduled-b` 233–235, `config-b` 236–238, `negative-b` 239–241, `competing-b`
+242–244, `config-c` 245–247, `negative-c` 248–250; suites `holdout9-<variant>`. C5b is exercised only if a
+`FAILED_ROLLOUT_EFFECT_AT_CALLER` witness can be judged: if `config-b` and `negative-b` produce none, it stays neither
+confirmed nor contradicted, and the reason is recorded per run.
+
+### 22.1 Ninth HOLDOUT result (2026-10-05, engine frozen at `ca29eeea`, 24 runs)
+
+Measured once, reported as it is (§12.2.6), scored with §20's grader.
+
+| Variant | Valid | Cause / instance | Execution witness / effect link | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `dependency-b` | 3/3 | 1.0 / 1.0 | 0 / 0 | 0 / 0 / 0 | |
+| `direct-b` | 3/3 | 1.0 / 1.0 | 1.0 / 1.0 | 0 / 0 / 0 | |
+| `scheduled-b` | 3/3 | 1.0 / 1.0 | 0.33 / 0.33 | 0 / 0 / 0 | |
+| `config-b` (missing image) | 3/3 | 1.0 / 1.0 | **0.33** / 0 | 0 / 0 / 0 | failed-rollout witnesses in 2 runs (4), all on the chain |
+| `negative-b` (missing image) | 3/3 | 1.0 / 1.0 | **0.67** / 0 | 0 / 0 / 0 | decoy named 0; failed-rollout witnesses in 2 runs (8), all on the chain |
+| `competing-b` | 3/3 | 0.83 / 0.83 | 0.33 / 0.33 | 0 / 0 / 0 | group recall 1.0 |
+| `config-c` | 3/3 | 1.0 / 1.0 | 1.0 / 0 | 0 / 0 / 0 | 7 rollout witnesses, all on the chain |
+| `negative-c` | 3/3 | 1.0 / 1.0 | 0.33 / 0 | 0 / 0 / 0 | decoy named 0; 5 rollout witnesses, all on the chain |
+
+**The acceptance bar holds**: 24 of 24 valid, no false strong authority, no false `RESOLVED`, the decoy never named;
+23 of 24 runs read their traces without a failed read (`competing-b` #1 lost 28 of 120).
+
+**C5b is confirmed** (m21 §14.4, §22): 12 `FAILED_ROLLOUT_EFFECT_AT_CALLER` witnesses in 328 diagnoses, in 4 of the 6
+held-out failed-rollout runs, each naming the run's own image change, none off the chain. C5a (12 witnesses) and C1
+(2) held, none off the chain. The `dependency-b` execution witness was 0 this time and the competing second cause was
+missed once (0.83); both are recorded, not selected from.

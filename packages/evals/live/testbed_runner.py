@@ -145,6 +145,7 @@ FAULT_BY_SCENARIO: dict[str, str] = {
     "negative-image-decoy": "image-break",
     "competing-loss-podkill": "competing-loss",
     "config-error-payment": "env-error",
+    "config-crash-payment": "env-crash",
     "negative-dbdelay-decoy": "env-db-delay",
 }
 # Variants whose faulted service is also the one showing the symptom: one probe, two views (contract §4.2).
@@ -157,6 +158,7 @@ ALERTS_BY_SCENARIO: dict[str, frozenset[str]] = {
     "negative-image-decoy": DEPENDENCY_ALERTS | {"PaymentServiceLatencyCritical"} | ERROR_ALERTS,
     "competing-loss-podkill": DEPENDENCY_ALERTS | ERROR_ALERTS,
     "config-error-payment": DEPENDENCY_ALERTS | ERROR_ALERTS,
+    "config-crash-payment": DEPENDENCY_ALERTS | {"PaymentServiceLatencyCritical"} | ERROR_ALERTS,
     "negative-dbdelay-decoy": DEPENDENCY_ALERTS | {"PaymentServiceLatencyCritical"},
 }
 TIMELINE_ALERTS_BY_SCENARIO: dict[str, frozenset[str]] = {
@@ -604,7 +606,17 @@ def dbdelay_negative_chain(injection: Injection) -> Chain:
     return _remechanised(negative_chain(injection), "slows payments", "slows payment queries")
 
 
+def crash_config_chain(injection: Injection) -> Chain:
+    """m21 §14: the change leaves the new revision unable to start, and the old one is already gone."""
+    return _remechanised(
+        _remechanised(config_chain(injection), "slows payments", "stops payments starting"),
+        "payment latency at the new pod",
+        "the new pod never ready, the old one removed",
+    )
+
+
 CHAINS_BY_SCENARIO = {
+    "config-crash-payment": crash_config_chain,
     "config-error-payment": error_config_chain,
     "negative-dbdelay-decoy": dbdelay_negative_chain,
     "dependency-loss-payment": loss_chain,
@@ -822,6 +834,7 @@ def run_once(
             "cpu-stress": "pod-stress",
             "env-delay": "env-delay",
             "env-error": "env-error",
+            "env-crash": "env-crash",
             "env-db-delay": "env-db-delay",
             "scheduled-delay": "sched-delay",
             "scheduled-stress": "sched-stress",

@@ -896,3 +896,45 @@ execution-witness recall per variant against the earlier `HOLDOUT`s (for informa
 decoy never named; 19 witnesses of the effect relations (§12: 11, §13: 8), none off the chain; 14 of 15 runs read
 their traces without a failed read (93%; `negative-c` #1 lost 16 of 48). `scheduled-b` still has no execution witness
 in this `HOLDOUT`; recorded, not selected from.
+
+## 26. Twelfth HOLDOUT, full: pre-registration (2026-10-05, frozen before the run)
+
+Per §23, a full measurement after several engine changes (C3a, C16) and the version raised to 2.2.0 (roadmap F1): the
+eight variants, seeds `dependency-b` 272–274, `direct-b` 275–277, `scheduled-b` 278–280, `config-b` 281–283,
+`negative-b` 284–286, `competing-b` 287–289, `config-c` 290–292, `negative-c` 293–295; suites `holdout12-<variant>`,
+engine 2.2.0 frozen at the commit in the manifests, scored with §20's grader.
+
+- **Acceptance:** the frozen bar (no false strong authority, no false `RESOLVED`, at least 90% valid, the decoy never
+  named).
+- **The effect relations (m21 §12, §13, §14):** no witness off the chain, no strong claim on one, at least 90% of the
+  valid runs with every trace read complete.
+- **Message delivery (m21 §15):** no incident's root is an actor off the chain.
+- Reported beside them, for information: cause, instance and execution-witness recall per variant against the earlier
+  `HOLDOUT`s, and the lag incidents rooted at the run's own cause.
+
+### 26.1 Twelfth HOLDOUT result (2026-10-05, engine 2.2.0 frozen at `de38010a`, 24 runs)
+
+| Variant | Valid | Cause / instance | Execution witness | False strong / false `RESOLVED` / false elimination | Other |
+|---|---|---|---|---|---|
+| `dependency-b` | 3/3 | 1.0 / 1.0 | 0.67 | 0 / 0 / 0 | |
+| `direct-b` | 3/3 | 1.0 / 1.0 | 1.0 | 0 / 0 / 0 | |
+| `scheduled-b` | 3/3 | 1.0 / 1.0 | 0.33 | 0 / 0 / 0 | |
+| `config-b` | 3/3 | 1.0 / 1.0 | 0.67 | 0 / 0 / 0 | |
+| `negative-b` | 3/3 | 1.0 / 1.0 | 0.33 | 0 / 0 / 0 | decoy named 0 |
+| `competing-b` | 3/3 | 1.0 / 1.0 | 0.67 | 0 / 0 / 0 | group recall 1.0 |
+| `config-c` | 3/3 | 1.0 / 1.0 | 1.0 | 0 / 0 / 0 | |
+| `negative-c` | 3/3 | 1.0 / 1.0 | 0.67 | 0 / 0 / 0 | decoy named 0 |
+
+- **Acceptance holds:** 24 of 24 valid, no false strong authority, no false `RESOLVED`, the decoy never named; cause
+  and instance recall 1.0 in every variant, for the first time in a full `HOLDOUT`.
+- **The effect relations hold:** 26 witnesses (§12: 2, §13: 11, §14: 13), none off the chain; 22 of 24 runs read their
+  traces without a failed read (92%; `config-b` #2 lost 11 of 72 around Tempo's restart at 19:42, `negative-c` #0 25
+  of 72).
+- **Message delivery:** the criterion was worded too broadly ("no incident's root is an actor off the chain"). Read
+  literally it fails: 8 of 366 diagnoses lead with a pod off the chain (`order-service` or `payment-service`), all
+  `UNESTABLISHED` / `INSUFFICIENT_EVIDENCE`, with no causal path at all, none of them a lag incident. The relation is not
+  their cause: every incident diagnosed with and without it on the same stored run differs in 5 of 170, all
+  `scheduled-b` lag incidents moving from no root to the run's own cause or spawned experiment; the 8 are the same
+  without it. What the criterion meant (no root moved off the chain by the relation) holds. Recorded as a wording
+  error of this pre-registration, not reinterpreted after the fact; the 8 are the existing least-bad
+  `UNESTABLISHED` leaders (roadmap C10, C12), 5 of them shown `SINGLE`, which is worth a look.

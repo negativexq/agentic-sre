@@ -1533,3 +1533,52 @@ evidence.
 
 Confirmed on the targeted eleventh `HOLDOUT` (testbed-scenarios-design §25.1): 15 of 15 valid, 19 witnesses of §12 and
 §13, none off the chain, no false strong authority or false `RESOLVED`, 14 of 15 runs with every trace read complete.
+
+## 17. The executing instance beside the root cause (proposal, 2026-10-05, awaiting the owner)
+
+### 17.1 Problem
+
+The root cause is the actor that controls the fault: a `Schedule` (§ observed fault execution, the owner-approved
+carrier of 2026-09-30), a changed `Deployment` (§13, §14). That is what an operator acts on: deleting one spawned
+experiment or one pod does not stop a recurring fault or a bad rollout. What actually ran is recorded too, inside the
+execution witnesses (the experiment instance, its target pod and `[Applied, Recovered]`; the rollout's ReplicaSet and
+new pod), but the diagnosis never names it beside the cause, so the operator has to read the witnesses to learn
+*which* experiment hit *which* pod, *when*.
+
+The same gap shows on ITBench-Lite: 8 of its 13 scoreable misses (2.2.0, 18 of 31) are scenarios where the engine
+names the `Schedule` and the published label names the experiment it spawned (`NetworkChaos`, `StressChaos`,
+`JVMChaos` of the same name stem); the grader requires the label's kind. This section is not designed from those
+labels: §17.2 is decided on what the operator needs, and §17.4 keeps the benchmark question apart.
+
+### 17.2 Field
+
+`executing_instances`: for the leader (and for each candidate shown when the display is `COMPETING`), the instances
+its **fired execution witnesses** name, each with:
+
+- the executing object and its UID: the experiment instance of a fault-execution witness (for a `Schedule`, every
+  spawned experiment its witnesses carry); the ReplicaSet of a rollout witness (§13, §14); the rejected subject of a
+  quota witness;
+- the exact target (pod) and the execution interval the witness used;
+- the witness's rule and evidence ids.
+
+Only fired execution witnesses supply it: a structural path, a D1 support or a name match never does. A leader with no
+fired execution witness has none (the field is empty, never guessed). It is **presentation, outside the epistemic
+digest**, like `leading_actor_established`: `root_cause`, ranking, tiers and every digest stay as they are, so the
+engine version moves by a patch (2.2.0 → 2.2.1, roadmap F1).
+
+### 17.3 Product
+
+The console and the report show it under the root cause ("executed by `NetworkChaos/…-rjhbq` on
+`Pod/checkout-…-8rt79`, 16:34:41–16:35:36"); the notification keeps naming the root cause only.
+
+### 17.4 Benchmark (a separate decision, roadmap C11)
+
+Which field an ITBench-Lite answer submits is not decided here. If it ever submits the executing instance, the rule is
+written before the measurement and both numbers are reported (the root cause and the executing instance).
+
+### 17.5 Validation (testbed-scenarios-design §23)
+
+Unit tests per witness kind; offline replay of every stored run with the field on: every digest equal to the
+version without it, and every executing instance one of the chain's `execution` or `target_effect` actors (or the
+experiments a `Schedule` in the chain spawned), none off the chain. No live `HOLDOUT` is needed for a field that changes
+no judgement; the next full `HOLDOUT` reports it beside the scores.

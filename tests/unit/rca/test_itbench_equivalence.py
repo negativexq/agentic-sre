@@ -173,3 +173,24 @@ def test_grading_is_deterministic() -> None:
         "Scenario-1", d, relations, EXPERIMENT
     )
     assert controller_relations(d, full()) == relations
+
+
+def test_an_execution_from_an_earlier_fault_episode_is_recorded_but_not_counted() -> None:
+    d = diagnose(full())  # reference time: minute 6
+    earlier = [spawned(), applied(minute=-60), recovered(-59), failure(2)]
+    (instance,) = controller_relations(d, earlier).instances
+    assert not instance.executed and instance.earlier_execution_evidence_ids
+    graded = grade_tracks("Scenario-1", d, controller_relations(d, earlier), EXPERIMENT)
+    assert graded["controller_record"]["correct"] and not graded["controller_execution"]["correct"]
+
+
+def test_an_execution_recovered_within_w_of_the_onset_still_counts() -> None:
+    d = diagnose(full())
+    recent = [
+        spawned(),
+        applied(minute=0),
+        recovered(2),
+        failure(2),
+    ]  # recovered 4 min before minute 6
+    (instance,) = controller_relations(d, recent).instances
+    assert instance.executed

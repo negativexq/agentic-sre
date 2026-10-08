@@ -8,8 +8,10 @@ that are kept apart from the exact score:
 - ``exact``: the root cause alone, the existing grader (unchanged, comparable with earlier runs);
 - ``controller_record``: the root cause, or an experiment its exact Schedule instance named in a ``Spawned``
   controller record, bound to one experiment UID (structural evidence: the controller created it);
-- ``controller_execution``: as above, and that experiment's own controller reported applying the fault to a pod
-  before the incident's reference time (execution evidence, as reported by the controller);
+- ``controller_execution``: as above, and that experiment's own controller reported applying the fault to a pod in
+  an interval that reaches the incident's reference time: it began at or before it and had not been recovered more
+  than ``W`` earlier (m21 §11's ``W``, 5 minutes, reused). An application that ended long before belongs to another
+  fault episode and is recorded apart, never counted (execution evidence, as reported by the controller);
 - ``executing_instance``: the root cause, or an instance the engine's fired execution witnesses name
   (``Diagnosis.executing_instances``, m21 §17).
 
@@ -35,8 +37,9 @@ from packages.evals.itbench.contracts import (
 from packages.evals.itbench.grader import grade_root_cause_entities
 from packages.rca.fault_execution import fault_executions
 from packages.rca.model import ClusterEvent, Diagnosis
+from packages.rca.presentation import RELEVANCE_WINDOW
 
-RELATIONS_VERSION = "c11.v1"
+RELATIONS_VERSION = "c11.v2"
 TRACKS = ("exact", "controller_record", "controller_execution", "executing_instance")
 
 
@@ -48,8 +51,10 @@ class ControlledInstance(BaseModel):
     entity: str
     uid: str
     spawn_evidence_ids: tuple[str, ...]
-    # Controller-reported applications to a pod that began at or before the incident's reference time.
+    # Controller-reported applications whose interval reaches the incident's reference time (see the module).
     execution_evidence_ids: tuple[str, ...] = ()
+    # Applications that began before the reference time but were recovered more than W before it.
+    earlier_execution_evidence_ids: tuple[str, ...] = ()
     applied_at: datetime | None = None
     targets: tuple[str, ...] = ()
 
@@ -124,17 +129,28 @@ def controller_relations(diagnosis: Diagnosis, events: Sequence[ClusterEvent]) -
         execution = by_ref[(child.entity, child.uid)]
         if execution.schedule is None or execution.schedule.uid != instance.uid:
             continue  # another Schedule instance's record claimed it first
-        applied = [
+        before = [
             t
             for t in execution.targets
             if t.applied_at is not None and reference is not None and t.applied_at <= reference
         ]
+        applied = [
+            t
+            for t in before
+            if reference is not None
+            and (end := t.recovered_at or t.applied_at) is not None
+            and end >= reference - RELEVANCE_WINDOW
+        ]
+        earlier = [t for t in before if t not in applied]
         instances.append(
             ControlledInstance(
                 entity=name,
                 uid=child.uid,
                 spawn_evidence_ids=execution.spawn_evidence,
                 execution_evidence_ids=tuple(e for t in applied for e in t.applied_evidence),
+                earlier_execution_evidence_ids=tuple(
+                    e for t in earlier for e in t.applied_evidence
+                ),
                 applied_at=min((t.applied_at for t in applied if t.applied_at), default=None),
                 targets=tuple(sorted({t.pod.canonical for t in applied})),
             )

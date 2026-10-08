@@ -23,6 +23,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ValidationError
 
 from packages.connector import wire
+from packages.connector.preflight import Check, as_dicts, run_preflight
 from packages.connector.streams import StreamBuffer
 from packages.connector.watch import ResourceVersionExpired, WatchEvent
 from packages.contracts import AlertmanagerWebhook
@@ -131,6 +132,8 @@ class Connector:
     # contract §16: the poll admits a firing occurrence only once it has been active this long, so both alert
     # paths agree on a short alert (Alertmanager notifies a group only after its group_wait)
     alert_min_active: timedelta = timedelta(0)
+    # connector-install-design.md §A8.1; the deployed Connector runs the real probes (connector_from_environment)
+    preflight_runner: Callable[[], list[Check]] = field(default=list)
     alerts_buffer_len: int = 10_000
     changes_buffer_len: int = 50_000
     epoch: str = field(default_factory=lambda: uuid4().hex)
@@ -785,7 +788,10 @@ class Connector:
                 "capabilities": self.capabilities(),
             }
         if request.op == "preflight":
-            # Configured, not probed: reachability probing arrives with `connectorctl preflight`.
+            # connector-install-design.md §A8.1: the same checks as `connectorctl preflight`; ``backends``
+            # keeps its earlier shape, ``reachable`` now measured
+            checks = self.preflight_runner()
+            status = {check.name: check.status for check in checks}
             backends = {
                 "kubernetes": self.cluster is not None,
                 "loki": self.providers.loki is not None,
@@ -794,9 +800,16 @@ class Connector:
             }
             return {
                 "backends": [
-                    {"name": name, "configured": configured, "reachable": None}
+                    {
+                        "name": name,
+                        "configured": configured,
+                        "reachable": (status.get(name) in ("ok", "warning"))
+                        if configured and name in status
+                        else None,
+                    }
                     for name, configured in sorted(backends.items())
-                ]
+                ],
+                "checks": as_dicts(checks),
             }
         if request.op == "read_alerts":
             if self.alert_source is None and not self.accept_webhook:
@@ -899,4 +912,5 @@ def connector_from_environment(
             else None
         ),
         providers=ProviderReaders.from_environment(),
+        preflight_runner=run_preflight,
     )

@@ -104,3 +104,25 @@ Each slice has unit tests. In addition:
 
 Not part of A8: several connectors per control plane in one console view, a remote multi-tenant control plane (A9),
 and the console's Connect Cluster screens (D4, which builds on A8.2's API).
+
+## 6. A8.1 implemented (2026-10-09)
+
+`packages/connector/preflight.py` (the checks) and `packages/connector/ctl.py` (`python -m packages.connector.ctl
+preflight [--json] [--as USER]`). The wire op `preflight` runs the same checks in the deployed Connector, keeps its
+`backends` shape with `reachable` now measured, and adds `checks`. `--as` asks the Kubernetes API through
+impersonation, so an operator can check the Connector's ServiceAccount from a workstation.
+
+Two things the tests found and the implementation handles:
+- TLS 1.3 finishes the client's handshake before the server has judged the client certificate, so a handshake alone
+  proves nothing; the check reads once after it.
+- The gRPC server refuses a foreign client certificate by closing the connection **without an alert**. A close right
+  after the handshake is therefore a refusal; a server that waits or sends its first HTTP/2 frame has accepted.
+
+Verification: 15 unit tests, one of them against the real gRPC gateway (a trusted identity accepted, a foreign one
+refused); the full suite passes. Against the lab, as `system:serviceaccount:connector:connector` with temporary
+port-forwards: **12 of 12 checks ok** (every read in `sre-demo`, `lab-control`, `chaos-mesh`; no write and no Secret
+access; the four backends; the mTLS handshake, certificate valid 81 more days). Broken on purpose (the `default`
+ServiceAccount, an Alertmanager on a closed port): the missing reads and the unreachable backend named, exit 1.
+
+Not covered yet: an identity off the control plane's allow-list passes the TLS check (the allow-list is enforced when
+the session opens); A8.2's registry makes it checkable.

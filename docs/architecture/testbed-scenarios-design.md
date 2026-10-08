@@ -992,3 +992,29 @@ manifests, scored with §20's grader.
   that end after the first coverage.
 - Reported beside them, for information: cause, instance and execution-witness recall per variant against the earlier
   `HOLDOUT`s.
+
+### 28.1 Fourteenth HOLDOUT result (2026-10-09, engine 2.3.1, 24 runs)
+
+**24/24 valid.** Cause and instance recall **1.0 in every variant**; 0 false strong authority, 0 false `RESOLVED`,
+the decoy never named (`negative-b`, `negative-c`).
+
+| Variant | Valid | Cause | Instance | Execution witness | Group |
+|---|---|---|---|---|---|
+| `dependency-b` | 3/3 | 1.0 | 1.0 | 0.67 | |
+| `direct-b` | 3/3 | 1.0 | 1.0 | 1.0 | |
+| `scheduled-b` | 3/3 | 1.0 | 1.0 | 0.0 | |
+| `config-b` | 3/3 | 1.0 | 1.0 | 0.33 | |
+| `negative-b` | 3/3 | 1.0 | 1.0 | 0.0 | |
+| `competing-b` | 3/3 | 1.0 | 1.0 | 0.33 | 0.87 |
+| `config-c` | 3/3 | 1.0 | 1.0 | 0.67 | |
+| `negative-c` | 3/3 | 1.0 | 1.0 | 1.0 | |
+
+- **Effect relations:** 23 execution witnesses, none off the chain; no strong claim off it; no scored root off the
+  chain (88 scored diagnoses). Trace reads: no read failed in any run (every read `TRUNCATED` at the span cap, as in
+  the eleventh to thirteenth; the criterion has been read as "no failed read" since §13.4).
+- **m21 §19:** no diagnosis leads with an actor whose every controller-recorded execution came after the onset.
+- **m21 §20:** no scored diagnosis is `NOT_ESTABLISHED`, so the surfaces rule had nothing to act on here.
+- **Connector §17 (lab check):** **0 of 24 runs** opened an incident before their injection (8 of 24 in the twelfth).
+
+Every pre-registered criterion holds. For information: `scheduled-b` formed an execution witness in the thirteenth
+(0.67) and none here (0.0), with the same rule; `competing-b`'s pod-kill was named in every run this time.

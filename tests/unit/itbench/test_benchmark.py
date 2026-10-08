@@ -186,3 +186,26 @@ def test_investigator_failures_are_counted_and_flagged(tmp_path: Path) -> None:
     assert manifest["records"][0]["investigator_error"] == "scripted replies exhausted"
     grade(cast(ITBenchLiteDataset, dataset), out)
     assert "not a valid investigator run" in (out / "report.md").read_text(encoding="utf-8")
+
+
+def test_causal_relations_are_sealed_with_the_prediction_and_tracks_never_replace_the_score(
+    tmp_path: Path,
+) -> None:
+    dataset = _dataset(tmp_path)
+    out = tmp_path / "run"
+    predict(cast(ITBenchLiteDataset, dataset), ["Scenario-1"], out, split="dev")
+    assert dataset.truth_reads == 0
+    path = out / "predictions" / "Scenario-1.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["causal_relations"]["root_cause"] == "shop/ConfigMap/flags"
+    assert payload["causal_relations"]["excluded"] == ["NOT_A_SCHEDULE"]
+    report = grade(cast(ITBenchLiteDataset, dataset), out)
+    assert report["rows"][0]["correct"] is True  # the exact score, unchanged
+    assert report["tracks"]["exact"]["correct"] == 1
+    assert report["tracks"]["controller_execution"]["correct"] == 1
+    payload["causal_relations"]["instances"] = [
+        {"entity": "chaos/NetworkChaos/x", "uid": "u", "spawn_evidence_ids": ["e"]}
+    ]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(BenchmarkError, match="changed after sealing"):
+        grade(cast(ITBenchLiteDataset, dataset), out)

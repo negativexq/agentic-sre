@@ -23,6 +23,12 @@ from packages.evals.itbench.contracts import (
     parse_canonical_entity,
 )
 from packages.evals.itbench.dataset import ITBenchLiteDataset
+from packages.evals.itbench.equivalence import (
+    TRACKS,
+    CausalRelations,
+    controller_relations,
+    grade_tracks,
+)
 from packages.evals.itbench.grader import grade_root_cause_entities
 from packages.evals.itbench.io import atomic_json_write
 from packages.evals.itbench.source import SOURCE_NORMALIZATION, SnapshotSource
@@ -113,17 +119,17 @@ def predict(
     started = time.monotonic()
     for scenario_id in scenario_ids:
         tick = time.monotonic()
-        diagnosis = diagnose(
-            SnapshotSource(dataset.scenario(scenario_id)),
-            investigator=investigator,
-            config=config,
-        )
+        source = SnapshotSource(dataset.scenario(scenario_id))
+        diagnosis = diagnose(source, investigator=investigator, config=config)
         output = agent_output(diagnosis)
+        # C11: what the root cause provably stands behind, from the snapshot alone, sealed with the answer
+        relations = controller_relations(diagnosis, source.events())
         atomic_json_write(
             predictions / f"{scenario_id}.json",
             {
                 "diagnosis": diagnosis.model_dump(mode="json"),
                 "agent_output": output.model_dump(mode="json"),
+                "causal_relations": relations.model_dump(mode="json"),
             },
         )
         records.append(
@@ -255,6 +261,14 @@ def grade(dataset: ITBenchLiteDataset, out_dir: Path) -> dict[str, Any]:
         position = next((i + 1 for i, ref in enumerate(ranked) if _matches(ref, truth)), None)
         grade_row = grade_root_cause_entities(output, truth)
         verified = diagnosis.confidence is Confidence.VERIFIED
+        # C11 tracks: relations are read from the sealed prediction, never derived here (an older run without
+        # them reports the controller tracks as not recorded)
+        sealed = payload.get("causal_relations")
+        relations = CausalRelations.model_validate(sealed) if sealed is not None else None
+        tracks = grade_tracks(scenario_id, diagnosis, relations, truth)
+        if relations is None:
+            for name in ("controller_record", "controller_execution"):
+                tracks[name] = {"recorded": False}
         rows.append(
             {
                 "scenario_id": scenario_id,
@@ -270,6 +284,7 @@ def grade(dataset: ITBenchLiteDataset, out_dir: Path) -> dict[str, Any]:
                     if g.root_cause
                 ],
                 "observable": _observable(dataset, scenario_id, truth),
+                "tracks": tracks,
             }
         )
     count = len(rows)
@@ -321,6 +336,7 @@ def grade(dataset: ITBenchLiteDataset, out_dir: Path) -> dict[str, Any]:
         },
         "answered": rate([r["prediction"] is not None for r in rows]),
         "by_confidence": by_confidence,
+        "tracks": _track_summary(rows),
         "baselines_macro_f1": BASELINES,
         "model_calls_total": manifest["model_calls_total"],
         "investigator_errors": manifest.get("investigator_errors", 0),
@@ -331,6 +347,25 @@ def grade(dataset: ITBenchLiteDataset, out_dir: Path) -> dict[str, Any]:
     (out_dir / "report.md").write_text(render_markdown(report), encoding="utf-8")
     _write_report_seal(out_dir, manifest)
     return report
+
+
+def _track_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """C11: each track over the scoreable (observable) scenarios; none replaces the exact score."""
+    scoreable = [r for r in rows if r["observable"]]
+    summary: dict[str, Any] = {}
+    for track in TRACKS:
+        graded = [r["tracks"][track] for r in scoreable if r["tracks"][track].get("recorded", True)]
+        if len(graded) != len(scoreable):
+            summary[track] = {"recorded": False}
+            continue
+        correct = sum(int(g["correct"]) for g in graded)
+        summary[track] = {
+            "correct": correct,
+            "scoreable": len(graded),
+            "accuracy": round(correct / len(graded), 4) if graded else 0.0,
+            "macro_f1": round(sum(g["f1"] for g in graded) / len(graded), 4) if graded else 0.0,
+        }
+    return summary
 
 
 def render_markdown(report: dict[str, Any]) -> str:
@@ -380,6 +415,24 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"| {name} | {bucket['count']} | {bucket['correct']} | "
             f"{bucket['precision']:.1%} | {bucket['share_of_predictions']:.1%} |"
         )
+    tracks = report.get("tracks") or {}
+    if tracks:
+        lines += [
+            "",
+            "Evidence-backed tracks (C11; scoreable scenarios). Only `exact` is the ITBench score; the others "
+            "accept an experiment the root cause provably stands behind and never replace it.",
+            "",
+            "| Track | Correct | Accuracy | Macro F1 |",
+            "| --- | ---: | ---: | ---: |",
+        ]
+        for name in TRACKS:
+            t = tracks.get(name, {})
+            if t.get("recorded", True) and "correct" in t:
+                lines.append(
+                    f"| {name} | {t['correct']}/{t['scoreable']} | {t['accuracy']:.1%} | {t['macro_f1']:.3f} |"
+                )
+            else:
+                lines.append(f"| {name} | not recorded | - | - |")
     lines += [
         "",
         "| Scenario | Prediction | Confidence | Correct | Rank | GT observable |",

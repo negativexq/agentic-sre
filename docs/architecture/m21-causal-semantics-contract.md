@@ -1813,3 +1813,48 @@ support comes from the other incarnation. That was wrong: D1 reads only the acto
 exact instance (`claims.actor_findings`), and in 2.3.0 the named instance and its support agree. What does mix
 incarnations is the name-derived `spawns` topology (roadmap C19): it affects a claim's score and the evidence listed
 with it, not its support or authority.
+
+## 20. A leader not established names no actor anywhere (proposal, 2026-10-08, awaiting the owner)
+
+### 20.1 Measured problem (roadmap C12's residue, ITBench-Lite Scenario-34)
+
+When no candidate is established and the top score is shared (`TIED_LEADERS`), the operator's display is already
+`NOT_ESTABLISHED` with the tied candidates (C12). `root_cause` still holds the ranking's last tie-break, the canonical
+name order, and three product surfaces read it as if it were the cause:
+
+- the **summary** opens with "Observed on <root_cause>: …";
+- the **remediation** is proposed for it (Scenario-34: "raise the cpu limit of deployment/cart", `cart` chosen over
+  `valkey-cart` by name);
+- the **timeline** line and the legacy surfaces (the `DIAGNOSIS_COMPLETED` event's `root_cause`, the HTML report, the
+  v1 API) show it.
+
+Measured on the testbed with engine 2.3.0: 42 incidents end `TIED_LEADERS`, all unscored (mostly warm-up incidents of
+connector contract §17); in 22 of them a tied candidate is on the run's chain while the name order puts an off-chain
+one in `root_cause` (`order-service` before `payment-service`, by the letter).
+
+### 20.2 Rule
+
+When the display is `NOT_ESTABLISHED`, whatever the reason (`TIED_LEADERS`, `NO_EVIDENCE_IN_INCIDENT_WINDOW`,
+`NO_EVIDENCE_NEAR_ONSET`, `NO_CANDIDATE`), no product surface names one actor as the cause:
+
+- the summary states the reason and lists the candidates as candidates (`TIED_LEADERS`: "No candidate is established;
+  N candidates share the top rank: A, B. None is named as the cause."); the two window reasons keep their texts;
+- no remediation is proposed (an action against one of several unestablished candidates is a guess);
+- the `DIAGNOSIS_COMPLETED` event, the timeline line, the HTML report and the v1 API carry the *shown* leader: none,
+  and the candidates where the surface has room for them.
+
+`root_cause` itself is unchanged: it remains the ranking's choice, which replay and the digests rely on, and is
+documented as such ("the ranking's leader; not a cause unless `leading_actor_established`"). Nothing here enters the
+epistemic digest, so the engine version moves by a patch (2.3.0 → 2.3.1).
+
+### 20.3 Not decided here
+
+What an ITBench-Lite answer is when the leader is not established. C11 keeps `root_cause` as the submitted answer;
+Scenario-34 is the one scoreable scenario decided this way, and the count is reported beside the score. Abstaining
+there is a benchmark policy for the owner, not a product rule.
+
+### 20.4 Measurement
+
+Unit tests per reason and surface; offline replay of every stored testbed run, engine on `main` against this one:
+every digest and every `root_cause` equal, and every changed summary or remediation belongs to a `NOT_ESTABLISHED`
+display. No `HOLDOUT` for a change that alters no judgement (§17.5).

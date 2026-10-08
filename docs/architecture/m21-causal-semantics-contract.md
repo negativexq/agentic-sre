@@ -1797,3 +1797,13 @@ targeted `HOLDOUT`.
 
 The offline criteria of §19.5 hold. Next: the targeted live `HOLDOUT` (`scheduled-b`, `competing-b`), pre-registered
 before it runs.
+
+### 19.9 ITBench-Lite regression (2026-10-08, engine 2.3.0)
+
+Identical to 2.2.2 on every scenario: exact 18/31; the C11 tracks 20/31 (execution), 26/31 (structural), 18/31
+(executing instance). The rule does act there: in Scenario-22, 80 and 91 every application of the root's `Schedule`
+instance after the onset is now `AFTER_ONSET`. The leader keeps `SUPPORTED` because the hypothesis also carries the
+**other incarnation's** findings (same `Schedule` name, different UID, applied about an hour before the onset), and
+D1 fires on those, while the hypothesis names the later UID as its exact instance. The logical actor did run before
+the onset; the exact-instance claim rests on another instance's evidence. That is a separate defect (roadmap C19),
+not this rule's.

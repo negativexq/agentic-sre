@@ -58,7 +58,7 @@ The Connector boundary in remote mode (details under [Connector boundary](#conne
 **What was measured**
 
 - **ITBench-Lite: [17/22 scoreable = 77.3%](evals/results/v1.1.2/README.md) on the TEST25 split, which was blind when it was frozen; 0 model calls.** Since 2026-09-28 all 35 published scenarios count as **development data**: the engine has been worked on with them in view, so they no longer measure generalization. The new held-out set is being built on our own [instrumented testbed](#instrumented-testbed).
-- **All 35 scenarios combined: 26/31 = 83.9%.** Four unmatchable published labels are excluded from the denominator.
+- **All 35 scenarios combined: 26/31 = 83.9% (historical, the frozen architecture of `f96073d`).** Four unmatchable published labels are excluded from the denominator. The **current engine (2.2.2) scores 18/31 exactly**; beside it, evidence-backed tracks that never replace that score: 20/31 when the predicted `Schedule`'s own spawned experiment ran across the incident's onset, 26/31 on the controller's structural record alone ([C11 analysis](docs/architecture/c11-itbench-equivalence.md)).
 - **Live suite: 25/25 expected outcomes** — 16/16 correct root-cause actors, 9/9 correct abstentions, and 0 fabricated `RESOLVED` diagnoses. Actor identification and epistemic resolution are separate: `RESOLVED` 0, `AMBIGUOUS` 14, `INSUFFICIENT_EVIDENCE` 11. See the [live-suite report](evals/results/live-suite-2026-09-24.md) and [M16 validation](docs/results/m16-positive-elimination.md).
 - **0 model calls** — in both reported measurements; deterministic judgment remains authoritative.
 - **Testbed, six fault families:** in development (18 runs) and in the first held-out set (18 runs, engine frozen by commit), every injected cause was named in 35 of 36 runs, with 0 false strong authority, 0 false `RESOLVED` and a decoy never named ([results](#instrumented-testbed)).
@@ -288,6 +288,21 @@ excluded from the accuracy denominator and reported separately.
 | DEV10 development split | 9/9 (100%) | 9/10 | 0 |
 | **TEST25 (blind when frozen)** | **[17/22 (77.3%)](evals/results/v1.1.2/README.md)** | 17/25 | **0** |
 | All 35 combined | 26/31 (83.9%) | 26/35 | 0 |
+
+The table above is **historical**: the frozen architecture of its time. The current engine is a different engine
+and is measured separately ([C11 analysis](docs/architecture/c11-itbench-equivalence.md); engine 2.2.2, all 35
+scenarios, full-source path, 31 scoreable):
+
+| Current engine 2.2.2 | Correct | What it measures |
+| --- | ---: | --- |
+| **Exact root cause (the ITBench score)** | **18/31 (58.1%)** | the answer equals the published label |
+| Evidence-backed causal equivalence | 20/31 (64.5%) | the answer is a `Schedule` whose own spawned experiment (controller record, one UID) ran across the incident's onset |
+| Structural controller record only | 26/31 (83.9%) | the answer's exact `Schedule` instance created the labelled experiment; says nothing about when it ran |
+| Executing instance (engine witness) | 18/31 (58.1%) | the engine's own execution witness names the labelled object |
+
+These measure different things. Only the first is the ITBench score; the others are reported beside it and never
+replace it. Of the 13 exact misses, 2 are proven equivalences, 6 are possible equivalences only, 4 are answers the
+published label cannot score, and 1 is a wrong causal actor.
 
 Confidence against ground truth on the 31 scoreable scenarios: `VERIFIED`
 predictions were 13/16 correct and `LIKELY` predictions 13/19.
@@ -710,9 +725,11 @@ remediation is returned as a proposal for an operator to review and execute.
 
 ### How accurate is Agentic SRE?
 
-Against ITBench-Lite ground truth it reached **17/22 (77.3%)** on TEST25, which
-was blind when frozen, and **26/31 (83.9%)** across all 35 scenarios, with zero
-model calls. Denominators exclude four scenarios whose published labels match
+Against ITBench-Lite ground truth the frozen architecture of its time reached
+**17/22 (77.3%)** on TEST25, which was blind when frozen, and **26/31 (83.9%)**
+across all 35 scenarios, with zero model calls (historical). The current engine
+scores **18/31** exactly, and 20/31 on an evidence-backed equivalence track
+reported beside it ([C11](docs/architecture/c11-itbench-equivalence.md)). Denominators exclude four scenarios whose published labels match
 nothing in their own snapshots. Since 2026-09-28 those 35 are development data,
 so these figures are regression evidence, not a generalization estimate; the
 held-out measurement is the own testbed: across six fault families every injected

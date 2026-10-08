@@ -101,3 +101,37 @@ def test_the_console_never_presents_a_withheld_actor_but_keeps_it_as_context() -
     assert listed.leading_root_actor is None and listed.leading_actor_withheld_reason
     # a view stored before the field existed is presented as it was
     assert incident_list_item(incident, {"root_cause": POD}).leading_root_actor == POD
+
+
+# ---- m21 contract §18: an unestablished leader needs evidence near the onset ------------------------------
+
+
+def test_a_leader_whose_only_evidence_is_in_the_window_but_long_before_the_onset_is_withheld() -> (
+    None
+):
+    old = diagnose(-10)  # sixteen minutes before the alert, inside the two-hour window
+    assert (
+        old.root_cause is not None and old.root_cause.canonical == POD
+    )  # the ranking is untouched
+    assert not old.leading_actor_established
+    assert old.leading_actor_display == "NOT_ESTABLISHED"
+    assert old.leading_actor_withheld_reason == "NO_EVIDENCE_NEAR_ONSET"
+    assert old.summary.startswith("No causal candidate has evidence near the onset")
+    assert "16 min before it" in old.summary and POD in old.summary
+
+
+def test_evidence_within_five_minutes_before_the_onset_still_presents_the_leader() -> None:
+    near = diagnose(2)
+    assert near.leading_actor_established and near.leading_actor_withheld_reason is None
+
+
+def test_the_near_onset_rule_changes_no_digest() -> None:
+    old = diagnose(-10)
+    presented = old.model_copy(
+        update={
+            "leading_actor_established": True,
+            "leading_actor_withheld_reason": None,
+            "leading_actor_display": "SINGLE",
+        }
+    )
+    assert epistemic_digest(old) == epistemic_digest(presented)

@@ -10,9 +10,10 @@ tier first (strong > supported > unestablished), considering only the highest ti
   the candidates eligible by temporal relevance (m21 contract §11, ``W`` = 5 minutes): one whose observed
   effect ended before the onset yields to a linked candidate tied to the onset by an observation, and is listed
   as set aside instead (its claim is unchanged);
-- an unestablished tier: its leader is shown only if it is the sole top score and has evidence in the
-  incident window; otherwise ``NOT_ESTABLISHED`` with the tied candidates (``TIED_LEADERS``) or the
-  leader as context (``NO_EVIDENCE_IN_INCIDENT_WINDOW``).
+- an unestablished tier: its leader is shown only if it is the sole top score, has evidence in the
+  incident window and, when its findings are timed, one of them at or after the onset less ``W`` (m21
+  contract §18); otherwise ``NOT_ESTABLISHED`` with the tied candidates (``TIED_LEADERS``) or the leader as
+  context (``NO_EVIDENCE_IN_INCIDENT_WINDOW``, ``NO_EVIDENCE_NEAR_ONSET``).
 """
 
 from __future__ import annotations
@@ -31,7 +32,16 @@ from packages.rca.temporal_relevance import (
 )
 
 # m21 contract §11.2: chosen by the pre-registered rule on the independent check; adopted for presentation only.
+# §18 reuses it for an unestablished leader's evidence near the onset.
 RELEVANCE_WINDOW = timedelta(minutes=5)
+
+
+def near_onset(at: datetime | None, onset: datetime | None) -> bool | None:
+    """Whether ``at`` is at or after ``onset`` less ``W`` (m21 contract §18); ``None`` when either is unknown."""
+    if at is None or onset is None:
+        return None
+    return at >= onset - RELEVANCE_WINDOW
+
 
 Display = Literal["SINGLE", "COMPETING", "NOT_ESTABLISHED"]
 Tier = Literal["STRONG", "SUPPORTED", "UNESTABLISHED"]
@@ -104,9 +114,11 @@ def project_leading_actor(
     supported: Collection[str],
     strong: Collection[str],
     in_window: Callable[[datetime | None], bool | None],
+    near_onset: Callable[[datetime | None], bool | None] = lambda _: None,
     events: Sequence[ClusterEvent] = (),
 ) -> LeadingActorProjection:
-    """``pool``: the engine's selectable, not eliminated hypotheses in ranking order; ``events``: the case's
+    """``pool``: the engine's selectable, not eliminated hypotheses in ranking order; ``near_onset``: whether
+    an instant is at or after the onset less ``W`` (§18), ``None`` when unknowable; ``events``: the case's
     Kubernetes events, read only for the experiments' ``Applied`` and ``Recovered`` (§11)."""
     if not pool:
         return LeadingActorProjection("NOT_ESTABLISHED", None, (), "NO_CANDIDATE")
@@ -127,6 +139,11 @@ def project_leading_actor(
             "UNESTABLISHED",
             (leader.causal_actor,),
             "NO_EVIDENCE_IN_INCIDENT_WINDOW",
+        )
+    recent = [near_onset(f.at) for f in leader.findings]
+    if any(r is False for r in recent) and not any(r is True for r in recent):
+        return LeadingActorProjection(
+            "NOT_ESTABLISHED", "UNESTABLISHED", (leader.causal_actor,), "NO_EVIDENCE_NEAR_ONSET"
         )
     top = max(h.score for h in pool)
     tied = _actors([h for h in pool if abs(h.score - top) < 1e-9])

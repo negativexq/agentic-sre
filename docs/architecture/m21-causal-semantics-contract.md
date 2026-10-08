@@ -1716,14 +1716,19 @@ involved, and a true cause must not be lost to it. ITBench-Lite (C11) showed the
   records it before coverage) bounds the actual onset from above, and nothing bounds it from below: the actual onset is
   **unknown and at or before** that time. Today it is represented only by the causal onset, as one instant.
 - Amendment: `Symptoms` also records `began_before_coverage` (bool) and `earliest_alert_start` (the earliest `startsAt`
-  of the incident's diagnostic alerts, inside coverage or not). The latest time the actual onset can be is
-  `T_latest = min(causal onset, earliest_alert_start)`; when no alert predates coverage it is the causal onset.
+  of the incident's diagnostic alerts, inside coverage or not), so the uncertainty is represented, not hidden.
+- Correction before implementation (2026-10-08): the proposal used `T_latest = min(causal onset,
+  earliest_alert_start)` for the rule. That is unsafe: an alert active for hours before coverage (a chronic lag) would
+  put `T_latest` hours back and strip the initiator role from a fault applied a minute before a new episode. The rule
+  uses the **causal onset** instead: the episode it denotes began no later than it, so an execution recorded after it
+  cannot have started that episode, whatever the earlier alerts were. `began_before_coverage` and
+  `earliest_alert_start` are presentation of the uncertainty only.
 
 ### 19.3 Rule
 
 A finding whose time is the **controller's record of an execution** (`FAULT_INJECTION`: the experiment's first
 `Applied`; `FAULT_SCHEDULE`: the schedule instance's first application) never takes the role `INITIATING` when that
-time is later than `T_latest + δ`. It takes `AFTER_ONSET` instead: the claim stays, with its evidence, as a possible
+time is later than the causal onset `+ δ`. It takes `AFTER_ONSET` instead: the claim stays, with its evidence, as a possible
 contributor; it cannot be supported as the initiator by D1, and it never leads through that support.
 
 - `δ` covers only timestamp precision and controller recording latency. It is **measured on `DEV` before adoption**
@@ -1760,3 +1765,8 @@ the earlier spawn would lead instead of the later one; whether `pod-kill-51` kee
 - **Rule:** `δ = ceil(max(0, max g)) + 1 s`, the extra second for the one-second resolution of event timestamps.
   If any `g` exceeds 60 s, nothing is fixed: the run is examined first and reported.
 - The `§19.1` cases are not in the population's selection and are not looked at to set `δ`.
+
+### 19.7 `δ` measured (2026-10-08)
+
+115 `DEV` runs qualify. `g` ranges from −78.8 s to −0.02 s (median −1.2 s): in no run was the effect observed before
+the controller's record of the execution. By the pre-registered rule, **`δ` = 1 s**.

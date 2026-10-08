@@ -15,6 +15,7 @@ from apps.control_plane.console.dto import (
     ChangeView,
     DiagnosisView,
     EvidenceView,
+    ExecutingInstanceView,
     FindingView,
     HypothesisView,
     IncidentListItem,
@@ -26,6 +27,9 @@ from apps.control_plane.console.dto import (
     StepView,
     TimelineEventView,
     TimelineView,
+    TimingDriverView,
+    TimingView,
+    TimingWithheldView,
 )
 from apps.control_plane.timeline import diagnosis_phases, newer_run_note
 from packages.contracts import (
@@ -40,11 +44,14 @@ from packages.rca.model import (
     CausalHop,
     Diagnosis,
     EntityRef,
+    ExecutingInstance,
     Finding,
     Hypothesis,
     InvestigationResult,
     ResolutionTrace,
+    TimingAssessment,
 )
+from packages.rca.presentation import leader_instance, shown_executing_instances
 from packages.report import ReportSnapshot
 
 
@@ -96,6 +103,39 @@ def _candidate_view(candidate: Candidate) -> CandidateView:
         entity=candidate.entity.canonical,
         score=candidate.score,
         strongest_signal=signal,
+    )
+
+
+def _executing_view(item: ExecutingInstance) -> ExecutingInstanceView:
+    return ExecutingInstanceView(
+        actor=item.actor.canonical,
+        instance=item.instance.canonical,
+        instance_uid=item.instance_uid,
+        target=item.target.canonical if item.target else None,
+        started_at=item.started_at,
+        ended_at=item.ended_at,
+        rule_id=item.rule_id,
+    )
+
+
+def _timing_view(timing: TimingAssessment) -> TimingView:
+    return TimingView(
+        status=timing.status.value,
+        withheld=tuple(
+            TimingWithheldView(actor=w.actor, authority=w.authority, relations=w.relations)
+            for w in timing.withheld
+        ),
+        drivers=tuple(
+            TimingDriverView(
+                onset=outcome.onset,
+                diagnosis_status=outcome.diagnosis_status,
+                actor=driver.actor,
+                change=driver.change,
+                reason=driver.reason,
+            )
+            for outcome in timing.outcomes
+            for driver in outcome.drivers
+        ),
     )
 
 
@@ -153,6 +193,7 @@ def diagnosis_view(
 
     trace = diagnosis.resolution_trace
     symptoms = diagnosis.symptoms
+    instance = leader_instance(diagnosis)
     return DiagnosisView(
         incident_id=diagnosis.incident_id,
         resolution=diagnosis.resolution.value,
@@ -184,6 +225,13 @@ def diagnosis_view(
         leading_actor_display=display,
         leading_actor_tier=diagnosis.leading_actor_tier,
         leading_actor_candidates=candidates,
+        executing_instances=tuple(
+            _executing_view(item) for item in shown_executing_instances(diagnosis)
+        ),
+        leader_instance_resolution=instance.resolution if instance else None,
+        leader_instance=instance.name if instance else None,
+        leader_instance_uid=instance.uid if instance else None,
+        timing=_timing_view(trace.timing) if trace and trace.timing else None,
         is_resolved=is_resolved,
         summary=diagnosis.summary,
         resolution_rationale=trace.rationale if trace else None,

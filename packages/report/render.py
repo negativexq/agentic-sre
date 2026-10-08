@@ -11,7 +11,12 @@ from datetime import datetime
 
 from fpdf import FPDF
 
-from packages.report.model import ReportFinding, ReportInvestigationTurn, ReportSnapshot
+from packages.report.model import (
+    ReportExecutingInstance,
+    ReportFinding,
+    ReportInvestigationTurn,
+    ReportSnapshot,
+)
 
 
 def _clock(value: datetime | None) -> str:
@@ -37,6 +42,32 @@ def _actor_line(snapshot: ReportSnapshot) -> str:
     if snapshot.is_resolved:
         return f"Root cause: `{snapshot.root_actor}`"
     return f"Leading root actor: `{snapshot.leading_root_actor or 'none identified'}`"
+
+
+def _executed_line(item: ReportExecutingInstance) -> str:
+    """D3: what ran for a shown cause; an unknown start or end is said, never guessed."""
+    target = f" on {item.target}" if item.target else ""
+    when = (
+        f"{_clock(item.started_at)} to {_clock(item.ended_at)}"
+        if item.started_at and item.ended_at
+        else f"from {_clock(item.started_at)}, end unknown"
+        if item.started_at
+        else "time unknown"
+    )
+    # A standalone experiment is its own executing instance: say where it ran, not "X executed by X".
+    by = "Executed" if item.instance == item.actor else f"Executed by {item.instance}"
+    return f"{by}{target}, {when}"
+
+
+def _instance_line(snapshot: ReportSnapshot) -> str | None:
+    if snapshot.leader_instance_resolution == "EXACT" and snapshot.leader_instance:
+        uid = f" (UID {snapshot.leader_instance_uid[:8]})" if snapshot.leader_instance_uid else ""
+        return f"Exact instance: {snapshot.leader_instance}{uid}"
+    return {
+        "EXACT": "Exact instance determined",
+        "MULTIPLE_VIABLE": "Several instances remain possible",
+        "UNKNOWN": "Exact instance not determined",
+    }.get(snapshot.leader_instance_resolution or "")
 
 
 def _findings_table(findings: tuple[ReportFinding, ...]) -> list[str]:
@@ -89,6 +120,13 @@ def to_markdown(snapshot: ReportSnapshot) -> str:
         f"- **{_actor_line(snapshot)}** — confidence {snapshot.confidence}, "
         f"resolution {snapshot.resolution}"
     )
+    lines.extend(
+        f"  - {_executed_line(item)}"
+        + (f" (for `{item.actor}`)" if len(snapshot.executing_instances) > 1 else "")
+        for item in snapshot.executing_instances
+    )
+    if instance_line := _instance_line(snapshot):
+        lines.append(f"  - {instance_line}")
     if not snapshot.is_resolved:
         lines.append(
             "- _Resolution is not RESOLVED: the engine has a leading actor but could not "
@@ -342,6 +380,13 @@ def to_pdf(snapshot: ReportSnapshot) -> bytes:
         else "Leading root actor"
     )
     pdf.kv(label, actor or "none identified")
+    for executed in snapshot.executing_instances:
+        pdf.kv(
+            "Executed",
+            _executed_line(executed).removeprefix("Executed").lstrip(" ,").removeprefix("by "),
+        )
+    if instance_line := _instance_line(snapshot):
+        pdf.kv("Instance", instance_line)
     pdf.kv("Confidence", snapshot.confidence)
     pdf.kv("Resolution", snapshot.resolution)
     pdf.kv("Services", ", ".join(snapshot.affected_services) or "—")

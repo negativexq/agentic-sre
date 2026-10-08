@@ -127,6 +127,40 @@ class InvestigationAuditView(ConsoleModel):
 # --- diagnosis -------------------------------------------------------------
 
 
+class ExecutingInstanceView(ConsoleModel):
+    """What ran for a shown cause (m21 §17; D3): a detail of the cause, never a second cause."""
+
+    actor: str
+    instance: str
+    instance_uid: str | None = None
+    target: str | None = None
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    rule_id: str
+
+
+class TimingWithheldView(ConsoleModel):
+    actor: str
+    authority: str
+    relations: tuple[str, ...] = ()
+
+
+class TimingDriverView(ConsoleModel):
+    onset: datetime
+    diagnosis_status: str
+    actor: str
+    change: str
+    reason: str
+
+
+class TimingView(ConsoleModel):
+    """Timing stability of the decision (M21 timing contract §4, §5); UNASSESSED is shown as not assessed."""
+
+    status: str
+    withheld: tuple[TimingWithheldView, ...] = ()
+    drivers: tuple[TimingDriverView, ...] = ()
+
+
 class DiagnosisView(ConsoleModel):
     """The engine's answer for one incident, shaped for the workspace."""
 
@@ -153,6 +187,12 @@ class DiagnosisView(ConsoleModel):
     leading_actor_display: str = "SINGLE"
     leading_actor_tier: str | None = None
     leading_actor_candidates: tuple[str, ...] = ()
+    # D3 (docs/ui/product-contract.md): read verbatim from the diagnosis, absent rather than guessed.
+    executing_instances: tuple[ExecutingInstanceView, ...] = ()
+    leader_instance_resolution: str | None = None
+    leader_instance: str | None = None
+    leader_instance_uid: str | None = None
+    timing: TimingView | None = None
     is_resolved: bool
     summary: str
     resolution_rationale: str | None

@@ -110,6 +110,12 @@ export interface DiagnosisView {
   leading_actor_display?: "SINGLE" | "COMPETING" | "NOT_ESTABLISHED";
   leading_actor_tier?: "STRONG" | "SUPPORTED" | "UNESTABLISHED" | null;
   leading_actor_candidates?: string[];
+  /** D3: what ran for each shown cause (m21 §17); absent rather than guessed. */
+  executing_instances?: ExecutingInstanceView[];
+  leader_instance_resolution?: "EXACT" | "MULTIPLE_VIABLE" | "UNKNOWN" | null;
+  leader_instance?: string | null;
+  leader_instance_uid?: string | null;
+  timing?: TimingView | null;
   is_resolved: boolean;
   summary: string;
   resolution_rationale: string | null;
@@ -308,4 +314,20 @@ export interface IncidentFilters {
   q?: string;
   limit?: number;
   offset?: number;
+}
+
+export interface ExecutingInstanceView {
+  actor: string;
+  instance: string;
+  instance_uid: string | null;
+  target: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  rule_id: string;
+}
+
+export interface TimingView {
+  status: "STABLE" | "SENSITIVE" | "UNASSESSED";
+  withheld: { actor: string; authority: string; relations: string[] }[];
+  drivers: { onset: string; diagnosis_status: string; actor: string; change: string; reason: string }[];
 }

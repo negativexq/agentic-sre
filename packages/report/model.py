@@ -13,7 +13,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-REPORT_VERSION = "2.3"
+REPORT_VERSION = "2.4"
 
 
 class ReportModel(BaseModel):
@@ -36,6 +36,16 @@ class ReportFinding(ReportModel):
     temporal_role: str
     onset_delta_seconds: float | None
     evidence_ids: tuple[str, ...] = ()
+
+
+class ReportExecutingInstance(ReportModel):
+    """What ran for a shown cause (m21 §17; D3)."""
+
+    actor: str
+    instance: str
+    target: str | None = None
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
 
 
 class ReportAlternative(ReportModel):
@@ -171,6 +181,11 @@ class ReportSnapshot(ReportModel):
 
     root_actor: str | None
     leading_root_actor: str | None
+    # D3 (docs/ui/product-contract.md): absent rather than guessed.
+    executing_instances: tuple[ReportExecutingInstance, ...] = ()
+    leader_instance_resolution: str | None = None
+    leader_instance: str | None = None
+    leader_instance_uid: str | None = None
     confidence: str
     resolution: str
     decision_semantics: str = "legacy"

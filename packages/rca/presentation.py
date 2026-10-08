@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Literal
 
-from packages.rca.model import ClusterEvent, EntityRef
+from packages.rca.model import ClusterEvent, Diagnosis, EntityRef, ExecutingInstance
 from packages.rca.temporal_relevance import (
     CandidateView,
     ChaosObservation,
@@ -150,3 +150,60 @@ def project_leading_actor(
     if len(tied) > 1:
         return LeadingActorProjection("NOT_ESTABLISHED", "UNESTABLISHED", tied, "TIED_LEADERS")
     return LeadingActorProjection("SINGLE", "UNESTABLISHED", (leader.causal_actor,))
+
+
+# ---- D3 (docs/ui/product-contract.md): what the console and the report show beside the leader ----------
+
+
+def _shown_actors(diagnosis: Diagnosis) -> tuple[EntityRef, ...]:
+    """The actors the operator is shown: none when not established, the candidates otherwise."""
+    if (
+        diagnosis.leading_actor_display == "NOT_ESTABLISHED"
+        or not diagnosis.leading_actor_established
+    ):
+        return ()
+    if diagnosis.leading_actor_candidates:
+        return diagnosis.leading_actor_candidates
+    return (diagnosis.root_cause,) if diagnosis.root_cause is not None else ()
+
+
+def shown_executing_instances(diagnosis: Diagnosis) -> tuple[ExecutingInstance, ...]:
+    """The executing instances (m21 §17) of the actors shown; nothing for a leader not shown."""
+    shown = set(_shown_actors(diagnosis))
+    return tuple(item for item in diagnosis.executing_instances if item.actor in shown)
+
+
+@dataclass(frozen=True)
+class LeaderInstance:
+    resolution: str  # EXACT, MULTIPLE_VIABLE or UNKNOWN (CausalFamily.instance_resolution)
+    name: str | None = None
+    uid: str | None = None
+
+
+def leader_instance(diagnosis: Diagnosis) -> LeaderInstance | None:
+    """How far the single shown leader's exact instance is resolved; None unless one leader is shown, and
+    None when an executing instance already names it (D3, owner, 2026-10-08)."""
+    shown = _shown_actors(diagnosis)
+    trace = diagnosis.resolution_trace
+    if len(shown) != 1 or diagnosis.leading_actor_display == "COMPETING" or trace is None:
+        return None
+    (actor,) = shown
+    if any(item.actor == actor for item in diagnosis.executing_instances):
+        return None  # the execution witness already names what ran; the family's resolution adds nothing
+    selected = diagnosis.hypothesis
+    families = [f for f in trace.causal_families if f.actor == actor]
+    family = next(
+        (f for f in families if selected is not None and selected.hypothesis_id in f.members),
+        families[0] if families else None,
+    )
+    if family is None:
+        return None
+    resolution = family.instance_resolution.value
+    instance = (
+        selected.actor_instance
+        if selected is not None and selected.causal_actor == actor and resolution == "EXACT"
+        else None
+    )
+    if instance is None:
+        return LeaderInstance(resolution)
+    return LeaderInstance(resolution, instance.entity.canonical, instance.uid)

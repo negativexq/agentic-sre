@@ -16,6 +16,7 @@ from packages.rca.model import (
     ResolutionElimination,
     ResolutionTrace,
 )
+from packages.rca.presentation import leader_instance, shown_executing_instances
 from packages.rca.report import LifecyclePhase
 from packages.report.model import (
     REPORT_VERSION,
@@ -24,6 +25,7 @@ from packages.report.model import (
     ReportAlternative,
     ReportElimination,
     ReportEliminationCheck,
+    ReportExecutingInstance,
     ReportFinding,
     ReportHop,
     ReportInvestigationGap,
@@ -336,6 +338,7 @@ def build_report(
     hypothesis = diagnosis.hypothesis
     started = diagnosis.symptoms.onset or alert_fired or incident_opened
     origin = phases[0].at if phases else None
+    instance = leader_instance(diagnosis)
     investigation_projection = (
         _investigation_projection(investigation) if investigation is not None else None
     )
@@ -354,6 +357,19 @@ def build_report(
         affected_services=tuple(diagnosis.symptoms.services),
         root_actor=leading if is_resolved else None,
         leading_root_actor=leading,
+        executing_instances=tuple(
+            ReportExecutingInstance(
+                actor=item.actor.canonical,
+                instance=item.instance.canonical,
+                target=item.target.canonical if item.target else None,
+                started_at=item.started_at,
+                ended_at=item.ended_at,
+            )
+            for item in shown_executing_instances(diagnosis)
+        ),
+        leader_instance_resolution=instance.resolution if instance else None,
+        leader_instance=instance.name if instance else None,
+        leader_instance_uid=instance.uid if instance else None,
         confidence=diagnosis.confidence.value,
         resolution=diagnosis.resolution.value,
         decision_semantics=diagnosis.decision_semantics,

@@ -98,7 +98,7 @@ never receives ground truth.
 |---|---|---|
 | D1 | UI notification: toast and badge on a new incident, a second one when the diagnosis lands; driven only by persisted state | DONE (verified in the browser against real alerts; `docs/ui/product-contract.md`, Notifications) | |
 | D2 | Browser notification while the tab is closed | PARKED |
-| D3 | Console shows timing stability, withheld authority, `instance_resolution` and status drivers; and the executing instance beside the root cause (`m21` §17: the engine records it from 2.2.1, the console does not show it yet) | NEXT |
+| D3 | Console shows timing stability, withheld authority, `instance_resolution` and status drivers; and the executing instance beside the root cause (`m21` §17) | DONE (owner-approved design, `docs/ui/product-contract.md` D3): the workspace and the report (v2.4) show what ran on which pod and when, and the leader's instance; timing only when assessed (live sources stay unassessed until C7), its withheld authority and drivers in the investigation tab. Checked in the browser on a copy of a twelfth-`HOLDOUT` database re-diagnosed with 2.2.2 |
 | D4 | Connect Cluster flow (token, install command, health, partial-coverage states) | NEXT (after A8) |
 
 ## 6. E. Benchmark suite (on top of the testbed)
@@ -124,6 +124,7 @@ never receives ground truth.
 | F9 | `kind-e2e` CI job fails now and then on commits that touch no code (seen on a docs-only commit, green on the next) | NEXT |
 | F10 | Harness: a calibration failure before any injection (the `order-service` port-forward serving nothing, only `URLError` in the baseline) stops the suite instead of being set aside like a refused baseline; done by hand once (`.refused-…`, §17.1) | NEXT |
 | F11 | Harness: the pause between runs is shorter than the previous fault's alerts take to resolve, so incidents open in the next run's quiet period before its injection (twelfth `HOLDOUT`: 8 such incidents, none scored; `m21` §18.5). Scoring is unaffected; the lab is not quiet when a run begins | NEXT |
+| F12 | Engine: a leader whose fault-execution witness names the exact experiment and pod can still carry `instance_resolution` `UNKNOWN` on its causal family (seen on a twelfth-`HOLDOUT` `StressChaos` leader); the console hides the instance line when an execution line is shown (D3), the inconsistency itself is not explained yet | NEXT |
 
 ## 8. Critical path
 

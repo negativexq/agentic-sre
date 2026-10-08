@@ -126,3 +126,27 @@ ServiceAccount, an Alertmanager on a closed port): the missing reads and the unr
 
 Not covered yet: an identity off the control plane's allow-list passes the TLS check (the allow-list is enforced when
 the session opens); A8.2's registry makes it checkable.
+
+## 7. Amendment to decisions 1 and 2, found before building A8.2 (proposal, 2026-10-09, awaiting the owner)
+
+Both were approved as recommended; neither can be built as written with the stack in use.
+
+**Decision 1 (enroll on the existing gRPC port).** The port requires a client certificate. For a Connector that has
+none yet, client authentication would have to become optional on that port. Measured with grpcio: with
+`require_client_auth=False` the server does not *request* a client certificate at all, so a Connector presenting a
+valid one arrives with no identity. One port cannot serve both enrollment and mutual TLS. Options:
+- **(a) recommended:** a second port for enrollment only: server-authenticated TLS, one method (`Enroll`), nothing
+  else served there. The customer still opens no inbound port (the Connector dials both); the control plane exposes two.
+- (b) one port without TLS-level client authentication, Connector identity checked by the application: weakens §12's
+  mutual TLS. Not recommended.
+
+**Decision 2 (pin the CA by its hash in the token).** Pinning by hash needs the Connector to see the control plane's CA
+before it trusts it. A gRPC channel cannot be opened without a trusted root, and Python 3.12's standard library cannot
+read a server's certificate chain, only its leaf. Options:
+- **(a) recommended:** the token **carries the CA certificate itself**, `<id>.<secret>.<CA, base64url DER>` (about 700
+  characters for the P-256 CA). The Connector trusts exactly that CA, so the token is still the only thing handed to
+  the customer, which was the point of the decision.
+- (b) ship the CA file with the chart values beside a short token.
+
+Everything else of §A8.2 stands: one-time, one hour, stored hashed, bound to the id, the key generated on the
+Connector, the certificate signed with `connector:<id>`, the registry in the database.

@@ -8,7 +8,7 @@ const LABEL: Record<LiveState, string> = {
 };
 
 const DOT: Record<LiveState, string> = {
-  connecting: "bg-warning animate-pulse",
+  connecting: "bg-warning",
   live: "bg-healthy",
   offline: "bg-border-strong",
 };

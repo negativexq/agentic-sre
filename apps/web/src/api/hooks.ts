@@ -7,6 +7,28 @@ import type { ChangeFilters, IncidentFilters } from "@/api/types";
 // fallback for when EventSource is unavailable or a stream drops.
 const FALLBACK_INTERVAL = 30_000;
 
+export function useDiagnosisRevisions(id: string) {
+  return useQuery({
+    queryKey: ["diagnosis-revisions", id],
+    queryFn: () => api.revisions(id),
+    refetchInterval: FALLBACK_INTERVAL,
+  });
+}
+export function useDiagnosisRevision(id: string, revision: number | null) {
+  return useQuery({
+    queryKey: ["diagnosis-revision", id, revision],
+    queryFn: () => api.revision(id, revision!),
+    enabled: revision !== null,
+  });
+}
+export function useEvidenceCoverage(id: string) {
+  return useQuery({
+    queryKey: ["evidence-coverage", id],
+    queryFn: () => api.coverage(id),
+    refetchInterval: FALLBACK_INTERVAL,
+  });
+}
+
 export function useDashboard() {
   return useQuery({
     queryKey: ["dashboard"],
@@ -77,7 +99,9 @@ export function useCreateReport(incidentId: string) {
   return useMutation({
     mutationFn: () => api.createReport(incidentId),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["incident-reports", incidentId] });
+      void queryClient.invalidateQueries({
+        queryKey: ["incident-reports", incidentId],
+      });
       void queryClient.invalidateQueries({ queryKey: ["reports"] });
     },
   });
@@ -97,7 +121,9 @@ export function useShareReport(reportId: string) {
     mutationFn: (request: { recipients: string[]; include_pdf: boolean }) =>
       api.shareReport(reportId, request),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["deliveries", reportId] });
+      void queryClient.invalidateQueries({
+        queryKey: ["deliveries", reportId],
+      });
     },
   });
 }

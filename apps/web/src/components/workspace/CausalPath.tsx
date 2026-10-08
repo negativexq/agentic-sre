@@ -1,36 +1,60 @@
+import { ArrowRight } from "lucide-react";
 import type { CausalHopView } from "@/api/types";
-import { shortEntity } from "@/lib/format";
+import { Entity } from "@/components/Entity";
 
-/**
- * The engine's causal path, rendered hop by hop. The UI draws exactly the hops
- * the diagnosis produced; it never infers a relation of its own.
- */
-export function CausalPath({ hops }: { hops: CausalHopView[] }) {
-  if (hops.length === 0) {
+/** Each row is exactly one engine hop. Disjoint hops are never stitched together. */
+export function CausalPath({
+  hops,
+  onOpenResource,
+}: {
+  hops: CausalHopView[];
+  onOpenResource?: (resource: string) => void;
+}) {
+  if (!hops.length)
     return (
       <p className="text-sm text-muted">
-        The strongest evidence attaches directly to the symptom; no multi-hop path.
+        No causal path recorded by the engine.
       </p>
     );
-  }
-
-  const nodes: { entity: string; relation?: string }[] = [{ entity: hops[0].source }];
-  for (const hop of hops) {
-    nodes.push({ entity: hop.target, relation: hop.relation });
-  }
-
   return (
-    <ol className="space-y-0">
-      {nodes.map((node, index) => (
-        <li key={index}>
-          {node.relation && (
-            <div className="ml-3 flex items-center gap-2 py-1 text-xs text-subtle">
-              <span className="h-4 w-px bg-border-strong" />
-              <span className="font-mono">↓ {node.relation}</span>
-            </div>
-          )}
-          <div className="rounded-lg border border-border bg-surface px-3 py-2">
-            <code className="text-sm text-text break-anywhere">{shortEntity(node.entity)}</code>
+    <ol className="space-y-3">
+      {hops.map((hop, index) => (
+        <li
+          key={index}
+          className="grid min-w-0 grid-cols-[1fr] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(90px,auto)_minmax(0,1fr)]"
+        >
+          <div className="rounded-md border border-border bg-surface p-3">
+            {onOpenResource ? (
+              <button
+                onClick={() => onOpenResource(hop.source)}
+                aria-label={`Inspect resource ${hop.source}`}
+                className="w-full text-left hover:text-accent"
+              >
+                <Entity value={hop.source} />
+              </button>
+            ) : (
+              <Entity value={hop.source} />
+            )}
+          </div>
+          <div className="flex flex-col items-center gap-1 py-1 text-subtle">
+            <span className="break-anywhere text-center font-mono text-[11px]">
+              {hop.relation}
+            </span>
+            <ArrowRight size={16} aria-hidden />
+            <span className="text-[10px]">{hop.direction}</span>
+          </div>
+          <div className="rounded-md border border-border bg-surface p-3">
+            {onOpenResource ? (
+              <button
+                onClick={() => onOpenResource(hop.target)}
+                aria-label={`Inspect resource ${hop.target}`}
+                className="w-full text-left hover:text-accent"
+              >
+                <Entity value={hop.target} />
+              </button>
+            ) : (
+              <Entity value={hop.target} />
+            )}
           </div>
         </li>
       ))}

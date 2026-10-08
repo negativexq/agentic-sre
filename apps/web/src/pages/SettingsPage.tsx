@@ -11,18 +11,22 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 border-b border-border/60 py-2 last:border-0">
       <span className="text-sm text-muted">{label}</span>
-      <span className="text-right text-sm text-text break-anywhere">{children}</span>
+      <span className="text-right text-sm text-text break-anywhere">
+        {children}
+      </span>
     </div>
   );
 }
 
 function YesNo({ value }: { value: boolean }) {
-  return <Badge tone={value ? "healthy" : "neutral"}>{value ? "Yes" : "No"}</Badge>;
+  return (
+    <Badge tone={value ? "healthy" : "neutral"}>{value ? "Yes" : "No"}</Badge>
+  );
 }
 
 function Configured({ value }: { value: boolean }) {
   return (
-    <Badge tone={value ? "healthy" : "neutral"}>{value ? "Configured" : "Not configured"}</Badge>
+    <Badge tone="neutral">{value ? "Configured" : "Not configured"}</Badge>
   );
 }
 
@@ -48,7 +52,9 @@ export function SettingsPage() {
                 <YesNo value={data.auto_diagnose} />
               </Row>
               <Row label="Watch interval">
-                {data.watch_interval_seconds > 0 ? `${data.watch_interval_seconds}s` : "off"}
+                {data.watch_interval_seconds > 0
+                  ? `${data.watch_interval_seconds}s`
+                  : "off"}
               </Row>
               <Row label="Cluster access">{data.cluster_access}</Row>
               <Row label="Watched namespaces">
@@ -80,7 +86,9 @@ export function SettingsPage() {
               <Row label="Email">
                 <Configured value={data.email_configured} />
               </Row>
-              {data.email_sender && <Row label="Email sender">{data.email_sender}</Row>}
+              {data.email_sender && (
+                <Row label="Email sender">{data.email_sender}</Row>
+              )}
               <Row label="Prometheus">
                 <Configured value={data.prometheus_configured} />
               </Row>

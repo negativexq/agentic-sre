@@ -1,51 +1,73 @@
+import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import type { FindingView } from "@/api/types";
-import { clock, shortEntity } from "@/lib/format";
+import { dateTime } from "@/lib/format";
 
-function roleTone(role: string) {
-  switch (role) {
-    case "INITIATING":
-      return "accent" as const;
-    case "SUPPORTING":
-      return "healthy" as const;
-    case "CONSEQUENCE":
-      return "neutral" as const;
-    default:
-      return "neutral" as const;
-  }
-}
-
-function offsetLabel(seconds: number | null): string | null {
-  if (seconds === null) return null;
-  const sign = seconds < 0 ? "−" : "+";
-  return `${sign}${Math.abs(seconds).toFixed(0)}s vs onset`;
-}
-
-export function FindingsList({ findings }: { findings: FindingView[] }) {
-  if (findings.length === 0) {
-    return <p className="text-sm text-muted">None recorded.</p>;
-  }
+export function FindingsList({
+  findings,
+  onSelect,
+}: {
+  findings: FindingView[];
+  onSelect?: (finding: FindingView) => void;
+}) {
+  if (!findings.length)
+    return <p className="py-2 text-sm text-muted">None recorded.</p>;
   return (
-    <ul className="space-y-2">
-      {findings.map((finding, index) => (
-        <li key={index} className="rounded-lg border border-border bg-surface px-3 py-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="neutral">{finding.kind}</Badge>
-            <Badge tone={roleTone(finding.temporal_role)}>{finding.temporal_role}</Badge>
-            {offsetLabel(finding.onset_delta_seconds) && (
-              <span className="font-mono text-xs text-subtle">
-                {offsetLabel(finding.onset_delta_seconds)}
+    <ul className="divide-y divide-border">
+      {findings.map((finding, index) => {
+        const content = (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone="neutral">{finding.kind}</Badge>
+              <span className="text-[10px] uppercase tracking-wide text-subtle">
+                {finding.temporal_role}
               </span>
+              {finding.onset_delta_seconds !== null && (
+                <span className="font-mono text-[11px] text-muted">
+                  {finding.onset_delta_seconds > 0 ? "+" : ""}
+                  {finding.onset_delta_seconds}s vs onset
+                </span>
+              )}
+              {onSelect && (
+                <ChevronRight
+                  size={14}
+                  className="ml-auto shrink-0 text-subtle"
+                  aria-hidden
+                />
+              )}
+            </div>
+            <p className="mt-2 break-anywhere text-sm">{finding.summary}</p>
+            <p className="mt-1 break-anywhere font-mono text-[11px] text-muted">
+              {finding.entity}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-subtle">
+              <span>
+                {finding.at ? dateTime(finding.at) : "Observation time unknown"}
+              </span>
+              <span>
+                {finding.evidence_ids.length} evidence reference
+                {finding.evidence_ids.length === 1 ? "" : "s"}
+              </span>
+            </div>
+          </>
+        );
+        return (
+          <li key={index}>
+            {onSelect ? (
+              <button
+                type="button"
+                aria-label={`Inspect finding: ${finding.summary}`}
+                onClick={() => onSelect(finding)}
+                className="block w-full rounded-md px-2 py-3 text-left transition-colors hover:bg-surface"
+              >
+                {content}
+              </button>
+            ) : (
+              <div className="px-2 py-3">{content}</div>
             )}
-            {finding.at && <span className="font-mono text-xs text-subtle">{clock(finding.at)}</span>}
-          </div>
-          <p className="mt-1 text-sm text-text break-anywhere">{finding.summary}</p>
-          <p className="mt-0.5 font-mono text-xs text-subtle break-anywhere">
-            {shortEntity(finding.entity)}
-            {finding.evidence_ids.length > 0 && ` · ${finding.evidence_ids.slice(0, 3).join(", ")}`}
-          </p>
-        </li>
-      ))}
+          </li>
+        );
+      })}
     </ul>
   );
 }

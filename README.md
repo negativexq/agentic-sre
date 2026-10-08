@@ -63,6 +63,26 @@ The Connector boundary in remote mode (details under [Connector boundary](#conne
 - **0 model calls** — in both reported measurements; deterministic judgment remains authoritative.
 - **Testbed, six fault families:** in development (18 runs) and in the first held-out set (18 runs, engine frozen by commit), every injected cause was named in 35 of 36 runs, with 0 false strong authority, 0 false `RESOLVED` and a decoy never named ([results](#instrumented-testbed)).
 
+## Operator Console
+
+Screenshots of the implemented console, rendered with repository-provided seeded
+data. These illustrate the interface, not a live production cluster.
+
+**Operational overview · light theme**
+
+![Operator Console overview with active incidents, recent diagnoses, changes, and source health](docs/ui/screenshots/overview-light.png)
+
+**Incident investigation · dark theme**
+
+![Incident workspace with deterministic diagnosis, engine causal path, evidence, and recorded lifecycle](docs/ui/screenshots/incident-workspace-dark.png)
+
+**Incident explorer**
+
+![Incident explorer with severity, confidence, resolution, and server-side filters](docs/ui/screenshots/incidents-dark.png)
+
+See the [screenshot gallery](docs/ui/screenshots/README.md) for evidence inspection,
+ambiguous diagnoses, changes, reports, light theme, and mobile views.
+
 ## What is Agentic SRE?
 
 Agentic SRE is a Kubernetes incident investigation and SRE root-cause

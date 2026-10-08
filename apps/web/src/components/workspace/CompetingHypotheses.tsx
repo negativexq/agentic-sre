@@ -1,17 +1,6 @@
-import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/Badge";
+import { Entity } from "@/components/Entity";
 import type { CandidateView, HypothesisView } from "@/api/types";
-import { shortEntity } from "@/lib/format";
-
-function stateTone(state: string): BadgeTone {
-  switch (state) {
-    case "SUPPORTED":
-      return "healthy";
-    case "CONTRADICTED":
-      return "critical";
-    default:
-      return "neutral"; // UNRESOLVED — plausible, not excluded
-  }
-}
 
 export function CompetingHypotheses({
   hypotheses,
@@ -20,47 +9,63 @@ export function CompetingHypotheses({
   hypotheses: HypothesisView[];
   candidates: CandidateView[];
 }) {
-  if (hypotheses.length === 0 && candidates.length === 0) {
+  if (!hypotheses.length && !candidates.length)
     return (
-      <p className="text-sm text-muted">
-        No competing hypotheses survived — the leading actor stands alone.
-      </p>
+      <p className="text-sm text-muted">No competing hypotheses recorded.</p>
     );
-  }
-
   return (
-    <div className="space-y-2">
+    <div className="divide-y divide-border">
+      <p className="pb-3 text-xs text-muted">
+        Supported hypotheses remain candidates; support alone does not establish
+        a root cause.
+      </p>
       {hypotheses.map((hypothesis) => (
-        <div
-          key={hypothesis.hypothesis_id}
-          className="rounded-lg border border-border bg-surface px-3 py-2"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <code className="text-sm text-text break-anywhere">{shortEntity(hypothesis.actor)}</code>
-            <Badge tone={stateTone(hypothesis.epistemic_state)}>
+        <article key={hypothesis.hypothesis_id} className="py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <Entity value={hypothesis.actor} />
+            </div>
+            <Badge
+              tone={
+                hypothesis.epistemic_state === "SUPPORTED"
+                  ? "accent"
+                  : "neutral"
+              }
+            >
               {hypothesis.epistemic_state}
             </Badge>
           </div>
-          {hypothesis.reasons.length > 0 && (
-            <p className="mt-1 text-sm text-muted break-anywhere">{hypothesis.reasons[0]}</p>
-          )}
-        </div>
+          <p className="mt-3 break-anywhere text-sm text-muted">
+            {hypothesis.causal_explanation || "No causal explanation recorded."}
+          </p>
+          <details className="mt-3">
+            <summary className="text-xs text-accent">
+              Engine reasons & identity
+            </summary>
+            <ul className="mt-2 list-inside list-disc space-y-2 text-xs text-muted">
+              {hypothesis.reasons.map((reason, index) => (
+                <li key={index} className="break-anywhere">
+                  {reason}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-3 break-anywhere font-mono text-[11px] text-subtle">
+              {hypothesis.hypothesis_id} · Engine score {hypothesis.score}
+            </p>
+          </details>
+        </article>
       ))}
-
-      {hypotheses.length === 0 &&
+      {!hypotheses.length &&
         candidates.map((candidate) => (
-          <div
-            key={candidate.entity}
-            className="rounded-lg border border-border bg-surface px-3 py-2"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <code className="text-sm text-text break-anywhere">
-                {shortEntity(candidate.entity)}
-              </code>
-              <span className="font-mono text-xs text-subtle">{candidate.score.toFixed(1)}</span>
-            </div>
-            <p className="mt-1 text-sm text-muted break-anywhere">{candidate.strongest_signal}</p>
-          </div>
+          <article key={candidate.entity} className="py-4">
+            <Entity value={candidate.entity} />
+            <p className="mt-2 break-anywhere text-sm text-muted">
+              {candidate.strongest_signal}
+            </p>
+            <p className="mt-2 text-[11px] text-subtle">
+              Engine score {candidate.score} · Epistemic state not provided
+            </p>
+          </article>
         ))}
     </div>
   );

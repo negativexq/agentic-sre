@@ -1,6 +1,10 @@
 import { useState } from "react";
 
-import { useReportDeliveries, useShareReport, useSystemStatus } from "@/api/hooks";
+import {
+  useReportDeliveries,
+  useShareReport,
+  useSystemStatus,
+} from "@/api/hooks";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/States";
 import { dateTime } from "@/lib/format";
@@ -12,7 +16,9 @@ export function ShareReport({ reportId }: { reportId: string }) {
   const [recipients, setRecipients] = useState("");
   const [includePdf, setIncludePdf] = useState(true);
 
-  const emailConnector = system?.connectors.find((connector) => connector.name === "Email");
+  const emailConnector = system?.connectors.find(
+    (connector) => connector.name === "Email",
+  );
   const configured = emailConnector?.status === "connected";
 
   const submit = () => {
@@ -32,8 +38,8 @@ export function ShareReport({ reportId }: { reportId: string }) {
 
       {!configured && (
         <Alert tone="warning">
-          Email delivery is not configured. Set <code>SRE_SMTP_HOST</code> to enable sharing. You can
-          still export the PDF, Markdown or JSON above.
+          Email delivery is not configured. Set <code>SRE_SMTP_HOST</code> to
+          enable sharing. You can still export the PDF, Markdown or JSON above.
         </Alert>
       )}
 
@@ -67,18 +73,30 @@ export function ShareReport({ reportId }: { reportId: string }) {
       </div>
 
       {share.isError && (
-        <p className="mt-2 text-sm text-critical">{(share.error as Error).message}</p>
+        <p className="mt-2 text-sm text-critical">
+          {(share.error as Error).message}
+        </p>
       )}
-      {share.isSuccess && <p className="mt-2 text-sm text-healthy">Report sent.</p>}
+      {share.isSuccess && (
+        <p className="mt-2 text-sm text-muted">
+          Delivery status: {share.data.status}
+          {share.data.error ? ` · ${share.data.error}` : ""}
+        </p>
+      )}
 
       {deliveries && deliveries.length > 0 && (
         <ul className="mt-3 space-y-1 text-xs text-muted">
           {deliveries.map((delivery) => (
-            <li key={delivery.delivery_id} className="flex flex-wrap justify-between gap-2">
+            <li
+              key={delivery.delivery_id}
+              className="flex flex-wrap justify-between gap-2"
+            >
               <span className="break-anywhere">
-                {delivery.status === "sent" ? "✓" : "✗"} {delivery.recipients.join(", ")}
+                {delivery.status} · {delivery.recipients.join(", ")}
               </span>
-              <span className="text-subtle">{dateTime(delivery.created_at)}</span>
+              <span className="text-subtle">
+                {dateTime(delivery.created_at)}
+              </span>
             </li>
           ))}
         </ul>

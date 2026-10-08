@@ -1,4 +1,8 @@
-import { useState } from "react";
+import { SearchInput } from "@/components/ui/Input";
+import { useUrlFilters } from "@/lib/useUrlFilters";
+import { Boxes, GitCompareArrows, SlidersHorizontal, X } from "lucide-react";
+import { FilterSelect } from "@/components/ui/FilterSelect";
+import { Button } from "@/components/ui/Button";
 
 import { useChanges } from "@/api/hooks";
 import { useLiveUpdates } from "@/api/useLiveUpdates";
@@ -12,39 +16,11 @@ import { ErrorState, Skeleton } from "@/components/ui/States";
 const SCOPES = ["", "DEPLOYMENT", "CONFIGURATION"];
 const TYPES = ["", "CREATED", "UPDATED", "ROLLOUT", "SCALED"];
 
-function Select({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: string[];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="flex flex-col gap-1 text-xs text-subtle">
-      {label}
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-text focus-visible:outline-2 focus-visible:outline-accent"
-      >
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option || "Any"}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
 export function ChangesPage() {
-  const [scope, setScope] = useState("");
-  const [changeType, setChangeType] = useState("");
-  const [q, setQ] = useState("");
+  const { params, update } = useUrlFilters();
+  const scope = params.get("scope") ?? "";
+  const changeType = params.get("change_type") ?? "";
+  const q = params.get("q") ?? "";
 
   const filters: ChangeFilters = {
     scope: scope || undefined,
@@ -64,18 +40,46 @@ export function ChangesPage() {
       />
 
       <Card className="mb-4">
-        <CardBody className="flex flex-wrap items-end gap-3">
-          <Select label="Scope" value={scope} options={SCOPES} onChange={setScope} />
-          <Select label="Change type" value={changeType} options={TYPES} onChange={setChangeType} />
-          <label className="flex flex-col gap-1 text-xs text-subtle">
-            Search resource
-            <input
+        <CardBody className="space-y-4">
+          <div className="min-w-0 sm:max-w-xl">
+            <SearchInput
+              aria-label="Search resource"
               value={q}
-              onChange={(event) => setQ(event.target.value)}
-              placeholder="e.g. payment"
-              className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-text focus-visible:outline-2 focus-visible:outline-accent"
+              onChange={(event) => update({ q: event.target.value })}
+              placeholder="Search changes by resource name…"
+              className="h-10 bg-surface-raised"
             />
-          </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4">
+            <span className="flex items-center gap-2 text-xs text-subtle">
+              <SlidersHorizontal size={14} aria-hidden /> Filters
+            </span>
+            <div className="grid min-w-0 flex-1 basis-full grid-cols-1 gap-2 sm:grid-cols-2 lg:max-w-2xl lg:basis-0">
+              <FilterSelect
+                label="Scope"
+                icon={Boxes}
+                value={scope}
+                options={SCOPES}
+                onChange={(value) => update({ scope: value })}
+              />
+              <FilterSelect
+                label="Change type"
+                icon={GitCompareArrows}
+                value={changeType}
+                options={TYPES}
+                onChange={(value) => update({ change_type: value })}
+              />
+            </div>
+            <Button
+              variant="ghost"
+              disabled={!scope && !changeType && !q}
+              onClick={() => {
+                update({ scope: null, change_type: null, q: null });
+              }}
+            >
+              <X size={14} aria-hidden /> Clear filters
+            </Button>
+          </div>
         </CardBody>
       </Card>
 

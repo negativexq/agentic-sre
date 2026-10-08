@@ -29,6 +29,8 @@ export interface SeenState {
 }
 
 export interface DiffResult {
+  /** Full recorded burst for the bounded notification center; toast limits remain separate. */
+  allNotifications: AppNotification[];
   /** Newest first, at most `MAX_BURST`. */
   notifications: AppNotification[];
   /** How many further notifications were folded into a summary instead of being shown one by one. */
@@ -41,12 +43,21 @@ export interface DiffResult {
 export const MAX_BURST = 3;
 const MAX_REMEMBERED = 500;
 
-function remember(list: readonly string[], additions: readonly string[]): string[] {
-  const merged = [...list.filter((id) => !additions.includes(id)), ...additions];
+function remember(
+  list: readonly string[],
+  additions: readonly string[],
+): string[] {
+  const merged = [
+    ...list.filter((id) => !additions.includes(id)),
+    ...additions,
+  ];
   return merged.slice(-MAX_REMEMBERED);
 }
 
-function notification(kind: NotificationKind, item: IncidentListItem): AppNotification {
+function notification(
+  kind: NotificationKind,
+  item: IncidentListItem,
+): AppNotification {
   return {
     id: `${kind}:${item.incident_id}`,
     kind,
@@ -67,8 +78,13 @@ function notification(kind: NotificationKind, item: IncidentListItem): AppNotifi
  * `previous === null` means nothing was ever recorded (the first visit): the current state is taken as
  * the baseline and nothing is announced, so opening the console never floods the screen.
  */
-export function diffIncidents(previous: SeenState | null, items: readonly IncidentListItem[]): DiffResult {
-  const ordered = [...items].sort((a, b) => b.created_at.localeCompare(a.created_at));
+export function diffIncidents(
+  previous: SeenState | null,
+  items: readonly IncidentListItem[],
+): DiffResult {
+  const ordered = [...items].sort((a, b) =>
+    b.created_at.localeCompare(a.created_at),
+  );
   const knownIncidents = new Set(previous?.incidents ?? []);
   const knownDiagnosed = new Set(previous?.diagnosed ?? []);
 
@@ -84,19 +100,28 @@ export function diffIncidents(previous: SeenState | null, items: readonly Incide
   }
 
   return {
+    allNotifications: announced,
     notifications: announced.slice(0, MAX_BURST),
     overflow: Math.max(0, announced.length - MAX_BURST),
-    announcedIncidentIds: [...new Set(announced.map((notice) => notice.incidentId))],
+    announcedIncidentIds: [
+      ...new Set(announced.map((notice) => notice.incidentId)),
+    ],
     seen: {
       incidents: remember(
         previous?.incidents ?? [],
-        [...ordered].reverse().map((item) => item.incident_id).filter((id) => !knownIncidents.has(id)),
+        [...ordered]
+          .reverse()
+          .map((item) => item.incident_id)
+          .filter((id) => !knownIncidents.has(id)),
       ),
       diagnosed: remember(
         previous?.diagnosed ?? [],
         [...ordered]
           .reverse()
-          .filter((item) => item.has_diagnosis && !knownDiagnosed.has(item.incident_id))
+          .filter(
+            (item) =>
+              item.has_diagnosis && !knownDiagnosed.has(item.incident_id),
+          )
           .map((item) => item.incident_id),
       ),
     },

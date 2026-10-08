@@ -1,5 +1,8 @@
-import { useDashboard } from "@/api/hooks";
+import { RecentDiagnoses } from "@/components/RecentDiagnoses";
+import { useDashboard, useChanges } from "@/api/hooks";
 import { useLiveUpdates } from "@/api/useLiveUpdates";
+import { ChangesTable } from "@/components/ChangesTable";
+import { Link } from "react-router-dom";
 import { IncidentsTable } from "@/components/IncidentsTable";
 import { LiveBadge } from "@/components/LiveBadge";
 import { PageHeader } from "@/components/PageHeader";
@@ -10,14 +13,19 @@ import { ErrorState, Skeleton } from "@/components/ui/States";
 import { humanizeSeconds } from "@/lib/format";
 
 export function OverviewPage() {
+  const recentChanges = useChanges({ limit: 5 });
   const { data, isLoading, isError, error } = useDashboard();
-  const live = useLiveUpdates("/stream", [["dashboard"], ["incidents"]]);
+  const live = useLiveUpdates("/stream", [
+    ["dashboard"],
+    ["incidents"],
+    ["changes"],
+  ]);
 
   return (
     <>
       <PageHeader
         title="Overview"
-        description="What is happening across the cluster right now."
+        description="Active impact, diagnosis activity, and the evidence sources supporting investigations."
         action={<LiveBadge state={live} />}
       />
 
@@ -31,12 +39,17 @@ export function OverviewPage() {
         </div>
       ) : data ? (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatTile label="Active incidents" value={data.counters.active_incidents} />
+          <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-border bg-surface-raised sm:grid-cols-4">
+            <StatTile
+              label="Active incidents"
+              value={data.counters.active_incidents}
+            />
             <StatTile
               label="Critical"
               value={data.counters.critical_incidents}
-              tone={data.counters.critical_incidents > 0 ? "critical" : "default"}
+              tone={
+                data.counters.critical_incidents > 0 ? "critical" : "default"
+              }
             />
             <StatTile
               label="Diagnosing"
@@ -50,31 +63,60 @@ export function OverviewPage() {
             />
           </div>
 
-          <Card>
-            <CardHeader
-              title="Active incidents"
-              action={
-                <span className="text-xs text-subtle">{data.active_incidents.length} open</span>
-              }
-            />
-            <CardBody className="p-0">
-              <IncidentsTable items={data.active_incidents} />
-            </CardBody>
-          </Card>
-
-          <div className="grid gap-6 lg:grid-cols-3">
-            <Card className="lg:col-span-2">
-              <CardHeader title="Recent diagnoses" />
-              <CardBody className="p-0">
-                <IncidentsTable items={data.recent_diagnoses} />
-              </CardBody>
-            </Card>
-            <Card>
-              <CardHeader title="System health" />
-              <CardBody>
-                <SystemHealth system={data.system} />
-              </CardBody>
-            </Card>
+          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_380px]">
+            <div className="min-w-0 space-y-5">
+              <Card>
+                <CardHeader
+                  title="Active incidents"
+                  action={
+                    <Link to="/incidents" className="text-xs text-accent">
+                      Explore incidents →
+                    </Link>
+                  }
+                />
+                <CardBody className="p-0">
+                  <IncidentsTable items={data.active_incidents} />
+                </CardBody>
+              </Card>
+              <Card>
+                <CardHeader
+                  title="Recent changes"
+                  action={
+                    <Link to="/changes" className="text-xs text-accent">
+                      Explore changes →
+                    </Link>
+                  }
+                />
+                <CardBody className="p-0">
+                  {recentChanges.isLoading ? (
+                    <Skeleton className="h-24" />
+                  ) : recentChanges.isError ? (
+                    <ErrorState
+                      message={(recentChanges.error as Error).message}
+                    />
+                  ) : (
+                    <ChangesTable changes={recentChanges.data ?? []} />
+                  )}
+                </CardBody>
+              </Card>
+            </div>
+            <aside
+              className="min-w-0 space-y-5"
+              aria-label="Diagnosis activity and source health"
+            >
+              <Card>
+                <CardHeader title="Recent diagnoses" />
+                <CardBody>
+                  <RecentDiagnoses items={data.recent_diagnoses} />
+                </CardBody>
+              </Card>
+              <Card>
+                <CardHeader title="Source health" />
+                <CardBody>
+                  <SystemHealth system={data.system} />
+                </CardBody>
+              </Card>
+            </aside>
           </div>
         </div>
       ) : null}

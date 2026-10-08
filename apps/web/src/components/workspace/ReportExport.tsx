@@ -7,15 +7,23 @@ import { Markdown } from "@/components/Markdown";
 import { Button } from "@/components/ui/Button";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { Drawer } from "@/components/ui/Drawer";
-import { Skeleton } from "@/components/ui/States";
+import { ErrorState, Skeleton } from "@/components/ui/States";
 import { ShareReport } from "@/components/workspace/ShareReport";
 import { dateTime } from "@/lib/format";
 
-function PreviewDrawer({ reportId, onClose }: { reportId: string | null; onClose: () => void }) {
-  const { data, isLoading } = useQuery({
+export function PreviewDrawer({
+  reportId,
+  onClose,
+}: {
+  reportId: string | null;
+  onClose: () => void;
+}) {
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["report-markdown", reportId],
     queryFn: async () => {
       const response = await fetch(reportUrl(reportId as string, "markdown"));
+      if (!response.ok)
+        throw new Error(`Report preview unavailable (${response.status})`);
       return response.text();
     },
     enabled: Boolean(reportId),
@@ -23,7 +31,13 @@ function PreviewDrawer({ reportId, onClose }: { reportId: string | null; onClose
 
   return (
     <Drawer open={Boolean(reportId)} onClose={onClose} title="Report preview">
-      {isLoading || !data ? <Skeleton className="h-64" /> : <Markdown source={data} />}
+      {isError ? (
+        <ErrorState message={(error as Error).message} />
+      ) : isLoading || !data ? (
+        <Skeleton className="h-64" />
+      ) : (
+        <Markdown source={data} />
+      )}
     </Drawer>
   );
 }
@@ -50,9 +64,12 @@ export function ReportExport({ incidentId }: { incidentId: string }) {
         }
       />
       <CardBody className="space-y-3">
+        {create.isError && (
+          <ErrorState message={(create.error as Error).message} />
+        )}
         <p className="text-sm text-muted">
-          A report is an immutable snapshot pinned to this diagnosis run. Re-diagnosing the incident
-          never changes an existing report.
+          A report is an immutable snapshot pinned to this diagnosis run.
+          Re-diagnosing the incident never changes an existing report.
         </p>
 
         {latest ? (
@@ -66,17 +83,35 @@ export function ReportExport({ incidentId }: { incidentId: string }) {
               </span>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={() => setPreviewId(latest.report_id)}>
+              <Button
+                variant="secondary"
+                onClick={() => setPreviewId(latest.report_id)}
+              >
                 Preview
               </Button>
-              <a href={reportUrl(latest.report_id, "pdf")} target="_blank" rel="noreferrer">
-                <Button variant="secondary">PDF</Button>
+              <a
+                className="inline-flex items-center rounded-md border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium hover:bg-surface-raised"
+                href={reportUrl(latest.report_id, "pdf")}
+                target="_blank"
+                rel="noreferrer"
+              >
+                PDF
               </a>
-              <a href={reportUrl(latest.report_id, "markdown")} target="_blank" rel="noreferrer">
-                <Button variant="secondary">Markdown</Button>
+              <a
+                className="inline-flex items-center rounded-md border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium hover:bg-surface-raised"
+                href={reportUrl(latest.report_id, "markdown")}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Markdown
               </a>
-              <a href={reportUrl(latest.report_id, "json")} target="_blank" rel="noreferrer">
-                <Button variant="secondary">JSON</Button>
+              <a
+                className="inline-flex items-center rounded-md border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium hover:bg-surface-raised"
+                href={reportUrl(latest.report_id, "json")}
+                target="_blank"
+                rel="noreferrer"
+              >
+                JSON
               </a>
             </div>
             {reports && reports.length > 1 && (
@@ -87,7 +122,9 @@ export function ReportExport({ incidentId }: { incidentId: string }) {
             <ShareReport reportId={latest.report_id} />
           </div>
         ) : (
-          <p className="text-sm text-subtle">No report yet. Generate one to preview and export.</p>
+          <p className="text-sm text-subtle">
+            No report yet. Generate one to preview and export.
+          </p>
         )}
       </CardBody>
 

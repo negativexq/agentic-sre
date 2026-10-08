@@ -12,6 +12,9 @@ import type {
   SettingsView,
   ShareRequest,
   SystemStatus,
+  EvidenceCoverage,
+  DiagnosisRevisionSummary,
+  DiagnosisRevisionDetail,
 } from "@/api/types";
 
 const BASE = "/api/v1/console";
@@ -26,8 +29,8 @@ export class ApiError extends Error {
   }
 }
 
-async function get<T>(path: string): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, {
+async function get<T>(path: string, base = BASE): Promise<T> {
+  const response = await fetch(`${base}${path}`, {
     headers: { accept: "application/json" },
   });
   if (!response.ok) {
@@ -55,15 +58,35 @@ function query(filters: IncidentFilters | ChangeFilters): string {
 }
 
 export const api = {
+  revisions: (id: string) =>
+    get<DiagnosisRevisionSummary[]>(
+      `/incidents/${encodeURIComponent(id)}/diagnoses`,
+      "/api/v1",
+    ),
+  revision: (id: string, revision: number) =>
+    get<DiagnosisRevisionDetail>(
+      `/incidents/${encodeURIComponent(id)}/diagnoses/${revision}`,
+      "/api/v1",
+    ),
+  coverage: async (id: string) => {
+    const document = await get<{ evidence_coverage?: EvidenceCoverage | null }>(
+      `/incidents/${encodeURIComponent(id)}/diagnosis`,
+      "/api/v1",
+    );
+    return document.evidence_coverage ?? null;
+  },
   dashboard: () => get<DashboardSummary>("/dashboard"),
   system: () => get<SystemStatus>("/system"),
   settings: () => get<SettingsView>("/settings"),
   incidents: (filters: IncidentFilters = {}) =>
     get<IncidentPage>(`/incidents${query(filters)}`),
   incident: (id: string) => get<IncidentDetail>(`/incidents/${id}`),
-  incidentEvidence: (id: string) => get<EvidenceView[]>(`/incidents/${id}/evidence`),
-  incidentChanges: (id: string) => get<ChangeView[]>(`/incidents/${id}/changes`),
-  changes: (filters: ChangeFilters = {}) => get<ChangeView[]>(`/changes${query(filters)}`),
+  incidentEvidence: (id: string) =>
+    get<EvidenceView[]>(`/incidents/${id}/evidence`),
+  incidentChanges: (id: string) =>
+    get<ChangeView[]>(`/incidents/${id}/changes`),
+  changes: (filters: ChangeFilters = {}) =>
+    get<ChangeView[]>(`/changes${query(filters)}`),
   createReport: async (id: string): Promise<{ report_id: string }> => {
     const response = await fetch(`${BASE}/incidents/${id}/reports`, {
       method: "POST",
@@ -78,14 +101,22 @@ export const api = {
     }
     return (await response.json()) as { report_id: string };
   },
-  incidentReports: (id: string) => get<ReportSummary[]>(`/incidents/${id}/reports`),
+  incidentReports: (id: string) =>
+    get<ReportSummary[]>(`/incidents/${id}/reports`),
   reports: () => get<ReportSummary[]>("/reports"),
   reportDeliveries: (reportId: string) =>
     get<DeliveryView[]>(`/reports/${reportId}/deliveries`),
-  shareReport: async (reportId: string, request: ShareRequest): Promise<DeliveryView> => {
+  shareReport: async (
+    reportId: string,
+    request: ShareRequest,
+  ): Promise<DeliveryView> => {
     const response = await fetch(`${BASE}/reports/${reportId}/email`, {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json", ...authHeaders() },
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+        ...authHeaders(),
+      },
       body: JSON.stringify(request),
     });
     if (!response.ok) {
@@ -106,6 +137,9 @@ export const api = {
 };
 
 /** Absolute URL to a report export, safe to open or download directly. */
-export function reportUrl(reportId: string, format: "markdown" | "pdf" | "json"): string {
+export function reportUrl(
+  reportId: string,
+  format: "markdown" | "pdf" | "json",
+): string {
   return `${BASE}/reports/${reportId}/${format}`;
 }

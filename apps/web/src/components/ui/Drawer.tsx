@@ -1,57 +1,58 @@
-import type { ReactNode } from "react";
-import { useEffect } from "react";
+// shadcn/ui Sheet composition, adapted to the console's existing Drawer API.
+import { type ReactNode, useRef } from "react";
+import * as Sheet from "@radix-ui/react-dialog";
+import { X } from "lucide-react";
+import { ScrollArea } from "./ScrollArea";
 
-import { cn } from "@/lib/cn";
-
-/** A right-side sheet for previews and detail drill-downs. */
 export function Drawer({
   open,
   onClose,
   title,
   children,
+  onAfterClose,
 }: {
   open: boolean;
   onClose: () => void;
   title: ReactNode;
   children: ReactNode;
+  onAfterClose?: () => void;
 }) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
+  const trigger = useRef<HTMLElement | null>(null);
   return (
-    <div className={cn("fixed inset-0 z-50", open ? "" : "pointer-events-none")} aria-hidden={!open}>
-      <div
-        onClick={onClose}
-        className={cn(
-          "absolute inset-0 bg-black/40 transition-opacity",
-          open ? "opacity-100" : "opacity-0",
-        )}
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        className={cn(
-          "absolute right-0 top-0 flex h-full w-full max-w-2xl flex-col border-l border-border bg-surface-raised shadow-xl transition-transform",
-          open ? "translate-x-0" : "translate-x-full",
-        )}
-      >
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold text-text">{title}</h2>
-          <button
-            onClick={onClose}
-            className="rounded-md px-2 py-1 text-sm text-muted hover:bg-surface hover:text-text"
-          >
-            Close
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
-      </div>
-    </div>
+    <Sheet.Root
+      open={open}
+      onOpenChange={(value) => {
+        if (!value) onClose();
+      }}
+    >
+      <Sheet.Portal>
+        <Sheet.Overlay className="fixed inset-0 z-50 bg-[rgb(4_9_16_/_60%)]" />
+        <Sheet.Content
+          aria-describedby={undefined}
+          className="fixed inset-y-0 right-0 z-50 flex h-dvh w-full max-w-[520px] flex-col border-l border-border bg-surface-raised text-text outline-none"
+          onOpenAutoFocus={() => {
+            trigger.current = document.activeElement as HTMLElement | null;
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            if (trigger.current?.isConnected) trigger.current.focus();
+            onAfterClose?.();
+          }}
+        >
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-4">
+            <Sheet.Title className="text-sm font-semibold">{title}</Sheet.Title>
+            <Sheet.Close
+              aria-label="Close inspector"
+              className="rounded-md p-2 text-muted hover:bg-surface"
+            >
+              <X size={18} aria-hidden />
+            </Sheet.Close>
+          </div>
+          <ScrollArea className="flex-1">
+            <div className="p-5">{children}</div>
+          </ScrollArea>
+        </Sheet.Content>
+      </Sheet.Portal>
+    </Sheet.Root>
   );
 }

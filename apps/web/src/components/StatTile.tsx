@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/cn";
 
 export function StatTile({
@@ -15,8 +14,10 @@ export function StatTile({
   tone?: "default" | "critical" | "accent";
 }) {
   return (
-    <Card className="px-4 py-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-subtle">{label}</p>
+    <div className="min-w-0 border-r border-border px-5 py-4 last:border-0">
+      <p className="text-xs font-medium uppercase tracking-wide text-subtle">
+        {label}
+      </p>
       <p
         className={cn(
           "mt-1 text-2xl font-semibold tabular-nums",
@@ -28,6 +29,6 @@ export function StatTile({
         {value}
       </p>
       {hint && <p className="mt-0.5 text-xs text-muted">{hint}</p>}
-    </Card>
+    </div>
   );
 }

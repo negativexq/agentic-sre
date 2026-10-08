@@ -2,11 +2,17 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 
-export function Card({ children, className }: { children: ReactNode; className?: string }) {
+export function Card({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <section
       className={cn(
-        "rounded-xl border border-border bg-surface-raised shadow-sm",
+        "min-w-0 rounded-lg border border-border bg-surface-raised",
         className,
       )}
     >
@@ -37,6 +43,12 @@ export function CardHeader({
   );
 }
 
-export function CardBody({ children, className }: { children: ReactNode; className?: string }) {
+export function CardBody({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return <div className={cn("p-4", className)}>{children}</div>;
 }

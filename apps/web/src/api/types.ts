@@ -1,9 +1,10 @@
 // Wire types mirroring apps/control_plane/console/dto.py. The console API is the
-// only contract the UI depends on; it never sees internal persistence rows.
+// workspace contract. Revision/coverage types below mirror public core API schemas.
 
 export type Resolution = "RESOLVED" | "AMBIGUOUS" | "INSUFFICIENT_EVIDENCE";
 export type Confidence = "VERIFIED" | "LIKELY" | "UNVERIFIED";
-export type ConnectorStatus = "connected" | "degraded" | "unavailable" | "not_configured";
+export type ConnectorStatus =
+  "connected" | "degraded" | "unavailable" | "not_configured";
 
 export interface CausalHopView {
   source: string;
@@ -96,8 +97,21 @@ export interface DiagnosisView {
   incident_recovery?: string;
   context_hypothesis_ids?: string[];
   material_frontier_ids?: string[];
-  causal_explanations?: { explaining_claim: string; explained_claim: string; mechanism: string; consequence: string; evidence_ids: string[] }[];
-  frontier_answers?: { alternative_id: string; question: string; state: string; investigation_state: string; evidence_ids: string[]; remaining_uncertainty: string[] }[];
+  causal_explanations?: {
+    explaining_claim: string;
+    explained_claim: string;
+    mechanism: string;
+    consequence: string;
+    evidence_ids: string[];
+  }[];
+  frontier_answers?: {
+    alternative_id: string;
+    question: string;
+    state: string;
+    investigation_state: string;
+    evidence_ids: string[];
+    remaining_uncertainty: string[];
+  }[];
   mechanism_verified_hypothesis_ids?: string[];
   incident_id: string;
   resolution: Resolution;
@@ -329,5 +343,98 @@ export interface ExecutingInstanceView {
 export interface TimingView {
   status: "STABLE" | "SENSITIVE" | "UNASSESSED";
   withheld: { actor: string; authority: string; relations: string[] }[];
-  drivers: { onset: string; diagnosis_status: string; actor: string; change: string; reason: string }[];
+  drivers: {
+    onset: string;
+    diagnosis_status: string;
+    actor: string;
+    change: string;
+    reason: string;
+  }[];
+}
+
+export interface EvidenceCoverage {
+  starts_at: string;
+  window_end: string;
+  stream_followed_since: string | null;
+  scopes: {
+    namespace: string;
+    kind: string;
+    source_continuity: "CONTINUOUS" | "GAPPED" | "UNKNOWN";
+    transport_completeness: "PROVEN" | "NOT_PROVEN" | "NOT_APPLICABLE";
+    transport_proven_at: string | null;
+    gaps: {
+      reason: string;
+      since: string | null;
+      at: string;
+      namespace: string | null;
+      kind: string | null;
+    }[];
+  }[];
+}
+
+export interface DiagnosisRevisionSummary {
+  diagnosis_id: number;
+  revision_number: number;
+  previous_diagnosis_id: number | null;
+  trigger: string;
+  created_at: string;
+  run_id: string | null;
+  window_end: string | null;
+  manifest_digest: string | null;
+  tape_digest: string | null;
+  epistemic_digest: string | null;
+  engine_version: string | null;
+  config_digest: string | null;
+  root_cause: string | null;
+  confidence: string;
+  mode: string;
+  resolution: string | null;
+}
+export interface RevisionHypothesis {
+  hypothesis_key: string | null;
+  hypothesis_id: string;
+  causal_actor: string | null;
+  state: string | null;
+  root_eligible: boolean;
+}
+export interface DiagnosisRevisionDetail extends DiagnosisRevisionSummary {
+  diagnosis: Record<string, unknown> & {
+    evidence_coverage?: EvidenceCoverage | null;
+  };
+  diff: {
+    resolution_transition: {
+      previous: string;
+      current: string;
+      changed: boolean;
+    };
+    hypothesis_changes: {
+      hypothesis_key: string;
+      previous: RevisionHypothesis;
+      current: RevisionHypothesis;
+    }[];
+    new_eliminations: {
+      hypothesis_key: string | null;
+      hypothesis_id: string;
+      code: string;
+      rule_id: string;
+      rule_version: string;
+      consequence: string | null;
+      targets: string[];
+      mechanism: string;
+      evidence_ids: string[];
+      observation_ids: string[];
+      time_basis: string[];
+      coverage_basis: string;
+      preconditions: string[];
+      decisive_evidence_ids: string[];
+    }[];
+    new_decisive_evidence_ids: string[];
+    appeared: RevisionHypothesis[];
+    disappeared: RevisionHypothesis[];
+    manifest_diff: {
+      previous_digest: string | null;
+      current_digest: string | null;
+      status: "UNCHANGED" | "CHANGED" | "UNKNOWN";
+    };
+  } | null;
 }

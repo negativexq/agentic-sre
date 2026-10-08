@@ -81,6 +81,7 @@ describe("diffIncidents", () => {
     const result = diffIncidents(seenBoth([]), items);
     expect(result.notifications.map((n) => n.incidentId)).toEqual(["5", "4", "3"].slice(0, MAX_BURST));
     expect(result.overflow).toBe(2);
+    expect(result.allNotifications).toHaveLength(5);
     expect(result.announcedIncidentIds).toHaveLength(5); // the unread count covers the folded ones too
     expect(result.seen.incidents).toHaveLength(5); // all are seen, so none returns on the next poll
   });

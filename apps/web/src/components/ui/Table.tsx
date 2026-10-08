@@ -2,10 +2,18 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 
-export function Table({ children, className }: { children: ReactNode; className?: string }) {
+export function Table({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="overflow-x-auto">
-      <table className={cn("w-full border-collapse text-sm", className)}>{children}</table>
+    <div className="max-w-full overflow-x-auto">
+      <table className={cn("w-full border-collapse text-sm", className)}>
+        {children}
+      </table>
     </div>
   );
 }
@@ -34,8 +42,22 @@ export function TRow({
   return (
     <tr
       onClick={onClick}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (event) => {
+              if (
+                event.target === event.currentTarget &&
+                (event.key === "Enter" || event.key === " ")
+              ) {
+                event.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
       className={cn(
-        "border-b border-border/60 last:border-0",
+        "border-b border-border/60 last:border-0 hover:bg-surface/60",
         onClick && "cursor-pointer transition-colors hover:bg-surface",
       )}
     >
@@ -44,6 +66,14 @@ export function TRow({
   );
 }
 
-export function TCell({ children, className }: { children: ReactNode; className?: string }) {
-  return <td className={cn("px-3 py-2.5 align-middle", className)}>{children}</td>;
+export function TCell({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <td className={cn("px-3 py-2.5 align-middle", className)}>{children}</td>
+  );
 }

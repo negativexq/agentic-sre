@@ -11,7 +11,7 @@ function initialTheme(): Theme {
   } catch {
     /* storage may be unavailable */
   }
-  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  return "dark";
 }
 
 /** Toggle between light and dark, persisting the choice per browser. */

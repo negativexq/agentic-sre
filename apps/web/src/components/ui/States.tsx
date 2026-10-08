@@ -4,7 +4,9 @@ import { cn } from "@/lib/cn";
 
 /** Skeleton shimmer block for loading states. */
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn("animate-pulse rounded-md bg-border/60", className)} />;
+  return (
+    <div className={cn("animate-pulse rounded-md bg-border/60", className)} />
+  );
 }
 
 export function EmptyState({
@@ -17,9 +19,11 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border px-6 py-12 text-center">
+    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border px-6 py-8 text-center">
       <p className="text-sm font-medium text-text">{title}</p>
-      {description && <p className="max-w-sm text-sm text-muted">{description}</p>}
+      {description && (
+        <p className="max-w-sm text-sm text-muted">{description}</p>
+      )}
       {action}
     </div>
   );
@@ -41,7 +45,11 @@ export function Alert({
   children: ReactNode;
 }) {
   return (
-    <div className={cn("rounded-lg border px-3 py-2 text-sm", ALERT_TONES[tone])}>{children}</div>
+    <div
+      className={cn("rounded-lg border px-3 py-2 text-sm", ALERT_TONES[tone])}
+    >
+      {children}
+    </div>
   );
 }
 

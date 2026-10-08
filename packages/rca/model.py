@@ -327,6 +327,9 @@ class EvidenceTemporalRole(StrEnum):
     SUPPORTING = "SUPPORTING"
     CONSEQUENCE = "CONSEQUENCE"
     AMBIGUOUS = "AMBIGUOUS"
+    # m21 §19: a controller-recorded execution that began after the causal onset; a possible contributor,
+    # never the initiator.
+    AFTER_ONSET = "AFTER_ONSET"
 
 
 class PredicateStatus(StrEnum):
@@ -599,6 +602,10 @@ class Symptoms(BaseModel):
     # W, the alert channel's observation start the onset was derived against.
     alert_observation_start: datetime | None = None
     onset_basis: str | None = None
+    # m21 §19.2: the actual symptom onset is not the causal onset. When a diagnostic alert was already active
+    # before W, the actual onset is unknown and at or before ``earliest_alert_start``. Presentation only.
+    began_before_coverage: bool = False
+    earliest_alert_start: datetime | None = None
 
 
 class Candidate(BaseModel):

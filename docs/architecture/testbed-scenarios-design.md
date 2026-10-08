@@ -938,3 +938,36 @@ engine 2.2.0 frozen at the commit in the manifests, scored with §20's grader.
   without it. What the criterion meant (no root moved off the chain by the relation) holds. Recorded as a wording
   error of this pre-registration, not reinterpreted after the fact; the 8 are the existing least-bad
   `UNESTABLISHED` leaders (roadmap C10, C12), 5 of them shown `SINGLE`, which is worth a look.
+
+## 27. Thirteenth HOLDOUT, targeted: pre-registration for m21 §19 (2026-10-08, frozen before the run)
+
+Per §23, the variants the rule can reach: `scheduled-b` 296–298 and `competing-b` 299–301; suites
+`holdout13-<variant>`, engine 2.3.0 frozen at the commit in the manifests. Acceptance: the frozen bar (0 false strong
+authority, 0 false `RESOLVED`). Criteria:
+
+1. No stored diagnosis leads with an actor whose every initiating finding is a controller-recorded execution more than
+   `δ` (1 s) after the causal onset (the defect of m21 §19.1 does not appear).
+2. Where a spawned experiment of the run's `Schedule` leads, it was applied at or before the onset `+ δ`.
+3. No root cause off the run's chain; cause and instance recall per variant reported against the earlier `HOLDOUT`s,
+   for information only, nothing selected from it.
+
+Reported beside them, not a criterion: for `competing-b`, every scored incident in which the pod-kill is or is not
+shown, with its onset against the pod-kill's application, so that a credit withdrawn by direction (m21 §19.8) is seen
+on fresh runs, and the symptom grouping that attributes lag alerts to the pod-kill (ground-truth contract §15) can be
+examined.
+
+### 27.1 Thirteenth HOLDOUT result (2026-10-08, engine 2.3.0, 6 runs)
+
+6/6 valid; 0 false strong authority, 0 false `RESOLVED`. `scheduled-b`: cause and instance recall 1.0, execution
+witness recall 0.67 (0 in the eleventh and twelfth). `competing-b`: cause and instance recall 0.83, group recall 0.89.
+
+1. **Held.** No diagnosis leads with an actor whose every execution was recorded more than `δ` after the onset: every
+   leader's controller-recorded executions lie 26 to 165 s before the onset, all `INITIATING`.
+2. **Held.** In `scheduled-b` the leader is the run's `Schedule`, its spawns applied 42 to 165 s before the onset.
+3. **Held.** Every root cause is on its run's chain.
+
+Reported, not a criterion: the missing cause is `competing-b` #2's pod-kill (`pod-kill-301`, applied 16:57:24). All
+seven scored incidents of that run are the loss's and began 50 to 75 s before it; it raised no lag incident of its own
+in the collection window. The engine lists it in each as a candidate with `AFTER_ONSET`, never as the initiator. In #0
+and #1 the pod-kill was applied 39 to 61 s before the lag incidents' onset and is shown as a competing cause there, as
+it should be. The rule withdraws credit only where the direction is impossible.

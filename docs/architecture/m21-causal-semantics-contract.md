@@ -1685,3 +1685,125 @@ product-mode runs), each incident's widest run diagnosed by the engine on `main`
    not listed. This drops a pre-registered reporting item; it decided nothing.
 
 The rule is adopted: no criterion of §18.4 is violated. The next full `HOLDOUT` reports the display beside the scores.
+
+## 19. An execution that began after the onset never initiates it (owner-approved 2026-10-08)
+
+### 19.1 Measured problem (roadmap C18)
+
+`annotate_temporal_roles` (`ranking.py`) gives a change or fault finding the role `INITIATING` when its time is at most
+`verification_onset_grace` (15 min) **after** the causal onset, and `m21.support.change-onset-path` (D1 v2) supports a
+hypothesis from any `INITIATING` change. The grace exists for changes whose time is an *observation* time (a change
+journaled late). It is applied unchanged to chaos findings whose time is the **controller's own record** of the
+execution (`Applied`, a schedule instance's first application), which is exact to the second.
+
+Reproduced on `DEV` with the current engine (2.2.2), replaying 30 databases (`slice4`, `slice4b`, `slice5` and their
+repeats, the phase-0 competing runs): of 187 diagnoses whose leader has timed initiating findings, **19 lead with an
+actor whose every initiating finding came after the onset**, all `SUPPORTED` and shown `COMPETING`:
+
+- 17 in `scheduled-delay` runs: the leader is a *later* spawn of the run's own `Schedule`, applied 44 to 137 s after
+  the onset, listed first beside the earlier spawn that was applied before it;
+- 2 in `competing-delay-podkill`: `pod-kill-51`, applied 5 s after the onset of a Kafka-lag incident, beside the delay.
+
+The second case is a warning for the rule: a difference of a few seconds is close to the precision of the timestamps
+involved, and a true cause must not be lost to it. ITBench-Lite (C11) showed the same mechanism at 12 to 15 minutes
+(Scenario-22, 80, 91); it motivated the search, it is not used to design or tune the rule.
+
+### 19.2 What the onset is, and is not
+
+- The **causal onset** (§10.2) is the first diagnostic episode that began inside alert coverage. It is not the first
+  alert ever observed and not the actual symptom onset.
+- When diagnostic alerts of the incident were already firing when coverage began, their `startsAt` (Alertmanager
+  records it before coverage) bounds the actual onset from above, and nothing bounds it from below: the actual onset is
+  **unknown and at or before** that time. Today it is represented only by the causal onset, as one instant.
+- Amendment: `Symptoms` also records `began_before_coverage` (bool) and `earliest_alert_start` (the earliest `startsAt`
+  of the incident's diagnostic alerts, inside coverage or not), so the uncertainty is represented, not hidden.
+- Correction before implementation (2026-10-08): the proposal used `T_latest = min(causal onset,
+  earliest_alert_start)` for the rule. That is unsafe: an alert active for hours before coverage (a chronic lag) would
+  put `T_latest` hours back and strip the initiator role from a fault applied a minute before a new episode. The rule
+  uses the **causal onset** instead: the episode it denotes began no later than it, so an execution recorded after it
+  cannot have started that episode, whatever the earlier alerts were. `began_before_coverage` and
+  `earliest_alert_start` are presentation of the uncertainty only.
+
+### 19.3 Rule
+
+A finding whose time is the **controller's record of an execution** (`FAULT_INJECTION`: the experiment's first
+`Applied`; `FAULT_SCHEDULE`: the schedule instance's first application) never takes the role `INITIATING` when that
+time is later than the causal onset `+ δ`. It takes `AFTER_ONSET` instead: the claim stays, with its evidence, as a possible
+contributor; it cannot be supported as the initiator by D1, and it never leads through that support.
+
+- `δ` covers only timestamp precision and controller recording latency. It is **measured on `DEV` before adoption**
+  by a pre-registered method (the distribution of a controller's `Applied` record against the earliest target-side
+  effect it produced), and fixed from that measurement, not from the cases in §19.1.
+- Findings whose time is an observation time (spec, config, image, object changes from the journal) keep the existing
+  grace; this rule does not touch them.
+- Age is never a reason: a finding *before* the onset keeps `INITIATING` however old (§11 governs leadership among
+  supported candidates). The rule is about direction, not recency.
+- An onset that is `UNKNOWN` (no qualified episode) leaves every role as today.
+
+### 19.4 Consequences
+
+The leader can change, so the engine version moves by a minor (2.2.2 → 2.3.0, roadmap F1). In §19.1's scheduled runs
+the earlier spawn would lead instead of the later one; whether `pod-kill-51` keeps its role depends on `δ`.
+
+### 19.5 Measurement, pre-registered (testbed-scenarios-design §23)
+
+1. `δ` measured on `DEV` as stated, recorded before any replay with the rule.
+2. Offline replay of every stored testbed run, engine on `main` against this one: every leader change listed with the
+   chain; the rule is not adopted if a scored true cause loses its support or its leadership without a stated reason
+   for each.
+3. A targeted live `HOLDOUT` of the affected variants (`scheduled-b`, `competing-b`), as for every rule that can
+   change a diagnosis.
+4. ITBench-Lite reported afterwards as a regression check only (exact and the C11 tracks).
+
+### 19.6 Measuring `δ`: pre-registration (2026-10-08, frozen before the measurement)
+
+- **Population:** every `DEV` testbed run (no `HOLDOUT` run) whose cause is a chaos experiment and whose timeline
+  records both `execution_started_at` (the controller's `Applied` record, read by the injector) and `target_effect_at`
+  (the oracle's first failing probe at the exact target).
+- **Gap:** `g = execution_started_at − target_effect_at`, in seconds. A positive `g` means the effect was observed
+  *before* the controller's record of the execution, which is what `δ` must absorb.
+- **Rule:** `δ = ceil(max(0, max g)) + 1 s`, the extra second for the one-second resolution of event timestamps.
+  If any `g` exceeds 60 s, nothing is fixed: the run is examined first and reported.
+- The `§19.1` cases are not in the population's selection and are not looked at to set `δ`.
+
+### 19.7 `δ` measured (2026-10-08)
+
+115 `DEV` runs qualify. `g` ranges from −78.8 s to −0.02 s (median −1.2 s): in no run was the effect observed before
+the controller's record of the execution. By the pre-registered rule, **`δ` = 1 s**.
+
+### 19.8 Implementation and offline replay (2026-10-08)
+
+`annotate_temporal_roles` gives a `FAULT_INJECTION` or `FAULT_SCHEDULE` finding more than `δ` (1 s,
+`EXECUTION_RECORD_PRECISION`) after the causal onset the role `AFTER_ONSET`; `Symptoms` records
+`began_before_coverage` and `earliest_alert_start`; engine 2.3.0. Every testbed database replayed (322, 2,412
+incidents, each incident's widest run), engine on `main` (2.2.2) against this one, no replay error:
+
+- 118 digests and 38 root causes change, 105 shown leaders; **no root cause moves off the run's chain, none onto it**;
+- `scheduled` runs (17 `DEV`, 7 `HOLDOUT`): the leader moves from a spawn applied after the onset to the spawn
+  applied before it, both on the chain;
+- `competing` runs (2 `DEV`, 12 `HOLDOUT`): the pod-kill, applied after the onset of the lag incidents it was shown
+  for, is no longer a competing cause there; the delay or loss leads alone;
+- chain support lost in 4 incidents, none scored: the first `HOLDOUT`'s `dependency-b` #0 and #1, incidents opened
+  about 33 s before the loss was applied (the warm-up incidents of connector contract §17), so the loss cannot have
+  started them; the root cause is unchanged and is now `UNESTABLISHED`.
+
+**Scored true causes no longer shown anywhere (stated reason for each, §19.5):** the pod-kill of `HOLDOUT6`
+`competing-b` #2 and of `DEV` `slice5` #0. In both, every scored incident it had been shown for began before it was
+applied: the lag alerts of #2 began about 34 s before `pod-kill-178`, those of `slice5` #0 about 5 s before
+`pod-kill-51`. The credit the earlier engine received there was for a causal direction that cannot hold. Consequence:
+the competing family's group recall falls for those runs, and the testbed's symptom grouping, which attributes those
+lag alerts to the pod-kill, is itself in question (`testbed-ground-truth-contract.md` §15), to be examined with the
+targeted `HOLDOUT`.
+
+The offline criteria of §19.5 hold. Next: the targeted live `HOLDOUT` (`scheduled-b`, `competing-b`), pre-registered
+before it runs.
+
+### 19.9 ITBench-Lite regression (2026-10-08, engine 2.3.0)
+
+Identical to 2.2.2 on every scenario: exact 18/31; the C11 tracks 20/31 (execution), 26/31 (structural), 18/31
+(executing instance). The rule does act there: in Scenario-22, 80 and 91 every application of the root's `Schedule`
+instance after the onset is now `AFTER_ONSET`. The leader keeps `SUPPORTED` because the hypothesis also carries the
+**other incarnation's** findings (same `Schedule` name, different UID, applied about an hour before the onset), and
+D1 fires on those, while the hypothesis names the later UID as its exact instance. The logical actor did run before
+the onset; the exact-instance claim rests on another instance's evidence. That is a separate defect (roadmap C19),
+not this rule's.

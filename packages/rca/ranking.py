@@ -327,6 +327,13 @@ _VERIFIABLE_KINDS = frozenset(
 )
 
 
+# m21 §19: findings whose time is the controller's own record of an execution, exact to the second.
+_EXECUTION_RECORD_KINDS = frozenset({FindingKind.FAULT_INJECTION, FindingKind.FAULT_SCHEDULE})
+# m21 §19.7: measured on DEV (115 runs, no effect observed before the controller's record), plus the
+# one-second resolution of event timestamps.
+EXECUTION_RECORD_PRECISION = timedelta(seconds=1)
+
+
 def annotate_temporal_roles(
     findings: Iterable[Finding], onset: datetime | None, grace: timedelta
 ) -> list[Finding]:
@@ -345,7 +352,13 @@ def annotate_temporal_roles(
         )
         role = EvidenceTemporalRole.AMBIGUOUS
         if delta is not None:
-            if finding.kind in _INITIATING_KINDS:
+            if finding.kind in _EXECUTION_RECORD_KINDS and delta > (
+                EXECUTION_RECORD_PRECISION.total_seconds()
+            ):
+                # m21 §19: an execution recorded after the onset cannot have started it; the grace below
+                # is for changes observed late, not for a controller's record of the execution
+                role = EvidenceTemporalRole.AFTER_ONSET
+            elif finding.kind in _INITIATING_KINDS:
                 role = (
                     EvidenceTemporalRole.INITIATING
                     if delta <= grace.total_seconds()

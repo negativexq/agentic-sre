@@ -129,6 +129,9 @@ def extract_symptoms(
         reference_time=onset if onset is not None else (min(starts) if starts else None),
         alert_observation_start=alert_observation_start,
         onset_basis=basis,
+        began_before_coverage=alert_observation_start is not None
+        and any(start < alert_observation_start for start in starts),
+        earliest_alert_start=min(starts) if starts else None,
     )
 
 

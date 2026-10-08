@@ -1770,3 +1770,30 @@ the earlier spawn would lead instead of the later one; whether `pod-kill-51` kee
 
 115 `DEV` runs qualify. `g` ranges from −78.8 s to −0.02 s (median −1.2 s): in no run was the effect observed before
 the controller's record of the execution. By the pre-registered rule, **`δ` = 1 s**.
+
+### 19.8 Implementation and offline replay (2026-10-08)
+
+`annotate_temporal_roles` gives a `FAULT_INJECTION` or `FAULT_SCHEDULE` finding more than `δ` (1 s,
+`EXECUTION_RECORD_PRECISION`) after the causal onset the role `AFTER_ONSET`; `Symptoms` records
+`began_before_coverage` and `earliest_alert_start`; engine 2.3.0. Every testbed database replayed (322, 2,412
+incidents, each incident's widest run), engine on `main` (2.2.2) against this one, no replay error:
+
+- 118 digests and 38 root causes change, 105 shown leaders; **no root cause moves off the run's chain, none onto it**;
+- `scheduled` runs (17 `DEV`, 7 `HOLDOUT`): the leader moves from a spawn applied after the onset to the spawn
+  applied before it, both on the chain;
+- `competing` runs (2 `DEV`, 12 `HOLDOUT`): the pod-kill, applied after the onset of the lag incidents it was shown
+  for, is no longer a competing cause there; the delay or loss leads alone;
+- chain support lost in 4 incidents, none scored: the first `HOLDOUT`'s `dependency-b` #0 and #1, incidents opened
+  about 33 s before the loss was applied (the warm-up incidents of connector contract §17), so the loss cannot have
+  started them; the root cause is unchanged and is now `UNESTABLISHED`.
+
+**Scored true causes no longer shown anywhere (stated reason for each, §19.5):** the pod-kill of `HOLDOUT6`
+`competing-b` #2 and of `DEV` `slice5` #0. In both, every scored incident it had been shown for began before it was
+applied: the lag alerts of #2 began about 34 s before `pod-kill-178`, those of `slice5` #0 about 5 s before
+`pod-kill-51`. The credit the earlier engine received there was for a causal direction that cannot hold. Consequence:
+the competing family's group recall falls for those runs, and the testbed's symptom grouping, which attributes those
+lag alerts to the pod-kill, is itself in question (`testbed-ground-truth-contract.md` §15), to be examined with the
+targeted `HOLDOUT`.
+
+The offline criteria of §19.5 hold. Next: the targeted live `HOLDOUT` (`scheduled-b`, `competing-b`), pre-registered
+before it runs.

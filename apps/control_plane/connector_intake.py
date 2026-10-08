@@ -20,13 +20,16 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from packages.connector import wire
 from packages.connector.client import ConnectorClient, ConnectorError
-from packages.contracts import AlertmanagerAlertPayload
+from packages.contracts import Alert, AlertmanagerAlertPayload, AlertStatus
 from packages.incident import IncidentManager, normalize_alert
 from packages.rca.alert_coverage import ALERT_COVERAGE_SOURCE, AlertCoverageConfig
-from packages.storage.models import AlertCoveragePollRow
+from packages.storage.models import AlertCoveragePollRow, AlertCoverageSegmentRow, AlertRow
 from packages.storage.repositories import AlertCoverageRepository
 
 logger = logging.getLogger(__name__)
+
+# connector contract §17: the reason an occurrence that ended before the first coverage opens nothing
+ENDED_BEFORE_FIRST_COVERAGE = "ENDED_BEFORE_FIRST_COVERAGE"
 
 
 def _utc(value: datetime) -> datetime:
@@ -58,6 +61,7 @@ class AlertStreamConsumer:
         self._limit = page_limit
         self.cursor: str | None = None
         self._available: bool | None = None  # log a change of state once, not every second
+        self.ended_before_first_coverage = 0  # contract §17, for the coverage view and the tests
 
     def _latest_poll(self, session: Session) -> datetime | None:
         latest = session.scalar(
@@ -66,6 +70,30 @@ class AlertStreamConsumer:
             )
         )
         return _utc(latest) if latest is not None else None
+
+    def _first_coverage(self, session: Session) -> datetime | None:
+        """``W₀``: when this installation first observed the alert channel; None before it ever has."""
+        first = session.scalar(
+            select(func.min(AlertCoverageSegmentRow.started_at)).where(
+                AlertCoverageSegmentRow.source == ALERT_COVERAGE_SOURCE
+            )
+        )
+        return _utc(first) if first is not None else None
+
+    def _before_first_coverage(self, session: Session, alert: Alert) -> bool:
+        """Contract §17: a resolved occurrence, never recorded, whose whole active interval ended at or before
+        ``W₀`` (or before any coverage at all) opens no incident. Later gaps are not considered."""
+        if alert.status is not AlertStatus.RESOLVED or alert.ends_at is None:
+            return False
+        first = self._first_coverage(session)
+        if first is not None and _utc(alert.ends_at) > first:
+            return False
+        known = session.scalar(
+            select(AlertRow.alert_id).where(
+                AlertRow.fingerprint == alert.fingerprint, AlertRow.starts_at == alert.starts_at
+            )
+        )
+        return known is None
 
     def _connector_lost(self, error: ConnectorError) -> None:
         """A connector that cannot be reached observes nothing: close the open segment once."""
@@ -103,8 +131,18 @@ class AlertStreamConsumer:
                 if isinstance(item, wire.AlertItem):
                     try:
                         payload = AlertmanagerAlertPayload.model_validate(item.alert)
+                        alert = normalize_alert(payload)
+                        if self._before_first_coverage(session, alert):
+                            self.ended_before_first_coverage += 1
+                            logger.info(
+                                "alert %s (%s) not admitted: %s",
+                                alert.alert_name,
+                                alert.fingerprint,
+                                ENDED_BEFORE_FIRST_COVERAGE,
+                            )
+                            continue
                         outcome = IncidentManager(session, quiet=self._quiet).ingest_occurrence(
-                            normalize_alert(payload), now=self._clock()
+                            alert, now=self._clock()
                         )
                     except ValueError:
                         logger.warning(

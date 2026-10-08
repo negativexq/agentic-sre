@@ -646,3 +646,79 @@ The same ten cycles on a fresh database (`testbed_admit_125023`), with the Conne
 
 The admission no longer depends on the poll's phase or on the group's history: a short alert never becomes an incident
 and a lasting one always does. Adopted.
+
+## 17. Alerts that ended before the installation began observing (APPROVED 2026-10-08)
+
+### 17.1 Measured problem
+
+A control plane opens incidents for alerts that began **and ended** before it ever observed the alert channel. In the
+testbed every run is a fresh installation (its own database, a restarted Connector), and the run's isolation step
+warms a fresh target pod under load, which raises short alerts. Over the 209 runs of the twelve `HOLDOUT`s:
+
+- 74 runs (35%) hold 165 incidents opened before their run's injection; none is scored;
+- every one of those alerts started before the run's load began, during the isolation step;
+- **161 of 165 had ended before the control plane's alert observation start `W`** (contract §10), 4 ended after it;
+  their active time had a median of 90 s.
+
+They were first read as alerts left over by the previous run (roadmap F11 and `m21-causal-semantics-contract.md`
+§18.1, §18.5); that reading was wrong: the alert rules use 30 s windows and the isolation step already waits until
+Alertmanager has no active alert. The leftovers are the isolation step's own warm-up alerts, delivered after the
+new control plane attached.
+
+The same happens to a customer: on first install, Alertmanager can deliver occurrences that resolved before the product
+existed, and each becomes an incident diagnosed on evidence the product never observed.
+
+### 17.2 Rule
+
+The control plane does not open an incident for an alert occurrence whose whole active interval lies **before the
+installation's first alert coverage** (the earliest `W` its database has recorded): `endsAt ≤ W₀`, or ended before
+any coverage at all. The occurrence is logged with the reason `ENDED_BEFORE_FIRST_COVERAGE`, as §16.7's drops are (a
+count on the coverage view was in the proposal; it is left for when that view shows §16.7's drops too); nothing else
+changes.
+
+- Only the **first** coverage counts. An occurrence that began and ended during a later coverage gap (a Connector
+  restart, a network outage) is admitted as today: it is real history the product missed, and dropping it would lose
+  an incident.
+- An occurrence still firing at `W₀`, or ending after it, is admitted as today.
+- §16's admission by active time is unchanged and applies first.
+
+### 17.3 Not chosen
+
+Making the harness wait after its warm-up until Alertmanager forgets the resolved alerts: it would hide the lab's
+symptom and leave the product's.
+
+### 17.4 Measurement
+
+1. Unit tests: ended before `W₀` not admitted; ended after `W₀`, still firing at `W₀`, and ended inside a later gap
+   all admitted.
+2. Offline over the twelve `HOLDOUT`s' stored alerts: the incidents the rule would not have opened, expected to be the
+   161 above, and no scored incident among them.
+3. Lab: the next `HOLDOUT` (a lab change requires a full one, `testbed-scenarios-design.md` §23) reports the number of
+   incidents opened before injection, expected near 4 of 24 runs rather than about a third.
+
+### 17.5 Also noted
+
+Some of the 165 occurrences were active only 10 s yet were admitted, which §16.7 should have dropped (a resolved
+occurrence never admitted and shorter than `min_active`). To be explained with this work, not assumed.
+
+### 17.6 Implementation and offline measurement (2026-10-08)
+
+`AlertStreamConsumer` (`apps/control_plane/connector_intake.py`) applies §17.2 before ingestion: a resolved occurrence
+never recorded whose `endsAt` is at or before the earliest coverage segment's start (or arrives before any segment
+exists) is logged and skipped. Unit tests cover the five cases of §17.4.1.
+
+Offline over the twelve `HOLDOUT`s' stored alerts (209 runs), counting the incidents whose every alert arrived already
+resolved with `endsAt ≤ W₀`:
+
+| Incidents | Not opened by the rule | Opened as before |
+|---|---|---|
+| scored | **0** | 866 |
+| unscored, opened before the injection | 160 | 5 |
+| unscored, opened after the injection | 303 | 196 |
+
+The 303 were not expected by §17.4 (which named only the 161 opened before the injection). They are the same
+occurrences: warm-up alerts that ended before `W₀` but whose delivery reached the control plane minutes later, after the
+injection (in the first `HOLDOUT`, for example, an alert ended at 06:47:44, `W₀` was 06:50:41, the incident opened at
+06:52:04). Runs with an incident opened before their injection: **74 → 2**. No scored incident is affected.
+
+§17.5 stays open. The lab measurement of §17.4.3 comes with the next full `HOLDOUT`.

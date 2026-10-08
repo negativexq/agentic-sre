@@ -79,7 +79,9 @@ function RootActor({ diagnosis }: { diagnosis: DiagnosisView }) {
           <p className="text-sm text-muted">
             {diagnosis.leading_actor_withheld_reason === "TIED_LEADERS"
               ? `No candidate is established and several share the top rank: ${candidates.map(shortEntity).join(", ")}. None is shown as the cause.`
-              : "No candidate has evidence in the incident window. Observations outside it stay listed below as context, not as causes."}
+              : diagnosis.leading_actor_withheld_reason === "NO_EVIDENCE_NEAR_ONSET"
+                ? "No candidate is established and none has evidence near the onset. The latest observation stays listed below as context, not as a cause."
+                : "No candidate has evidence in the incident window. Observations outside it stay listed below as context, not as causes."}
           </p>
         )}
         <p className="text-sm text-muted break-anywhere">{diagnosis.summary}</p>

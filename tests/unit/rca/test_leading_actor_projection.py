@@ -224,3 +224,52 @@ def test_the_strong_tier_is_never_filtered() -> None:
     events = [chaos_event("old", "Applied", -90), chaos_event("old", "Recovered", -88)]
     p = relevant(pool, events, strong=("old", "now"))
     assert (p.display, p.tier, names(p), p.set_aside) == ("COMPETING", "STRONG", ["old", "now"], ())
+
+
+# ---- m21 contract §18 ---------------------------------------------------------------------------------
+
+
+def project_recency(pool: list[Any], recent: bool | None) -> Any:
+    return project_leading_actor(
+        pool,
+        supported=frozenset(),
+        strong=frozenset(),
+        in_window=lambda at: cast(bool | None, at),
+        near_onset=lambda _: recent,
+    )
+
+
+def test_an_unestablished_leader_without_evidence_near_the_onset_is_not_established() -> None:
+    p = project_recency([hyp("a", "a"), hyp("b", "b", score=5.0)], recent=False)
+    assert (p.display, p.reason, names(p)) == ("NOT_ESTABLISHED", "NO_EVIDENCE_NEAR_ONSET", ["a"])
+
+
+def test_an_untimed_leader_and_a_recent_one_are_shown_as_before() -> None:
+    for recent in (None, True):
+        p = project_recency([hyp("a", "a"), hyp("b", "b", score=5.0)], recent=recent)
+        assert (p.display, p.reason) == ("SINGLE", None)
+
+
+def test_the_window_check_comes_first_and_supported_leaders_are_untouched() -> None:
+    p = project_recency([hyp("a", "a", window=False)], recent=False)
+    assert p.reason == "NO_EVIDENCE_IN_INCIDENT_WINDOW"
+    s = project_leading_actor(
+        [hyp("a", "a")],
+        supported=frozenset({"a"}),
+        strong=frozenset(),
+        in_window=lambda at: cast(bool | None, at),
+        near_onset=lambda _: False,
+    )
+    assert (s.display, s.tier) == ("SINGLE", "SUPPORTED")
+
+
+def test_near_onset_is_at_or_after_the_onset_less_five_minutes() -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from packages.rca.presentation import near_onset
+
+    onset = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+    assert near_onset(onset - timedelta(minutes=5), onset) is True
+    assert near_onset(onset - timedelta(minutes=5, seconds=1), onset) is False
+    assert near_onset(onset + timedelta(minutes=30), onset) is True
+    assert near_onset(None, onset) is None and near_onset(onset, None) is None

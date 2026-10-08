@@ -57,7 +57,7 @@ from packages.rca.model import (
     TimingAssessment,
     TimingStability,
 )
-from packages.rca.presentation import leader_by_tier, project_leading_actor
+from packages.rca.presentation import leader_by_tier, near_onset, project_leading_actor
 from packages.rca.ranking import (
     Context,
     RankingConfig,
@@ -180,7 +180,7 @@ class Investigator(Protocol):
 # evidence; replay refuses a run recorded under another version (M20.3a).
 # Rule (owner, 2026-10-05; roadmap F1): minor for a change that can alter a diagnosis,
 # patch for one that cannot change any digest, major when the contract version moves.
-RCA_ENGINE_VERSION = "2.2.1"
+RCA_ENGINE_VERSION = "2.2.2"
 
 
 @dataclass(frozen=True)
@@ -475,6 +475,14 @@ def _summary(candidate: Candidate, confidence: Confidence, reason: str) -> str:
         else "structurally plausible actor without observed causal evidence"
     )
     return f"{candidate.entity.canonical}: {evidence}. {confidence.value.capitalize()} ({reason}).{linked}"
+
+
+def _age_before(findings: Sequence[Finding], onset: datetime | None) -> str:
+    """How long before ``onset`` the latest timed finding lies, in whole minutes (m21 contract §18.3)."""
+    times = [f.at for f in findings if f.at is not None]
+    if not times or onset is None:
+        return "an unknown time"
+    return f"{int((onset - max(times)).total_seconds() // 60)} min"
 
 
 def _selected_hypothesis(case: Case, entity: EntityRef) -> Hypothesis | None:
@@ -873,9 +881,11 @@ def diagnose_case(
         supported=frozenset(resolution_trace.plausible_hypotheses),
         strong=frozenset(resolution_trace.mechanism_verified_hypotheses),
         in_window=lambda at: finding_in_window(at, case.context, config.ranking),
+        near_onset=lambda at: near_onset(at, case.context.symptoms.reference_time),
         events=case.source.events(),
     )
     withheld = projection.reason == "NO_EVIDENCE_IN_INCIDENT_WINDOW"
+    not_recent = projection.reason == "NO_EVIDENCE_NEAR_ONSET"
     return Diagnosis(
         decision_semantics="m21.v3",
         incident_id=case.incident_id,
@@ -902,6 +912,8 @@ def diagnose_case(
             if resolution_trace.diagnosis_status == "SUPPORTED_CAUSE"
             else f"No causal candidate has evidence in the incident window. Nearest observation, outside it, on {selected.causal_actor.canonical}: {selected.findings[0].summary if selected.findings else 'no actor observation'}. Causal investigation remains open: {resolution_trace.rationale}"
             if withheld
+            else f"No causal candidate has evidence near the onset. Latest observation, {_age_before(selected.findings, case.context.symptoms.reference_time)} before it, on {selected.causal_actor.canonical}: {selected.findings[0].summary if selected.findings else 'no actor observation'}. Causal investigation remains open: {resolution_trace.rationale}"
+            if not_recent
             else f"Observed on {selected.causal_actor.canonical}: {selected.findings[0].summary if selected.findings else 'no actor observation'}. Causal investigation remains open: {resolution_trace.rationale}"
         ),
         symptoms=case.symptoms,

@@ -1591,3 +1591,97 @@ ReplicaSet that owns the witnessed pod by UID, over the pod's life, and nothing 
 evidence; the quota witness names the rejected subject. Offline over every stored testbed run, the engine on `main`
 (2.2.0) against this one: **1,333 of 1,333 digests equal**; **254 incidents name an executing instance, all 254 on
 the chain** (the chain's execution link, its target, or an experiment its `Schedule` spawned), none off it.
+
+## 18. An unestablished leader needs evidence near the onset (owner-approved 2026-10-08)
+
+### 18.1 Measured problem
+
+An incident whose highest tier is `UNESTABLISHED` shows its leader alone (`SINGLE`) when that leader is the sole top
+score and has *some* finding in the incident window (roadmap C10, C12). The incident window the ranking uses reaches
+`lookback` (2 h) before the onset, so a finding two hours old still counts. The twelfth `HOLDOUT` (engine 2.2.0) has
+eight diagnoses whose `root_cause` is off the run's chain. All eight belong to incidents opened before the run's own
+fault, from alerts left over by the previous run, so none is scored. Three are shown `NOT_ESTABLISHED` (tied leaders),
+which is right. Five are shown `SINGLE`:
+
+| Incident | Previous run's fault | Leader | Leader's latest finding, before the first alert |
+|---|---|---|---|
+| `scheduled-b#0` (3 incidents, first alert 16:02:32) | CPU stress on `payment-service`, 15:57:56–15:59:34 | that run's stressed pod, `payment-service-…-drjfb` | 3.4–4.2 min |
+| `scheduled-b#1` (first alert 16:11:14) | CPU stress on `order-service`, ended 16:08:34 | `payment-service-…-drjfb`, from the same 15:58:19 finding | **12.9 min** |
+| `config-c#2` (first alert 17:40:17) | environment change on `payment-service`, ended 17:36:47 | `payment-service-…-6kvjj` | 3.4 min |
+
+In `scheduled-b#1` a finding left by the fault before last leads an incident that began thirteen minutes later,
+while the fault that actually preceded it (on `order-service`) has no candidate in that diagnosis. The operator sees
+one "possible causal actor" with nothing near the onset to support it. This `HOLDOUT` found the defect; it does not
+choose the rule or its window, and its incidents are not used to confirm it (§18.4).
+
+### 18.2 Rule
+
+An `UNESTABLISHED` leader is shown `SINGLE` only if, in addition to the conditions that stand (sole top score, a
+finding in the incident window), **at least one of its timed findings lies at or after `T0 − W`**, where `T0` is the
+incident's reference onset the incident window uses, and `W` = 5 minutes. Otherwise the display is `NOT_ESTABLISHED`
+with the leader as context and the reason `NO_EVIDENCE_NEAR_ONSET`.
+
+- `W` is the window of §11, fixed there by a pre-registered rule on an independent run; it is reused, not chosen
+  here. The four incidents that stay `SINGLE` in §18.1 (3.4–4.2 min) and the one that changes (12.9 min) were not used
+  to pick it.
+- The order of the checks stays: no finding in the incident window (`NO_EVIDENCE_IN_INCIDENT_WINDOW`) first, then
+  this rule, then a shared top score (`TIED_LEADERS`).
+- A leader with no timed finding is left as today (the rule needs a time to apply).
+- Strong and supported tiers are untouched: §11 already governs supported leadership, and a strong claim carries its
+  own execution witness.
+
+It is **presentation, outside the epistemic digest**, as C10 and C12: `root_cause`, ranking, tiers, claims and every
+digest stay as they are, so the engine version moves by a patch (2.2.1 → 2.2.2, roadmap F1). ITBench-Lite grades
+`root_cause` and does not move.
+
+### 18.3 Product
+
+The console, the report and the notification treat `NO_EVIDENCE_NEAR_ONSET` as they treat the existing
+`NO_EVIDENCE_IN_INCIDENT_WINDOW`: "Not established", the leader listed as context with the age of its latest finding,
+and no actor named in the notification.
+
+### 18.4 Measurement, pre-registered (testbed-scenarios-design §23)
+
+Offline replay of every stored run (testbed `DEV` and `HOLDOUT`, the product-mode runs, ITBench-Lite), the engine on
+`main` against this one:
+
+1. every epistemic digest and every `root_cause` equal;
+2. on scored testbed incidents: the number whose display changes, and among them any whose shown leader was on the
+   chain (a true cause hidden) is reported one by one; the rule is not adopted if a scored true cause shown `SINGLE`
+   becomes `NOT_ESTABLISHED` without a reason stated for each;
+3. on all incidents: the number moving from `SINGLE` to `NOT_ESTABLISHED`, with the age distribution of the hidden
+   leaders' latest findings;
+4. ITBench-Lite: the display changes listed (the score cannot move).
+
+No live `HOLDOUT` for a change that alters no judgement, as §17.5; the next full `HOLDOUT` reports the display beside
+the scores and is the first to confirm the rule on incidents it did not motivate.
+
+### 18.5 Not decided here
+
+Leftover alerts from a previous run reach the next run's quiet period because the pause between runs is shorter than
+the time the alerts take to resolve. That is a harness matter (roadmap F10's family), recorded separately; it does not
+change scoring, since those incidents are not scored.
+
+### 18.6 Implementation and measurement (2026-10-08)
+
+`project_leading_actor` (`packages/rca/presentation.py`) applies the rule after the window check and before the tie
+check; the summary of a withheld leader states the age of its latest finding; engine 2.2.2 (a patch). Offline over
+every testbed database on the control-plane Postgres (322: `DEV`, phase 0, the twelve `HOLDOUT`s, the six
+product-mode runs), each incident's widest run diagnosed by the engine on `main` (2.2.1) and by this one:
+
+1. **2,412 of 2,412 digests equal, and every `root_cause` equal**; no replay error.
+2. **No scored testbed incident changes its display.**
+3. 22 displays change, all to `NO_EVIDENCE_NEAR_ONSET`: 15 were already `NOT_ESTABLISHED` (`TIED_LEADERS`, the
+   reason only changes, since this check comes first), **7 move from `SINGLE` to `NOT_ESTABLISHED`**. The hidden
+   leaders' latest findings lie 8.8 to 38.7 minutes before the onset. Five are `scheduled-b` lag incidents of the
+   fifth, seventh, eleventh and twelfth `HOLDOUT` (§18.1's `scheduled-b#1` among them) and two are `DEV`
+   `competing` runs. Those two lead with a pod that is on their run's chain by name, but both incidents opened
+   before their run's fault (21:49:09 against 21:49:52, 15:45:24 against 15:46:06), from alerts that began six
+   minutes earlier: the pod's evidence (13.9 and 38.7 minutes old) is the previous repeat's, not this run's cause.
+   Of the 564 incidents whose top tier is `UNESTABLISHED`, 494 were shown `SINGLE` and 487 are now. The product-mode
+   runs have no change.
+4. ITBench-Lite was **not run**: started, then stopped at the owner's request to shorten the measurement. It grades
+   `root_cause`, which item 1 shows unchanged on every incident, so its score cannot move; its display changes are
+   not listed. This drops a pre-registered reporting item; it decided nothing.
+
+The rule is adopted: no criterion of §18.4 is violated. The next full `HOLDOUT` reports the display beside the scores.

@@ -1801,9 +1801,15 @@ before it runs.
 ### 19.9 ITBench-Lite regression (2026-10-08, engine 2.3.0)
 
 Identical to 2.2.2 on every scenario: exact 18/31; the C11 tracks 20/31 (execution), 26/31 (structural), 18/31
-(executing instance). The rule does act there: in Scenario-22, 80 and 91 every application of the root's `Schedule`
-instance after the onset is now `AFTER_ONSET`. The leader keeps `SUPPORTED` because the hypothesis also carries the
-**other incarnation's** findings (same `Schedule` name, different UID, applied about an hour before the onset), and
-D1 fires on those, while the hypothesis names the later UID as its exact instance. The logical actor did run before
-the onset; the exact-instance claim rests on another instance's evidence. That is a separate defect (roadmap C19),
-not this rule's.
+(executing instance). The rule does act there. In Scenario-22, 80 and 91 the later incarnation of the `Schedule`
+(same name, another UID) applied only after the onset; in 2.2.2 its own `FAULT_SCHEDULE` finding was `INITIATING`
+through the 15-min grace and D1 supported it, so it led. In 2.3.0 that finding is `AFTER_ONSET`, the later instance
+loses D1, and the leader is the earlier incarnation, supported by its own findings, applied about an hour before the
+onset. The answer's name is unchanged, so the exact score is; the earlier incarnation's applications do not reach the
+onset, so the execution track is unchanged too.
+
+Correction (2026-10-08): an earlier version of this section said the 2.3.0 hypothesis names the later UID while its
+support comes from the other incarnation. That was wrong: D1 reads only the actor's own findings of the hypothesis'
+exact instance (`claims.actor_findings`), and in 2.3.0 the named instance and its support agree. What does mix
+incarnations is the name-derived `spawns` topology (roadmap C19): it affects a claim's score and the evidence listed
+with it, not its support or authority.

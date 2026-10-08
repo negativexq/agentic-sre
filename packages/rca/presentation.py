@@ -207,3 +207,25 @@ def leader_instance(diagnosis: Diagnosis) -> LeaderInstance | None:
     if instance is None:
         return LeaderInstance(resolution)
     return LeaderInstance(resolution, instance.entity.canonical, instance.uid)
+
+
+def shown_root_cause(diagnosis: Diagnosis) -> EntityRef | None:
+    """m21 §20: the actor a surface may name as the cause; none when the leader is not established."""
+    if (
+        not diagnosis.leading_actor_established
+        or diagnosis.leading_actor_display == "NOT_ESTABLISHED"
+    ):
+        return None
+    return diagnosis.root_cause
+
+
+def shown_root_canonical(document: dict[str, Any]) -> str | None:
+    """``shown_root_cause`` over a stored diagnosis document, for surfaces that read rows, not models."""
+    if document.get("leading_actor_established") is False or (
+        document.get("leading_actor_display") == "NOT_ESTABLISHED"
+    ):
+        return None
+    root = document.get("root_cause")
+    if isinstance(root, dict):
+        return EntityRef.model_validate(root).canonical
+    return root if isinstance(root, str) else None

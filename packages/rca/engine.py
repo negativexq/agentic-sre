@@ -180,7 +180,7 @@ class Investigator(Protocol):
 # evidence; replay refuses a run recorded under another version (M20.3a).
 # Rule (owner, 2026-10-05; roadmap F1): minor for a change that can alter a diagnosis,
 # patch for one that cannot change any digest, major when the contract version moves.
-RCA_ENGINE_VERSION = "2.3.0"
+RCA_ENGINE_VERSION = "2.3.1"
 
 
 @dataclass(frozen=True)
@@ -886,6 +886,9 @@ def diagnose_case(
     )
     withheld = projection.reason == "NO_EVIDENCE_IN_INCIDENT_WINDOW"
     not_recent = projection.reason == "NO_EVIDENCE_NEAR_ONSET"
+    tied = projection.reason == "TIED_LEADERS"
+    # m21 §20: a leader not established names no actor anywhere: no single actor in the summary, no remediation
+    shown = projection.display != "NOT_ESTABLISHED"
     return Diagnosis(
         decision_semantics="m21.v3",
         incident_id=case.incident_id,
@@ -914,6 +917,8 @@ def diagnose_case(
             if withheld
             else f"No causal candidate has evidence near the onset. Latest observation, {_age_before(selected.findings, case.context.symptoms.reference_time)} before it, on {selected.causal_actor.canonical}: {selected.findings[0].summary if selected.findings else 'no actor observation'}. Causal investigation remains open: {resolution_trace.rationale}"
             if not_recent
+            else f"No candidate is established; {len(projection.candidates)} candidates share the top rank: {', '.join(c.canonical for c in projection.candidates)}. None is named as the cause. Causal investigation remains open: {resolution_trace.rationale}"
+            if tied
             else f"Observed on {selected.causal_actor.canonical}: {selected.findings[0].summary if selected.findings else 'no actor observation'}. Causal investigation remains open: {resolution_trace.rationale}"
         ),
         symptoms=case.symptoms,
@@ -924,7 +929,7 @@ def diagnose_case(
         hypothesis=selected,
         alternative_hypotheses=alternative_hypotheses,
         hypothesis_diagnostics=case.hypothesis_diagnostics,
-        remediation=propose(selected_candidate, case.topology),
+        remediation=propose(selected_candidate, case.topology) if shown else (),
         steps=tuple(case.steps),
         mode=mode,
         model_calls=model_calls,

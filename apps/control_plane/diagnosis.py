@@ -65,6 +65,7 @@ from packages.rca.live import (
 from packages.rca.llm import LLMClient
 from packages.rca.manifest import alert_from_payload, event_evidence_id
 from packages.rca.model import Alert, Diagnosis, JournalEntry
+from packages.rca.presentation import shown_root_cause
 from packages.rca.provider_adapter import ProviderAdapter, ProviderReaders
 from packages.storage import (
     AlertRepository,
@@ -1161,7 +1162,8 @@ class DiagnosisService:
             IncidentEventType.DIAGNOSIS_COMPLETED,
             {
                 "run_id": run_id,
-                "root_cause": diagnosis.root_cause.canonical if diagnosis.root_cause else None,
+                # m21 §20: the shown leader; none when it is not established
+                "root_cause": shown.canonical if (shown := shown_root_cause(diagnosis)) else None,
                 "resolution": diagnosis.resolution.value,
                 "confidence": diagnosis.confidence.value,
                 "model_calls": diagnosis.model_calls,

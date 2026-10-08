@@ -135,3 +135,43 @@ def test_the_near_onset_rule_changes_no_digest() -> None:
         }
     )
     assert epistemic_digest(old) == epistemic_digest(presented)
+
+
+# ---- m21 contract §20: a leader not established names no actor anywhere ----------------------------------
+
+
+def test_a_leader_not_established_gets_no_remediation_and_keeps_its_root_cause() -> None:
+    stale, fresh = diagnose(-300), diagnose(4)
+    assert (
+        stale.root_cause is not None and stale.root_cause.canonical == POD
+    )  # the ranking is untouched
+    assert stale.remediation == ()
+    assert fresh.leading_actor_established
+
+
+def test_surfaces_read_the_shown_leader_not_the_rankings_choice() -> None:
+    from packages.rca.presentation import shown_root_canonical, shown_root_cause
+    from packages.rca.report import diagnosis_html
+
+    stale, fresh = diagnose(-300), diagnose(4)
+    assert shown_root_cause(stale) is None
+    assert shown_root_cause(fresh) is not None and shown_root_cause(fresh).canonical == POD  # type: ignore[union-attr]
+    assert shown_root_canonical(stale.model_dump(mode="json")) is None
+    assert shown_root_canonical(fresh.model_dump(mode="json")) == POD
+    tied = {**fresh.model_dump(mode="json"), "leading_actor_display": "NOT_ESTABLISHED"}
+    assert shown_root_canonical(tied) is None
+    # a document stored before the fields existed is shown as it was
+    legacy = {"root_cause": {"kind": "Pod", "name": "worker-rs-abcde", "namespace": "shop"}}
+    assert shown_root_canonical(legacy) == POD
+    html = diagnosis_html(stale)
+    assert (
+        "Not established" in html
+        and f"<code>{POD}</code>" not in html.split("Not established")[0][-200:]
+    )
+
+
+def test_the_epistemic_digest_ignores_what_is_shown() -> None:
+    stale = diagnose(-300)
+    assert epistemic_digest(stale) == epistemic_digest(
+        stale.model_copy(update={"remediation": (), "summary": "x"})
+    )

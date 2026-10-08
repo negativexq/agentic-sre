@@ -8,6 +8,7 @@ from datetime import datetime
 from html import escape
 
 from packages.rca.model import Confidence, Diagnosis, InvestigationResult
+from packages.rca.presentation import shown_root_cause
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,8 +174,13 @@ def diagnosis_html(
     )
     if lifecycle is not None:
         parts.append(_lifecycle_section(lifecycle))
+    shown = shown_root_cause(diagnosis)  # m21 §20
     cause = (
-        escape(diagnosis.root_cause.canonical) if diagnosis.root_cause else "No root cause found"
+        escape(shown.canonical)
+        if shown
+        else "Not established"
+        if diagnosis.root_cause
+        else "No root cause found"
     )
     actor_label = (
         "Observed mechanism cause"

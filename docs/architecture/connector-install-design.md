@@ -1,6 +1,6 @@
 # Installing a Connector: preflight, enrollment, rotation, Helm (roadmap A8)
 
-Status: **proposal (2026-10-09), awaiting the owner.** Builds on the connector boundary contract §12 (gRPC over mTLS,
+Status: **approved by the owner (2026-10-09), every decision of §4 as recommended.** Slices land one PR each. Builds on the connector boundary contract §12 (gRPC over mTLS,
 the Connector dials out) and replaces its §12.4 "static certificates, first version".
 
 ## 1. Where it stands

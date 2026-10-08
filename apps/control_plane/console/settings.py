@@ -25,8 +25,27 @@ def _flag(name: str, *, default: bool = False) -> bool:
     return value.casefold() == "true"
 
 
-def read_settings() -> SettingsView:
-    """Assemble the current effective configuration for display."""
+# The connector capabilities that read each evidence backend (same mapping as the system status).
+_BACKEND_CAPABILITIES = {
+    "prometheus": frozenset({"resource_pressure", "traffic"}),
+    "loki": frozenset({"logs"}),
+    "tempo": frozenset({"runtime_traces"}),
+}
+
+
+def read_settings(connector_capabilities: frozenset[str] | None = None) -> SettingsView:
+    """Assemble the current effective configuration for display.
+
+    In remote mode (``connector_capabilities`` given) the evidence backends are configured on the connector,
+    not here, so whether each is configured comes from what the connector reports, as on the system status;
+    otherwise from this process's environment.
+    """
+
+    def backend(name: str, env_var: str) -> bool:
+        if connector_capabilities is not None:
+            return bool(_BACKEND_CAPABILITIES[name] & connector_capabilities)
+        return bool(os.environ.get(env_var))
+
     return SettingsView(
         watched_namespaces=_csv("SRE_WATCH_NAMESPACES"),
         evidence_namespaces=_csv("SRE_EVIDENCE_NAMESPACES"),
@@ -39,8 +58,8 @@ def read_settings() -> SettingsView:
         api_token_configured=bool(os.environ.get("SRE_API_TOKEN")),
         email_configured=bool(os.environ.get("SRE_SMTP_HOST")),
         email_sender=os.environ.get("SRE_SMTP_FROM"),
-        prometheus_configured=bool(os.environ.get("PROMETHEUS_URL")),
-        loki_configured=bool(os.environ.get("SRE_LOKI_URL")),
-        tempo_configured=bool(os.environ.get("TEMPO_URL")),
+        prometheus_configured=backend("prometheus", "PROMETHEUS_URL"),
+        loki_configured=backend("loki", "SRE_LOKI_URL"),
+        tempo_configured=backend("tempo", "TEMPO_URL"),
         report_version=REPORT_VERSION,
     )

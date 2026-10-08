@@ -1600,7 +1600,7 @@ An incident whose highest tier is `UNESTABLISHED` shows its leader alone (`SINGL
 score and has *some* finding in the incident window (roadmap C10, C12). The incident window the ranking uses reaches
 `lookback` (2 h) before the onset, so a finding two hours old still counts. The twelfth `HOLDOUT` (engine 2.2.0) has
 eight diagnoses whose `root_cause` is off the run's chain. All eight belong to incidents opened before the run's own
-fault, from alerts left over by the previous run, so none is scored. Three are shown `NOT_ESTABLISHED` (tied leaders),
+fault, from alerts raised before the run began (first read here as the previous run's leftovers; measured later as the isolation step's warm-up alerts, `connector-boundary-contract.md` §17), so none is scored. Three are shown `NOT_ESTABLISHED` (tied leaders),
 which is right. Five are shown `SINGLE`:
 
 | Incident | Previous run's fault | Leader | Leader's latest finding, before the first alert |
@@ -1658,9 +1658,9 @@ the scores and is the first to confirm the rule on incidents it did not motivate
 
 ### 18.5 Not decided here
 
-Leftover alerts from a previous run reach the next run's quiet period because the pause between runs is shorter than
-the time the alerts take to resolve. That is a harness matter (roadmap F10's family), recorded separately; it does not
-change scoring, since those incidents are not scored.
+The incidents of §18.1 open before their run's injection. The reading at the time (the pause between runs too short
+for the previous fault's alerts) was wrong; they come from the isolation step's warm-up, and the fix is proposed in
+`connector-boundary-contract.md` §17. It does not change scoring, since those incidents are not scored.
 
 ### 18.6 Implementation and measurement (2026-10-08)
 

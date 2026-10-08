@@ -938,3 +938,20 @@ engine 2.2.0 frozen at the commit in the manifests, scored with §20's grader.
   without it. What the criterion meant (no root moved off the chain by the relation) holds. Recorded as a wording
   error of this pre-registration, not reinterpreted after the fact; the 8 are the existing least-bad
   `UNESTABLISHED` leaders (roadmap C10, C12), 5 of them shown `SINGLE`, which is worth a look.
+
+## 27. Thirteenth HOLDOUT, targeted: pre-registration for m21 §19 (2026-10-08, frozen before the run)
+
+Per §23, the variants the rule can reach: `scheduled-b` 296–298 and `competing-b` 299–301; suites
+`holdout13-<variant>`, engine 2.3.0 frozen at the commit in the manifests. Acceptance: the frozen bar (0 false strong
+authority, 0 false `RESOLVED`). Criteria:
+
+1. No stored diagnosis leads with an actor whose every initiating finding is a controller-recorded execution more than
+   `δ` (1 s) after the causal onset (the defect of m21 §19.1 does not appear).
+2. Where a spawned experiment of the run's `Schedule` leads, it was applied at or before the onset `+ δ`.
+3. No root cause off the run's chain; cause and instance recall per variant reported against the earlier `HOLDOUT`s,
+   for information only, nothing selected from it.
+
+Reported beside them, not a criterion: for `competing-b`, every scored incident in which the pod-kill is or is not
+shown, with its onset against the pod-kill's application, so that a credit withdrawn by direction (m21 §19.8) is seen
+on fresh runs, and the symptom grouping that attributes lag alerts to the pod-kill (ground-truth contract §15) can be
+examined.

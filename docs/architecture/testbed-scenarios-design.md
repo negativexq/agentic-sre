@@ -971,3 +971,24 @@ seven scored incidents of that run are the loss's and began 50 to 75 s before it
 in the collection window. The engine lists it in each as a candidate with `AFTER_ONSET`, never as the initiator. In #0
 and #1 the pod-kill was applied 39 to 61 s before the lag incidents' onset and is shown as a competing cause there, as
 it should be. The rule withdraws credit only where the direction is impossible.
+
+## 28. Fourteenth HOLDOUT, full: pre-registration (2026-10-08, frozen before the run)
+
+Per §23, a full measurement after a lab-facing change (connector contract §17, alerts that ended before the first
+coverage) and two engine changes (m21 §19, engine 2.3.0; §20, engine 2.3.1): the eight variants, seeds `dependency-b`
+302–304, `direct-b` 305–307, `scheduled-b` 308–310, `config-b` 311–313, `negative-b` 314–316, `competing-b` 317–319,
+`config-c` 320–322, `negative-c` 323–325; suites `holdout14-<variant>`, engine 2.3.1 frozen at the commit in the
+manifests, scored with §20's grader.
+
+- **Acceptance:** the frozen bar (no false strong authority, no false `RESOLVED`, at least 90% valid, the decoy never
+  named).
+- **The effect relations (m21 §12–§15):** no witness off the chain, no strong claim on one, no incident's root off the
+  chain, at least 90% of the valid runs with every trace read complete.
+- **m21 §19:** no diagnosis leads with an actor whose every controller-recorded execution came more than `δ` after the
+  onset.
+- **m21 §20:** no `NOT_ESTABLISHED` diagnosis proposes a remediation or names one actor in its summary.
+- **Connector §17 (lab check of §17.4.3):** the number of runs with an incident opened before their injection,
+  expected far below the twelfth `HOLDOUT`'s 8 of 24 (about a third across the twelve), a few remaining from alerts
+  that end after the first coverage.
+- Reported beside them, for information: cause, instance and execution-witness recall per variant against the earlier
+  `HOLDOUT`s.

@@ -105,6 +105,34 @@ Ordered top to bottom:
 
 Raw JSON is never the default view; raw evidence is reachable by drill-down.
 
+#### D3: what ran, which instance, and how firm the timing is (owner-approved 2026-10-08)
+
+Read verbatim from the diagnosis; the UI adds no claim. Measured on the eleventh and twelfth `HOLDOUT` (160
+diagnoses): timing stability is `UNASSESSED` in all 160 (live sources record no capture history yet, roadmap C7),
+the leader's exact instance is `EXACT` in 78 and `UNKNOWN` in 82; the executing instance exists from engine 2.2.1
+(254 replayed incidents carry it, m21 §17.6).
+
+1. **Executed by** (m21 §17), directly under the leading actor in block 2, one line per executing instance:
+   "Executed by `NetworkChaos/…-rjhbq` on `Pod/checkout-…-8rt79`, 16:34:41–16:35:36". A competing display lists them
+   under each candidate. It appears only when the diagnosis carries one, so it is absent, not "missing", for a
+   cause without a fired execution witness; an unknown start or end reads "time unknown", never a guess. It is
+   never shown for a leader that is not shown (`NOT_ESTABLISHED`). It is a detail of the cause, not a second
+   cause: no badge, no tone of its own.
+2. **Instance** of the leading actor, from its causal family's `instance_resolution`, one muted line in block 2:
+   `EXACT` "Exact instance: `<name>` (UID `<first 8>`)"; `MULTIPLE_VIABLE` "Several instances remain possible"; `UNKNOWN`
+   "Exact instance not determined". Absent when the leader is not shown.
+3. **Timing stability** (M21 timing contract §4, §5), shown only when assessed (`STABLE` or `SENSITIVE`): one line
+   in block 2 ("Holds over every admissible onset" / "Depends on the exact onset"), and, when `SENSITIVE`, a
+   *Timing* section in the investigation tab listing withheld authority (actor, authority, relations) and the
+   status drivers per admissible onset (actor, change, reason, in the evidence's words). `UNASSESSED` shows
+   nothing in block 2 and one muted line in that section ("Timing stability not assessed for this source"), so
+   the operator is not shown a judgement the engine did not make.
+4. **Report and list.** The exported report carries 1 and 2 beside the root cause. The incident list, overview
+   and notifications stay as they are (§17.3: the notification names the root cause only).
+
+Validation: API mapper tests per case (present, absent, unknown time, each `instance_resolution`, each timing
+state); a browser check of the workspace on a live incident and on a replayed one with an executing instance.
+
 ### Changes
 Change timeline (namespace / kind / actor / change type / time range). Within
 an incident, changes are shown relative to onset (`-31s`, `-7m`). The

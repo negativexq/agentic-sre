@@ -6,7 +6,7 @@ import { useLiveUpdates } from "@/api/useLiveUpdates";
 import { ChangesTable } from "@/components/ChangesTable";
 import { LiveBadge } from "@/components/LiveBadge";
 import { ReportExport } from "@/components/workspace/ReportExport";
-import type { DiagnosisView, IncidentListItem } from "@/api/types";
+import type { DiagnosisView, ExecutingInstanceView, IncidentListItem } from "@/api/types";
 import { CausalPath } from "@/components/workspace/CausalPath";
 import { CompetingHypotheses } from "@/components/workspace/CompetingHypotheses";
 import { FindingsList } from "@/components/workspace/FindingsList";
@@ -17,7 +17,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { ErrorState, Skeleton } from "@/components/ui/States";
 import { TCell, THead, TRow, Table } from "@/components/ui/Table";
 import { Tabs } from "@/components/ui/Tabs";
-import { dateTime, shortEntity } from "@/lib/format";
+import { clock, dateTime, shortEntity } from "@/lib/format";
 import { confidenceTone, resolutionTone, severityTone } from "@/lib/tones";
 
 function Header({ incident, live }: { incident: IncidentListItem; live: ReactNode }) {
@@ -39,6 +39,57 @@ function Header({ incident, live }: { incident: IncidentListItem; live: ReactNod
         <span>· opened {dateTime(incident.created_at)}</span>
       </div>
     </div>
+  );
+}
+
+/** D3: a detail of the cause, never a second cause; an unknown time is said, not guessed. */
+function executedLine(item: ExecutingInstanceView): string {
+  const target = item.target ? ` on ${shortEntity(item.target)}` : "";
+  const when =
+    item.started_at && item.ended_at
+      ? `${clock(item.started_at)}–${clock(item.ended_at)}`
+      : item.started_at
+        ? `from ${clock(item.started_at)}, end unknown`
+        : "time unknown";
+  // A standalone experiment is its own executing instance: say where it ran, not "X executed by X".
+  const by = item.instance === item.actor ? "Executed" : `Executed by ${shortEntity(item.instance)}`;
+  return `${by}${target}, ${when}`;
+}
+
+function instanceLine(diagnosis: DiagnosisView): string | null {
+  switch (diagnosis.leader_instance_resolution) {
+    case "EXACT":
+      return diagnosis.leader_instance
+        ? `Exact instance: ${shortEntity(diagnosis.leader_instance)}${diagnosis.leader_instance_uid ? ` (UID ${diagnosis.leader_instance_uid.slice(0, 8)})` : ""}`
+        : "Exact instance determined";
+    case "MULTIPLE_VIABLE":
+      return "Several instances remain possible";
+    case "UNKNOWN":
+      return "Exact instance not determined";
+    default:
+      return null;
+  }
+}
+
+function ExecutionDetails({ diagnosis, competing }: { diagnosis: DiagnosisView; competing: boolean }) {
+  const executed = diagnosis.executing_instances ?? [];
+  const instance = instanceLine(diagnosis);
+  const timing = diagnosis.timing?.status;
+  if (executed.length === 0 && !instance && timing !== "STABLE" && timing !== "SENSITIVE") return null;
+  return (
+    <ul className="space-y-0.5 text-sm text-muted">
+      {executed.map((item, index) => (
+        <li key={index} className="break-anywhere">
+          {executedLine(item)}
+          {competing && <span className="text-subtle"> · for {shortEntity(item.actor)}</span>}
+        </li>
+      ))}
+      {instance && <li className="text-subtle">{instance}</li>}
+      {timing === "STABLE" && <li className="text-subtle">Holds over every admissible onset</li>}
+      {timing === "SENSITIVE" && (
+        <li className="text-subtle">Depends on the exact onset (see Investigation, Timing)</li>
+      )}
+    </ul>
   );
 }
 
@@ -75,6 +126,7 @@ function RootActor({ diagnosis }: { diagnosis: DiagnosisView }) {
                 ? shortEntity(actor)
                 : "No single root cause identified"}
         </p>
+        {!withheld && <ExecutionDetails diagnosis={diagnosis} competing={competing} />}
         {withheld && (
           <p className="text-sm text-muted">
             {diagnosis.leading_actor_withheld_reason === "TIED_LEADERS"
@@ -114,13 +166,63 @@ function RootActor({ diagnosis }: { diagnosis: DiagnosisView }) {
   );
 }
 
+function TimingSection({ diagnosis }: { diagnosis: DiagnosisView }) {
+  const timing = diagnosis.timing;
+  if (!timing) return null;
+  return (
+    <section className="space-y-2">
+      <div className="text-xs font-medium uppercase tracking-wide text-subtle">Timing</div>
+      {timing.status === "UNASSESSED" ? (
+        <p className="text-sm text-subtle">Timing stability not assessed for this source.</p>
+      ) : (
+        <p className="text-sm text-muted">
+          {timing.status === "STABLE"
+            ? "The decision holds over every admissible onset."
+            : "The decision depends on the exact onset."}
+        </p>
+      )}
+      {timing.withheld.length > 0 && (
+        <Table>
+          <THead columns={["Withheld authority", "Actor", "Relations"]} />
+          <tbody>
+            {timing.withheld.map((item, index) => (
+              <TRow key={index}>
+                <TCell>{item.authority}</TCell>
+                <TCell className="break-anywhere">{item.actor}</TCell>
+                <TCell className="text-muted">{item.relations.join(", ") || "—"}</TCell>
+              </TRow>
+            ))}
+          </tbody>
+        </Table>
+      )}
+      {timing.drivers.length > 0 && (
+        <Table>
+          <THead columns={["Onset", "Status there", "Actor", "Change", "Reason"]} />
+          <tbody>
+            {timing.drivers.map((item, index) => (
+              <TRow key={index}>
+                <TCell className="whitespace-nowrap">{clock(item.onset)}</TCell>
+                <TCell>{item.diagnosis_status}</TCell>
+                <TCell className="break-anywhere">{item.actor}</TCell>
+                <TCell>{item.change}</TCell>
+                <TCell className="text-muted">{item.reason}</TCell>
+              </TRow>
+            ))}
+          </tbody>
+        </Table>
+      )}
+    </section>
+  );
+}
+
 function InvestigationTrace({ diagnosis }: { diagnosis: DiagnosisView }) {
   const audit = diagnosis.investigation_audit;
-  if (diagnosis.steps.length === 0 && audit === null) {
+  if (diagnosis.steps.length === 0 && audit === null && !diagnosis.timing) {
     return <p className="text-sm text-muted">No investigation steps recorded.</p>;
   }
   return (
     <div className="space-y-4">
+      <TimingSection diagnosis={diagnosis} />
       {diagnosis.steps.length > 0 && (
         <Table>
           <THead columns={["Step", "Detail"]} />

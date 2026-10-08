@@ -93,6 +93,7 @@ def create_console_router(
     system_status: Callable[[Session], SystemStatus],
     session_factory: sessionmaker[Session],
     email_delivery: EmailDelivery | None = None,
+    connector_capabilities: Callable[[], frozenset[str] | None] = lambda: None,
 ) -> APIRouter:
     """Build the console router bound to the app's session dependency.
 
@@ -146,7 +147,7 @@ def create_console_router(
     @router.get("/settings", response_model=SettingsView)
     def settings() -> SettingsView:
         """Read-only effective configuration; secrets reduced to booleans."""
-        return read_settings()
+        return read_settings(connector_capabilities())
 
     @router.get("/incidents", response_model=IncidentPage)
     def incidents(  # noqa: PLR0913

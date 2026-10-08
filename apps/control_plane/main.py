@@ -383,6 +383,7 @@ def create_app(
             email_delivery=email_delivery
             if email_delivery is not None
             else email_delivery_from_env(),
+            connector_capabilities=connector_capabilities,
         )
     )
 

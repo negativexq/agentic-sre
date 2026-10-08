@@ -57,6 +57,7 @@ from packages.rca.alert_coverage import (
     alert_coverage_poller_from_environment,
 )
 from packages.rca.model import Diagnosis
+from packages.rca.presentation import shown_root_canonical
 from packages.rca.report import (
     Lifecycle,
     diagnosis_html,
@@ -531,7 +532,7 @@ def create_app(
                 epistemic_digest=row.epistemic_digest,
                 engine_version=row.engine_version,
                 config_digest=row.config_digest,
-                root_cause=row.root_cause,
+                root_cause=shown_root_canonical(row.document),  # m21 §20
                 confidence=row.confidence,
                 mode=row.mode,
                 resolution=row.document.get("resolution"),
@@ -586,7 +587,7 @@ def create_app(
             epistemic_digest=current.epistemic_digest,
             engine_version=current.engine_version,
             config_digest=current.config_digest,
-            root_cause=current.root_cause,
+            root_cause=shown_root_canonical(current.document),  # m21 §20
             confidence=current.confidence,
             mode=current.mode,
             resolution=current.document.get("resolution"),

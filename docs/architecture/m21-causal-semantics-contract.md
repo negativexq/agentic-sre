@@ -1814,7 +1814,7 @@ exact instance (`claims.actor_findings`), and in 2.3.0 the named instance and it
 incarnations is the name-derived `spawns` topology (roadmap C19): it affects a claim's score and the evidence listed
 with it, not its support or authority.
 
-## 20. A leader not established names no actor anywhere (proposal, 2026-10-08, awaiting the owner)
+## 20. A leader not established names no actor anywhere (owner-approved 2026-10-08)
 
 ### 20.1 Measured problem (roadmap C12's residue, ITBench-Lite Scenario-34)
 

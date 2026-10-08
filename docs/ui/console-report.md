@@ -102,7 +102,7 @@ is set; every GET is read-only and open, matching the legacy API.
 - `GET /incidents/{id}/diagnosis` → the diagnosis view alone (404 if none)
 - `GET /incidents/{id}/timeline` → alert→diagnosis lifecycle, run-bound
 - `GET /incidents/{id}/evidence` → raw provenance rows
-- `GET /incidents/{id}/changes` → changes in ±2h onset window, leading-actor marked
+- `GET /incidents/{id}/changes` → changes from 2h before to 30m after onset, leading-actor marked
 
 **Changes**
 - `GET /changes` → global change explorer (`scope, change_type, q, limit`)

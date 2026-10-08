@@ -181,12 +181,15 @@ class LeaderInstance:
 
 
 def leader_instance(diagnosis: Diagnosis) -> LeaderInstance | None:
-    """How far the single shown leader's exact instance is resolved; None unless one leader is shown."""
+    """How far the single shown leader's exact instance is resolved; None unless one leader is shown, and
+    None when an executing instance already names it (D3, owner, 2026-10-08)."""
     shown = _shown_actors(diagnosis)
     trace = diagnosis.resolution_trace
     if len(shown) != 1 or diagnosis.leading_actor_display == "COMPETING" or trace is None:
         return None
     (actor,) = shown
+    if any(item.actor == actor for item in diagnosis.executing_instances):
+        return None  # the execution witness already names what ran; the family's resolution adds nothing
     selected = diagnosis.hypothesis
     families = [f for f in trace.causal_families if f.actor == actor]
     family = next(

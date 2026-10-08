@@ -117,8 +117,13 @@ def test_an_unknown_time_is_said_and_never_guessed() -> None:
     assert "end unknown" in report(started)
 
 
+def test_an_executing_instance_replaces_the_instance_line() -> None:
+    view = diagnosis_view(with_families(diagnosis(), InstanceResolution.UNKNOWN))
+    assert view.executing_instances and view.leader_instance_resolution is None
+
+
 def test_each_instance_resolution_reads_as_stated() -> None:
-    d = diagnosis()
+    d = diagnosis().model_copy(update={"executing_instances": ()})
     exact = diagnosis_view(with_families(d, InstanceResolution.EXACT))
     assert exact.leader_instance_resolution == "EXACT"
     several = with_families(d, InstanceResolution.MULTIPLE_VIABLE)

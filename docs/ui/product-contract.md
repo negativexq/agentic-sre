@@ -120,7 +120,9 @@ the leader's exact instance is `EXACT` in 78 and `UNKNOWN` in 82; the executing 
    cause: no badge, no tone of its own.
 2. **Instance** of the leading actor, from its causal family's `instance_resolution`, one muted line in block 2:
    `EXACT` "Exact instance: `<name>` (UID `<first 8>`)"; `MULTIPLE_VIABLE` "Several instances remain possible"; `UNKNOWN`
-   "Exact instance not determined". Absent when the leader is not shown.
+   "Exact instance not determined". Absent when the leader is not shown, and when an executing instance (1) is
+   shown for it (owner, 2026-10-08: the execution witness already names what ran, while the family's resolution
+   can still read `UNKNOWN` for the same actor, which side by side reads as a contradiction).
 3. **Timing stability** (M21 timing contract §4, §5), shown only when assessed (`STABLE` or `SENSITIVE`): one line
    in block 2 ("Holds over every admissible onset" / "Depends on the exact onset"), and, when `SENSITIVE`, a
    *Timing* section in the investigation tab listing withheld authority (actor, authority, relations) and the

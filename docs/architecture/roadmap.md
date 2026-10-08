@@ -124,6 +124,7 @@ never receives ground truth.
 | F9 | `kind-e2e` CI job fails now and then on commits that touch no code (seen on a docs-only commit, green on the next) | NEXT |
 | F10 | Harness: a calibration failure before any injection (the `order-service` port-forward serving nothing, only `URLError` in the baseline) stops the suite instead of being set aside like a refused baseline; done by hand once (`.refused-…`, §17.1) | NEXT |
 | F11 | Harness: the pause between runs is shorter than the previous fault's alerts take to resolve, so incidents open in the next run's quiet period before its injection (twelfth `HOLDOUT`: 8 such incidents, none scored; `m21` §18.5). Scoring is unaffected; the lab is not quiet when a run begins | NEXT |
+| F12 | Engine: a leader whose fault-execution witness names the exact experiment and pod can still carry `instance_resolution` `UNKNOWN` on its causal family (seen on a twelfth-`HOLDOUT` `StressChaos` leader); the console hides the instance line when an execution line is shown (D3), the inconsistency itself is not explained yet | NEXT |
 
 ## 8. Critical path
 

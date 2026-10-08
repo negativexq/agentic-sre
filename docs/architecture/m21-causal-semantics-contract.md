@@ -1858,3 +1858,13 @@ there is a benchmark policy for the owner, not a product rule.
 Unit tests per reason and surface; offline replay of every stored testbed run, engine on `main` against this one:
 every digest and every `root_cause` equal, and every changed summary or remediation belongs to a `NOT_ESTABLISHED`
 display. No `HOLDOUT` for a change that alters no judgement (§17.5).
+
+### 20.5 Implementation and offline replay (2026-10-08)
+
+`shown_root_cause` / `shown_root_canonical` (`packages/rca/presentation.py`) give the actor a surface may name; the
+engine writes the `TIED_LEADERS` summary and proposes no remediation when the display is `NOT_ESTABLISHED`; the
+`DIAGNOSIS_COMPLETED` event, the HTML report and the v1 revision API read the shown leader; engine 2.3.1. Every
+testbed database replayed (2,412 incidents), engine on `main` (2.3.0) against this one, no replay error: **2,412 of
+2,412 digests, root causes and displays equal**; 77 incidents change, every one `NOT_ESTABLISHED` (43 `TIED_LEADERS`:
+summary and remediation; 22 `NO_EVIDENCE_NEAR_ONSET` and 12 `NO_EVIDENCE_IN_INCIDENT_WINDOW`: remediation only). No
+`NOT_ESTABLISHED` diagnosis proposes a remediation any more (77 did).

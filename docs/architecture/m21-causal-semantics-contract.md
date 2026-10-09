@@ -1868,3 +1868,90 @@ testbed database replayed (2,412 incidents), engine on `main` (2.3.0) against th
 2,412 digests, root causes and displays equal**; 77 incidents change, every one `NOT_ESTABLISHED` (43 `TIED_LEADERS`:
 summary and remediation; 22 `NO_EVIDENCE_NEAR_ONSET` and 12 `NO_EVIDENCE_IN_INCIDENT_WINDOW`: remediation only). No
 `NOT_ESTABLISHED` diagnosis proposes a remediation any more (77 did).
+
+## 21. A claim's exact instance: the journal's experiment and the pressured pod (C2, F12; proposal, 2026-10-09, awaiting the owner)
+
+### 21.1 Measured problem
+
+Two places where the evidence knows an exact instance and the claim does not. Measured on `DEV` only: every
+non-`HOLDOUT` testbed database (113) replayed offline with the engine on `main` (2.3.1, `d1803e6`); the incidents
+whose leader is a chaos experiment (464).
+
+**The experiment's twin (F12).** One chaos experiment yields two `FAULT_INJECTION` findings:
+
+- from the controller's Events (`event:…`), carrying the experiment's UID and its execution record (targets, applied
+  and recovered times);
+- from the object journal (`policy_findings`, "object present", `journal:…`), carrying **no** UID, although the
+  journal version it reads holds `metadata.uid`. Every other journal finding takes its instance from the version
+  (`_instance(entity, version.instance_uid)`); this one alone does not.
+
+Hypotheses are partitioned by exact instance and episode (`hypotheses.py`, evidence never lent across UIDs), so the two findings build two claims
+of one experiment: one with the UID, one with "unknown". Both join one causal family, so the family's
+`instance_resolution` is `UNKNOWN` even when the leader names the exact experiment: **418 of 464** chaos-led incidents.
+In **220 of 464** the leader is the UID-less twin, ranked first by the tie-break. The execution witness (`fault_execution`)
+requires the holder's exact instance, so a twin leader can never carry it: **none of the 220** has strong authority;
+all 26 strong leaders hold the UID.
+
+**The pressured pod (C2).** CPU throttling and memory use come from Prometheus by pod name (`resource_findings`) and
+carry no instance. On the target pod they therefore build a claim of their own with an unknown instance, apart from
+any finding that carries the pod's UID (a failed probe, a container failure). The pod-level witness reads only the
+target pod's claim that holds the exact instance, so a saturating fault is witnessed only when something else on the
+same pod also failed. On the `direct-stress` runs (21 chaos-led incidents in 12 databases): 2 strong; 4 led by the
+UID-holding claim with pressure on the target and no witness; 12 led by the twin; 3 others.
+
+The two causes compound: fixing either alone leaves most `direct-stress` incidents without their witness.
+
+### 21.2 Rule A: a journal finding carries the instance of the version it reads
+
+The chaos "object present" finding takes the UID of the journal version it is built from (`instance_uid` of the
+latest version, the same version whose evidence id it cites). Nothing else changes: its time, summary and targets stay
+as they are.
+
+- When that UID equals the one the controller's Events name, both findings fall into one claim, which then carries
+  the exact instance: one claim per experiment, as the partition intends.
+- When it differs (the name was reused by a new incarnation), they remain two claims of two instances, and the family
+  is `MULTIPLE_VIABLE`, as it should be.
+- A version without a UID leaves the finding without an instance, as today.
+
+This is the existing principle applied where it was missed: the evidence itself carries the UID.
+
+### 21.3 Rule B: resource pressure binds to the pod instance that held the name
+
+A `RESOURCE_PRESSURE` finding takes the instance of its pod when the object journal determines it uniquely: exactly
+one UID of that pod name in that namespace whose observed presence covers the whole sample interval of the pressure
+(`sample_start` to `sample_end`, else `at`). Presence runs from the version's `creationTimestamp` (else its first
+observation) to its `DELETED` tombstone (else open).
+
+- No covering instance, or more than one: no instance, as today. Nothing is inferred from a name alone.
+- This is a binding by name **and time** through the journal, not a reading of the metric, and it is stated as such:
+  the metric does not carry the UID. It is admitted only because the binding is unique by construction (one instance
+  held the name for the whole interval). On `DEV`, 1,017 pod names were journaled and none held more than one UID; the
+  rule must still refuse an ambiguous name, and a unit test pins that.
+- The effect rules are unchanged: a bound pressure is an effect only inside the execution interval and with no
+  effect before the apply (§16 unchanged).
+
+### 21.4 Consequences
+
+Claims merge (Rule A) and new instances appear (Rule B), so hypothesis identities, scores, leaders and digests change,
+and strong authority can form where it could not: the engine version moves by a minor (2.3.1 → 2.4.0). No witness rule
+changes; what changes is which claim holds the exact instance the existing rules require.
+
+### 21.5 Measurement, pre-registered (testbed-scenarios-design §23)
+
+1. Unit tests: the twin merges on equal UIDs and stays apart on different ones; pressure binds on a unique covering
+   instance and not on zero, two or a partial cover.
+2. Offline replay of every stored testbed database, engine on `main` against this one: the distribution of family
+   `instance_resolution` and of twin leaders before and after; every leader change listed; **every new strong
+   authority checked against the run's recorded chain**. The rule is not adopted if one of them names an actor off
+   the chain, or if a scored true cause loses support or leadership without a stated reason.
+3. A full `HOLDOUT` (the sixteenth), pre-registered before it starts, with the usual criteria (no false strong
+   authority, no false `RESOLVED`, decoy never named, at least 90% valid runs) and the witness count per variant
+   reported, `direct-b` in particular. Its result never selects or tunes either rule.
+4. ITBench-Lite afterwards as a regression check only (exact and the C11 tracks).
+
+### 21.6 Not decided here
+
+- A metric that carries the pod UID itself (for example a cgroup path label) would make Rule B a reading rather than
+  a binding; not examined here.
+- Whether the "object present" finding should still exist when the controller's record of the same instance is
+  present (it adds the object's existence, not an execution). Rule A keeps it and only gives it its instance.

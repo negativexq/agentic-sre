@@ -1236,3 +1236,38 @@ from it (`code_identity`).
   added after this run, so this run's entry predates it.
 
 Next: the seventeenth `HOLDOUT`, which covers this and m21 §22, pre-registered before it starts.
+
+## 32. Seventeenth HOLDOUT, full: pre-registration for F10 and m21 §22 (2026-10-10, frozen before the run)
+
+Per §23.3, a full measurement after a harness change: F10 (§31), together with m21 §22 (Rule C, engine 2.5.0, §22.5
+leaves the pairing to the owner). The lab itself is unchanged since the fifteenth.
+
+**The setup:**
+- **Variants and seeds:** `dependency-b` 374–376, `direct-b` 377–379, `scheduled-b` 380–382, `config-b` 383–385,
+  `negative-b` 386–388, `competing-b` 389–391, `config-c` 392–394, `negative-c` 395–397.
+- **Suites:** `holdout17-<variant>`.
+- **Engine:** 2.5.0, frozen at the commit in the manifests.
+- **Where it runs:** the suite runs from a worktree of that commit, with links to the main tree's `.venv` and
+  `.local`. So, by §31.2 C, the control plane imports the worktree.
+- **Scoring:** with §20's grader.
+
+**Criteria:**
+- **Acceptance:** the frozen bar (no false strong authority, no false `RESOLVED`, at least 90% valid, the decoy never
+  named).
+- **Effect relations and m21 §19, §20:** as §28.
+- **m21 §21:** as §30. Every scored chaos-led diagnosis has its family `EXACT` and the experiment's UID; every
+  execution witness names an actor on the run's chain.
+- **m21 §22:**
+  - no scored diagnosis has a `Schedule` or experiment claim holding chaos objects of another incarnation;
+  - the run's incidents, replayed offline with engine 2.4.0, keep every leader, tier and display. Rule C has nothing
+    to act on in the testbed (§22.6), so any change is listed with its reason.
+- **F10:**
+  - every run's journal opens with `code_identity` naming the worktree, the frozen commit and `dirty` false;
+  - after the suite, no testbed forward is left (no `forwards.json`, no `kubectl port-forward` on the testbed's
+    ports);
+  - every repeat set aside (`.aborted-` or `.refused-`) is reported with its reason; such a repeat is not a run, and
+    it is run again from the same manifest.
+- **The Connector and connector §17:** as §29.
+
+Reported beside them, for information: cause, instance and execution-witness recall per variant against the
+fourteenth to sixteenth. That comparison is not a criterion and never selects or tunes a rule.

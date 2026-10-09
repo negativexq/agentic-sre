@@ -16,19 +16,23 @@ Alert → evidence → hypotheses → bounded investigation → deterministic ju
 
 ## Product preview
 
-![Incident workspace with the shared investigation canvas: the Causal X-Ray of recorded hops, the selected resource's linked evidence, the deterministic diagnosis and the recorded lifecycle](docs/ui/screenshots/investigation-canvas-dark.png)
-
-The incident workspace, rendered with repository-provided seeded data (not a live production cluster). One
-selection is shared across views: a change, a finding, a graph node or a recorded investigation step is
-highlighted in the **Causal X-Ray** and scopes the evidence explorer. The X-Ray draws exactly the hops the engine
-recorded; disconnected parts stay disconnected, with no link invented to join them.
+**▶ Investigation canvas in action (animated GIF, ~30 s)**
 
 ![Selecting a node in the Causal X-Ray opens its evidence; the selection then scopes the Evidence view and stays in the canvas across the Investigation, Timeline and Diagnosis views](docs/ui/screenshots/investigation-canvas.gif)
 
-The same canvas in motion, recorded on a copy of a held-out testbed run (packet loss injected on
-`payment-service`; the engine names the `NetworkChaos` experiment as a supported possible cause and keeps the
-diagnosis `AMBIGUOUS`): a graph node opens its evidence, the selection scopes the Evidence view, and the canvas
-stays beside the Investigation, Timeline and Diagnosis views.
+Recorded on a copy of a held-out testbed run (packet loss injected on `payment-service`; the engine names the
+`NetworkChaos` experiment as a supported possible cause and keeps the diagnosis `AMBIGUOUS`): a graph node opens
+its evidence, the selection scopes the Evidence view, and the canvas stays beside the Investigation, Timeline and
+Diagnosis views.
+
+**Incident workspace (screenshot)**
+
+![Incident workspace with the shared investigation canvas: the Causal X-Ray of recorded hops, the selected resource's linked evidence, the deterministic diagnosis and the recorded lifecycle](docs/ui/screenshots/investigation-canvas-dark.png)
+
+Rendered with repository-provided seeded data (not a live production cluster). One selection is shared across
+views: a change, a finding, a graph node or a recorded investigation step is highlighted in the **Causal X-Ray**
+and scopes the evidence explorer. The X-Ray draws exactly the hops the engine recorded; disconnected parts stay
+disconnected, with no link invented to join them.
 
 The console has seven screens: Overview, Incidents, the Incident workspace, Changes, Reports, Connections and
 Settings. See the [screenshot gallery](docs/ui/screenshots/README.md) and [the console in detail](docs/how-it-works.md#operator-console).

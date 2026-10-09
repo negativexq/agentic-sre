@@ -342,7 +342,10 @@ class KubernetesAccessReview:
 
 
 def _csv(value: str | None, default: str) -> tuple[str, ...]:
-    return tuple(item.strip() for item in (value or default).split(",") if item.strip())
+    # as the Connector reads it (agent._csv): set but empty means none, not the default
+    return tuple(
+        item.strip() for item in (default if value is None else value).split(",") if item.strip()
+    )
 
 
 def run_preflight(

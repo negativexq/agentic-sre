@@ -178,7 +178,9 @@ def test_backends_configured_on_the_connector_are_not_reported_as_unconfigured()
     assert by_name["Alertmanager"].status == "connected"
     assert by_name["Loki"].status == "connected"
     assert by_name["Prometheus"].status == "not_configured"
-    assert "connector" in (by_name["Prometheus"].detail or "")
+    assert "backends.prometheus.url" in (
+        by_name["Prometheus"].detail or ""
+    )  # D4: the chart value to set
     assert "PROMETHEUS_URL" not in " ".join(c.detail or "" for c in status.connectors)
 
 

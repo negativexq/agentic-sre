@@ -15,6 +15,8 @@ import {
   ChevronRight,
   type LucideIcon,
 } from "lucide-react";
+import { useSystemStatus } from "@/api/hooks";
+import { Badge } from "@/components/ui/Badge";
 import { Drawer } from "@/components/ui/Drawer";
 import { Skeleton } from "@/components/ui/States";
 import { cn } from "@/lib/cn";
@@ -23,6 +25,17 @@ import { useNotifications } from "@/notifications/context";
 import { NotificationProvider } from "@/notifications/NotificationProvider";
 import { NotificationViewport } from "@/notifications/NotificationViewport";
 import { NotificationCenter } from "@/notifications/NotificationCenter";
+
+/** Shown on every page when the control plane runs on seeded demo data (SRE_DEMO). */
+function DemoBadge() {
+  const { data } = useSystemStatus();
+  if (data?.mode !== "demo") return null;
+  return (
+    <Badge tone="warning" className="whitespace-nowrap">
+      Demo data
+    </Badge>
+  );
+}
 
 const PRIMARY = [
   { to: "/", label: "Overview", icon: LayoutDashboard },
@@ -202,6 +215,7 @@ function LayoutFrame() {
           <ChevronRight size={12} className="text-subtle" aria-hidden />
           <span className="text-xs text-text">{section}</span>
           <div className="ml-auto flex items-center gap-4">
+            <DemoBadge />
             <span className="hidden text-[11px] text-subtle sm:block">
               Deterministic RCA
             </span>

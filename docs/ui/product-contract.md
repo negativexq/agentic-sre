@@ -168,6 +168,21 @@ Read-only connector health first (Kubernetes / Prometheus / Alertmanager /
 Loki / Tempo / Email: Connected / Degraded / Unavailable / Not configured).
 Secret values never returned to the UI.
 
+**Connect a cluster (D4, [design](connect-cluster-design.md)).** The Connections page lists the Connector
+registry (status, session, certificate expiry and renewal, enrollment) and adds a three-step flow: name, then the
+one-time token and the `helm` command shown once, then waiting for the session and a `preflight`. It only reads and
+calls what A8 provides; it adds no rule of its own.
+
+- Creating and disabling a Connector are refused (403) unless the control plane has `SRE_API_TOKEN`; the CLI works
+  either way. The token is returned once by `POST /connectors` and never listed.
+- `preflight` runs only on a button press, never on a timer.
+- The install command carries `SRE_CONNECTOR_PUBLIC_ENDPOINT` / `SRE_CONNECTOR_PUBLIC_ENROLL_ENDPOINT`, or
+  placeholders and a note when they are unset.
+- A backend not configured through a Connector names the chart value to set (`backends.prometheus.url`), not the
+  control plane's environment variable.
+- `GET /system` carries `mode` (`connector`, `in-process`, `demo`); with `demo` (`SRE_DEMO=true`, set by
+  `make console`) every page shows a "Demo data" badge.
+
 ## Scope rule (in force M0–M10)
 
 > The RCA scoring / resolution algorithm is **not touched** while the UI and
@@ -198,6 +213,7 @@ Secret values never returned to the UI.
 - **M10** Email sharing (SMTP when configured; audit log; idempotency; honest refusal when unconfigured).
 - **M11** Read-only Connections (probed health) and Settings (secrets masked to booleans).
 - **M12** Control plane serves the built SPA at `/app` with security headers + CSP; frontend error boundary; route code-splitting.
+- **D4** Connect a cluster from the console (registry, once-only token and install command, on-demand preflight, revocation, demo badge).
 
 ## G12 — product gate
 

@@ -371,6 +371,8 @@ class DiagnosisService:
     gateway: ConnectorGateway | None = None
     # connector-install-design.md §A8.2: the enrollment port, started beside the gateway when configured
     enrollment: EnrollmentServer | None = None
+    # the Connector registry (A8.2), read and written by the console's Connections page (D4)
+    registry: Registry | None = None
     connector_client: ConnectorClient | None = None
     investigator_factory: Callable[[], Investigator | None] = lambda: None
     bounded_policy_factory: Callable[[], InvestigationPolicy | None] = lambda: None
@@ -1249,6 +1251,7 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
     connector: Connector | None = None
     gateway: ConnectorGateway | None = None
     enrollment: EnrollmentServer | None = None
+    registry: Registry | None = None
     remote_client: ConnectorClient | None = None
     reader: ClusterReader | None
     if mode == "remote":
@@ -1327,6 +1330,7 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
         connector=connector if streams else None,
         gateway=gateway,
         enrollment=enrollment,
+        registry=registry,
         connector_client=remote_client,
         provider_readers=provider_readers,
         investigator_factory=investigator,

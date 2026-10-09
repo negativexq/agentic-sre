@@ -90,7 +90,7 @@ console: web-build
 	DATABASE_URL=$(LOCAL_DB) $(PY) -m alembic upgrade head
 	DATABASE_URL=$(LOCAL_DB) $(PY) scripts/seed_console_demo.py
 	@echo "Operator console: http://localhost:8000/app"
-	DATABASE_URL=$(LOCAL_DB) $(CLI) serve
+	SRE_DEMO=true DATABASE_URL=$(LOCAL_DB) $(CLI) serve
 
 # --- benchmark (ITBench-Lite, offline) ---------------------------------------
 

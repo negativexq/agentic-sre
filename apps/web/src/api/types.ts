@@ -284,6 +284,39 @@ export interface SystemConnector {
 
 export interface SystemStatus {
   connectors: SystemConnector[];
+  /** How the control plane reaches clusters: "connector", "in-process" or "demo". */
+  mode?: "connector" | "in-process" | "demo";
+}
+
+export interface ConnectorView {
+  id: string;
+  status: "pending" | "active" | "disabled" | string;
+  connected: boolean;
+  certificate_valid_until: string | null;
+  renews_after: string | null;
+  enrolled_at: string | null;
+  created_at: string;
+}
+
+export interface ConnectorsView {
+  available: boolean;
+  writable: boolean;
+  endpoints_configured: boolean;
+  connectors: ConnectorView[];
+}
+
+export interface CreatedConnector {
+  id: string;
+  token: string;
+  expires_at: string;
+  install_command: string;
+  endpoints_configured: boolean;
+}
+
+export interface PreflightCheck {
+  name: string;
+  status: "ok" | "warning" | "failed" | "not_configured" | string;
+  detail: string;
 }
 
 export interface SettingsView {

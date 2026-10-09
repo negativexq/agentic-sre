@@ -84,13 +84,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     pki = commands.add_parser("pki")
     pki.add_argument("--out", type=Path, required=True)
+    pki.add_argument(
+        "--hostname",
+        action="append",
+        help="a name the Connectors reach the control plane at (repeatable; default: the lab's)",
+    )
     alertmanager = commands.add_parser("alertmanager")
     alertmanager.add_argument("--source", type=Path, required=True)
     alertmanager.add_argument("--url", required=True)
     alertmanager.add_argument("--token-file", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == "pki":
-        for name, path in lab_pki(args.out).items():
+        hostnames = tuple(args.hostname) if args.hostname else CONTROL_PLANE_NAMES
+        for name, path in lab_pki(args.out, hostnames=hostnames).items():
             print(f"{name} {path}")
         return 0
     token = args.token_file.read_text(encoding="utf-8").strip()

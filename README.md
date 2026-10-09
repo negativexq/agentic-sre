@@ -408,8 +408,11 @@ Kubernetes · Prometheus · Loki · Tempo · Alertmanager
   epochs and explicit `Gap` records (connector restart, buffer expiry, backend
   unreachable). The alert-channel coverage window is derived from heartbeats, so
   the engine knows what it could not have seen.
-- **Identity:** mTLS with a per-connector URI SAN; static 90-day certificates.
-  Enrollment, rotation, Helm packaging and multi-tenancy are not built yet.
+- **Identity:** mTLS with a per-connector URI SAN. A Connector enrolls once
+  with a one-time token, renews its certificate over the live session, and can
+  be revoked; it is installed with the Helm chart `charts/agentic-sre-connector`
+  ([install design](docs/architecture/connector-install-design.md)). One
+  control plane diagnoses through one Connector; multi-tenancy is not built yet.
 - **Proven equivalent:** recorded real data survives the wire unchanged, and the
   direct and over-the-wire epistemic digests are identical on the migration gate.
 
@@ -597,6 +600,80 @@ make cp-up             # control plane and its own PostgreSQL on the host
 make connector-check   # the Connector can read, and cannot write or read Secrets
 ```
 
+### Connect your own cluster
+
+The console can enroll a cluster in a few minutes. The control plane runs where
+you choose; the Connector runs in your cluster and dials out to it on two
+ports, so nothing in the cluster is exposed.
+
+**1. Certificates.** One authority signs the control plane's server
+certificate and every Connector's. Name the host your cluster reaches the
+control plane at:
+
+```bash
+.venv/bin/python -m packages.connector.lab pki --out .local/pki --hostname sre.example.com
+```
+
+Keep `.local/pki/ca.key` on the control plane only; it signs enrollments and
+renewals.
+
+**2. Control plane.** Start it in remote mode, with the enrollment port and an
+API token (the console refuses to mint a Connector token without one):
+
+```bash
+export DATABASE_URL=postgresql+psycopg://user:pass@db:5432/agentic_sre
+export SRE_CONNECTOR_MODE=remote SRE_CONNECTOR_ID=prod-eu-1
+export SRE_CONNECTOR_LISTEN=0.0.0.0:8443 SRE_CONNECTOR_ENROLL_LISTEN=0.0.0.0:8444
+export SRE_CONNECTOR_TLS_CERT=.local/pki/server.crt SRE_CONNECTOR_TLS_KEY=.local/pki/server.key
+export SRE_CONNECTOR_TLS_CLIENT_CA=.local/pki/ca.crt SRE_CONNECTOR_CA_KEY=.local/pki/ca.key
+export SRE_CONNECTOR_PUBLIC_ENDPOINT=sre.example.com:8443
+export SRE_CONNECTOR_PUBLIC_ENROLL_ENDPOINT=sre.example.com:8444
+export SRE_API_TOKEN=$(openssl rand -hex 24)
+export SRE_WATCH_NAMESPACES=shop SRE_AUTO_DIAGNOSE=true
+.venv/bin/python -m alembic upgrade head
+agentic-sre serve --host 0.0.0.0 --port 8080
+```
+
+`SRE_CONNECTOR_ID` names the Connector diagnoses go through (one per control
+plane in this version). The two `PUBLIC_*` values only fill in the install
+command; without them it shows placeholders.
+
+**3. Connector image.** No public image is published yet; build it and push it
+to a registry your cluster pulls from:
+
+```bash
+docker build -f infra/docker/Dockerfile --target connector -t registry.example.com/agentic-sre/connector:0.1 .
+docker push registry.example.com/agentic-sre/connector:0.1
+```
+
+**4. Connect.** Open `http://<control-plane>:8080/app/connections`, paste the
+API token in **Settings**, then **Connect a cluster**:
+
+1. name the Connector (`prod-eu-1`, a DNS label);
+2. copy the `helm` command shown, fill in the namespaces and your
+   Alertmanager, Prometheus, Loki and Tempo URLs, add
+   `--set image.repository=registry.example.com/agentic-sre/connector --set image.tag=0.1`,
+   and run it from a checkout of this repository. The token in it is valid for
+   one hour, works once, and is not shown again;
+3. the console waits for the Connector to connect, then runs **preflight**:
+   every backend probed, every permission it needs present and every one it
+   must not have (writes, Secrets) absent.
+
+Without the console, `agentic-sre connector create prod-eu-1` prints the same
+token and `agentic-sre connector disable prod-eu-1` revokes it. Point
+Alertmanager's webhook at the Connector's local receiver
+(`http://prod-eu-1-webhook.agentic-sre-connector.svc:9095/webhook`, bearer
+token in the Secret `prod-eu-1-webhook`) so alerts arrive as they fire.
+
+**Which address is what**
+
+| Address | What runs there |
+|---|---|
+| `http://localhost:5173` | the console's Vite dev server (`npm run dev`), proxying `/api` to `:8000` |
+| `http://localhost:8000/app` | `make console`: seeded demo data, marked **Demo data** |
+| `http://localhost:8080/app` | a control plane on a live cluster (`make ui`, or the lab's `make cp-up`) |
+| `:8443` / `:8444` | the Connector's session (mTLS) and its one-time enrollment port |
+
 ### Operator console
 
 A React/TypeScript operator console (`apps/web`) renders the deterministic
@@ -604,7 +681,8 @@ engine's output — it never computes a causal claim of its own. It has six
 screens: an **Overview** dashboard, a filterable **Incidents** list, the
 **Incident workspace** (root actor, causal path, run-bound lifecycle, "why this
 actor" vs competing hypotheses, evidence and trace), a **Changes** explorer,
-a **Reports** library, and read-only **Connections/Settings**.
+a **Reports** library, **Connections** (connect a cluster, the Connector
+registry, preflight, revocation) and read-only **Settings**.
 
 ```bash
 make console   # builds the SPA, seeds a demo incident mix, serves it

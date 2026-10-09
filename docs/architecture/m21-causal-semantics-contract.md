@@ -2003,7 +2003,7 @@ read during prediction. Compared with the last run, `all-2.3.0-20261008T2001` (e
 - **Leader families:** 19 `EXACT`, 12 `MULTIPLE_VIABLE`, 3 `UNKNOWN`, unchanged; Scenario-34 moves from the fourth
   `UNKNOWN` to `EXACT`; no other scenario's leader family changes.
 
-## 22. A claim does not gather another incarnation of its own Schedule (C19; proposed 2026-10-10, awaiting approval)
+## 22. A claim does not gather another incarnation of its own Schedule (C19; owner-approved 2026-10-10)
 
 ### 22.1 Measured problem
 
@@ -2100,3 +2100,33 @@ run creates one incarnation. A testbed digest that changes is listed and explain
 - **One `HOLDOUT` or two.** Whether the seventeenth `HOLDOUT` follows Rule C alone, or also the harness change of
   roadmap F10 (a lab change that needs its own), is the owner's call. One run covering both is cheaper. Separate runs
   keep the two attributable.
+
+### 22.6 Implementation, replay and ITBench-Lite (2026-10-10)
+
+Rule C sits in `group_candidates` (`_incarnations`, `_own_incarnation_members`), engine 2.5.0. There is a unit test
+for every case of §22.4.1; the three that test the change fail without it.
+
+- **Testbed replay.** Every stored database was replayed with the engine on `main` (2.4.0, `c45695e`) and with this
+  one: 398 databases, 2,742 incidents, no replay error. Every digest is unchanged, as are every leader, tier, display,
+  shown candidate and resolution. Every claim keeps its identity, its support, its strong authority and its
+  plausibility. No claim held another incarnation's chaos objects before or after; each run creates one incarnation.
+  The adoption conditions of §22.4.2 hold.
+- **ITBench-Lite** (`all-2.5.0-20261009T2158`, commit `20f5246`, clean tree, 0 model calls, ground truth not read
+  during prediction), against `all-2.4.0-20261009T2109`:
+  - Exact 18/31 and the C11 tracks 26/31, 20/31 and 18/31 are unchanged.
+  - In all 35 scenarios the leader, its instance, family, tier, display, claim level and executing instances are
+    unchanged.
+  - **Members.** The 12 `Schedule` leaders hold fewer members, for example Scenario-81 27 → 12 and Scenario-21 12 → 6.
+    Three of them score lower (Scenario-22, 29, 35: 17.6 → 15.6 and 15.2 → 13.2).
+  - **Alternatives.** These are the candidates outside the leader's members. They now list the other incarnation's
+    experiments, so in 8 scenarios the labelled experiment appears second (Scenario-17, 21, 22, 35, 80, 81, 83, 91).
+    The ground-truth-based "root cause in top 3 / top 5" goes from 57% to 80%.
+  - **One confidence change, Scenario-22.** In 2.4.0 the runner-up held the same members as the leader and tied it
+    (17.6), so `candidate_dominance` was `WEAK` and the answer `LIKELY`. In 2.5.0 the margin is 6.6, `PASS`, and the
+    answer is `VERIFIED`. The answer, the `Schedule`, is still not the labelled experiment. VERIFIED coverage goes
+    from 48.6% to 51.4% and VERIFIED accuracy from 52.9% to 50.0%.
+
+  These are reported only. None of them selects or tunes the rule (§22.4.3).
+
+Next: the seventeenth `HOLDOUT`, pre-registered before it starts (§22.4.4; §22.5 leaves to the owner whether it
+also covers F10).

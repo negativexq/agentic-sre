@@ -1084,3 +1084,50 @@ manifests (the control plane restarted on that commit before the first run), sco
 - Reported beside them, for information: cause, instance and execution-witness recall per variant against the
   fourteenth and fifteenth, `direct-b` and `scheduled-b` in particular (m21 §21.7 expects more witnesses there; that
   expectation is not a criterion, and the result never selects or tunes either rule).
+
+### 30.1 Sixteenth HOLDOUT result (2026-10-10, engine 2.4.0, 24 runs)
+
+**24/24 valid**; 0 false strong authority, 0 false `RESOLVED`, the decoy never named.
+
+| Variant | Valid | Cause | Instance | Execution witness | Group |
+|---|---|---|---|---|---|
+| `dependency-b` | 3/3 | 1.0 | 1.0 | 0.0 | |
+| `direct-b` | 3/3 | 1.0 | 1.0 | 1.0 | |
+| `scheduled-b` | 3/3 | 1.0 | 1.0 | 1.0 | |
+| `config-b` | 3/3 | 1.0 | 1.0 | 0.33 | |
+| `negative-b` | 3/3 | 1.0 | 1.0 | 0.67 | |
+| `competing-b` | 3/3 | 1.0 | 1.0 | 0.67 | 0.85 |
+| `config-c` | 3/3 | 1.0 | 1.0 | 0.67 | |
+| `negative-c` | 3/3 | 1.0 | 1.0 | 0.67 | |
+
+- **m21 §21:** all 47 scored diagnoses led by a chaos experiment have their family `EXACT` and the experiment's UID
+  on the leading claim; 29 execution witnesses, none off the chain.
+- **Effect relations:** no scored root off the chain (91 scored diagnoses). Two runs with failed trace reads
+  (`direct-b` #1: 19 reads, `negative-c` #1: 11 reads, `ConnectorReadError` from a failed Tempo request), 22 of 24
+  without: above the 90% bar.
+- **m21 §19 and §20:** no leader from an execution after the onset; no scored diagnosis `NOT_ESTABLISHED`.
+- **The Connector:** connected in every run; no run's database holds an enrollment (the bring-up registry still has
+  `lab` active, its token used once); the running pod logs "identity restored", never "enrolled".
+- **Connector §17:** 0 of 24 runs opened an incident before their injection.
+
+Every pre-registered criterion holds. For information, against the fourteenth and fifteenth:
+- **`scheduled-b`** formed an execution witness in all three runs (0.0 in both earlier `HOLDOUT`s), as m21 §21.7
+  expected.
+- **`dependency-b`** formed none (0.67 in both). In the fifteenth, the witnesses formed only on the payment-side
+  incidents (`PaymentRequestLatencyHigh`, `HighRequestLatency`, `PaymentDbQueryLatencyHigh`). None of those alerts
+  fired in any run here; only the order-side alerts did.
+
+The same 24 databases replayed offline with engine 2.3.1 (the fifteenth's commit) and 2.4.0 give the same leader for
+all 101 incidents and the true cause shown for all 91 scored ones. Incidents with a strong witness go from 25 to 28;
+all three new ones are `scheduled-b`'s and on the chain, and no variant loses one. Chaos-led families go from
+`UNKNOWN` (55/55) to `EXACT` (55/55). The drops in `dependency-b`, `config-b` and `negative-c` come from the runs: the
+engines agree on them.
+
+Before the first run, three starts were stopped short of an injection. The first two failed in the runner's isolation
+step: the run worktree had no `.venv` or `.local/lab`, so the per-run `make cp-up` failed, and the second also found
+the first's empty work directory. In the third, `kubectl port-forward` processes left over from the second answered
+the reachability check and then broke when the isolation step replaced the order-service pod. Every client probe in
+that baseline failed, and the run stopped at calibration. None of the three created a chaos object. The empty work
+directories were removed. The third's work directory and database are kept aside as
+`work/aborted-holdout16/` and `aborted_holdout16_dependency_b_0_attempt3`. All 24 scored runs come from the fourth
+start, from the frozen manifests at `eaf28fb`.

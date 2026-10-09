@@ -22,6 +22,10 @@ that capture session.
 
 ![Shared investigation canvas with recorded causal graph, selected resource, linked evidence and cross-view context](investigation-canvas-dark.png)
 
+Interaction, recorded on a copy of a held-out testbed run (packet loss on `payment-service`):
+
+![Selecting graph nodes, inspecting their evidence and moving across task views with the canvas kept in place](investigation-canvas.gif)
+
 ## Ambiguous diagnosis
 
 ![Ambiguous incident workspace retaining engine uncertainty and alternative explanations](incident-ambiguous-dark.png)

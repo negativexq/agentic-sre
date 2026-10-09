@@ -58,7 +58,7 @@ The Connector boundary in remote mode (details under [Connector boundary](#conne
 **What was measured**
 
 - **ITBench-Lite: [17/22 scoreable = 77.3%](evals/results/v1.1.2/README.md) on the TEST25 split, which was blind when it was frozen; 0 model calls.** Since 2026-09-28 all 35 published scenarios count as **development data**: the engine has been worked on with them in view, so they no longer measure generalization. The new held-out set is being built on our own [instrumented testbed](#instrumented-testbed).
-- **All 35 scenarios combined: 26/31 = 83.9% (historical, the frozen architecture of `f96073d`).** Four unmatchable published labels are excluded from the denominator. The **current engine (2.2.2) scores 18/31 exactly**; beside it, evidence-backed tracks that never replace that score: 20/31 when the predicted `Schedule`'s own spawned experiment ran across the incident's onset, 26/31 on the controller's structural record alone ([C11 analysis](docs/architecture/c11-itbench-equivalence.md)).
+- **All 35 scenarios combined: 26/31 = 83.9% (historical, the frozen architecture of `f96073d`).** Four unmatchable published labels are excluded from the denominator. The **last measured engine (2.2.2) scores 18/31 exactly** (the current engine, 2.3.1, has not been re-measured on all 35 yet); beside it, evidence-backed tracks that never replace that score: 20/31 when the predicted `Schedule`'s own spawned experiment ran across the incident's onset, 26/31 on the controller's structural record alone ([C11 analysis](docs/architecture/c11-itbench-equivalence.md)).
 - **Live suite: 25/25 expected outcomes** — 16/16 correct root-cause actors, 9/9 correct abstentions, and 0 fabricated `RESOLVED` diagnoses. Actor identification and epistemic resolution are separate: `RESOLVED` 0, `AMBIGUOUS` 14, `INSUFFICIENT_EVIDENCE` 11. See the [live-suite report](evals/results/live-suite-2026-09-24.md) and [M16 validation](docs/results/m16-positive-elimination.md).
 - **0 model calls** — in both reported measurements; deterministic judgment remains authoritative.
 - **Testbed, six fault families:** in development (18 runs) and in the first held-out set (18 runs, engine frozen by commit), every injected cause was named in 35 of 36 runs, with 0 false strong authority, 0 false `RESOLVED` and a decoy never named ([results](#instrumented-testbed)).
@@ -309,11 +309,11 @@ excluded from the accuracy denominator and reported separately.
 | **TEST25 (blind when frozen)** | **[17/22 (77.3%)](evals/results/v1.1.2/README.md)** | 17/25 | **0** |
 | All 35 combined | 26/31 (83.9%) | 26/35 | 0 |
 
-The table above is **historical**: the frozen architecture of its time. The current engine is a different engine
-and is measured separately ([C11 analysis](docs/architecture/c11-itbench-equivalence.md); engine 2.2.2, all 35
-scenarios, full-source path, 31 scoreable):
+The table above is **historical**: the frozen architecture of its time. The engine has changed since and is
+measured separately. The last such measurement is engine 2.2.2 ([C11 analysis](docs/architecture/c11-itbench-equivalence.md); all 35
+scenarios, full-source path, 31 scoreable); the current engine, 2.3.1, has not been re-measured on all 35 yet:
 
-| Current engine 2.2.2 | Correct | What it measures |
+| Engine 2.2.2 (last measured) | Correct | What it measures |
 | --- | ---: | --- |
 | **Exact root cause (the ITBench score)** | **18/31 (58.1%)** | the answer equals the published label |
 | Evidence-backed causal equivalence | 20/31 (64.5%) | the answer is a `Schedule` whose own spawned experiment (controller record, one UID) ran across the incident's onset |
@@ -324,8 +324,9 @@ These measure different things. Only the first is the ITBench score; the others 
 replace it. Of the 13 exact misses, 2 are proven equivalences, 6 are possible equivalences only, 4 are answers the
 published label cannot score, and 1 is a wrong causal actor.
 
-Confidence against ground truth on the 31 scoreable scenarios: `VERIFIED`
-predictions were 13/16 correct and `LIKELY` predictions 13/19.
+Confidence against ground truth, for the historical architecture over all 35 scenarios
+([v1.1.2](evals/results/v1.1.2/README.md)): `VERIFIED` predictions were 13/16 correct and `LIKELY` predictions 13/19.
+The current engine's confidence has not been re-calibrated on these scenarios.
 
 These accuracy figures are measured on the deterministic full-source path. The
 bounded investigation path is measured separately, by how often it reaches the
@@ -481,7 +482,8 @@ recovery. The testbed measures the engine against a world whose truth we record.
 All 36 runs were valid, with 0 false strong authority, 0 false `RESOLVED` and the decoy never named. The one
 held-out miss is a pod kill whose symptom never reached its alert threshold before the run ended, so no incident
 of that group existed. Strong evidence depends on the fault leaving an execution witness at the exact target; the
-rollout families have no strong rule yet (roadmap C5). A run starts only from a quiet baseline: if the target
+rollout families had no strong rule at the time of this measurement; they have since
+(roadmap C5a and C5b, each confirmed on a later held-out set). A run starts only from a quiet baseline: if the target
 already holds a warning, the run is refused before anything is injected.
 
 The service-level effect relation (below) was wired into the engine after this measurement and confirmed on a later
@@ -602,9 +604,15 @@ make connector-check   # the Connector can read, and cannot write or read Secret
 
 ### Connect your own cluster
 
-The console can enroll a cluster in a few minutes. The control plane runs where
-you choose; the Connector runs in your cluster and dials out to it on two
-ports, so nothing in the cluster is exposed.
+Once the control plane is set up, the console guides a cluster's enrollment.
+The control plane runs where you choose; the Connector runs in your cluster
+and dials out to it on two ports, so nothing in the cluster is exposed.
+
+> **Before exposing it beyond your workstation:** put the console and API
+> behind HTTPS (a TLS-terminating proxy or ingress): the API token is a bearer
+> token and would otherwise cross the network in clear. `SRE_API_TOKEN` guards
+> writes only; read endpoints are unauthenticated by default and return
+> incident and log-derived data, so restrict who can reach them.
 
 **1. Certificates.** One authority signs the control plane's server
 certificate and every Connector's. Name the host your cluster reaches the
@@ -646,7 +654,7 @@ docker build -f infra/docker/Dockerfile --target connector -t registry.example.c
 docker push registry.example.com/agentic-sre/connector:0.1
 ```
 
-**4. Connect.** Open `http://<control-plane>:8080/app/connections`, paste the
+**4. Connect.** Open `https://<control-plane>/app/connections`, paste the
 API token in **Settings**, then **Connect a cluster**:
 
 1. name the Connector (`prod-eu-1`, a DNS label);
@@ -677,12 +685,19 @@ token in the Secret `prod-eu-1-webhook`) so alerts arrive as they fire.
 ### Operator console
 
 A React/TypeScript operator console (`apps/web`) renders the deterministic
-engine's output — it never computes a causal claim of its own. It has six
+engine's output — it never computes a causal claim of its own. It has seven
 screens: an **Overview** dashboard, a filterable **Incidents** list, the
 **Incident workspace** (root actor, causal path, run-bound lifecycle, "why this
 actor" vs competing hypotheses, evidence and trace), a **Changes** explorer,
 a **Reports** library, **Connections** (connect a cluster, the Connector
 registry, preflight, revocation) and read-only **Settings**.
+
+**Investigation canvas.** In the incident workspace one selection is shared
+across views: choosing a change, a finding, a graph node or a recorded
+investigation step highlights it in the Causal X-Ray and scopes the evidence
+explorer, and the canvas stays beside every task view. The X-Ray draws exactly the hops the
+engine recorded; disconnected parts stay disconnected, with no link invented
+to join them ([design](docs/ui/investigation-canvas.md)).
 
 ```bash
 make console   # builds the SPA, seeds a demo incident mix, serves it
@@ -825,15 +840,15 @@ remediation is returned as a proposal for an operator to review and execute.
 
 Against ITBench-Lite ground truth the frozen architecture of its time reached
 **17/22 (77.3%)** on TEST25, which was blind when frozen, and **26/31 (83.9%)**
-across all 35 scenarios, with zero model calls (historical). The current engine
-scores **18/31** exactly, and 20/31 on an evidence-backed equivalence track
+across all 35 scenarios, with zero model calls (historical). The last measured
+engine (2.2.2) scores **18/31** exactly, and 20/31 on an evidence-backed equivalence track
 reported beside it ([C11](docs/architecture/c11-itbench-equivalence.md)). Denominators exclude four scenarios whose published labels match
 nothing in their own snapshots. Since 2026-09-28 those 35 are development data,
 so these figures are regression evidence, not a generalization estimate; the
 held-out measurement is the own testbed: across six fault families every injected
 cause was named in 35 of 36 runs with no false strong authority, a small result
-reported with its limits above. `VERIFIED` predictions were 13/16 correct against
-ground truth.
+reported with its limits above. Historically, over all 35 scenarios, `VERIFIED`
+predictions were 13/16 correct against ground truth.
 
 ### What makes it different from an AI SRE agent?
 
@@ -877,17 +892,18 @@ telemetry impose real limits.
   instrumented service (the minutes around the onset and a baseline before it),
   at most two at a time; bounded traffic is not yet read live, and some
   observability queries and signal mappings remain demo-workload-specific.
-- The Connector uses static 90-day certificates; enrollment, rotation, Helm
-  packaging, `preflight` probing and multi-tenant operation are not built, and
-  the stream mode is opt-in.
+- One control plane diagnoses through one Connector (`SRE_CONNECTOR_ID`);
+  several Connectors can enroll and connect, but multi-cluster diagnosis and
+  multi-tenant operation are not built. No Connector image is published yet,
+  and the stream mode is opt-in.
 - Strong authority needs an observed execution and an effect at the exact
   target: a pod-level effect, or the service-level effect read from traces. The
   service-level relation is confirmed on one small held-out set and needs
   traced calls to the target; a fault whose effect shows in
   neither still yields a correctly named but non-strong cause.
 - The testbed covers six fault families with three runs per variant, on one
-  demo workload; the held-out set is small, and rollout faults have no strong
-  rule yet.
+  demo workload; the held-out set is small. Rollouts have strong rules (C5a,
+  C5b); config consumption without a rollout and autoscaling do not.
 - Evidence coverage is recorded but not yet read by the rules that infer from
   absence; until each is changed and measured, they behave as before.
 - General durable high-availability deployment is not yet complete.

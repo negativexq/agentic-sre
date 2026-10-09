@@ -2002,3 +2002,101 @@ read during prediction. Compared with the last run, `all-2.3.0-20261008T2001` (e
     established and names both tied candidates.
 - **Leader families:** 19 `EXACT`, 12 `MULTIPLE_VIABLE`, 3 `UNKNOWN`, unchanged; Scenario-34 moves from the fourth
   `UNKNOWN` to `EXACT`; no other scenario's leader family changes.
+
+## 22. A claim does not gather another incarnation of its own Schedule (C19; proposed 2026-10-10, awaiting approval)
+
+### 22.1 Measured problem
+
+A chaos `Schedule` can be deleted and created again under the same name: two incarnations, two UIDs. Every candidate is
+partitioned by exact instance (§21), so each incarnation of the `Schedule` and each experiment instance builds its own
+claim. Membership, however, is not partitioned. `group_candidates` joins candidates into one component through the
+topology. The topology's `spawns` edge is derived from names (`topology.py`: an experiment whose name is the
+`Schedule`'s plus a suffix of at most 7 characters, in the same namespace). Every claim built in a component
+(`_make_hypothesis`) then takes all of the component's candidates as members: their findings enter its score
+(`all_findings`), its manifestations and the evidence listed with it. The controller's own record of which incarnation
+spawned which experiment (`Spawned`, bound to the schedule UID in `fault_executions`, carried as `schedule_uid` on the
+experiment's finding) is not consulted there.
+
+Measured on the stored diagnoses, engine 2.4.0. An experiment instance belongs to the incarnation whose `Spawned`
+record names it.
+
+- **ITBench-Lite** (`all-2.4.0-20261009T2109`, 35 scenarios): **12 of 12** `Schedule` leaders with a UID have both
+  incarnations of their name in the evidence. Each claim holds **116** experiment instances spawned by the other
+  incarnation, beside **144** of its own and **4** with no `Spawned` record. Among alternatives: 2 of 12 such claims,
+  19 foreign instances. In the other direction, **260 of 260** experiment claims whose owner is recorded hold another
+  incarnation's experiments, and **135** of them that incarnation's `Schedule` findings.
+- **Testbed:** each run creates one incarnation, so nothing is mixed. In the sixteenth `HOLDOUT`, all 3 `Schedule`
+  leaders hold only experiments their own `Spawned` record names.
+
+Support and authority are not affected. D1 reads only the actor's own findings of the claim's exact instance
+(`claims.actor_findings`), and the execution witness checks the schedule UID (§19.9). What the mixing changes is a
+claim's score, its manifestations and the evidence it lists. So it can reorder claims within one tier, and it presents
+another incarnation's experiments as part of this one.
+
+### 22.2 Rule C: a claim's members belong to the actor's own incarnation
+
+**The incarnation of a chaos object of a `Schedule` name `S` in namespace `N`:**
+- a `Schedule` candidate of `S` with an exact instance: its UID;
+- an experiment instance named in a `Spawned` record of a `Schedule` `S` instance (`schedule_uid`): that UID;
+- an experiment that joins `S` by name only (no `Spawned` record names it), or a `Schedule` candidate of `S` without an
+  instance: **unknown**.
+
+**The rule.** When a claim's actor has a known incarnation `u` of `S`, a member candidate that is a chaos object of `S`
+is kept only if:
+- its incarnation is `u`; or
+- its incarnation is unknown **and** `u` is the only incarnation of `S` in the evidence (the only UID of `S` among the
+  `Schedule` candidates and the `schedule_uid`s).
+
+Any other chaos object of `S` (another known incarnation, or an unknown one while two or more incarnations are
+present) is not a member of this claim. It is removed from `members`, from `member_paths` and manifestations, and its
+findings do not enter `all_findings`.
+
+**Unchanged:**
+- **An actor with an unknown incarnation** (a `Schedule` candidate without an instance, an experiment no `Spawned`
+  record names): membership as today. Nothing is decided from a name.
+- **An actor that is not a chaos object of `S`** (a pod, a deployment): membership as today. Rule C is about one
+  `Schedule` lending to another incarnation of itself, not about episode grouping.
+- **The component itself** (`group_candidates`' union of candidates), the topology's name-derived `spawns` edge
+  (structure, the console's neighbourhood, remediation's "pause the `Schedule`"), `collapse_fault_instances` (already
+  grouped by schedule UID), the actor's own findings, D1, every witness rule and §16.
+
+This is the principle of §21 applied to membership: evidence is not lent across UIDs. The rule reads the controller's
+record (`Spawned`) and never infers an incarnation from a name. A name alone decides membership only when there is
+nothing to choose between.
+
+### 22.3 Consequences
+
+On ITBench the members, manifestations, scores, presentation groups and evidence lists of `Schedule` and experiment
+claims change, so leaders within one tier can reorder, and digests change. The engine version moves by a minor
+(2.4.0 → 2.5.0). No support, authority or witness rule changes. On the testbed nothing is expected to change, since a
+run creates one incarnation. A testbed digest that changes is listed and explained.
+
+### 22.4 Measurement, pre-registered (testbed-scenarios-design §23)
+
+1. **Unit tests:**
+   - two incarnations: each claim keeps only its own `Spawned` experiments and its own `Schedule` findings, in both
+     directions;
+   - an experiment without a `Spawned` record: kept when its `Schedule` name has one incarnation, dropped when it has
+     two;
+   - an actor with an unknown incarnation: unchanged;
+   - a non-chaos actor in the same component: unchanged.
+2. **Offline replay of every stored testbed database, engine on `main` (2.4.0) against this one:**
+   - claims holding another incarnation's chaos objects, before and after (expected after: 0);
+   - every leader change and every changed digest, listed with its reason.
+
+   The rule is not adopted if any claim's own support, tier or strong authority changes. It is also not adopted if a
+   scored true cause loses support or leadership without a stated reason.
+3. **ITBench-Lite, reported as a regression check only:** exact and the C11 tracks, with every changed prediction
+   listed. The result never selects or tunes the rule.
+4. **A full `HOLDOUT` (the seventeenth), pre-registered before it starts,** with the usual criteria. On the testbed it
+   checks non-regression; Rule C has nothing to act on there.
+
+### 22.5 Not decided here
+
+- **A non-chaos claim's members** (a pod claim whose component holds both incarnations) stay as they are. Whether
+  episode grouping should also respect incarnations is not examined here.
+- **The topology's `spawns` edge** stays name-derived. Deriving it from `Spawned` records would also change
+  structure, the console's neighbourhood and remediation; Rule C does not need it.
+- **One `HOLDOUT` or two.** Whether the seventeenth `HOLDOUT` follows Rule C alone, or also the harness change of
+  roadmap F10 (a lab change that needs its own), is the owner's call. One run covering both is cheaper. Separate runs
+  keep the two attributable.

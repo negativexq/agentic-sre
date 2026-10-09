@@ -1018,3 +1018,21 @@ the decoy never named (`negative-b`, `negative-c`).
 
 Every pre-registered criterion holds. For information: `scheduled-b` formed an execution witness in the thirteenth
 (0.67) and none here (0.0), with the same rule; `competing-b`'s pod-kill was named in every run this time.
+
+## 29. Fifteenth HOLDOUT, full: pre-registration (2026-10-09, frozen before the run)
+
+Per §23, a full measurement after a lab change: the Connector is now installed with the chart, enrolled once with a
+one-time token and restored from its Secret on every restart (connector-install-design.md §A8.5); the control plane
+runs with the registry and the enrollment port. The engine is unchanged (2.3.1). The eight variants, seeds
+`dependency-b` 326–328, `direct-b` 329–331, `scheduled-b` 332–334, `config-b` 335–337, `negative-b` 338–340,
+`competing-b` 341–343, `config-c` 344–346, `negative-c` 347–349; suites `holdout15-<variant>`, engine frozen at the
+commit in the manifests, scored with §20's grader.
+
+- **Acceptance:** the frozen bar (no false strong authority, no false `RESOLVED`, at least 90% valid, the decoy never
+  named).
+- **Effect relations and m21 §19, §20:** as §28.
+- **The Connector:** connected in every run after the isolation step (the run would be invalid otherwise), its identity
+  restored, never re-enrolled (the registry's token stays used, the Connector logs no enrollment).
+- **Connector §17:** runs with an incident opened before the injection, as in §28 (0 of 24 there).
+- Reported beside them, for information: cause, instance and execution-witness recall per variant against the
+  fourteenth.

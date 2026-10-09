@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import stat
 from collections.abc import Collection
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from test_fault_execution_support import OFF, full, source
@@ -52,10 +54,14 @@ class FakeWorld:
         apply_event: bool = True,
         diagnose: bool = True,
         fail_on_inject: bool = False,
+        fail_on_isolate: bool = False,
+        client_up: bool = True,
+        database: str | None = "aborted_0001",
     ) -> None:
         self.clock = clock
         self.calls: list[str] = []
         self.apply_event, self.diagnose, self.fail_on_inject = apply_event, diagnose, fail_on_inject
+        self.fail_on_isolate, self.client_up, self.database = fail_on_isolate, client_up, database
         self.injected: datetime | None = None
         self.baseline_warnings: list[str] = []
         self.foreign_before: list[str] = []
@@ -70,6 +76,8 @@ class FakeWorld:
 
     def isolate(self, run_id: str) -> None:
         self.calls.append(f"isolate:{run_id}")
+        if self.fail_on_isolate:
+            raise RuntimeError("make cp-up failed")
 
     def start_load(self, rps: float) -> None:
         self.calls.append("start_load")
@@ -81,6 +89,8 @@ class FakeWorld:
         return Measurement(self.clock.now(), True, 0.6 if self._degraded() else 0.005)
 
     def client_measure(self) -> Measurement:
+        if not self.client_up:  # a forward serving nothing: every client probe fails
+            return Measurement(self.clock.now(), False, None)
         return Measurement(self.clock.now(), True, 0.9 if self._degraded() else 0.05)
 
     def inject(self, params: RunParameters, journal: InjectorJournal, name: str) -> Injection:
@@ -144,6 +154,10 @@ class FakeWorld:
 
     def cleanup(self) -> None:
         self.calls.append("cleanup")
+
+    def set_aside(self, run_id: str) -> str | None:
+        self.calls.append(f"set_aside:{run_id}")
+        return self.database
 
 
 def manifest() -> SuiteManifest:
@@ -391,3 +405,102 @@ def test_an_alert_admitted_after_the_cause_is_removed_still_stamps_the_timeline(
     alerted = outcome.record.timeline.alert_fired_at
     assert alerted is not None and world.injected is not None
     assert alerted.at == world.injected + timedelta(seconds=25)
+
+
+# ---- design §31.2 A: a failure before the injection sets the repeat aside -------------------------
+
+
+def _aside(tmp_path: Path, kind: str) -> Path:
+    [directory] = (tmp_path / "work").glob(f"s1-dependency-delay-0.{kind}-*")
+    return directory
+
+
+@pytest.mark.parametrize(
+    "world_kwargs",
+    [{"client_up": False}, {"fail_on_isolate": True}],
+    ids=["calibration-without-samples", "control-plane-not-started"],
+)
+def test_a_failure_before_the_injection_sets_the_repeat_aside_and_it_runs_again(
+    tmp_path: Path, world_kwargs: dict[str, Any]
+) -> None:
+    from packages.evals.live.testbed_runner import RunAborted
+
+    world = FakeWorld(FakeClock(), **world_kwargs)
+    with pytest.raises(RunAborted, match="set aside as s1-dependency-delay-0.aborted-"):
+        run(tmp_path, world)
+    assert "inject" not in world.calls
+    aside_at = world.calls.index("set_aside:s1-dependency-delay-0")
+    assert world.calls[:aside_at][-2:] == [
+        "stop_load",
+        "cleanup",
+    ]  # the lab is quiet before the rename
+    aside = _aside(tmp_path, "aborted")
+    assert json.loads((aside / "set-aside.json").read_text()) == {
+        "database": "aborted_0001",
+        "run_id": "s1-dependency-delay-0",
+    }
+    assert not (tmp_path / "store" / "s1" / "dependency-delay").exists()  # no run is recorded
+
+    _, _, outcome = run(tmp_path, FakeWorld(FakeClock()))
+    assert outcome.record.valid, outcome.record.invalid_reasons
+
+
+def test_a_run_whose_database_was_never_created_records_no_rename(tmp_path: Path) -> None:
+    from packages.evals.live.testbed_runner import RunAborted
+
+    with pytest.raises(RunAborted):
+        run(tmp_path, FakeWorld(FakeClock(), fail_on_isolate=True, database=None))
+    assert not (_aside(tmp_path, "aborted") / "set-aside.json").exists()
+
+
+def test_a_refused_baseline_also_sets_its_database_aside(tmp_path: Path) -> None:
+    from packages.evals.live.testbed_runner import BaselineNotQuiet
+
+    world = FakeWorld(FakeClock())
+    world.baseline_warnings = ["payment-1: Unhealthy"]
+    with pytest.raises(BaselineNotQuiet):
+        run(tmp_path, world)
+    assert (_aside(tmp_path, "refused") / "set-aside.json").exists()
+
+
+def test_a_stop_request_before_the_injection_is_set_aside(tmp_path: Path) -> None:
+    from packages.evals.live.testbed_runner import Interrupted, RunAborted
+
+    world = FakeWorld(FakeClock())
+
+    def stopped(run_id: str) -> None:
+        raise Interrupted("SIGTERM")
+
+    world.isolate = stopped  # type: ignore[method-assign]
+    with pytest.raises(RunAborted, match="Interrupted: SIGTERM"):
+        run(tmp_path, world)
+    assert _aside(tmp_path, "aborted").is_dir()
+
+
+def test_a_failure_from_the_injection_on_belongs_to_the_run(tmp_path: Path) -> None:
+    world = FakeWorld(FakeClock(), fail_on_inject=True)
+    with pytest.raises(RuntimeError, match="refused the experiment"):
+        run(tmp_path, world)
+    assert not any("set_aside" in call for call in world.calls)
+    assert (tmp_path / "work" / "s1-dependency-delay-0").is_dir()
+
+
+def test_the_journal_records_the_code_the_run_used(tmp_path: Path) -> None:
+    clock = FakeClock()
+    world = FakeWorld(clock)
+    store = TestbedStore(tmp_path / "store")
+    frozen = manifest()
+    store.write_manifest(frozen)
+    run_once(
+        frozen,
+        "dependency-delay",
+        0,
+        world,
+        store,
+        work_root=tmp_path / "work",
+        clock=clock,
+        code_identity={"tree": "/repo", "commit": "abc"},
+    )
+    journal = store.run_dir("s1", "dependency-delay", 0) / "journal.jsonl"
+    [first] = InjectorJournal(journal).entries()[:1]
+    assert first.role == "code_identity" and first.payload == {"tree": "/repo", "commit": "abc"}

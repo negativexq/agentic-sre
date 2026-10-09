@@ -10,8 +10,11 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import hashlib
 import json
+import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -46,6 +49,8 @@ from packages.evals.live.testbed_grader import RunScore, aggregate, score_run
 from packages.evals.live.testbed_runner import (
     BaselineNotQuiet,
     Injection,
+    Interrupted,
+    RunAborted,
     RunOutcome,
     RunParameters,
     StoredDiagnosis,
@@ -55,6 +60,8 @@ from packages.evals.live.testbed_runner import (
 from packages.rca.model import Diagnosis
 
 REPO = Path(__file__).resolve().parents[3]
+# the kubectl port-forwards the testbed started, so a later start can end any that outlived their run (§31.2 B)
+FORWARDS_FILE = REPO / ".local/testbed/forwards.json"
 NAMESPACE = "sre-demo"
 SCENARIO_ID = "dependency-delay-payment"
 CONFIG_SCENARIO_ID = "config-delay-payment"
@@ -171,6 +178,7 @@ class LabWorld:
         alertmanager_port: int = 19093,
         target_app: str = "payment-service",
         payment_probe: bool = False,
+        forwards_file: Path = FORWARDS_FILE,
     ) -> None:
         self.target_app = (
             target_app  # the workload the fault lands on; its pod is replaced for every run
@@ -191,6 +199,7 @@ class LabWorld:
         self.database = ""
         self._forwarder: PortForwarder | None = None
         self._driver: WorkloadDriver | None = None
+        self.forwards_file = forwards_file
 
     # ---- plumbing ------------------------------------------------------------------------------
 
@@ -244,6 +253,11 @@ class LabWorld:
         *before* the connector restarts, and the connector restarts before the control plane starts on its empty database.
         """
         self.database = database_name(run_id)
+        # design §31.2 B: the testbed's ports carry only its own forwards, never one adopted from elsewhere
+        self._end_recorded_forwards()
+        held = [port for port in (self.order_port, self.alertmanager_port) if _port_open(port)]
+        if held:
+            raise RuntimeError(f"testbed ports held by a process the testbed did not start: {held}")
         self._experiments.clear()
         self._delete_experiments()
         self._unset_delay()  # a run that died mid-way may have left the change in place
@@ -392,8 +406,31 @@ class LabWorld:
             timeout_seconds=30,
         )
         unreachable = self._forwarder.start_all()
+        self._record_forwards()
         if unreachable:
             raise RuntimeError(f"port-forward failed for {', '.join(unreachable)}")
+
+    def _record_forwards(self) -> None:
+        ports = {"order-service": self.order_port, "alertmanager": self.alertmanager_port}
+        pids = self._forwarder.pids() if self._forwarder is not None else {}
+        rows = [{"service": s, "pid": pid, "port": ports[s]} for s, pid in sorted(pids.items())]
+        self.forwards_file.parent.mkdir(parents=True, exist_ok=True)
+        self.forwards_file.write_text(json.dumps(rows, sort_keys=True) + "\n")
+
+    def _end_recorded_forwards(self) -> list[int]:
+        """End the recorded forwards still alive (a driver killed outright leaves them behind)."""
+        try:
+            rows = json.loads(self.forwards_file.read_text())
+        except (OSError, ValueError):
+            rows = []
+        ended = []
+        for row in rows:
+            pid, port = int(row["pid"]), int(row["port"])
+            if _is_forward(pid, port):
+                _end(pid)
+                ended.append(pid)
+        self.forwards_file.unlink(missing_ok=True)
+        return ended
 
     def target_warnings(self) -> list[str]:
         """Warning events of the current target pod (a terminated pod of the same workload is another pod)."""
@@ -485,6 +522,7 @@ class LabWorld:
         # else would stand it up again: every request of the run would then fail at localhost
         if self._forwarder is not None and not _port_open(self.order_port):
             self._forwarder.refresh(("order-service",))
+            self._record_forwards()
         workload = Workload(
             target=Target.ORDERS,
             count=1,
@@ -1110,6 +1148,43 @@ class LabWorld:
         if self._forwarder is not None:
             self._forwarder.stop_all()
             self._forwarder = None
+            self.forwards_file.unlink(missing_ok=True)
+
+    def set_aside(self, run_id: str) -> str | None:
+        """Rename the run's database, if it was created, so a later attempt starts empty (§31.2 A)."""
+        database = database_name(run_id)
+        psql = ["docker", "exec", self.pg_container, "psql", "-U", "postgres", "-Atc"]
+        found = self._run(
+            [*psql, f"select 1 from pg_database where datname = '{database}'"], check=False
+        )
+        if found.stdout.strip() != "1":
+            return None
+        self._run(["make", "cp-stop"])  # its connections would block the rename
+        stamp = f"{database}:{self.clock.now().isoformat()}"
+        renamed = f"aborted_{hashlib.sha256(stamp.encode()).hexdigest()[:16]}"
+        self._run([*psql, f'alter database "{database}" rename to "{renamed}"'])
+        return renamed
+
+
+def _is_forward(pid: int, port: int) -> bool:
+    """Whether ``pid`` is still a ``kubectl port-forward`` serving ``port`` (pids are reused)."""
+    result = subprocess.run(
+        ["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True, check=False
+    )
+    command = result.stdout.strip()
+    return "kubectl" in command and "port-forward" in command and f"{port}:" in command
+
+
+def _end(pid: int, seconds: float = 5.0) -> None:
+    try:
+        os.kill(pid, signal.SIGTERM)
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            os.kill(pid, 0)
+            time.sleep(0.1)
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
 
 
 def _port_open(port: int) -> bool:
@@ -1441,6 +1516,32 @@ ORACLE_FIELDS = (
 ENGINE_PATHS = ("packages/rca", "apps/control_plane")
 
 
+def tree_problems(repo: Path = REPO) -> list[str]:
+    """What the run tree lacks for ``make cp-up`` and the lab (design §31.2 C); a link is fine."""
+    return [
+        f"{repo / name} is missing"
+        for name in (".venv", ".local/lab")
+        if not (repo / name).exists()
+    ]
+
+
+def code_identity(repo: Path = REPO) -> dict[str, str]:
+    """The tree this harness and the control plane it starts run from (design §31.2 C)."""
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", *args], cwd=repo, capture_output=True, text=True, check=False
+        ).stdout.strip()
+
+    # tracked changes only: the run tree's links to the main tree's .venv and .local are untracked
+    dirty = bool(git("status", "--porcelain", "--untracked-files=no"))
+    return {"tree": str(repo), "commit": git("rev-parse", "HEAD"), "dirty": str(dirty).lower()}
+
+
+def _interrupt(signum: int, frame: object) -> None:
+    raise Interrupted(signal.Signals(signum).name)
+
+
 def engine_drift(commit: str) -> list[str]:
     """Files of the engine that differ from ``commit`` in the working tree (design §12.2.3); empty when frozen
     there or when the manifest predates the freeze."""
@@ -1518,6 +1619,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     again.add_argument("--suite", required=True)
     args = parser.parse_args(argv)
     clock = RealClock()
+    if args.command in ("phase0", "run"):
+        # design §31.2 B, C: refuse before any side effect; a stop request cleans up like any failure
+        missing = tree_problems()
+        if missing:
+            print(f"run refused: {'; '.join(missing)}")
+            return 2
+        signal.signal(signal.SIGINT, _interrupt)
+        signal.signal(signal.SIGTERM, _interrupt)
 
     if args.command == "rescore":
         return _rescore(TestbedStore(args.root), args.suite)
@@ -1571,9 +1680,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 store,
                 work_root=args.root / "work",
                 clock=clock,
+                code_identity=code_identity(),
             )
         except BaselineNotQuiet as refused:
             print(f"run refused before the injection: {refused}")
+            return 2
+        except RunAborted as aborted:
+            print(f"run aborted before the injection: {aborted}")
             return 2
         print(_blind_summary(outcome, store) if args.blind else _summarize(outcome))
         return 0 if outcome.record.valid else 1
@@ -1605,10 +1718,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                     store,
                     work_root=args.root / "work",
                     clock=clock,
+                    code_identity=code_identity(),
                 )
             except BaselineNotQuiet as refused:
                 # the suite stops: a world that is not quiet is fixed first, never retried until lucky
                 print(f"run {spec.scenario_id}#{repeat} refused before the injection: {refused}")
+                return 2
+            except RunAborted as aborted:
+                # design §31.2 A: set aside, the suite stops, the repeat runs again on the next start
+                print(f"run {spec.scenario_id}#{repeat} aborted before the injection: {aborted}")
                 return 2
             print(_summarize(outcome), flush=True)
             outcomes.append(outcome)

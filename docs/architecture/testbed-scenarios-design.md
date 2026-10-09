@@ -1036,3 +1036,31 @@ commit in the manifests, scored with §20's grader.
 - **Connector §17:** runs with an incident opened before the injection, as in §28 (0 of 24 there).
 - Reported beside them, for information: cause, instance and execution-witness recall per variant against the
   fourteenth.
+
+### 29.1 Fifteenth HOLDOUT result (2026-10-09, engine 2.3.1, the Connector from the chart, 24 runs)
+
+**24/24 valid**; 0 false strong authority, 0 false `RESOLVED`, the decoy never named.
+
+| Variant | Valid | Cause | Instance | Execution witness | Group |
+|---|---|---|---|---|---|
+| `dependency-b` | 3/3 | 1.0 | 1.0 | 0.67 | |
+| `direct-b` | 3/3 | 1.0 | 1.0 | 1.0 | |
+| `scheduled-b` | 3/3 | 1.0 | 1.0 | 0.0 | |
+| `config-b` | 3/3 | 1.0 | 1.0 | 0.67 | |
+| `negative-b` | 3/3 | 1.0 | 1.0 | 0.67 | |
+| `competing-b` | 3/3 | 0.83 | 0.83 | 0.33 | 1.0 |
+| `config-c` | 3/3 | 1.0 | 1.0 | 0.67 | |
+| `negative-c` | 3/3 | 1.0 | 1.0 | 1.0 | |
+
+- **Effect relations:** 24 execution witnesses, none off the chain; no scored root off the chain (92 scored
+  diagnoses). One run with failed trace reads (`config-c` #0: 6 reads, `ConnectorReadError`), 23 of 24 without: above
+  the 90% bar.
+- **m21 §19 and §20:** no leader from an execution after the onset; no scored diagnosis `NOT_ESTABLISHED`.
+- **The Connector:** connected in every run; **no run's database holds an enrollment** (the registry rows stay in the
+  bring-up database: `lab` active, its token used once at bring-up); the running pod logs "identity restored", never
+  "enrolled".
+- **Connector §17:** 0 of 24 runs opened an incident before their injection.
+
+Every pre-registered criterion holds. The missing cause is `competing-b` #1's pod-kill (applied 03:48:38): both scored
+incidents of that run are the loss's and began 49 to 59 s before it; it raised no incident of its own and is listed
+`AFTER_ONSET` there, as in the thirteenth (§27.1).

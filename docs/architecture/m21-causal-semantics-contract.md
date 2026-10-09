@@ -1869,7 +1869,7 @@ testbed database replayed (2,412 incidents), engine on `main` (2.3.0) against th
 summary and remediation; 22 `NO_EVIDENCE_NEAR_ONSET` and 12 `NO_EVIDENCE_IN_INCIDENT_WINDOW`: remediation only). No
 `NOT_ESTABLISHED` diagnosis proposes a remediation any more (77 did).
 
-## 21. A claim's exact instance: the journal's experiment and the pressured pod (C2, F12; proposal, 2026-10-09, awaiting the owner)
+## 21. A claim's exact instance: the journal's experiment and the pressured pod (C2, F12; owner-approved 2026-10-09)
 
 ### 21.1 Measured problem
 

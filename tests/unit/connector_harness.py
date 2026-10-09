@@ -25,6 +25,8 @@ class GrpcHarness:
         timeout: float = 10.0,
         max_message: int | None = None,
         is_allowed: Callable[[str], bool] | None = None,
+        renew: Callable[[str, bytes], bytes] | None = None,
+        sweep_interval: float = 10.0,
     ) -> None:
         self.ca = ca or new_ca()
         self.server = issue_server(self.ca, ["localhost", "127.0.0.1"])
@@ -35,6 +37,8 @@ class GrpcHarness:
             client_ca=self.ca.certificate,
             allowed=IDS if allowed is None else allowed,
             is_allowed=is_allowed,
+            renew=renew,
+            sweep_interval=sweep_interval,
             request_timeout=timeout,
             max_message=MAX_MESSAGE if max_message is None else max_message,
         )

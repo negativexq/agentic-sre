@@ -172,3 +172,21 @@ enrollment followed by a mutual-TLS session, a never-enrolled identity refused b
 refusing a control plane that is not the token's CA, the first start writing an owner-only key and not enrolling
 twice, and the registry surviving a control-plane restart in the database. The lab is not switched over here; that is
 A8.5, with the chart.
+
+## 9. A8.3 implemented (2026-10-09)
+
+- **Rotation.** The session port serves `connector.v1.Session/Renew` over mutual TLS: the caller's own identity, if
+  allowed and active in the registry, gets a certificate for a new key. The Connector checks hourly
+  (`SRE_CONNECTOR_RENEW_CHECK_SECONDS`) and renews once two thirds of the validity have passed, writes the key
+  (owner-only) and certificate atomically, and reopens its session with them at once; a failure is retried within
+  five minutes and never stops the Connector. An identity only on the fixed allow-list has no renewal (its certificate
+  is static, as before).
+- **Revocation.** `agentic-sre connector disable <id>` marks it disabled: the next handshake is refused and the
+  gateway's sweep closes the live session within `sweep_interval` (10 s); renewal is refused as well.
+- **Expiry visibility.** The gateway records the certificate each connected Connector presented; the system status
+  degrades the Connector row 14 days before expiry and names the days left.
+
+Verification: 6 tests, over real gRPC on loopback (renewal of an active Connector only; a due certificate renewed and
+the session reopened with it, files written owner-only; a revoked Connector's live session closed and every
+reconnection and renewal refused; no renewal on the fixed allow-list; the recorded expiry; the status degrading 14 days
+ahead). Full suite passes. The lab adopts all of it with the chart (A8.5).

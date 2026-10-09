@@ -7,6 +7,7 @@ import { TCell, THead, TRow, Table } from "@/components/ui/Table";
 import type { ChangeView } from "@/api/types";
 import { dateTime } from "@/lib/format";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { useInvestigationCanvas } from "@/components/investigation/context";
 
 function onsetLabel(seconds: number | null): string {
   if (seconds === null) return "";
@@ -33,6 +34,7 @@ export function ChangesTable({
   showOnset?: boolean;
 }) {
   const [selected, setSelected] = useState<ChangeView | null>(null);
+  const canvas = useInvestigationCanvas();
   if (changes.length === 0) {
     return (
       <EmptyState
@@ -65,10 +67,13 @@ export function ChangesTable({
               <TCell className="max-w-[18rem]">
                 <button
                   className="block w-full text-left hover:text-accent"
-                  onClick={() => setSelected(change)}
+                  onClick={() => {
+                    setSelected(change);
+                    canvas?.select({ kind: "change", id: change.change_id });
+                  }}
                 >
                   <Entity
-                    value={`${change.resource_type}/${change.resource_name}`}
+                    value={`${change.namespace ? `${change.namespace}/` : ""}${change.resource_type}/${change.resource_name}`}
                   />
                   <span className="mt-1 block text-[10px] text-accent">
                     Inspect change
@@ -76,7 +81,7 @@ export function ChangesTable({
                 </button>
                 {change.matches_leading_actor && (
                   <Badge tone="accent" className="ml-2">
-                    leading actor
+                    actor kind/name match
                   </Badge>
                 )}
               </TCell>
@@ -101,10 +106,10 @@ export function ChangesTable({
         {selected && (
           <div className="space-y-5">
             <Entity
-              value={`${selected.resource_type}/${selected.resource_name}`}
+              value={`${selected.namespace ? `${selected.namespace}/` : ""}${selected.resource_type}/${selected.resource_name}`}
             />
             <CopyButton
-              value={`${selected.resource_type}/${selected.resource_name}`}
+              value={`${selected.namespace ? `${selected.namespace}/` : ""}${selected.resource_type}/${selected.resource_name}`}
               label="resource identity"
             />
             <Badge>{selected.change_type}</Badge>
@@ -120,6 +125,13 @@ export function ChangesTable({
               <div>
                 <dt className="text-xs text-subtle">Scope</dt>
                 <dd className="break-anywhere">{selected.scope}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-subtle">Recorded namespace</dt>
+                <dd className="break-anywhere">
+                  {selected.namespace ??
+                    "Not recorded — kind/name alone does not establish resource identity."}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs text-subtle">Source</dt>

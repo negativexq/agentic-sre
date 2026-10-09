@@ -1258,7 +1258,8 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
         # the enrollment port signs their requests; without it, the fixed allow-list alone, as before
         registry = registry_from_environment(session_factory)
         gateway, remote_id = gateway_from_environment(
-            is_allowed=registry.is_allowed if registry is not None else None
+            is_allowed=registry.is_allowed if registry is not None else None,
+            renew=registry.renew if registry is not None else None,
         )
         enrollment_listen = os.getenv("SRE_CONNECTOR_ENROLL_LISTEN", "")
         if registry is not None and enrollment_listen:

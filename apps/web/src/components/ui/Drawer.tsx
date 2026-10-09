@@ -10,12 +10,15 @@ export function Drawer({
   title,
   children,
   onAfterClose,
+  restoreFocusLabel,
 }: {
   open: boolean;
   onClose: () => void;
   title: ReactNode;
   children: ReactNode;
   onAfterClose?: () => void;
+  /** A logical replacement trigger when a selected graph moves into the shared canvas. */
+  restoreFocusLabel?: string | null;
 }) {
   const trigger = useRef<HTMLElement | null>(null);
   return (
@@ -35,7 +38,22 @@ export function Drawer({
           }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
-            if (trigger.current?.isConnected) trigger.current.focus();
+            if (
+              trigger.current?.isConnected &&
+              trigger.current !== document.body &&
+              trigger.current.getClientRects().length
+            )
+              trigger.current.focus();
+            else if (restoreFocusLabel) {
+              const replacement = [
+                ...document.querySelectorAll<HTMLElement>("button[aria-label]"),
+              ].find(
+                (element) =>
+                  element.getAttribute("aria-label") === restoreFocusLabel &&
+                  element.getClientRects().length > 0,
+              );
+              replacement?.focus();
+            }
             onAfterClose?.();
           }}
         >

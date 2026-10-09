@@ -237,6 +237,47 @@ test("recorded investigation walks persisted actions without executing tools and
 }) => {
   const data = await fixture(page);
   const d = data.diagnosis!;
+  const base = d.evidence[0];
+  d.evidence = [
+    {
+      ...base,
+      entity: "production/Pod/first",
+      summary: "First turn finding",
+      evidence_ids: ["ref-4"],
+    },
+    {
+      ...base,
+      entity: "production/Pod/second",
+      summary: "Second turn finding",
+      evidence_ids: ["ref-8"],
+    },
+  ];
+  d.causal_path = [
+    {
+      source: "production/Pod/first",
+      target: "production/Pod/second",
+      relation: "recorded",
+      direction: "forward",
+    },
+  ];
+  d.competing_hypotheses = [
+    {
+      hypothesis_id: "first-hypothesis",
+      actor: "production/Pod/first",
+      epistemic_state: "UNRESOLVED",
+      score: 1,
+      causal_explanation: "Current first hypothesis",
+      reasons: [],
+    },
+    {
+      hypothesis_id: "second-hypothesis",
+      actor: "production/Pod/second",
+      epistemic_state: "SUPPORTED",
+      score: 2,
+      causal_explanation: "Current second hypothesis",
+      reasons: [],
+    },
+  ];
   const action = {
     turn_index: 4,
     gap_id: null,
@@ -246,7 +287,7 @@ test("recorded investigation walks persisted actions without executing tools and
     intent_kind: null,
     action: "recorded-read",
     capability: "kubernetes",
-    target: "production/Pod/recorded",
+    target: "production/Pod/first",
     action_rationale: "Recorded first rationale",
     authorization_result: "ALLOWED",
     authorization_reason: "Recorded allowed reason",
@@ -257,7 +298,7 @@ test("recorded investigation walks persisted actions without executing tools and
     new_evidence_refs: ["ref-4"],
     already_known_refs: [],
     normalized_finding_ids: [],
-    affected_hypothesis_ids: [],
+    affected_hypothesis_ids: ["first-hypothesis"],
     resolution_before: "INSUFFICIENT_EVIDENCE",
     resolution_after: "AMBIGUOUS",
     decision_state_changed: true,
@@ -277,6 +318,9 @@ test("recorded investigation walks persisted actions without executing tools and
       {
         ...action,
         turn_index: 8,
+        target: "production/Pod/second",
+        returned_evidence_refs: ["ref-8"],
+        affected_hypothesis_ids: ["second-hypothesis"],
         action_rationale: "Recorded second rationale",
         new_evidence_refs: [],
         already_known_refs: ["ref-4"],
@@ -295,6 +339,21 @@ test("recorded investigation walks persisted actions without executing tools and
   await expect(
     page.getByText("Recorded first rationale", { exact: true }),
   ).toBeVisible();
+  const canvas = page.getByRole("region", {
+    name: "Shared investigation canvas",
+  });
+  await expect(
+    canvas.getByRole("button", {
+      name: "Select graph resource production/Pod/first",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    canvas.getByRole("button", {
+      name: "Select graph resource production/Pod/second",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-pressed", "false");
   await page.getByRole("button", { name: "Next action", exact: true }).click();
   await expect(
     page.getByText("Recorded action 2 of 2 · Turn 8", { exact: true }),
@@ -302,6 +361,32 @@ test("recorded investigation walks persisted actions without executing tools and
   await expect(
     page.getByRole("button", { name: "Next action", exact: true }),
   ).toBeDisabled();
+  await expect(
+    canvas.getByRole("button", {
+      name: "Select graph resource production/Pod/first",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-pressed", "false");
+  await expect(
+    canvas.getByRole("button", {
+      name: "Select graph resource production/Pod/second",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    canvas.getByText("Second turn finding", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    canvas.getByText("First turn finding", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    canvas.getByText("Current state: SUPPORTED", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    canvas.getByText(
+      /Historical hypotheses, graph and diagnosis state are not reconstructed/,
+    ),
+  ).toBeVisible();
   await page.reload();
   await expect(
     page.getByText("Recorded second rationale", { exact: true }),
@@ -312,6 +397,35 @@ test("recorded investigation walks persisted actions without executing tools and
   await expect(
     page.getByText("Recorded first rationale", { exact: true }),
   ).toBeVisible();
+  await page.getByRole("tab", { name: /^Evidence/ }).click();
+  await canvas
+    .getByRole("button", { name: "Next recorded turn", exact: true })
+    .click();
+  await expect(
+    page.getByRole("tabpanel").getByRole("button", {
+      name: "Inspect finding: Second turn finding",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("tabpanel").getByRole("button", {
+      name: "Inspect finding: First turn finding",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await page.getByRole("tab", { name: "Diagnosis", exact: true }).click();
+  if (d.root_cause)
+    await expect(
+      page
+        .locator("section")
+        .filter({
+          has: page.getByRole("heading", {
+            name: "Deterministic diagnosis",
+            exact: true,
+          }),
+        })
+        .getByText(d.root_cause, { exact: true }),
+    ).toBeVisible();
   expect(writes).toEqual([]);
 });
 
@@ -332,6 +446,7 @@ test("new investigation views fit desktop, laptop and mobile in both themes; emp
         "?tab=revisions",
         "?tab=evidence",
         "?tab=trace&investigation_view=recorded",
+        `?tab=evidence&canvas_kind=resource&canvas_id=${encodeURIComponent(data.diagnosis!.evidence[0].entity)}&canvas_view=open`,
       ]) {
         await open(page, id, query);
         await expect(
@@ -359,4 +474,248 @@ test("new investigation views fit desktop, laptop and mobile in both themes; emp
       /No recorded investigation actions are available for this walkthrough/,
     ),
   ).toBeVisible();
+});
+
+test("timeline selection drives graph, hypotheses and evidence across tabs using exact resource identity", async ({
+  page,
+}) => {
+  const data = await fixture(page);
+  const d = data.diagnosis!;
+  const one = "one/Deployment/payment",
+    two = "two/Deployment/payment";
+  const base = d.evidence[0];
+  d.evidence = [
+    {
+      ...base,
+      entity: one,
+      summary: "Namespace one observation",
+      evidence_ids: ["ref-one"],
+    },
+    {
+      ...base,
+      entity: two,
+      summary: "Namespace two observation",
+      evidence_ids: ["ref-two"],
+    },
+  ];
+  d.initiating_findings = d.evidence;
+  d.causal_path = [
+    {
+      source: one,
+      target: "one/Service/checkout",
+      relation: "recorded-one",
+      direction: "forward",
+    },
+    {
+      source: two,
+      target: "two/Service/checkout",
+      relation: "recorded-two",
+      direction: "forward",
+    },
+  ];
+  d.competing_hypotheses = [
+    {
+      hypothesis_id: "hyp-one",
+      actor: one,
+      epistemic_state: "SUPPORTED",
+      score: 1,
+      causal_explanation: "Current recorded explanation",
+      reasons: [],
+    },
+  ];
+  await page.route(`**/api/v1/console/incidents/${d.incident_id}`, (route) =>
+    route.fulfill({ json: data }),
+  );
+  await page.route(
+    `**/api/v1/console/incidents/${d.incident_id}/changes`,
+    (route) =>
+      route.fulfill({
+        json: [
+          {
+            change_id: "explicit-change",
+            timestamp: "2026-10-09T09:00:00Z",
+            resource_type: "Deployment",
+            resource_name: "payment",
+            namespace: "one",
+            change_type: "UPDATED",
+            scope: "DEPLOYMENT",
+            revision: null,
+            source: "test",
+            onset_delta_seconds: null,
+            matches_leading_actor: false,
+          },
+          {
+            change_id: "unknown-change",
+            timestamp: "2026-10-09T09:01:00Z",
+            resource_type: "Deployment",
+            resource_name: "unknown",
+            namespace: null,
+            change_type: "UPDATED",
+            scope: "DEPLOYMENT",
+            revision: null,
+            source: "test",
+            onset_delta_seconds: null,
+            matches_leading_actor: false,
+          },
+        ],
+      }),
+  );
+  await open(page, d.incident_id, "?tab=timeline");
+  await page
+    .getByRole("button", {
+      name: "Select timeline change: Deployment/payment",
+      exact: true,
+    })
+    .click();
+  const canvas = page.getByRole("region", {
+    name: "Shared investigation canvas",
+  });
+  await expect(
+    canvas.getByRole("button", {
+      name: `Select graph resource ${one}`,
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    canvas.getByRole("button", {
+      name: `Select graph resource ${two}`,
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-pressed", "false");
+  await expect(
+    canvas.getByText("Linked hypotheses · 1", { exact: true }),
+  ).toBeVisible();
+  await canvas
+    .getByRole("button", { name: "Explore selected evidence" })
+    .click();
+  const evidence = page.getByRole("tabpanel");
+  await expect(
+    evidence.getByRole("button", {
+      name: "Inspect finding: Namespace one observation",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    evidence.getByRole("button", {
+      name: "Inspect finding: Namespace two observation",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await page.reload();
+  await expect(page).toHaveURL(/canvas_id=explicit-change/);
+  await expect(
+    page.getByRole("tabpanel").getByRole("button", {
+      name: "Inspect finding: Namespace one observation",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: /^Timeline/ }).click();
+  await page
+    .getByRole("button", {
+      name: "Select timeline change: Deployment/unknown",
+      exact: true,
+    })
+    .click();
+  await expect(canvas.getByText(/Namespace is not recorded/)).toBeVisible();
+  await expect(canvas.locator("button[aria-pressed=true]")).toHaveCount(0);
+  await canvas
+    .getByRole("button", { name: "Clear selection", exact: true })
+    .click();
+  await page.getByRole("tab", { name: /^Evidence/ }).click();
+  await expect(
+    page.getByRole("tabpanel").getByRole("button", {
+      name: "Inspect finding: Namespace two observation",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "../../.local/ui-redesign/canvas-reference-fixture.png",
+    fullPage: true,
+  });
+});
+
+test("graph node opens exact evidence and preserves disconnected engine edges", async ({
+  page,
+}) => {
+  const data = await fixture(page);
+  const d = data.diagnosis!;
+  const entity = d.evidence[0].entity;
+  d.causal_path = [
+    {
+      source: entity,
+      target: "test/Service/effect",
+      relation: "explicit-relation",
+      direction: "forward",
+    },
+    {
+      source: "separate/Pod/one",
+      target: "separate/Service/two",
+      relation: "separate-relation",
+      direction: "forward",
+    },
+  ];
+  await page.route(`**/api/v1/console/incidents/${d.incident_id}`, (route) =>
+    route.fulfill({ json: data }),
+  );
+  await open(page, d.incident_id, "?canvas_view=open");
+  const graph = page.getByRole("region", { name: "Recorded causal graph" });
+  await expect(
+    graph.getByRole("button", { name: /^Select graph resource/ }),
+  ).toHaveCount(4);
+  await graph
+    .getByRole("button", {
+      name: `Select graph resource ${entity}`,
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Evidence inspector" }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/canvas_kind=resource/);
+  await page.keyboard.press("Escape");
+  await expect(
+    graph.getByRole("button", {
+      name: `Select graph resource ${entity}`,
+      exact: true,
+    }),
+  ).toBeFocused();
+});
+
+test("primary diagnosis graph moves into shared canvas and returns keyboard focus to the same resource", async ({
+  page,
+}) => {
+  const data = await fixture(page);
+  const d = data.diagnosis!;
+  const entity = d.evidence[0].entity;
+  d.causal_path = [
+    {
+      source: entity,
+      target: "test/Service/effect",
+      relation: "explicit",
+      direction: "forward",
+    },
+  ];
+  await page.route(`**/api/v1/console/incidents/${d.incident_id}`, (route) =>
+    route.fulfill({ json: data }),
+  );
+  await open(page, d.incident_id);
+  await page
+    .getByRole("button", {
+      name: `Select graph resource ${entity}`,
+      exact: true,
+    })
+    .focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("dialog", { name: "Evidence inspector" }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(
+    page
+      .getByRole("region", { name: "Shared investigation canvas" })
+      .getByRole("button", {
+        name: `Select graph resource ${entity}`,
+        exact: true,
+      }),
+  ).toBeFocused();
 });

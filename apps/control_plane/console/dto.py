@@ -319,6 +319,7 @@ class ChangeView(ConsoleModel):
     timestamp: datetime
     resource_type: str
     resource_name: str
+    namespace: str | None = None
     change_type: str
     scope: str
     revision: str | None

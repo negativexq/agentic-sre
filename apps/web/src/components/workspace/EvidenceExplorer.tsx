@@ -12,6 +12,8 @@ import { ErrorState, Skeleton } from "@/components/ui/States";
 import { FindingsList } from "./FindingsList";
 import { dateTime } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
+import { useInvestigationCanvas } from "@/components/investigation/context";
+import { findingKey } from "@/components/investigation/selection";
 
 export function EvidenceInspector({
   finding,
@@ -21,6 +23,7 @@ export function EvidenceInspector({
   findings,
   onSelect,
   onOpenResource,
+  restoreFocusLabel,
 }: {
   finding: FindingView | null;
   diagnosis: DiagnosisView;
@@ -29,6 +32,7 @@ export function EvidenceInspector({
   findings: FindingView[];
   onSelect: (finding: FindingView) => void;
   onOpenResource: (resource: string) => void;
+  restoreFocusLabel?: string | null;
 }) {
   const pendingTurn = useRef<number | null>(null);
   const pendingResource = useRef<string | null>(null);
@@ -57,6 +61,7 @@ export function EvidenceInspector({
       open={Boolean(finding)}
       onClose={onClose}
       title="Evidence inspector"
+      restoreFocusLabel={restoreFocusLabel}
       onAfterClose={() => {
         if (pendingTurn.current !== null) {
           onOpenTurn(pendingTurn.current);
@@ -285,6 +290,7 @@ export function EvidenceExplorer({
   onSelect: (finding: FindingView, findings: FindingView[]) => void;
 }) {
   const { params, update } = useUrlFilters();
+  const canvas = useInvestigationCanvas();
   const query = params.get("finding_q") ?? "";
   const requestedGroup = params.get("finding_group") ?? "all";
   const group = ["all", "initiating", "supporting", "contradictory"].includes(
@@ -301,13 +307,44 @@ export function EvidenceExplorer({
         : group === "contradictory"
           ? diagnosis.contradictory_findings
           : diagnosis.evidence;
-  const filtered = findings.filter((finding) =>
-    `${finding.kind} ${finding.entity} ${finding.summary} ${finding.evidence_ids.join(" ")}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
+  const selectedKeys = new Set(canvas?.focus.findings.map(findingKey));
+  const filtered = findings.filter(
+    (finding) =>
+      (!canvas?.focus.active ||
+        canvas.selection.kind === "finding" ||
+        params.get("canvas_evidence") === "all" ||
+        selectedKeys.has(findingKey(finding))) &&
+      `${finding.kind} ${finding.entity} ${finding.summary} ${finding.evidence_ids.join(" ")}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
   );
   return (
     <div>
+      {canvas?.focus.active && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-accent/30 bg-accent-soft p-3 text-xs">
+          <span className="min-w-0 flex-1 break-anywhere">
+            {params.get("canvas_evidence") === "all" ||
+            canvas.selection.kind === "finding"
+              ? "All findings · selection highlighted"
+              : "Filtered to shared canvas selection"}
+          </span>
+          {canvas.selection.kind !== "finding" && (
+            <Button
+              variant="ghost"
+              onClick={() =>
+                update({
+                  canvas_evidence:
+                    params.get("canvas_evidence") === "all" ? null : "all",
+                })
+              }
+            >
+              {params.get("canvas_evidence") === "all"
+                ? "Use canvas selection"
+                : "Show all findings"}
+            </Button>
+          )}
+        </div>
+      )}
       <div className="mb-3 flex flex-wrap items-end gap-3">
         <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted">
           Search findings

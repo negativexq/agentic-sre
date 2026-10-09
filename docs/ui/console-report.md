@@ -163,7 +163,7 @@ surface a distinct state.
 
 ### M6 — Changes explorer
 Global change timeline + onset-relative incident view. Changes touching the
-engine's leading actor are marked with a neutral "leading actor" badge — a label,
+engine's leading actor are marked with a neutral "actor kind/name match" badge — a label,
 not a UI causal claim. Repository addition: `ChangeRecordRepository.recent()`.
 
 ### M7 — Canonical report

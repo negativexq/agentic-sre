@@ -249,6 +249,16 @@ def cmd_connector(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 0
+    if args.connector_command == "disable":
+        try:
+            registry.disable(args.connector_id)
+        except ValueError as error:
+            print(error, file=sys.stderr)
+            return 1
+        print(
+            f"{args.connector_id} disabled; its live session closes within seconds", file=sys.stderr
+        )
+        return 0
     for record in registry.store.all():
         expiry = (
             record.cert_not_after.isoformat(timespec="seconds") if record.cert_not_after else "-"
@@ -523,6 +533,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     create_cmd.add_argument("connector_id", help="a DNS label, e.g. prod-eu")
     connector_sub.add_parser("list", help="list registered Connectors")
+    disable_cmd = connector_sub.add_parser(
+        "disable", help="revoke a Connector: refused from now on, its live session closed"
+    )
+    disable_cmd.add_argument("connector_id")
     connector_cmd.set_defaults(handler=cmd_connector)
 
     serve_cmd = sub.add_parser("serve", help="run the control plane API and web UI")

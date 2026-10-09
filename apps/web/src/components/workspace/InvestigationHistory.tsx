@@ -4,6 +4,8 @@ import { useEffect, useRef } from "react";
 import { useUrlFilters } from "@/lib/useUrlFilters";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { useInvestigationCanvas } from "@/components/investigation/context";
+import { Button } from "@/components/ui/Button";
 
 function Field({
   label,
@@ -35,6 +37,7 @@ export function AuditTurn({
   focusSelection?: boolean;
 }) {
   const details = useRef<HTMLDetailsElement>(null);
+  const canvas = useInvestigationCanvas();
   const summary = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!selected) return;
@@ -47,6 +50,9 @@ export function AuditTurn({
   return (
     <details
       ref={details}
+      data-canvas-highlight={
+        canvas?.focus.turnIndex === turn.turn_index || undefined
+      }
       className={`group rounded-md border bg-surface ${selected ? "border-accent" : "border-border"}`}
     >
       <summary ref={summary} className="px-4 py-3 text-sm">
@@ -80,6 +86,17 @@ export function AuditTurn({
         </div>
       </summary>
       <div className="space-y-4 border-t border-border px-4 py-4">
+        {canvas && (
+          <Button
+            variant="secondary"
+            aria-pressed={canvas.focus.turnIndex === turn.turn_index}
+            onClick={() =>
+              canvas.select({ kind: "turn", id: String(turn.turn_index) })
+            }
+          >
+            Focus canvas on turn {turn.turn_index}
+          </Button>
+        )}
         <p className="break-anywhere text-sm">
           {turn.action_rationale || "Action rationale not recorded."}
         </p>

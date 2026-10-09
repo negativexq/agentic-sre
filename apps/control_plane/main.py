@@ -133,6 +133,31 @@ def _env_connector(name: str, env_var: str) -> SystemConnector:
     return SystemConnector(name=name, status="not_configured", detail=f"set {env_var} to enable")
 
 
+CERTIFICATE_WARNING = timedelta(days=14)
+
+
+def gateway_status(gateway: ConnectorGateway, now: datetime | None = None) -> SystemConnector:
+    """The Connector row: who is connected, and (connector-install-design.md §A8.3) a certificate close to
+    expiry, which degrades the row 14 days ahead so the operator can act before the session fails."""
+    moment = now or datetime.now(UTC)
+    connected = sorted(gateway.connected())
+    if not connected:
+        return SystemConnector(
+            name="Connector", status="unavailable", detail="no connector is connected"
+        )
+    soon = [
+        f"{cid} certificate expires in {(expiry - moment).days} days"
+        for cid in connected
+        if (expiry := gateway.certificate_expiry(cid)) is not None
+        and expiry - moment < CERTIFICATE_WARNING
+    ]
+    return SystemConnector(
+        name="Connector",
+        status="degraded" if soon else "connected",
+        detail=f"connected: {', '.join(connected)}" + (f"; {'; '.join(soon)}" if soon else ""),
+    )
+
+
 def build_system_status(
     session: Session,
     *,
@@ -351,18 +376,7 @@ def create_app(
         return response
 
     def connector_status() -> SystemConnector | None:
-        if gateway is None:
-            return None
-        connected = sorted(gateway.connected())
-        return (
-            SystemConnector(
-                name="Connector", status="connected", detail=f"connected: {', '.join(connected)}"
-            )
-            if connected
-            else SystemConnector(
-                name="Connector", status="unavailable", detail="no connector is connected"
-            )
-        )
+        return gateway_status(gateway) if gateway is not None else None
 
     def connector_capabilities() -> frozenset[str] | None:
         if remote_client is None:

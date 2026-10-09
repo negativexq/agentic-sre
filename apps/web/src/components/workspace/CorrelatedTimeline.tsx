@@ -1,8 +1,13 @@
 import { useState } from "react";
-import type { ChangeView, TimelineView } from "@/api/types";
+import type { ChangeView, TimelineView, FindingView } from "@/api/types";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { dateTime } from "@/lib/format";
+import { useInvestigationCanvas } from "@/components/investigation/context";
+import {
+  changeIdentity,
+  findingKey,
+} from "@/components/investigation/selection";
 
 type Entry = {
   id: string;
@@ -11,6 +16,8 @@ type Entry = {
   label: string;
   detail: string;
   timeMeaning: string;
+  change?: ChangeView;
+  finding?: FindingView;
 };
 
 /** Chronology of explicit timestamps, not causal edges or an inferred execution order. */
@@ -18,12 +25,15 @@ export function CorrelatedTimeline({
   timeline,
   onset,
   changes,
+  findings = [],
 }: {
   timeline: TimelineView;
   onset: string | null;
   changes: ChangeView[];
+  findings?: FindingView[];
 }) {
   const [limit, setLimit] = useState(40);
+  const canvas = useInvestigationCanvas();
   const entries: Entry[] = [
     {
       id: "alert",
@@ -80,6 +90,16 @@ export function CorrelatedTimeline({
       label: `${change.resource_type}/${change.resource_name}`,
       detail: `${change.change_type} · ${change.scope} · ${change.source ?? "Source not recorded"}`,
       timeMeaning: "Change occurrence",
+      change,
+    })),
+    ...findings.map((finding, index) => ({
+      id: `finding-${index}`,
+      at: finding.at,
+      kind: "Observation",
+      label: finding.summary,
+      detail: finding.entity,
+      timeMeaning: "Normalized observation time",
+      finding,
     })),
   ];
   const known = entries
@@ -94,7 +114,20 @@ export function CorrelatedTimeline({
     groups.set(time, [...(groups.get(time) ?? []), entry]);
   }
   const row = (entry: Entry) => (
-    <li key={entry.id} className="min-w-0 py-2.5">
+    <li
+      key={entry.id}
+      data-canvas-highlight={
+        (entry.change &&
+          (canvas?.focus.changeId === entry.change.change_id ||
+            canvas?.focus.resources.has(changeIdentity(entry.change) ?? ""))) ||
+        (entry.finding &&
+          canvas?.focus.findings.some(
+            (finding) => findingKey(finding) === findingKey(entry.finding!),
+          )) ||
+        undefined
+      }
+      className="min-w-0 rounded-md py-2.5 data-[canvas-highlight=true]:bg-accent-soft data-[canvas-highlight=true]:px-2"
+    >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <Badge>{entry.kind}</Badge>
         <span className="min-w-0 flex-1 basis-40 break-anywhere text-sm font-medium">
@@ -105,14 +138,42 @@ export function CorrelatedTimeline({
       {entry.detail && (
         <p className="mt-1 break-anywhere text-xs text-muted">{entry.detail}</p>
       )}
+      {canvas && (entry.change || entry.finding) && (
+        <button
+          className="mt-2 text-xs text-accent hover:underline"
+          aria-label={`Select timeline ${entry.kind.toLowerCase()}: ${entry.label}`}
+          aria-pressed={
+            entry.change
+              ? canvas.focus.changeId === entry.change.change_id
+              : canvas.selection.kind === "finding" &&
+                canvas.selection.id === findingKey(entry.finding!)
+          }
+          onClick={() => {
+            canvas.select(
+              entry.change
+                ? { kind: "change", id: entry.change.change_id }
+                : { kind: "finding", id: findingKey(entry.finding!) },
+            );
+            requestAnimationFrame(() => {
+              const region = document.getElementById(
+                "shared-investigation-canvas",
+              );
+              region?.focus({ preventScroll: true });
+              region?.scrollIntoView({ block: "start" });
+            });
+          }}
+        >
+          Focus investigation canvas
+        </button>
+      )}
     </li>
   );
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted">
-        Recorded chronology · changes from 2h before to 30m after onset. Temporal proximity
-        does not establish causation. Entries at the same timestamp are grouped
-        without implying an order within that group.
+        Recorded chronology · changes from 2h before to 30m after onset.
+        Temporal proximity does not establish causation. Entries at the same
+        timestamp are grouped without implying an order within that group.
       </p>
       <ol
         aria-label="Timestamped investigation chronology"

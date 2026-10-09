@@ -13,14 +13,15 @@ import os
 import signal
 import threading
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
 from packages.connector.enrollment import enroll
-from packages.connector.pki import Identity
+from packages.connector.pki import CONNECTOR_SAN_PREFIX, Identity
 from packages.connector.service import Connector, connector_from_environment
-from packages.connector.transport import ConnectorAgent
+from packages.connector.transport import ConnectorAgent, renew_identity
 from packages.rca.alert_coverage import AlertCoverageConfig
 
 logger = logging.getLogger(__name__)
@@ -105,6 +106,63 @@ def ensure_identity(env: Mapping[str, str]) -> None:
     logger.info("enrolled; certificate written to %s", cert)
 
 
+RENEW_AT = (
+    2 / 3
+)  # connector-install-design.md §A8.3: renew once two thirds of the validity have passed
+
+
+def _write_atomically(path: Path, data: bytes, *, private: bool = False) -> None:
+    temporary = path.with_name(path.name + ".new")
+    if private:
+        temporary.touch(mode=0o600)
+    temporary.write_bytes(data)
+    temporary.replace(path)
+
+
+def renew_when_due(
+    agent: ConnectorAgent, env: Mapping[str, str], *, now: datetime | None = None
+) -> bool:
+    """Renew the certificate if two thirds of its validity have passed; returns whether it did."""
+    from cryptography import x509
+
+    current = x509.load_pem_x509_certificate(agent.identity.certificate)
+    start, end = current.not_valid_before_utc, current.not_valid_after_utc
+    moment = now or datetime.now(UTC)
+    if moment < start + (end - start) * RENEW_AT:
+        return False
+    sans = current.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+    (connector_id,) = [
+        uri.removeprefix(CONNECTOR_SAN_PREFIX)
+        for uri in sans.get_values_for_type(x509.UniformResourceIdentifier)
+        if uri.startswith(CONNECTOR_SAN_PREFIX)
+    ]
+    renewed = renew_identity(
+        env["SRE_CONNECTOR_ENDPOINT"],
+        agent.identity,
+        connector_id,
+        server_ca=Path(env["SRE_CONNECTOR_TLS_CA"]).read_bytes(),
+        server_name=env.get("SRE_CONNECTOR_SERVER_NAME") or None,
+    )
+    _write_atomically(Path(env["SRE_CONNECTOR_TLS_KEY"]), renewed.private_key, private=True)
+    _write_atomically(Path(env["SRE_CONNECTOR_TLS_CERT"]), renewed.certificate)
+    agent.replace_identity(renewed)
+    logger.info("certificate renewed for %s", connector_id)
+    return True
+
+
+def renewal_loop(agent: ConnectorAgent, env: Mapping[str, str], stop: threading.Event) -> None:
+    """Check every hour (``SRE_CONNECTOR_RENEW_CHECK_SECONDS``); a failure is retried within five minutes."""
+    interval = float(env.get("SRE_CONNECTOR_RENEW_CHECK_SECONDS", "3600"))
+    while not stop.is_set():
+        try:
+            renew_when_due(agent, env)
+            wait = interval
+        except Exception:  # noqa: BLE001 (a failed renewal must not stop the Connector)
+            logger.warning("certificate renewal failed; retrying", exc_info=True)
+            wait = min(interval, 300.0)
+        stop.wait(wait)
+
+
 def identity_from_files(cert: str, key: str) -> Identity:
     return Identity(Path(cert).read_bytes(), Path(key).read_bytes())
 
@@ -144,7 +202,7 @@ def main() -> None:
             server.shutdown()
 
         threading.Thread(target=shutdown_on_stop, daemon=True).start()
-    ConnectorAgent(
+    agent = ConnectorAgent(
         connector,
         os.environ["SRE_CONNECTOR_ENDPOINT"],
         identity=identity_from_files(
@@ -152,7 +210,9 @@ def main() -> None:
         ),
         server_ca=Path(os.environ["SRE_CONNECTOR_TLS_CA"]).read_bytes(),
         server_name=os.getenv("SRE_CONNECTOR_SERVER_NAME") or None,
-    ).run(stop)
+    )
+    threading.Thread(target=renewal_loop, args=(agent, os.environ, stop), daemon=True).start()
+    agent.run(stop)
 
 
 if __name__ == "__main__":

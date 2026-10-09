@@ -31,6 +31,7 @@ export function ResourceInspector({
       open={resource !== null}
       onClose={onClose}
       title="Resource inspector"
+      restoreFocusLabel={resource ? `Select graph resource ${resource}` : null}
       onAfterClose={() => {
         if (pending.current) {
           onSelect(pending.current);

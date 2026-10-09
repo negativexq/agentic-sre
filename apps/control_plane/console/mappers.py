@@ -431,6 +431,24 @@ def report_summary(snapshot: ReportSnapshot) -> ReportSummary:
     )
 
 
+def _change_namespace(record: ChangeRecord) -> str | None:
+    """Expose only consistent namespace metadata explicitly retained in snapshots."""
+    namespaces: set[str] = set()
+    for snapshot in (record.before, record.after):
+        metadata = snapshot.get("metadata")
+        if not isinstance(metadata, dict):
+            continue
+        namespace = metadata.get("namespace")
+        if not isinstance(namespace, str) or not namespace:
+            continue
+        if metadata.get("name", record.resource_name) != record.resource_name:
+            return None
+        if snapshot.get("kind", record.resource_type) != record.resource_type:
+            return None
+        namespaces.add(namespace)
+    return next(iter(namespaces)) if len(namespaces) == 1 else None
+
+
 def change_view(
     record: ChangeRecord,
     onset: datetime | None = None,
@@ -455,6 +473,7 @@ def change_view(
         timestamp=record.timestamp,
         resource_type=record.resource_type,
         resource_name=record.resource_name,
+        namespace=_change_namespace(record),
         change_type=record.change_type.value,
         scope=record.scope.value,
         revision=record.revision,

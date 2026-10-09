@@ -18,6 +18,10 @@ that capture session.
 
 ![Dark-theme incident diagnosis with engine causal path, evidence basis, and recorded lifecycle](incident-workspace-dark.png)
 
+## Shared investigation canvas
+
+![Shared investigation canvas with recorded causal graph, selected resource, linked evidence and cross-view context](investigation-canvas-dark.png)
+
 ## Ambiguous diagnosis
 
 ![Ambiguous incident workspace retaining engine uncertainty and alternative explanations](incident-ambiguous-dark.png)

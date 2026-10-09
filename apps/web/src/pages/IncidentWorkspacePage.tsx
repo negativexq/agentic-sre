@@ -40,6 +40,11 @@ import { CorrelatedTimeline } from "@/components/workspace/CorrelatedTimeline";
 import { incidentReturn } from "@/lib/incidentNavigation";
 import { severityTone } from "@/lib/tones";
 import { useUrlFilters } from "@/lib/useUrlFilters";
+import {
+  InvestigationCanvas,
+  InvestigationCanvasProvider,
+} from "@/components/investigation/InvestigationCanvas";
+import { findingKey } from "@/components/investigation/selection";
 
 function Header({
   incident,
@@ -97,6 +102,7 @@ function Header({
 
 export function IncidentWorkspacePage() {
   const [selected, setSelected] = useState<FindingView | null>(null);
+  const [returnFocusLabel, setReturnFocusLabel] = useState<string | null>(null);
   const [selectedFindings, setSelectedFindings] = useState<FindingView[]>([]);
   const { params, update } = useUrlFilters();
   const requestedTab = params.get("tab") ?? "diagnosis";
@@ -136,8 +142,16 @@ export function IncidentWorkspacePage() {
     );
   const { incident, diagnosis, timeline } = data;
   const selectFinding = (finding: FindingView, findings?: FindingView[]) => {
+    if (!selected)
+      setReturnFocusLabel(
+        document.activeElement?.getAttribute("aria-label") ?? null,
+      );
     setSelected(finding);
     setSelectedFindings(findings ?? diagnosis?.evidence ?? [finding]);
+    if (
+      !["resource", "change", "turn"].includes(params.get("canvas_kind") ?? "")
+    )
+      update({ canvas_kind: "finding", canvas_id: findingKey(finding) });
   };
   const started =
     timeline.phases.length > 0 ||
@@ -183,7 +197,16 @@ export function IncidentWorkspacePage() {
           </CardBody>
         </Card>
       ) : (
-        <>
+        <InvestigationCanvasProvider
+          diagnosis={diagnosis}
+          changes={changes.data ?? []}
+        >
+          <InvestigationCanvas
+            diagnosis={diagnosis}
+            onSelect={selectFinding}
+            onOpenResource={(resource) => update({ resource })}
+            onOpenHypothesis={(hypothesis) => update({ hypothesis })}
+          />
           <Tabs
             initial="diagnosis"
             value={tab}
@@ -206,7 +229,13 @@ export function IncidentWorkspacePage() {
                     timeline={timeline}
                     onSelect={selectFinding}
                     onOpenHypothesis={(id) => update({ hypothesis: id })}
-                    onOpenResource={(resource) => update({ resource })}
+                    onOpenResource={(resource) =>
+                      update({
+                        resource,
+                        canvas_kind: "resource",
+                        canvas_id: resource,
+                      })
+                    }
                   />
                 ),
               },
@@ -287,6 +316,7 @@ export function IncidentWorkspacePage() {
                           timeline={timeline}
                           onset={diagnosis.onset}
                           changes={changes.data ?? []}
+                          findings={diagnosis.evidence}
                         />
                       </CardBody>
                     </Card>
@@ -424,7 +454,16 @@ export function IncidentWorkspacePage() {
                               params.get("investigation_view") === "recorded"
                             }
                             onClick={() =>
-                              update({ investigation_view: "recorded" })
+                              update({
+                                investigation_view: "recorded",
+                                canvas_kind: "turn",
+                                canvas_id:
+                                  params.get("replay_turn") ??
+                                  String(
+                                    diagnosis.investigation_audit
+                                      ?.action_audits[0]?.turn_index ?? "",
+                                  ),
+                              })
                             }
                           >
                             Recorded investigation
@@ -470,11 +509,14 @@ export function IncidentWorkspacePage() {
             onClose={() => update({ hypothesis: null })}
           />
           <EvidenceInspector
+            restoreFocusLabel={returnFocusLabel}
             finding={selected}
             diagnosis={diagnosis}
             onClose={() => setSelected(null)}
             findings={selectedFindings}
-            onSelect={setSelected}
+            onSelect={(finding) => {
+              selectFinding(finding, selectedFindings);
+            }}
             onOpenResource={(resource) => update({ resource })}
             onOpenTurn={(turn) =>
               update({
@@ -482,6 +524,8 @@ export function IncidentWorkspacePage() {
                 turn: String(turn),
                 audit_filter: null,
                 investigation_view: null,
+                canvas_kind: "turn",
+                canvas_id: String(turn),
               })
             }
           />
@@ -492,7 +536,7 @@ export function IncidentWorkspacePage() {
               {diagnosis.background_alerts_ignored} background alerts ignored
             </span>
           </footer>
-        </>
+        </InvestigationCanvasProvider>
       )}
     </>
   );

@@ -40,3 +40,33 @@ def test_same_name_different_kind_is_not_flagged() -> None:
 def test_no_leading_actor_never_flags() -> None:
     view = change_view(_record("Deployment", "payment-service"), T0, None)
     assert view.matches_leading_actor is False
+
+
+def test_namespace_is_projected_from_explicit_snapshot_metadata() -> None:
+    record = _record("Deployment", "payment-service").model_copy(
+        update={
+            "after": {
+                "kind": "Deployment",
+                "metadata": {"name": "payment-service", "namespace": "production"},
+            }
+        }
+    )
+    assert change_view(record).namespace == "production"
+
+
+def test_missing_conflicting_or_mismatched_namespace_is_not_inferred() -> None:
+    record = _record("Deployment", "payment-service")
+    assert change_view(record).namespace is None
+    conflicting = record.model_copy(
+        update={
+            "before": {"metadata": {"namespace": "one"}},
+            "after": {"metadata": {"namespace": "two"}},
+        }
+    )
+    assert change_view(conflicting).namespace is None
+    for payload in [
+        {"metadata": {"name": "other", "namespace": "production"}},
+        {"kind": "Service", "metadata": {"namespace": "production"}},
+        {"metadata": {"namespace": 123}},
+    ]:
+        assert change_view(record.model_copy(update={"after": payload})).namespace is None

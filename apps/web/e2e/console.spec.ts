@@ -125,7 +125,10 @@ test("engine edge states: competing actors, unknown execution time, absent prove
     page.getByText("Exact instance not determined"),
   ).not.toBeVisible();
   await expect(
-    page.getByText("disjoint-source", { exact: true }),
+    page.getByRole("button", {
+      name: "Select graph resource ns/Service/disjoint-source",
+      exact: true,
+    }),
   ).toBeVisible();
   await page.getByRole("tab", { name: /^Evidence/ }).click();
   await expect(
@@ -716,6 +719,10 @@ test("chronology groups equal timestamps, separates unknown time, and report IDs
   const data = await incident(page);
   const at = "2026-10-08T22:18:00Z";
   data.diagnosis!.onset = at;
+  data.diagnosis!.evidence = data.diagnosis!.evidence.map((finding) => ({
+    ...finding,
+    at,
+  }));
   data.timeline = {
     ...data.timeline,
     alert_fired: at,

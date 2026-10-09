@@ -33,7 +33,14 @@ export function InvestigationReplay({
         </p>
         <Button
           variant="secondary"
-          onClick={() => update({ replay_turn: null })}
+          onClick={() =>
+            update({
+              replay_turn: null,
+              canvas_evidence: null,
+              canvas_kind: "turn",
+              canvas_id: String(actions[0].turn_index),
+            })
+          }
         >
           Start with first recorded turn
         </Button>
@@ -57,7 +64,12 @@ export function InvestigationReplay({
             variant="secondary"
             disabled={index === 0}
             onClick={() =>
-              update({ replay_turn: String(actions[index - 1].turn_index) })
+              update({
+                replay_turn: String(actions[index - 1].turn_index),
+                canvas_evidence: null,
+                canvas_kind: "turn",
+                canvas_id: String(actions[index - 1].turn_index),
+              })
             }
           >
             Previous action
@@ -66,7 +78,12 @@ export function InvestigationReplay({
             variant="secondary"
             disabled={index === actions.length - 1}
             onClick={() =>
-              update({ replay_turn: String(actions[index + 1].turn_index) })
+              update({
+                replay_turn: String(actions[index + 1].turn_index),
+                canvas_evidence: null,
+                canvas_kind: "turn",
+                canvas_id: String(actions[index + 1].turn_index),
+              })
             }
           >
             Next action

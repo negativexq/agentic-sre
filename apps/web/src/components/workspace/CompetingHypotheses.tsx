@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/Badge";
 import { Entity } from "@/components/Entity";
 import type { CandidateView, HypothesisView } from "@/api/types";
+import { useInvestigationCanvas } from "@/components/investigation/context";
 
 export function CompetingHypotheses({
   hypotheses,
@@ -9,6 +10,7 @@ export function CompetingHypotheses({
   hypotheses: HypothesisView[];
   candidates: CandidateView[];
 }) {
+  const canvas = useInvestigationCanvas();
   if (!hypotheses.length && !candidates.length)
     return (
       <p className="text-sm text-muted">No competing hypotheses recorded.</p>
@@ -20,7 +22,14 @@ export function CompetingHypotheses({
         a root cause.
       </p>
       {hypotheses.map((hypothesis) => (
-        <article key={hypothesis.hypothesis_id} className="py-4">
+        <article
+          key={hypothesis.hypothesis_id}
+          data-canvas-highlight={
+            canvas?.focus.hypothesisIds.has(hypothesis.hypothesis_id) ||
+            undefined
+          }
+          className={`py-4 ${canvas?.focus.hypothesisIds.has(hypothesis.hypothesis_id) ? "rounded-md bg-accent-soft px-3 ring-1 ring-inset ring-accent/30" : ""}`}
+        >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <Entity value={hypothesis.actor} />

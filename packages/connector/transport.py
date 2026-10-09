@@ -19,6 +19,7 @@ import threading
 import time
 from collections.abc import Callable, Collection, Iterator, Mapping
 from concurrent import futures
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 SERVICE = "connector.v1.Session"
 METHOD = f"/{SERVICE}/Open"
+# connector-install-design.md §A8.3: a new certificate for the caller's own identity, over mutual TLS
+RENEW_METHOD = f"/{SERVICE}/Renew"
 MAX_MESSAGE = wire.MAX_RESPONSE_BYTES + 1_048_576
 KEEPALIVE_MS = 20_000
 KEEPALIVE_TIMEOUT_MS = 10_000
@@ -102,6 +105,8 @@ class ConnectorGateway:
         client_ca: bytes,
         allowed: Collection[str],
         is_allowed: Callable[[str], bool] | None = None,
+        renew: Callable[[str, bytes], bytes] | None = None,
+        sweep_interval: float = 10.0,
         request_timeout: float = DEFAULT_TIMEOUT_SECONDS,
         on_connect: Callable[[str], None] | None = None,
         on_disconnect: Callable[[str], None] | None = None,
@@ -114,6 +119,11 @@ class ConnectorGateway:
         self._allowed = frozenset(allowed)
         # connector-install-design.md §A8.2: the registry's active Connectors, beside the fixed allow-list
         self._is_allowed = is_allowed
+        # §A8.3: the registry signs renewals; a revoked identity's live session is closed by the sweep
+        self._renew = renew
+        self._sweep_interval = sweep_interval
+        self._sweeping = threading.Event()
+        self._expiry: dict[str, datetime] = {}
         self._timeout = request_timeout
         self.on_connect = on_connect
         self.on_disconnect = on_disconnect
@@ -142,7 +152,10 @@ class ConnectorGateway:
             (
                 grpc.method_handlers_generic_handler(
                     SERVICE,
-                    {"Open": grpc.stream_stream_rpc_method_handler(self._open)},
+                    {
+                        "Open": grpc.stream_stream_rpc_method_handler(self._open),
+                        "Renew": grpc.unary_unary_rpc_method_handler(self._renew_call),
+                    },
                 ),
             )
         )
@@ -154,9 +167,12 @@ class ConnectorGateway:
         self.port = server.add_secure_port(self._address, credentials)
         server.start()
         self._server = server
+        self._sweeping.clear()
+        threading.Thread(target=self._sweep, daemon=True).start()
         return self.port
 
     def stop(self) -> None:
+        self._sweeping.set()
         with self._lock:
             sessions = list(self._sessions.values())
         for session in sessions:
@@ -181,6 +197,35 @@ class ConnectorGateway:
 
         return send
 
+    def certificate_expiry(self, connector_id: str) -> datetime | None:
+        """When the certificate a connected Connector presented expires (§A8.3)."""
+        with self._lock:
+            return self._expiry.get(connector_id) if connector_id in self._sessions else None
+
+    def _sweep(self) -> None:
+        """Close the live session of every identity no longer allowed (a revocation, §A8.3)."""
+        while not self._sweeping.wait(self._sweep_interval):
+            with self._lock:
+                revoked = [s for i, s in self._sessions.items() if not self.allows(i)]
+            for session in revoked:
+                logger.warning("closing the session of revoked connector %s", session.connector_id)
+                session.close()
+
+    def _renew_call(self, request: bytes, context: grpc.ServicerContext) -> bytes:
+        identity = self._identity(context)
+        if identity is None or not self.allows(identity) or self._renew is None:
+            logger.warning("refused a renewal for identity %r", identity)
+            context.abort(grpc.StatusCode.PERMISSION_DENIED, "renewal refused")
+        assert identity is not None and self._renew is not None
+        try:
+            return self._renew(identity, request)
+        except (
+            Exception
+        ) as error:  # the registry refuses: log the reason, tell the caller nothing more
+            logger.warning("refused a renewal for %s: %s", identity, error)
+            context.abort(grpc.StatusCode.PERMISSION_DENIED, "renewal refused")
+            raise
+
     def allows(self, identity: str) -> bool:
         return identity in self._allowed or (
             self._is_allowed is not None and self._is_allowed(identity)
@@ -201,9 +246,12 @@ class ConnectorGateway:
             context.abort(grpc.StatusCode.PERMISSION_DENIED, "connector is not allowed")
         assert identity is not None
         session = _Session(identity)
+        expiry = _certificate_expiry(context)
         with self._lock:
             previous = self._sessions.get(identity)
             self._sessions[identity] = session
+            if expiry is not None:
+                self._expiry[identity] = expiry
         if previous is not None:
             previous.close()
 
@@ -238,6 +286,17 @@ class ConnectorGateway:
                 threading.Thread(target=self.on_disconnect, args=(identity,), daemon=True).start()
 
 
+def _certificate_expiry(context: grpc.ServicerContext) -> datetime | None:
+    from cryptography import x509
+
+    for pem in context.auth_context().get("x509_pem_cert", []):
+        try:
+            return x509.load_pem_x509_certificate(pem).not_valid_after_utc
+        except ValueError:
+            return None
+    return None
+
+
 class ConnectorAgent:
     """The customer end: dials out, serves requests with a ``Connector``, reconnects on loss.
 
@@ -263,10 +322,23 @@ class ConnectorAgent:
         self._identity = identity
         self._server_ca = server_ca
         self._server_name = server_name
+        self._identity_lock = threading.Lock()
+        self._restart = threading.Event()
         self._workers = workers
         self._min_backoff = min_backoff
         self._max_backoff = max_backoff
         self._max_message = max_message
+
+    @property
+    def identity(self) -> Identity:
+        with self._identity_lock:
+            return self._identity
+
+    def replace_identity(self, identity: Identity) -> None:
+        """Use a renewed certificate (§A8.3): the session is reopened with it at once; the epoch is kept."""
+        with self._identity_lock:
+            self._identity = identity
+        self._restart.set()
 
     def run(self, stop: threading.Event) -> None:
         """Connect, serve until the session ends, back off (1 s to 30 s, jittered), repeat."""
@@ -279,16 +351,21 @@ class ConnectorAgent:
                 logger.warning("connector session ended: %s", error)
             except Exception:
                 logger.warning("connector session failed", exc_info=True)
+            if self._restart.is_set():  # a renewal, not a failure: reconnect at once
+                self._restart.clear()
+                backoff = self._min_backoff
+                continue
             if time.monotonic() - started > self._max_backoff:
                 backoff = self._min_backoff
             stop.wait(min(backoff, self._max_backoff) * (0.5 + random.random() / 2))
             backoff = min(backoff * 2, self._max_backoff)
 
     def _serve_once(self, stop: threading.Event) -> None:
+        identity = self.identity
         credentials = grpc.ssl_channel_credentials(
             root_certificates=self._server_ca,
-            private_key=self._identity.private_key,
-            certificate_chain=self._identity.certificate,
+            private_key=identity.private_key,
+            certificate_chain=identity.certificate,
         )
         options: list[tuple[str, Any]] = [
             ("grpc.max_receive_message_length", self._max_message),
@@ -316,7 +393,7 @@ class ConnectorAgent:
 
             def watch_stop() -> None:
                 while not ended.wait(0.5):
-                    if stop.is_set():
+                    if stop.is_set() or self._restart.is_set():
                         call.cancel()
                         return
 
@@ -338,6 +415,7 @@ def gateway_from_environment(
     environ: Mapping[str, str] | None = None,
     *,
     is_allowed: Callable[[str], bool] | None = None,
+    renew: Callable[[str, bytes], bytes] | None = None,
 ) -> tuple[ConnectorGateway, str]:
     """The control plane's gateway and the id of the one connector it talks to.
 
@@ -359,6 +437,46 @@ def gateway_from_environment(
         client_ca=Path(env["SRE_CONNECTOR_TLS_CLIENT_CA"]).read_bytes(),
         allowed=allowed,
         is_allowed=is_allowed,
+        renew=renew,
         request_timeout=float(env.get("SRE_CONNECTOR_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS)),
     )
     return gateway, connector_id
+
+
+def renew_identity(
+    target: str,
+    identity: Identity,
+    connector_id: str,
+    *,
+    server_ca: bytes,
+    server_name: str | None = None,
+    timeout: float = 15.0,
+) -> Identity:
+    """A new key and certificate, asked for over mutual TLS with the current identity (§A8.3)."""
+    from cryptography import x509
+    from cryptography.hazmat.primitives import serialization
+
+    from packages.connector.pki import new_key_and_request
+
+    key, request = new_key_and_request(connector_id)
+    credentials = grpc.ssl_channel_credentials(
+        root_certificates=server_ca,
+        private_key=identity.private_key,
+        certificate_chain=identity.certificate,
+    )
+    options = [("grpc.ssl_target_name_override", server_name)] if server_name else []
+    with grpc.secure_channel(target, credentials, options=options) as channel:
+        certificate: bytes = channel.unary_unary(RENEW_METHOD)(request, timeout=timeout)
+    issued = x509.load_pem_x509_certificate(certificate)
+    sans = issued.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+    if f"{CONNECTOR_SAN_PREFIX}{connector_id}" not in sans.get_values_for_type(
+        x509.UniformResourceIdentifier
+    ):
+        raise ValueError("the renewed certificate does not name this connector")
+    spki = serialization.PublicFormat.SubjectPublicKeyInfo
+    ours = serialization.load_pem_private_key(key, password=None).public_key()
+    if issued.public_key().public_bytes(serialization.Encoding.DER, spki) != ours.public_bytes(
+        serialization.Encoding.DER, spki
+    ):
+        raise ValueError("the renewed certificate is not for the new key")
+    return Identity(certificate, key)

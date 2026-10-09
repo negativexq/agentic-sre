@@ -1,6 +1,6 @@
 # Investigative Graphite — implementation and verification
 
-Implemented in the existing React 18 / TypeScript / Vite / Tailwind v4 console. Backend API DTOs, the deterministic RCA engine, report model, authentication handling, and notification reconciliation remain unchanged. Frontend types/client/hooks now also consume existing public revision and coverage APIs. No commits or pushes were made.
+Implemented in the existing React 18 / TypeScript / Vite / Tailwind v4 console. The deterministic RCA engine, report model, authentication handling, and notification reconciliation remain unchanged. The only backend DTO addition is nullable change namespace projected from explicit recorded metadata, needed for safe cross-view resource identity joins. Frontend types/client/hooks now also consume existing public revision and coverage APIs. No commits or pushes were made.
 
 ## Operator experience
 
@@ -35,7 +35,7 @@ Implemented in the existing React 18 / TypeScript / Vite / Tailwind v4 console. 
 - **Recorded investigation** offers manual previous/next inspection of stored audit actions, persists the selected turn in the URL, and preserves rationale, authorization, returned/new/known references, and decision changes. This is not deterministic replay: no tools execute and no historical decision snapshot is reconstructed.
 - **Operator action proposals** retain recorded action/risk/approval requirements and support command copying only. No approval or cluster execution workflow is introduced.
 - Revision lists and latest coverage participate in the existing SSE query invalidation and polling fallback. Immutable revision details are not polled.
-- These additions introduce no further dependencies or backend changes.
+- Shared canvas interactions and Causal X-Ray are now implemented; see [the interaction contract and file map](investigation-canvas.md). No further dependencies were added. The additive namespace projection is the only backend change.
 
 ## File map
 
@@ -82,7 +82,7 @@ Compared shadcn sidebar-07 (icon collapse), sidebar-08 (inset content), sidebar-
 
 Origin UI now redirects to coss UI. Its [input group](https://coss.com/ui/docs/components/input-group) and [toolbar](https://coss.com/ui/docs/components/toolbar) compositions informed compact search/filter styling, while Radix remains the single behavior foundation. No second Base UI component stack was introduced.
 
-[React Flow UI](https://reactflow.dev/ui) and [TanStack Table](https://tanstack.com/table/latest) were evaluated. Current causal paths are short, read-only engine hop sequences; custom deterministic rows avoid graph layout/interaction overhead and preserve disjoint source identities. The backend has no sorting API and the existing tables already support bounded pagination; adding a table engine solely for visual styling was not justified.
+[React Flow UI](https://reactflow.dev/ui) and [TanStack Table](https://tanstack.com/table/latest) were evaluated. Current causal paths use a custom deterministic node/edge layout with exact identity deduplication and separate disconnected components. The recorded hop ledger remains available. This avoids a graph interaction dependency and preserves every supplied relationship. The backend has no sorting API and the existing tables already support bounded pagination; adding a table engine solely for visual styling was not justified.
 
 ## Dependencies
 
@@ -104,10 +104,10 @@ All final checks passed:
 ```sh
 npm --prefix apps/web run typecheck
 npm --prefix apps/web run lint
-npm --prefix apps/web run test                         # 13 tests passed
+npm --prefix apps/web run test                         # 17 tests passed
 npm --prefix apps/web run build                        # production build passed
 WEB_E2E_URL=http://localhost:8000/app npm --prefix apps/web run test:e2e
-# 20 browser tests passed against production-served /app, including its CSP
+# 23 browser tests passed against production-served /app, including its CSP
 
 .venv/bin/python -m pytest \
   tests/integration/test_console_api.py \
@@ -118,12 +118,12 @@ WEB_E2E_URL=http://localhost:8000/app npm --prefix apps/web run test:e2e
   tests/integration/test_diagnosis_revision_api.py \
   tests/integration/test_diagnosis_revisions.py \
   tests/unit/test_evidence_coverage.py -q
-# 68 passed, 2 skipped (TEST_POSTGRES_URL unset); one existing Starlette/AnyIO deprecation warning
+# 70 passed, 2 skipped (TEST_POSTGRES_URL unset); one existing Starlette/AnyIO deprecation warning
 
 git diff --check                                     # passed
 ```
 
-Browser matrix: 1920, 1440, 1100, 768, and 390px; both themes; all seven product routes (70 route/theme/width combinations), plus the new revision/evidence/recorded-investigation views (30 combinations). Ordinary document layouts passed overflow assertions; dense data tables retain contained horizontal scrolling. Other browser coverage includes long resource IDs, 95 evidence observations, disjoint causal hops, competing and withheld actors, verified-but-ambiguous diagnosis, unknown execution endpoints, exact/multiple instance states, stable/sensitive/unassessed timing, missing provenance, empty audits, audit disclosure fields, backward Tab containment, Escape/focus restoration, arrow-key tabs, inset sidebar collapse, explicit raw-provenance joins and long observations, server pagination parameters, actual report creation/preview, and unconfigured email refusal.
+Browser matrix: 1920, 1440, 1100, 768, and 390px; both themes; all seven product routes (70 route/theme/width combinations), plus the new revision/evidence/recorded-investigation views (40 combinations, including an expanded resource-scoped canvas). Ordinary document layouts passed overflow assertions; dense data tables retain contained horizontal scrolling. Other browser coverage includes long resource IDs, 95 evidence observations, disjoint causal hops, competing and withheld actors, verified-but-ambiguous diagnosis, unknown execution endpoints, exact/multiple instance states, stable/sensitive/unassessed timing, missing provenance, empty audits, audit disclosure fields, backward Tab containment, Escape/focus restoration, arrow-key tabs, inset sidebar collapse, explicit raw-provenance joins and long observations, server pagination parameters, actual report creation/preview, and unconfigured email refusal.
 
 A computed-token contrast check found all nine tested text/surface and status/soft-background combinations at or above 4.5:1 in both themes (minimum 4.60:1 light, 5.56:1 dark). This is a targeted token check, not a full accessibility certification.
 
@@ -147,7 +147,7 @@ WEB_E2E_URL=http://localhost:8000/app npm run test:e2e
 
 The browser report-generation test writes a snapshot to the test/demo database. Run it against a disposable seeded database, not an operator deployment. Synthetic edge-state DTOs are confined to browser test interception and never appear as product/demo data.
 
-Fourteen selected production screenshots are included in the repository's
+Fifteen selected production screenshots are included in the repository's
 [screenshot gallery](screenshots/README.md), with overview, incident explorer,
 diagnosis, ambiguity, evidence, changes, reports, light theme, and mobile views.
 The root README embeds the overview, workspace, and incident explorer.

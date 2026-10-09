@@ -2,14 +2,20 @@ import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import type { FindingView } from "@/api/types";
 import { dateTime } from "@/lib/format";
+import { useInvestigationCanvas } from "@/components/investigation/context";
+import { findingKey } from "@/components/investigation/selection";
 
 export function FindingsList({
   findings,
   onSelect,
+  labelPrefix = "Inspect finding:",
 }: {
   findings: FindingView[];
   onSelect?: (finding: FindingView) => void;
+  labelPrefix?: string;
 }) {
+  const canvas = useInvestigationCanvas();
+  const highlighted = new Set(canvas?.focus.findings.map(findingKey));
   if (!findings.length)
     return <p className="py-2 text-sm text-muted">None recorded.</p>;
   return (
@@ -52,11 +58,21 @@ export function FindingsList({
           </>
         );
         return (
-          <li key={index}>
+          <li
+            key={index}
+            data-canvas-highlight={
+              highlighted.has(findingKey(finding)) || undefined
+            }
+            className={
+              highlighted.has(findingKey(finding))
+                ? "rounded-md bg-accent-soft ring-1 ring-inset ring-accent/30"
+                : undefined
+            }
+          >
             {onSelect ? (
               <button
                 type="button"
-                aria-label={`Inspect finding: ${finding.summary}`}
+                aria-label={`${labelPrefix} ${finding.summary}`}
                 onClick={() => onSelect(finding)}
                 className="block w-full rounded-md px-2 py-3 text-left transition-colors hover:bg-surface"
               >

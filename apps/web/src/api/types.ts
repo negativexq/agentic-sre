@@ -229,6 +229,8 @@ export interface ChangeView {
   timestamp: string;
   resource_type: string;
   resource_name: string;
+  /** Explicit snapshot namespace; absent/unknown identities must not be joined by name. */
+  namespace?: string | null;
   change_type: string;
   scope: string;
   revision: string | null;

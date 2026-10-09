@@ -196,6 +196,27 @@ class Registry:
         )
         return certificate
 
+    def renew(self, connector_id: str, request_pem: bytes) -> bytes:
+        """A new certificate for an active Connector, asked over its own mutual-TLS identity (§A8.3)."""
+        record = self.store.get(connector_id)
+        if record is None or record.status != "active":
+            raise EnrollmentError(f"connector {connector_id} is not active")
+        try:
+            certificate, serial, expiry = sign_request(
+                self.ca, request_pem, connector_id, days=self.validity_days, now=self.clock()
+            )
+        except ValueError as error:
+            raise EnrollmentError(f"bad signing request: {error}") from error
+        self.store.put(replace(record, cert_serial=format(serial, "x"), cert_not_after=expiry))
+        return certificate
+
+    def disable(self, connector_id: str) -> None:
+        """Revoke: the next handshake is refused and the live session is closed by the gateway (§A8.3)."""
+        record = self.store.get(connector_id)
+        if record is None:
+            raise ValueError(f"unknown connector {connector_id}")
+        self.store.put(replace(record, status="disabled", token_hash=None))
+
     def is_allowed(self, connector_id: str) -> bool:
         record = self.store.get(connector_id)
         return record is not None and record.status == "active"

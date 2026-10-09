@@ -14,6 +14,7 @@ import { LifecycleTimeline } from "./LifecycleTimeline";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { WhyNotResolved } from "./WhyNotResolved";
 import { RemediationProposal } from "./RemediationProposal";
+import { useInvestigationCanvas } from "@/components/investigation/context";
 
 export function DiagnosisOverview({
   incident,
@@ -26,10 +27,11 @@ export function DiagnosisOverview({
   incident: IncidentListItem;
   diagnosis: DiagnosisView;
   timeline: TimelineView;
-  onSelect: (finding: FindingView) => void;
+  onSelect: (finding: FindingView, findings?: FindingView[]) => void;
   onOpenHypothesis: (id: string) => void;
   onOpenResource: (resource: string) => void;
 }) {
+  const canvas = useInvestigationCanvas();
   return (
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_380px]">
       <div className="min-w-0 space-y-5">
@@ -45,7 +47,14 @@ export function DiagnosisOverview({
             </div>
             <CausalPath
               hops={diagnosis.causal_path}
-              onOpenResource={onOpenResource}
+              onOpenResource={(resource) => {
+                const findings = diagnosis.evidence.filter(
+                  (item) => item.entity === resource,
+                );
+                if (findings.length) onSelect(findings[0], findings);
+                else onOpenResource(resource);
+                canvas?.select({ kind: "resource", id: resource });
+              }}
             />
           </div>
         </DiagnosisPanel>

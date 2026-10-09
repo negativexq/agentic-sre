@@ -294,7 +294,7 @@ cp-up: lab-pki
 		SRE_CONNECTOR_TLS_CLIENT_CA=$(LAB_DIR)/pki/ca.crt SRE_AUTO_DIAGNOSE=true \
 		SRE_CONNECTOR_CA_KEY=$(LAB_DIR)/pki/ca.key SRE_CONNECTOR_ENROLL_LISTEN=0.0.0.0:8444 \
 		SRE_WATCH_NAMESPACES=sre-demo,lab-control SRE_WATCH_INTERVAL_SECONDS=$(CP_WATCH_INTERVAL) \
-		nohup $(CLI) serve --host 127.0.0.1 --port 8080 > $(LAB_DIR)/cp.log 2>&1 & echo $$! > $(LAB_DIR)/cp.pid; \
+		PYTHONPATH=$(CURDIR) nohup $(CLI) serve --host 127.0.0.1 --port 8080 > $(LAB_DIR)/cp.log 2>&1 & echo $$! > $(LAB_DIR)/cp.pid; \
 		echo "control plane started (pid $$(cat $(LAB_DIR)/cp.pid)); log $(LAB_DIR)/cp.log; console http://127.0.0.1:8080/app"; \
 	fi
 

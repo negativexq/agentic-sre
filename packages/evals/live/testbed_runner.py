@@ -107,6 +107,18 @@ class BaselineNotQuiet(RuntimeError):
     """
 
 
+class RunAborted(RuntimeError):
+    """The run failed before anything was injected (design §31.2 A).
+
+    Its work directory and database are set aside under new names, so the repeat can run again
+    from the same manifest; nothing is deleted.
+    """
+
+
+class Interrupted(Exception):
+    """The driver was asked to stop (``SIGINT``, ``SIGTERM``); handled like any other failure."""
+
+
 class Clock(Protocol):
     def now(self) -> datetime: ...
 
@@ -302,6 +314,22 @@ class World(Protocol):
         ...
 
     def cleanup(self) -> None: ...
+
+    def set_aside(self, run_id: str) -> str | None:
+        """Rename the run's database out of the way of a later attempt; the new name, or None if none existed."""
+        ...
+
+
+def _set_aside(world: World, run_id: str, work: Path, kind: str, clock: Clock) -> Path:
+    """Move a run that ended before its injection out of the way, keeping everything (design §31.2 A)."""
+    target = work.with_name(f"{work.name}.{kind}-{clock.now():%Y%m%dT%H%M%S}")
+    work.rename(target)
+    database = world.set_aside(run_id)
+    if database is not None:
+        (target / "set-aside.json").write_text(
+            json.dumps({"run_id": run_id, "database": database}, sort_keys=True) + "\n"
+        )
+    return target
 
 
 @dataclass(frozen=True)
@@ -762,6 +790,7 @@ def run_once(
     work_root: Path,
     clock: Clock,
     alerts: Collection[str] | None = None,
+    code_identity: Mapping[str, str] | None = None,
 ) -> RunOutcome:
     spec = manifest.spec(scenario_id)
     alerts = (
@@ -791,6 +820,11 @@ def run_once(
     problems: list[str] = []
     injection: Injection | None = None
     stored: list[StoredDiagnosis] = []
+    injecting = False  # from the first inject call on, a failure belongs to the run
+    if code_identity is not None:
+        run.journal.record(
+            verb="check", object="code", role="code_identity", payload=dict(code_identity)
+        )
     try:
         world.isolate(run_id)
         world.start_load(params.load_rps)  # the client probe and the alerts need traffic
@@ -857,8 +891,10 @@ def run_once(
             )
             problems.extend(f"construction: {p}" for p in construction)
             if params.decoy_offset_seconds < 0:
+                injecting = True
                 decoy = world.inject(decoy_params, run.journal, f"decoy-{params.seed}")
                 run.wait(-params.decoy_offset_seconds)
+        injecting = True
         injection = world.inject(params, run.journal, f"{prefix}-{params.seed}")
         alert_at: datetime | None = None
         applied: datetime | None = None
@@ -970,8 +1006,17 @@ def run_once(
         # kept for inspection, out of the way of the repeat's real run
         world.stop_load()
         world.cleanup()
-        work.rename(work.with_name(f"{work.name}.refused-{clock.now():%Y%m%dT%H%M%S}"))
+        _set_aside(world, run_id, work, "refused", clock)
         raise
+    except Exception as failure:
+        if injecting:
+            raise
+        world.stop_load()
+        world.cleanup()
+        aside = _set_aside(world, run_id, work, "aborted", clock)
+        raise RunAborted(
+            f"{type(failure).__name__}: {failure} (set aside as {aside.name})"
+        ) from failure
     finally:
         world.stop_load()
         world.cleanup()

@@ -574,6 +574,14 @@ class PortForwarder:
                 unavailable.append(service)
         return tuple(unavailable)
 
+    def pids(self) -> dict[str, int]:
+        """The live forward processes this forwarder started, by service (none for an external port)."""
+        return {
+            service: process.pid
+            for service, process in self._processes.items()
+            if process.poll() is None
+        }
+
     def stop_all(self) -> None:
         for process in self._processes.values():
             process.terminate()

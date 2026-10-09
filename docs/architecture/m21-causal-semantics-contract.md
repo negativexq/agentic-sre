@@ -1983,4 +1983,23 @@ engine on `main` (2.3.1, `d1803e6`) against this one:
 
 The sixteenth `HOLDOUT` (§21.5.3, `testbed-scenarios-design.md` §30.1, 2026-10-10): 24/24 valid, every
 pre-registered criterion holds; all 47 scored chaos-led diagnoses `EXACT` with the experiment's UID, 29 execution
-witnesses, none off the chain. Next: ITBench-Lite as a regression check only (§21.5.4).
+witnesses, none off the chain.
+
+### 21.8 ITBench-Lite regression (2026-10-10, engine 2.4.0)
+
+Run `.local/runs/all-2.4.0-20261009T2109`: commit `ff23c2c`, clean tree, 35 scenarios, 0 model calls, ground truth not
+read during prediction. Compared with the last run, `all-2.3.0-20261008T2001` (engine 2.3.0), so the comparison spans
+§20 (2.3.1) as well as §21:
+
+- **Scores identical:** exact 18/31; the C11 tracks 26/31 (structural), 20/31 (execution), 18/31 (executing
+  instance). The per-scenario table (prediction, confidence, correct, rank) is identical, and every scenario keeps its
+  leader, tier, display, confidence, resolution, claim level, candidates and executing instances.
+- **One change, Scenario-34.** The leader, `Pod/cart-755465879b-t9mf7`, is `NOT_ESTABLISHED` (tied with
+  `valkey-cart`) in both. Two things change, and the answer stays the same:
+  - **§21 Rule B:** the leader's CPU-throttling finding is bound to the pod's UID, so its family goes from `UNKNOWN`
+    to `EXACT`, and the C11 relations record that `root_uid`.
+  - **§20:** the answer's text no longer leads with an observation on the pod; it says that no candidate is
+    established and names both tied candidates.
+- **Leader families:** 19 `EXACT`, 12 `MULTIPLE_VIABLE`, 3 `UNKNOWN`, unchanged; Scenario-34 moves from the fourth
+  `UNKNOWN` to `EXACT`. No ITBench leader is a chaos experiment with a journaled UID, so Rule A has nothing to act on
+  there.

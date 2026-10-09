@@ -101,6 +101,7 @@ class ConnectorGateway:
         server: Identity,
         client_ca: bytes,
         allowed: Collection[str],
+        is_allowed: Callable[[str], bool] | None = None,
         request_timeout: float = DEFAULT_TIMEOUT_SECONDS,
         on_connect: Callable[[str], None] | None = None,
         on_disconnect: Callable[[str], None] | None = None,
@@ -111,6 +112,8 @@ class ConnectorGateway:
         self._server_identity = server
         self._client_ca = client_ca
         self._allowed = frozenset(allowed)
+        # connector-install-design.md §A8.2: the registry's active Connectors, beside the fixed allow-list
+        self._is_allowed = is_allowed
         self._timeout = request_timeout
         self.on_connect = on_connect
         self.on_disconnect = on_disconnect
@@ -178,6 +181,11 @@ class ConnectorGateway:
 
         return send
 
+    def allows(self, identity: str) -> bool:
+        return identity in self._allowed or (
+            self._is_allowed is not None and self._is_allowed(identity)
+        )
+
     @staticmethod
     def _identity(context: grpc.ServicerContext) -> str | None:
         for value in context.auth_context().get("x509_subject_alternative_name", []):
@@ -188,7 +196,7 @@ class ConnectorGateway:
 
     def _open(self, requests: Iterator[bytes], context: grpc.ServicerContext) -> Iterator[bytes]:
         identity = self._identity(context)
-        if identity is None or identity not in self._allowed:
+        if identity is None or not self.allows(identity):
             logger.warning("refused a connector session for identity %r", identity)
             context.abort(grpc.StatusCode.PERMISSION_DENIED, "connector is not allowed")
         assert identity is not None
@@ -328,6 +336,8 @@ class ConnectorAgent:
 
 def gateway_from_environment(
     environ: Mapping[str, str] | None = None,
+    *,
+    is_allowed: Callable[[str], bool] | None = None,
 ) -> tuple[ConnectorGateway, str]:
     """The control plane's gateway and the id of the one connector it talks to.
 
@@ -337,7 +347,8 @@ def gateway_from_environment(
     env = os.environ if environ is None else environ
     allowed = tuple(i.strip() for i in env.get("SRE_CONNECTOR_ALLOWED", "").split(",") if i.strip())
     connector_id = env.get("SRE_CONNECTOR_ID") or (allowed[0] if len(allowed) == 1 else "")
-    if connector_id not in allowed:
+    # an id enrolled through the registry (connector-install-design.md §A8.2) need not be listed here
+    if not connector_id or (connector_id not in allowed and is_allowed is None):
         raise ValueError("SRE_CONNECTOR_ID must name one identity of SRE_CONNECTOR_ALLOWED")
     gateway = ConnectorGateway(
         env.get("SRE_CONNECTOR_LISTEN", "0.0.0.0:8443"),  # noqa: S104 - the gateway must be reachable
@@ -347,6 +358,7 @@ def gateway_from_environment(
         ),
         client_ca=Path(env["SRE_CONNECTOR_TLS_CLIENT_CA"]).read_bytes(),
         allowed=allowed,
+        is_allowed=is_allowed,
         request_timeout=float(env.get("SRE_CONNECTOR_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS)),
     )
     return gateway, connector_id

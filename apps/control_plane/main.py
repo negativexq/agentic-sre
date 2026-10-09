@@ -285,6 +285,9 @@ def create_app(
         watcher = None
         if gateway is not None:
             logger.info("connector gateway listening on port %d", gateway.start())
+        enrollment = getattr(diagnoser, "enrollment", None)
+        if enrollment is not None:
+            logger.info("connector enrollment listening on port %d", enrollment.start())
         if watch_interval > 0 and (diagnoser.reader is not None or gateway is not None):
             watcher = threading.Thread(
                 target=diagnoser.watch, args=(stop, watch_interval), daemon=True
@@ -329,6 +332,8 @@ def create_app(
                 thread.join(timeout=5)
             if gateway is not None:
                 gateway.stop()
+            if enrollment is not None:
+                enrollment.stop()
 
     app = FastAPI(title="Agentic SRE", version=PROJECT_VERSION, lifespan=lifespan)
     app.add_middleware(TelemetryMiddleware, runtime=telemetry)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 
 from packages.connector.client import Transport
 from packages.connector.pki import Identity, issue_connector, issue_server, new_ca
@@ -23,6 +24,7 @@ class GrpcHarness:
         allowed: list[str] | None = None,
         timeout: float = 10.0,
         max_message: int | None = None,
+        is_allowed: Callable[[str], bool] | None = None,
     ) -> None:
         self.ca = ca or new_ca()
         self.server = issue_server(self.ca, ["localhost", "127.0.0.1"])
@@ -32,6 +34,7 @@ class GrpcHarness:
             server=self.server,
             client_ca=self.ca.certificate,
             allowed=IDS if allowed is None else allowed,
+            is_allowed=is_allowed,
             request_timeout=timeout,
             max_message=MAX_MESSAGE if max_message is None else max_message,
         )

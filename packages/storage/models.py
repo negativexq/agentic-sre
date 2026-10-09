@@ -824,3 +824,25 @@ class AlertCoveragePollRow(Base):
     success: Mapped[bool] = mapped_column(Boolean, nullable=False)
     error_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     active_alerts: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+CONNECTOR_STATUSES = ("pending", "active", "disabled")
+
+
+class ConnectorRow(Base):
+    """One registered Connector (connector-install-design.md §A8.2): the allow-list and its enrollment state.
+
+    The enrollment secret is stored only as a SHA-256 hash and cleared once used.
+    """
+
+    __tablename__ = "connectors"
+    __table_args__ = (_one_of("status", CONNECTOR_STATUSES, "ck_connector_status"),)
+
+    connector_id: Mapped[str] = mapped_column(String(63), primary_key=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    token_expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    token_used_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    cert_serial: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cert_not_after: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)

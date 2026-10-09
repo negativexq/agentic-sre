@@ -1131,3 +1131,79 @@ that baseline failed, and the run stopped at calibration. None of the three crea
 directories were removed. The third's work directory and database are kept aside as
 `work/aborted-holdout16/` and `aborted_holdout16_dependency_b_0_attempt3`. All 24 scored runs come from the fourth
 start, from the frozen manifests at `eaf28fb`.
+
+## 31. Harness robustness (roadmap F10; proposed 2026-10-10, awaiting approval)
+
+### 31.1 What happened
+
+Starting the sixteenth `HOLDOUT` (§30.1) took four attempts. Each failure shows a gap in the harness, not in the lab.
+
+1. **The run tree had no `.venv` or `.local/lab`.** The suite ran from a git worktree, so that the main tree stays
+   untouched during a `HOLDOUT`. The isolation step runs `make cp-up` in the run tree (`REPO`), and `make` found neither
+   the interpreter nor the PKI. The run stopped before any injection, but it left an empty work directory. The next
+   start then refused that repeat (`FileExistsError: … a re-run is a new repeat`).
+2. **Port-forwards outlived their run.** Stopping the driver killed the Python process but not the `kubectl
+   port-forward` children it had started. On the next start, `PortForwarder.start_all` found the ports open and treated
+   them as externally managed: used as-is, never refreshed. The isolation step then replaced the `order-service` pod,
+   the inherited forward kept pointing at the old one, and every client probe of the baseline failed (`URLError`,
+   46 of 46). Calibration raised `ValueError`. That is not a refused baseline, so the work directory was neither set
+   aside nor cleaned, and the driver moved on to the next variant. The same failure in the fifth `HOLDOUT` was set aside
+   by hand (§17.1).
+3. **The engine that diagnoses is not the one the freeze checks.** `engine_drift` compares the run tree with the
+   manifest's commit. The control plane started by `make cp-up` is `.venv/bin/agentic-sre`. Its editable install
+   points at the main tree, so it imports the main tree's code, whatever tree the harness runs in. The sixteenth
+   `HOLDOUT` is unaffected: the reflog shows the main tree at the frozen commit `eaf28fb` from 21:14:45 to 00:05:43,
+   and the suite ran from 21:18 to 00:02. That was by luck, not by construction.
+
+### 31.2 Proposal
+
+**A. A failure before the injection sets the repeat aside.** Today only `BaselineNotQuiet` is set aside. Under this
+proposal, any exception raised before the injection is journaled is set aside the same way: calibration with no
+samples, a failed `make cp-up`, an unreachable forward, a connector that does not connect. The handling is:
+- the work directory is renamed `.aborted-<time>` (`.refused-<time>` stays for a baseline that was not quiet);
+- the run's database, if one was created, is renamed `aborted_<hash>`, with the original name recorded in the
+  directory;
+- the suite stops with exit code 2 and the reason;
+- nothing is deleted, and the repeat can be run again from the same manifest.
+
+A failure after the injection keeps today's handling: it belongs to the run. The suite still stops rather than retrying
+until lucky (the rule of "Baseline health", item 2), so a person looks at the world before the next start.
+
+**B. The testbed owns its forwards.**
+- Every `kubectl port-forward` the testbed starts is recorded in `.local/testbed/forwards.json` (pid, port, service).
+- Before the isolation step, each recorded pid still alive whose command line is that forward is ended, and the file
+  is cleared.
+- A testbed port then held by any other process refuses the run before the isolation step. That port is never adopted
+  as external. `PortForwarder`'s external mode stays for the product benchmark, where a user's `make ui` forward is
+  expected.
+- On `SIGINT` or `SIGTERM` the driver runs the world's cleanup before exiting. `SIGKILL` cannot be caught; the
+  recorded pids cover it.
+
+**C. The control plane runs the run tree's code, and the harness checks the trees it depends on.**
+- `make cp-up` starts the control plane with `PYTHONPATH` set to the tree `make` runs in, ahead of the editable
+  install, so it imports the code the freeze checks.
+- Before a run, the harness checks that the run tree has `.venv` and `.local/lab` (a link is fine). If either is
+  missing, it refuses with that reason before creating a work directory or touching the lab.
+- The journal records the run tree's path and commit beside the frozen one.
+
+### 31.3 Consequences and measurement
+
+- This is a harness change, so §23.3 calls for a full `HOLDOUT`. The seventeenth `HOLDOUT` covers it together with
+  m21 §22 (engine 2.5.0). Rule C has nothing to act on in the testbed (m21 §22.6), so that run measures this harness
+  and checks the engine for regressions.
+- Unit tests:
+  - a calibration failure, a failed `cp-up` and a refused forward each leave an `.aborted-` directory and a renamed
+    database, and the repeat runs again afterwards;
+  - a recorded forward of an ended run is stopped before isolation;
+  - an unknown process on a testbed port refuses the run before isolation;
+  - a run tree without `.venv` or `.local/lab` refuses before any side effect;
+  - `cp-up` puts the run tree first on `PYTHONPATH`.
+- Before the seventeenth `HOLDOUT`, one `phase0` run from a worktree whose code differs from the main tree only by a
+  marker shows which tree the control plane imported. No suite run is spent on it.
+
+### 31.4 Not decided here
+
+- **Retrying an aborted repeat automatically.** This proposal stops the suite, as "Baseline health" asks. Allowing one automatic
+  retry for a failure before the injection would save a person's step, at the cost of the rule.
+- **Containerizing the control plane for the testbed**, so that it runs a built image of the frozen commit instead of
+  a tree. That would close C structurally but is a larger change.

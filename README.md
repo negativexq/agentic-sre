@@ -23,6 +23,13 @@ selection is shared across views: a change, a finding, a graph node or a recorde
 highlighted in the **Causal X-Ray** and scopes the evidence explorer. The X-Ray draws exactly the hops the engine
 recorded; disconnected parts stay disconnected, with no link invented to join them.
 
+![Selecting a node in the Causal X-Ray opens its evidence; the selection then scopes the Evidence view and stays in the canvas across the Investigation, Timeline and Diagnosis views](docs/ui/screenshots/investigation-canvas.gif)
+
+The same canvas in motion, recorded on a copy of a held-out testbed run (packet loss injected on
+`payment-service`; the engine names the `NetworkChaos` experiment as a supported possible cause and keeps the
+diagnosis `AMBIGUOUS`): a graph node opens its evidence, the selection scopes the Evidence view, and the canvas
+stays beside the Investigation, Timeline and Diagnosis views.
+
 The console has seven screens: Overview, Incidents, the Incident workspace, Changes, Reports, Connections and
 Settings. See the [screenshot gallery](docs/ui/screenshots/README.md) and [the console in detail](docs/how-it-works.md#operator-console).
 

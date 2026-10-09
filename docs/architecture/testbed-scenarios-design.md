@@ -1064,3 +1064,23 @@ commit in the manifests, scored with §20's grader.
 Every pre-registered criterion holds. The missing cause is `competing-b` #1's pod-kill (applied 03:48:38): both scored
 incidents of that run are the loss's and began 49 to 59 s before it; it raised no incident of its own and is listed
 `AFTER_ONSET` there, as in the thirteenth (§27.1).
+
+## 30. Sixteenth HOLDOUT, full: pre-registration for m21 §21 (2026-10-09, frozen before the run)
+
+Per §23 and m21 §21.5.3, a full measurement after an engine change that can alter a diagnosis: m21 §21 (a claim's
+exact instance for the journal's experiment, Rule A, and for the pressured pod, Rule B), engine 2.4.0. The lab is
+unchanged since the fifteenth (the Connector from the chart). The eight variants, seeds `dependency-b` 350–352,
+`direct-b` 353–355, `scheduled-b` 356–358, `config-b` 359–361, `negative-b` 362–364, `competing-b` 365–367,
+`config-c` 368–370, `negative-c` 371–373; suites `holdout16-<variant>`, engine 2.4.0 frozen at the commit in the
+manifests (the control plane restarted on that commit before the first run), scored with §20's grader.
+
+- **Acceptance:** the frozen bar (no false strong authority, no false `RESOLVED`, at least 90% valid, the decoy never
+  named).
+- **Effect relations and m21 §19, §20:** as §28.
+- **m21 §21:** every scored diagnosis led by a chaos experiment has its family's `instance_resolution` `EXACT`, and
+  none is led by a claim without the experiment's UID; every execution witness names an actor on the run's chain (the
+  rule is not adopted otherwise, m21 §21.5.2).
+- **The Connector and connector §17:** as §29.
+- Reported beside them, for information: cause, instance and execution-witness recall per variant against the
+  fourteenth and fifteenth, `direct-b` and `scheduled-b` in particular (m21 §21.7 expects more witnesses there; that
+  expectation is not a criterion, and the result never selects or tunes either rule).

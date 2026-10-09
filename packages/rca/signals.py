@@ -569,6 +569,8 @@ def policy_findings(
                         else FindingKind.FAULT_INJECTION
                     ),
                     entity=entity,
+                    # m21 §21 Rule A: the instance of the version this finding reads
+                    entity_instance=_instance(entity, latest.instance_uid),
                     at=_creation_time(latest.body) or versions[0].observed_at,
                     summary=f"{entity.kind} object present",
                     evidence_ids=(latest.evidence_id,),
@@ -670,11 +672,43 @@ PRESSURE_THRESHOLD = {"memory": 0.9, "cpu": 0.25}
 PRESSURE_BASELINE_FACTOR = 0.6
 
 
-def resource_findings(pressures: Sequence[ResourcePressure]) -> list[Finding]:
+def _pod_holding_name(
+    versions: Sequence[ObjectVersion], start: datetime, end: datetime
+) -> str | None:
+    """m21 §21 Rule B: the one pod UID whose journaled presence covers ``start``..``end``.
+
+    Presence runs from ``creationTimestamp`` (else the first observation) to the ``DELETED``
+    tombstone (else open). None when a version has no UID, or when zero or several cover.
+    """
+    first: dict[str, datetime] = {}
+    deleted: dict[str, datetime] = {}
+    for item in versions:
+        uid = item.instance_uid
+        if uid is None:
+            return None
+        created = _creation_time(item.body) or item.observed_at
+        first[uid] = min(first.get(uid, created), created)
+        if item.lifecycle is Lifecycle.DELETED:
+            deleted[uid] = item.observed_at
+    covering = [
+        uid
+        for uid, since in first.items()
+        if since <= start and (uid not in deleted or deleted[uid] >= end)
+    ]
+    return covering[0] if len(covering) == 1 else None
+
+
+def resource_findings(
+    pressures: Sequence[ResourcePressure],
+    history: Mapping[EntityRef, Sequence[ObjectVersion]] | None = None,
+) -> list[Finding]:
     """Containers whose memory or CPU pressure appeared around the incident.
 
     Pressure that already existed before the incident is normal for that
     workload and is ignored, as is pressure without a baseline to compare with.
+    The metric names a pod, not its UID; the finding takes the pod instance only
+    when the journal shows exactly one holding the name over the whole sample
+    interval (m21 §21 Rule B).
     """
     worst: dict[EntityRef, list[ResourcePressure]] = {}
     for item in pressures:
@@ -692,10 +726,18 @@ def resource_findings(pressures: Sequence[ResourcePressure]) -> list[Finding]:
             for item in items[:3]
         ]
         times = [item.at for item in items if item.at is not None]
+        starts = [t for item in items if (t := item.sample_start or item.at) is not None]
+        ends = [t for item in items if (t := item.sample_end or item.at) is not None]
+        uid = (
+            _pod_holding_name(history[pod], min(starts), max(ends))
+            if history and pod in history and len(starts) == len(ends) == len(items)
+            else None
+        )
         findings.append(
             Finding(
                 kind=FindingKind.RESOURCE_PRESSURE,
                 entity=pod,
+                entity_instance=_instance(pod, uid),
                 at=min(times) if times else None,
                 summary="; ".join(parts),
                 evidence_ids=tuple(item.evidence_id for item in items[:3]),

@@ -1955,3 +1955,30 @@ changes; what changes is which claim holds the exact instance the existing rules
   a binding; not examined here.
 - Whether the "object present" finding should still exist when the controller's record of the same instance is
   present (it adds the object's existence, not an execution). Rule A keeps it and only gives it its instance.
+
+### 21.7 Implementation and offline replay (2026-10-09)
+
+Rule A in `policy_findings`, Rule B in `resource_findings` (given the journal; `_pod_holding_name`), engine 2.4.0; unit
+tests for every case of §21.5.1. Every testbed database replayed (376 databases, 2,641 incidents, no replay error),
+engine on `main` (2.3.1, `d1803e6`) against this one:
+
+- **Instance resolution.** Chaos-led incidents: family `EXACT` in 1,404 of 1,404 (before: 46 of 1,398, 1,352
+  `UNKNOWN`); UID-less leaders 556 → 0.
+- **Strong authority.** Incidents with a strong witness 409 → 487. 79 gain one: **75 on the run's recorded chain**
+  (49 `scheduled-b` and 12 `direct-b` in held-out databases, 10 `direct` on `DEV`, 4 phase-0), **0 off the chain**, and
+  4 in long-run databases without a run record, each naming the StressChaos the long-run injector created about 45 s
+  before that incident's onset (`lr-1`, `lr-4`), checked against the injector's log. On the `direct` databases: 84 → 106.
+- **One loss, with its reason.** `HOLDOUT`1 `scheduled-b` #2, incident `82ba40d1`: `Schedule/sched-stress-79` keeps
+  its leadership and support and loses strong authority. Before, the witness came from a failed probe inside the
+  spawn `jvzll` (06:09:01–06:10:01). Now the target pod's CPU pressure (06:08:34) is bound to the same instance; it is
+  the previous spawn's effect (`whwqh`, recovered 06:08:31), and the per-execution condition "no effect before the
+  apply" counts it against `jvzll`. A recurring schedule's earlier execution is not a pre-existing effect of the later
+  one; that reading belongs to §16 (the baseline ends at the holder's first execution) and is left as an open
+  question for the owner, not changed here.
+- **Leaders.** 2,633 of 2,641 unchanged; **no scored incident changes its leader**, and every scored incident whose
+  true cause was shown still shows it (1,457 of 1,457). The 8 changes are all in long-run databases: 4 move from
+  `Deployment/payment-service` or `NetworkChaos/lr-0` to the StressChaos that was injected (corrections), 4 reorder two
+  true causes of `indep1` inside an unchanged `COMPETING` display.
+- **Digests.** 520 of 2,641 equal, as expected for merged claims and new instances. No `RESOLVED` before or after.
+
+Next: the sixteenth `HOLDOUT`, pre-registered before it starts (§21.5.3).

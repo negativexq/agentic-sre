@@ -180,7 +180,7 @@ class Investigator(Protocol):
 # evidence; replay refuses a run recorded under another version (M20.3a).
 # Rule (owner, 2026-10-05; roadmap F1): minor for a change that can alter a diagnosis,
 # patch for one that cannot change any digest, major when the contract version moves.
-RCA_ENGINE_VERSION = "2.3.1"
+RCA_ENGINE_VERSION = "2.4.0"
 
 
 @dataclass(frozen=True)
@@ -329,7 +329,7 @@ def build_case(
         *policy_findings(history, topology, set(symptoms.namespaces), events),
         *autoscaling_findings(history, events, topology),
         *container_findings(history),
-        *resource_findings(pressure_records),
+        *resource_findings(pressure_records, history),
         *fault_event_findings(events, topology),
         *failure_findings(events),
         *dependency_findings(list(source.error_logs()), topology, entities),

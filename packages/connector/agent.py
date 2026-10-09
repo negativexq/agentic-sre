@@ -12,10 +12,12 @@ import logging
 import os
 import signal
 import threading
+from collections.abc import Mapping
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from packages.connector.enrollment import enroll
 from packages.connector.pki import Identity
 from packages.connector.service import Connector, connector_from_environment
 from packages.connector.transport import ConnectorAgent
@@ -73,12 +75,43 @@ def build_webhook_server(
     return ThreadingHTTPServer(address, Handler)
 
 
+def ensure_identity(env: Mapping[str, str]) -> None:
+    """First start (connector-install-design.md §A8.2): enroll when no certificate exists and a token is given.
+
+    The key is generated here and written with owner-only permissions next to the certificate and the CA, at the
+    paths the session uses; a Connector that already has its certificate does nothing.
+    """
+    cert, key, ca = (
+        Path(env["SRE_CONNECTOR_TLS_CERT"]),
+        Path(env["SRE_CONNECTOR_TLS_KEY"]),
+        Path(env["SRE_CONNECTOR_TLS_CA"]),
+    )
+    token = env.get("SRE_CONNECTOR_ENROLLMENT_TOKEN", "").strip()
+    if cert.exists() and key.exists() and ca.exists():
+        return
+    if not token:
+        raise RuntimeError("no certificate and no SRE_CONNECTOR_ENROLLMENT_TOKEN to enroll with")
+    identity, served_ca = enroll(
+        env["SRE_CONNECTOR_ENROLL_ENDPOINT"],
+        token,
+        server_name=env.get("SRE_CONNECTOR_SERVER_NAME") or None,
+    )
+    for path in (cert, key, ca):
+        path.parent.mkdir(parents=True, exist_ok=True)
+    key.touch(mode=0o600)
+    key.write_bytes(identity.private_key)
+    cert.write_bytes(identity.certificate)
+    ca.write_bytes(served_ca)
+    logger.info("enrolled; certificate written to %s", cert)
+
+
 def identity_from_files(cert: str, key: str) -> Identity:
     return Identity(Path(cert).read_bytes(), Path(key).read_bytes())
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
+    ensure_identity(os.environ)
     namespaces = _csv("SRE_WATCH_NAMESPACES", "sre-demo")
     evidence = _csv("SRE_EVIDENCE_NAMESPACES", "chaos-mesh")
     connector = connector_from_environment(

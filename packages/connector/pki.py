@@ -157,3 +157,62 @@ def write_identity(identity: Identity, directory: Path, name: str) -> tuple[Path
     key.touch(mode=0o600)
     key.write_bytes(identity.private_key)
     return certificate, key
+
+
+# ---- enrollment (connector-install-design.md §A8.2): the key never leaves the Connector -------------------
+
+
+def new_key_and_request(connector_id: str) -> tuple[bytes, bytes]:
+    """A fresh private key and a certificate signing request for it, both PEM; the key stays here."""
+    key = _key()
+    request = (
+        x509.CertificateSigningRequestBuilder()
+        .subject_name(_name(f"connector {connector_id}"))
+        .sign(key, hashes.SHA256())
+    )
+    return _pem_key(key), request.public_bytes(serialization.Encoding.PEM)
+
+
+def sign_request(
+    ca: Identity,
+    request_pem: bytes,
+    connector_id: str,
+    *,
+    days: int = DEFAULT_VALIDITY_DAYS,
+    now: datetime | None = None,
+) -> tuple[bytes, int, datetime]:
+    """Sign a Connector's request: only its public key is taken; the identity is the id the token was bound to.
+
+    Returns the certificate (PEM), its serial and its expiry.
+    """
+    request = x509.load_pem_x509_csr(request_pem)
+    if not request.is_signature_valid:
+        raise ValueError("the signing request's signature is invalid")
+    public_key = request.public_key()
+    if not isinstance(public_key, ec.EllipticCurvePublicKey):
+        raise ValueError("the signing request must carry an EC key")
+    start = now or datetime.now(UTC)
+    ca_certificate = x509.load_pem_x509_certificate(ca.certificate)
+    ca_key = serialization.load_pem_private_key(ca.private_key, password=None)
+    assert isinstance(ca_key, ec.EllipticCurvePrivateKey)
+    serial = x509.random_serial_number()
+    expiry = start + timedelta(days=days)
+    certificate = (
+        x509.CertificateBuilder()
+        .subject_name(_name(f"connector {connector_id}"))
+        .issuer_name(ca_certificate.subject)
+        .public_key(public_key)
+        .serial_number(serial)
+        .not_valid_before(start - timedelta(minutes=5))
+        .not_valid_after(expiry)
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .add_extension(
+            x509.SubjectAlternativeName(
+                [x509.UniformResourceIdentifier(f"{CONNECTOR_SAN_PREFIX}{connector_id}")]
+            ),
+            critical=False,
+        )
+        .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.CLIENT_AUTH]), critical=False)
+        .sign(ca_key, hashes.SHA256())
+    )
+    return certificate.public_bytes(serialization.Encoding.PEM), serial, expiry

@@ -187,6 +187,7 @@ def test_alembic_migration_up_and_down(tmp_path: Path) -> None:
         "entity_instances",
         "evidence",
         "evidence_requirements",
+        "connectors",
         "hypotheses",
         "incident_events",
         "incidents",

@@ -221,6 +221,42 @@ def cmd_demo(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_connector(args: argparse.Namespace) -> int:
+    """Register a Connector and print its one-time enrollment token, or list the registry (A8.2)."""
+    from apps.control_plane.diagnosis import registry_from_environment
+    from apps.control_plane.main import DEFAULT_DATABASE_URL
+    from packages.storage import create_database_engine, create_session_factory
+
+    factory = create_session_factory(
+        create_database_engine(os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL))
+    )
+    registry = registry_from_environment(factory)
+    if registry is None:
+        print(
+            "set SRE_CONNECTOR_CA_KEY and SRE_CONNECTOR_TLS_CLIENT_CA to manage connectors",
+            file=sys.stderr,
+        )
+        return 2
+    if args.connector_command == "create":
+        try:
+            token = registry.create(args.connector_id)
+        except ValueError as error:
+            print(error, file=sys.stderr)
+            return 1
+        print(token)
+        print(
+            "one-time, valid for 1 hour; give it to the Connector as SRE_CONNECTOR_ENROLLMENT_TOKEN",
+            file=sys.stderr,
+        )
+        return 0
+    for record in registry.store.all():
+        expiry = (
+            record.cert_not_after.isoformat(timespec="seconds") if record.cert_not_after else "-"
+        )
+        print(f"{record.connector_id}\t{record.status}\tcertificate until {expiry}")
+    return 0
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import logging
 
@@ -477,6 +513,17 @@ def build_parser() -> argparse.ArgumentParser:
     _add_output_flags(demo_cmd)
     _add_llm_flags(demo_cmd)
     demo_cmd.set_defaults(handler=cmd_demo)
+
+    connector_cmd = sub.add_parser(
+        "connector", help="manage the Connectors this control plane accepts"
+    )
+    connector_sub = connector_cmd.add_subparsers(dest="connector_command", required=True)
+    create_cmd = connector_sub.add_parser(
+        "create", help="register a Connector, print its enrollment token"
+    )
+    create_cmd.add_argument("connector_id", help="a DNS label, e.g. prod-eu")
+    connector_sub.add_parser("list", help="list registered Connectors")
+    connector_cmd.set_defaults(handler=cmd_connector)
 
     serve_cmd = sub.add_parser("serve", help="run the control plane API and web UI")
     serve_cmd.add_argument("--host", default="127.0.0.1")

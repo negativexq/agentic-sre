@@ -126,3 +126,49 @@ ServiceAccount, an Alertmanager on a closed port): the missing reads and the unr
 
 Not covered yet: an identity off the control plane's allow-list passes the TLS check (the allow-list is enforced when
 the session opens); A8.2's registry makes it checkable.
+
+## 7. Amendment to decisions 1 and 2, found before building A8.2 (approved by the owner 2026-10-09, both as recommended)
+
+Both were approved as recommended; neither can be built as written with the stack in use.
+
+**Decision 1 (enroll on the existing gRPC port).** The port requires a client certificate. For a Connector that has
+none yet, client authentication would have to become optional on that port. Measured with grpcio: with
+`require_client_auth=False` the server does not *request* a client certificate at all, so a Connector presenting a
+valid one arrives with no identity. One port cannot serve both enrollment and mutual TLS. Options:
+- **(a) recommended:** a second port for enrollment only: server-authenticated TLS, one method (`Enroll`), nothing
+  else served there. The customer still opens no inbound port (the Connector dials both); the control plane exposes two.
+- (b) one port without TLS-level client authentication, Connector identity checked by the application: weakens §12's
+  mutual TLS. Not recommended.
+
+**Decision 2 (pin the CA by its hash in the token).** Pinning by hash needs the Connector to see the control plane's CA
+before it trusts it. A gRPC channel cannot be opened without a trusted root, and Python 3.12's standard library cannot
+read a server's certificate chain, only its leaf. Options:
+- **(a) recommended:** the token **carries the CA certificate itself**, `<id>.<secret>.<CA, base64url DER>` (about 700
+  characters for the P-256 CA). The Connector trusts exactly that CA, so the token is still the only thing handed to
+  the customer, which was the point of the decision.
+- (b) ship the CA file with the chart values beside a short token.
+
+Everything else of §A8.2 stands: one-time, one hour, stored hashed, bound to the id, the key generated on the
+Connector, the certificate signed with `connector:<id>`, the registry in the database.
+
+## 8. A8.2 implemented (2026-10-09)
+
+- `packages/connector/enrollment.py`: the token `<id>.<secret>.<CA>` (§7), the `Registry` (create, enroll,
+  `is_allowed`), the `EnrollmentServer` (its own port, server-authenticated TLS, one method) and the Connector's
+  `enroll()`, which trusts only the token's CA and checks that the certificate names its id and its own key.
+- `packages/connector/pki.py`: `new_key_and_request` (on the Connector) and `sign_request` (on the control plane,
+  taking only the public key; the identity is the id the token was bound to).
+- The registry in the database (`connectors`, migration `0032_connectors`, `apps/control_plane/connector_registry.py`);
+  the gateway admits an identity on the fixed allow-list **or** active in the registry.
+- Control plane, remote mode: with `SRE_CONNECTOR_CA_KEY` the registry is built; with `SRE_CONNECTOR_ENROLL_LISTEN`
+  as well, the enrollment port opens beside the gateway. Without them nothing changes (the lab runs as before).
+- Operator: `agentic-sre connector create <id>` prints the token; `agentic-sre connector list`.
+- Connector: on first start, with no certificate and `SRE_CONNECTOR_ENROLLMENT_TOKEN` set, it enrolls at
+  `SRE_CONNECTOR_ENROLL_ENDPOINT` and writes its key (owner-only), certificate and CA where the session reads them.
+
+Verification: 11 tests, over real gRPC on loopback: the one-time token (reuse, expiry, a wrong secret, an unknown id,
+another CA, all refused), the certificate carrying only the token's identity whatever the request asked, a full
+enrollment followed by a mutual-TLS session, a never-enrolled identity refused by the session port, a Connector
+refusing a control plane that is not the token's CA, the first start writing an owner-only key and not enrolling
+twice, and the registry surviving a control-plane restart in the database. The lab is not switched over here; that is
+A8.5, with the chart.

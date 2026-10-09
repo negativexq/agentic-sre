@@ -10,6 +10,7 @@ from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -30,6 +31,8 @@ from packages.connector.client import (
     in_process_transport,
 )
 from packages.connector.client import provider_readers as connector_provider_readers
+from packages.connector.enrollment import EnrollmentServer, Registry
+from packages.connector.pki import Identity
 from packages.connector.service import Connector, connector_from_environment
 from packages.connector.transport import ConnectorGateway, gateway_from_environment
 from packages.connector.wire import GapItem
@@ -366,6 +369,8 @@ class DiagnosisService:
     reader: ClusterReader | None = None
     connector: Connector | None = None
     gateway: ConnectorGateway | None = None
+    # connector-install-design.md §A8.2: the enrollment port, started beside the gateway when configured
+    enrollment: EnrollmentServer | None = None
     connector_client: ConnectorClient | None = None
     investigator_factory: Callable[[], Investigator | None] = lambda: None
     bounded_policy_factory: Callable[[], InvestigationPolicy | None] = lambda: None
@@ -1209,6 +1214,19 @@ def investigation_policy_from_environment(environ: Mapping[str, str]) -> str | N
     return policy
 
 
+def registry_from_environment(session_factory: sessionmaker[Session]) -> Registry | None:
+    """The Connector registry when the control plane holds its CA's key (``SRE_CONNECTOR_CA_KEY``)."""
+    key = os.getenv("SRE_CONNECTOR_CA_KEY", "")
+    if not key:
+        return None
+    from apps.control_plane.connector_registry import SqlRegistryStore
+
+    ca = Identity(
+        Path(os.environ["SRE_CONNECTOR_TLS_CLIENT_CA"]).read_bytes(), Path(key).read_bytes()
+    )
+    return Registry(SqlRegistryStore(session_factory), ca)
+
+
 def service_from_environment(session_factory: sessionmaker[Session]) -> DiagnosisService:
     """Configure cluster access from environment variables; offline by default."""
     investigation_policy = investigation_policy_from_environment(os.environ)
@@ -1230,12 +1248,28 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
     streams = os.getenv("SRE_CONNECTOR_STREAMS", "").casefold() == "true"
     connector: Connector | None = None
     gateway: ConnectorGateway | None = None
+    enrollment: EnrollmentServer | None = None
     remote_client: ConnectorClient | None = None
     reader: ClusterReader | None
     if mode == "remote":
         # A remote connector dials this process (contract §12): the service starts with no reader
         # and attaches them when a connector connects.
-        gateway, remote_id = gateway_from_environment()
+        # connector-install-design.md §A8.2: with the CA's key, the registry admits enrolled connectors and
+        # the enrollment port signs their requests; without it, the fixed allow-list alone, as before
+        registry = registry_from_environment(session_factory)
+        gateway, remote_id = gateway_from_environment(
+            is_allowed=registry.is_allowed if registry is not None else None
+        )
+        enrollment_listen = os.getenv("SRE_CONNECTOR_ENROLL_LISTEN", "")
+        if registry is not None and enrollment_listen:
+            enrollment = EnrollmentServer(
+                enrollment_listen,
+                server=Identity(
+                    Path(os.environ["SRE_CONNECTOR_TLS_CERT"]).read_bytes(),
+                    Path(os.environ["SRE_CONNECTOR_TLS_KEY"]).read_bytes(),
+                ),
+                registry=registry,
+            )
         remote_client = ConnectorClient(gateway.transport(remote_id))
         reader, provider_readers = None, ProviderReaders()
     else:
@@ -1291,6 +1325,7 @@ def service_from_environment(session_factory: sessionmaker[Session]) -> Diagnosi
         reader=reader,
         connector=connector if streams else None,
         gateway=gateway,
+        enrollment=enrollment,
         connector_client=remote_client,
         provider_readers=provider_readers,
         investigator_factory=investigator,

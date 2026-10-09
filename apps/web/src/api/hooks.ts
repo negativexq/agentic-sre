@@ -136,6 +136,39 @@ export function useSystemStatus() {
   });
 }
 
+export function useConnectors(fast = false) {
+  return useQuery({
+    queryKey: ["connectors"],
+    queryFn: api.connectors,
+    // Polled quickly only while the Connect drawer waits for a new Connector.
+    refetchInterval: fast ? 3_000 : 15_000,
+  });
+}
+export function useCreateConnector() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.createConnector(id),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({ queryKey: ["connectors"] }),
+  });
+}
+export function useDisableConnector() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.disableConnector(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["connectors"] });
+      void queryClient.invalidateQueries({ queryKey: ["system"] });
+    },
+  });
+}
+/** On demand only (decision 4): each run asks the cluster for about a hundred access reviews. */
+export function useConnectorPreflight() {
+  return useMutation({
+    mutationFn: (id: string) => api.connectorPreflight(id),
+  });
+}
+
 export function useSettings() {
   return useQuery({
     queryKey: ["settings"],

@@ -387,6 +387,8 @@ class SystemStatus(ConsoleModel):
     """Connector health for the console."""
 
     connectors: list[SystemConnector]
+    # D4: "connector" (remote), "in-process", or "demo" (seeded data, SRE_DEMO=true)
+    mode: str = "in-process"
 
 
 # --- settings --------------------------------------------------------------

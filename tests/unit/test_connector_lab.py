@@ -84,3 +84,12 @@ def test_the_command_line_prints_the_rendered_configuration(tmp_path: Path, caps
     out = capsys.readouterr().out  # type: ignore[attr-defined]
     assert yaml.safe_load(out)["receivers"][0]["webhook_configs"][0]["url"] == URL
     assert "abc123" in out
+
+
+def test_the_command_line_names_the_control_plane_for_a_real_install(tmp_path: Path) -> None:
+    # README quick start: the server certificate must carry the name the customer's cluster dials
+    assert main(["pki", "--out", str(tmp_path), "--hostname", "sre.example.com"]) == 0
+    names = certificate(tmp_path / "server.crt").extensions.get_extension_for_class(
+        x509.SubjectAlternativeName
+    )
+    assert names.value.get_values_for_type(x509.DNSName) == ["sre.example.com"]

@@ -101,7 +101,7 @@ never receives ground truth.
 | D1 | UI notification: toast and badge on a new incident, a second one when the diagnosis lands; driven only by persisted state | DONE (verified in the browser against real alerts; `docs/ui/product-contract.md`, Notifications) | |
 | D2 | Browser notification while the tab is closed | PARKED |
 | D3 | Console shows timing stability, withheld authority, `instance_resolution` and status drivers; and the executing instance beside the root cause (`m21` §17) | DONE (owner-approved design, `docs/ui/product-contract.md` D3): the workspace and the report (v2.4) show what ran on which pod and when, and the leader's instance; timing only when assessed (live sources stay unassessed until C7), its withheld authority and drivers in the investigation tab. Checked in the browser on a copy of a twelfth-`HOLDOUT` database re-diagnosed with 2.2.2 |
-| D4 | Connect Cluster flow (token, install command, health, partial-coverage states) | NEXT (after A8) |
+| D4 | Connect Cluster flow (token, install command, health, partial-coverage states) | DONE (owner-approved design, `docs/ui/connect-cluster-design.md`): the Connections page lists the registry and connects a cluster in three steps (name; once-only token and `helm` command; waiting, then an on-demand `preflight`), disables with confirmation, names the chart value for a backend not configured, and marks demo data. Checked on the lab with `lab2`: created through the console API, installed with its command, connected in about 15 s, preflight run, disabled (session closed in about 2 s), uninstalled; `lab` stayed connected. The run found a preflight fault (an empty evidence-namespace list checked as `chaos-mesh`), fixed |
 
 ## 6. E. Benchmark suite (on top of the testbed)
 

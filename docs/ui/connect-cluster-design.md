@@ -1,6 +1,6 @@
 # Connect a cluster from the console (roadmap D4)
 
-Status: **proposal (2026-10-09), awaiting the owner.** Builds on A8 (connector-install-design.md): the registry, the
+Status: **approved by the owner (2026-10-09), every decision of §4 as recommended.** Builds on A8 (connector-install-design.md): the registry, the
 one-time token, `preflight`, rotation, revocation and the chart. The console only reads and calls what A8 provides; it
 adds no rule of its own.
 
@@ -71,3 +71,20 @@ Writes use the existing bearer-token guard. `GET /system` adds `mode` (`connecto
 - Lab: a second Connector (`lab2`) created from the console, installed with the copied command into its own
   namespace, connected, preflight run from the console, then disabled from the console and uninstalled; `lab` and the
   `HOLDOUT` setup untouched.
+
+## 6. Result (2026-10-09)
+
+- API: 8 tests (the token once and never listed, 403 without `SRE_API_TOKEN`, disable, preflight relayed, `mode`).
+  Playwright: 4 tests on synthetic DTOs (the drawer's three steps, copy buttons, the token forgotten on close, waiting
+  then preflight with its reasons, disable's confirmation, the fixed hint, no write controls without the token, the
+  demo badge in both themes and on mobile).
+- Lab: `lab2` created through `POST /connectors` with the control plane temporarily given `SRE_API_TOKEN` and the
+  public endpoints; the returned command, its placeholders filled, installed it into `agentic-sre-connector`; it
+  enrolled and connected in about 15 s and the console listed it beside `lab`. Preflight passed every check but one:
+  `read:chaos-mesh` failed although no evidence namespace was listed. The chart sets `SRE_EVIDENCE_NAMESPACES=""`;
+  the Connector reads that as none, preflight read it as unset and fell back to `chaos-mesh`. Preflight now reads it
+  as the Connector does (a test pins it). Disable answered 204 and closed the session in about 2 s; without the token
+  writes answered 401. `lab2` was uninstalled and its namespace deleted; the control plane was restarted as before;
+  `lab` stayed connected throughout.
+- The browser token was not typed for the lab run, so the drawer itself was exercised only in Playwright; the lab
+  run used the same API calls.

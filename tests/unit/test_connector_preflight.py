@@ -24,6 +24,7 @@ from packages.connector.preflight import (
     control_plane_check,
     failed,
     kubernetes_checks,
+    run_preflight,
 )
 from packages.connector.service import Connector
 from packages.rca.provider_adapter import ProviderReaders
@@ -88,6 +89,20 @@ def test_chaos_kinds_are_required_in_evidence_namespaces_and_optional_beside_wor
     assert checks["read:shop"] == "ok" and checks["read:chaos-mesh"] == "failed"
     some = no_chaos | reads("shop", CHAOS_RESOURCES[:2])
     assert statuses(kubernetes_checks(Review(some), ["shop"], []))["read:shop"] == "warning"
+
+
+def test_preflight_checks_the_namespaces_the_connector_reads() -> None:
+    # the chart sets SRE_EVIDENCE_NAMESPACES="" when none are listed; the Connector then reads none,
+    # so preflight must not check chaos-mesh (found in the D4 lab run)
+    env = {"SRE_WATCH_NAMESPACES": "shop", "SRE_EVIDENCE_NAMESPACES": ""}
+    checks = statuses(
+        run_preflight(env, review=Review(reads("shop", WORKLOAD_RESOURCES)), get=fake_get({}))
+    )
+    assert "read:chaos-mesh" not in checks and checks["read:shop"] == "ok"
+    unset = statuses(
+        run_preflight({"SRE_WATCH_NAMESPACES": "shop"}, review=Review(set()), get=fake_get({}))
+    )
+    assert "read:chaos-mesh" in unset
 
 
 def test_an_unreachable_api_or_no_cluster_access_is_reported_as_such() -> None:

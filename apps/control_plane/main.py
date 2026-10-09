@@ -27,6 +27,7 @@ from apps.control_plane.auth import require_api_token
 from apps.control_plane.baseline import evaluate_baseline
 from apps.control_plane.connector_intake import AlertStreamConsumer
 from apps.control_plane.console import create_console_router
+from apps.control_plane.console.connectors import create_connectors_router
 from apps.control_plane.console.dto import SystemConnector, SystemStatus
 from apps.control_plane.console.email_delivery import EmailDelivery, email_delivery_from_env
 from apps.control_plane.diagnosis import DiagnosisService, service_from_environment
@@ -176,6 +177,13 @@ def build_system_status(
     except SQLAlchemyError:
         database = SystemConnector(name="Database", status="unavailable", detail="SELECT 1 failed")
     if connector_capabilities is not None:
+        values_key = {
+            "Kubernetes": "kubernetes",
+            "Alertmanager": "alertmanager",
+            "Prometheus": "prometheus",
+            "Loki": "loki",
+            "Tempo": "tempo",
+        }
 
         def through_connector(name: str, wanted: set[str]) -> SystemConnector:
             if not connector_capabilities:
@@ -187,7 +195,10 @@ def build_system_status(
                     name=name, status="connected", detail="read through the connector"
                 )
             return SystemConnector(
-                name=name, status="not_configured", detail="not configured on the connector"
+                name=name,
+                status="not_configured",
+                # D4: the place to configure it is the Connector's chart values, not this process
+                detail=f"not configured on the Connector: set backends.{values_key[name]}.url in its values",
             )
 
         return SystemStatus(
@@ -392,7 +403,12 @@ def create_app(
             reader_configured=diagnoser.reader is not None,
             connector_status=connector_status(),
             connector_capabilities=connector_capabilities(),
-        )
+        ).model_copy(update={"mode": run_mode()})
+
+    def run_mode() -> str:
+        if os.getenv("SRE_DEMO", "").casefold() == "true":
+            return "demo"
+        return "connector" if gateway is not None else "in-process"
 
     app.include_router(
         create_console_router(
@@ -405,6 +421,8 @@ def create_app(
             connector_capabilities=connector_capabilities,
         )
     )
+    # D4: the Connections page's registry, enrollment and preflight
+    app.include_router(create_connectors_router(getattr(diagnoser, "registry", None), gateway))
 
     @app.exception_handler(IncidentNotFoundError)
     async def incident_not_found_handler(

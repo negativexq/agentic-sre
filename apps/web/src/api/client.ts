@@ -12,6 +12,9 @@ import type {
   SettingsView,
   ShareRequest,
   SystemStatus,
+  ConnectorsView,
+  CreatedConnector,
+  PreflightCheck,
   EvidenceCoverage,
   DiagnosisRevisionSummary,
   DiagnosisRevisionDetail,
@@ -46,6 +49,41 @@ async function get<T>(path: string, base = BASE): Promise<T> {
   return (await response.json()) as T;
 }
 
+/** A write with the session's API token; the server's `detail` becomes the message. */
+async function send<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+      ...authHeaders(),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!response.ok) {
+    let message =
+      response.status === 401
+        ? "API token required or invalid — set it in Settings."
+        : `Request failed (${response.status})`;
+    try {
+      const payload = (await response.json()) as {
+        detail?: unknown;
+        error?: { message?: string };
+      };
+      if (response.status !== 401) {
+        if (typeof payload?.detail === "string") message = payload.detail;
+        else if (payload?.error?.message) message = payload.error.message;
+      }
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(response.status, message);
+  }
+  return response.status === 204
+    ? (undefined as T)
+    : ((await response.json()) as T);
+}
+
 function query(filters: IncidentFilters | ChangeFilters): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {
@@ -78,6 +116,13 @@ export const api = {
   dashboard: () => get<DashboardSummary>("/dashboard"),
   system: () => get<SystemStatus>("/system"),
   settings: () => get<SettingsView>("/settings"),
+  connectors: () => get<ConnectorsView>("/connectors"),
+  createConnector: (id: string) =>
+    send<CreatedConnector>("/connectors", { id }),
+  disableConnector: (id: string) =>
+    send<void>(`/connectors/${encodeURIComponent(id)}/disable`),
+  connectorPreflight: (id: string) =>
+    send<PreflightCheck[]>(`/connectors/${encodeURIComponent(id)}/preflight`),
   incidents: (filters: IncidentFilters = {}) =>
     get<IncidentPage>(`/incidents${query(filters)}`),
   incident: (id: string) => get<IncidentDetail>(`/incidents/${id}`),

@@ -461,6 +461,83 @@ def _make_hypothesis(
     return hypothesis, duplicate_count, ownership
 
 
+_Incarnation = tuple[EntityRef, str | None]  # a Schedule name and the UID of one incarnation
+
+
+@dataclass(frozen=True)
+class _Incarnations:
+    of: dict[int, _Incarnation]  # candidate id -> the Schedule it belongs to and its incarnation
+    present: dict[EntityRef, frozenset[str]]  # Schedule -> every incarnation UID in the evidence
+
+
+def _incarnations(candidates: Sequence[Candidate], topology: Topology) -> _Incarnations:
+    """Each chaos object's Schedule incarnation (m21 §22.2), read from the controller's records.
+
+    A Schedule candidate is its own exact instance; an experiment belongs to the incarnation a
+    ``Spawned`` record of it names (``schedule_uid``). An experiment joined to its Schedule by
+    name only, or a Schedule candidate without an instance, has an unknown incarnation (None).
+    """
+    parents = {edge.target: edge.source for edge in topology.edges if edge.relation == "spawns"}
+    of: dict[int, _Incarnation] = {}
+    present: dict[EntityRef, set[str]] = {}
+    for candidate in candidates:
+        entity = candidate.entity
+        if entity.kind == "Schedule":
+            uids = {
+                f.entity_instance.uid
+                for f in candidate.findings
+                if f.entity == entity and f.entity_instance is not None
+            }
+            schedule: EntityRef | None = entity
+        elif entity.kind.endswith("Chaos"):
+            uids = {
+                uid
+                for f in candidate.findings
+                if isinstance(uid := f.details.get("schedule_uid"), str)
+            }
+            named = {
+                name
+                for f in candidate.findings
+                if isinstance(name := f.details.get("schedule"), str)
+            }
+            schedule = (
+                EntityRef.parse(next(iter(named))) if len(named) == 1 else parents.get(entity)
+            )
+        else:
+            continue
+        if schedule is None:
+            continue
+        uid = next(iter(uids)) if len(uids) == 1 else None
+        of[id(candidate)] = (schedule, uid)
+        if uid is not None:
+            present.setdefault(schedule, set()).add(uid)
+    return _Incarnations(of=of, present={k: frozenset(v) for k, v in present.items()})
+
+
+def _own_incarnation_members(
+    items: Sequence[Candidate], actor: Candidate, incarnations: _Incarnations
+) -> list[Candidate]:
+    """m21 §22.2 Rule C: an actor of a known Schedule incarnation keeps only the chaos objects of
+    that incarnation, or of an unknown one while it is the only incarnation in the evidence."""
+    own = incarnations.of.get(id(actor))
+    if own is None or own[1] is None:
+        return list(items)
+    schedule, uid = own
+    only = incarnations.present.get(schedule, frozenset()) == {uid}
+    kept = []
+    for candidate in items:
+        other = incarnations.of.get(id(candidate))
+        if (
+            candidate is actor
+            or other is None
+            or other[0] != schedule
+            or other[1] == uid
+            or (other[1] is None and only)
+        ):
+            kept.append(candidate)
+    return kept
+
+
 def group_candidates(
     candidates: Sequence[Candidate], topology: Topology, context: Context, config: RankingConfig
 ) -> GroupingResult:
@@ -494,8 +571,11 @@ def group_candidates(
     components: dict[int, list[Candidate]] = {}
     for index, candidate in enumerate(candidates):
         components.setdefault(disjoint.find(index), []).append(candidate)
+    incarnations = _incarnations(candidates, topology)
     built = [
-        _make_hypothesis(items, topology, context, config, actor)
+        _make_hypothesis(
+            _own_incarnation_members(items, actor, incarnations), topology, context, config, actor
+        )
         for items in components.values()
         for actor in items
     ]

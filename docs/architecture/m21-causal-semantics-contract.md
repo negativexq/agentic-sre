@@ -1981,4 +1981,6 @@ engine on `main` (2.3.1, `d1803e6`) against this one:
   true causes of `indep1` inside an unchanged `COMPETING` display.
 - **Digests.** 520 of 2,641 equal, as expected for merged claims and new instances. No `RESOLVED` before or after.
 
-Next: the sixteenth `HOLDOUT`, pre-registered before it starts (§21.5.3).
+The sixteenth `HOLDOUT` (§21.5.3, `testbed-scenarios-design.md` §30.1, 2026-10-10): 24/24 valid, every
+pre-registered criterion holds; all 47 scored chaos-led diagnoses `EXACT` with the experiment's UID, 29 execution
+witnesses, none off the chain. Next: ITBench-Lite as a regression check only (§21.5.4).

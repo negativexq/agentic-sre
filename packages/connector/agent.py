@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from packages.connector.credentials import KubernetesSecret, SecretApi, restore, save
 from packages.connector.enrollment import enroll
 from packages.connector.pki import CONNECTOR_SAN_PREFIX, Identity
 from packages.connector.service import Connector, connector_from_environment
@@ -76,7 +77,7 @@ def build_webhook_server(
     return ThreadingHTTPServer(address, Handler)
 
 
-def ensure_identity(env: Mapping[str, str]) -> None:
+def ensure_identity(env: Mapping[str, str]) -> bool:
     """First start (connector-install-design.md §A8.2): enroll when no certificate exists and a token is given.
 
     The key is generated here and written with owner-only permissions next to the certificate and the CA, at the
@@ -89,7 +90,7 @@ def ensure_identity(env: Mapping[str, str]) -> None:
     )
     token = env.get("SRE_CONNECTOR_ENROLLMENT_TOKEN", "").strip()
     if cert.exists() and key.exists() and ca.exists():
-        return
+        return False
     if not token:
         raise RuntimeError("no certificate and no SRE_CONNECTOR_ENROLLMENT_TOKEN to enroll with")
     identity, served_ca = enroll(
@@ -104,6 +105,7 @@ def ensure_identity(env: Mapping[str, str]) -> None:
     cert.write_bytes(identity.certificate)
     ca.write_bytes(served_ca)
     logger.info("enrolled; certificate written to %s", cert)
+    return True
 
 
 RENEW_AT = (
@@ -150,12 +152,18 @@ def renew_when_due(
     return True
 
 
-def renewal_loop(agent: ConnectorAgent, env: Mapping[str, str], stop: threading.Event) -> None:
+def renewal_loop(
+    agent: ConnectorAgent,
+    env: Mapping[str, str],
+    stop: threading.Event,
+    secret: SecretApi | None = None,
+) -> None:
     """Check every hour (``SRE_CONNECTOR_RENEW_CHECK_SECONDS``); a failure is retried within five minutes."""
     interval = float(env.get("SRE_CONNECTOR_RENEW_CHECK_SECONDS", "3600"))
     while not stop.is_set():
         try:
-            renew_when_due(agent, env)
+            if renew_when_due(agent, env) and secret is not None:
+                save(secret, env)  # the renewed identity survives a pod restart
             wait = interval
         except Exception:  # noqa: BLE001 (a failed renewal must not stop the Connector)
             logger.warning("certificate renewal failed; retrying", exc_info=True)
@@ -169,7 +177,15 @@ def identity_from_files(cert: str, key: str) -> Identity:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
-    ensure_identity(os.environ)
+    # connector-install-design.md §4 decision 3: in Kubernetes the identity lives in one Secret of the
+    # Connector's own namespace; restored before the session, stored after an enrollment or a renewal
+    secret_name = os.getenv("SRE_CONNECTOR_CREDENTIAL_SECRET", "")
+    secret: SecretApi | None = KubernetesSecret(secret_name) if secret_name else None
+    if secret is not None and restore(secret, os.environ):
+        logger.info("identity restored from Secret %s", secret_name)
+    enrolled = ensure_identity(os.environ)
+    if enrolled and secret is not None:
+        save(secret, os.environ)
     namespaces = _csv("SRE_WATCH_NAMESPACES", "sre-demo")
     evidence = _csv("SRE_EVIDENCE_NAMESPACES", "chaos-mesh")
     connector = connector_from_environment(
@@ -211,7 +227,9 @@ def main() -> None:
         server_ca=Path(os.environ["SRE_CONNECTOR_TLS_CA"]).read_bytes(),
         server_name=os.getenv("SRE_CONNECTOR_SERVER_NAME") or None,
     )
-    threading.Thread(target=renewal_loop, args=(agent, os.environ, stop), daemon=True).start()
+    threading.Thread(
+        target=renewal_loop, args=(agent, os.environ, stop, secret), daemon=True
+    ).start()
     agent.run(stop)
 
 

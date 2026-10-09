@@ -1,0 +1,79 @@
+{{- /* Read-only everywhere it watches; never Secrets there (connector-install-design.md §A8.4). */ -}}
+{{- $root := . -}}
+{{- range $ns := concat .Values.watch.namespaces .Values.watch.evidenceNamespaces | uniq }}
+{{- $workloads := has $ns $root.Values.watch.namespaces }}
+{{- $chaos := or (has $ns $root.Values.watch.evidenceNamespaces) (and $workloads $root.Values.watch.chaosBesideWorkloads) }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "connector.name" $root }}-reader
+  namespace: {{ $ns }}
+  labels: {{- include "connector.labels" $root | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+{{- if $workloads }}
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "resourcequotas", "limitranges"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+{{- end }}
+{{- if $chaos }}
+  - apiGroups: ["chaos-mesh.org"]
+    resources: ["networkchaos", "podchaos", "stresschaos", "iochaos", "httpchaos", "schedules"]
+    verbs: ["get", "list", "watch"]
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "connector.name" $root }}-reader
+  namespace: {{ $ns }}
+  labels: {{- include "connector.labels" $root | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "connector.name" $root }}
+    namespace: {{ $root.Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "connector.name" $root }}-reader
+{{- end }}
+---
+{{- /* Its own identity: one Secret in its own namespace, get and update only (§4 decision 3). */}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "connector.name" . }}-credentials
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "connector.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ include "connector.credentials" . | quote }}]
+    verbs: ["get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "connector.name" . }}-credentials
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "connector.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "connector.name" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "connector.name" . }}-credentials

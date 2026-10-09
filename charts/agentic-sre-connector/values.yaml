@@ -1,0 +1,65 @@
+# The Agentic SRE Connector (docs/architecture/connector-install-design.md).
+# It reads, never writes, in the namespaces you list, and dials out to the control plane: no inbound port.
+
+image:
+  repository: agentic-sre/connector
+  tag: dev
+  pullPolicy: IfNotPresent
+
+controlPlane:
+  # session port, mutual TLS (host:port)
+  endpoint: ""
+  # enrollment port, server-authenticated TLS, used once on first start (host:port)
+  enrollEndpoint: ""
+  # the name in the control plane's certificate, when it differs from the endpoint's host
+  serverName: ""
+
+enrollment:
+  # the one-time token from `agentic-sre connector create <id>`; or name an existing Secret with key `token`
+  token: ""
+  existingSecret: ""
+
+watch:
+  # workload namespaces the Connector reads
+  namespaces: []
+  # namespaces holding chaos experiments (evidence); chaos kinds are read there
+  evidenceNamespaces: []
+  # also read chaos kinds beside the workloads (experiments created next to their targets)
+  chaosBesideWorkloads: true
+  intervalSeconds: 15
+
+backends:
+  alertmanager:
+    url: ""
+    token: ""
+  prometheus:
+    url: ""
+    token: ""
+    tenant: ""
+  loki:
+    url: ""
+  tempo:
+    url: ""
+    token: ""
+    tenant: ""
+
+alerts:
+  # the admission rule of the connector boundary contract §16 (Alertmanager's group_wait)
+  minActiveSeconds: 30
+  coveragePollSeconds: 30
+
+webhook:
+  # a local receiver for Alertmanager's webhook (contract §10.5); Alertmanager posts to
+  # http://<release>-webhook.<namespace>.svc:9095/webhook with this bearer token
+  enabled: true
+  port: 9095
+  token: ""
+  existingSecret: ""
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

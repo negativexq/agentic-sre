@@ -1,0 +1,6 @@
+apiVersion: v2
+name: agentic-sre-connector
+description: The Agentic SRE Connector, read-only inside your cluster, dialing out to the control plane
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

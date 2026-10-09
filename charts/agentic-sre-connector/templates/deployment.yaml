@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "connector.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "connector.labels" . | nindent 4 }}
+spec:
+  replicas: 1  # one session per Connector id (connector boundary contract §12.3)
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {{- include "connector.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "connector.selector" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "connector.name" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: connector
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "packages.connector.agent"]
+          envFrom:
+            - configMapRef:
+                name: {{ include "connector.name" . }}-config
+            {{- if or .Values.backends.alertmanager.token .Values.backends.prometheus.token .Values.backends.tempo.token }}
+            - secretRef:
+                name: {{ include "connector.name" . }}-backends
+            {{- end }}
+          env:
+            - name: SRE_CONNECTOR_ENROLLMENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "connector.enrollmentSecret" . }}
+                  key: token
+                  optional: true
+            {{- if .Values.webhook.enabled }}
+            - name: SRE_CONNECTOR_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "connector.webhookSecret" . }}
+                  key: token
+            {{- end }}
+          {{- if .Values.webhook.enabled }}
+          ports:
+            - name: webhook
+              containerPort: {{ .Values.webhook.port }}
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tls
+              mountPath: /var/run/connector/tls
+            - name: tmp
+              mountPath: /tmp
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        # the session's files; the identity itself lives in the credentials Secret and is restored on start
+        - name: tls
+          emptyDir:
+            medium: Memory
+        - name: tmp
+          emptyDir: {}

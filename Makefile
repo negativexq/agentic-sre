@@ -48,6 +48,14 @@ test-pg:
 	TEST_POSTGRES_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:$(PG_TEST_PORT)/postgres \
 		$(PY) -m pytest -m postgres
 
+# The Connector's Helm chart (docs/architecture/connector-install-design.md §A8.4).
+CHART_VALUES := --set controlPlane.endpoint=cp.example.com:8443 --set controlPlane.enrollEndpoint=cp.example.com:8444 \
+	--set 'watch.namespaces={shop}' --set 'watch.evidenceNamespaces={chaos-mesh}'
+
+chart-lint:
+	helm lint charts/agentic-sre-connector $(CHART_VALUES)
+	helm template conn charts/agentic-sre-connector $(CHART_VALUES) > /dev/null
+
 precommit:
 	MYPY_CACHE_DIR=/tmp/agentic-sre-mypy-cache $(PY) -m pre_commit run --all-files
 

@@ -23,6 +23,8 @@ jobs:
         run: make check
       - name: Offline demo
         run: .venv/bin/agentic-sre demo --json > /dev/null
+      - name: Lint the Connector chart
+        run: make chart-lint
 
   images:
     runs-on: ubuntu-latest

@@ -1,0 +1,15 @@
+The Agentic SRE Connector is installed as {{ include "connector.name" . }} in {{ .Release.Namespace }}.
+
+It reads (never writes) in: {{ include "connector.allNamespaces" . }}
+and dials the control plane at {{ .Values.controlPlane.endpoint }}; it enrolls once at {{ .Values.controlPlane.enrollEndpoint }}.
+
+Check every backend and permission, from inside the Connector:
+  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "connector.name" . }} -- python -m packages.connector.ctl preflight
+
+or from your workstation, as the Connector's ServiceAccount:
+  python -m packages.connector.ctl preflight --as system:serviceaccount:{{ .Release.Namespace }}:{{ include "connector.name" . }}
+{{- if .Values.webhook.enabled }}
+
+Point Alertmanager's webhook at http://{{ include "connector.name" . }}-webhook.{{ .Release.Namespace }}.svc:{{ .Values.webhook.port }}/webhook
+with the bearer token in Secret {{ include "connector.webhookSecret" . }} (key: token).
+{{- end }}

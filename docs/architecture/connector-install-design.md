@@ -190,3 +190,22 @@ Verification: 6 tests, over real gRPC on loopback (renewal of an active Connecto
 the session reopened with it, files written owner-only; a revoked Connector's live session closed and every
 reconnection and renewal refused; no renewal on the fixed allow-list; the recorded expiry; the status degrading 14 days
 ahead). Full suite passes. The lab adopts all of it with the chart (A8.5).
+
+## 10. A8.4 implemented (2026-10-09)
+
+`charts/agentic-sre-connector`: a ServiceAccount; per watched namespace a Role and RoleBinding with `get`, `list`,
+`watch` on the workload kinds and events (chaos kinds in the evidence namespaces, and beside the workloads unless
+`watch.chaosBesideWorkloads=false`), never Secrets there and no ClusterRole; in the release namespace one Role on the
+credentials Secret only, by `resourceNames`, `get` and `update`. The Deployment (one replica, `Recreate`) runs the
+agent as a non-root user with a read-only root filesystem, no privilege escalation and every capability dropped; the
+session's files are an in-memory volume, restored on start from the credentials Secret (`helm.sh/resource-policy:
+keep`) and written back after an enrollment or a renewal (`packages/connector/credentials.py`). The enrollment token
+and the webhook token come from values or existing Secrets (the webhook token is kept across upgrades). A values
+schema refuses a missing endpoint, a malformed token or namespace, and an empty namespace list; `NOTES.txt` points to
+`preflight`.
+
+Verification: `helm lint` and `helm template` (`make chart-lint`, now a CI step); 5 tests on the rendered chart
+(read-only RBAC in every watched namespace and never Secrets there, the one credentials Secret by name, the optional
+chaos rule, the pod's security settings, the schema's refusals) and 3 on the credential store; the rendered chart
+accepted by the lab's API server in a server-side dry run (15 objects, nothing created). Not installed in the lab yet:
+that is A8.5.

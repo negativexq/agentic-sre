@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["controlPlane", "watch"],
+  "properties": {
+    "controlPlane": {
+      "type": "object",
+      "required": ["endpoint", "enrollEndpoint"],
+      "properties": {
+        "endpoint": {"type": "string", "minLength": 3, "pattern": "^[^:/]+:[0-9]+$"},
+        "enrollEndpoint": {"type": "string", "minLength": 3, "pattern": "^[^:/]+:[0-9]+$"},
+        "serverName": {"type": "string"}
+      }
+    },
+    "enrollment": {
+      "type": "object",
+      "properties": {
+        "token": {"type": "string", "pattern": "^$|^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.[^.]+\\.[A-Za-z0-9_-]+$"},
+        "existingSecret": {"type": "string"}
+      }
+    },
+    "watch": {
+      "type": "object",
+      "required": ["namespaces"],
+      "properties": {
+        "namespaces": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"}},
+        "evidenceNamespaces": {"type": "array", "items": {"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"}},
+        "chaosBesideWorkloads": {"type": "boolean"},
+        "intervalSeconds": {"type": "number", "minimum": 1}
+      }
+    },
+    "webhook": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535}
+      }
+    }
+  }
+}

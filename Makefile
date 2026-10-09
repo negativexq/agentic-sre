@@ -227,13 +227,13 @@ CONNECTOR_SA := system:serviceaccount:connector:connector
 lab-pki:
 	$(PY) -m packages.connector.lab pki --out $(LAB_DIR)/pki
 
+# The lab's Connector is installed with the chart and enrolls once with a one-time token
+# (connector-install-design.md §A8.5). Its identity then lives in the Secret `connector-credentials` and survives
+# every restart; the token is created only while that Secret is empty. The control plane must be running (cp-up).
 connector-deploy: lab-pki
+	$(KUBECTL) get namespace connector >/dev/null 2>&1 || $(KUBECTL) create namespace connector
 	$(KUBECTL) apply -f infra/kubernetes/chaos-mesh-rbac.yaml
-	$(KUBECTL) apply -f infra/kubernetes/connector.yaml
 	test -f $(LAB_DIR)/webhook-token || { umask 077; head -c 24 /dev/urandom | base64 | tr -d '/+=\n' > $(LAB_DIR)/webhook-token; }
-	$(KUBECTL) -n connector create secret generic connector-tls \
-		--from-file=client.crt=$(LAB_DIR)/pki/client.crt --from-file=client.key=$(LAB_DIR)/pki/client.key \
-		--from-file=ca.crt=$(LAB_DIR)/pki/ca.crt --dry-run=client -o yaml | $(KUBECTL) apply -f -
 	$(KUBECTL) -n connector create secret generic connector-webhook \
 		--from-file=token=$(LAB_DIR)/webhook-token --dry-run=client -o yaml | $(KUBECTL) apply -f -
 	$(PY) -m packages.connector.lab alertmanager --source infra/observability/alertmanager.yml \
@@ -241,8 +241,16 @@ connector-deploy: lab-pki
 		--token-file $(LAB_DIR)/webhook-token > $(LAB_DIR)/alertmanager.yml
 	$(KUBECTL) -n observability create configmap alertmanager-config \
 		--from-file=alertmanager.yml=$(LAB_DIR)/alertmanager.yml --dry-run=client -o yaml | $(KUBECTL) apply -f -
-	$(KUBECTL) -n observability rollout restart deployment/alertmanager
+	@if $(KUBECTL) -n connector get secret connector-credentials -o jsonpath='{.data.tls\.crt}' 2>/dev/null | grep -q .; then \
+		echo "the Connector already has its identity; no enrollment token"; token=""; \
+	else \
+		token=$$(DATABASE_URL=$(CP_DB) SRE_CONNECTOR_CA_KEY=$(LAB_DIR)/pki/ca.key \
+			SRE_CONNECTOR_TLS_CLIENT_CA=$(LAB_DIR)/pki/ca.crt $(CLI) connector create lab) || exit 1; \
+	fi; \
+	helm upgrade --install connector charts/agentic-sre-connector -n connector \
+		-f infra/kubernetes/connector-values.yaml $${token:+--set enrollment.token=$$token}
 	$(KUBECTL) -n connector rollout restart deployment/connector
+	$(KUBECTL) -n observability rollout restart deployment/alertmanager
 	$(KUBECTL) -n connector rollout status deployment/connector --timeout=180s
 	$(KUBECTL) -n observability rollout status deployment/alertmanager --timeout=180s
 
@@ -275,7 +283,7 @@ cp-up: lab-pki
 	@if [ -f $(LAB_DIR)/cp.pid ] && kill -0 $$(cat $(LAB_DIR)/cp.pid) 2>/dev/null; then \
 		echo "the control plane is already running (pid $$(cat $(LAB_DIR)/cp.pid))"; \
 	else \
-		for port in 8080 8443; do \
+		for port in 8080 8443 8444; do \
 			if lsof -nP -iTCP:$$port -sTCP:LISTEN >/dev/null 2>&1; then \
 				echo "port $$port is already in use by another process"; exit 1; \
 			fi; \
@@ -284,6 +292,7 @@ cp-up: lab-pki
 		SRE_CONNECTOR_LISTEN=0.0.0.0:8443 SRE_CONNECTOR_ALLOWED=lab \
 		SRE_CONNECTOR_TLS_CERT=$(LAB_DIR)/pki/server.crt SRE_CONNECTOR_TLS_KEY=$(LAB_DIR)/pki/server.key \
 		SRE_CONNECTOR_TLS_CLIENT_CA=$(LAB_DIR)/pki/ca.crt SRE_AUTO_DIAGNOSE=true \
+		SRE_CONNECTOR_CA_KEY=$(LAB_DIR)/pki/ca.key SRE_CONNECTOR_ENROLL_LISTEN=0.0.0.0:8444 \
 		SRE_WATCH_NAMESPACES=sre-demo,lab-control SRE_WATCH_INTERVAL_SECONDS=$(CP_WATCH_INTERVAL) \
 		nohup $(CLI) serve --host 127.0.0.1 --port 8080 > $(LAB_DIR)/cp.log 2>&1 & echo $$! > $(LAB_DIR)/cp.pid; \
 		echo "control plane started (pid $$(cat $(LAB_DIR)/cp.pid)); log $(LAB_DIR)/cp.log; console http://127.0.0.1:8080/app"; \

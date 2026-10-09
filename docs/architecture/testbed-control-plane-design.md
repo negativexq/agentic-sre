@@ -108,7 +108,7 @@ plane; running the control plane in a container; the stream-mode default (`conne
 ## 10. Implementation record (2026-09-30)
 
 Built: the `connector` image target, `packages/connector/lab.py` (static certificates and the lab's
-Alertmanager configuration), `infra/kubernetes/connector.yaml`, and the targets `lab-pki`,
+Alertmanager configuration), the Connector chart with `infra/kubernetes/connector-values.yaml` (connector-install-design.md §A8.5), and the targets `lab-pki`,
 `connector-deploy`, `connector-check`, `cp-up`, `cp-down`, `cp-reset`. Tests: 9 for the helpers and the
 manifests' promises (no credential committed, read-only rules, `cp-down` keeps the volume, the control plane
 starts with `KUBECONFIG=/dev/null`, the demo manifests are untouched).

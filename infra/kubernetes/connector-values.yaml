@@ -1,0 +1,33 @@
+# The lab's Connector, installed with the chart (connector-install-design.md §A8.5; `make connector-deploy`).
+# The enrollment token is not here: `make connector-deploy` creates one when the Connector has no identity yet.
+image:
+  repository: agentic-sre/connector
+  tag: dev
+  pullPolicy: IfNotPresent
+controlPlane:
+  # the control plane runs on the host; the Connector dials out to it
+  endpoint: host.docker.internal:8443
+  enrollEndpoint: host.docker.internal:8444
+  serverName: host.docker.internal
+watch:
+  namespaces: [sre-demo, lab-control]
+  evidenceNamespaces: [chaos-mesh]
+  chaosBesideWorkloads: true
+  intervalSeconds: 15
+backends:
+  alertmanager:
+    url: http://alertmanager.observability.svc.cluster.local:9093
+  prometheus:
+    url: http://prometheus.observability.svc.cluster.local:9090
+  loki:
+    url: http://loki.observability.svc.cluster.local:3100
+  tempo:
+    url: http://tempo.observability.svc.cluster.local:3200
+alerts:
+  minActiveSeconds: 30
+  coveragePollSeconds: 30
+webhook:
+  enabled: true
+  port: 9095
+  # the bearer token the lab's Alertmanager configuration carries (written by `make connector-deploy`)
+  existingSecret: connector-webhook

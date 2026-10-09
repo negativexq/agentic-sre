@@ -209,3 +209,18 @@ Verification: `helm lint` and `helm template` (`make chart-lint`, now a CI step)
 chaos rule, the pod's security settings, the schema's refusals) and 3 on the credential store; the rendered chart
 accepted by the lab's API server in a server-side dry run (15 objects, nothing created). Not installed in the lab yet:
 that is A8.5.
+
+## 11. A8.5: the lab installs its Connector with the chart (2026-10-09)
+
+`make connector-deploy` now installs the chart with `infra/kubernetes/connector-values.yaml` (no credential committed;
+the webhook token stays in the existing `connector-webhook` Secret) and, while the Connector has no identity, creates
+its one-time token with `agentic-sre connector create lab`. `make cp-up` starts the control plane with the CA's key
+and the enrollment port 8444. `infra/kubernetes/connector.yaml` is removed. The lab's control plane changes database on
+every run, and the registry lives in that database, so the id `lab` also stays on the fixed allow-list: the lab
+enrolls once and then reconnects from its stored identity whatever the run's database.
+
+Done on the lab: the old Connector's objects removed (its Secrets and namespace kept), the chart installed, the
+Connector enrolled with its token (`lab` active, certificate until 2027-01-07), the identity written to
+`connector-credentials`; after a pod restart the identity was restored and no enrollment happened; `preflight` inside
+the pod **12 of 12 ok**; `make connector-check` read-only PASS; a control plane started on a fresh database reattached
+`lab` at once. A full `HOLDOUT` follows (testbed-scenarios-design §29).

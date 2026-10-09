@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import re
+import shutil
+import subprocess
 import tarfile
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -150,46 +153,62 @@ def test_lab_up_builds_everything_but_the_control_plane_and_lab_check_can_fail()
         assert problem in check  # each check reports a tool failure instead of passing silently
 
 
-def test_the_connector_can_only_read_and_no_credential_is_committed() -> None:
-    documents = [
-        d for d in yaml.safe_load_all((ROOT / "infra/kubernetes/connector.yaml").read_text()) if d
-    ]
-    assert "Secret" not in {
-        d["kind"] for d in documents
-    }  # the certificate and token are made at bring-up
-    roles = [d for d in documents if d["kind"] == "Role"]
-    for role in roles:
-        for rule in role["rules"]:
-            assert set(rule["verbs"]) <= {"get", "list", "watch"}
-            assert "secrets" not in rule["resources"]
-    bindings = [d for d in documents if d["kind"] == "RoleBinding"]
-    assert {b["metadata"]["namespace"] for b in bindings} == {
-        "sre-demo",
-        "chaos-mesh",
-        "lab-control",
+def test_the_labs_connector_values_commit_no_credential_and_dial_the_host() -> None:
+    """The lab installs its Connector with the chart (connector-install-design.md §A8.5)."""
+    values = yaml.safe_load((ROOT / "infra/kubernetes/connector-values.yaml").read_text())
+    assert "token" not in values.get("enrollment", {})  # created at bring-up, never committed
+    assert values["webhook"]["existingSecret"] == "connector-webhook"
+    assert not any(v.get("token") for v in values["backends"].values())
+    assert values["controlPlane"] == {
+        "endpoint": "host.docker.internal:8443",
+        "enrollEndpoint": "host.docker.internal:8444",
+        "serverName": "host.docker.internal",
     }
-    for binding in bindings:
-        assert binding["subjects"] == [
-            {"kind": "ServiceAccount", "name": "connector", "namespace": "connector"}
-        ]
-        assert binding["roleRef"]["name"] == "agentic-sre-reader"
+    assert values["watch"]["namespaces"] == ["sre-demo", "lab-control"]
+    assert values["watch"]["evidenceNamespaces"] == ["chaos-mesh"]
+    assert not (ROOT / "infra/kubernetes/connector.yaml").exists()
 
 
-def test_the_connector_deployment_uses_the_bring_up_secrets_and_the_gateway_on_the_host() -> None:
-    documents = [
-        d for d in yaml.safe_load_all((ROOT / "infra/kubernetes/connector.yaml").read_text()) if d
+@pytest.mark.skipif(shutil.which("helm") is None, reason="helm is not installed")
+def test_the_labs_connector_renders_read_only_with_the_webhook_secret_it_already_has() -> None:
+    rendered = subprocess.run(
+        [
+            "helm",
+            "template",
+            "connector",
+            str(ROOT / "charts/agentic-sre-connector"),
+            "-n",
+            "connector",
+            "-f",
+            str(ROOT / "infra/kubernetes/connector-values.yaml"),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    documents = [d for d in yaml.safe_load_all(rendered) if d]
+    readers = [
+        d for d in documents if d["kind"] == "Role" and d["metadata"]["name"] == "connector-reader"
     ]
+    assert {r["metadata"]["namespace"] for r in readers} == {
+        "sre-demo",
+        "lab-control",
+        "chaos-mesh",
+    }
+    for role in readers:
+        for rule in role["rules"]:
+            assert (
+                set(rule["verbs"]) == {"get", "list", "watch"}
+                and "secrets" not in rule["resources"]
+            )
     pod = deployment(documents, "connector")["spec"]["template"]["spec"]
     assert pod["serviceAccountName"] == "connector"
-    container = pod["containers"][0]
-    assert container["image"] == "agentic-sre/connector:dev"
-    assert pod["volumes"] == [{"name": "tls", "secret": {"secretName": "connector-tls"}}]
-    token = next(e for e in container["env"] if e["name"] == "SRE_CONNECTOR_WEBHOOK_TOKEN")
-    assert token["valueFrom"]["secretKeyRef"] == {"name": "connector-webhook", "key": "token"}
-    config = next(d for d in documents if d["kind"] == "ConfigMap")["data"]
-    assert config["SRE_CONNECTOR_ENDPOINT"] == "host.docker.internal:8443"
-    assert config["SRE_WATCH_NAMESPACES"] == "sre-demo,lab-control"
-    assert config["SRE_EVIDENCE_NAMESPACES"] == "chaos-mesh"
+    token = next(
+        e for e in pod["containers"][0]["env"] if e["name"] == "SRE_CONNECTOR_WEBHOOK_TOKEN"
+    )
+    assert token["valueFrom"]["secretKeyRef"]["name"] == "connector-webhook"
+    secrets = {d["metadata"]["name"] for d in documents if d["kind"] == "Secret"}
+    assert "connector-webhook" not in secrets  # the existing one is used, not replaced
 
 
 def test_the_connector_image_and_the_control_plane_targets_keep_their_promises() -> None:

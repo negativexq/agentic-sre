@@ -2001,5 +2001,4 @@ read during prediction. Compared with the last run, `all-2.3.0-20261008T2001` (e
   - **§20:** the answer's text no longer leads with an observation on the pod; it says that no candidate is
     established and names both tied candidates.
 - **Leader families:** 19 `EXACT`, 12 `MULTIPLE_VIABLE`, 3 `UNKNOWN`, unchanged; Scenario-34 moves from the fourth
-  `UNKNOWN` to `EXACT`. No ITBench leader is a chaos experiment with a journaled UID, so Rule A has nothing to act on
-  there.
+  `UNKNOWN` to `EXACT`; no other scenario's leader family changes.

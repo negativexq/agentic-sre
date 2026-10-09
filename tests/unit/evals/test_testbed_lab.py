@@ -14,7 +14,12 @@ from typing import Any
 import pytest
 
 from packages.evals.live import testbed_lab
-from packages.evals.live.testbed_lab import LabWorld, foreign_fault_event, tree_problems
+from packages.evals.live.testbed_lab import (
+    LabWorld,
+    code_identity,
+    foreign_fault_event,
+    tree_problems,
+)
 
 
 def test_an_experiment_of_another_run_is_foreign() -> None:
@@ -150,3 +155,18 @@ def test_a_run_tree_without_its_interpreter_or_lab_is_refused(tmp_path: Path) ->
 def test_the_control_plane_imports_the_tree_make_runs_in() -> None:
     makefile = (testbed_lab.REPO / "Makefile").read_text()
     assert "PYTHONPATH=$(CURDIR) nohup $(CLI) serve" in makefile
+
+
+def test_the_code_identity_says_whether_tracked_files_changed(tmp_path: Path) -> None:
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+
+    git("init", "-q")
+    (tmp_path / "a.py").write_text("x = 1\n")
+    git("add", "a.py")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "a")
+    (tmp_path / ".venv").mkdir()  # untracked links to the main tree do not count
+    clean = code_identity(tmp_path)
+    assert clean["dirty"] == "false" and len(clean["commit"]) == 40
+    (tmp_path / "a.py").write_text("x = 2\n")
+    assert code_identity(tmp_path)["dirty"] == "true"

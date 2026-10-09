@@ -1527,10 +1527,15 @@ def tree_problems(repo: Path = REPO) -> list[str]:
 
 def code_identity(repo: Path = REPO) -> dict[str, str]:
     """The tree this harness and the control plane it starts run from (design §31.2 C)."""
-    head = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True, check=False
-    ).stdout.strip()
-    return {"tree": str(repo), "commit": head}
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", *args], cwd=repo, capture_output=True, text=True, check=False
+        ).stdout.strip()
+
+    # tracked changes only: the run tree's links to the main tree's .venv and .local are untracked
+    dirty = bool(git("status", "--porcelain", "--untracked-files=no"))
+    return {"tree": str(repo), "commit": git("rev-parse", "HEAD"), "dirty": str(dirty).lower()}
 
 
 def _interrupt(signum: int, frame: object) -> None:

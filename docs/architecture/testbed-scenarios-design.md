@@ -1132,7 +1132,7 @@ directories were removed. The third's work directory and database are kept aside
 `work/aborted-holdout16/` and `aborted_holdout16_dependency_b_0_attempt3`. All 24 scored runs come from the fourth
 start, from the frozen manifests at `eaf28fb`.
 
-## 31. Harness robustness (roadmap F10; proposed 2026-10-10, awaiting approval)
+## 31. Harness robustness (roadmap F10; owner-approved 2026-10-10)
 
 ### 31.1 What happened
 
@@ -1207,3 +1207,32 @@ until lucky (the rule of "Baseline health", item 2), so a person looks at the wo
   retry for a failure before the injection would save a person's step, at the cost of the rule.
 - **Containerizing the control plane for the testbed**, so that it runs a built image of the frozen commit instead of
   a tree. That would close C structurally but is a larger change.
+
+### 31.5 Implementation and check (2026-10-10)
+
+**A.** `run_once` marks the first `inject` call. Any exception before it, a stop request included, leaves the lab
+cleaned up, the work directory renamed `.aborted-<time>`, and the run's database renamed `aborted_<hash>`
+(`LabWorld.set_aside`, after `make cp-stop`), recorded in `set-aside.json`. The exception surfaces as `RunAborted`, and
+the suite stops with exit code 2. A refused baseline sets its database aside the same way. A failure from the
+injection on is handled as before.
+
+**B.** `LabWorld` records its forwards in `.local/testbed/forwards.json`. At the start of `isolate` it ends each
+recorded pid whose command line is still that forward. Then, if a testbed port is still held, it refuses the run
+before touching the lab. `cleanup` clears the file. `SIGINT` and `SIGTERM` raise `Interrupted`, which A handles.
+
+**C.** `make cp-up` sets `PYTHONPATH=$(CURDIR)`. `run` and `phase0` refuse a tree without `.venv` or `.local/lab`
+before any side effect. The journal's first entry records the tree, its commit and whether its tracked files differ
+from it (`code_identity`).
+
+**Checks.**
+- Unit tests for each case of §31.3. For A: a calibration without samples, a control plane that does not start, a
+  stop request, a missing database, a refused baseline, and a failure at the injection. Each repeat that is set aside
+  then runs again. The rest: a recorded forward ended, an unrelated pid left alone, a foreign listener refusing before
+  any command, the database rename, the tree check, the `PYTHONPATH` line and the dirty flag.
+- One `phase0` (`dependency-b`, seed 901) from a worktree of `3946ba7`, with a marker line in its
+  `packages/__init__.py` only. The control plane's log printed the worktree's path, and its environment held
+  `PYTHONPATH` set to the worktree. The forwards were recorded and the file removed at cleanup; no forward outlived
+  the run. The run was `VALID`, and the journal's first entry named the worktree and its commit. The dirty flag was
+  added after this run, so this run's entry predates it.
+
+Next: the seventeenth `HOLDOUT`, which covers this and m21 §22, pre-registered before it starts.

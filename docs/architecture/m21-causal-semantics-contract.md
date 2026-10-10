@@ -2586,3 +2586,120 @@ The rule has no parameter.
   write record.
 - Whether the change stream should be followed before a run's window starts, so that continuity from the window's start
   is known instead of the listing-based route of B.
+
+## 27. A workload is covered by a witness on its own Pod (C6; proposal, 2026-10-10, awaiting the owner)
+
+### 27.1 Measured problem
+
+`RESOLVED` needs execution witnesses covering every declared symptom of the one strong claim (`strong_complete`,
+`resolution.py`). The shadow of §26.1 shows what happens once the frontier is answered:
+- 318 incidents still miss `RESOLVED`;
+- each has exactly one supported claim, and it is strong;
+- **one of its three declared symptoms has no witness.**
+
+The declared set comes from `symptom_entities` (`signals.py`). An alert's `service` label is expanded into every
+workload, Service and Pod carrying that name (`entities_for_service`). An alert for `payment-service` thus declares
+three entities:
+- `Deployment/payment-service`;
+- the `payment-service` Pod;
+- `Service/payment-service`.
+
+The witness forms cover two of them:
+- the target-effect witness covers the Pod itself (§2);
+- the service-level effect (§12, §23) covers the Service.
+
+**No witness form ever names a workload.** A workload has no failure observation of its own; it fails through its
+Pods.
+
+Measured over every incident with a strong leader in the C20 replay (engine 2.7.0, 661 incidents; a measurement, not
+a rule):
+- **225** strong claims cover every declared symptom.
+- **436** miss at least one. Every missing symptom, without exception, is a workload (`Deployment/payment-service`;
+  `Deployment/order-service` in the `scheduled-b` runs). In every one of these incidents, a witness covers a Pod of that
+  same workload.
+- **Combined with §26's shadow** (every `configuration_source` answered), the 318 incidents would become `RESOLVED`:
+  - In 307, the leader is the run's cause (role `cause,execution`). By suite: `competing-b` 107, `dependency-b` 100,
+    `direct-b` 92, and 8 in the early slices.
+  - The other 11 come from phase-0 runs without a chain (`NetworkChaos` `dep-loss-908/909/914/918`, the phase's own
+    faults).
+  - **No leader is outside the run's chain.**
+  - The other 110 keep their `dependency` questions.
+
+Because `MATERIAL_CAUSAL_FRONTIER` is recorded over `SUPPORTED_POSSIBLE_CAUSE`, today's diagnoses never show this
+coverage failure.
+
+### 27.2 Amendment
+
+**Rule `m21.resolution.workload-coverage` (v1).** In `strong_complete`, a declared symptom `W` that is a workload
+(`WORKLOAD_KINDS`) is covered when **one of the strong claim's witnesses covers a Pod `P` that `W` owns.**
+- Ownership is read through the topology's `owned_by` edges only: Pod → ReplicaSet → Deployment, or Pod → StatefulSet
+  or DaemonSet or Job.
+- The name-based fallback of `workload_of` is never used.
+- `P` is the witness's exact Pod instance, as the witness already binds it.
+
+**Unchanged.**
+- A declared Pod still needs a witness on that Pod.
+- A declared Service still needs a service-level witness.
+- A workload with no witnessed Pod of its own stays uncovered.
+- Every other condition of `RESOLVED`:
+  - one supported family, strong;
+  - no unresolved admitted claim;
+  - no unanswered material frontier.
+- Witness formation, support, timing gates and leader selection are untouched. Recovery is still not assessed.
+
+**Why it is sound.**
+- **A workload is not a separate observation.** It enters the declared set only as a name expansion of an alert
+  (`service`, `deployment` or `statefulset` label, or the owner of a labelled Pod). It is never an observation of its
+  own.
+- **Its failure is its Pods' failure.** A witness on a Pod that it owns, through recorded ownership, is an observed
+  effect of the fault on that workload.
+- **The rule never covers more than it saw:**
+  - a Pod of another workload never covers `W`;
+  - the Service and every declared Pod keep their own requirement.
+
+**Name-blind (§3 I3).** The rule reads ownership edges, never names.
+
+### 27.3 Consequences
+
+- `RESOLVED` becomes reachable where only the workload was missing. The engine's minor version rises, together with
+  §25 and §26 if they are approved together.
+- **On the stored runs, no resolution changes.** All 318 are also limited by `workload-config`, which only §26 can
+  answer, and §26 cannot act on the stored runs (no `managedFields`).
+  - The replay shows the coverage change only in the trace: the per-claim coverage and the unresolved dimensions.
+  - The `RESOLVED` count can only be measured on a new `HOLDOUT`, with §25 and §26.
+- **The risk is a false `RESOLVED`.**
+  - It needs a strong witness on a Pod of the workload while the declared symptom belongs to another cause.
+  - In `competing-b`, the runs hold two causes. The 107 incidents that would resolve name one of them; each is
+    resolved only because its own witnesses cover every one of its declared symptoms.
+  - The bar's hard criterion stays: no false `RESOLVED`.
+- **Recording the basis.** Today a coverage failure is hidden behind `MATERIAL_CAUSAL_FRONTIER`. The trace should
+  record both, so that the next blocker is visible:
+  - `unresolved_dimensions` gains `mechanism_execution` beside the frontier roles when both hold;
+  - `decision_basis` is unchanged.
+
+  This touches the digest, so it is part of this amendment.
+
+### 27.4 Measurement, pre-registered
+
+The rule has no parameter. The C20 replay found the problem, so every stored run is development data for it.
+1. **Offline replay of every stored run,** the engine on `main` against this one. Hard criteria:
+   - no leader, tier or display changes;
+   - no new `RESOLVED` whose leader is not the run's cause;
+   - every workload newly covered has a witnessed Pod that it owns through `owned_by`.
+
+   Reported:
+   - every coverage change, with the workload and its Pod;
+   - any of the 436 that ownership alone does not cover (the measurement above used `workload_of`, which can fall back
+     to a name).
+2. **ITBench-Lite** as a regression check only.
+3. **A full `HOLDOUT`,** pre-registered once and shared with §24, §25 and §26 if the owner approves them together.
+   - Hard criteria: the frozen bar, including no false `RESOLVED`.
+   - Reported per variant for information only: the number of `RESOLVED` diagnoses, and for each one that is not
+     `RESOLVED`, the condition that blocked it (rival, frontier role, uncovered symptom).
+
+### 27.5 Not decided here
+
+- **The `dependency` frontier questions** (110 incidents; C4).
+- **Incidents whose strong claim does not reach a declared Service,** for example a symptom on another service with no
+  witness. None of the measured 436 needed one.
+- **`MULTIPLE_OBSERVED_CAUSES`** (`competing-b` with both causes strong in one incident) stays `AMBIGUOUS`.

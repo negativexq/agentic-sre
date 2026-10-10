@@ -1343,7 +1343,7 @@ fault, so it passes such a run.
   `quiet_since + BASELINE_BEFORE_EXECUTION + 60 s`. The constant is imported from the engine, so the harness follows a
   change of the window; the 60 seconds cover the lag between a fault's action and its recorded `Applied`.
 - The journal records `quiet_since`, the earliest allowed injection and the actual one (`role="baseline_window"`).
-  The seeded offset (§ seeds) is unchanged and still applies; the wait only adds time when the run is faster than the
+  The seeded offset is unchanged and still applies; the wait only adds time when the run is faster than the
   window.
 - Nothing else changes: the baseline gate, the calibration and the probes stay as they are.
 

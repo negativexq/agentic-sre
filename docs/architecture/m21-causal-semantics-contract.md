@@ -2769,7 +2769,7 @@ The rule has no parameter. The C20 replay found the problem, so every stored run
   witness.
 - **`MULTIPLE_OBSERVED_CAUSES`** (`competing-b` with both causes strong in one incident) stays `AMBIGUOUS`.
 
-## 28. A Service with one ready Pod and that Pod are one observation (C6; proposal, 2026-10-10, awaiting the owner)
+## 28. A Service with one ready Pod and that Pod are one observation (C6; owner-approved 2026-10-10)
 
 ### 28.1 Measured problem
 

@@ -2146,3 +2146,86 @@ for every case of §22.4.1; the three that test the change fail without it.
 
 Next: the seventeenth `HOLDOUT`, pre-registered before it starts (§22.4.4; §22.5 leaves to the owner whether it
 also covers F10).
+
+## 23. Calls that never reached the target, and the fault's action (C2; owner-approved 2026-10-10)
+
+### 23.1 Measured problem
+
+The service-level effect (§12) pairs a client span of the symptom service `S` with the server span of the target `T`
+that answered it. The pair binds the effect to `T`'s exact pod. A packet loss or a partition leaves calls that **never
+reach `T`**: the client span ends in an error, and `T` never starts a server span. Such a call is in no pair, so it
+counts on neither side.
+
+On the seventeenth `HOLDOUT`, there were 12 incidents in the loss variants (`dependency-b`, `competing-b`) whose symptom
+service `order-service` calls the faulted `payment-service`:
+- In 6, the read held calls inside the execution: 8 error client spans to `payment-service` each, with no server span.
+  One of them also held one paired error. In every case the baseline before the execution held paired, successful
+  calls only (8 to 31).
+- In the other 6, the read held no call inside the execution at all. F14 (`live-trace-design.md` §12) addresses that
+  case.
+
+None of the 12 formed a witness, and both loss variants' execution-witness recall was 0.33 on the run.
+
+**The fault's action is not stated either.** The witness records the chaos kind (`NetworkChaos`), never what it did.
+The journaled experiment object (C14) holds it: every `dep-loss` experiment of the seventeenth `HOLDOUT` has
+`spec.action` `loss`, with a loss of 80% to 88% (seeded per run).
+
+### 23.2 Amendment
+
+**A third form of the service-level effect: unanswered calls.** It holds for the target pod `T` (execution interval
+`[start, end]`) and a declared symptom service `S` when all of these hold:
+
+1. **Unanswered calls inside the execution.** At least `N` client spans of `S`:
+   - addressed to `T`'s service (`server.address`);
+   - beginning inside `[start, end]`;
+   - with a non-success outcome (§12.2's definition);
+   - with no server span under them in the same fetched trace.
+2. **A clean baseline.** The baseline window of §16 (the five minutes before the first execution) holds at least `N`
+   paired calls `S` → `T`'s service, and no unanswered call to it.
+3. **`T` is the only server those calls could have reached.**
+   - Every paired call `S` → `T`'s service in the baseline and in `[start, end]` was answered by `T`'s exact pod.
+   - The lifecycle ledger shows no other pod of `T`'s workload `Ready` at any time from the baseline's start to `end`.
+   - If either cannot be shown, the form is unknown.
+
+`N` is §12's (3). A call without a server span is attributed to `T` only through condition 3. A call-graph path, or an
+error at `S` alone, is still no effect. An incomplete read (`TRUNCATED`, `FAILED`, too few calls on a side) leaves the
+form unknown, never false, as in §12.2. The witness carries the same coverage as §12's, plus
+`UNANSWERED_CALLS_SINGLE_SERVER`, and lists the unanswered spans as its evidence.
+
+**The fault's action.** When the experiment instance's journaled object has `spec.action`, the witness and the
+diagnosis record it beside the kind (for example `NetworkChaos`, `loss`, `85%`). It is presentation and audit only: no
+rule reads it, and the third form above holds for any fault whose calls go unanswered, whatever its action.
+
+### 23.3 Consequences
+
+- The incident-effect relation of `m21.support.observed-fault-execution.v1` can now hold through the third form, under
+  the rule's other conditions unchanged (onset connection, timing gates, D1 support). The witness covers `S`;
+  `RESOLVED` still needs every declared symptom covered.
+- No new claim kind; no change to admission, elimination, grouping, or the forms of §12.
+- A diagnosis can change from the same evidence, so the engine's minor version rises (F1).
+
+### 23.4 Measurement, pre-registered (testbed-scenarios-design §23)
+
+1. **Offline replay of every stored testbed run**, the engine on `main` against this one. Report:
+   - every new witness, with its target, its symptom and the run's chain;
+   - every lost witness;
+   - leader, tier and resolution changes.
+
+   Hard criteria:
+   - no new witness for a target off the chain, or for the negative control's decoy;
+   - no new false strong authority, and no new false `RESOLVED`.
+
+   Most stored runs read the execution poorly (§23.1), so this step checks safety more than recall.
+2. **ITBench-Lite**, as a regression check only (§21.5.4).
+3. **A full `HOLDOUT`, pre-registered on its own,** covering F13, F14 and this amendment together (owner,
+   2026-10-10). It reports the same hard criteria. For information only, it reports execution-witness recall per
+   variant against the fourteenth to seventeenth, with the loss variants in particular. That comparison never selects
+   or tunes the rule.
+
+### 23.5 Not decided here
+
+- **Calls with no outcome.** A client span still open when the read was taken has no outcome. It counts as neither
+  success nor non-success, so it is not a call of the third form.
+- **Several replicas.** When `T`'s workload has several `Ready` pods, the unanswered calls cannot be bound to `T`, and
+  the form stays unknown. Binding them by the client's connection target (a pod IP on the span) would need that
+  attribute, which the lab's spans do not carry.

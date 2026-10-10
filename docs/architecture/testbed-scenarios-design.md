@@ -1377,7 +1377,20 @@ about five minutes, a 24-run `HOLDOUT` by about two hours.
 Per §23.3, a full measurement after a harness change (F13, §33), a capture change (F14, `live-trace-design.md` §12)
 and an engine change (C2, m21 §23, engine 2.6.0), together, as the owner decided (2026-10-10). Engine 2.6.1 only makes
 a tie between candidate paths independent of hash order; it changes the alternatives shown, never a leader, tier,
-resolution or digest. The lab itself is unchanged since the fifteenth.
+resolution or digest.
+
+**One lab change since the fifteenth (owner-approved 2026-10-10): Tempo's memory limit is known to its runtime.**
+- *Measured:* Tempo used 1,410 MiB of its 2 GiB limit, of which 35 MiB was live heap. Replaying one incident's first
+  capture on a window of the seventeenth (45 slice searches, 208 trace fetches, two at a time) raised its memory by
+  303 MiB, and 113 MiB stayed after the reads ended. Ingestion and compaction are small (about 18 MB of blocks an
+  hour). The growth is garbage the Go runtime collects only when its heap doubles, since it does not know the limit;
+  the seventeenth's kill (01:49 UTC) is consistent with it.
+- *Change:* `GOMEMLIMIT=1600MiB` on the lab's Tempo (`infra/kubernetes/lab-tempo-patch.yaml`, applied by
+  `make lab-tune`), so the runtime collects before the limit. The limit itself and Tempo's configuration are unchanged.
+- *Data:* the new pod starts with an empty `emptyDir`, so the stored blocks are copied out before the rollout and back
+  in after it.
+- *Check before the run:* the same capture replayed ten times in a row, then two at once; Tempo's memory stays below its
+  limit, and it does not restart.
 
 **The setup:**
 - **Variants and seeds:** `dependency-b` 398–400, `direct-b` 401–403, `scheduled-b` 404–406, `config-b` 407–409,
@@ -1402,7 +1415,8 @@ resolution or digest. The lab itself is unchanged since the fifteenth.
 - **F14:**
   - every recorded trace read of an incident lies inside `[onset − 10 min, onset + 5 min]` and spans at most 60 s;
   - no (service, slice) is read twice for an incident unless its earlier read failed;
-  - Tempo's restart count before and after the suite, and every failed read, are reported.
+  - Tempo's restart count before and after the suite, its peak memory (`memory.peak`), and every failed read, are
+    reported.
 - **m21 §23:**
   - every witness of the third form (`UNANSWERED_CALLS_SINGLE_SERVER`) names the run's own target pod, and an actor on
     the run's chain; none names the decoy;

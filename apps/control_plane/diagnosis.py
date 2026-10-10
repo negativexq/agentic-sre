@@ -1068,13 +1068,19 @@ class DiagnosisService:
                 listed_objects=len(listed),
                 provider_capabilities=capture_adapter.capabilities(),
                 alert_coverage_config=self.alert_coverage_config,
+                # m21 §26.6: computed over the journal members and frozen with them
+                evidence_coverage=lambda journal: self._evidence_coverage(
+                    journal, starts_at, window_end, transport_proven_at
+                ),
             ),
             timestamp=self.clock(),
         )
         with self.session_factory() as session:
             members = load_members(session, entries)
             # The live run reads back exactly the coverage it persisted, as replay will.
-            alert_coverage = load_run_boundary(session, run_id).alert_coverage
+            boundary = load_run_boundary(session, run_id)
+            alert_coverage = boundary.alert_coverage
+            coverage = boundary.evidence_coverage
         source = LiveSource(
             incident=str(incident_id),
             alert_items=[alert_from_payload(item) for item in members.alerts],
@@ -1091,9 +1097,7 @@ class DiagnosisService:
             snapshot_cycle_id=members.snapshot.cycle_id if members.snapshot else None,
             snapshot_observed_at=members.snapshot.observed_at if members.snapshot else None,
             alert_coverage=alert_coverage,
-        )
-        coverage = self._evidence_coverage(
-            members.journal, starts_at, window_end, transport_proven_at
+            evidence_coverage=coverage,
         )
         bounded_policy = self.bounded_policy_factory()
         # The effective configs are explicit so the revision can record them.

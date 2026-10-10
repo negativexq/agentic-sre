@@ -25,6 +25,7 @@ from packages.rca.claims import actor_findings, admission_reasons, admitted, sym
 from packages.rca.episode_end import RULE_ID as EPISODE_END_RULE_ID
 from packages.rca.episode_end import RULE_VERSION as EPISODE_END_RULE_VERSION
 from packages.rca.episode_end import EndedEpisode
+from packages.rca.evidence_coverage import EvidenceCoverage
 from packages.rca.model import (
     CausalExplanation,
     CausalFamily,
@@ -80,7 +81,7 @@ from packages.rca.temporal import (
     temporal_contradiction_certainty,
 )
 from packages.rca.timing_stability import current_timing_masks
-from packages.rca.topology import is_chaos_kind
+from packages.rca.topology import WORKLOAD_KINDS, is_chaos_kind
 
 _CHANGE_KINDS = frozenset(
     {
@@ -831,6 +832,10 @@ def resolve_hypotheses(
     object_history: Mapping[EntityRef, Sequence[ObjectVersion]] | None = None,
     observation_cutoff: datetime | None = None,
     pod_statuses: Sequence[PodStatusObservation] = (),
+    owned_by: Mapping[EntityRef, EntityRef] | None = None,
+    selects: Mapping[EntityRef, Collection[EntityRef]] | None = None,
+    evidence_coverage: EvidenceCoverage | None = None,
+    causal_onset: datetime | None = None,
 ) -> ResolutionTrace:
     """Resolve distinguishability without treating missing proof as contradiction.
 
@@ -997,12 +1002,25 @@ def resolve_hypotheses(
         )
         for audit in trace.hypothesis_audits
     )
-    from packages.rca.frontier import material_frontier
+    from packages.rca.frontier import ANSWERED_STATES, material_frontier, unchanged_configuration
 
     material = material_frontier(structural_alternatives, admitted_claims)
     supported_ids = set(trace.plausible_hypotheses)
     answers = answer_frontier(material, relations, set(observation_excluded) - set(explained))
-    answered = {a.alternative_id for a in answers if a.state == "ANSWERED_ROLE_TRANSFERRED"}
+    # m21 §26: a configuration observed unchanged through the window, where no observed role answered it
+    by_id = {a.alternative_id: a for a in material}
+    answers = tuple(
+        (
+            unchanged_configuration(
+                by_id[a.alternative_id], object_history or {}, evidence_coverage, causal_onset
+            )
+            or a
+        )
+        if a.state == "OPEN"
+        else a
+        for a in answers
+    )
+    answered = {a.alternative_id for a in answers if a.state in ANSWERED_STATES}
     # Strong authority leans on temporal ordering; when the claim's formation, D1 support or
     # execution witness is not timing-stable it is not granted and the claim stays a
     # possible cause (M21 timing contract §5.2). Nothing is ever upgraded.
@@ -1066,7 +1084,9 @@ def resolve_hypotheses(
         and strong_ids == supported_ids
         and all(
             set(h.symptom_entities).issubset(
-                {w.symptom for w in observed[h.hypothesis_id].witnesses}
+                _covered_symptoms(
+                    observed[h.hypothesis_id].witnesses, owned_by or {}, selects, pod_statuses
+                )
             )
             for h in hypotheses
             if h.hypothesis_id in supported_ids
@@ -1099,11 +1119,89 @@ def resolve_hypotheses(
             state=Resolution.AMBIGUOUS,
             decision_basis="MATERIAL_CAUSAL_FRONTIER",
             rationale="A possible initiating cause is supported; relevant unobserved mechanisms remain open.",
+            # m21 §27.3: an uncovered declared symptom stays visible behind the frontier
             unresolved_dimensions=tuple(
                 sorted({a.role for a in material if a.alternative_id in limiting})
-            ),
+            )
+            + (() if strong_complete else ("mechanism_execution",)),
         )
     return trace.model_copy(update=updates)
+
+
+def _execution_interval(witness: CausalWitness) -> tuple[datetime, datetime] | None:
+    """The fault's execution interval at the witness's target pod, from the experiment's own records."""
+    target = next((hop.target for hop in witness.path if hop.relation == "fault_targets"), None)
+    if target is None or target.kind != "Pod":
+        return None
+    for entry in witness.origin.details.get("execution_targets", ()):
+        namespace, _, rest = str(entry.get("target", "")).partition("/")
+        if (namespace, rest.partition("/")[0]) != (target.namespace, target.name):
+            continue
+        applied, recovered = entry.get("applied_at"), entry.get("recovered_at")
+        if isinstance(applied, str) and isinstance(recovered, str):
+            return datetime.fromisoformat(applied), datetime.fromisoformat(recovered)
+    return None
+
+
+def _sole_ready(
+    pod: EntityRef,
+    others: Collection[EntityRef],
+    statuses: Sequence[PodStatusObservation],
+    start: datetime,
+    end: datetime,
+) -> bool:
+    """m21 §28: the ledger shows ``pod`` and no other of ``others`` possibly ``Ready`` in ``[start, end]`` (§23's test)."""
+    if not any(status.pod == pod for status in statuses):
+        return False
+    for other in others:
+        if other == pod:
+            continue
+        observations = [status for status in statuses if status.pod == other]
+        if any(
+            status.ready is True
+            and status.observed_at >= start
+            and (status.ready_since or status.observed_at) <= end
+            for status in observations
+        ):
+            return False
+        before = [status for status in observations if status.observed_at < start]
+        if before and max(before, key=lambda status: status.observed_at).ready is True:
+            return False
+    return True
+
+
+def _covered_symptoms(
+    witnesses: Sequence[CausalWitness],
+    owned_by: Mapping[EntityRef, EntityRef],
+    selects: Mapping[EntityRef, Collection[EntityRef]] | None = None,
+    pod_statuses: Sequence[PodStatusObservation] = (),
+) -> set[EntityRef]:
+    """The witnessed symptoms, a Service and its only ready Pod as one (m21 §28), and every workload that owns a
+    covered Pod (m21 §27, ``owned_by`` only)."""
+    covered = {w.symptom for w in witnesses}
+    for witness in witnesses:
+        interval = _execution_interval(witness)
+        if interval is None:
+            continue
+        for service, pods in (selects or {}).items():
+            if witness.symptom in pods:
+                sole = [witness.symptom]
+            elif witness.symptom == service:
+                sole = [pod for pod in pods if any(status.pod == pod for status in pod_statuses)]
+            else:
+                continue
+            if len(sole) == 1 and _sole_ready(sole[0], pods, pod_statuses, *interval):
+                covered.update((service, sole[0]))
+    for pod in [entity for entity in covered if entity.kind == "Pod"]:
+        current = pod
+        for _ in range(3):
+            owner = owned_by.get(current)
+            if owner is None:
+                break
+            if owner.kind in WORKLOAD_KINDS:
+                covered.add(owner)
+            current = owner
+    return covered
 
 
 def _resolve(

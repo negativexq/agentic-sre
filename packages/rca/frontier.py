@@ -10,20 +10,25 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 from hashlib import sha256
 
 from packages.rca.claims import admitted, symptom_links
+from packages.rca.evidence_coverage import EvidenceCoverage, continuously_observed
 from packages.rca.model import (
     Diagnosis,
     EntityRef,
+    FrontierAnswer,
     FrontierStatus,
     GapDimension,
     Hypothesis,
     InvestigationStatus,
+    Lifecycle,
+    ObjectVersion,
     StructuralAlternative,
 )
 from packages.rca.ranking import Context
-from packages.rca.topology import WORKLOAD_KINDS
+from packages.rca.topology import WORKLOAD_KINDS, api_access_refs, config_refs, pod_spec_of
 
 _ROLE_BY_RELATION = {
     "uses_config": "configuration_source",
@@ -36,6 +41,7 @@ _ROLE_BY_RELATION = {
 
 _DIMENSIONS_BY_ROLE = {
     "configuration_source": (GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING),
+    "api_access": (GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING),
     "autoscaler": (GapDimension.AUTOSCALING_TARGET_STATE, GapDimension.EVENT_SEQUENCE),
     "network_policy": (GapDimension.CHANGE_TIMING,),
     "fault_actor": (GapDimension.EVENT_SEQUENCE, GapDimension.FAILURE_ONSET),
@@ -97,7 +103,49 @@ def _linked_symptoms(actor: EntityRef, context: Context) -> tuple[str, ...]:
     )[:8]
 
 
-def derive_structural_frontier(context: Context) -> tuple[StructuralAlternative, ...]:
+def _api_access(config: EntityRef, pod: EntityRef, context: Context) -> bool:
+    """m21 §25: the Pod holds ``config`` only through its API access volume, and its controller never declares it."""
+    version = context.topology.latest.get(pod)
+    spec = pod_spec_of(version.body) if version is not None else None
+    if pod.kind != "Pod" or spec is None or (config.kind, config.name) not in api_access_refs(spec):
+        return False
+    current = pod
+    for _ in range(3):
+        owners = context.topology.outgoing(current, "owned_by")
+        if not owners:
+            return False
+        current = owners[0]
+        owner = context.topology.latest.get(current)
+        template = pod_spec_of(owner.body) if owner is not None else None
+        if template is not None:
+            return (config.kind, config.name) not in config_refs(template)
+    return False
+
+
+def _content(version: ObjectVersion) -> tuple[object, object]:
+    return version.body.get("data"), version.body.get("binaryData")
+
+
+def _changed(
+    config: EntityRef,
+    history: Mapping[EntityRef, Sequence[ObjectVersion]],
+    onset: datetime | None,
+) -> bool:
+    """An observed content change of ``config`` up to the onset (m21 §25, third bullet)."""
+    versions = sorted(history.get(config, ()), key=lambda version: version.observed_at)
+    return any(
+        (later.lifecycle is Lifecycle.DELETED or _content(later) != _content(earlier))
+        and (onset is None or later.observed_at <= onset)
+        for earlier, later in zip(versions, versions[1:], strict=False)
+    )
+
+
+def derive_structural_frontier(
+    context: Context,
+    *,
+    history: Mapping[EntityRef, Sequence[ObjectVersion]] | None = None,
+    onset: datetime | None = None,
+) -> tuple[StructuralAlternative, ...]:
     """Derive role-constrained alternatives from direct causal topology.
 
     The relation itself is the structural basis.  We do not scan arbitrary
@@ -132,6 +180,12 @@ def derive_structural_frontier(context: Context) -> tuple[StructuralAlternative,
             continue
         if actor.kind in {"Pod", "Service"} and role not in {"dependency"}:
             continue
+        if (
+            role == "configuration_source"
+            and _api_access(actor, affected, context)
+            and not _changed(actor, history or {}, onset)
+        ):
+            role = "api_access"
         basis: tuple[str, ...] = (f"{edge.relation}:{actor.kind}:{affected.kind}",)
         key = (actor, role)
         previous = rows.get(key)
@@ -298,6 +352,97 @@ def material_frontier(
     return tuple(sorted(result, key=lambda item: item.alternative_id))
 
 
+UNCHANGED_CONFIGURATION_RULE = "m21.frontier.unchanged-configuration"
+ANSWERED_STATES = frozenset({"ANSWERED_ROLE_TRANSFERRED", "ANSWERED_NO_CHANGE_IN_WINDOW"})
+
+
+def _write_record(body: Mapping[str, object]) -> datetime | None:
+    """The latest of ``creationTimestamp`` and every ``managedFields`` time; None when any is missing."""
+    metadata = body.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    entries = metadata.get("managedFields")
+    created = metadata.get("creationTimestamp")
+    if not isinstance(entries, list) or not entries or not isinstance(created, str):
+        return None
+    times = [created]
+    for entry in entries:
+        at = entry.get("time") if isinstance(entry, dict) else None
+        if not isinstance(at, str):
+            return None
+        times.append(at)
+    try:
+        return max(datetime.fromisoformat(at.replace("Z", "+00:00")) for at in times)
+    except ValueError:
+        return None
+
+
+def unchanged_configuration(
+    alternative: StructuralAlternative,
+    history: Mapping[EntityRef, Sequence[ObjectVersion]],
+    coverage: EvidenceCoverage | None,
+    onset: datetime | None,
+) -> FrontierAnswer | None:
+    """m21 §26 B: a configuration whose last write precedes the window and that stayed unchanged to the onset.
+
+    None when the rule cannot be assessed (not a configuration question, no coverage record, no onset): the
+    question then keeps the answer it had. Otherwise the answer, ``OPEN`` with the failed condition named.
+    """
+    if alternative.role != "configuration_source" or coverage is None or onset is None:
+        return None
+    question = "DID_THE_CONFIGURATION_CHANGE_INSIDE_THE_WINDOW"
+
+    def open_(reason: str, **fields: object) -> FrontierAnswer:
+        return FrontierAnswer(
+            alternative_id=alternative.alternative_id,
+            question=question,
+            state="OPEN",
+            blocked_reason=reason,
+            affected_claims=alternative.material_for_hypothesis_ids,
+            remaining_uncertainty=("UPSTREAM_ROLE_UNDETERMINED",),
+            rule_id=UNCHANGED_CONFIGURATION_RULE,
+            **fields,  # type: ignore[arg-type]
+        )
+
+    versions = [
+        version
+        for version in sorted(
+            history.get(alternative.actor, ()), key=lambda version: version.observed_at
+        )
+        if version.observed_at <= onset
+    ]
+    if not versions:
+        return open_("NO_LISTING")
+    listing = versions[-1]
+    if listing.lifecycle is Lifecycle.DELETED:
+        return open_("WRITTEN_IN_WINDOW")
+    written = _write_record(listing.body)
+    if written is None:
+        return open_("NO_WRITE_RECORD", listed_at=listing.observed_at)
+    if written >= coverage.starts_at:
+        return open_("WRITTEN_IN_WINDOW", last_written_at=written, listed_at=listing.observed_at)
+    gap = continuously_observed(
+        coverage,
+        alternative.actor.namespace or "",
+        alternative.actor.kind,
+        listing.observed_at,
+        onset,
+    )
+    if gap is not None:
+        return open_(gap, last_written_at=written, listed_at=listing.observed_at)
+    return FrontierAnswer(
+        alternative_id=alternative.alternative_id,
+        question=question,
+        state="ANSWERED_NO_CHANGE_IN_WINDOW",
+        evidence_ids=(listing.evidence_id,),
+        affected_claims=alternative.material_for_hypothesis_ids,
+        remaining_uncertainty=("CONFIGURATION_MAY_REMAIN_A_CONDITION",),
+        rule_id=UNCHANGED_CONFIGURATION_RULE,
+        last_written_at=written,
+        listed_at=listing.observed_at,
+    )
+
+
 def investigation_status(
     alternatives: Sequence[StructuralAlternative], *, bounded: bool
 ) -> InvestigationStatus:
@@ -305,7 +450,7 @@ def investigation_status(
     if not alternatives and not bounded:
         return InvestigationStatus.NOT_REQUIRED
     if any(
-        (item.answer is None or item.answer.state != "ANSWERED_ROLE_TRANSFERRED")
+        (item.answer is None or item.answer.state not in ANSWERED_STATES)
         and (item.status is FrontierStatus.UNEXPLORED or item.material_for_hypothesis_ids)
         for item in alternatives
     ):
@@ -314,8 +459,11 @@ def investigation_status(
 
 
 __all__ = [
+    "ANSWERED_STATES",
+    "UNCHANGED_CONFIGURATION_RULE",
     "apply_frontier_progress",
     "covered_frontier_dimensions",
     "derive_structural_frontier",
     "investigation_status",
+    "unchanged_configuration",
 ]

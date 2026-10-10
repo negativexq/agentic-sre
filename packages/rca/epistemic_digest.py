@@ -170,7 +170,9 @@ def epistemic_state(diagnosis: Diagnosis) -> EpistemicState:
                         "explanations": [r.model_dump(mode="json") for r in trace.explanations],
                         "frontier_answers": [
                             a.model_dump(
-                                mode="json", exclude={"investigation_state", "blocked_reason"}
+                                mode="json",
+                                exclude={"investigation_state", "blocked_reason"},
+                                exclude_none=True,
                             )
                             for a in trace.frontier_answers
                         ],

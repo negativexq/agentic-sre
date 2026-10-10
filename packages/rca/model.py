@@ -1066,6 +1066,9 @@ class FrontierAnswer(BaseModel):
     remaining_uncertainty: tuple[str, ...] = ()
     rule_id: str = "m21.frontier.observed-role"
     rule_version: str = "v1"
+    # m21 §26: the API server's last write and the listing that carried it, for an unchanged configuration
+    last_written_at: datetime | None = None
+    listed_at: datetime | None = None
 
 
 class RootSupportRecord(BaseModel):

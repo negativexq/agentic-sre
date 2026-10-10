@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from packages.rca.epistemic_digest import diagnosis_epistemic_digest
+from packages.rca.evidence_coverage import EvidenceCoverage
 from packages.rca.investigation.graph import investigate_diagnosis
 from packages.rca.investigation.intents import DeterministicIntentPolicy
 from packages.rca.investigation.policy import (
@@ -455,6 +456,7 @@ class ReplaySource:
             snapshot_observed_at=snapshot.observed_at if snapshot else None,
             # Exactly the coverage the live run froze; never recomputed from segments.
             alert_coverage=boundary.alert_coverage,
+            evidence_coverage=boundary.evidence_coverage,
         )
         return cls(
             run_id=run_id,
@@ -478,6 +480,9 @@ class ReplaySource:
 
     def alert_observation_start(self) -> datetime | None:
         return self._base.alert_observation_start()
+
+    def evidence_coverage_record(self) -> EvidenceCoverage | None:
+        return self._base.evidence_coverage_record()
 
     def object_history(self) -> Mapping[EntityRef, Sequence[ObjectVersion]]:
         return self._base.object_history()

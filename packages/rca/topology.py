@@ -204,6 +204,39 @@ def _config_refs(pod_spec: Mapping[str, Any]) -> set[tuple[str, str]]:
     return refs
 
 
+def api_access_refs(pod_spec: Mapping[str, Any]) -> set[tuple[str, str]]:
+    """References reached only through a projected volume that carries a service account token (m21 §25).
+
+    That volume is the API access the ServiceAccount admission adds; a reference also reached any other way is the
+    workload's own configuration.
+    """
+    volumes = pod_spec.get("volumes") or []
+    access: list[Any] = []
+    other: list[Any] = []
+    for volume in volumes if isinstance(volumes, list) else []:
+        projected = volume.get("projected") if isinstance(volume, dict) else None
+        sources = projected.get("sources") if isinstance(projected, dict) else None
+        token = isinstance(sources, list) and any(
+            isinstance(source, dict) and "serviceAccountToken" in source for source in sources
+        )
+        (access if token else other).append(volume)
+    if not access:
+        return set()
+    return _config_refs({**pod_spec, "volumes": access}) - _config_refs(
+        {**pod_spec, "volumes": other}
+    )
+
+
+def pod_spec_of(body: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """A Pod's spec, or a controller's Pod template spec."""
+    return _pod_spec(body)
+
+
+def config_refs(pod_spec: Mapping[str, Any]) -> set[tuple[str, str]]:
+    """Every ConfigMap and Secret a Pod spec references."""
+    return _config_refs(pod_spec)
+
+
 _ENV_REF = re.compile(r"\$\(([A-Za-z_][A-Za-z0-9_]*)\)")
 _HOST = re.compile(
     r"^(?:[a-z][a-z0-9+.-]*://)?([a-z0-9](?:[a-z0-9.-]*[a-z0-9])?)(?::[0-9]+)?(?:/.*)?$"

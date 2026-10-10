@@ -788,7 +788,7 @@ def _structural_contract(
     """Map a structural role to its exact observation actor(s)."""
     actor = alternative.actor
     role = alternative.role
-    if role in {"configuration_source", "workload_controller"}:
+    if role in {"configuration_source", "api_access", "workload_controller"}:
         if dimension in {GapDimension.CONFIG_DIFFERENCE, GapDimension.CHANGE_TIMING}:
             return _actor_local_contract(
                 actor, dimension, source, alternative_id=alternative.alternative_id
@@ -1195,7 +1195,7 @@ def derive_information_gaps(
         for item in hypotheses
         if admitted(item) and item.hypothesis_id not in resolution.eliminated_hypotheses
     )
-    from packages.rca.frontier import material_frontier
+    from packages.rca.frontier import ANSWERED_STATES, material_frontier
 
     material = {
         item.alternative_id: item for item in material_frontier(structural_alternatives, hypotheses)
@@ -1207,7 +1207,7 @@ def derive_information_gaps(
         if item.alternative_id in material
         else item
         for item in structural_alternatives
-        if item.answer is None or item.answer.state != "ANSWERED_ROLE_TRANSFERRED"
+        if item.answer is None or item.answer.state not in ANSWERED_STATES
     )
     if runtime_context is not None:
         return _derive_runtime_aware_gaps(

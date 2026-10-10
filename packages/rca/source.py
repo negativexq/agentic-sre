@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
 
+from packages.rca.evidence_coverage import EvidenceCoverage
 from packages.rca.model import (
     Alert,
     AlertEpisode,
@@ -71,6 +72,10 @@ class ObservationSource(Protocol):
         """
         ...
 
+    def evidence_coverage_record(self) -> EvidenceCoverage | None:
+        """The object channel's coverage frozen at the run boundary (m21 §26.6); None when not recorded."""
+        ...
+
 
 @dataclass
 class InMemorySource:
@@ -87,6 +92,7 @@ class InMemorySource:
     trace_items: list[TraceSpanObservation] = field(default_factory=list)
     cutoff: datetime | None = None
     alert_coverage_start: datetime | None = None
+    evidence_coverage: EvidenceCoverage | None = None
     # Explicit capture history; when absent each alert is one episode that is still firing.
     alert_episode_items: list[AlertEpisode] | None = None
 
@@ -101,6 +107,9 @@ class InMemorySource:
 
     def alert_observation_start(self) -> datetime | None:
         return self.alert_coverage_start
+
+    def evidence_coverage_record(self) -> EvidenceCoverage | None:
+        return self.evidence_coverage
 
     def alert_episodes(self) -> Sequence[AlertEpisode]:
         if self.alert_episode_items is not None:

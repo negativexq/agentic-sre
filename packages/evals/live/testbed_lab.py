@@ -166,6 +166,16 @@ _DIAGNOSES = text(
 ).bindparams(bindparam("alerts", expanding=False))
 
 
+# design §35 DEV check 1: one value of the workloads' ConfigMap, written and put back. The workloads read the flag
+# lower-cased, so the write changes the object and not what any workload does.
+EDITED_CONFIG, EDITED_KEY, EDITED_VALUE, KEPT_VALUE = (
+    "workload-config",
+    "ENABLE_TEST_FAULTS",
+    "TRUE",
+    "true",
+)
+
+
 class LabWorld:
     def __init__(
         self,
@@ -267,6 +277,7 @@ class LabWorld:
         self._delete_experiments()
         self._unset_delay()  # a run that died mid-way may have left the change in place
         self._restore_image()
+        self._restore_config()
         self._quiet_target_pod()
         self._quiet_since = self.clock.now()  # design §33: no earlier run's fault acts from here on
         for namespace in WATCHED_NAMESPACES:
@@ -330,6 +341,56 @@ class LabWorld:
                     ["kubectl", "-n", namespace, "delete", kind, "--all", "--ignore-not-found"],
                     check=False,
                 )
+
+    def before_injection(self, params: RunParameters, journal: InjectorJournal) -> None:
+        if not params.edit_config:
+            return
+        result = self._set_config_value(EDITED_VALUE)
+        journal.record(
+            verb="patch",
+            object=f"configmap {EDITED_CONFIG} {EDITED_KEY}={EDITED_VALUE}",
+            ok=result.returncode == 0,
+            response=result.stdout if result.returncode == 0 else result.stderr,
+            role="config_edited",
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"the configuration was not edited: {result.stderr.strip()[:200]}")
+
+    def _set_config_value(self, value: str) -> subprocess.CompletedProcess[str]:
+        body = json.dumps({"data": {EDITED_KEY: value}})
+        return self._run(
+            [
+                "kubectl",
+                "-n",
+                NAMESPACE,
+                "patch",
+                "configmap",
+                EDITED_CONFIG,
+                "--type",
+                "merge",
+                "-p",
+                body,
+            ],
+            check=False,
+        )
+
+    def _restore_config(self) -> None:
+        """Put the edited value back; a ConfigMap that already holds it is not written again (a write would date it)."""
+        held = self._run(
+            [
+                "kubectl",
+                "-n",
+                NAMESPACE,
+                "get",
+                "configmap",
+                EDITED_CONFIG,
+                "-o",
+                f"jsonpath={{.data.{EDITED_KEY}}}",
+            ],
+            check=False,
+        )
+        if held.returncode == 0 and held.stdout.strip() != KEPT_VALUE:
+            self._set_config_value(KEPT_VALUE)
 
     def construction_problems(self) -> list[str]:
         """Contract §16.3: the decoy's workload is isolated and nothing in sre-demo is configured to reach it."""
@@ -1150,6 +1211,7 @@ class LabWorld:
             self._unset_delay()  # already undone by remove() on a normal run; this covers an aborted one
         self._restore_strategy()
         self._restore_image()
+        self._restore_config()
         self._delete_experiments()
         if self._forwarder is not None:
             self._forwarder.stop_all()
@@ -1366,6 +1428,13 @@ SPECS: dict[str, Callable[..., ScenarioSpec]] = {
         spawn_every_seconds=ParameterRange(low=120, high=120),
     ),
     "config-b": _variant_b(config_spec, "config-image-payment"),
+    # design §35 DEV check 1: variant B of the dependency family with the workloads' ConfigMap written in the window
+    "dependency-b-edited": lambda repeats, seeds, tier="DEV": _variant_b(
+        dependency_spec,
+        "dependency-loss-payment",
+        loss_percent=LOSS,
+        edit_config=ParameterRange(low=1, high=1),
+    )(repeats, seeds, tier=tier),
     # m21 §13.4: the rollout witness's held-out variants, mechanisms variant A did not use
     "config-c": _variant_b(config_spec, "config-error-payment"),
     # m21 §14: the failed rollout's `DEV` scenario, a mechanism the held-out `config-b` (a missing image) does not use

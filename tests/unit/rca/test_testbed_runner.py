@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import stat
 from collections.abc import Collection
@@ -109,6 +110,9 @@ class FakeWorld:
             verb="apply", object=f"networkchaos {name}", role=ROLE_CAUSE_CREATED, uid="e1"
         )
         return Injection(name, "e1", "payment-1", "p1", self.injected)
+
+    def before_injection(self, params: RunParameters, journal: InjectorJournal) -> None:
+        self.calls.append(f"before_injection:{params.edit_config}")
 
     def applied_at(self, injection: Injection) -> datetime | None:
         ready = self.clock.now() >= injection.injected_at + timedelta(seconds=1)
@@ -310,6 +314,22 @@ def test_parameters_are_reproducible_from_the_seed_and_stay_in_their_ranges() ->
     assert 5 <= first.offset_seconds <= 15 and 90 <= first.duration_seconds <= 110
     assert 300 <= first.latency_ms <= 600 and 8 <= first.load_rps <= 12
     assert derive_parameters(spec.model_copy(update={"parameters": {}}), 7).baseline_seconds == 45.0
+
+
+def test_the_lab_is_edited_after_the_baseline_gate_and_before_the_injection(tmp_path: Path) -> None:
+    world = FakeWorld(FakeClock())
+    run(tmp_path, world)
+    assert world.calls.index("before_injection:False") + 1 == world.calls.index("inject")
+
+
+def test_a_config_edit_is_drawn_last_and_leaves_the_other_draws_as_they_were() -> None:
+    spec = manifest().spec("dependency-delay")
+    edited = spec.model_copy(
+        update={"parameters": {**spec.parameters, "edit_config": ParameterRange(low=1, high=1)}}
+    )
+    plain, edit = derive_parameters(spec, 7), derive_parameters(edited, 7)
+    assert not plain.edit_config and edit.edit_config
+    assert dataclasses.replace(edit, edit_config=False) == plain
 
 
 def test_calibration_sits_well_above_the_baseline_and_never_below_the_floor() -> None:

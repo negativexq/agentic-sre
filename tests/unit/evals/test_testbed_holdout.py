@@ -37,6 +37,14 @@ def test_every_variant_b_is_a_holdout_with_its_own_injection() -> None:
     assert 80 <= derive_parameters(SPECS["dependency-b"](3, (1, 2, 3)), 1).loss_percent <= 90
 
 
+def test_the_edited_dev_variant_is_variant_b_with_its_configuration_written() -> None:
+    spec = SPECS["dependency-b-edited"](1, (1,))
+    assert (spec.scenario_id, spec.tier) == ("dependency-loss-payment", "DEV")
+    edited, plain = derive_parameters(spec, 1), derive_parameters(SPECS["dependency-b"](1, (1,)), 1)
+    assert edited.edit_config and not plain.edit_config
+    assert edited.loss_percent == plain.loss_percent
+
+
 def test_a_manifest_without_an_engine_commit_keeps_its_old_digest() -> None:
     spec = SPECS["dependency-b"](3, (1, 2, 3))
     old = SuiteManifest(

@@ -2587,6 +2587,29 @@ The rule has no parameter.
 - Whether the change stream should be followed before a run's window starts, so that continuity from the window's start
   is known instead of the listing-based route of B.
 
+### 26.6 The coverage record as a replayable input (owner-approved 2026-10-10)
+
+Found while preparing the implementation, the coverage record that B reads is not an engine input today.
+- The control plane computes it after the run's manifest is frozen and after `diagnose()` (`diagnosis.py`,
+  `_evidence_coverage`), then attaches it to the diagnosis as provenance.
+- Replay cannot reproduce it, so a rule reading it would break §3 I5.
+
+**Amendment.** The record follows the path the alert channel's coverage already takes (`alert_coverage`, frozen in the
+run boundary and read back by `ReplaySource.from_run`):
+1. **Computed before the freeze.** The control plane computes the record before it freezes the run boundary. The wait
+   for transport completeness already ends before that point, so every input exists then.
+2. **Frozen in the boundary.** It is stored in the boundary as `evidence_coverage`, with the follow start, the gaps
+   overlapping the window (scope and interval), and the instant transport was proven.
+3. **Read through the source.** The engine reads it through the source: `LiveSource` live, the frozen boundary on
+   replay. Rule B computes its own continuity over `[L, o]` from these fields: the stream followed since `L` or
+   earlier, no gap of the scope overlapping `[L, o]`, and transport `PROVEN`. The record's own per-scope
+   `source_continuity`, measured from the window's start, is not redefined.
+4. **Older runs.** A boundary without the record leaves every question of B `OPEN`, so stored runs keep their digests.
+5. **On the diagnosis.** The diagnosis keeps the same record in `evidence_coverage`; the console and API do not change.
+
+No new data source is added. The record becomes epistemic input only through rule B; with B not firing, every
+diagnosis is as before.
+
 ## 27. A workload is covered by a witness on its own Pod (C6; owner-approved 2026-10-10)
 
 ### 27.1 Measured problem

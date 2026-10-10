@@ -152,3 +152,84 @@ two windows are read at once, each one service after another, so at most two rea
 every service at once (up to 16 searches) overloaded the lab's Tempo in the second `HOLDOUT` (testbed-scenarios-design
 §13.1: 15 of 18 runs had failed reads, Tempo restarted), so the owner set the limit at two (2026-10-04). Tests that assert a run's exact provider-read sequence
 for another purpose turn the read off explicitly.
+
+## 12. The two windows still miss the execution (proposal, 2026-10-10, awaiting the owner)
+
+### 12.1 Measured problem
+
+The capture reads two windows per instrumented service (§9, `apps/control_plane/diagnosis.py`): the **fault** from two
+minutes before the first alert to five minutes after it (at most the capture time), and a **baseline** from ten to five
+minutes before it. Each search keeps at most 8 traces (`_MAX_SEARCH_TRACE_IDS`), and on the live path Tempo returns
+the earliest ones first (§9). Three consequences, measured on the seventeenth `HOLDOUT`
+(`testbed-scenarios-design.md` §32.1):
+
+- **The fault window yields its first seconds, which lie before the execution.** An alert fires about 20 to 40 s after
+  the execution in the testbed, so the window opens about a minute and a half before it. In `dependency-b` #2 the
+  `OrderErrorRateHigh` capture ended its spans at 23:36:19; the experiment was applied at 23:36:36.
+- **The engine's baseline is mostly not read.** The effect relations compare with the five minutes before the first
+  execution (m21 §16), about `[onset − 6 min, onset − 1 min]`. The capture reads `[onset − 10, onset − 5]` and then
+  nothing until `onset − 2`.
+- **Across all reads:** in 298 of 1,061 successful trace reads of the seventeenth `HOLDOUT` (28%), the latest returned
+  trace began in the first tenth of the requested window.
+
+Of the 12 `dependency-b` and `competing-b` incidents whose symptom service calls the faulted `payment-service`, 6 held no
+call inside the execution at all; the other 6 held only calls that never reached the target (§12.4).
+
+### 12.2 Proposal
+
+**One contiguous range read in one-minute slices.**
+
+- The range is `[onset − 10 min, min(capture time, onset + 5 min)]`: the same outer bounds as today's two windows, with
+  the gap between them closed. It covers the engine's baseline wherever the execution falls in the five minutes the
+  contract admits before the onset.
+- The range is cut into slices of 60 s on a grid anchored at the onset. Each slice is one search per service, with the
+  same 8-trace limit, so every minute contributes its own sample instead of the range contributing its first seconds.
+- **No slice is read twice for an incident.** A later capture of the same open incident skips a slice whose read for
+  that service is already recorded with the same bounds and did not fail (`trace_captures`). Only the slices after the
+  previous capture, and the last partial one, are read again.
+- **Unchanged:** the services read (§8), at most two reads reaching Tempo at once (§11), the span cap per service, the
+  persistence and replay (§6), and completeness as coverage (§3.2): a failed or truncated slice is recorded as such.
+
+### 12.3 Shadow on the seventeenth `HOLDOUT` (run before this text, stated as such)
+
+The lab's Tempo still held the seventeenth `HOLDOUT`'s traces. For every incident, the recorded capture windows and the
+proposed slices were searched again directly, with the same query and limit, and a trace of the symptom service that
+began inside an execution's `[Applied, Recovered]`, or inside its §16 baseline, was counted. These were search results
+only: no trace was fetched, and a trace's start stands for its call. 73 (incident, chaos execution, symptom service)
+rows:
+
+| | Current plan | Slices of 60 s |
+|---|---|---|
+| Rows with at least 3 traces inside the execution | 8 | **48** |
+| Rows with at least 3 traces in the §16 baseline | 68 | 69 |
+| Traces returned in all | 1,202 | 3,888 |
+
+**Caveats:**
+- Tempo now serves these runs from compacted blocks. Its order may differ from the live path, where the data sat in the
+  ingester, so the live effect is to be measured live.
+- Rollout changes (`config-*`, `negative-b`) are not in this count: it uses the chaos executions only.
+- More calls inside the execution do not by themselves form a witness. A packet loss leaves calls that never reach the
+  target (§12.4), and the relation still needs paired calls.
+
+### 12.4 Not in scope
+
+The calls a packet loss or partition leaves are client spans with no server span. The relation pairs a client span
+with its server span, so these calls never count. That is roadmap C2, proposed separately after this one, because
+it cannot be measured while the read misses the execution.
+
+### 12.5 Cost and measurement
+
+- **Searches:** about 15 per service for the first capture of an incident instead of 2, and only the new slices
+  afterwards. The lab reads three services. With two reads at a time and the 0.8 s median of §8, a first capture takes
+  about 20 s more, plus the trace fetches (up to 8 per slice).
+- **Tempo's memory:** the lab's Tempo was killed for memory once in the seventeenth `HOLDOUT` (01:49 UTC, `negative-c`
+  #0's 13 failed reads). Search load grows with this change, so the measurement reports Tempo restarts and failed reads
+  beside the read time.
+- **Measurement:**
+  1. A blind `phase0`: read time per capture, slices read and skipped, failed reads.
+  2. Then a full `HOLDOUT`, pre-registered, which covers this change and F13 (`testbed-scenarios-design.md` §33)
+     together, as the owner decided (2026-10-10). It reports:
+     - the share of executions with calls read inside them, against the seventeenth;
+     - execution-witness recall, for information only.
+  This is a capture change, not an engine change: the engine version stays, and a stored diagnosis replays from its
+  own manifest as before.

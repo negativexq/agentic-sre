@@ -1534,6 +1534,22 @@ evidence.
 Confirmed on the targeted eleventh `HOLDOUT` (testbed-scenarios-design §25.1): 15 of 15 valid, 19 witnesses of §12 and
 §13, none off the chain, no false strong authority or false `RESOLVED`, 14 of 15 runs with every trace read complete.
 
+### 16.7 A recurring `Schedule`'s earlier spawn (owner decision, 2026-10-10)
+
+Since §21 the execution witness checks the claim's exact experiment: the effect must not be present before **that**
+experiment's `Applied`. When a recurring `Schedule`'s earlier spawn is still producing the effect, a later spawn finds
+it already there and forms no witness. The §21 replay lost one witness this way (`HOLDOUT1` `scheduled-b` #2, incident
+`82ba40d1`); no leader changed, every scored true cause stayed shown, only that incident's tier stayed `SUPPORTED`.
+
+**Decision:** the reading stays. An effect present before an experiment's `Applied` counts as present before it, even
+when another spawn of the same `Schedule` produced it. The witness says the mechanism was observed starting after this
+instance ran; an effect already present does not show that, and crediting it would give the strong claim to an
+instance that did not start it (the concern of §21 and §22). The sixteenth and seventeenth `HOLDOUT`s formed a witness
+in every `scheduled-b` run.
+
+If such losses become measurable, the change to propose is that the spawn whose `Applied` precedes the effect carries
+the witness, not that a later spawn ignores it; that needs its own text.
+
 ## 17. The executing instance beside the root cause (proposal, 2026-10-05, awaiting the owner)
 
 ### 17.1 Problem

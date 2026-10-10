@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
+import pytest
 from rca_builders import alert, at, deployment, event, pod, ref, replicaset, service, version
 
+from packages.rca import ranking
 from packages.rca.engine import build_case, diagnose
 from packages.rca.hypotheses import group_candidates, summarize_diagnostics
 from packages.rca.model import (
@@ -444,3 +448,44 @@ def test_renaming_an_unrelated_entity_does_not_change_selection() -> None:
 
     assert first.hypotheses[0].causal_actor == second.hypotheses[0].causal_actor
     assert first.hypotheses[0].hypothesis_id == second.hypotheses[0].hypothesis_id
+
+
+def _pod_finding_candidate(
+    symptoms: set[str], order: list[str], monkeypatch: pytest.MonkeyPatch
+) -> Candidate:
+    case = build_case(_rollout_source())
+    context = replace(case.context, symptom_entities={ref(item) for item in symptoms})
+    finding = Finding(
+        kind=FindingKind.FAILURE_EVENT,
+        entity=ref("shop/Pod/catalog-rs-abcde"),
+        at=at(6),
+        summary="failure",
+        evidence_ids=("failure-1",),
+        temporal_role=EvidenceTemporalRole.SUPPORTING,
+    )
+    # the walk's order as a hash-ordered set might give it
+    monkeypatch.setattr(ranking, "_affected_entities", lambda *_: [ref(item) for item in order])
+    (candidate,) = score_findings([finding], context, RankingConfig())
+    return candidate
+
+
+def test_a_tie_between_equal_length_paths_does_not_follow_the_walk_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pod_first = ["shop/Pod/catalog-rs-abcde", "shop/Deployment/catalog"]
+    for order in (pod_first, pod_first[::-1]):
+        candidate = _pod_finding_candidate({"shop/Service/catalog"}, order, monkeypatch)
+        assert [(hop.source, hop.relation) for hop in candidate.causal_path] == [
+            (ref("shop/Pod/catalog-rs-abcde"), "backs")
+        ]
+
+
+def test_an_affected_symptom_is_direct_whatever_the_walk_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    symptoms = {"shop/Service/catalog", "shop/Pod/catalog-rs-abcde"}
+    pod_first = ["shop/Pod/catalog-rs-abcde", "shop/Deployment/catalog"]
+    for order in (pod_first, pod_first[::-1]):
+        candidate = _pod_finding_candidate(symptoms, order, monkeypatch)
+        assert candidate.causal_path == ()
+        assert candidate.causal_explanation == "DIRECT"

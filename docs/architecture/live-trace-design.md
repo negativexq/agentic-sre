@@ -280,3 +280,9 @@ incomplete read. No other slice can be that short: every slice but the last is 6
   integration test of §12.6 still reads the same slices.
 - No `HOLDOUT` of its own: it can only remove a read that cannot succeed. The next full `HOLDOUT` reports failed reads
   as before; any `start` = `end` read there would be a defect of this change.
+
+**Implementation (2026-10-10).** `trace_slices` leaves out a slice whose start and end have the same whole second
+(`int(timestamp())`, as the reader's `_epoch_seconds`). Unit tests: the eighteenth `HOLDOUT`'s slice (0.784 s after
+the onset) is left out and the slice before it kept; a slice ending 0.9 s after the onset, across a whole second, is
+kept; a later capture reads the part left out as its own last slice. The two tests of a left-out slice fail without
+the change. The integration test of §12.6 is unchanged and passes.

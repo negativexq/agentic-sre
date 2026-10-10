@@ -2352,3 +2352,237 @@ The rule has no parameter.
   CPU reading on another Pod before the leader's execution. Letting such a fact leave competition, for example by its
   time relative to the execution, is a separate question.
 - **The 22 incidents without a strong leader** and **the 19 limited by a material frontier** (C4).
+
+## 25. The API access the admission adds is not the workload's configuration (C21; proposal, 2026-10-10, awaiting the owner)
+
+### 25.1 Measured problem
+
+Offline replay of every stored testbed run with engine 2.7.0 (C20, §24) shows the following:
+- 661 incidents have a strong leader.
+- In 444 of them, C20 clears every unresolved claim.
+- Of those 444, 428 now stay `AMBIGUOUS` through `MATERIAL_CAUSAL_FRONTIER`. In 409 of these, the leader is a cause in
+  the run's chain; the other 19 have no chain (phase 0).
+
+Every limiting question is `UNEXPLORED`, and every incident holds the same two `configuration_source` questions:
+- **`ConfigMap/kube-root-ca.crt`** (428 of 428), with structural basis `uses_config:ConfigMap:Pod` only.
+- **`ConfigMap/workload-config`** (428 of 428), with basis `uses_config:ConfigMap:Deployment`, `…:ReplicaSet` and
+  `…:Pod`.
+
+In 110 incidents, three `dependency` questions are added (`Service/kafka`, `payment-service`, `redis`).
+
+The first question does not come from the workload.
+- **The workload's controller never declares it.** In the run databases, the Deployment's Pod template has no volume
+  at all.
+- **The Pod holds it through one volume, `kube-api-access-<suffix>`.** This is a projected volume whose sources are a
+  `serviceAccountToken`, the `configMap` `kube-root-ca.crt` (key `ca.crt`) and a `downwardAPI` namespace field.
+  The ServiceAccount admission adds this volume to every Pod, so that the Pod's clients can call the Kubernetes API.
+- **The cluster publishes the ConfigMap** in every namespace, with the cluster's CA. In the runs it has a single
+  observed version, created days before.
+
+Yet `_config_refs` (`topology.py`) reads that projected source like any configuration volume. So
+`derive_structural_frontier` makes it a `configuration_source` of the symptom workload, and `material_frontier` binds
+it to every claim whose chain reaches the Pod.
+
+The question it raises is about the cluster's CA, which no workload change can create, on every Pod of every incident.
+It is a real event only when that CA changes. That case was seen once, after the lab was recreated with a journal kept
+on purpose (`testbed-scenarios-design.md`, 2026-09-30): the new cluster's ConfigMaps were journaled as updates and the
+engine led with them.
+
+**What this proposal can and cannot gain.** In the replay, `kube-root-ca.crt` is never the only limiting question;
+`workload-config` limits every one of the 428 incidents as well. **On its own, this amendment changes no resolution
+of a stored run.** It removes a question that is wrong for every Pod. Reaching `RESOLVED` also needs the
+`workload-config` question answered, which is C4 (§25.5).
+
+### 25.2 Amendment
+
+**Rule `m21.frontier.api-access-credential` (v1).** A configuration reference is **API access**, not a
+`configuration_source`, when all of these hold:
+1. It reaches the Pod only through a projected volume that also has a `serviceAccountToken` source.
+2. The Pod's owning controller's Pod template (ReplicaSet, and through it the Deployment, StatefulSet, DaemonSet or Job)
+   does not reference it.
+
+   A Pod without an owner never satisfies this condition. Neither does an owner whose template is not in the
+   evidence. In both cases the reference stays a `configuration_source`.
+
+Then:
+- **It is still derived.** The structural alternative gets role `api_access`, keeps its basis and observation targets,
+  and stays visible in the frontier and the investigation status.
+- **It is not material.** `api_access` is not among the roles `material_frontier` binds. So it never limits a claim
+  and never alone keeps a diagnosis from `RESOLVED`.
+- **An observed change makes it material again.** If the ConfigMap has two stored versions with different content,
+  and the later one is observed inside the diagnosis's evidence window up to the causal onset, the reference is a
+  `configuration_source` as before.
+
+**Name-blind (§3 I3).** The rule reads the volume's structure and the owner's template. It never reads the object's
+name or namespace. A ConfigMap named `kube-root-ca.crt` that a workload mounts itself stays a `configuration_source`.
+So does any reference the controller declares.
+
+**Why it is sound.** A `configuration_source` asks whether the workload's own configuration changed what it runs. The
+API access volume carries no workload configuration. It carries the platform's credentials to its own API, added at
+admission, the same for every Pod in the namespace.
+
+Keeping the question material while it is unobserved is what I1 asks of an *unknown*. Here, though, the unknown is
+not whether this workload's configuration changed. It is whether the cluster's CA changed, and that is answered by an
+observed version, which the third bullet keeps.
+
+**The residual risk.** A CA rotation that the journal did not observe is no longer asked about. It would surface only
+as calls to the Kubernetes API failing, which is a different symptom from those the testbed declares.
+
+**Unchanged.**
+- The topology, its `uses_config` edges, influence channels and closure (`channels.py`), and remediation.
+- Admission, support, leader selection, tiers, explanations and every other frontier role.
+- `RESOLVED` keeps every existing condition.
+
+### 25.3 Consequences
+
+- A material frontier can shrink, so a diagnosis can change its basis and, in principle, its resolution. So the
+  engine's minor version rises (2.8.0, or the next minor after C20).
+- Measured over the stored runs, no resolution changes (§25.1). The expected visible effect is
+  `material_frontier_ids` and `unresolved_dimensions` losing one `configuration_source` entry.
+- ITBench clusters carry the same volume. The m15 planner already proposed `kube-root-ca.crt` as a `CHANGE_TIMING`
+  history read in Scenario-6, 9, 22 and 33 (`docs/results/m15-discriminative-planner.md`). A planner read may
+  therefore move off it.
+
+### 25.4 Measurement, pre-registered
+
+The rule has no parameter. The C20 replay found the problem, so every stored run is development data for it.
+1. **Offline replay of every stored testbed run,** engine 2.7.0 against this one. Report:
+   - every incident whose material frontier, basis or resolution changes;
+   - every reference classified `api_access`, with its Pod and volume;
+   - every reference kept material by an observed change.
+
+   Hard criteria:
+   - no leader, tier or display changes;
+   - no new `RESOLVED` whose leader is not the run's cause;
+   - every reference classified `api_access` comes from a projected volume with a `serviceAccountToken` source, and
+     its owner's template does not reference it.
+2. **ITBench-Lite,** as a regression check only: scores unchanged; any change of planner reads is listed.
+3. **A full `HOLDOUT`,** pre-registered on its own, shared with C20's (§24.4 step 3) if the owner approves both before
+   it runs.
+
+### 25.5 Not decided here
+
+- **`workload-config` (C4).** This is the question that actually keeps the 428 incidents from `RESOLVED`. It is the
+  workload's own declared configuration, so it is rightly material. Closing it needs positive evidence: for example,
+  continuous change-stream coverage of the ConfigMap over the evidence window, with no new version (C9's coverage
+  record). I1 and I2 forbid closing it on absence. This is a separate text.
+- **The three `dependency` questions** in 110 incidents (C4 as well).
+- Whether other admission-added sources (a sidecar's projected CA from a mutating webhook, for example) follow the same
+  rule. Here only the `serviceAccountToken` projection is classified; any other stays a `configuration_source`.
+
+## 26. A configuration observed unchanged through the window cannot be the initiating change (C4; proposal, 2026-10-10, awaiting the owner)
+
+### 26.1 Measured problem
+
+The 428 incidents of §25.1 are limited by `ConfigMap/workload-config` as a `configuration_source`: the workload's own
+declared configuration, rightly material. `material_frontier` says why nothing closes it today: "query completion, no
+findings, promotion and budget exhaustion are not negative causal evidence". `answer_frontier` closes a question only by
+transferring an observed role to another claim (`ANSWERED_ROLE_TRANSFERRED`), and nothing ever observes that a
+configuration *did not* change.
+
+**What closing it would gain, measured in shadow** (every `configuration_source` taken out of the material frontier of
+the 428; a measurement, not a rule):
+- **0 become `RESOLVED`.**
+- 110 stay limited by their `dependency` questions (`Service/kafka`, `payment-service`, `redis`).
+- 318 fall to `SUPPORTED_POSSIBLE_CAUSE` (`mechanism_execution`). Each has one supported claim, and it is strong, but
+  one of its three declared symptoms has no witness: `Deployment/payment-service` in 316, `Deployment/order-service` in
+  2. The frontier basis hid this, because `MATERIAL_CAUSAL_FRONTIER` is recorded over it. This is C6.
+
+So `RESOLVED` on these runs needs §25, this section and C6 together, and for 110 of them the dependency questions as
+well. This section is proposed for its own soundness, not for a count.
+
+**What the evidence holds.**
+- **The stored runs cannot answer it.**
+  - The Connector drops `metadata.managedFields` from every object (`live.py`, `_serialize`), so a listing keeps no
+    record of when an object was last written. A stored `workload-config` has only its `creationTimestamp`
+    (2026-09-30) and one observed version.
+  - Every scope's source continuity is `UNKNOWN`. The coverage record (`late-evidence-design.md` §4) measures
+    continuity from the evidence window's start, about two hours before the onset. A run's control plane follows the
+    change stream for only the last 6 to 8 minutes, since each run has a fresh database (HOLDOUT18: 93 of 93 scored
+    diagnoses).
+- **The cluster does record it.** In the live lab, `workload-config`'s `managedFields` hold one write,
+  `kubectl-client-side-apply` `Update` at 2026-09-30T11:02:48Z.
+- **No stored chain has a ConfigMap as a cause,** so the testbed has no case where this question must stay open.
+
+### 26.2 Amendment
+
+**A. The Connector keeps the write times (data, no rule).** The Connector drops `managedFields[].fieldsV1` as
+before, but keeps each entry's `manager`, `operation` and `time`. This is a Connector change: the lab's Connector
+runs from the repository for the measurement, and nothing is published.
+
+**B. Rule `m21.frontier.unchanged-configuration` (v1).** A material `configuration_source` question on an object `C`
+gets the answer `ANSWERED_NO_CHANGE_IN_WINDOW` when all of these hold. The window is `W = [s, o]`: `s` is the
+evidence window's start (`EvidenceCoverage.starts_at`) and `o` is the causal onset.
+1. **The object was last written before `W`.** A stored listing of `C` at time `L ≤ o` carries the API server's write
+   record. With `T_w` the latest of `creationTimestamp` and every `managedFields[].time`, `T_w < s`. A listing
+   without `managedFields`, or with an entry without a time, does not satisfy this.
+2. **`C` stayed unchanged from `L` to `o`.**
+   - The scope (`C`'s namespace, `C`'s kind) was observed continuously over `[L, o]`: the stream was followed since
+     before `L`, and no persisted gap overlaps `[L, o]`.
+   - Transport is `PROVEN` for the diagnosis.
+   - No stored version of `C` in `[L, o]` has a different content hash, and none is a deletion.
+3. **`C` is the same object.** It has the same `uid` throughout. A deletion and re-creation is a change.
+
+The answer records the listing's evidence id, `T_w`, `L` and the scope's coverage. `answered` (`resolution.py`) then
+includes this state as well as `ANSWERED_ROLE_TRANSFERRED`.
+- The question is answered, not dropped: it stays in the frontier with its answer.
+- A condition that fails leaves it `OPEN` with the condition named. For example, `NO_WRITE_RECORD`,
+  `WRITTEN_IN_WINDOW` or `SCOPE_NOT_CONTINUOUS`.
+
+**Why it is sound (§3 I1, I2).** The question is `UPSTREAM_MECHANISM_COULD_CHANGE_INITIATING_CAUSE`: whether a change
+of `C` could be what started the incident. The rule never reads absence.
+- `T_w < s` is the API server's own positive record of the last write, as of `L`.
+- "No change from `L` to `o`" is read only where the coverage record proves the scope was observed continuously and
+  every item has arrived.
+
+Together they prove that `C`'s content did not change inside the window in which the engine looks for an initiating
+change. A configuration that did not change can be a *condition* of the incident, never the change that initiated it.
+If a later event made an old configuration matter, for example a restart that loads it, that event is its own claim.
+
+**Name-blind (§3 I3).** The rule reads timestamps, the coverage record and content hashes, never names.
+
+**Unchanged.**
+- Other roles, including `dependency`, `quota` and `network_policy`.
+- A `configuration_source` whose object is not listed (for example a Secret the Connector does not read) stays open.
+- Continuity measured from the window's start (§4 of `late-evidence-design.md`) is not redefined. The rule reads
+  continuity over its own `[L, o]` from the same persisted gaps and follow segments.
+- Admission, support, explanations, leader selection and tiers.
+
+### 26.3 Consequences
+
+- A material frontier can be answered, so the engine's minor version rises (with §25 if both are approved together).
+- **Stored runs do not change.** They hold no `managedFields`, so nothing is answered on replay. The rule can be
+  measured only on new runs.
+- **The risk is a configuration change that the rule calls unchanged,** for example a write the API server did not
+  record in `managedFields`. Every update records the writing manager's time. The hard criteria below include a run in
+  which the ConfigMap itself is the cause.
+
+### 26.4 Measurement, pre-registered
+
+The rule has no parameter.
+1. **Unit tests** for each condition, and for a deletion and re-creation.
+2. **Offline replay of every stored run:** no answer, no digest change beyond the engine version (hard).
+3. **`DEV` runs with the Connector of A**, unscored, in the lab:
+   - a run of an existing variant, where `workload-config` must be answered `ANSWERED_NO_CHANGE_IN_WINDOW`;
+   - a run in which `workload-config` is edited inside the window, where it must stay `OPEN` with
+     `WRITTEN_IN_WINDOW` (hard).
+
+   No new scenario is scored.
+4. **ITBench-Lite** as a regression check: the scenarios have no Connector rows and no coverage, so nothing may be
+   answered (hard).
+5. **A full `HOLDOUT`,** pre-registered on its own and shared with §24 and §25 if approved together. Reported:
+   - every `configuration_source` answer, with `T_w`, `L` and coverage;
+   - the number of `RESOLVED` diagnoses per variant, for information only.
+
+   Hard:
+   - no false `RESOLVED`;
+   - no answer on a configuration that changed in its window.
+
+### 26.5 Not decided here
+
+- **C6, the declared symptom without a witness** (`Deployment/payment-service` beside the Service-level witness).
+  This is what keeps the 318 from `RESOLVED` once the frontier is answered.
+- **The `dependency` questions** of the 110 (C4 as well). A dependency's role is answered by its health, not by a
+  write record.
+- Whether the change stream should be followed before a run's window starts, so that continuity from the window's start
+  is known instead of the listing-based route of B.

@@ -255,7 +255,7 @@ it cannot be measured while the read misses the execution.
 For the incident whose symptom service calls the delayed pod (`OrderDependencyLatencyHigh`), the spans now hold
 **11 paired calls inside the execution** and 57 in its §16 baseline. The diagnosis was not read (blind).
 
-### 12.7 A slice within one second is not read (roadmap F15; proposal, 2026-10-10, awaiting the owner)
+### 12.7 A slice within one second is not read (roadmap F15; owner-approved 2026-10-10)
 
 **Measured problem.** On the eighteenth `HOLDOUT` (`testbed-scenarios-design.md` §34.1), all 3 failed trace reads
 were one slice of `config-c` #0, read for three services: `17:05:59.192` to `17:05:59.976`. A capture's last slice

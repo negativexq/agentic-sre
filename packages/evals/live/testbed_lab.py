@@ -1167,9 +1167,15 @@ class LabWorld:
 
 
 def _is_forward(pid: int, port: int) -> bool:
-    """Whether ``pid`` is still a ``kubectl port-forward`` serving ``port`` (pids are reused)."""
+    """Whether ``pid`` is still a ``kubectl port-forward`` serving ``port`` (pids are reused).
+
+    ``-ww``: procps cuts a piped command line at 80 columns, which drops the port.
+    """
     result = subprocess.run(
-        ["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True, check=False
+        ["ps", "-ww", "-o", "command=", "-p", str(pid)],
+        capture_output=True,
+        text=True,
+        check=False,
     )
     command = result.stdout.strip()
     return "kubectl" in command and "port-forward" in command and f"{port}:" in command

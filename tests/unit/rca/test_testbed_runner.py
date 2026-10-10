@@ -57,11 +57,14 @@ class FakeWorld:
         fail_on_isolate: bool = False,
         client_up: bool = True,
         database: str | None = "aborted_0001",
+        quiet_for: timedelta = timedelta(hours=1),
     ) -> None:
         self.clock = clock
         self.calls: list[str] = []
         self.apply_event, self.diagnose, self.fail_on_inject = apply_event, diagnose, fail_on_inject
         self.fail_on_isolate, self.client_up, self.database = fail_on_isolate, client_up, database
+        self.quiet_for = quiet_for  # how long before the isolation step the lab was already quiet
+        self.quiet: datetime | None = None
         self.injected: datetime | None = None
         self.baseline_warnings: list[str] = []
         self.foreign_before: list[str] = []
@@ -78,6 +81,10 @@ class FakeWorld:
         self.calls.append(f"isolate:{run_id}")
         if self.fail_on_isolate:
             raise RuntimeError("make cp-up failed")
+        self.quiet = self.clock.now() - self.quiet_for
+
+    def quiet_since(self) -> datetime | None:
+        return self.quiet
 
     def start_load(self, rps: float) -> None:
         self.calls.append("start_load")
@@ -504,3 +511,36 @@ def test_the_journal_records_the_code_the_run_used(tmp_path: Path) -> None:
     journal = store.run_dir("s1", "dependency-delay", 0) / "journal.jsonl"
     [first] = InjectorJournal(journal).entries()[:1]
     assert first.role == "code_identity" and first.payload == {"tree": "/repo", "commit": "abc"}
+
+
+# ---- design §33: the engine's baseline window lies after the lab was made quiet ---------------------
+
+
+def test_the_injection_waits_until_the_baseline_window_follows_the_quiet_lab(
+    tmp_path: Path,
+) -> None:
+    world = FakeWorld(FakeClock(), quiet_for=timedelta(0))
+    run(tmp_path, world)
+    assert world.injected is not None
+    assert world.injected >= T0 + timedelta(minutes=5, seconds=60)
+    journal = InjectorJournal(
+        TestbedStore(tmp_path / "store").run_dir("s1", "dependency-delay", 0) / "journal.jsonl"
+    )
+    roles = [e.role for e in journal.entries()]
+    assert roles.index("probe_calibration") < roles.index("baseline_window")
+    assert roles.index("baseline_window") < roles.index(ROLE_CAUSE_CREATED)
+    window = next(e for e in journal.entries() if e.role == "baseline_window")
+    assert window.payload["quiet_since"] == T0.isoformat()
+    assert window.payload["earliest_injection"] == (T0 + timedelta(seconds=360)).isoformat()
+    assert window.payload["waited_seconds"] > 0
+
+
+def test_a_lab_quiet_long_before_the_run_adds_no_wait(tmp_path: Path) -> None:
+    world = FakeWorld(FakeClock())
+    run(tmp_path, world)
+    journal = InjectorJournal(
+        TestbedStore(tmp_path / "store").run_dir("s1", "dependency-delay", 0) / "journal.jsonl"
+    )
+    window = next(e for e in journal.entries() if e.role == "baseline_window")
+    assert window.payload["waited_seconds"] == 0
+    assert world.injected is not None and world.injected < T0 + timedelta(minutes=5)

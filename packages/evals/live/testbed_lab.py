@@ -200,6 +200,7 @@ class LabWorld:
         self._forwarder: PortForwarder | None = None
         self._driver: WorkloadDriver | None = None
         self.forwards_file = forwards_file
+        self._quiet_since: datetime | None = None
 
     # ---- plumbing ------------------------------------------------------------------------------
 
@@ -245,6 +246,9 @@ class LabWorld:
 
     # ---- World ---------------------------------------------------------------------------------
 
+    def quiet_since(self) -> datetime | None:
+        return self._quiet_since
+
     def isolate(self, run_id: str) -> None:
         """Quiet the lab, then give the run a fresh control plane and connector (design §3).
 
@@ -253,6 +257,7 @@ class LabWorld:
         *before* the connector restarts, and the connector restarts before the control plane starts on its empty database.
         """
         self.database = database_name(run_id)
+        self._quiet_since = None
         # design §31.2 B: the testbed's ports carry only its own forwards, never one adopted from elsewhere
         self._end_recorded_forwards()
         held = [port for port in (self.order_port, self.alertmanager_port) if _port_open(port)]
@@ -263,6 +268,7 @@ class LabWorld:
         self._unset_delay()  # a run that died mid-way may have left the change in place
         self._restore_image()
         self._quiet_target_pod()
+        self._quiet_since = self.clock.now()  # design §33: no earlier run's fault acts from here on
         for namespace in WATCHED_NAMESPACES:
             self._run(
                 ["kubectl", "-n", namespace, "delete", "events", "--all", "--ignore-not-found"]

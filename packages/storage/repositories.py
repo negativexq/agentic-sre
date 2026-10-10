@@ -630,6 +630,21 @@ class TraceCaptureRepository:
             )
         self._session.flush()
 
+    def read_windows(self, incident_id: object) -> set[tuple[str, str, datetime, datetime]]:
+        """``(namespace, service, starts_at, ends_at)`` of the incident's reads that did not fail."""
+        rows = self._session.execute(
+            select(
+                TraceCaptureRow.namespace,
+                TraceCaptureRow.service,
+                TraceCaptureRow.starts_at,
+                TraceCaptureRow.ends_at,
+            ).where(
+                TraceCaptureRow.incident_id == incident_id,
+                TraceCaptureRow.completeness != "FAILED",
+            )
+        )
+        return {(ns, svc, start, end) for ns, svc, start, end in rows}
+
 
 class LogObservationRepository:
     """Append-only bounded log observations used by diagnosis replay."""

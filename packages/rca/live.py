@@ -844,6 +844,21 @@ TRACE_CAPTURE_MAX_SPANS = 500
 TRACE_QUERY_MAX_SPAN = timedelta(hours=1)  # the Tempo reader's bound
 
 
+def trace_slices(
+    onset: datetime, end: datetime, *, lead: timedelta, width: timedelta
+) -> list[tuple[datetime, datetime]]:
+    """``[onset - lead, end]`` cut on a grid anchored at ``onset`` (live-trace-design.md §12.2).
+
+    Each slice is one search, so every slice contributes its own sample; only the last one may be partial.
+    """
+    slices: list[tuple[datetime, datetime]] = []
+    start = onset - lead
+    while start < end:
+        slices.append((start, min(start + width, end)))
+        start += width
+    return slices
+
+
 @dataclass(frozen=True)
 class TraceServiceCapture:
     """One service's bounded trace read: how complete it was, never repaired."""

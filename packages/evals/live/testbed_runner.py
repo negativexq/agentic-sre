@@ -53,6 +53,7 @@ from packages.evals.live.oracle import (
 )
 from packages.evals.live.testbed_grader import RunScore, score_run
 from packages.rca.model import Diagnosis
+from packages.rca.service_effect import BASELINE_BEFORE_EXECUTION
 
 # The alerts one payment-service delay is expected to raise (seen in the lab); the primary incident of a
 # run is the earliest one created after the injection whose alert is in this set.
@@ -98,6 +99,8 @@ DIAGNOSIS_QUIET_SECONDS = 20.0
 # design §18: lag builds about a minute after a pod-kill, then 30 s of admission, a poll and a diagnosis
 SECOND_CAUSE_COLLECT_SECONDS = 180.0
 ALERT_POLL_SECONDS = 5.0
+# design §33: a fault acts seconds before its Applied is recorded; the engine's baseline window ends at Applied
+APPLY_LAG = timedelta(seconds=60)
 
 
 class BaselineNotQuiet(RuntimeError):
@@ -270,6 +273,10 @@ class World(Protocol):
     """Everything the protocol needs from the lab."""
 
     def isolate(self, run_id: str) -> None: ...
+
+    def quiet_since(self) -> datetime | None:
+        """When the isolation step finished quieting the lab (design §33); None before it."""
+        ...
 
     def start_load(self, rps: float) -> None: ...
 
@@ -848,6 +855,23 @@ def run_once(
         )
         # 2. injection after the seeded offset
         run.wait(params.offset_seconds)
+        # design §33: the engine's baseline window lies wholly after the lab was made quiet
+        quiet = world.quiet_since()
+        if quiet is None:
+            raise RuntimeError("the world recorded no moment it was made quiet")
+        earliest = quiet + BASELINE_BEFORE_EXECUTION + APPLY_LAG
+        waited = max(0.0, (earliest - clock.now()).total_seconds())
+        run.wait(waited)
+        run.journal.record(
+            verb="check",
+            object="baseline/window",
+            role="baseline_window",
+            payload={
+                "quiet_since": quiet.isoformat(),
+                "earliest_injection": earliest.isoformat(),
+                "waited_seconds": round(waited, 3),
+            },
+        )
         # the gate: a target that already failed makes every later effect ambiguous (design, "Baseline health")
         warnings = world.target_warnings()
         foreign = world.foreign_faults()

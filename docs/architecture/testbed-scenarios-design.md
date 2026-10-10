@@ -1356,3 +1356,18 @@ fault, so it passes such a run.
   written; a world whose `quiet_since` is long past does not wait.
 - Not in scope: the trace read's sampling (8 traces per query, from the window's start) and calls that never reach the
   target (packet loss), both found in the same investigation and proposed separately, in that order.
+
+### 33.4 Implementation (2026-10-10)
+
+- `World.quiet_since()`; the lab records it when `_quiet_target_pod` returns, and clears it at the start of each
+  isolation step. A world that recorded none refuses the run before the injection (set aside, §31.2 A).
+- After the seeded offset the runner waits until `quiet_since + BASELINE_BEFORE_EXECUTION + 60 s`, then journals
+  `baseline_window` (`quiet_since`, `earliest_injection`, `waited_seconds`) before the baseline gate and the first
+  inject call.
+- Confirmed by a blind `phase0` on the lab (`dependency`, seed 9133, commit `370892b`, VALID): quiet at 10:28:48,
+  earliest injection 10:34:48, waited 290 s, injected at 10:34:49.
+
+**Correction to §33.3.** The run grows by more than the two minutes estimated there. That estimate measured from the
+previous run's recovery, but the isolation step itself takes most of that gap, and the lab is quiet only at its end:
+in the `phase0`, the injection would otherwise have come about 70 s after `quiet_since`. A run therefore grows by
+about five minutes, a 24-run `HOLDOUT` by about two hours.

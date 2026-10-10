@@ -233,3 +233,24 @@ it cannot be measured while the read misses the execution.
      - execution-witness recall, for information only.
   This is a capture change, not an engine change: the engine version stays, and a stored diagnosis replays from its
   own manifest as before.
+
+### 12.6 Implementation (2026-10-10)
+
+- `trace_slices` (`packages/rca/live.py`) cuts `[onset − 10 min, min(capture time, onset + 5 min)]` into 60 s slices on
+  a grid anchored at the onset.
+- The capture (`apps/control_plane/diagnosis.py`) runs one `capture_traces` per (slice, service), at most two at
+  once, and skips the slices recorded for the incident in `trace_captures` with the same bounds and no failure
+  (`TraceCaptureRepository.read_windows`).
+- Spans of skipped slices stay in the incident's later manifests, because a manifest takes every span of the incident
+  captured by its end (§6).
+- An integration test drives four captures on a moving clock: 12 slices, then only the two new ones, then none, then
+  the remaining two up to `onset + 5 min`.
+
+**Blind `phase0` on the lab** (`dependency`, seed 9134, commit `b516fe3`, VALID):
+- four incidents, three diagnoses each; only the first diagnosis of each captured, with 33 slice reads (11 slices,
+  three services), and no read failed;
+- a capture took 1.8 to 3.6 s in all, and a read 0.09 to 0.20 s at the median;
+- Tempo did not restart (restart count 20 before and after).
+
+For the incident whose symptom service calls the delayed pod (`OrderDependencyLatencyHigh`), the spans now hold
+**11 paired calls inside the execution** and 57 in its §16 baseline. The diagnosis was not read (blind).

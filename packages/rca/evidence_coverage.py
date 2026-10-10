@@ -7,7 +7,7 @@ is approved. Two dimensions are kept apart (§4.3); the summary is derived, neve
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
@@ -132,3 +132,31 @@ def evidence_coverage(
         stream_followed_since=stream_followed_since if streamed else None,
         scopes=tuple(records),
     )
+
+
+def continuously_observed(
+    coverage: EvidenceCoverage, namespace: str, kind: str, start: datetime, end: datetime
+) -> str | None:
+    """Why the scope was not shown observed continuously over ``[start, end]``, or None when it was (m21 §26.6).
+
+    The stream was followed since ``start`` or earlier, no gap of the scope overlaps the interval, and transport is
+    proven. Read from the record frozen at the run boundary.
+    """
+    scope = next((s for s in coverage.scopes if (s.namespace, s.kind) == (namespace, kind)), None)
+    if scope is None:
+        return "SCOPE_NOT_RECORDED"
+    if scope.transport_completeness is not TransportCompleteness.PROVEN:
+        return "TRANSPORT_NOT_PROVEN"
+    if coverage.stream_followed_since is None or _utc(coverage.stream_followed_since) > start:
+        return "SCOPE_NOT_CONTINUOUS"
+    if any(
+        (gap.since is None or _utc(gap.since) <= end) and _utc(gap.at) >= start
+        for gap in scope.gaps
+    ):
+        return "SCOPE_NOT_CONTINUOUS"
+    return None
+
+
+def _utc(instant: datetime) -> datetime:
+    """Gap rows are stored without a zone, in UTC."""
+    return instant if instant.tzinfo is not None else instant.replace(tzinfo=UTC)

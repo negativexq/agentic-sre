@@ -2855,3 +2855,34 @@ The rule has no parameter. The C20 replay found the problem, so every stored run
 - **Services with several ready Pods** need a service-level witness. This rule does not relax that.
 - **The `dependency` frontier questions** (110 incidents; C4).
 - **The 217 incidents with an unresolved rival that holds a fact of its own** (§24.5).
+
+### 28.6 Implementation and measurement of §25 to §28 (2026-10-10)
+
+**Implementation.** Engine 2.8.0.
+- **§25:** `api_access_refs` in `topology.py`; `derive_structural_frontier` gives such a ConfigMap the role
+  `api_access`, which is derived and not material, unless an observed content change falls before the onset.
+- **§26 A:** the Connector keeps each `managedFields` entry's manager, operation and time (`keep_write_times`).
+- **§26 B:** `m21.frontier.unchanged-configuration` in `frontier.py`, answer `ANSWERED_NO_CHANGE_IN_WINDOW` with
+  `last_written_at` and `listed_at`, or `OPEN` with the condition that failed. The bounded investigation keeps
+  both: an answered question is `ANSWERED`, and an open one keeps its named condition rather than the
+  investigation's stop reason (found in the first `DEV` run, §35).
+- **§26.6:** the run boundary freezes `evidence_coverage`; the live diagnosis and the replay read the same record.
+- **§27 and §28:** `_covered_symptoms` in `resolution.py`, through `owned_by` and the lifecycle ledger only. A
+  diagnosis limited by the frontier also names `mechanism_execution` when a declared symptom stays uncovered.
+
+**1. Offline replay** of every stored testbed run (2,956 incidents), 2.7.0 against 2.8.0. No errors.
+- **No root, leader, display, tier, claim level, resolution or decision basis change.** `RESOLVED`: 0 before, 0 after.
+  The digest changes in 2,795 incidents (the new roles and dimensions).
+- **§25:** `kube-root-ca.crt` is `api_access` in all 2,956, and no other ConfigMap is.
+- **§26:** no answer, as expected: no stored run has a coverage record or kept write times.
+- **The 428 incidents with a strong leader limited by the frontier** now name: `configuration_source` alone 318;
+  with `dependency` and `mechanism_execution` 63; with `dependency` 47.
+- **Shadow** (every `configuration_source` question answered, §27 and §28 applied): 318 become `RESOLVED`. 307 lead
+  with the run's cause; 11 are phase-0 runs without a chain; none leads with an actor off the chain. Every one of
+  them is a single-replica workload, so the ledger and the topology routes agree.
+
+**2. ITBench-Lite:** run `all-2.8.0-20261010T1957` at `cc3ffd0`, against `all-2.7.0-20261010T1851`. The report is
+identical apart from the commit and the run time; no prediction changes its root, resolution, leader, display, tier,
+claim level, basis or dimensions (`AMBIGUOUS` 23, `INSUFFICIENT_EVIDENCE` 12).
+
+**3. The `DEV` checks and the full `HOLDOUT`** are pre-registered in testbed design §35.

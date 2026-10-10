@@ -14,6 +14,7 @@ from typing import Any
 
 from packages.evals.itbench.contracts import ITBenchEvidenceCategory, ITBenchScenario
 from packages.evals.itbench.dataset import iter_tsv
+from packages.rca.evidence_coverage import EvidenceCoverage
 from packages.rca.json_access import child
 from packages.rca.model import (
     CLUSTER_SCOPE,
@@ -395,6 +396,10 @@ class SnapshotSource:
 
     def alerts(self) -> Sequence[Alert]:
         return self._alerts
+
+    def evidence_coverage_record(self) -> EvidenceCoverage | None:
+        """No Connector stream recorded the scenario: no object coverage (m21 §26.6)."""
+        return None
 
     def alert_observation_start(self) -> datetime | None:
         """W: the earliest alert-channel capture, from the alert snapshot file names.

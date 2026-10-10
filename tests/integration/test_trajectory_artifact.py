@@ -36,6 +36,8 @@ BOUNDARY_KEYS = {
     "logs",
     "provider_capabilities",
     "alert_coverage",
+    # m21 §26.6: the object channel's coverage, frozen with the members
+    "evidence_coverage",
 }
 
 

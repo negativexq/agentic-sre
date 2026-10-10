@@ -15,6 +15,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from packages.rca.alert_coverage import AlertCoverageBoundary
+from packages.rca.evidence_coverage import EvidenceCoverage
 from packages.rca.investigation.environment import (
     InvestigationBackend,
     PrometheusInvestigationBackend,
@@ -79,6 +80,23 @@ _LOG_ERRORS = "(?i)(error|exception|fatal|refused|timeout|unavailable|unreachabl
 
 
 WatchEventType = Literal["ADDED", "MODIFIED", "DELETED", "BOOKMARK"]
+
+
+def keep_write_times(metadata: dict[str, Any]) -> None:
+    """Keep each ``managedFields`` entry's manager, operation and time; drop the field sets (m21 §26 A).
+
+    The times are the API server's record of when each manager last wrote the object.
+    """
+    entries = metadata.pop("managedFields", None)
+    if not isinstance(entries, list):
+        return
+    kept = [
+        {key: entry[key] for key in ("manager", "operation", "time") if key in entry}
+        for entry in entries
+        if isinstance(entry, dict)
+    ]
+    if kept:
+        metadata["managedFields"] = kept
 
 
 @dataclass(frozen=True)
@@ -192,7 +210,7 @@ class KubernetesClusterReader:
         body: dict[str, Any] = api_client.sanitize_for_serialization(item)
         body["kind"] = kind
         body.setdefault("apiVersion", api_version)
-        child(body, "metadata").pop("managedFields", None)
+        keep_write_times(child(body, "metadata"))
         return body
 
     def list_objects(self, namespaces: Sequence[str]) -> ObjectListing:
@@ -254,7 +272,7 @@ class KubernetesClusterReader:
                     versions[scope] = str(version)
                 for item in listing.get("items", []):
                     item["kind"] = kind
-                    child(item, "metadata").pop("managedFields", None)
+                    keep_write_times(child(item, "metadata"))
                     objects.append(item)
         return ObjectListing(
             tuple(objects), frozenset(completed), tuple(failures), resource_versions=versions
@@ -294,7 +312,7 @@ class KubernetesClusterReader:
             items = []
             for item in listing.get("items", []):
                 item["kind"] = scope.kind
-                child(item, "metadata").pop("managedFields", None)
+                keep_write_times(child(item, "metadata"))
                 items.append(item)
             return items, str((listing.get("metadata") or {}).get("resourceVersion"))
         group, method = _NAMESPACED_METHODS[scope.kind]
@@ -369,7 +387,7 @@ class KubernetesClusterReader:
                 if isinstance(item, dict):
                     body = item
                     body["kind"] = scope.kind
-                    child(body, "metadata").pop("managedFields", None)
+                    keep_write_times(child(body, "metadata"))
                 else:
                     body = self._serialize(item, scope.kind, "v1")
                 version = str(child(body, "metadata").get("resourceVersion") or resource_version)
@@ -618,6 +636,8 @@ class LiveSource:
     snapshot_observed_at: datetime | None = None
     # The alert-channel coverage frozen at the run boundary (M21 contract §10.2).
     alert_coverage: AlertCoverageBoundary | None = None
+    # The object channel's coverage frozen at the run boundary (m21 §26.6).
+    evidence_coverage: EvidenceCoverage | None = None
     # Persisted ``event:<version_pk>`` ids, one per ``event_bodies`` item.
     event_evidence_ids: Sequence[str] | None = None
     # Spans captured for the incident and frozen by the run's manifest (live-trace-design.md §3).
@@ -636,6 +656,9 @@ class LiveSource:
     def alert_observation_start(self) -> datetime | None:
         """W from the persisted boundary; unknown without contiguous coverage."""
         return self.alert_coverage.alert_observation_start if self.alert_coverage else None
+
+    def evidence_coverage_record(self) -> EvidenceCoverage | None:
+        return self.evidence_coverage
 
     def object_history(self) -> Mapping[EntityRef, Sequence[ObjectVersion]]:
         """Journal versions plus the run's persisted snapshot cycle.

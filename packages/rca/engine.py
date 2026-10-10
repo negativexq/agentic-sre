@@ -180,7 +180,7 @@ class Investigator(Protocol):
 # evidence; replay refuses a run recorded under another version (M20.3a).
 # Rule (owner, 2026-10-05; roadmap F1): minor for a change that can alter a diagnosis,
 # patch for one that cannot change any digest, major when the contract version moves.
-RCA_ENGINE_VERSION = "2.7.0"
+RCA_ENGINE_VERSION = "2.8.0"
 
 
 @dataclass(frozen=True)
@@ -370,7 +370,9 @@ def build_case(
         grace=config.ranking.verification_onset_grace,
         evaluation_at=context.window_end,
     )
-    structural_alternatives = list(derive_structural_frontier(context))
+    structural_alternatives = list(
+        derive_structural_frontier(context, history=history, onset=symptoms.onset)
+    )
     structural_alternatives = list(
         apply_frontier_progress(
             structural_alternatives,
@@ -571,7 +573,28 @@ def _resolution_trace(case: Case, config: EngineConfig) -> ResolutionTrace:
         object_history=case.source.object_history(),
         observation_cutoff=case.source.observation_cutoff(),
         pod_statuses=case.source.pod_status_observations(),
+        owned_by={
+            edge.source: edge.target
+            for edge in case.context.topology.edges
+            if edge.relation == "owned_by"
+        },
+        selects=_selected_pods(case.context.topology),
+        evidence_coverage=case.source.evidence_coverage_record(),
+        causal_onset=case.symptoms.onset,
     )
+
+
+def _selected_pods(topology: Topology) -> dict[EntityRef, frozenset[EntityRef]]:
+    """Each Service and the Pods it selects (m21 §28)."""
+    pods: dict[EntityRef, set[EntityRef]] = {}
+    for edge in topology.edges:
+        if (
+            edge.relation == "selects"
+            and edge.source.kind == "Service"
+            and edge.target.kind == "Pod"
+        ):
+            pods.setdefault(edge.source, set()).add(edge.target)
+    return {service: frozenset(selected) for service, selected in pods.items()}
 
 
 def _without_ended_episodes(

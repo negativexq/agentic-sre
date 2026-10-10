@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TypeVar
 
+from packages.rca.evidence_coverage import EvidenceCoverage
 from packages.rca.model import (
     Alert,
     AlertEpisode,
@@ -189,6 +190,10 @@ class OverlayObservationSource:
     def alert_observation_start(self) -> datetime | None:
         # An overlay never changes the base run's alert coverage boundary.
         return self.base.alert_observation_start()
+
+    def evidence_coverage_record(self) -> EvidenceCoverage | None:
+        # An overlay never changes the base run's object coverage boundary.
+        return self.base.evidence_coverage_record()
 
     def alert_episodes(self) -> Sequence[AlertEpisode] | None:
         # Capture history is a property of the alert channel; an overlay never adds to it.

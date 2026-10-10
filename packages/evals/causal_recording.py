@@ -140,6 +140,10 @@ class RecordedSeed:
     def investigation_backend(self) -> RecordedBackend:
         return RecordedBackend(self.tape)
 
+    def evidence_coverage_record(self) -> None:
+        # the tapes hold no object-channel coverage (m21 §26.6): as a run recorded before it
+        return None
+
     def __getattr__(self, name: str) -> Any:
         if name not in _SOURCE_METHODS:
             raise AttributeError(name)

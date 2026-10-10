@@ -12,7 +12,7 @@ SQLite runs the same single transaction without claiming MVCC semantics.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -28,6 +28,7 @@ from packages.rca.alert_coverage import (
     AlertCoverageBoundaryError,
     AlertCoverageConfig,
 )
+from packages.rca.evidence_coverage import EvidenceCoverage
 from packages.rca.manifest import ManifestEntry, manifest_membership_digest, ordered_entries
 from packages.rca.model import JournalEntry, LogRecord, TraceSpanObservation
 from packages.rca.provider_adapter import PROVIDER_CAPABILITIES, ProviderIntegrityError
@@ -80,6 +81,8 @@ class ManifestRequest:
     provider_capabilities: tuple[str, ...]
     # How a polling gap breaks alert-channel coverage (M21 contract §10.2).
     alert_coverage_config: AlertCoverageConfig = field(default_factory=AlertCoverageConfig)
+    # The object channel's coverage over the run's journal members, frozen with them (m21 §26.6).
+    evidence_coverage: Callable[[Sequence[JournalEntry]], EvidenceCoverage] | None = None
 
 
 def canonical_provider_capabilities(names: Sequence[str]) -> list[str]:
@@ -211,6 +214,15 @@ def build_manifest(
             at=request.window_end,
             config=request.alert_coverage_config,
         )
+        evidence_coverage = (
+            request.evidence_coverage(
+                ObjectVersionRepository(session).entries(
+                    [int(e.source_id) for e in entries if e.source_type == "OBJECT_VERSION"]
+                )
+            )
+            if request.evidence_coverage is not None
+            else None
+        )
         IncidentEventRepository(session).append(
             IncidentEvent(
                 incident_id=request.incident_id,
@@ -230,6 +242,11 @@ def build_manifest(
                         request.provider_capabilities
                     ),
                     "alert_coverage": alert_coverage.to_payload(),
+                    **(
+                        {"evidence_coverage": evidence_coverage.model_dump(mode="json")}
+                        if evidence_coverage is not None
+                        else {}
+                    ),
                 },
             ),
             commit=False,
@@ -291,6 +308,8 @@ class RunBoundary:
     # The alert-channel coverage frozen at the boundary; None for runs recorded
     # before M21 amendment 4, which never captured it.
     alert_coverage: AlertCoverageBoundary | None = None
+    # The object channel's coverage frozen at the boundary (m21 §26.6); None for runs recorded before it.
+    evidence_coverage: EvidenceCoverage | None = None
 
 
 def load_run_boundary(session: Session, run_id: str) -> RunBoundary:
@@ -345,6 +364,12 @@ def load_run_boundary(session: Session, run_id: str) -> RunBoundary:
             alert_coverage = AlertCoverageBoundary.from_payload(payload["alert_coverage"])
         except AlertCoverageBoundaryError as error:
             raise ReplayDataError(f"run {run_id} boundary: {error}") from error
+    evidence_coverage = None
+    if "evidence_coverage" in payload:
+        try:
+            evidence_coverage = EvidenceCoverage.model_validate(payload["evidence_coverage"])
+        except ValueError as error:
+            raise ReplayDataError(f"run {run_id} boundary evidence_coverage: {error}") from error
     return RunBoundary(
         run_id,
         rows[0].incident_id,
@@ -353,6 +378,7 @@ def load_run_boundary(session: Session, run_id: str) -> RunBoundary:
         tuple(canonical),
         listed,
         alert_coverage,
+        evidence_coverage,
     )
 
 

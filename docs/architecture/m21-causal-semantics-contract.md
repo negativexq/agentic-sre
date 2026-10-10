@@ -2261,7 +2261,7 @@ case of §23.5.
 
 Next: the eighteenth `HOLDOUT`, covering F13, F14 and this amendment, pre-registered before it starts (§23.4 step 3).
 
-## 24. A claim with no fact of its own does not compete with an observed execution (C20; owner-approved 2026-10-10)
+## 24. A claim with no fact of its own does not compete with an observed execution (C20; owner-approved 2026-10-10, implemented)
 
 ### 24.1 Measured problem
 
@@ -2352,6 +2352,41 @@ The rule has no parameter.
   CPU reading on another Pod before the leader's execution. Letting such a fact leave competition, for example by its
   time relative to the execution, is a separate question.
 - **The 22 incidents without a strong leader** and **the 19 limited by a material frontier** (C4).
+
+### 24.6 Implementation and measurement (2026-10-10)
+
+**Implementation.**
+- `m21.explanation.shared-evidence` v1 is in `causal_closure.py` (`_shared_evidence_explanations`).
+- The resolver applies it once the strong claims are known: after the observed-execution audit, and before the
+  audits are attached.
+- If it explains a claim, the resolver resolves again with the explained set.
+- It never answers a frontier question.
+- Engine 2.7.0.
+
+**1. Offline replay** of every stored testbed run (451 databases, 2,956 incidents), 2.6.1 against 2.7.0. No errors;
+the same incidents on both sides.
+- **No root, leader, display, tier, claim level or resolution changes.** The digest changes in 651 incidents and the
+  decision basis in 444.
+- **883 claims are explained by the new rule.** By the role of their actor in the run's chain:
+  - 610 `target_effect`;
+  - 215 off the chain;
+  - 58 from runs without a chain.
+
+  None is a cause in the run's chain, and none is a decoy.
+- **No new `RESOLVED`**: 0 before, 0 after. Every hard criterion of §24.4 holds.
+- **The rule did what it was for: in 444 of the 661 incidents with a strong leader, it clears every unresolved
+  claim.** The next blocker then shows:
+  - 428 go to `MATERIAL_CAUSAL_FRONTIER` (§25, §26);
+  - 16 go to `EQUIVALENT_OR_INCOMPARABLE_PLAUSIBLE_HYPOTHESES`. These are a `Schedule` beside its own spawned
+    `StressChaos` experiments, and successive experiments in the long runs. They were `AMBIGUOUS` before and stay so.
+
+  Behind the frontier, a declared workload symptom stays without a witness (§27).
+
+**2. ITBench-Lite:** run `all-2.7.0-20261010T1851` at `de434eb`, against `all-2.6.1-seed1-20261010T1228`. Every one of
+the 35 prediction files is byte-identical; macro F1 0.5143 and verified 9 of 18 are unchanged.
+
+**3. The full `HOLDOUT`** is not run yet. It is to be pre-registered together with §25 to §27 (owner-approved), so that
+one run measures `RESOLVED`.
 
 ## 25. The API access the admission adds is not the workload's configuration (C21; owner-approved 2026-10-10)
 

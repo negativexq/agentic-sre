@@ -2147,7 +2147,7 @@ for every case of §22.4.1; the three that test the change fail without it.
 Next: the seventeenth `HOLDOUT`, pre-registered before it starts (§22.4.4; §22.5 leaves to the owner whether it
 also covers F10).
 
-## 23. Calls that never reached the target, and the fault's action (C2; proposal, 2026-10-10, awaiting the owner)
+## 23. Calls that never reached the target, and the fault's action (C2; owner-approved 2026-10-10)
 
 ### 23.1 Measured problem
 

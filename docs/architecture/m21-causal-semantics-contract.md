@@ -2167,8 +2167,8 @@ service `order-service` calls the faulted `payment-service`:
 None of the 12 formed a witness, and both loss variants' execution-witness recall was 0.33 on the run.
 
 **The fault's action is not stated either.** The witness records the chaos kind (`NetworkChaos`), never what it did.
-The journaled experiment object (C14) holds it: `spec.action` is `loss`, with `loss: 85` (percent), for every `dep-loss`
-experiment of the seventeenth `HOLDOUT`.
+The journaled experiment object (C14) holds it: every `dep-loss` experiment of the seventeenth `HOLDOUT` has
+`spec.action` `loss`, with a loss of 80% to 88% (seeded per run).
 
 ### 23.2 Amendment
 

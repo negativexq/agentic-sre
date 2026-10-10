@@ -2246,7 +2246,7 @@ case of §23.5.
     `payment-service` pod, went unanswered. Every new witness names the run's own target pod and the symptom
     `order-service`. 52 are on the chain recorded for their suite; the other 10 are `phase0` runs with no recorded
     chain, and each of them names its own experiment's target. No new witness is off the chain or for a decoy.
-  - A strong witness records the action in 322 incidents (`loss` with its settings, for the `dep-loss` runs).
+  - A strong witness records the action in 322 incidents: `loss` in 306, `delay` in 16 (13 `NetworkChaos`, 3 `Schedule`).
   - 323 digests change: exactly the union of these 62 and these 322.
   - The hard criteria of §23.4 hold: no witness off the chain or for the decoy, no new false strong authority, no
     change in `RESOLVED`.

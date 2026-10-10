@@ -25,6 +25,7 @@ from packages.rca.model import (
     FrontierAnswer,
     Hypothesis,
     ObjectVersion,
+    PodStatusObservation,
     RootSupportRecord,
     RootSupportStatus,
     StructuralAlternative,
@@ -40,7 +41,10 @@ from packages.rca.service_effect import (
     baseline_before,
     call_pairs,
     fault_calls,
+    other_server_ready,
     service_effect,
+    unanswered_calls,
+    unanswered_effect,
 )
 from packages.rca.signals import _QUOTA_MESSAGE
 from packages.rca.topology import is_chaos_kind
@@ -212,10 +216,12 @@ def _service_effect_witness(
     recovered: datetime,
     spans: Sequence[TraceSpanObservation],
     first_execution: datetime | None = None,
+    pod_statuses: Sequence[PodStatusObservation] = (),
 ) -> list[CausalWitness]:
     """m21 contract §12: the target is not itself a symptom, but a declared symptom service's calls to the exact
     target pod show the effect (non-success, or latency far above the baseline). The witness covers that service.
-    The baseline is the calls just before the fault's first execution (§16), ``applied`` when none is given."""
+    The baseline is the calls just before the fault's first execution (§16), ``applied`` when none is given.
+    §23: or the calls never reached the target, which was the only server they could have reached."""
     first_execution = first_execution or applied
     assert holder.episode_onset is not None
     onset = holder.episode_onset
@@ -227,17 +233,42 @@ def _service_effect_witness(
         if symptom.namespace != target_pod.namespace:
             continue
         pairs = call_pairs(spans, symptom.name, target_service)
+        baseline = baseline_before(first_execution)
         holds = service_effect(
             pairs,
             target_pod=target_pod.name,
             start=applied,
             end=recovered,
-            baseline=baseline_before(first_execution),
+            baseline=baseline,
             parameters=SERVICE_EFFECT,
         )
-        if holds is not True:
-            continue
-        calls = fault_calls(pairs, target_pod=target_pod.name, start=applied, end=recovered)
+        effect_ids: tuple[str, ...] = ()
+        unanswered_form = False
+        if holds is True:
+            calls = fault_calls(pairs, target_pod=target_pod.name, start=applied, end=recovered)
+            effect_ids = tuple(e for c in calls for e in c.evidence_ids)
+        else:
+            unanswered = unanswered_calls(spans, symptom.name, target_service)
+            unanswered_form = (
+                unanswered_effect(
+                    pairs,
+                    unanswered,
+                    target_pod=target_pod.name,
+                    start=applied,
+                    end=recovered,
+                    baseline=baseline,
+                    other_ready=other_server_ready(
+                        pod_statuses, target_pod.name, target_pod.namespace, baseline[0], recovered
+                    ),
+                    parameters=SERVICE_EFFECT,
+                )
+                is True
+            )
+            if not unanswered_form:
+                continue
+            effect_ids = tuple(
+                u.evidence_id for u in unanswered if applied <= u.started <= recovered
+            )
         spawned = tuple(injection.details.get("spawn_evidence_ids", ()))
         witnesses.append(
             CausalWitness(
@@ -258,15 +289,14 @@ def _service_effect_witness(
                     CausalHop(source=target_pod, relation="called_by", target=symptom),
                 ),
                 onset=onset,
-                evidence_ids=tuple(
-                    sorted({*injection.evidence_ids, *(e for c in calls for e in c.evidence_ids)})
-                ),
+                evidence_ids=tuple(sorted({*injection.evidence_ids, *effect_ids})),
                 relation_evidence_ids=spawned,
                 coverage=(
                     "EXACT_EXPERIMENT_INSTANCE",
                     "EXECUTION_INTERVAL_CLOSED",
                     "SERVICE_LEVEL_EFFECT_AT_EXACT_POD",
                     "BASELINE_BEFORE_ONSET",
+                    *(("UNANSWERED_CALLS_SINGLE_SERVER",) if unanswered_form else ()),
                     *(("EXACT_SPAWN_RECORD_UIDS",) if spawned else ()),
                 ),
                 missing=("FAULT_ACTION_NOT_OBSERVED", "INCIDENT_RECOVERY_NOT_ASSESSED"),
@@ -284,6 +314,8 @@ def fault_execution(
     hypotheses: Sequence[Hypothesis],
     events: Sequence[ClusterEvent],
     spans: Sequence[TraceSpanObservation] = (),
+    history: Mapping[EntityRef, Sequence[ObjectVersion]] | None = None,
+    pod_statuses: Sequence[PodStatusObservation] = (),
 ) -> RootSupportRecord:
     """Execution witness plus incident effect at the exact target, never Spawned/Applied alone."""
     witnesses: list[CausalWitness] = []
@@ -337,6 +369,7 @@ def fault_execution(
                             recovered,
                             spans,
                             first_execution,
+                            pod_statuses,
                         )
                     continue
                 effects = [
@@ -386,6 +419,7 @@ def fault_execution(
                         claim_level="OBSERVED_MECHANISM_CAUSE",
                     )
                 )
+    witnesses = [_with_fault_action(w, history or {}) for w in witnesses]
     return RootSupportRecord(
         rule_id=FAULT_EXECUTION_RULE,
         rule_version="v1",
@@ -394,6 +428,37 @@ def fault_execution(
         reasons=() if witnesses else ("NO_EXECUTION_WITH_INCIDENT_EFFECT_WITNESS",),
         decisive_evidence_ids=tuple(sorted({e for w in witnesses for e in w.evidence_ids})),
         witnesses=tuple(witnesses),
+    )
+
+
+def _with_fault_action(
+    witness: CausalWitness, history: Mapping[EntityRef, Sequence[ObjectVersion]]
+) -> CausalWitness:
+    """m21 §23.2: the experiment instance's journaled ``spec.action`` and its settings, audit only."""
+    instance = witness.origin.entity_instance
+    uid = instance.uid if instance is not None else None
+    versions = [
+        v
+        for v in history.get(witness.origin.entity, ())
+        if uid is not None and v.instance_uid == uid
+    ]
+    spec = versions[-1].body.get("spec") if versions else None
+    action = spec.get("action") if isinstance(spec, dict) else None
+    if not isinstance(action, str) or not action:
+        return witness
+    settings = spec.get(action) if isinstance(spec, dict) else None
+    parameters = tuple(
+        sorted((str(k), str(v)) for k, v in settings.items() if not isinstance(v, (dict, list)))
+        if isinstance(settings, dict)
+        else ()
+    )
+    return witness.model_copy(
+        update={
+            "fault_action": action,
+            "fault_parameters": parameters,
+            "coverage": (*witness.coverage, "FAULT_ACTION_OBSERVED"),
+            "missing": tuple(m for m in witness.missing if m != "FAULT_ACTION_NOT_OBSERVED"),
+        }
     )
 
 

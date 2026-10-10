@@ -46,6 +46,7 @@ from packages.rca.model import (
     HypothesisSignature,
     InstanceResolution,
     ObjectVersion,
+    PodStatusObservation,
     PreconditionAuditReason,
     PreconditionResult,
     PreconditionStatus,
@@ -829,6 +830,7 @@ def resolve_hypotheses(
     trace_spans: Sequence[TraceSpanObservation] = (),
     object_history: Mapping[EntityRef, Sequence[ObjectVersion]] | None = None,
     observation_cutoff: datetime | None = None,
+    pod_statuses: Sequence[PodStatusObservation] = (),
 ) -> ResolutionTrace:
     """Resolve distinguishability without treating missing proof as contradiction.
 
@@ -903,7 +905,11 @@ def resolve_hypotheses(
     def executions(h: Hypothesis) -> tuple[RootSupportRecord, ...]:
         possible = change_onset_path_support(h)
         if is_chaos_kind(h.causal_actor.kind):
-            return (fault_execution(h, possible, hypotheses, events, trace_spans),)
+            return (
+                fault_execution(
+                    h, possible, hypotheses, events, trace_spans, object_history, pod_statuses
+                ),
+            )
         if h.causal_actor.kind == "Deployment":
             history = object_history or {}
             return (

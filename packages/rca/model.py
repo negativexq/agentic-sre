@@ -8,7 +8,14 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 from packages.rca.evidence_coverage import EvidenceCoverage
 
@@ -1008,6 +1015,18 @@ class CausalWitness(BaseModel):
     rule_id: str = "m21.support.change-onset-path"
     rule_version: str = "v2"
     claim_level: str = "POSSIBLE_INITIATING_CAUSE"
+    # m21 §23.2: the experiment's ``spec.action`` and that action's own settings, when journaled; audit only
+    fault_action: str | None = None
+    fault_parameters: tuple[tuple[str, str], ...] = ()
+
+    @model_serializer(mode="wrap")
+    def _omit_unobserved_action(self, handler: SerializerFunctionWrapHandler) -> Any:
+        """A witness without an observed action serializes as before §23, so its digest does not move."""
+        data = handler(self)
+        if isinstance(data, dict) and self.fault_action is None:
+            data.pop("fault_action", None)
+            data.pop("fault_parameters", None)
+        return data
 
 
 class CausalExplanation(BaseModel):

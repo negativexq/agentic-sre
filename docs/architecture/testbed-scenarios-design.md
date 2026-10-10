@@ -1311,3 +1311,48 @@ Every pre-registered criterion holds. Unlike the sixteenth, the suite started wi
 information, execution-witness recall against the fourteenth to sixteenth: `scheduled-b` again 1.0 (0.0, 0.0, 1.0);
 `config-b` 1.0 (0.33, 0.67, 0.33); `dependency-b` 0.33 (0.67, 0.67, 0.0); `competing-b` 0.33 (0.33, 0.33, 0.67). The
 2.4.0 replay agrees on every run, so these differences come from the runs, not from Rule C.
+
+## 33. The engine's baseline holds only the run's own calls (roadmap F13; proposal, 2026-10-10, awaiting the owner)
+
+### 33.1 Measured problem
+
+The effect relations (m21 §12 to §14) compare the calls during an execution with a baseline: the calls that began in
+the five minutes before the fault's first execution (m21 §16, `BASELINE_BEFORE_EXECUTION`). Tempo keeps every run's
+traces, so that window holds whatever the lab served then, including the end of the previous run.
+
+- **How often:** over every stored suite, 376 pairs of consecutive runs. In 322 of them (86%) the injection came less
+  than five minutes after the previous run's recovery; the median gap is 4.1 minutes (min 2.0, max 57.5). Each
+  `HOLDOUT` from the fourteenth to the seventeenth: 20 of 23.
+- **What it does (seventeenth `HOLDOUT`, `config-c` #2):** the change was applied at 01:41:13, so the baseline began
+  at 01:36:13. The previous repeat's faulty `payment-service` pod answered with errors until 01:36:37 (5 error calls
+  read, 01:35:43 to 01:36:37); that repeat recovered at 01:37:13. With non-success calls in the baseline, the relation
+  could not show a rise, and the run formed no execution witness although the incident's reads held 13 error calls to
+  the new pod.
+
+The quiet-baseline gate (§"Baseline health") checks the target's warnings and foreign faults, not the age of the last
+fault, so it passes such a run.
+
+### 33.2 Proposal
+
+**The injection waits until the engine's baseline window lies wholly after the lab was made quiet.**
+
+- `quiet_since` is the moment the isolation step has finished quieting the lab: the earlier run's experiments deleted,
+  its change undone, the image restored, and a fresh target pod warmed up without warnings (`_quiet_target_pod`
+  returns). The world records it.
+- Before the first inject call (decoy or main), the runner waits until
+  `quiet_since + BASELINE_BEFORE_EXECUTION + 60 s`. The constant is imported from the engine, so the harness follows a
+  change of the window; the 60 seconds cover the lag between a fault's action and its recorded `Applied`.
+- The journal records `quiet_since`, the earliest allowed injection and the actual one (`role="baseline_window"`).
+  The seeded offset (§ seeds) is unchanged and still applies; the wait only adds time when the run is faster than the
+  window.
+- Nothing else changes: the baseline gate, the calibration and the probes stay as they are.
+
+### 33.3 Consequences and measurement
+
+- A run grows by about two minutes at the median gap (a 24-run `HOLDOUT` by roughly 45 minutes).
+- This is a harness change, so §23.3 calls for a full `HOLDOUT`, pre-registered on its own. Execution-witness recall
+  of the fourteenth to seventeenth is then compared for information only; it never selects or tunes a rule.
+- Unit tests: the runner does not inject before the earliest allowed time on a fake clock; the journal entry is
+  written; a world whose `quiet_since` is long past does not wait.
+- Not in scope: the trace read's sampling (8 traces per query, from the window's start) and calls that never reach the
+  target (packet loss), both found in the same investigation and proposed separately, in that order.

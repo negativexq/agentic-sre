@@ -2229,3 +2229,34 @@ rule reads it, and the third form above holds for any fault whose calls go unans
 - **Several replicas.** When `T`'s workload has several `Ready` pods, the unanswered calls cannot be bound to `T`, and
   the form stays unknown. Binding them by the client's connection target (a pod IP on the span) would need that
   attribute, which the lab's spans do not carry.
+
+### 23.6 Implementation, replay and ITBench-Lite (2026-10-10)
+
+The third form is `unanswered_effect` in `packages/rca/service_effect.py`, with `unanswered_calls` and
+`other_server_ready` (the lifecycle ledger read of condition 3). `_service_effect_witness` tries it when §12's forms do
+not hold, and `fault_execution` records the action (`_with_fault_action`), engine 2.6.0. A witness without an observed
+action serializes as before, so its digest does not move. There is a unit test for each condition of §23.2 and each
+case of §23.5.
+
+- **Testbed replay.** Every stored database was replayed with the engine on `main` (2.5.0, `8192093`) and with this
+  one: 427 databases, 2,848 incidents, no replay error.
+  - Every leader, display and resolution is unchanged. No strong witness is lost.
+  - 62 incidents gain a strong witness, all of the third form, so their tier goes from `SUPPORTED` to `STRONG`. 61 are
+    `dep-loss` runs, and one is `pod-stress-331` (`holdout15_direct_b`), whose calls to its target, the only
+    `payment-service` pod, went unanswered. Every new witness names the run's own target pod and the symptom
+    `order-service`. 52 are on the chain recorded for their suite; the other 10 are `phase0` runs with no recorded
+    chain, and each of them names its own experiment's target. No new witness is off the chain or for a decoy.
+  - A strong witness records the action in 322 incidents: `loss` in 306, `delay` in 16 (13 `NetworkChaos`, 3 `Schedule`).
+  - 323 digests change: exactly the union of these 62 and these 322.
+  - The hard criteria of §23.4 hold: no witness off the chain or for the decoy, no new false strong authority, no
+    change in `RESOLVED`.
+- **ITBench-Lite** (`all-2.6.0-20261010T1141`, commit `84c678c`, clean tree, 0 model calls, ground truth not read
+  during prediction), against `all-2.5.0-20261009T2158`:
+  - The report is identical: every leader, answer, tier, display and score, in all 35 scenarios.
+  - No prediction holds a witness of the third form or a recorded action.
+  - In 21 scenarios an alternative's `causal_path` or `causal_explanation` differs. This is not C2: the same commit
+    gives different paths for the same alternative under different `PYTHONHASHSEED` values (Scenario-12: `serves`
+    or `backs` between equal-length routes). The tie between equal-length paths in `Topology.causal_path` follows
+    hash order; it is recorded separately and is not changed here.
+
+Next: the eighteenth `HOLDOUT`, covering F13, F14 and this amendment, pre-registered before it starts (§23.4 step 3).

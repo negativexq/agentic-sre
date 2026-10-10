@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from packages.rca.model import TraceSpanObservation
+from packages.rca.model import PodStatusObservation, TraceSpanObservation
 
 
 @dataclass(frozen=True)
@@ -124,3 +124,101 @@ def service_effect(
         fault_median > parameters.factor * baseline_median
         and fault_median > parameters.floor.total_seconds()
     )
+
+
+# ---- m21 §23: calls that never reached the target ------------------------------------------------
+
+
+@dataclass(frozen=True)
+class UnansweredCall:
+    started: datetime
+    evidence_id: str
+
+
+def unanswered_calls(
+    spans: Sequence[TraceSpanObservation], caller_service: str, target_service: str
+) -> list[UnansweredCall]:
+    """Client spans of ``caller_service`` addressed to ``target_service`` that ended in a non-success outcome with
+    no server span under them in the same fetched trace. A span still open has no outcome and is not one (§23.5)."""
+    answered = {(s.trace_id, s.parent_span_id) for s in spans if s.span_kind == "SERVER"}
+    return [
+        UnansweredCall(span.start_at, span.evidence_id)
+        for span in spans
+        if span.service == caller_service
+        and span.span_kind == "CLIENT"
+        and span.semantic_attributes.get("server.address") == target_service
+        and span.end_at is not None
+        and _non_success(span)
+        and (span.trace_id, span.span_id) not in answered
+    ]
+
+
+def _workload(pod: str) -> str:
+    return pod.rsplit("-", 2)[0]
+
+
+def other_server_ready(
+    statuses: Sequence[PodStatusObservation],
+    target_pod: str,
+    namespace: str,
+    start: datetime,
+    end: datetime,
+) -> bool | None:
+    """Whether a pod of ``target_pod``'s workload other than it may have been ``Ready`` in ``[start, end]``.
+
+    ``None`` when the lifecycle ledger holds nothing of the target itself, so it cannot show the workload. A pod
+    counts as possibly ``Ready`` when an observation shows it ``Ready`` inside the interval, or when its last
+    observation before the interval shows it ``Ready`` (nothing shows it stopped).
+    """
+    workload = _workload(target_pod)
+    mine = [s for s in statuses if s.pod.namespace == namespace and s.pod.name == target_pod]
+    if not mine:
+        return None
+    others: dict[str, list[PodStatusObservation]] = {}
+    for status in statuses:
+        name = status.pod.name
+        if status.pod.namespace == namespace and name != target_pod and _workload(name) == workload:
+            others.setdefault(name, []).append(status)
+    for observations in others.values():
+        for status in observations:
+            if (
+                status.ready is True
+                and status.observed_at >= start
+                and ((status.ready_since or status.observed_at) <= end)
+            ):
+                return True
+        before = [s for s in observations if s.observed_at < start]
+        if before and max(before, key=lambda s: s.observed_at).ready is True:
+            return True
+    return False
+
+
+def unanswered_effect(
+    pairs: Sequence[CallPair],
+    unanswered: Sequence[UnansweredCall],
+    *,
+    target_pod: str,
+    start: datetime,
+    end: datetime,
+    baseline: tuple[datetime, datetime],
+    other_ready: bool | None,
+    parameters: EffectParameters,
+) -> bool | None:
+    """§23.2, the third form, for one witness target and one symptom service.
+
+    At least ``parameters.calls`` unanswered calls inside ``[start, end]``; at least as many paired calls in the
+    ``baseline`` and no unanswered one there; and the target the only server those calls could have reached (every
+    paired call from the baseline's start to ``end`` answered by it, and no other pod of its workload ``Ready``).
+    ``None`` whenever one of these cannot be shown: an unanswered call has no pod of its own.
+    """
+    fault = [u for u in unanswered if start <= u.started <= end]
+    calm = [p for p in pairs if baseline[0] <= p.started <= baseline[1]]
+    if len(fault) < parameters.calls or len(calm) < parameters.calls:
+        return None
+    if any(baseline[0] <= u.started <= baseline[1] for u in unanswered):
+        return None
+    if any(p.target_pod != target_pod for p in pairs if baseline[0] <= p.started <= end):
+        return None
+    if other_ready is not False:
+        return None
+    return True

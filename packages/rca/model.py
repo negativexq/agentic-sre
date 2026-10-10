@@ -1008,6 +1008,9 @@ class CausalWitness(BaseModel):
     rule_id: str = "m21.support.change-onset-path"
     rule_version: str = "v2"
     claim_level: str = "POSSIBLE_INITIATING_CAUSE"
+    # m21 §23.2: the experiment's ``spec.action`` and that action's own settings, when journaled; audit only
+    fault_action: str | None = None
+    fault_parameters: tuple[tuple[str, str], ...] = ()
 
 
 class CausalExplanation(BaseModel):

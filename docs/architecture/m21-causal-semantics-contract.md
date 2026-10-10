@@ -2768,3 +2768,90 @@ The rule has no parameter. The C20 replay found the problem, so every stored run
 - **Incidents whose strong claim does not reach a declared Service,** for example a symptom on another service with no
   witness.
 - **`MULTIPLE_OBSERVED_CAUSES`** (`competing-b` with both causes strong in one incident) stays `AMBIGUOUS`.
+
+## 28. A Service with one ready Pod and that Pod are one observation (C6; owner-approved 2026-10-10)
+
+### 28.1 Measured problem
+
+After §27, the declared set's Service and Pod still each need an execution witness of their own (§27.1, corrected). An
+alert's `service` label declares the Service, the workload and the Pod together, but a witness lands on one of them:
+- the target-effect witness covers the Pod;
+- the service-level effect covers the Service (§12, §23).
+
+So **no strong claim of the 661 covers its declared set.**
+
+**Shadow (a measurement, not a rule)** over the 661 incidents with a strong leader in the C20 replay. It combines:
+- the branch implementing §25 and §27;
+- every `configuration_source` taken out of the material frontier (the effect §26 would have with a write record);
+- a Pod and a Service that selects only that Pod (in the topology) counted as covering each other.
+
+Result:
+- **318 incidents become `RESOLVED`** (`OBSERVED_MECHANISM_DISAMBIGUATED_V1`):
+  - 307 lead with the run's cause (role `cause,execution`);
+  - 11 lead with a phase-0 run's own fault (no chain);
+  - **0 lead with an actor outside the chain.**
+- The rest stay `AMBIGUOUS`: 217 with an unresolved rival, 110 with `dependency` questions, and 16 equivalent claims
+  (§24.6).
+- A looser variant gives the same 318: any entity of the alert's expansion covers the whole alert. Every one of these
+  incidents has exactly one diagnostic alert.
+- **The testbed cannot test the risk this rule carries.** All 318 have a witness on the target Pod only, and the
+  workload behind every one of them runs one replica (`payment-service` 316, `order-service` 2).
+
+### 28.2 Amendment
+
+**Rule `m21.resolution.sole-ready-pod` (v1).** In `strong_complete`, let `S` be a Service and `P` a Pod. `S` and `P`
+cover each other when all of these hold:
+1. **`S` selects `P`.** The topology has a `selects` edge `S` → `P`.
+2. **`P` is `S`'s only ready Pod throughout the witness's execution interval.** The lifecycle ledger shows no other Pod
+   that `S` selects `Ready` at any time in that interval. This is the test of §23, condition 3, applied to the
+   Service.
+   - If the ledger cannot show it, the condition does not hold and nothing is covered.
+3. **Then:**
+   - a strong witness on `P` covers `S`;
+   - a strong witness on `S` covers `P`, and through §27 `P`'s workload.
+
+**Why it is sound.** A Service sends its traffic only to the Pods it selects that are ready. While `P` is the only
+one, the Service's behaviour is `P`'s, and an effect observed at either one is the same effect. A second ready Pod
+breaks the identity, and the rule then does not apply. In a rollout in progress (§27.1's 21), for example, both Pods
+keep their own requirement.
+
+**Name-blind (§3 I3).** The rule reads `selects` edges and the lifecycle ledger, never names.
+
+**Unchanged.**
+- A Service with more than one ready Pod still needs a service-level witness.
+- A Pod that is not the only one still needs its own witness.
+- Witness formation, support, explanations, the frontier and leader selection.
+- Every other condition of `RESOLVED`. Recovery is not assessed.
+
+### 28.3 Consequences
+
+- `RESOLVED` becomes reachable, with §25, §26 and §27, where a single-replica service's Pod or Service carries the
+  witness. The engine's minor version rises (2.8.0, with §25 to §27).
+- **On the stored runs, no resolution changes,** for the reason of §27.3: `workload-config` stays open without §26's
+  write record. The replay shows the coverage only in the trace.
+- **The risk is a false `RESOLVED` on a service with several replicas,** where one Pod's failure is taken for the
+  service's. Condition 2 excludes it, but it has never been exercised: the testbed's workloads run one replica.
+
+### 28.4 Measurement, pre-registered
+
+The rule has no parameter. The C20 replay found the problem, so every stored run is development data for it.
+1. **Offline replay of every stored run** (2.7.0 against the engine with §25 to §28).
+   Hard criteria:
+   - no leader, tier or display change;
+   - no new `RESOLVED` whose leader is not the run's cause.
+
+   Reported:
+   - every coverage gained through this rule, with `S`, `P` and the ledger interval;
+   - every incident where the ledger route differs from the topology route of the shadow.
+2. **ITBench-Lite,** as a regression check only.
+3. **A `DEV` run with two replicas of the target's workload,** unscored. The rule must not cover the Service (hard).
+4. **The shared full `HOLDOUT`** (§24 to §28), pre-registered before it runs.
+   - Hard: the frozen bar, including no false `RESOLVED`.
+   - For information only: `RESOLVED` per variant, and for every diagnosis that is not `RESOLVED`, the blocking
+     condition.
+
+### 28.5 Not decided here
+
+- **Services with several ready Pods** need a service-level witness. This rule does not relax that.
+- **The `dependency` frontier questions** (110 incidents; C4).
+- **The 217 incidents with an unresolved rival that holds a fact of its own** (§24.5).

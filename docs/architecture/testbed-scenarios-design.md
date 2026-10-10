@@ -1490,3 +1490,82 @@ For information only (this never selects or tunes a rule):
   the execution's `[Applied, Recovered]`, counted from the spans each run stored: 67 of 70 here, 28 of 58 on the
   seventeenth, counted the same way (`dependency-b` 13/13 against 3/9, `competing-b` 20/20 against 12/17). These are
   stored spans, not the search results of `live-trace-design.md` §12.3, so the two counts are not comparable.
+
+## 35. Nineteenth HOLDOUT, full: pre-registration for m21 §24 to §28 (2026-10-10, owner-approved, frozen before the run)
+
+Per §23.3, a full measurement after an engine change and a lab change, together:
+- **Engine changes:**
+  - 2.7.0: C20, m21 §24.
+  - 2.8.0: m21 §25 to §28.
+    - §25: the API access the admission adds is not configuration.
+    - §26: an unchanged configuration answers its frontier question. The coverage record is frozen in the run boundary
+      (§26.6).
+    - §27: a workload is covered by a witness on its own Pod.
+    - §28: a Service with one ready Pod and that Pod are one observation.
+- **The lab change** (owner-approved 2026-10-10): the Connector image `agentic-sre/connector:dev` is rebuilt from the
+  2.8.0 commit, so that it keeps each `managedFields` entry's manager, operation and time (§26 A).
+  - It is loaded into the lab and the Connector is restarted. Nothing is published.
+  - The previous image is kept as `agentic-sre/connector:before-s26`.
+
+This is the first `HOLDOUT` in which `RESOLVED` is reachable. The offline replay (m21 §24.6, and §28 for 2.8.0) shows
+what limits it on stored runs:
+- 318 incidents with a strong leader are limited only by `workload-config`. Only §26 can answer it, and only on runs
+  whose Connector kept the write times and whose boundary froze the coverage record.
+- The replay could not measure the rest, and this run is what measures it.
+
+**Before the run: two unscored `DEV` checks** (suites `dev19-*`). The harness for each is added in its own commit
+first, and the `HOLDOUT` starts only if both hold.
+1. **§26, a configuration written inside the window.**
+   - A run of an existing variant in which `workload-config` is edited (one value, restored at teardown) after the
+     baseline and before the injection.
+   - Its `configuration_source` question on `workload-config` must stay `OPEN` with `WRITTEN_IN_WINDOW` (hard).
+   - A run of the same variant without the edit must answer it `ANSWERED_NO_CHANGE_IN_WINDOW`. If it does not, the
+     failed condition is reported and the `HOLDOUT` waits for the owner.
+2. **§28, two ready replicas.**
+   - A `direct-b` run with `payment-service` at two replicas (restored at teardown).
+   - No §28 coverage of `Service/payment-service` may be recorded, and no diagnosis may be `RESOLVED` through it
+     (hard).
+
+**The setup:**
+- **Variants and seeds:** `dependency-b` 422–424, `direct-b` 425–427, `scheduled-b` 428–430, `config-b` 431–433,
+  `negative-b` 434–436, `competing-b` 437–439, `config-c` 440–442, `negative-c` 443–445.
+- **Suites:** `holdout19-<variant>`.
+- **Engine:** 2.8.0, frozen at the merged commit recorded in the manifests.
+- **Where it runs:** as §32, from a worktree of that commit, with links to the main tree's `.venv` and `.local`.
+- **Scoring:** with §20's grader.
+
+**Criteria (hard):**
+- **Acceptance:** the frozen bar:
+  - no false strong authority;
+  - **no false `RESOLVED`** (every `RESOLVED` diagnosis leads with the run's cause or its execution instance);
+  - at least 90% valid;
+  - the decoy never named.
+- **Carried over from §34:** the effect relations and m21 §19 to §23, F10, F13, F14, the Connector and connector §17.
+- **m21 §24:** no claim explained by `m21.explanation.shared-evidence` has, as its actor, a cause in the run's chain or
+  the decoy.
+- **m21 §25:** every reference classified `api_access` is reached only through a projected volume with a
+  `serviceAccountToken` source, and the owning controller's Pod template does not reference it. This is re-checked
+  from the run's stored Pod and ReplicaSet versions.
+- **m21 §26:**
+  - every run's boundary holds `evidence_coverage`;
+  - every stored ConfigMap version observed by the rebuilt Connector carries `managedFields` times;
+  - for every `ANSWERED_NO_CHANGE_IN_WINDOW` answer, re-checked from the run's database:
+    - the last write precedes the window's start;
+    - the stream was followed since the listing;
+    - no gap of the scope overlaps `[listing, onset]`;
+    - no stored version of the object between the window's start and the onset has other content.
+- **m21 §27 and §28:** every workload, Service or Pod covered through these rules is re-checked from the run's
+  database:
+  - a workload owns the witnessed Pod through `owned_by`;
+  - for a Service, the lifecycle ledger shows no other ready Pod it selects in the witness's execution interval.
+
+**Reported beside them, for information only** (these never select or tune a rule):
+- **`RESOLVED` diagnoses per variant.** For each scored diagnosis that is not `RESOLVED`, the condition that blocked
+  it:
+  - an unresolved rival (with or without a fact of its own);
+  - each limiting frontier role, with the answer's `blocked_reason`;
+  - an uncovered declared symptom.
+- **Every `configuration_source` answer,** with its last write, listing time and coverage.
+- **The run's incidents replayed offline with engine 2.6.1** (before §24). Every change of leader, tier, display or
+  resolution is listed with its reason.
+- Recall per variant against the eighteenth, as §34.

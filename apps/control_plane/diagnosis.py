@@ -54,6 +54,7 @@ from packages.rca.investigation.state import (
 )
 from packages.rca.lifecycle import classify, status_payload
 from packages.rca.live import (
+    TRACE_CAPTURE_MAX_SERVICES,
     ChangeWatcher,
     ClusterReader,
     ListingFailure,
@@ -64,6 +65,7 @@ from packages.rca.live import (
     capture_error_logs,
     capture_traces,
     incident_window,
+    trace_slices,
 )
 from packages.rca.llm import LLMClient
 from packages.rca.manifest import alert_from_payload, event_evidence_id
@@ -343,10 +345,12 @@ class SnapshotResult:
     cycle_id: int | None = None
 
 
-TRACE_FAULT_LEAD = timedelta(minutes=2)  # an alert fires about a minute after its fault begins
-TRACE_FAULT_TAIL = timedelta(minutes=5)
-TRACE_BASELINE_FROM = timedelta(minutes=10)
-TRACE_BASELINE_TO = timedelta(minutes=5)
+# live-trace-design.md §12: one range around the first alert, read in slices on a grid anchored at it
+TRACE_RANGE_LEAD = timedelta(
+    minutes=10
+)  # the engine's baseline wherever the execution falls before the onset
+TRACE_RANGE_TAIL = timedelta(minutes=5)
+TRACE_SLICE = timedelta(seconds=60)
 
 
 def _instrumented(body: dict[str, Any]) -> bool:
@@ -958,35 +962,39 @@ class DiagnosisService:
             and body.get("metadata", {}).get("namespace")
             and _instrumented(body)
         )
-        # live-trace-design.md §9: Tempo returns a window's oldest traces first, so one wide read only ever held
-        # the quiet minutes before the fault. Two narrow reads instead: the fault around the first alert, and a
-        # baseline before it to compare the fault's calls with.
+        # live-trace-design.md §12: Tempo returns a window's oldest traces first and a search keeps 8, so a wide
+        # window yields its first seconds. One range around the first alert, one search per slice and service,
+        # and a slice this incident already read is not read again.
+        targets = list(dict.fromkeys(services))[:TRACE_CAPTURE_MAX_SERVICES]
         onset = min((alert.starts_at for alert in alerts), default=self.clock())
-        now = self.clock()
-        # §11: the two windows at once, each read sequentially, so at most two reads reach Tempo
+        end = min(self.clock(), onset + TRACE_RANGE_TAIL)
+        with self.session_factory() as session:
+            done = TraceCaptureRepository(session).read_windows(incident_id)
+        reads = [
+            (namespace, service, start, stop)
+            for start, stop in trace_slices(onset, end, lead=TRACE_RANGE_LEAD, width=TRACE_SLICE)
+            for namespace, service in targets
+            if (namespace, service, start, stop) not in done
+        ]
+        # §11: at most two reads reach Tempo at once
         with ThreadPoolExecutor(max_workers=2) as pool:
-            fault_read = pool.submit(
-                capture_traces,
-                provider_adapter,
-                services,
-                onset - TRACE_FAULT_LEAD,
-                min(now, onset + TRACE_FAULT_TAIL),
+            results = list(
+                pool.map(
+                    lambda read: capture_traces(
+                        provider_adapter, [(read[0], read[1])], read[2], read[3]
+                    ),
+                    reads,
+                )
             )
-            baseline_read = pool.submit(
-                capture_traces,
-                provider_adapter,
-                services,
-                onset - TRACE_BASELINE_FROM,
-                onset - TRACE_BASELINE_TO,
-            )
-            fault, baseline = fault_read.result(), baseline_read.result()
         capture = TraceCapture(
             tuple(
                 {
-                    (span.trace_id, span.span_id): span for span in (*baseline.spans, *fault.spans)
+                    (span.trace_id, span.span_id): span
+                    for result in results
+                    for span in result.spans
                 }.values()
             ),
-            (*fault.reads, *baseline.reads),
+            tuple(read for result in results for read in result.reads),
         )
         for read in capture.reads:
             if read.completeness == "FAILED":

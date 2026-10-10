@@ -468,3 +468,61 @@ def test_a_late_commit_after_the_manifest_snapshot_is_not_part_of_the_run(
         events = {e.source_id for e in entries if e.source_type == "EVENT_VERSION"}
         assert str(first) in events  # committed before the snapshot: in
         assert str(late) not in events  # committed after it: out
+
+
+# ---- live-trace-design.md §12: one range in one-minute slices, a slice never read twice -------------
+
+
+def test_the_trace_range_is_read_in_slices_and_a_read_slice_is_not_read_again(
+    setup: Any,  # noqa: F811
+) -> None:
+    from packages.rca.model import Alert
+    from packages.rca.provider_adapter import ProviderAdapter
+    from packages.storage.repositories import TraceCaptureRepository
+
+    factory, _, clock, incident_id = setup
+    asked: list[tuple[datetime, datetime]] = []
+
+    class CountingTempo(FakeTempo):
+        def query(self, target: Any, query: Any) -> tuple[TraceSpanObservation, ...]:
+            asked.append((query.start, query.end))
+            return super().query(target, query)
+
+    service = DiagnosisService(
+        session_factory=factory,
+        namespaces=("sre-demo",),
+        provider_readers=ProviderReaders(tempo=CountingTempo(())),
+        clock=clock,
+    )
+    onset = T0 + timedelta(minutes=11)
+    alert = Alert(
+        name="HighLatency", service="order-service", namespace="sre-demo", starts_at=onset
+    )
+
+    def capture(run_id: str) -> None:
+        adapter = ProviderAdapter(run_id, "CAPTURE", factory, service.provider_readers)
+        service._capture_traces(incident_id, [alert], (), adapter)
+
+    clock.now = onset + timedelta(minutes=2)
+    capture("r1")
+    assert sorted(asked) == [
+        (onset - timedelta(minutes=10 - k), onset - timedelta(minutes=9 - k)) for k in range(12)
+    ]
+    asked.clear()
+    clock.now = onset + timedelta(minutes=3, seconds=30)
+    capture("r2")
+    assert sorted(asked) == [
+        (onset + timedelta(minutes=2), onset + timedelta(minutes=3)),
+        (onset + timedelta(minutes=3), onset + timedelta(minutes=3, seconds=30)),
+    ]
+    asked.clear()
+    capture("r3")
+    assert asked == []
+    clock.now = onset + timedelta(minutes=20)
+    capture("r4")
+    assert sorted(asked) == [
+        (onset + timedelta(minutes=3), onset + timedelta(minutes=4)),
+        (onset + timedelta(minutes=4), onset + timedelta(minutes=5)),
+    ]
+    with factory() as session:
+        assert len(TraceCaptureRepository(session).read_windows(incident_id)) == 16

@@ -2380,7 +2380,7 @@ the same incidents on both sides.
   - 16 go to `EQUIVALENT_OR_INCOMPARABLE_PLAUSIBLE_HYPOTHESES`. These are a `Schedule` beside its own spawned
     `StressChaos` experiments, and successive experiments in the long runs. They were `AMBIGUOUS` before and stay so.
 
-  Behind the frontier, a declared workload symptom stays without a witness (§27).
+  Behind the frontier, declared symptoms stay without a strong witness (§27.1, corrected; §28).
 
 **2. ITBench-Lite:** run `all-2.7.0-20261010T1851` at `de434eb`, against `all-2.6.1-seed1-20261010T1228`. Every one of
 the 35 prediction files is byte-identical; macro F1 0.5143 and verified 9 of 18 are unchanged.
@@ -2520,8 +2520,11 @@ the 428; a measurement, not a rule):
 - **0 become `RESOLVED`.**
 - 110 stay limited by their `dependency` questions (`Service/kafka`, `payment-service`, `redis`).
 - 318 fall to `SUPPORTED_POSSIBLE_CAUSE` (`mechanism_execution`). Each has one supported claim, and it is strong, but
-  one of its three declared symptoms has no witness: `Deployment/payment-service` in 316, `Deployment/order-service` in
-  2. The frontier basis hid this, because `MATERIAL_CAUSAL_FRONTIER` is recorded over it. This is C6.
+  its execution witnesses do not cover every declared symptom. The frontier basis hid this, because
+  `MATERIAL_CAUSAL_FRONTIER` is recorded over it. This is C6 (§27, §28).
+  - *Corrected 2026-10-10:* this first read named only the workload (`Deployment/payment-service`) as missing. It
+    counted every witness of the claim, including D1's `POSSIBLE_INITIATING_CAUSE` path witnesses, which
+    `strong_complete` does not read. With the execution witnesses only, the `Service` is missing as well (§27.1).
 
 So `RESOLVED` on these runs needs §25, this section and C6 together, and for 110 of them the dependency questions as
 well. This section is proposed for its own soundness, not for a count.
@@ -2615,8 +2618,8 @@ The rule has no parameter.
 
 ### 26.5 Not decided here
 
-- **C6, the declared symptom without a witness** (`Deployment/payment-service` beside the Service-level witness).
-  This is what keeps the 318 from `RESOLVED` once the frontier is answered.
+- **C6, the declared symptoms without an execution witness** (the workload and the Service beside a Pod witness; §27,
+  §28). This is what keeps the 318 from `RESOLVED` once the frontier is answered.
 - **The `dependency` questions** of the 110 (C4 as well). A dependency's role is answered by its health, not by a
   write record.
 - Whether the change stream should be followed before a run's window starts, so that continuity from the window's start
@@ -2653,7 +2656,7 @@ diagnosis is as before.
 `resolution.py`). The shadow of §26.1 shows what happens once the frontier is answered:
 - 318 incidents still miss `RESOLVED`;
 - each has exactly one supported claim, and it is strong;
-- **one of its three declared symptoms has no witness.**
+- **its execution witnesses do not cover every declared symptom.**
 
 The declared set comes from `symptom_entities` (`signals.py`). An alert's `service` label is expanded into every
 workload, Service and Pod carrying that name (`entities_for_service`). An alert for `payment-service` thus declares
@@ -2669,19 +2672,24 @@ The witness forms cover two of them:
 **No witness form ever names a workload.** A workload has no failure observation of its own; it fails through its
 Pods.
 
-Measured over every incident with a strong leader in the C20 replay (engine 2.7.0, 661 incidents; a measurement, not
-a rule):
-- **225** strong claims cover every declared symptom.
-- **436** miss at least one. Every missing symptom, without exception, is a workload (`Deployment/payment-service`;
-  `Deployment/order-service` in the `scheduled-b` runs). In every one of these incidents, a witness covers a Pod of that
-  same workload.
-- **Combined with §26's shadow** (every `configuration_source` answered), the 318 incidents would become `RESOLVED`:
-  - In 307, the leader is the run's cause (role `cause,execution`). By suite: `competing-b` 107, `dependency-b` 100,
-    `direct-b` 92, and 8 in the early slices.
-  - The other 11 come from phase-0 runs without a chain (`NetworkChaos` `dep-loss-908/909/914/918`, the phase's own
-    faults).
-  - **No leader is outside the run's chain.**
-  - The other 110 keep their `dependency` questions.
+**Corrected 2026-10-10.** The first measurement of this section counted every witness of the strong claim, including
+D1's `POSSIBLE_INITIATING_CAUSE` path witnesses. `strong_complete` reads only the execution witnesses
+(`OBSERVED_MECHANISM_CAUSE`). So its figures were wrong:
+- "225 cover every declared symptom";
+- "436 miss only a workload";
+- "318 would become `RESOLVED`".
+
+Measured again over every incident with a strong leader in the C20 replay (engine 2.7.0, 661 incidents; a measurement,
+not a rule), with execution witnesses only:
+- **No strong claim covers every declared symptom.**
+- **415** have a witness on the target Pod only; the workload and the Service are missing. This rule covers the
+  workload; the Service stays missing.
+- **225** have a service-level witness on the Service only (the caller's side); the workload and the caller's Pod are
+  missing. This rule cannot cover them, because no Pod is witnessed.
+- **21** have a witness on one of two declared Pods (a rollout in progress); the other Pod and the Service are missing.
+
+**So this rule alone resolves nothing.** It remains sound and is kept. What is still missing is the link between a
+Pod and its Service (§28).
 
 Because `MATERIAL_CAUSAL_FRONTIER` is recorded over `SUPPORTED_POSSIBLE_CAUSE`, today's diagnoses never show this
 coverage failure.
@@ -2719,16 +2727,16 @@ coverage failure.
 
 ### 27.3 Consequences
 
-- `RESOLVED` becomes reachable where only the workload was missing. The engine's minor version rises, together with
-  §25 and §26 if they are approved together.
+- On its own, the rule makes no incident `RESOLVED` (§27.1, corrected): the Service stays uncovered. The engine's
+  minor version rises, together with §25 and §26.
 - **On the stored runs, no resolution changes.** All 318 are also limited by `workload-config`, which only §26 can
   answer, and §26 cannot act on the stored runs (no `managedFields`).
   - The replay shows the coverage change only in the trace: the per-claim coverage and the unresolved dimensions.
   - The `RESOLVED` count can only be measured on a new `HOLDOUT`, with §25 and §26.
 - **The risk is a false `RESOLVED`.**
   - It needs a strong witness on a Pod of the workload while the declared symptom belongs to another cause.
-  - In `competing-b`, the runs hold two causes. The 107 incidents that would resolve name one of them; each is
-    resolved only because its own witnesses cover every one of its declared symptoms.
+  - In `competing-b`, the runs hold two causes. An incident there resolves only if its own claim's execution
+    witnesses cover every one of its declared symptoms.
   - The bar's hard criterion stays: no false `RESOLVED`.
 - **Recording the basis.** Today a coverage failure is hidden behind `MATERIAL_CAUSAL_FRONTIER`. The trace should
   record both, so that the next blocker is visible:
@@ -2747,8 +2755,7 @@ The rule has no parameter. The C20 replay found the problem, so every stored run
 
    Reported:
    - every coverage change, with the workload and its Pod;
-   - any of the 436 that ownership alone does not cover (the measurement above used `workload_of`, which can fall back
-     to a name).
+   - any workload with a witnessed Pod that ownership alone does not cover (`workload_of` can fall back to a name).
 2. **ITBench-Lite** as a regression check only.
 3. **A full `HOLDOUT`,** pre-registered once and shared with §24, §25 and §26 if the owner approves them together.
    - Hard criteria: the frozen bar, including no false `RESOLVED`.
@@ -2759,5 +2766,5 @@ The rule has no parameter. The C20 replay found the problem, so every stored run
 
 - **The `dependency` frontier questions** (110 incidents; C4).
 - **Incidents whose strong claim does not reach a declared Service,** for example a symptom on another service with no
-  witness. None of the measured 436 needed one.
+  witness.
 - **`MULTIPLE_OBSERVED_CAUSES`** (`competing-b` with both causes strong in one incident) stays `AMBIGUOUS`.

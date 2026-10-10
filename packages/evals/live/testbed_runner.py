@@ -151,6 +151,8 @@ class RunParameters:
     loss_percent: int = 0
     # design §35 DEV check 1: one value of the workloads' ConfigMap is written after the baseline, before the injection
     edit_config: bool = False
+    # design §35 DEV check 2: how many replicas the faulted workload runs with
+    replicas: int = 1
 
 
 # The HOLDOUT variants B (design §12.2.2): the injection differs from the family's variant A.
@@ -223,6 +225,8 @@ def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
     if "edit_config" in spec.parameters:
         # design §35: drawn after the others, so the variant's other draws of a seed stay as they were
         params = dataclasses.replace(params, edit_config=draw("edit_config", 0.0) >= 0.5)
+    if "replicas" in spec.parameters:
+        params = dataclasses.replace(params, replicas=int(draw("replicas", 1.0)))
     return params
 
 
@@ -276,6 +280,10 @@ class StoredDiagnosis:
 
 class World(Protocol):
     """Everything the protocol needs from the lab."""
+
+    def shape(self, params: RunParameters) -> None:
+        """The lab's shape the next isolation sets up for the run (design §35: the target's replicas)."""
+        ...
 
     def isolate(self, run_id: str) -> None: ...
 
@@ -842,6 +850,7 @@ def run_once(
             verb="check", object="code", role="code_identity", payload=dict(code_identity)
         )
     try:
+        world.shape(params)
         world.isolate(run_id)
         world.start_load(params.load_rps)  # the client probe and the alerts need traffic
         # 1. quiet baseline, then thresholds fixed from it and written to the journal

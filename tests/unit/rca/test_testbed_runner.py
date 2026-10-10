@@ -78,6 +78,9 @@ class FakeWorld:
     def _degraded(self) -> bool:
         return self.injected is not None and self.removed is None
 
+    def shape(self, params: RunParameters) -> None:
+        self.calls.append(f"shape:{params.replicas}")
+
     def isolate(self, run_id: str) -> None:
         self.calls.append(f"isolate:{run_id}")
         if self.fail_on_isolate:
@@ -234,7 +237,8 @@ def test_a_complete_run_is_valid_ordered_and_scored(tmp_path: Path) -> None:
     ):
         assert timeline.stamp(name) is not None, name
     assert outcome.score is not None and outcome.score.valid
-    assert world.calls[0].startswith("isolate:s1-dependency-delay-0")
+    assert world.calls[0] == "shape:1"
+    assert world.calls[1].startswith("isolate:s1-dependency-delay-0")
     assert world.calls[-2:] == ["stop_load", "cleanup"]
 
 
@@ -330,6 +334,16 @@ def test_a_config_edit_is_drawn_last_and_leaves_the_other_draws_as_they_were() -
     plain, edit = derive_parameters(spec, 7), derive_parameters(edited, 7)
     assert not plain.edit_config and edit.edit_config
     assert dataclasses.replace(edit, edit_config=False) == plain
+
+
+def test_replicas_are_drawn_last_and_leave_the_other_draws_as_they_were() -> None:
+    spec = manifest().spec("dependency-delay")
+    scaled = spec.model_copy(
+        update={"parameters": {**spec.parameters, "replicas": ParameterRange(low=2, high=2)}}
+    )
+    plain, two = derive_parameters(spec, 7), derive_parameters(scaled, 7)
+    assert (plain.replicas, two.replicas) == (1, 2)
+    assert dataclasses.replace(two, replicas=1) == plain
 
 
 def test_calibration_sits_well_above_the_baseline_and_never_below_the_floor() -> None:

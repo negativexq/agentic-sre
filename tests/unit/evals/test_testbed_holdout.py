@@ -45,6 +45,14 @@ def test_the_edited_dev_variant_is_variant_b_with_its_configuration_written() ->
     assert edited.loss_percent == plain.loss_percent
 
 
+def test_the_two_replica_dev_variant_is_variant_b_with_a_second_replica() -> None:
+    spec = SPECS["direct-b-two-replicas"](1, (1,))
+    assert (spec.scenario_id, spec.tier) == ("direct-stress-payment", "DEV")
+    two, plain = derive_parameters(spec, 1), derive_parameters(SPECS["direct-b"](1, (1,)), 1)
+    assert (two.replicas, plain.replicas) == (2, 1)
+    assert two.cpu_workers == plain.cpu_workers
+
+
 def test_a_manifest_without_an_engine_commit_keeps_its_old_digest() -> None:
     spec = SPECS["dependency-b"](3, (1, 2, 3))
     old = SuiteManifest(

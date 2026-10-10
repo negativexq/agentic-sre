@@ -211,6 +211,7 @@ class LabWorld:
         self._driver: WorkloadDriver | None = None
         self.forwards_file = forwards_file
         self._quiet_since: datetime | None = None
+        self._replicas = 1  # design §35 DEV check 2: the target's replicas for the next run
 
     # ---- plumbing ------------------------------------------------------------------------------
 
@@ -259,6 +260,31 @@ class LabWorld:
     def quiet_since(self) -> datetime | None:
         return self._quiet_since
 
+    def shape(self, params: RunParameters) -> None:
+        self._replicas = params.replicas
+
+    def _wanted_replicas(self, app: str) -> int:
+        return self._replicas if app == self.target_app else 1
+
+    def _set_replicas(self, app: str, count: int) -> None:
+        """Scale a workload; one already at ``count`` is not written again."""
+        held = self._run(
+            [
+                "kubectl",
+                "-n",
+                NAMESPACE,
+                "get",
+                "deployment",
+                app,
+                "-o",
+                "jsonpath={.spec.replicas}",
+            ]
+        )
+        if held.stdout.strip() != str(count):
+            self._run(
+                ["kubectl", "-n", NAMESPACE, "scale", f"deployment/{app}", f"--replicas={count}"]
+            )
+
     def isolate(self, run_id: str) -> None:
         """Quiet the lab, then give the run a fresh control plane and connector (design §3).
 
@@ -278,6 +304,8 @@ class LabWorld:
         self._unset_delay()  # a run that died mid-way may have left the change in place
         self._restore_image()
         self._restore_config()
+        # only payment-service is ever scaled (design §35); a run that died scaled leaves it so
+        self._set_replicas("payment-service", self._wanted_replicas("payment-service"))
         self._quiet_target_pod()
         self._quiet_since = self.clock.now()  # design §33: no earlier run's fault acts from here on
         for namespace in WATCHED_NAMESPACES:
@@ -460,7 +488,9 @@ class LabWorld:
                     ]
                 ).stdout
             )["items"]
-            return len(items) == 1 and all("deletionTimestamp" not in i["metadata"] for i in items)
+            return len(items) == self._wanted_replicas(self.target_app) and all(
+                "deletionTimestamp" not in i["metadata"] for i in items
+            )
 
         self._wait(f"the old {self.target_app} pod to terminate", single_pod, 120)
 
@@ -1212,6 +1242,7 @@ class LabWorld:
         self._restore_strategy()
         self._restore_image()
         self._restore_config()
+        self._set_replicas("payment-service", 1)
         self._delete_experiments()
         if self._forwarder is not None:
             self._forwarder.stop_all()
@@ -1428,6 +1459,13 @@ SPECS: dict[str, Callable[..., ScenarioSpec]] = {
         spawn_every_seconds=ParameterRange(low=120, high=120),
     ),
     "config-b": _variant_b(config_spec, "config-image-payment"),
+    # design §35 DEV check 2: variant B of the direct family with payment-service at two ready replicas
+    "direct-b-two-replicas": lambda repeats, seeds, tier="DEV": _variant_b(
+        direct_pod_spec,
+        "direct-stress-payment",
+        cpu_workers=ParameterRange(low=56, high=72),
+        replicas=ParameterRange(low=2, high=2),
+    )(repeats, seeds, tier=tier),
     # design §35 DEV check 1: variant B of the dependency family with the workloads' ConfigMap written in the window
     "dependency-b-edited": lambda repeats, seeds, tier="DEV": _variant_b(
         dependency_spec,

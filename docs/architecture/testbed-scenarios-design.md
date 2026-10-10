@@ -1432,3 +1432,61 @@ Reported beside them, for information:
 - F13's waits (`waited_seconds`) and the actions recorded on witnesses.
 
 That comparison is not a criterion and never selects or tunes a rule.
+
+### 34.1 Eighteenth HOLDOUT result (2026-10-10, engine 2.6.1, 24 runs from a worktree)
+
+**Check before the run (Tempo).** With `GOMEMLIMIT` set and the blocks copied back, the capture replayed ten times in
+a row, then two at once four times, kept Tempo's anonymous memory at most 1,495 MiB (limit 2 GiB); no restart, no OOM
+kill. The page cache rose to the limit and was reclaimed, as it may be.
+
+**24/24 valid**; 0 false strong authority, 0 false `RESOLVED`, the decoy never named.
+
+| Variant | Valid | Cause | Instance | Execution witness | Group |
+|---|---|---|---|---|---|
+| `dependency-b` | 3/3 | 1.0 | 1.0 | 1.0 | |
+| `direct-b` | 3/3 | 1.0 | 1.0 | 1.0 | |
+| `scheduled-b` | 3/3 | 1.0 | 1.0 | 1.0 | |
+| `config-b` | 3/3 | 1.0 | 1.0 | 1.0 | |
+| `negative-b` | 3/3 | 1.0 | 1.0 | 1.0 | |
+| `competing-b` | 3/3 | 1.0 | 1.0 | 1.0 | 0.88 |
+| `config-c` | 3/3 | 1.0 | 1.0 | 1.0 | |
+| `negative-c` | 3/3 | 1.0 | 1.0 | 1.0 | |
+
+- **Effect relations:** 93 scored diagnoses; no scored root and no strong witness (52) off the chain. One run with
+  failed trace reads (`config-c` #0, 3 of its reads, see F14), 23 of 24 without: above the 90% bar.
+- **m21 §19 and §20:** no leader from an execution after the onset; no scored diagnosis `NOT_ESTABLISHED`.
+- **m21 §21:** all 45 scored diagnoses led by a chaos experiment have their family `EXACT` and the experiment's UID.
+- **m21 §22:** no scored diagnosis has a `Schedule` or experiment claim holding chaos objects of another incarnation.
+- **F10:** every journal opens with `code_identity` naming the worktree, `dd63bd6` (the manifests' `engine_commit`)
+  and `dirty` false; after the suite, no `forwards.json` and no testbed forward; no repeat was set aside.
+- **F13:** every run journals `baseline_window` with `earliest_injection` = `quiet_since` + 6 min, and no inject call
+  (decoy or main) came before it. The waits were 274 to 292 s (median 284 s); the suite took 4 h 37 min.
+- **F14:** 3,726 trace reads, each at most 60 s and inside `[onset − 10 min, onset + 5 min]`; no slice read twice.
+  The 3 failed reads are one slice of `config-c` #0, read for three services: it was 0.78 s long and lay within one
+  second, and the reader sends whole seconds, so Tempo got `start` = `end` and answered 400 (checked by hand: `end` =
+  `start` + 1 is answered). This is a defect of the slicing, not of Tempo; it is proposed separately.
+- **m21 §23:**
+  - 7 witnesses of the third form (`dependency-b` 4, `competing-b` 3), each naming its run's own target pod and the
+    run's experiment; none for the decoy;
+  - the 24 databases replayed offline with engine 2.5.0 (`8192093`): all 106 incidents keep their leader, display,
+    shown candidates and resolution. 6 incidents (the loss variants) go from `SUPPORTED` to `STRONG`, each through a
+    witness of the third form; 21 digests change, all in the loss variants, where the witnesses also record the
+    action (`loss`, 18 witnesses).
+- **Tempo:** sampled every 30 s through the suite (549 samples): anonymous memory at most 1,576 MiB, no restart, no
+  OOM kill.
+- **The Connector:** no run's database holds an enrollment; the running pod (started 17:53 UTC, during the last
+  run) logs "identity restored", never "enrolled". **Connector §17:** 0 of 24 runs opened an incident before their
+  injection.
+
+Every pre-registered criterion holds.
+
+For information only (this never selects or tunes a rule):
+- Execution-witness recall per variant, against the fourteenth to seventeenth: `dependency-b` 1.0 (0.67, 0.67, 0.0,
+  0.33); `competing-b` 1.0 (0.33, 0.33, 0.67, 0.33); `negative-b` 1.0 (0.67 on the seventeenth); `config-c` 1.0
+  (0.67); the others 1.0 as on the seventeenth. In the 2.5.0 replay, 2 of 3 runs of each loss variant hold a strong
+  claim, and the third form adds the third run's. So, for the loss variants, the rise from 0.33 to 0.67 comes from
+  the runs (F13, F14), and from 0.67 to 1.0 from §23.
+- Rows (incident, chaos execution, symptom service) with at least 3 traces of the symptom service that began inside
+  the execution's `[Applied, Recovered]`, counted from the spans each run stored: 67 of 70 here, 28 of 58 on the
+  seventeenth, counted the same way (`dependency-b` 13/13 against 3/9, `competing-b` 20/20 against 12/17). These are
+  stored spans, not the search results of `live-trace-design.md` §12.3, so the two counts are not comparable.

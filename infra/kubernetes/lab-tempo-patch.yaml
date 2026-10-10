@@ -1,12 +1,16 @@
 # Lab-only memory headroom for Tempo. With the 1 GiB limit it was OOM-killed 23 times in 35 hours under the
 # testbed's trace volume; each restart failed the reads made meanwhile (11% of the trace reads of the ten-hour
-# product-mode run) and can lose the traces it held. Applied by `make lab-tune`; the observability manifest
-# stays as it is.
+# product-mode run) and can lose the traces it held. GOMEMLIMIT tells the Go runtime the limit, so it collects
+# the garbage a capture's reads leave before reaching it (testbed-scenarios-design.md section 34). Applied by
+# `make lab-tune`; the observability manifest stays as it is.
 spec:
   template:
     spec:
       containers:
         - name: tempo
+          env:
+            - name: GOMEMLIMIT
+              value: 1600MiB
           resources:
             limits:
               memory: 2Gi

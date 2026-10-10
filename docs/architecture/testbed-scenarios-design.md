@@ -1371,3 +1371,64 @@ fault, so it passes such a run.
 previous run's recovery, but the isolation step itself takes most of that gap, and the lab is quiet only at its end:
 in the `phase0`, the injection would otherwise have come about 70 s after `quiet_since`. A run therefore grows by
 about five minutes, a 24-run `HOLDOUT` by about two hours.
+
+## 34. Eighteenth HOLDOUT, full: pre-registration for F13, F14 and m21 §23 (2026-10-10, frozen before the run)
+
+Per §23.3, a full measurement after a harness change (F13, §33), a capture change (F14, `live-trace-design.md` §12)
+and an engine change (C2, m21 §23, engine 2.6.0), together, as the owner decided (2026-10-10). Engine 2.6.1 only makes
+a tie between candidate paths independent of hash order; it changes the alternatives shown, never a leader, tier,
+resolution or digest.
+
+**One lab change since the fifteenth (owner-approved 2026-10-10): Tempo's memory limit is known to its runtime.**
+- *Measured:* Tempo used 1,410 MiB of its 2 GiB limit, of which 35 MiB was live heap. Replaying one incident's first
+  capture on a window of the seventeenth (45 slice searches, 208 trace fetches, two at a time) raised its memory by
+  303 MiB, and 113 MiB stayed after the reads ended. Ingestion and compaction are small (about 18 MB of blocks an
+  hour). The growth is garbage the Go runtime collects only when its heap doubles, since it does not know the limit;
+  the seventeenth's kill (01:49 UTC) is consistent with it.
+- *Change:* `GOMEMLIMIT=1600MiB` on the lab's Tempo (`infra/kubernetes/lab-tempo-patch.yaml`, applied by
+  `make lab-tune`), so the runtime collects before the limit. The limit itself and Tempo's configuration are unchanged.
+- *Data:* the new pod starts with an empty `emptyDir`, so the stored blocks are copied out before the rollout and back
+  in after it.
+- *Check before the run:* the same capture replayed ten times in a row, then two at once; Tempo's memory stays below its
+  limit, and it does not restart.
+
+**The setup:**
+- **Variants and seeds:** `dependency-b` 398–400, `direct-b` 401–403, `scheduled-b` 404–406, `config-b` 407–409,
+  `negative-b` 410–412, `competing-b` 413–415, `config-c` 416–418, `negative-c` 419–421.
+- **Suites:** `holdout18-<variant>`.
+- **Engine:** 2.6.1, frozen at the commit in the manifests.
+- **Where it runs:** as §32, from a worktree of that commit, with links to the main tree's `.venv` and `.local`.
+- **Scoring:** with §20's grader.
+- **Duration:** about two hours longer than the seventeenth, from F13's wait (§33.4).
+
+**Criteria:**
+- **Acceptance:** the frozen bar (no false strong authority, no false `RESOLVED`, at least 90% valid, the decoy never
+  named).
+- **Effect relations and m21 §19, §20:** as §28.
+- **m21 §21:** as §30.
+- **m21 §22:** as §32: no scored diagnosis has a `Schedule` or experiment claim holding chaos objects of another
+  incarnation.
+- **F10:** as §32 (`code_identity`, no forward left after the suite, every repeat set aside reported and run again).
+- **F13:**
+  - every run's journal has `baseline_window` with `earliest_injection` = `quiet_since` + 6 min;
+  - no inject call of the run (decoy or main) comes before its `earliest_injection`.
+- **F14:**
+  - every recorded trace read of an incident lies inside `[onset − 10 min, onset + 5 min]` and spans at most 60 s;
+  - no (service, slice) is read twice for an incident unless its earlier read failed;
+  - Tempo's restart count before and after the suite, its peak memory (`memory.peak`), and every failed read, are
+    reported.
+- **m21 §23:**
+  - every witness of the third form (`UNANSWERED_CALLS_SINGLE_SERVER`) names the run's own target pod, and an actor on
+    the run's chain; none names the decoy;
+  - the run's incidents are replayed offline with engine 2.5.0 (before §23). Every change of leader, tier, display or
+    resolution is listed with its reason.
+- **The Connector and connector §17:** as §29.
+
+Reported beside them, for information:
+- cause, instance and execution-witness recall per variant against the fourteenth to seventeenth, the loss variants
+  (`dependency-b`, `competing-b`) in particular;
+- per variant, the share of chaos executions with at least 3 calls of the symptom service read inside them, against
+  the seventeenth (§12.5);
+- F13's waits (`waited_seconds`) and the actions recorded on witnesses.
+
+That comparison is not a criterion and never selects or tunes a rule.

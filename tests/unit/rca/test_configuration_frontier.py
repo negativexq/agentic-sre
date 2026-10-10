@@ -243,3 +243,35 @@ def test_the_connector_keeps_only_the_write_times() -> None:
     empty: dict[str, Any] = {}
     keep_write_times(empty)
     assert empty == {}
+
+
+def test_the_investigation_keeps_the_rules_answer_and_its_named_condition() -> None:
+    from test_fault_execution_support import OFF, full, source
+
+    from packages.rca.engine import build_case, diagnose_case
+    from packages.rca.investigation.graph import _investigated_answers
+    from packages.rca.model import FrontierAnswer, InvestigationStopReason
+
+    diagnosis = diagnose_case(build_case(source(full())), config=OFF)
+    observed = FrontierAnswer(alternative_id="a:observed", question="q", state="OPEN")
+    answered = answer(listing())
+    written = answer(listing(written="2025-01-01T12:30:00Z")).model_copy(
+        update={"alternative_id": "alternative:written"}
+    )
+    final = _investigated_answers(
+        diagnosis,
+        (observed, answered, written),
+        (),
+        InvestigationStopReason.TURN_BUDGET_EXHAUSTED,
+    )
+    by_id = {a.alternative_id: a for a in final}
+    assert (by_id["a:observed"].investigation_state, by_id["a:observed"].blocked_reason) == (
+        "BLOCKED_BUDGET",
+        "TURN_BUDGET_EXHAUSTED",
+    )
+    assert by_id[answered.alternative_id].investigation_state == "ANSWERED"
+    assert by_id[answered.alternative_id].blocked_reason is None
+    assert (by_id["alternative:written"].state, by_id["alternative:written"].blocked_reason) == (
+        "OPEN",
+        "WRITTEN_IN_WINDOW",
+    )

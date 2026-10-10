@@ -18,6 +18,8 @@ from pydantic import BaseModel
 from packages.rca.engine import Case, EngineConfig, build_case, diagnose_case
 from packages.rca.epistemic_digest import diagnosis_epistemic_digest
 from packages.rca.frontier import (
+    ANSWERED_STATES,
+    UNCHANGED_CONFIGURATION_RULE,
     apply_frontier_progress,
     covered_frontier_dimensions,
 )
@@ -91,6 +93,7 @@ from packages.rca.model import (
     Diagnosis,
     EntityRef,
     Finding,
+    FrontierAnswer,
     GapDimension,
     GapOutcomeKind,
     GapResolvability,
@@ -105,6 +108,7 @@ from packages.rca.model import (
     InvestigationGapState,
     InvestigationHypothesisState,
     InvestigationLedgerEntry,
+    InvestigationObservation,
     InvestigationPolicyKind,
     InvestigationResult,
     InvestigationStep,
@@ -2343,6 +2347,45 @@ def _route_after_progress(state: InvestigationState) -> str:
     return "finalize" if state.get("stop_reason") is not None else "select_action"
 
 
+def _investigated_answers(
+    diagnosis: Diagnosis,
+    frontier_answers: Sequence[FrontierAnswer],
+    observations: Sequence[InvestigationObservation],
+    reason: InvestigationStopReason,
+) -> list[FrontierAnswer]:
+    """Each frontier answer with how far the investigation got on its question."""
+    alternatives = {a.alternative_id: a for a in diagnosis.structural_alternatives}
+    answers = []
+    for answer in frontier_answers:
+        alternative = alternatives.get(answer.alternative_id)
+        reads = [
+            o for o in observations if alternative and o.target in alternative.observation_targets
+        ]
+        phase = (
+            "ANSWERED"
+            if answer.state in ANSWERED_STATES
+            else "BLOCKED_ACCESS"
+            if any(o.error for o in reads)
+            else "BLOCKED_BUDGET"
+            if "BUDGET" in reason.value or "WALL_TIME" in reason.value
+            else "INVESTIGATED_INCONCLUSIVE"
+            if reads
+            else "UNEXPLORED"
+        )
+        # m21 §26: the unchanged-configuration rule names its own failed condition, which no read changes
+        blocked = (
+            answer.blocked_reason
+            if answer.rule_id == UNCHANGED_CONFIGURATION_RULE
+            else reason.value
+            if phase.startswith("BLOCKED")
+            else None
+        )
+        answers.append(
+            answer.model_copy(update={"investigation_state": phase, "blocked_reason": blocked})
+        )
+    return answers
+
+
 def _finalize(state: InvestigationState) -> dict[str, Any]:
     reason = state.get("stop_reason") or InvestigationStopReason.NO_PROGRESS
     diagnosis = state["current_diagnosis"].model_copy(
@@ -2354,34 +2397,9 @@ def _finalize(state: InvestigationState) -> dict[str, Any]:
     )
     trace = diagnosis.resolution_trace
     if trace is not None and trace.frontier_answers:
-        alternatives = {a.alternative_id: a for a in diagnosis.structural_alternatives}
-        answers = []
-        for answer in trace.frontier_answers:
-            alternative = alternatives.get(answer.alternative_id)
-            reads = [
-                o
-                for o in state["observations"]
-                if alternative and o.target in alternative.observation_targets
-            ]
-            phase = (
-                "ANSWERED"
-                if answer.state == "ANSWERED_ROLE_TRANSFERRED"
-                else "BLOCKED_ACCESS"
-                if any(o.error for o in reads)
-                else "BLOCKED_BUDGET"
-                if "BUDGET" in reason.value or "WALL_TIME" in reason.value
-                else "INVESTIGATED_INCONCLUSIVE"
-                if reads
-                else "UNEXPLORED"
-            )
-            answers.append(
-                answer.model_copy(
-                    update={
-                        "investigation_state": phase,
-                        "blocked_reason": reason.value if phase.startswith("BLOCKED") else None,
-                    }
-                )
-            )
+        answers = _investigated_answers(
+            diagnosis, trace.frontier_answers, state["observations"], reason
+        )
         by_id = {a.alternative_id: a for a in answers}
         diagnosis = diagnosis.model_copy(
             update={

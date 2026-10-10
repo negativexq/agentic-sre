@@ -2863,7 +2863,9 @@ The rule has no parameter. The C20 replay found the problem, so every stored run
   `api_access`, which is derived and not material, unless an observed content change falls before the onset.
 - **§26 A:** the Connector keeps each `managedFields` entry's manager, operation and time (`keep_write_times`).
 - **§26 B:** `m21.frontier.unchanged-configuration` in `frontier.py`, answer `ANSWERED_NO_CHANGE_IN_WINDOW` with
-  `last_written_at` and `listed_at`, or `OPEN` with the condition that failed.
+  `last_written_at` and `listed_at`, or `OPEN` with the condition that failed. The bounded investigation keeps
+  both: an answered question is `ANSWERED`, and an open one keeps its named condition rather than the
+  investigation's stop reason (found in the first `DEV` run, §35).
 - **§26.6:** the run boundary freezes `evidence_coverage`; the live diagnosis and the replay read the same record.
 - **§27 and §28:** `_covered_symptoms` in `resolution.py`, through `owned_by` and the lifecycle ledger only. A
   diagnosis limited by the frontier also names `mechanism_execution` when a declared symptom stays uncovered.

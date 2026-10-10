@@ -204,12 +204,17 @@ def score_findings(
                 extras.setdefault(finding.kind, min(value, top_value))
         total = top_value + config.extra_finding_weight * sum(sorted(extras.values())[-2:])
         reached: set[EntityRef] = set()
-        causal_path: tuple[CausalHop, ...] = ()
-        for affected in _affected_entities(scored[0][1], context.topology):
+        shortest: tuple[CausalHop, ...] | None = None
+        # the finding's own entity first, then by name, so a tie between equal-length paths never follows hash order
+        for affected in sorted(
+            _affected_entities(scored[0][1], context.topology),
+            key=lambda ref: (ref != entity, ref.canonical),
+        ):
             reached.update(context.topology.causal_reachable(affected))
             path = context.topology.causal_path(affected, context.symptom_entities)
-            if path is not None and (not causal_path or len(path) < len(causal_path)):
-                causal_path = path
+            if path is not None and (shortest is None or len(path) < len(shortest)):
+                shortest = path
+        causal_path = shortest or ()
         linked = sorted(ref.canonical for ref in context.symptom_entities & reached)[:5]
         candidates.append(
             Candidate(

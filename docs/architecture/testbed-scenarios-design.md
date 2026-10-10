@@ -1312,7 +1312,7 @@ information, execution-witness recall against the fourteenth to sixteenth: `sche
 `config-b` 1.0 (0.33, 0.67, 0.33); `dependency-b` 0.33 (0.67, 0.67, 0.0); `competing-b` 0.33 (0.33, 0.33, 0.67). The
 2.4.0 replay agrees on every run, so these differences come from the runs, not from Rule C.
 
-## 33. The engine's baseline holds only the run's own calls (roadmap F13; proposal, 2026-10-10, awaiting the owner)
+## 33. The engine's baseline holds only the run's own calls (roadmap F13; owner-approved 2026-10-10)
 
 ### 33.1 Measured problem
 

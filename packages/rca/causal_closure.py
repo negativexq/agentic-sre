@@ -52,6 +52,7 @@ from packages.rca.topology import is_chaos_kind
 EXECUTION_RULE = "m21.support.observed-quota-rejection"
 EXPLANATION_RULE = "m21.explanation.observed-quota-rejection"
 SPAWN_EXPLANATION_RULE = "m21.explanation.controller-spawn"
+SHARED_EVIDENCE_RULE = "m21.explanation.shared-evidence"
 FAULT_EXECUTION_RULE = "m21.support.observed-fault-execution"
 ROLLOUT_EXECUTION_RULE = "m21.support.observed-rollout-execution"
 FAILED_ROLLOUT_RULE = "m21.support.observed-failed-rollout"
@@ -898,14 +899,89 @@ def _spawn_explanations(
     return result
 
 
+def _shared_evidence_explanations(
+    hypotheses: Sequence[Hypothesis],
+    supported: set[str],
+    strong: set[str],
+    excluded: frozenset[str],
+) -> list[CausalExplanation]:
+    """m21 §24: a strong claim explains a member of its episode that holds no fact of its own.
+
+    The explained claim is admitted and not supported, and every one of its local facts carries evidence that the
+    strong claim's own findings hold. A fact with no evidence, or with any evidence the strong claim does not hold,
+    keeps it in competition. Nothing here says the explained actor took no part; it adds nothing the observed
+    execution leaves unaccounted for.
+    """
+    result: list[CausalExplanation] = []
+    for source in hypotheses:
+        if (
+            source.hypothesis_id not in strong
+            or source.hypothesis_id not in supported
+            or source.hypothesis_id in excluded
+            or source.episode_onset is None
+            or not admitted(source)
+        ):
+            continue
+        held = {e for finding in source.findings for e in finding.evidence_ids}
+        for target in hypotheses:
+            if (
+                target.hypothesis_id == source.hypothesis_id
+                or target.causal_actor == source.causal_actor
+                or target.causal_actor not in source.members
+                or target.hypothesis_id in supported
+                or target.hypothesis_id in excluded
+                or not admitted(target)
+            ):
+                continue
+            local = actor_findings(target)
+            if not local or not all(
+                finding.evidence_ids and set(finding.evidence_ids) <= held for finding in local
+            ):
+                continue
+            shared = tuple(sorted({e for finding in local for e in finding.evidence_ids}))
+            result.append(
+                CausalExplanation(
+                    explaining_claim=source.hypothesis_id,
+                    explained_claim=target.hypothesis_id,
+                    actor=source.causal_actor,
+                    actor_instance=source.actor_instance,
+                    manifestation=target.causal_actor,
+                    manifestation_instance=target.actor_instance,
+                    episode_onset=source.episode_onset,
+                    mechanism="SHARED_EVIDENCE_OF_OBSERVED_EXECUTION",
+                    path=(
+                        CausalHop(
+                            source=source.causal_actor,
+                            relation="episode_member",
+                            target=target.causal_actor,
+                        ),
+                    ),
+                    evidence_ids=shared,
+                    explained_evidence_ids=shared,
+                    coverage=(
+                        "STRONG_EXPLAINING_CLAIM",
+                        "EPISODE_MEMBER",
+                        "ALL_LOCAL_FACTS_SHARED",
+                    ),
+                    rule_id=SHARED_EVIDENCE_RULE,
+                    consequence="EXPLAINS_CLAIM",
+                )
+            )
+    return result
+
+
 def explanations(
     hypotheses: Sequence[Hypothesis],
     supported: set[str],
     events: Sequence[ClusterEvent],
     propagation: RuntimePropagation | None,
     excluded_sources: frozenset[str] = frozenset(),
+    strong: set[str] | None = None,
 ) -> tuple[CausalExplanation, ...]:
-    """Explain specific observations; retire a claim only if all its facts are covered."""
+    """Explain specific observations; retire a claim only if all its facts are covered.
+
+    ``strong`` holds the claims with strong authority; only then does §24's shared-evidence rule apply.
+    """
     result: list[CausalExplanation] = []
     for source in hypotheses:
         if not admitted(source) or source.hypothesis_id in excluded_sources:
@@ -1043,6 +1119,10 @@ def explanations(
                     )
                 )
     result.extend(_spawn_explanations(hypotheses, supported, excluded_sources))
+    if strong:
+        result.extend(
+            _shared_evidence_explanations(hypotheses, supported, strong, excluded_sources)
+        )
     # Edges in cycles never remove claims. The raw observations remain auditable.
     adjacency: dict[str, set[str]] = {}
     for item in result:
@@ -1094,7 +1174,7 @@ def answer_frontier(
             r
             for r in relations
             if r.actor == alternative.actor
-            and r.rule_id != SPAWN_EXPLANATION_RULE
+            and r.rule_id not in (SPAWN_EXPLANATION_RULE, SHARED_EVIDENCE_RULE)
             and r.explained_claim in alternative.material_for_hypothesis_ids
         ]
         valid = [

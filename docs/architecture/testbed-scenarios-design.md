@@ -1271,3 +1271,43 @@ leaves the pairing to the owner). The lab itself is unchanged since the fifteent
 
 Reported beside them, for information: cause, instance and execution-witness recall per variant against the
 fourteenth to sixteenth. That comparison is not a criterion and never selects or tunes a rule.
+
+### 32.1 Seventeenth HOLDOUT result (2026-10-10, engine 2.5.0, 24 runs from a worktree)
+
+**24/24 valid**; 0 false strong authority, 0 false `RESOLVED`, the decoy never named.
+
+| Variant | Valid | Cause | Instance | Execution witness | Group |
+|---|---|---|---|---|---|
+| `dependency-b` | 3/3 | 1.0 | 1.0 | 0.33 | |
+| `direct-b` | 3/3 | 1.0 | 1.0 | 1.0 | |
+| `scheduled-b` | 3/3 | 1.0 | 1.0 | 1.0 | |
+| `config-b` | 3/3 | 1.0 | 1.0 | 1.0 | |
+| `negative-b` | 3/3 | 1.0 | 1.0 | 0.67 | |
+| `competing-b` | 3/3 | 1.0 | 1.0 | 0.33 | 0.88 |
+| `config-c` | 3/3 | 1.0 | 1.0 | 0.67 | |
+| `negative-c` | 3/3 | 1.0 | 1.0 | 1.0 | |
+
+- **Effect relations:** no scored root off the chain (80 scored diagnoses). One run with failed trace reads
+  (`negative-c` #0: 13 of 137 reads, `ConnectorReadError` from a failed Tempo request), 23 of 24 without: above the
+  90% bar.
+- **m21 §19 and §20:** no leader from an execution after the onset; no scored diagnosis `NOT_ESTABLISHED`.
+- **m21 §21:** all 36 scored diagnoses led by a chaos experiment have their family `EXACT` and the experiment's UID
+  on the leading claim; 28 execution witnesses, none off the chain.
+- **m21 §22:**
+  - no scored diagnosis has a `Schedule` or experiment claim holding chaos objects of another incarnation (0 of 80);
+  - the 24 databases replayed offline with engine 2.4.0 (`c45695e`) and 2.5.0 give the same leader, tier, display,
+    shown candidates, resolution, claims and epistemic digest for all 92 incidents. Nothing changed, so there is no
+    change to explain; as §22.6 expected, Rule C had nothing to act on.
+- **F10:**
+  - all 24 journals open with `code_identity` naming the worktree, `c3c196d` (the manifests' `engine_commit`) and
+    `dirty` false;
+  - after the suite, no `forwards.json` and no listener on the testbed's forward ports;
+  - no repeat was set aside (no `.aborted-` or `.refused-` directory, no `aborted_` database from this run).
+- **The Connector:** connected in every run; no run's database holds an enrollment (the bring-up registry still has
+  `lab` active, its token used once); the running pod logs "identity restored", never "enrolled".
+- **Connector §17:** 0 of 24 runs opened an incident before their injection.
+
+Every pre-registered criterion holds. Unlike the sixteenth, the suite started without any manual step. For
+information, execution-witness recall against the fourteenth to sixteenth: `scheduled-b` again 1.0 (0.0, 0.0, 1.0);
+`config-b` 1.0 (0.33, 0.67, 0.33); `dependency-b` 0.33 (0.67, 0.67, 0.0); `competing-b` 0.33 (0.33, 0.33, 0.67). The
+2.4.0 replay agrees on every run, so these differences come from the runs, not from Rule C.

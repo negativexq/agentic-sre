@@ -153,7 +153,7 @@ every service at once (up to 16 searches) overloaded the lab's Tempo in the seco
 §13.1: 15 of 18 runs had failed reads, Tempo restarted), so the owner set the limit at two (2026-10-04). Tests that assert a run's exact provider-read sequence
 for another purpose turn the read off explicitly.
 
-## 12. The two windows still miss the execution (proposal, 2026-10-10, awaiting the owner)
+## 12. The two windows still miss the execution (owner-approved 2026-10-10)
 
 ### 12.1 Measured problem
 

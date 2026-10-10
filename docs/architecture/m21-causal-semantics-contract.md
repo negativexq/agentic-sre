@@ -2353,7 +2353,7 @@ The rule has no parameter.
   time relative to the execution, is a separate question.
 - **The 22 incidents without a strong leader** and **the 19 limited by a material frontier** (C4).
 
-## 25. The API access the admission adds is not the workload's configuration (C21; proposal, 2026-10-10, awaiting the owner)
+## 25. The API access the admission adds is not the workload's configuration (C21; owner-approved 2026-10-10)
 
 ### 25.1 Measured problem
 
@@ -2470,7 +2470,7 @@ The rule has no parameter. The C20 replay found the problem, so every stored run
 - Whether other admission-added sources (a sidecar's projected CA from a mutating webhook, for example) follow the same
   rule. Here only the `serviceAccountToken` projection is classified; any other stays a `configuration_source`.
 
-## 26. A configuration observed unchanged through the window cannot be the initiating change (C4; proposal, 2026-10-10, awaiting the owner)
+## 26. A configuration observed unchanged through the window cannot be the initiating change (C4; owner-approved 2026-10-10)
 
 ### 26.1 Measured problem
 
@@ -2587,7 +2587,7 @@ The rule has no parameter.
 - Whether the change stream should be followed before a run's window starts, so that continuity from the window's start
   is known instead of the listing-based route of B.
 
-## 27. A workload is covered by a witness on its own Pod (C6; proposal, 2026-10-10, awaiting the owner)
+## 27. A workload is covered by a witness on its own Pod (C6; owner-approved 2026-10-10)
 
 ### 27.1 Measured problem
 

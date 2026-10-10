@@ -2469,3 +2469,120 @@ The rule has no parameter. The C20 replay found the problem, so every stored run
 - **The three `dependency` questions** in 110 incidents (C4 as well).
 - Whether other admission-added sources (a sidecar's projected CA from a mutating webhook, for example) follow the same
   rule. Here only the `serviceAccountToken` projection is classified; any other stays a `configuration_source`.
+
+## 26. A configuration observed unchanged through the window cannot be the initiating change (C4; proposal, 2026-10-10, awaiting the owner)
+
+### 26.1 Measured problem
+
+The 428 incidents of §25.1 are limited by `ConfigMap/workload-config` as a `configuration_source`: the workload's own
+declared configuration, rightly material. `material_frontier` says why nothing closes it today: "query completion, no
+findings, promotion and budget exhaustion are not negative causal evidence". `answer_frontier` closes a question only by
+transferring an observed role to another claim (`ANSWERED_ROLE_TRANSFERRED`), and nothing ever observes that a
+configuration *did not* change.
+
+**What closing it would gain, measured in shadow** (every `configuration_source` taken out of the material frontier of
+the 428; a measurement, not a rule):
+- **0 become `RESOLVED`.**
+- 110 stay limited by their `dependency` questions (`Service/kafka`, `payment-service`, `redis`).
+- 318 fall to `SUPPORTED_POSSIBLE_CAUSE` (`mechanism_execution`). Each has one supported claim, and it is strong, but
+  one of its three declared symptoms has no witness: `Deployment/payment-service` in 316, `Deployment/order-service` in
+  2. The frontier basis hid this, because `MATERIAL_CAUSAL_FRONTIER` is recorded over it. This is C6.
+
+So `RESOLVED` on these runs needs §25, this section and C6 together, and for 110 of them the dependency questions as
+well. This section is proposed for its own soundness, not for a count.
+
+**What the evidence holds.**
+- **The stored runs cannot answer it.**
+  - The Connector drops `metadata.managedFields` from every object (`live.py`, `_serialize`), so a listing keeps no
+    record of when an object was last written. A stored `workload-config` has only its `creationTimestamp`
+    (2026-09-30) and one observed version.
+  - Every scope's source continuity is `UNKNOWN`. The coverage record (`late-evidence-design.md` §4) measures
+    continuity from the evidence window's start, about two hours before the onset. A run's control plane follows the
+    change stream for only the last 6 to 8 minutes, since each run has a fresh database (HOLDOUT18: 93 of 93 scored
+    diagnoses).
+- **The cluster does record it.** In the live lab, `workload-config`'s `managedFields` hold one write,
+  `kubectl-client-side-apply` `Update` at 2026-09-30T11:02:48Z.
+- **No stored chain has a ConfigMap as a cause,** so the testbed has no case where this question must stay open.
+
+### 26.2 Amendment
+
+**A. The Connector keeps the write times (data, no rule).** The Connector drops `managedFields[].fieldsV1` as
+before, but keeps each entry's `manager`, `operation` and `time`. This is a Connector change: the lab's Connector
+runs from the repository for the measurement, and nothing is published.
+
+**B. Rule `m21.frontier.unchanged-configuration` (v1).** A material `configuration_source` question on an object `C`
+gets the answer `ANSWERED_NO_CHANGE_IN_WINDOW` when all of these hold. The window is `W = [s, o]`: `s` is the
+evidence window's start (`EvidenceCoverage.starts_at`) and `o` is the causal onset.
+1. **The object was last written before `W`.** A stored listing of `C` at time `L ≤ o` carries the API server's write
+   record. With `T_w` the latest of `creationTimestamp` and every `managedFields[].time`, `T_w < s`. A listing
+   without `managedFields`, or with an entry without a time, does not satisfy this.
+2. **`C` stayed unchanged from `L` to `o`.**
+   - The scope (`C`'s namespace, `C`'s kind) was observed continuously over `[L, o]`: the stream was followed since
+     before `L`, and no persisted gap overlaps `[L, o]`.
+   - Transport is `PROVEN` for the diagnosis.
+   - No stored version of `C` in `[L, o]` has a different content hash, and none is a deletion.
+3. **`C` is the same object.** It has the same `uid` throughout. A deletion and re-creation is a change.
+
+The answer records the listing's evidence id, `T_w`, `L` and the scope's coverage. `answered` (`resolution.py`) then
+includes this state as well as `ANSWERED_ROLE_TRANSFERRED`.
+- The question is answered, not dropped: it stays in the frontier with its answer.
+- A condition that fails leaves it `OPEN` with the condition named. For example, `NO_WRITE_RECORD`,
+  `WRITTEN_IN_WINDOW` or `SCOPE_NOT_CONTINUOUS`.
+
+**Why it is sound (§3 I1, I2).** The question is `UPSTREAM_MECHANISM_COULD_CHANGE_INITIATING_CAUSE`: whether a change
+of `C` could be what started the incident. The rule never reads absence.
+- `T_w < s` is the API server's own positive record of the last write, as of `L`.
+- "No change from `L` to `o`" is read only where the coverage record proves the scope was observed continuously and
+  every item has arrived.
+
+Together they prove that `C`'s content did not change inside the window in which the engine looks for an initiating
+change. A configuration that did not change can be a *condition* of the incident, never the change that initiated it.
+If a later event made an old configuration matter, for example a restart that loads it, that event is its own claim.
+
+**Name-blind (§3 I3).** The rule reads timestamps, the coverage record and content hashes, never names.
+
+**Unchanged.**
+- Other roles, including `dependency`, `quota` and `network_policy`.
+- A `configuration_source` whose object is not listed (for example a Secret the Connector does not read) stays open.
+- Continuity measured from the window's start (§4 of `late-evidence-design.md`) is not redefined. The rule reads
+  continuity over its own `[L, o]` from the same persisted gaps and follow segments.
+- Admission, support, explanations, leader selection and tiers.
+
+### 26.3 Consequences
+
+- A material frontier can be answered, so the engine's minor version rises (with §25 if both are approved together).
+- **Stored runs do not change.** They hold no `managedFields`, so nothing is answered on replay. The rule can be
+  measured only on new runs.
+- **The risk is a configuration change that the rule calls unchanged,** for example a write the API server did not
+  record in `managedFields`. Every update records the writing manager's time. The hard criteria below include a run in
+  which the ConfigMap itself is the cause.
+
+### 26.4 Measurement, pre-registered
+
+The rule has no parameter.
+1. **Unit tests** for each condition, and for a deletion and re-creation.
+2. **Offline replay of every stored run:** no answer, no digest change beyond the engine version (hard).
+3. **`DEV` runs with the Connector of A**, unscored, in the lab:
+   - a run of an existing variant, where `workload-config` must be answered `ANSWERED_NO_CHANGE_IN_WINDOW`;
+   - a run in which `workload-config` is edited inside the window, where it must stay `OPEN` with
+     `WRITTEN_IN_WINDOW` (hard).
+
+   No new scenario is scored.
+4. **ITBench-Lite** as a regression check: the scenarios have no Connector rows and no coverage, so nothing may be
+   answered (hard).
+5. **A full `HOLDOUT`,** pre-registered on its own and shared with §24 and §25 if approved together. Reported:
+   - every `configuration_source` answer, with `T_w`, `L` and coverage;
+   - the number of `RESOLVED` diagnoses per variant, for information only.
+
+   Hard:
+   - no false `RESOLVED`;
+   - no answer on a configuration that changed in its window.
+
+### 26.5 Not decided here
+
+- **C6, the declared symptom without a witness** (`Deployment/payment-service` beside the Service-level witness).
+  This is what keeps the 318 from `RESOLVED` once the frontier is answered.
+- **The `dependency` questions** of the 110 (C4 as well). A dependency's role is answered by its health, not by a
+  write record.
+- Whether the change stream should be followed before a run's window starts, so that continuity from the window's start
+  is known instead of the listing-based route of B.

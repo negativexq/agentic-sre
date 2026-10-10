@@ -163,7 +163,7 @@ minutes before it. Each search keeps at most 8 traces (`_MAX_SEARCH_TRACE_IDS`),
 the earliest ones first (§9). Three consequences, measured on the seventeenth `HOLDOUT`
 (`testbed-scenarios-design.md` §32.1):
 
-- **The fault window yields its first seconds, which lie before the execution.** An alert fires about 20 to 40 s after
+- **The fault window yields its first seconds, which lie before the execution.** An alert fires about 20 to 30 s after
   the execution in the testbed, so the window opens about a minute and a half before it. In `dependency-b` #2 the
   `OrderErrorRateHigh` capture ended its spans at 23:36:19; the experiment was applied at 23:36:36.
 - **The engine's baseline is mostly not read.** The effect relations compare with the five minutes before the first

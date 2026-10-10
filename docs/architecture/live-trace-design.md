@@ -254,3 +254,29 @@ it cannot be measured while the read misses the execution.
 
 For the incident whose symptom service calls the delayed pod (`OrderDependencyLatencyHigh`), the spans now hold
 **11 paired calls inside the execution** and 57 in its §16 baseline. The diagnosis was not read (blind).
+
+### 12.7 A slice within one second is not read (roadmap F15; owner-approved 2026-10-10)
+
+**Measured problem.** On the eighteenth `HOLDOUT` (`testbed-scenarios-design.md` §34.1), all 3 failed trace reads
+were one slice of `config-c` #0, read for three services: `17:05:59.192` to `17:05:59.976`. A capture's last slice
+ends at the capture time, so it can be shorter than a second. The Tempo reader sends whole seconds
+(`_epoch_seconds` truncates), so this slice went out as `start` = `end`, and Tempo answered 400 (`end` = `start` + 1 is
+answered, checked by hand). The read was recorded `FAILED` (`ConnectorReadError`), so the run counted as one with an
+incomplete read. No other slice can be that short: every slice but the last is 60 s, and the last one ending at
+`onset + 5 min` is whole.
+
+**Proposal.**
+- `trace_slices` leaves out a slice whose bounds fall within the same whole second, the only bounds the reader can
+  express. Nothing is read or recorded for it.
+- A later capture of the incident reads that part again as part of its own, longer last slice, since the bounds then
+  differ and no read is recorded for the shorter one. Without a later capture, less than a second at the end of the
+  read is left out; it is not a failed read, because no read was made.
+- Unchanged: the grid, the width, the range, the skip of slices already read, the reader. Widening the slice to a
+  whole second instead would make it overlap the slice before it.
+
+**Consequences and measurement.**
+- A capture change; the engine version stays, and a stored diagnosis replays from its own manifest as before.
+- Unit tests: a last slice within one whole second is left out; one that crosses a whole second is kept; the
+  integration test of §12.6 still reads the same slices.
+- No `HOLDOUT` of its own: it can only remove a read that cannot succeed. The next full `HOLDOUT` reports failed reads
+  as before; any `start` = `end` read there would be a defect of this change.

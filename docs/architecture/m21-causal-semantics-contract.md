@@ -2260,3 +2260,95 @@ case of §23.5.
     hash order; it is recorded separately and is not changed here.
 
 Next: the eighteenth `HOLDOUT`, covering F13, F14 and this amendment, pre-registered before it starts (§23.4 step 3).
+
+## 24. A claim with no fact of its own does not compete with an observed execution (C20; proposal, 2026-10-10, awaiting the owner)
+
+### 24.1 Measured problem
+
+On the eighteenth `HOLDOUT` (`testbed-scenarios-design.md` §34.1), every cause was named and every run formed an
+execution witness, yet **none of the 93 scored diagnoses is `RESOLVED`**:
+- 74 stay `AMBIGUOUS` through `UNRESOLVED_CAUSAL_ALTERNATIVE`: an unresolved claim remains beside the leader.
+- 19 stay `AMBIGUOUS` through `MATERIAL_CAUSAL_FRONTIER` (`configuration_source`, `dependency`); that is C4.
+
+Of the 74, 52 have a mechanism-verified (strong) leader. Beside them stand 149 unresolved claims, all on Pods, none
+plausible (`NO_ONSET_CAPABLE_INITIATING_EVIDENCE`):
+- **120 hold no fact of their own.** Every local fact (`actor_findings`) carries evidence that the strong leader's
+  own findings already hold, and the Pod is a member of the leader's episode. They are the leader's observations seen
+  from the Pod: the fault's target with its `Unhealthy` events and the dependency errors its callers report, or the
+  Pods a rollout created, with its image or spec change.
+  - *Example* (`dependency-b` #0): the leader `NetworkChaos dep-loss-398` has a witness at
+    `payment-service-5dd48cf5f9-jmqbt`. Two claims on that Pod stay unresolved: one holds its `Unhealthy` events
+    (25, inside the execution) and the other the dependency errors `order-service` reports against it. Both pieces of
+    evidence are among the leader's findings.
+- **29 hold a fact of their own** that the leader does not: 24 `RESOURCE_PRESSURE` (an ambiguous CPU reading, for
+  example `order-service`'s at 0.356 two minutes before the execution) and 5 `DEPENDENCY_ERRORS`. None of these Pods
+  is a member of the leader's episode.
+
+By incident: in **23**, every claim beside the strong leader holds no fact of its own; in 29, at least one holds a fact
+of its own; 22 have no strong leader.
+
+The resolver keeps an unresolved claim in competition because missing proof does not exclude it (v3 contract, "The
+question this contract answers"). The explanation rules that let a claim leave competition (quota rejection,
+controller spawn) do not reach a claim built only from the leader's own evidence.
+
+### 24.2 Amendment
+
+**Rule `m21.explanation.shared-evidence` (v1).** A claim `L` explains a claim `X` (`EXPLAINS_CLAIM`) when all of these
+hold:
+1. **`L` is supported and strong:** an observed execution witness of `L` fired, and `L`'s strong authority is
+   granted (timing-stable, timing contract §5.2).
+2. **`X` belongs to `L`'s episode:**
+   - `X`'s actor is one of `L`'s members, and not `L`'s actor;
+   - `X` is admitted and not supported (it is unresolved).
+3. **`X` holds no fact of its own.**
+   - `X` has at least one local fact (`actor_findings`).
+   - Every local fact of `X` carries evidence, and all of that evidence is held by `L`'s own findings.
+   - A fact with no evidence, or with any evidence `L` does not hold, keeps `X` in competition, however weak the fact.
+4. **No cycle:** as for every explanation, a cycle never removes a claim.
+
+`X` then leaves competition as an explained claim, like the other explanation rules:
+- elimination `POSITIVELY_EXPLAINED_OBSERVATION`, consequence `ROOT_INELIGIBILITY`;
+- recorded with `L`, the rule, and the shared evidence.
+
+**Why it is sound.** `X` adds no observation that the observed execution leaves unaccounted for. The same evidence
+cannot stand for two independent causes, and the one it stands for has its mechanism observed. A claim with any fact
+of its own stays, so this rule cannot remove a rival that brings something new.
+
+**Unchanged.** `RESOLVED` still needs every existing condition:
+- exactly one supported family, strong;
+- every declared symptom covered by a witness;
+- no material frontier limiting it;
+- no other unresolved claim.
+
+Admission, grouping, support, leader selection and the tiers are untouched, and recovery is still not assessed.
+
+### 24.3 Consequences
+
+- A diagnosis can now become `RESOLVED` (`MECHANISM_VERIFIED_CAUSE`) where it was `AMBIGUOUS`, so the engine's minor
+  version rises (2.7.0).
+- **The risk is a false `RESOLVED`.** It needs `L` to have grouped facts that were not its own, and `L` to be strong
+  all the same. The frozen bar already counts false `RESOLVED` as a hard failure.
+
+### 24.4 Measurement, pre-registered
+
+The eighteenth `HOLDOUT`'s diagnoses were read to find this problem, so for this amendment they are development data.
+The rule has no parameter.
+1. **Offline replay of every stored testbed run,** the engine on `main` (2.6.1) against this one. Report:
+   - every incident whose resolution changes, with its leader and the run's chain;
+   - every claim explained by the new rule, with its actor and that actor's role in the run's chain.
+
+   Hard criteria:
+   - no new `RESOLVED` whose leader is not the run's cause;
+   - no claim explained whose actor is a cause in the run's chain (in `competing-b`, the second fault must stay in
+     competition);
+   - no change of leader, tier or display.
+2. **ITBench-Lite,** as a regression check only (§21.5.4).
+3. **A full `HOLDOUT`, pre-registered on its own,** with the frozen bar (no false `RESOLVED` among its criteria). The
+   number of `RESOLVED` diagnoses per variant is reported for information only, and never selects or tunes the rule.
+
+### 24.5 Not decided here
+
+- **The 29 incidents with a claim that has a fact of its own** stay `AMBIGUOUS`. Most of these facts are an ambiguous
+  CPU reading on another Pod before the leader's execution. Letting such a fact leave competition, for example by its
+  time relative to the execution, is a separate question.
+- **The 22 incidents without a strong leader** and **the 19 limited by a material frontier** (C4).

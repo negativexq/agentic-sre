@@ -1491,7 +1491,7 @@ For information only (this never selects or tunes a rule):
   seventeenth, counted the same way (`dependency-b` 13/13 against 3/9, `competing-b` 20/20 against 12/17). These are
   stored spans, not the search results of `live-trace-design.md` §12.3, so the two counts are not comparable.
 
-## 35. Nineteenth HOLDOUT, full: pre-registration for m21 §24 to §28 (2026-10-10, proposal, frozen once approved)
+## 35. Nineteenth HOLDOUT, full: pre-registration for m21 §24 to §28 (2026-10-10, owner-approved, frozen before the run)
 
 Per §23.3, a full measurement after an engine change and a lab change, together:
 - **Engine changes:**

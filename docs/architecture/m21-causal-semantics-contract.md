@@ -2261,7 +2261,7 @@ case of §23.5.
 
 Next: the eighteenth `HOLDOUT`, covering F13, F14 and this amendment, pre-registered before it starts (§23.4 step 3).
 
-## 24. A claim with no fact of its own does not compete with an observed execution (C20; proposal, 2026-10-10, awaiting the owner)
+## 24. A claim with no fact of its own does not compete with an observed execution (C20; owner-approved 2026-10-10)
 
 ### 24.1 Measured problem
 

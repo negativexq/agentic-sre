@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from packages.rca.live import LiveSource, capture_traces
+from packages.rca.live import LiveSource, capture_traces, trace_slices
 from packages.rca.model import ProviderReadFailure, TraceSpanObservation
 
 T0 = datetime(2026, 10, 3, 12, 0, tzinfo=UTC)
@@ -116,3 +116,28 @@ def test_only_workloads_configured_for_opentelemetry_are_read() -> None:
     assert _instrumented(deployment("OTEL_RESOURCE_ATTRIBUTES", "PORT"))
     assert not _instrumented(deployment("POSTGRES_PASSWORD"))
     assert not _instrumented({"kind": "Deployment", "spec": {}})
+
+
+ONSET = T0 + timedelta(seconds=59.192)
+LEAD, WIDTH = timedelta(minutes=10), timedelta(seconds=60)
+
+
+def test_a_last_slice_within_one_whole_second_is_not_read() -> None:
+    # live-trace-design.md §12.7: 17:05:59.192 to 17:05:59.976 on the eighteenth HOLDOUT went out as start = end
+    slices = trace_slices(ONSET, ONSET + timedelta(seconds=0.784), lead=LEAD, width=WIDTH)
+    assert len(slices) == 10
+    assert slices[-1] == (ONSET - WIDTH, ONSET)
+
+
+def test_a_last_slice_that_crosses_a_whole_second_is_read() -> None:
+    end = ONSET + timedelta(seconds=0.9)
+    slices = trace_slices(ONSET, end, lead=LEAD, width=WIDTH)
+    assert slices[-1] == (ONSET, end)
+    assert int(end.timestamp()) - int(ONSET.timestamp()) == 1
+
+
+def test_a_later_capture_reads_the_part_left_out() -> None:
+    first = trace_slices(ONSET, ONSET + timedelta(seconds=0.784), lead=LEAD, width=WIDTH)
+    later = trace_slices(ONSET, ONSET + timedelta(seconds=30), lead=LEAD, width=WIDTH)
+    assert later[:-1] == first
+    assert later[-1] == (ONSET, ONSET + timedelta(seconds=30))

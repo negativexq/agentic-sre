@@ -849,12 +849,16 @@ def trace_slices(
 ) -> list[tuple[datetime, datetime]]:
     """``[onset - lead, end]`` cut on a grid anchored at ``onset`` (live-trace-design.md §12.2).
 
-    Each slice is one search, so every slice contributes its own sample; only the last one may be partial.
+    Each slice is one search, so every slice contributes its own sample; only the last one may be partial. Tempo takes
+    whole seconds, so a last slice within one whole second cannot be read and is left out (§12.7); a later capture
+    reads that part with its own, longer last slice.
     """
     slices: list[tuple[datetime, datetime]] = []
     start = onset - lead
     while start < end:
-        slices.append((start, min(start + width, end)))
+        stop = min(start + width, end)
+        if int(start.timestamp()) != int(stop.timestamp()):
+            slices.append((start, stop))
         start += width
     return slices
 

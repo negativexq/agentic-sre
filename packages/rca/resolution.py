@@ -934,6 +934,36 @@ def resolve_hypotheses(
         )
         for hid, records in execution.items()
     }
+    # m21 §24: a strong claim explains a member that holds only its evidence. Strong authority is read from the
+    # execution witnesses, which do not depend on the trace; the explanations are taken again with it.
+    strong_now = {
+        hid
+        for hid in trace.plausible_hypotheses
+        if observed[hid].status is RootSupportStatus.FIRED
+        and hid not in current_timing_masks().strong
+    }
+    if strong_now:
+        with_shared = explanations(
+            hypotheses,
+            set(trace.plausible_hypotheses),
+            events,
+            runtime_propagation,
+            observation_excluded,
+            strong_now,
+        )
+        explained_shared = {
+            r.explained_claim: r for r in with_shared if r.consequence == "EXPLAINS_CLAIM"
+        }
+        if explained_shared.keys() != explained.keys():
+            relations, explained = with_shared, explained_shared
+            trace = _resolve(
+                hypotheses,
+                verification_traces=verification_traces,
+                onset_grace=onset_grace,
+                root_cause_eligibilities=effective_eligibilities,
+                mismatches=mismatches,
+                explained=explained,
+            )
     trace = _attach_audits(trace, hypotheses, verification_traces, onset_grace)
     audits = tuple(
         audit.model_copy(

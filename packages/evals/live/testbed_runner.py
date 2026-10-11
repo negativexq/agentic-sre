@@ -149,6 +149,10 @@ class RunParameters:
     decoy_offset_seconds: float = 0.0
     # packet-loss variants: the share of packets dropped
     loss_percent: int = 0
+    # design §35 DEV check 1: one value of the workloads' ConfigMap is written after the baseline, before the injection
+    edit_config: bool = False
+    # design §35 DEV check 2: how many replicas the faulted workload runs with
+    replicas: int = 1
 
 
 # The HOLDOUT variants B (design §12.2.2): the injection differs from the family's variant A.
@@ -218,6 +222,11 @@ def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
         params = dataclasses.replace(
             params, second_offset_seconds=max(0.0, params.duration_seconds - before)
         )
+    if "edit_config" in spec.parameters:
+        # design §35: drawn after the others, so the variant's other draws of a seed stay as they were
+        params = dataclasses.replace(params, edit_config=draw("edit_config", 0.0) >= 0.5)
+    if "replicas" in spec.parameters:
+        params = dataclasses.replace(params, replicas=int(draw("replicas", 1.0)))
     return params
 
 
@@ -272,6 +281,10 @@ class StoredDiagnosis:
 class World(Protocol):
     """Everything the protocol needs from the lab."""
 
+    def shape(self, params: RunParameters) -> None:
+        """The lab's shape the next isolation sets up for the run (design §35: the target's replicas)."""
+        ...
+
     def isolate(self, run_id: str) -> None: ...
 
     def quiet_since(self) -> datetime | None:
@@ -299,6 +312,10 @@ class World(Protocol):
         ...
 
     def inject(self, params: RunParameters, journal: InjectorJournal, name: str) -> Injection: ...
+
+    def before_injection(self, params: RunParameters, journal: InjectorJournal) -> None:
+        """What the run does to the lab after the baseline gate and before the injection (design §35)."""
+        ...
 
     def construction_problems(self) -> list[str]:
         """Why the decoy could reach the symptom (contract §16.3); empty when the construction holds."""
@@ -833,6 +850,7 @@ def run_once(
             verb="check", object="code", role="code_identity", payload=dict(code_identity)
         )
     try:
+        world.shape(params)
         world.isolate(run_id)
         world.start_load(params.load_rps)  # the client probe and the alerts need traffic
         # 1. quiet baseline, then thresholds fixed from it and written to the journal
@@ -888,6 +906,7 @@ def run_once(
             )
         if foreign:
             raise BaselineNotQuiet(f"faults this run did not create are present: {foreign[:5]}")
+        world.before_injection(params, run.journal)
         prefix = {
             "cpu-stress": "pod-stress",
             "env-delay": "env-delay",

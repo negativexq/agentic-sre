@@ -7,10 +7,12 @@ from itertools import count
 
 from rca_builders import at, microservice, ref
 
+from apps.control_plane.diagnosis import TRACE_SLICE
 from packages.rca.evidence_coverage import TraceRead
 from packages.rca.frontier import (
     DEPENDENCY_DECLARED_UNUSED_RULE,
     DEPENDENCY_OBSERVED_HEALTHY_RULE,
+    RECENT_CALLS,
     dependency_calls,
 )
 from packages.rca.model import (
@@ -70,13 +72,13 @@ def span(
 
 
 def traffic(**overrides: object) -> list[TraceSpanObservation]:
-    """Server spans of the caller, earlier broker calls, three recent ones and a database call."""
+    """Server spans of the caller, earlier broker calls, three in the last minute and a database call."""
     recent = {"seconds": overrides.pop("recent_seconds", 0.012)}
     recent_status = overrides.pop("recent_status", TraceSpanStatus.UNSET)
     return [
         *(span(m, kind="SERVER", address=None) for m in (40, 50, 58)),
         *(span(m) for m in (40, 45, 50)),
-        *(span(m, status=recent_status, **recent) for m in (56, 57, 59)),  # type: ignore[arg-type]
+        *(span(m, status=recent_status, **recent) for m in (59.2, 59.5, 59.8)),  # type: ignore[arg-type]
         span(58, kind="CLIENT", address="db"),
     ]
 
@@ -134,11 +136,23 @@ def test_each_condition_of_b_keeps_the_question_open() -> None:
     assert state(answer(spans=failed)) == ("OPEN", "FAILED_CALLS", B)
     assert state(answer(spans=traffic(recent_seconds=0.05))) == ("OPEN", "SLOWER_CALLS", B)
     assert state(answer(spans=traffic(recent_seconds=None))) == ("OPEN", "SLOWER_CALLS", B)
-    no_earlier = [s for s in traffic() if not (s.span_kind == "PRODUCER" and s.start_at < at(55))]
+    no_earlier = [s for s in traffic() if not (s.span_kind == "PRODUCER" and s.start_at < at(59))]
     assert state(answer(spans=no_earlier)) == ("OPEN", "NO_EARLIER_CALLS", B)
     failed_read = [*READS, READS[0].model_copy(update={"completeness": "FAILED"})]
     assert state(answer(reads=failed_read)) == ("OPEN", "TRACE_READ_FAILED", B)
     assert state(answer(alerted=(BROKER,))) == ("OPEN", "DEPENDENCY_ALERTED", B)
+
+
+def test_calls_that_stopped_before_the_last_minute_do_not_show_it_healthy() -> None:
+    # m21 §29.8, found by the DEV check: healthy calls up to 44 s before the onset, then none
+    stopped = [
+        s.model_copy(update={"start_at": s.start_at - timedelta(minutes=1)})
+        if s.start_at >= at(59)
+        else s
+        for s in traffic()
+    ]
+    assert state(answer(spans=stopped)) == ("OPEN", "TOO_FEW_CALLS", B)
+    assert RECENT_CALLS == TRACE_SLICE
 
 
 def test_twice_as_slow_is_still_healthy() -> None:

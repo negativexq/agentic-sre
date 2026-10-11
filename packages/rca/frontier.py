@@ -31,7 +31,7 @@ from packages.rca.model import (
     TraceSpanStatus,
 )
 from packages.rca.ranking import Context
-from packages.rca.service_effect import BASELINE_BEFORE_EXECUTION, SERVICE_EFFECT
+from packages.rca.service_effect import SERVICE_EFFECT
 from packages.rca.topology import (
     WORKLOAD_KINDS,
     api_access_refs,
@@ -386,6 +386,8 @@ EVIDENCE_RULES = frozenset(
 )
 # m21 §29 B: the calls just before the onset are at most this many times slower than the earlier ones
 HEALTHY_SLOWDOWN = 2.0
+# m21 §29.8: B reads the calls of this last stretch before the onset, the trace capture's slice (``TRACE_SLICE``)
+RECENT_CALLS = timedelta(minutes=1)
 # span kinds that receive a call; every other span of a caller is one it makes (m21 §29.6)
 _INBOUND_KINDS = frozenset({"SERVER", "CONSUMER"})
 
@@ -599,13 +601,13 @@ def dependency_calls(
             None,
             [span.evidence_id for own in outbound.values() for span in own],
         )
-    # B: the calls just before the onset, against the same calls before them
+    # B: the calls of the last minute before the onset, against the same calls before them (§29.8)
     rule = DEPENDENCY_OBSERVED_HEALTHY_RULE
     if read_failed:
         return answer(rule, "OPEN", "TRACE_READ_FAILED", ())
     if alternative.actor in alerted:
         return answer(rule, "OPEN", "DEPENDENCY_ALERTED", ())
-    since = onset - BASELINE_BEFORE_EXECUTION
+    since = onset - RECENT_CALLS
     evidence: list[str] = []
     for own in calls.values():
         recent = [span for span in own if since <= span.start_at]

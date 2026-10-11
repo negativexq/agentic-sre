@@ -153,6 +153,8 @@ class RunParameters:
     edit_config: bool = False
     # design §35 DEV check 2: how many replicas the faulted workload runs with
     replicas: int = 1
+    # m21 §29.4 DEV check: a delay on kafka's Pod from the baseline's end, so the calls before the onset are slower
+    dependency_delay_ms: int = 0
 
 
 # The HOLDOUT variants B (design §12.2.2): the injection differs from the family's variant A.
@@ -227,6 +229,10 @@ def derive_parameters(spec: ScenarioSpec, seed: int) -> RunParameters:
         params = dataclasses.replace(params, edit_config=draw("edit_config", 0.0) >= 0.5)
     if "replicas" in spec.parameters:
         params = dataclasses.replace(params, replicas=int(draw("replicas", 1.0)))
+    if "dependency_delay_ms" in spec.parameters:
+        params = dataclasses.replace(
+            params, dependency_delay_ms=int(draw("dependency_delay_ms", 0.0))
+        )
     return params
 
 

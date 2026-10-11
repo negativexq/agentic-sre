@@ -53,6 +53,17 @@ def test_the_two_replica_dev_variant_is_variant_b_with_a_second_replica() -> Non
     assert two.cpu_workers == plain.cpu_workers
 
 
+def test_the_kafka_delay_dev_variant_is_variant_b_with_its_dependency_delayed() -> None:
+    spec = SPECS["dependency-b-kafka-delay"](1, (1,))
+    assert (spec.scenario_id, spec.tier) == ("dependency-loss-payment", "DEV")
+    delayed, plain = (
+        derive_parameters(spec, 1),
+        derive_parameters(SPECS["dependency-b"](1, (1,)), 1),
+    )
+    assert (delayed.dependency_delay_ms, plain.dependency_delay_ms) == (300, 0)
+    assert delayed.loss_percent == plain.loss_percent
+
+
 def test_a_manifest_without_an_engine_commit_keeps_its_old_digest() -> None:
     spec = SPECS["dependency-b"](3, (1, 2, 3))
     old = SuiteManifest(

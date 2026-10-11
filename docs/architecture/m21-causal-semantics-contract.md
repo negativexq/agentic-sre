@@ -3125,7 +3125,7 @@ with `TOO_FEW_CALLS`.
 
 **Withdrawn with B by §29.9.**
 
-### 29.9 B is withdrawn until a new design (amendment found by the second `DEV` check; proposed 2026-10-11)
+### 29.9 B is withdrawn until a new design (amendment found by the second `DEV` check; owner-approved 2026-10-11)
 
 **Found by the second `DEV` check** (`dev20b-kafka-delay`, engine 2.10.0 at `2d96d00`, with §29.8, unscored). It ran
 the same variant and the same seed as `dev20-kafka-delay`.

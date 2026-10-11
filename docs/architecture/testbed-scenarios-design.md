@@ -1816,3 +1816,31 @@ measures the same engine with the same criteria, with new seeds. It also measure
   - **failed trace reads per run,** with their times.
 - **If Tempo is killed again,** it is reported and the run continues as §36 did. The next step is decided after the
   run. Raising the limit is not the default.
+
+### 37.1 Implementation caveat: live-trace §13 was not active in this run (2026-10-11, owner-approved, retrospective)
+
+Found during the run. Recorded after the freeze. It changes neither §37's criteria nor any result.
+
+**What was not active:**
+- The lab's control plane reads Tempo through the Connector (`SRE_CONNECTOR_MODE=remote`). Its Tempo reader is
+  `ConnectorTempoReader`, which has no `fetching_once`. `ProviderAdapter.fetching_traces_once()` therefore returns the
+  adapter unchanged, and every capture read reaches the Connector as before.
+- The Connector makes the Tempo requests. It runs the `agentic-sre/connector:dev` image, which does not contain PR
+  #112.
+- #112's tests used the direct `TempoTraceReader`. No test used the path through the Connector.
+- Tempo's own log agrees: an identical 60 s trace request was sent up to six times in the same minute.
+
+**Consequences for the measurement:**
+- **§13's performance measurement is void in this run.** Trace-by-ID requests per incident, and their repeats, measure
+  the code without §13. They are reported as such, never as §13's effect.
+- **Lab §15 (Tempo's settings) is measured on its own,** without §13: restarts, memory, bytes inspected per lookup
+  and failed reads, against §36's 14 runs.
+- **The engine's results are judged as §37 says,** by its frozen criteria, the trace coverage the runs actually had
+  and their failed reads. §13 would not have changed the stored spans by design, but that equivalence was not
+  measured through the Connector. This run does not claim it.
+
+**Not changed:** §37's seeds, frozen commit, criteria and reported measures. The run is neither stopped nor restarted,
+and the lab is not touched while it runs.
+
+**Next:** the Connector path is covered by its own design (live-trace-design §14). Its tests run through the
+Connector first.

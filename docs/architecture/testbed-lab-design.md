@@ -201,3 +201,36 @@ In the ten-hour product-mode run Tempo, limited to 1 GiB, had been OOM-killed 23
 reads (11%) failed within half a second of being made, all in the minutes of a restart. `make lab-tune` now raises
 Tempo's memory limit to 2 GiB (`infra/kubernetes/lab-tempo-patch.yaml`); the observability manifest is unchanged.
 The node had 5 GiB free. Restarts are counted again in the next fault run.
+
+## 15. Tempo cuts its blocks sooner, keeps a day, and bounds its queries (owner-approved 2026-10-11)
+
+**Measured problem.** Tempo is still killed for memory at 2 GiB (§14), in the nineteenth `HOLDOUT` once and in the
+twentieth once by 16:00. Its configuration sets only the receivers and the local storage path, so everything else is
+Tempo 2.8.2's default.
+- **The open block holds the recent traces.** Searches report `total_blocks=0`, so a lookup by ID scans the
+  ingester's open block whole: 17 to 57 MB per request. Many such lookups at once exceed the memory limit.
+- **Retention is two weeks.** Default `block_retention` is 336 h. The local store held 924 MB in 69 blocks.
+
+**Proposal: settings only. The memory limit stays 2 GiB and `GOMEMLIMIT` stays 1600 MiB.**
+- **Cut blocks sooner.** The ingester's `max_block_duration` goes from its default to 2 minutes, so lookups by ID reach
+  completed blocks through their bloom filters instead of scanning the open block. The capture reads from the onset −
+  10 min onward, so almost all of what it reads is then in completed blocks.
+- **Keep a day.** The compactor's `block_retention` goes to 24 h. A run reads at most about an hour back.
+- **Bound the queries.** The querier's `max_concurrent_queries` goes to 4. The capture sends at most two reads at once
+  (live-trace-design §11), each fetching its traces in turn.
+- The exact keys are checked against Tempo 2.8.2's configuration reference when the change is made. A key it does
+  not accept is reported, not replaced by another.
+- `infra/kubernetes/observability.yaml` carries the change. It is applied with `kubectl apply` and a restart of
+  Tempo. The traces held in the local store are not kept.
+
+**Not changed:**
+- the memory limit and `GOMEMLIMIT`;
+- the receivers, the storage backend and the image.
+
+**Measurement.** In the next full `HOLDOUT`, together with live-trace-design §13, against testbed-scenarios-design §36:
+- Tempo restarts (the aim is none);
+- its memory peak, sampled every minute;
+- bytes inspected per lookup, from its log;
+- failed reads per run.
+
+If memory is not reduced, the next step is decided then. Raising the limit is not the default.

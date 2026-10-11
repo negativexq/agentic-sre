@@ -286,3 +286,55 @@ incomplete read. No other slice can be that short: every slice but the last is 6
 the onset) is left out and the slice before it kept; a slice ending 0.9 s after the onset, across a whole second, is
 kept; a later capture reads the part left out as its own last slice. The two tests of a left-out slice fail without
 the change. The integration test of §12.6 is unchanged and passes.
+
+## 13. A trace is fetched once per capture (owner-approved 2026-10-11)
+
+### 13.1 Measured problem
+
+In the twentieth `HOLDOUT` (testbed-scenarios-design §36) Tempo was killed for memory at 14:37:13, during
+`direct-b` #2. That run's last 62 reads failed. By 16:00 its memory had climbed back to 1.8 GiB of its 2 GiB limit.
+
+**Most of the load is the same traces fetched again.** Tempo's own log, from its restart at 14:37 to about 16:10:
+- **6,640 trace-by-ID requests** reached it, for **2,150 distinct traces**. 4,490 requests (68%) fetched a trace
+  already fetched; one trace was fetched 26 times.
+- **3,397 of the repeats (51% of all requests)** came within two minutes of the trace's first fetch, so within the
+  same capture. 1,093 came later, from another capture.
+- **Each request inspected 17 to 57 MB.** The searches report `total_blocks=0`: the recent minutes are still in the
+  ingester's open block, and a lookup by ID scans it whole. Bursts reached 264 requests and 3.7 GB inspected in a
+  minute.
+
+**Why the same capture repeats a trace:**
+- A search is made per service and per slice (§12), and keeps up to 8 traces.
+- An order's trace holds spans of `order-service`, `payment-service` and `order-worker`. Each service's search finds
+  it, and each fetches it.
+
+### 13.2 Proposal
+
+**Within one capture, a trace is fetched once.**
+- The capture keeps the trace IDs it has fetched, with their spans. A search that returns an ID already fetched in the
+  same capture reuses those spans and does not ask Tempo again.
+- The capture's reads are made at the same moment, so a reused trace is what a second fetch would have returned.
+- Each read still records its own completeness, span count and slice (`trace_captures`), and every span is stored as
+  today.
+
+**Unchanged:**
+- the range and its slices (§12);
+- the services read;
+- at most two reads reaching Tempo at once (§11);
+- the 8-trace search limit and the span cap;
+- persistence, replay, and completeness as coverage (§3.2).
+
+**Not decided here:** reusing a trace fetched by an earlier capture (the other 16% of the repeats). An earlier fetch
+may have been made before all of the trace's spans arrived, for example a consumer's span. Reusing it could drop
+spans, so it needs its own rule.
+
+### 13.3 Consequences and measurement
+
+- **No span changes.** A reused trace's spans are those the same capture fetched. A unit test shows that a capture
+  with reuse stores the same spans as one without.
+- **The engine is unchanged.** The capture belongs to the control plane, so this needs no engine version.
+- **Measured in the next full `HOLDOUT`,** together with the lab's Tempo settings (testbed-lab-design §15), against
+  §36:
+  - trace-by-ID requests per incident, read from Tempo's log;
+  - Tempo restarts and its memory peak;
+  - failed reads per run.

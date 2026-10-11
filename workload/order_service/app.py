@@ -9,6 +9,7 @@ from uuid import UUID, uuid4, uuid5
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
+from opentelemetry.trace import SpanKind
 from prometheus_client import make_asgi_app
 from prometheus_client.registry import CollectorRegistry
 from pydantic import BaseModel, ConfigDict, Field
@@ -22,6 +23,7 @@ from workload.common.adapters import (
     HttpPaymentGateway,
     LazyKafkaEventPublisher,
     PaymentGateway,
+    peer_host,
 )
 from workload.common.contracts import (
     EventTopic,
@@ -69,6 +71,7 @@ class OrderService:
         clock: Callable[[], datetime] | None = None,
         id_factory: Callable[[], UUID] | None = None,
         runtime: TelemetryRuntime | None = None,
+        db_address: str | None = None,
         fault_config: OrderFaultConfig | None = None,
     ) -> None:
         self._repository_factory = repository_factory
@@ -77,6 +80,10 @@ class OrderService:
         self._clock = clock or (lambda: datetime.now(UTC))
         self._id_factory = id_factory or uuid4
         self._runtime = runtime
+        # the database's host as the service was configured with it (OpenTelemetry `server.address`)
+        self._db_attributes = {"db.system": "postgresql"} | (
+            {"server.address": db_address} if db_address else {}
+        )
         self._fault_config = fault_config
 
     def create(self, request: OrderCreateRequest) -> OrderResponse:
@@ -106,7 +113,11 @@ class OrderService:
                         {"delay_seconds": self._fault_config.db_query_delay_ms / 1000},
                     )
                 span_context = (
-                    self._runtime.tracer.start_as_current_span("postgres order create")
+                    self._runtime.tracer.start_as_current_span(
+                        "postgres order create",
+                        kind=SpanKind.CLIENT,
+                        attributes=self._db_attributes,
+                    )
                     if self._runtime is not None
                     else nullcontext()
                 )
@@ -141,7 +152,11 @@ class OrderService:
                     )
                 query_started = time.perf_counter()
                 span_context = (
-                    self._runtime.tracer.start_as_current_span("postgres order update")
+                    self._runtime.tracer.start_as_current_span(
+                        "postgres order update",
+                        kind=SpanKind.CLIENT,
+                        attributes=self._db_attributes,
+                    )
                     if self._runtime is not None
                     else nullcontext()
                 )
@@ -184,8 +199,10 @@ def create_app(
     service: OrderService | None = None,
 ) -> FastAPI:
     """Build the order HTTP application."""
+    db_address = None
     if session_factory is None:
         database_url = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
+        db_address = peer_host(database_url)
         session_factory = create_session_factory(create_database_engine(database_url))
     registry = CollectorRegistry()
     telemetry = create_runtime(
@@ -205,7 +222,12 @@ def create_app(
         os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092"), runtime=telemetry
     )
     order_service = service or OrderService(
-        session_factory, gateway, publisher, runtime=telemetry, fault_config=fault_config
+        session_factory,
+        gateway,
+        publisher,
+        runtime=telemetry,
+        db_address=db_address,
+        fault_config=fault_config,
     )
     ballast = MemoryBallast()
 

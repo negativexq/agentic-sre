@@ -5,6 +5,7 @@ from contextlib import nullcontext
 from time import perf_counter
 from typing import Any, Protocol
 from urllib.error import HTTPError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from opentelemetry import propagate, trace
@@ -98,7 +99,7 @@ class HttpPaymentGateway:
                     method="POST",
                 )
                 span.set_attribute("http.request.method", "POST")
-                span.set_attribute("server.address", "payment-service")
+                span.set_attribute("server.address", peer_host(self._base_url))
                 try:
                     with urlopen(http_request, timeout=self._timeout_seconds) as response:
                         span.set_attribute("http.response.status_code", response.status)
@@ -120,6 +121,19 @@ class HttpPaymentGateway:
                 )
 
 
+def peer_host(address: str) -> str:
+    """The host a client connects to, from the URL or ``host:port`` list it was configured with (the first)."""
+    first = address.split(",")[0].strip()
+    return urlsplit(first if "://" in first else f"//{first}").hostname or first
+
+
+def client_span(runtime: Any | None, name: str, kind: SpanKind, attributes: dict[str, str]) -> Any:
+    """A span of an outgoing call carrying its peer, as the OpenTelemetry semantic conventions name it."""
+    if runtime is None:
+        return nullcontext()
+    return runtime.tracer.start_as_current_span(name, kind=kind, attributes=attributes)
+
+
 class KafkaEventPublisher:
     """Kafka publisher adapter; the broker is never contacted at import time."""
 
@@ -128,14 +142,20 @@ class KafkaEventPublisher:
 
         self._producer: Any = Producer({"bootstrap.servers": bootstrap_servers})
         self._runtime = runtime
+        self._server_address = peer_host(bootstrap_servers)
 
     def publish(self, topic: EventTopic, event: OrderCreatedEvent) -> None:
         headers: dict[str, str] = {}
         propagate.inject(headers)
-        span_context = (
-            self._runtime.tracer.start_as_current_span("kafka publish")
-            if self._runtime is not None
-            else nullcontext()
+        span_context = client_span(
+            self._runtime,
+            "kafka publish",
+            SpanKind.PRODUCER,
+            {
+                "messaging.system": "kafka",
+                "messaging.destination.name": topic.value,
+                "server.address": self._server_address,
+            },
         )
         with span_context:
             self._producer.produce(
@@ -166,17 +186,27 @@ class LazyKafkaEventPublisher:
 class RedisProcessedStateStore:
     """Redis-backed idempotency adapter."""
 
-    def __init__(self, redis_url: str, *, key_prefix: str = "agentic-sre:processed:") -> None:
+    def __init__(
+        self,
+        redis_url: str,
+        *,
+        key_prefix: str = "agentic-sre:processed:",
+        runtime: Any | None = None,
+    ) -> None:
         from redis import Redis
 
         self._key_prefix = key_prefix
         self._redis: Any = Redis.from_url(redis_url, decode_responses=True)
+        self._runtime = runtime
+        self._attributes = {"db.system": "redis", "server.address": peer_host(redis_url)}
 
     def has_processed(self, event_id: str) -> bool:
-        return bool(self._redis.exists(f"{self._key_prefix}{event_id}"))
+        with client_span(self._runtime, "redis exists", SpanKind.CLIENT, self._attributes):
+            return bool(self._redis.exists(f"{self._key_prefix}{event_id}"))
 
     def mark_processed(self, event_id: str) -> None:
-        self._redis.set(f"{self._key_prefix}{event_id}", "1")
+        with client_span(self._runtime, "redis set", SpanKind.CLIENT, self._attributes):
+            self._redis.set(f"{self._key_prefix}{event_id}", "1")
 
 
 class InProcessPaymentGateway:

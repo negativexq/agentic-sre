@@ -3008,3 +3008,31 @@ dependency that is called goes to B.
 - **The 29 diagnoses with an uncovered declared symptom,** most in `config-c` and `negative-c`. It is likely, but not
   yet checked, that a rollout keeps two Pods ready and §28 then rightly does not cover the Service.
 - **Deriving `calls` from observed traffic.** C reads the declaration; it does not change where edges come from.
+
+### 29.6 Attributing a span to a dependency (amendment found before implementation; owner-approved 2026-10-11)
+
+**Found while implementing.** §29.1 counted spans that "name" a dependency by their span name. A rule may not do that
+(§3 I3). In the lab, a span names its peer structurally only through `server.address`, and only the `payment-service`
+client call carries it.
+- **`POST payment-service /payments`** is a `CLIENT` span with `server.address`.
+- **`kafka publish`** and **`postgres order create`/`update`** are `INTERNAL` spans with no peer attribute.
+
+Read name-blind, B as written cannot attribute a single `kafka` call. C as written would answer `kafka` "declared
+unused" although `order-service` publishes to it: its condition 2 holds through the `payment-service` call.
+
+**Amendment.**
+- **Attribution.** A span is a call to a dependency only when its `server.address` equals a host the caller declares
+  for that Service: the same declaration the `calls` edge comes from (`_declared_hosts`). Two observed values are
+  compared; no name is read. This applies to B and C.
+- **C, condition 2,** becomes: every span of the caller in the evidence window that is neither `SERVER` nor
+  `CONSUMER` carries a `server.address`. A call of unknown peer is then never mistaken for no call. Otherwise
+  `CALLS_NOT_TRACED`.
+- **Order.** A is implemented now. B and C are implemented with the amendment, together with the lab's
+  instrumentation decision.
+
+**Consequence on the lab as it is.**
+- A answers the 79 `payment-service` questions.
+- B answers nothing new: the `kafka` questions stay `TOO_FEW_CALLS`.
+- C never applies: `CALLS_NOT_TRACED`, since `kafka publish` and the `postgres` spans carry no peer.
+- The `kafka` and `redis` questions stay open until the workload's spans carry the standard peer attributes. That is
+  a separate lab decision, not part of this contract.

@@ -1844,3 +1844,91 @@ and the lab is not touched while it runs.
 
 **Next:** the Connector path is covered by its own design (live-trace-design §14). Its tests run through the
 Connector first.
+
+### 37.2 Results (2026-10-11, scored after the run; §37.1 applies)
+
+The run went from 16:33 to 21:11 UTC, frozen at `e6f58fc` (engine 2.10.0) and run from the worktree `wt-h21`.
+§13 was not active (§37.1). Every load figure below measures lab §15 alone.
+
+**Hard criteria: all hold.**
+- **Acceptance:**
+  - 24 of 24 runs valid;
+  - 81 scored diagnoses;
+  - no false strong authority;
+  - no false `RESOLVED`;
+  - the decoy never named.
+- **Carried over from §35:** no violation.
+  - §19: no leader after the onset. §20: no scored `NOT_ESTABLISHED`. §21: no violation. §22: no diagnosis with
+    another incarnation's objects. §23: 38 strong witnesses, none off the chain, and no scored root off the chain.
+  - F10: code identity `e6f58fc`, clean, from `wt-h21`, in every run.
+  - F13: waits of 258 to 295 s.
+  - F14: 3,530 reads, 41 failed (below).
+  - No incident before the injection, no enrollment in a run database.
+  - m21 §24 to §28 re-checks: no violation.
+- **m21 §29 A:** 66 `ANSWERED_ON_CLAIM_PATH` answers, all for `payment-service`. Re-checked from the stored
+  diagnoses: in each, the dependency is a hop of every named claim's paths, taken together as §29.2 defines it.
+  - **Reported beside it:** read more strictly, as "a hop of each of the claim's paths", 15 answers (`config-c` 6,
+    `negative-c` 9) name a claim with four paths, of which one holds the hop. The implementation and §29.2 use the
+    paths together. The strict reading is not the criterion; it is shown so that the owner can judge it.
+- **m21 §29 C:** 66 `ANSWERED_DECLARED_UNUSED` answers (`redis` 51, `kafka` 15). Re-checked from the run databases:
+  - the boundary holds `trace_reads`, and no read of the caller failed;
+  - the caller has a `SERVER` span up to the onset;
+  - every outgoing span up to the onset carries `server.address` (106 to 508 per answer, median 364);
+  - none names the dependency's Service.
+  - **Limit of the re-check:** the hosts it looks for are the Service's name and its in-cluster DNS forms, a superset
+    of the hosts the caller declares.
+  - **Result:** no violation.
+- **m21 §29.9:** no `dependency` answer is `ANSWERED_OBSERVED_HEALTHY`.
+- **Lab change:** every run's `order-service` spans include a `PRODUCER` span carrying `server.address`.
+
+**Reported, for information only:**
+- **`RESOLVED`,** over all stored diagnoses:
+
+  | Variant | `RESOLVED` / diagnoses |
+  |---|---|
+  | `dependency-b` | 1 / 7 |
+  | `direct-b` | 4 / 8 |
+  | all other variants | 0 |
+
+- **What blocked the rest:**
+  - an open `dependency` question with `CALLED`: the caller does call it (60);
+  - `CALLER_NOT_TRACED` (26);
+  - an unresolved rival (47);
+  - `fault_actor` `TURN_BUDGET_EXHAUSTED` (`scheduled-b` 5, `competing-b` 11);
+  - `configuration_source` `TRANSPORT_NOT_PROVEN` (`competing-b` 3);
+  - `NOT_ON_EVERY_CLAIM_PATH` (`config-c` 3);
+  - `TRACE_READ_FAILED` (`config-b` 1).
+- **Dependency answers:**
+  - `payment-service`: A 66, open 7;
+  - `redis`: C 51, `CALLED` 20, other open 2;
+  - `kafka`: C 15, `CALLED` 37, `CALLER_NOT_TRACED` 21.
+- **Offline replay, engine 2.8.0 against 2.10.0:** all 103 incidents, none failed. No change of leader, tier, display,
+  resolution or root. A and C answer questions, and no outcome changes.
+- **Recall against the nineteenth:**
+  - **Cause and instance recall:** 1.00 in every variant except `competing-b` (0.83). Run #2 named one of its two
+    causes.
+  - **Execution witness:** missing in one run each of `config-b` (#2), `competing-b` (#2) and `config-c` (#1); the
+    nineteenth had all 24. `config-b` #2 is the run whose reads failed while Tempo restarted, before its diagnoses.
+    The other two are not explained here.
+- **Tempo (lab §15, without §13):**
+  - **Restarts:** one, `OOMKilled` at 18:50:54, during `config-b` #2. The twentieth's came at 14:37, in its sixth run.
+  - **Memory:** the container reached its 2 GiB limit twice before the kill, reclaimed each time, and touched it
+    again after it. The minute samples missed the spike that killed it.
+  - **Trace-by-ID requests:** 29,602 for 107 incidents (277 per incident). 11,095 were distinct (same ID, same range),
+    for 4,976 traces, so 62% repeat a request.
+  - **Bytes inspected per lookup:** capture reads (24,554) median 5.7 MB, p95 51.9 MB, max 68.5 MB. Investigation
+    reads (2,824) median 6.3 MB, p95 52.6 MB. The median fell from the twentieth's 17 to 57 MB range; the tail did
+    not.
+- **Failed reads: 41.**
+  - **`config-b` #2:** 39 reads failed with `ConnectorReadError` between 18:50:54 and 18:51:17, while Tempo restarted,
+    before its diagnoses.
+  - **`competing-b` #2:** 2 reads failed with `ConnectorUnavailable` at 20:02:50, while Tempo was up and after the
+    run's last stored diagnosis. Their cause is not established.
+- **Duration:** 4 h 38 min, the same per suite as the twentieth and the nineteenth.
+
+**Reading:**
+- The engine criteria hold, with C answering where full coverage lets it.
+- Lab §15 lowered the typical lookup cost and delayed Tempo's kill from the sixth run to the twelfth, but did not
+  prevent it.
+- **Next, as approved:** P0 and P1 (live-trace-design §14) on the lab, in one `DEV` run with verification on. No new
+  `HOLDOUT` is started without the owner's approval.

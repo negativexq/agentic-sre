@@ -3071,3 +3071,54 @@ unused" although `order-service` publishes to it: its condition 2 holds through 
 
 **3. B, C and the `HOLDOUT`.** B and C follow, under §29.6. The `HOLDOUT` that measures §29 is pre-registered in
 testbed design once B and C are implemented.
+
+### 29.8 B reads the calls of the last minute before the onset (amendment found by the `DEV` check; proposed 2026-10-11)
+
+**Found by the `DEV` check of §29.4** (`dev20-kafka-delay`, engine 2.10.0 at `ee1e19c`, unscored). The check is
+variant B of the dependency family, with a 300 ms `NetworkChaos` delay on kafka's Pod from the baseline's end.
+- **Timing:** the kafka delay began at 12:08:42 and the payment loss at 12:08:43. The onset (first alert) was
+  12:09:14.
+- **The last kafka call** observed was 12:08:30, before the delay. While payment was lost, orders stopped before they
+  reached kafka, so no call to kafka was made, or observed, in the 44 s before the onset.
+- **B's window was mostly before the delay.** It read [onset − 5 min, onset], so its calls came from the 4.5 minutes
+  before the delay. Their median was 1 ms, as before.
+- **Result:** in both incidents the `kafka` question was answered `ANSWERED_OBSERVED_HEALTHY`. The hard condition of
+  §29.4 failed.
+- **Every trace read of `order-service` was cut** in the window (`TRUNCATED`): 20 of the 22 slices; the other 2
+  returned no span. B counts only `FAILED` reads as missing.
+- **C was correct:** `redis`, which `order-service` never calls, was answered `ANSWERED_DECLARED_UNUSED`.
+
+**The defect is in B's design, not in a threshold.** The median of a five-minute window does not see a change that
+began shortly before the onset. When the dependency's fault stops the calls, the window still holds the earlier,
+healthy ones.
+
+**Amendment.** Each change is fixed here, before any new measurement of B.
+- **B, condition 1 (enough calls)** becomes: at least 3 call spans of the caller attributed to the dependency began in
+  `[onset − 1 min, onset]`.
+  - The minute is the trace capture's slice (`TRACE_SLICE`). The 3 is §12.5's, as before.
+  - Otherwise B stays `OPEN` with `TOO_FEW_CALLS`.
+- **B, conditions 2 and 3** read the calls of that minute.
+  - **None failed:** none of them has status `ERROR`.
+  - **None slower:** their median duration is at most twice the median of the calls attributed to the dependency
+    that began before `onset − 1 min`, inside the evidence window.
+  - With no such earlier call, B stays `OPEN` with `NO_EARLIER_CALLS`.
+- **B, conditions 4 and 5** are unchanged.
+- **A read cut at its bound (`TRUNCATED`) is not a failed read.**
+  - A cut read returns a sample of the slice's traces, not a gap of known extent.
+  - Counting it as missing would leave B unable to answer in the lab, where every read of a loaded service is cut.
+  - The sample's representativeness is left to §29.5.
+
+**Unchanged.**
+- A, C and the attribution of §29.6.
+- The order in which B's conditions are checked, as recorded with the implementation (§29.9).
+- Every other rule.
+
+**Consequence on the `DEV` run.** No call to kafka began in `[12:08:14, 12:09:14]`, so the question would stay `OPEN`
+with `TOO_FEW_CALLS`.
+
+**Measurement, pre-registered.**
+1. **The same `DEV` check runs again** on the amended engine, as a new suite. The hard condition is unchanged: no
+   `kafka` question answered `ANSWERED_OBSERVED_HEALTHY`.
+2. **The other measurements of §29.4** follow unchanged.
+
+**Added to §29.5, not decided here.** Whether the traces a cut read returns are a fair sample of the slice's calls.

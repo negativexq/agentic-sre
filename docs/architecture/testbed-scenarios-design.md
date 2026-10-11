@@ -1659,3 +1659,89 @@ For information only (this never selects or tunes a rule):
   through §24 to §28.
 - **Recall against the eighteenth:** cause, instance and execution witness 1.0 in every variant, as there.
   `competing-b`'s group recall is 0.81 (0.88).
+
+## 36. Twentieth HOLDOUT, full: pre-registration for m21 §29 A and C (2026-10-11, proposed, frozen before the run)
+
+Per §23.3, a full measurement after an engine change and a lab change, together.
+
+**Engine changes:**
+- 2.9.0: m21 §29 A. A `dependency` question is answered when the dependency is a hop of every material claim's own
+  path.
+- 2.10.0: m21 §29 C, with §29.6. A `dependency` question is answered when the traced caller never called the
+  declared dependency up to the onset. The incident's trace reads are frozen in the run boundary (`trace_reads`).
+- B is withdrawn (m21 §29.9). No rule answers a `dependency` question from observed call health.
+
+**The lab change** (owner-approved 2026-10-11, PR #105):
+- The workload's client spans now carry the standard peer attributes:
+  - `kafka publish` is a `PRODUCER` span with `server.address`;
+  - the postgres and redis calls are `CLIENT` spans with `server.address`.
+- The images of `order-service`, `payment-service` and `order-worker` were rebuilt locally and loaded into the lab.
+  Nothing was published. The previous images are kept as `before-otel`.
+- **Trace counts are not comparable with earlier `HOLDOUT`s.** The workload now emits more spans, and redis spans
+  exist for the first time.
+
+**The `DEV` checks are done** (m21 §29.8 to §29.10). B failed its hard condition twice and was withdrawn. The replay of
+both `DEV` runs without B passed: no `kafka` question was answered healthy. No further `DEV` check is run before this
+`HOLDOUT`.
+
+**What the replay could not measure.** No stored run has a trace-read record, so C answered nothing offline. This run
+is the first that can show C. Expected, from §29.1 and the `DEV` runs:
+- the `redis` questions of `order-service` claims answered `ANSWERED_DECLARED_UNUSED`;
+- the `kafka` questions open;
+- the `payment-service` questions answered by A wherever every material claim's path holds it.
+
+**The setup:**
+- **Variants and seeds:**
+
+  | Variant | Seeds |
+  |---|---|
+  | `dependency-b` | 446–448 |
+  | `direct-b` | 449–451 |
+  | `scheduled-b` | 452–454 |
+  | `config-b` | 455–457 |
+  | `negative-b` | 458–460 |
+  | `competing-b` | 461–463 |
+  | `config-c` | 464–466 |
+  | `negative-c` | 467–469 |
+
+- **Suites:** `holdout20-<variant>`.
+- **Engine:** 2.10.0, frozen at the merged commit `57cc8f2` recorded in the manifests.
+- **Where it runs:** as §32, from a worktree of that commit, with links to the main tree's `.venv` and `.local`.
+- **Scoring:** with §20's grader.
+
+**Criteria (hard):**
+- **Acceptance:** the frozen bar:
+  - no false strong authority;
+  - **no false `RESOLVED`** (every `RESOLVED` diagnosis leads with the run's cause or its execution instance);
+  - at least 90% valid;
+  - the decoy never named.
+- **Carried over from §35:**
+  - the effect relations and m21 §19 to §23;
+  - F10, F13, F14;
+  - the Connector and connector §17;
+  - the re-checks of m21 §24 to §28.
+- **m21 §29 A:** for every `ANSWERED_ON_CLAIM_PATH` answer, the dependency is a hop of the stored path of every
+  claim the answer names, re-checked from the stored diagnosis.
+- **m21 §29 C:** every `ANSWERED_DECLARED_UNUSED` answer is re-checked from the run's database:
+  - the run's boundary holds `trace_reads`, and none of the caller's reads is `FAILED`;
+  - the caller has a `SERVER` span up to the onset;
+  - every span of the caller up to the onset that is neither `SERVER` nor `CONSUMER` carries `server.address`, and
+    there is at least one;
+  - no span of the caller up to the onset has a `server.address` equal to a host it declares for the dependency.
+- **m21 §29.9:** no `dependency` answer is `ANSWERED_OBSERVED_HEALTHY`.
+- **The lab change:** in every run, the stored `order-service` spans include a `PRODUCER` span carrying
+  `server.address`. This shows the run used the rebuilt images.
+
+**Reported beside them, for information only** (these never select or tune a rule):
+- **`RESOLVED` diagnoses per variant,** and, for each scored diagnosis that is not `RESOLVED`, the condition that
+  blocked it, as §35:
+  - an unresolved rival;
+  - each limiting frontier role, with its `blocked_reason`;
+  - an uncovered declared symptom.
+- **Every `dependency` answer,** with its rule, its state or condition, and, for C, the caller's span count.
+- **The run's incidents replayed offline with engine 2.8.0.** Every change of leader, tier, display or resolution is
+  listed with its reason.
+- **Recall per variant against the nineteenth,** as §35.
+- **Tempo:**
+  - its restart count and memory, sampled before and after each run;
+  - every failed trace read, with its time.

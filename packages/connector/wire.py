@@ -79,6 +79,11 @@ class TargetQueryArgs(WireModel):
     query: InvestigationQuery
 
 
+class TraceQueryArgs(TargetQueryArgs):
+    # live-trace-design.md §14.2: only sent to a Connector that lists ``trace_capture_scope``
+    capture_scope: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+
+
 class LogArgs(WireModel):
     services: list[str] = Field(max_length=MAX_SERVICES)
     starts_at: datetime

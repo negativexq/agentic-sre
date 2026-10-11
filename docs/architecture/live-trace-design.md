@@ -349,8 +349,10 @@ spans, so it needs its own rule.
 - Two concurrent reads of the same trace wait for one fetch.
 - Unit tests in `test_tempo_backend.py` show that reads with reuse return the same batches as reads without, with
   fewer fetches.
+- **Superseded by §14.2.** The sequential reuse and the kept 404 are withdrawn; only concurrent identical fetches are
+  joined.
 
-## 14. Trace reads through the Connector: fetch once (P0) and one shared read budget (P1) (2026-10-11, proposed)
+## 14. Trace reads through the Connector: fetch once (P0) and one shared read budget (P1) (2026-10-11, owner-approved with the revisions of §14.2 and §14.3)
 
 ### 14.1 Measured problem
 

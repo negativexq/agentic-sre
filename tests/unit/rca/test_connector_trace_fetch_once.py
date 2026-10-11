@@ -1,4 +1,4 @@
-"""live-trace-design §14 P0: a capture fetches an identical trace once on the path the lab uses, through the Connector.
+"""live-trace-design §14.2 P0: concurrent identical trace fetches of a capture are made once, through the Connector.
 
 ControlPlane ProviderAdapter -> ConnectorTempoReader -> ConnectorClient -> encoded bytes -> Connector ->
 TempoTraceReader -> Tempo's HTTP API (a fake opener counting the real trace-by-ID requests).
@@ -7,12 +7,14 @@ TempoTraceReader -> Tempo's HTTP API (a fake opener counting the real trace-by-I
 from __future__ import annotations
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from urllib.request import Request
 
-import pytest
 from provider_test_helpers import provider_session_factory
 
+from packages.connector import wire
 from packages.connector.client import ConnectorClient, in_process_transport, provider_readers
 from packages.connector.service import Connector
 from packages.rca.investigation.tempo import TempoConfig, TempoTraceReader
@@ -59,10 +61,16 @@ def _span(trace_id: str, span_id: str, service: str) -> dict[str, object]:
 
 
 class _Tempo:
-    """Tempo's HTTP API: each service's search finds the shared trace and its own."""
+    """Tempo's HTTP API: each service's search finds the shared trace and its own.
+
+    A fetch of the shared trace is held until a second one arrives, or 0.5 s: two workers reading one slice
+    overlap, as ``_capture_traces``'s two workers do, whatever the scheduler does.
+    """
 
     def __init__(self) -> None:
         self.trace_fetches: list[str] = []
+        self._lock = threading.Lock()
+        self._second = threading.Event()
 
     def __call__(self, request: Request, *, timeout: float) -> _Response:
         del timeout
@@ -71,7 +79,13 @@ class _Tempo:
             service = next(name for name in OWN if f"%22{name}%22" in url)
             ids = [SHARED, OWN[service]]
             return _Response(json.dumps({"traces": [{"traceID": i} for i in ids]}).encode())
-        self.trace_fetches.append(url)
+        with self._lock:
+            self.trace_fetches.append(url)
+            shared = sum(f"/{SHARED}?" in fetch for fetch in self.trace_fetches)
+        if f"/{SHARED}?" in url:
+            if shared >= 2:
+                self._second.set()
+            self._second.wait(0.5)
         trace_id = next(i for i in (SHARED, *OWN.values()) if f"/{i}?" in url)
         resource = [
             {"key": "service.name", "value": {"stringValue": "order-service"}},
@@ -89,32 +103,78 @@ class _Tempo:
         return _Response(json.dumps(payload).encode())
 
 
-def _control_plane_adapter(tempo: _Tempo) -> ProviderAdapter:
+def _control_plane_adapter(tempo: _Tempo) -> tuple[ProviderAdapter, Connector]:
     connector = Connector(
         providers=ProviderReaders(
             tempo=TempoTraceReader(TempoConfig("https://tempo.example.internal"), tempo)
         )
     )
     readers = provider_readers(ConnectorClient(in_process_transport(connector)))
-    return ProviderAdapter("run", "CAPTURE", provider_session_factory(), readers)
+    return ProviderAdapter("run", "CAPTURE", provider_session_factory(), readers), connector
 
 
 def _capture(adapter: ProviderAdapter) -> list[object]:
-    """One capture: the services' reads of one slice, as ``_capture_traces`` makes them."""
+    """One slice of one capture: two services read at once by the two workers, then the third."""
     start, stop = T0 - timedelta(minutes=1), T0
-    return [capture_traces(adapter, [("shop", service)], start, stop) for service in SERVICES]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        overlapping = list(
+            pool.map(
+                lambda service: capture_traces(adapter, [("shop", service)], start, stop),
+                SERVICES[:2],
+            )
+        )
+    return [*overlapping, capture_traces(adapter, [("shop", SERVICES[2])], start, stop)]
 
 
-@pytest.mark.xfail(
-    strict=True, reason="live-trace §14 P0: the Connector path does not fetch once yet"
-)
-def test_a_capture_through_the_connector_fetches_an_identical_trace_once() -> None:
+def test_a_capture_through_the_connector_joins_concurrent_identical_fetches() -> None:
     plain = _Tempo()
-    without = _capture(_control_plane_adapter(plain))
+    adapter, _ = _control_plane_adapter(plain)
+    without = _capture(adapter)
     once = _Tempo()
-    with_reuse = _capture(_control_plane_adapter(once).fetching_traces_once())
+    adapter, connector = _control_plane_adapter(once)
+    with_join = _capture(adapter.fetching_traces_once())
 
-    assert len(plain.trace_fetches) == 6
-    assert with_reuse == without
-    # the shared trace reaches Tempo once, each service's own trace once
-    assert len(once.trace_fetches) == len(set(once.trace_fetches)) == 4
+    shared = f"/{SHARED}?"
+    assert sum(shared in url for url in plain.trace_fetches) == 3
+    # the two overlapping reads share one fetch; the third read, after it, asks Tempo again
+    assert sum(shared in url for url in once.trace_fetches) == 2
+    assert len(once.trace_fetches) == 5
+    assert with_join == without
+    preflight = json.loads(
+        connector.handle(json.dumps({"version": wire.WIRE_VERSION, "op": "preflight"}).encode())
+    )
+    assert preflight["result"]["trace_fetches"] == {
+        "requests": 6,
+        "joined": 1,
+        "http_fetches": 5,
+        "failures": 0,
+        "verify_differences": 0,
+    }
+
+
+def test_an_older_connector_is_never_sent_a_capture_scope() -> None:
+    class _OldTempo:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def query(self, target: object, query: object) -> tuple[()]:
+            self.calls += 1
+            return ()
+
+    old = _OldTempo()
+    connector = Connector(providers=ProviderReaders(tempo=old))
+    assert "trace_capture_scope" not in connector.capabilities()
+    sent: list[bytes] = []
+    transport = in_process_transport(connector)
+
+    def recording(payload: bytes) -> bytes:
+        sent.append(payload)
+        return transport(payload)
+
+    readers = provider_readers(ConnectorClient(recording))
+    adapter = ProviderAdapter("run", "CAPTURE", provider_session_factory(), readers)
+    capture_traces(
+        adapter.fetching_traces_once(), [("shop", "order-service")], T0 - timedelta(minutes=1), T0
+    )
+    assert old.calls == 1
+    assert all(b"capture_scope" not in payload for payload in sent)

@@ -1761,7 +1761,7 @@ memory once and was again near its limit.
 - **No diagnosis of these runs was read or scored.** They select nothing, and their stored data stays as it is.
 - **The twenty-first `HOLDOUT`** is pre-registered separately, with new seeds.
 
-## 37. Twenty-first HOLDOUT, full: §36 again with Tempo's load reduced (2026-10-11, proposed, frozen before the run)
+## 37. Twenty-first HOLDOUT, full: §36 again with Tempo's load reduced (2026-10-11, owner-approved, frozen before the run)
 
 The twentieth (§36) was stopped by the owner (§36.1) so that it could run again with Tempo's load reduced. This one
 measures the same engine with the same criteria, with new seeds. It also measures the two load changes.

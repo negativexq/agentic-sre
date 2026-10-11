@@ -3072,7 +3072,7 @@ unused" although `order-service` publishes to it: its condition 2 holds through 
 **3. B, C and the `HOLDOUT`.** B and C follow, under §29.6. The `HOLDOUT` that measures §29 is pre-registered in
 testbed design once B and C are implemented.
 
-### 29.8 B reads the calls of the last minute before the onset (amendment found by the `DEV` check; proposed 2026-10-11)
+### 29.8 B reads the calls of the last minute before the onset (amendment found by the `DEV` check; owner-approved 2026-10-11)
 
 **Found by the `DEV` check of §29.4** (`dev20-kafka-delay`, engine 2.10.0 at `ee1e19c`, unscored). The check is
 variant B of the dependency family, with a 300 ms `NetworkChaos` delay on kafka's Pod from the baseline's end.

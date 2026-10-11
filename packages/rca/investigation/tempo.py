@@ -7,8 +7,9 @@ import binascii
 import json
 import os
 import re
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+import threading
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Protocol, cast
@@ -474,10 +475,43 @@ def _metrics(
     )
 
 
+class TraceFetchCache:
+    """One capture's trace-by-ID responses (live-trace-design.md §13).
+
+    A request identical to one already answered in the same capture (same trace ID, same range) is not sent
+    again. A 404 is kept as ``None``; any other failure is not kept, so a later read asks Tempo itself.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._keys: dict[tuple[str, int, int], threading.Lock] = {}
+        self._payloads: dict[tuple[str, int, int], Mapping[str, object] | None] = {}
+
+    def fetch(
+        self,
+        key: tuple[str, int, int],
+        get: Callable[[], Mapping[str, object] | None],
+    ) -> Mapping[str, object] | None:
+        with self._lock:
+            key_lock = self._keys.setdefault(key, threading.Lock())
+        # a concurrent read of the same trace waits for the first instead of sending its own
+        with key_lock:
+            if key in self._payloads:
+                return self._payloads[key]
+            payload = get()
+            self._payloads[key] = payload
+            return payload
+
+
 @dataclass(frozen=True)
 class TempoTraceReader:
     config: TempoConfig
     opener: _TempoOpener = field(default=_default_opener, repr=False, compare=False)
+    trace_cache: TraceFetchCache | None = field(default=None, repr=False, compare=False)
+
+    def fetching_once(self) -> TempoTraceReader:
+        """This reader for one capture: an identical trace fetch reaches Tempo once (§13)."""
+        return replace(self, trace_cache=TraceFetchCache())
 
     def _headers(self) -> dict[str, str]:
         headers = {"Accept": "application/json"}
@@ -512,6 +546,25 @@ class TempoTraceReader:
             raise TempoProtocolError("Tempo returned invalid JSON") from error
         return _mapping(decoded, "response")
 
+    def _fetch_trace(self, trace_id: str, start: int, end: int) -> Mapping[str, object] | None:
+        """One trace by ID over the range, or ``None`` when Tempo does not have it."""
+
+        def get() -> Mapping[str, object] | None:
+            try:
+                return self._get_json(
+                    f"/api/v2/traces/{quote(trace_id, safe='')}",
+                    {"start": start, "end": end},
+                    _MAX_TRACE_RESPONSE_BYTES,
+                )
+            except TempoHttpError as error:
+                if error.status_code == 404:
+                    return None
+                raise
+
+        if self.trace_cache is None:
+            return get()
+        return self.trace_cache.fetch((trace_id, start, end), get)
+
     def query(self, target: EntityRef, query: InvestigationQuery) -> TempoTraceBatch:
         start, end = _validate_query(query)
         traceql = _compile_target_traceql(target)
@@ -530,17 +583,10 @@ class TempoTraceReader:
         missing: list[str] = []
         spans: dict[tuple[str, str], TraceSpanObservation] = {}
         for trace_id in selected_ids:
-            try:
-                payload = self._get_json(
-                    f"/api/v2/traces/{quote(trace_id, safe='')}",
-                    {"start": start, "end": end},
-                    _MAX_TRACE_RESPONSE_BYTES,
-                )
-            except TempoHttpError as error:
-                if error.status_code == 404:
-                    missing.append(trace_id)
-                    continue
-                raise
+            payload = self._fetch_trace(trace_id, start, end)
+            if payload is None:
+                missing.append(trace_id)
+                continue
             fetched.append(trace_id)
             for span in parse_tempo_trace_json(payload):
                 identity = (span.trace_id, span.span_id)
@@ -586,6 +632,7 @@ __all__ = [
     "TempoSearchDiagnostics",
     "TempoTraceBatch",
     "TempoTraceReader",
+    "TraceFetchCache",
     "_compile_target_traceql",
     "parse_tempo_trace_json",
 ]

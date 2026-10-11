@@ -338,3 +338,14 @@ spans, so it needs its own rule.
   - trace-by-ID requests per incident, read from Tempo's log;
   - Tempo restarts and its memory peak;
   - failed reads per run.
+
+### 13.4 Implementation
+
+- `ProviderAdapter.fetching_traces_once()` gives each `_capture_traces` call its own `TraceFetchCache`. Nothing is
+  kept across captures.
+- A trace-by-ID request is reused only when it is identical: same trace ID and same range. The services' searches of
+  one slice share that range, so they share their fetches. Another slice is another request.
+- A 404 is reused as missing. Any other failure is not kept: the next read asks Tempo itself.
+- Two concurrent reads of the same trace wait for one fetch.
+- Unit tests in `test_tempo_backend.py` show that reads with reuse return the same batches as reads without, with
+  fewer fetches.

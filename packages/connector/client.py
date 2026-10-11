@@ -8,6 +8,7 @@ returned as an empty result, so callers that already map exceptions to failed re
 
 from __future__ import annotations
 
+import secrets
 import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -177,13 +178,26 @@ class ConnectorLokiReader:
 
 
 class ConnectorTempoReader:
-    def __init__(self, client: ConnectorClient) -> None:
+    def __init__(self, client: ConnectorClient, capture_scope: str | None = None) -> None:
         self._client = client
+        self._capture_scope = capture_scope
+
+    def fetching_once(self) -> ConnectorTempoReader:
+        """This reader for one capture (live-trace-design.md §14.2), if the Connector takes a scope.
+
+        An older Connector rejects the unknown field, so it is never sent one.
+        """
+        if "trace_capture_scope" not in self._client.capabilities():
+            return self
+        return ConnectorTempoReader(self._client, secrets.token_hex(16))
 
     def query(
         self, target: EntityRef, query: InvestigationQuery
     ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch:
-        return wire.traces_from_wire(self._client.call("query_traces", _query_args(target, query)))
+        args = _query_args(target, query)
+        if self._capture_scope is not None:
+            args["capture_scope"] = self._capture_scope
+        return wire.traces_from_wire(self._client.call("query_traces", args))
 
 
 def provider_readers(client: ConnectorClient) -> ProviderReaders:

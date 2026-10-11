@@ -209,6 +209,8 @@ class Connector:
             names += ["resource_pressure", "traffic"]
         if self.providers.tempo is not None:
             names.append("runtime_traces")
+            if hasattr(self.providers.tempo, "fetching_once"):
+                names.append("trace_capture_scope")
         if self.cluster is not None:
             names.append("changes")
         if self.alert_source is not None or self.accept_webhook:
@@ -798,7 +800,10 @@ class Connector:
                 "prometheus": self.providers.prometheus is not None,
                 "tempo": self.providers.tempo is not None,
             }
+            flights = getattr(self.providers.tempo, "flights", None)
             return {
+                # live-trace-design.md §14.2: what the capture reads asked of Tempo since start
+                "trace_fetches": flights.totals.as_dict() if flights is not None else None,
                 "backends": [
                     {
                         "name": name,
@@ -842,11 +847,18 @@ class Connector:
                     logs.services, logs.starts_at, logs.ends_at, limit=logs.limit
                 ),
             )
-        query = _args(wire.TargetQueryArgs, args)
         if request.op == "query_traces":
-            if self.providers.tempo is None:
+            traces = _args(wire.TraceQueryArgs, args)
+            reader = self.providers.tempo
+            if reader is None:
                 raise LookupError("tempo backend is not configured")
-            return wire.traces_to_wire(self.providers.tempo.query(query.target, query.query))
+            if traces.capture_scope is not None:
+                fetching_once = getattr(reader, "fetching_once", None)
+                if fetching_once is None:
+                    raise LookupError("tempo backend does not take a capture scope")
+                reader = fetching_once(traces.capture_scope)
+            return wire.traces_to_wire(reader.query(traces.target, traces.query))
+        query = _args(wire.TargetQueryArgs, args)
         if self.providers.prometheus is None:
             raise LookupError("prometheus backend is not configured")
         if request.op == "query_resource_pressure":

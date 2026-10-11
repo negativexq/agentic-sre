@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from email.message import Message
 from urllib.error import HTTPError
@@ -36,7 +38,6 @@ from packages.rca.investigation.tempo import (
     TempoTraceReader,
     _compile_target_traceql,
     _TempoHttpResponse,
-    _TempoOpener,
     parse_tempo_trace_json,
 )
 from packages.rca.investigation.tools import RuntimeTracesTool
@@ -332,88 +333,179 @@ def test_fetch_404_is_missing_but_other_errors_fail() -> None:
         )
 
 
-def _fetch_once_opener(calls: list[str]) -> _TempoOpener:
-    shared = "b" * 32
-    own = {"payment": "c" * 32, "order": "d" * 32, "worker": "e" * 32}
-    search_url = "https://tempo.example.internal/api/search"
+class _ChangingTempo:
+    """A Tempo whose traces change between requests; a fetch can be held open to make waiters overlap."""
 
-    def opener(request: Request, *, timeout: float) -> _Response:
+    def __init__(self, versions: list[list[dict[str, object]] | None]) -> None:
+        self.versions = versions
+        self.fetches = 0
+        self.hold = threading.Event()
+        self.hold.set()
+        self.started = threading.Event()
+        self._lock = threading.Lock()
+
+    def __call__(self, request: Request, *, timeout: float) -> _Response:
         del timeout
         url = request.full_url
-        calls.append(url)
-        if url.startswith(search_url):
-            service = next(name for name in own if f"%22{name}%22" in url)
-            ids = [shared, own[service]]
-            return _Response(json.dumps({"traces": [{"traceID": i} for i in ids]}).encode())
-        if f"/{own['worker']}?" in url:
-            raise HTTPError(url, 404, "missing", Message(), None)
-        trace_id = next(i for i in (shared, *own.values()) if f"/{i}?" in url)
-        spans = [
-            _raw_span(trace_id[:16], trace_id=trace_id),
-            _raw_span("2" * 16, trace_id=trace_id),
-        ]
-        return _Response(json.dumps(_trace_payload(spans)).encode())
-
-    return opener
-
-
-def test_a_capture_fetches_an_identical_trace_once_and_stores_the_same_spans() -> None:
-    """live-trace-design.md §13: the services' searches of one slice share a trace; it reaches Tempo once."""
-    services = ("payment", "order", "worker")
-    plain_calls: list[str] = []
-    plain = TempoTraceReader(
-        TempoConfig("https://tempo.example.internal"), _fetch_once_opener(plain_calls)
-    )
-    once_calls: list[str] = []
-    once = TempoTraceReader(
-        TempoConfig("https://tempo.example.internal"), _fetch_once_opener(once_calls)
-    ).fetching_once()
-
-    without = [plain.query(_entity(name=name), _query()) for name in services]
-    with_reuse = [once.query(_entity(name=name), _query()) for name in services]
-
-    assert with_reuse == without
-    fetches = [url for url in once_calls if "/api/v2/traces/" in url]
-    assert len(fetches) == len(set(fetches)) == 4
-    assert len([url for url in plain_calls if "/api/v2/traces/" in url]) == 6
-    # a 404 is answered once too, and stays missing
-    assert with_reuse[2].diagnostics.missing_trace_ids == ("e" * 32,)
-    # another range is another request
-    later = InvestigationQuery(start=T0, end=T0 + timedelta(minutes=2), limit=32)
-    once.query(_entity(name="payment"), later)
-    assert len([url for url in once_calls if "/api/v2/traces/" in url]) == 6
-
-
-def test_a_failed_fetch_is_not_kept_and_a_new_capture_starts_empty() -> None:
-    calls: list[str] = []
-
-    def opener(request: Request, *, timeout: float) -> _Response:
-        del timeout
-        url = request.full_url
-        calls.append(url)
-        if url.startswith("https://tempo.example.internal/api/search"):
+        if "/api/search?" in url:
             return _Response(json.dumps({"traces": [{"traceID": TRACE_ID}]}).encode())
-        raise HTTPError(url, 500, "failure", Message(), None)
-
-    reader = TempoTraceReader(TempoConfig("https://tempo.example.internal"), opener)
-    once = reader.fetching_once()
-    for _ in range(2):
-        with pytest.raises(TempoHttpError):
-            once.query(_entity(), _query())
-    assert len([url for url in calls if "/api/v2/traces/" in url]) == 2
-    assert reader.trace_cache is None
-    assert once.fetching_once().trace_cache is not once.trace_cache
+        with self._lock:
+            version = self.versions[min(self.fetches, len(self.versions) - 1)]
+            self.fetches += 1
+        self.started.set()
+        self.hold.wait(5)
+        if version is None:
+            raise HTTPError(url, 404, "missing", Message(), None)
+        return _Response(json.dumps(_trace_payload(version)).encode())
 
 
-def test_the_capture_adapter_scopes_the_reuse_to_one_capture() -> None:
+PRODUCER = _raw_span("1" * 16, kind=4)
+CONSUMER = _raw_span("2" * 16, parent="1" * 16, kind=5, start=90)
+
+
+def _ids(batch: TempoTraceBatch) -> list[str]:
+    return [span.span_id for span in batch.spans]
+
+
+def test_a_late_kafka_consumer_span_is_in_the_next_read_of_the_same_capture() -> None:
+    """live-trace-design.md §14.2: nothing is kept after a fetch, so a later span is never hidden."""
+    tempo = _ChangingTempo([[PRODUCER], [PRODUCER, CONSUMER]])
+    reader = TempoTraceReader(TempoConfig("https://tempo.example.internal"), tempo).fetching_once()
+    first = reader.query(_entity(), _query())
+    second = reader.query(_entity(), _query())
+    assert _ids(first) == ["1" * 16]
+    assert _ids(second) == ["1" * 16, "2" * 16]
+    assert tempo.fetches == 2
+
+
+def test_a_trace_ingested_late_is_found_by_the_next_read() -> None:
+    tempo = _ChangingTempo([None, [PRODUCER]])
+    reader = TempoTraceReader(TempoConfig("https://tempo.example.internal"), tempo).fetching_once()
+    assert reader.query(_entity(), _query()).diagnostics.missing_trace_ids == (TRACE_ID,)
+    assert _ids(reader.query(_entity(), _query())) == ["1" * 16]
+
+
+def _overlapping(reader: TempoTraceReader, tempo: _ChangingTempo, n: int) -> list[TempoTraceBatch]:
+    """``n`` identical reads, all waiting on the first fetch while it is held open."""
+    tempo.hold.clear()
+    with ThreadPoolExecutor(max_workers=n) as pool:
+        first = pool.submit(reader.query, _entity(), _query())
+        assert tempo.started.wait(5)
+        rest = [pool.submit(reader.query, _entity(), _query()) for _ in range(n - 1)]
+        assert reader.flights is not None
+        while reader.flights.totals.joined < n - 1:
+            threading.Event().wait(0.005)
+        tempo.hold.set()
+        return [first.result(), *(future.result() for future in rest)]
+
+
+@pytest.mark.parametrize("n", [2, 8])
+def test_concurrent_identical_reads_share_one_fetch_then_see_the_complete_trace(n: int) -> None:
+    tempo = _ChangingTempo([[PRODUCER], [PRODUCER, CONSUMER]])
+    reader = TempoTraceReader(TempoConfig("https://tempo.example.internal"), tempo).fetching_once()
+    shared = _overlapping(reader, tempo, n)
+    assert tempo.fetches == 1
+    assert all(_ids(batch) == ["1" * 16] for batch in shared)
+    # the partial trace is not kept: the next read finds it complete
+    assert _ids(reader.query(_entity(), _query())) == ["1" * 16, "2" * 16]
+    assert reader.flights is not None
+    assert reader.flights.totals.as_dict() == {
+        "requests": n + 1,
+        "joined": n - 1,
+        "http_fetches": 2,
+        "failures": 0,
+        "verify_differences": 0,
+    }
+
+
+def test_a_failure_reaches_every_waiter_and_is_not_kept() -> None:
+    tempo = _ChangingTempo([[PRODUCER]])
+    calls: list[int] = []
+
+    def failing(request: Request, *, timeout: float) -> _Response:
+        if "/api/v2/traces/" in request.full_url and not calls:
+            calls.append(1)
+            tempo.started.set()
+            tempo.hold.wait(5)
+            raise HTTPError(request.full_url, 500, "failure", Message(), None)
+        return tempo(request, timeout=timeout)
+
+    reader = TempoTraceReader(
+        TempoConfig("https://tempo.example.internal"), failing
+    ).fetching_once()
+    tempo.hold.clear()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(reader.query, _entity(), _query())]
+        assert tempo.started.wait(5)
+        futures.append(pool.submit(reader.query, _entity(), _query()))
+        assert reader.flights is not None
+        while reader.flights.totals.joined < 1:
+            threading.Event().wait(0.005)
+        tempo.hold.set()
+        for future in futures:
+            with pytest.raises(TempoHttpError):
+                future.result()
+    assert _ids(reader.query(_entity(), _query())) == ["1" * 16]
+    assert reader.flights.totals.failures == 1
+
+
+def test_scopes_tenants_and_ranges_are_never_joined() -> None:
+    tempo = _ChangingTempo([[PRODUCER]])
+    base = TempoTraceReader(TempoConfig("https://tempo.example.internal"), tempo)
+    tenant = TempoTraceReader(
+        TempoConfig("https://tempo.example.internal", tenant_id="other"), tempo, base.flights
+    )
+    later = InvestigationQuery(start=T0, end=T0 + timedelta(minutes=2), limit=32)
+    tempo.hold.clear()
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [
+            pool.submit(base.fetching_once().query, _entity(), _query()),
+            pool.submit(base.fetching_once().query, _entity(), _query()),
+            pool.submit(tenant.fetching_once("a" * 32).query, _entity(), _query()),
+            pool.submit(base.fetching_once("a" * 32).query, _entity(), later),
+        ]
+        deadline = threading.Event()
+        for _ in range(1000):  # every one of the four reaches Tempo; a joined one never would
+            if tempo.fetches >= 4:
+                break
+            deadline.wait(0.005)
+        tempo.hold.set()
+        for future in futures:
+            future.result()
+    assert base.flights is not None and base.flights.totals.joined == 0
+
+
+def test_verification_fetches_for_each_waiter_and_reports_a_difference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import packages.rca.investigation.tempo as tempo_module
+
+    warnings: list[str] = []
+    # another test's logging configuration may disable this logger; read what is logged directly
+    monkeypatch.setattr(
+        tempo_module.logger, "warning", lambda message, *args: warnings.append(message % args)
+    )
+    tempo = _ChangingTempo([[PRODUCER], [PRODUCER, CONSUMER]])
+    config = TempoConfig("https://tempo.example.internal", verify_single_flight=True)
+    reader = TempoTraceReader(config, tempo).fetching_once()
+    first, joined = _overlapping(reader, tempo, 2)
+    # the waiter keeps its own fetch, which already holds the consumer span
+    assert _ids(first) == ["1" * 16]
+    assert _ids(joined) == ["1" * 16, "2" * 16]
+    assert reader.flights is not None and reader.flights.totals.verify_differences == 1
+    assert len(warnings) == 1 and TRACE_ID in warnings[0] and "differs" in warnings[0]
+
+
+def test_a_reader_without_a_scope_never_joins_and_the_adapter_binds_one() -> None:
     reader = TempoTraceReader(TempoConfig("https://tempo.example.internal"), _Transport({}))
-    adapter = _provider_adapter(reader, "CAPTURE")
-    capture = adapter.fetching_traces_once()
-    assert adapter.readers.tempo is reader
+    assert reader.capture_scope is None
+    capture = _provider_adapter(reader, "CAPTURE").fetching_traces_once()
     assert isinstance(capture.readers.tempo, TempoTraceReader)
-    assert capture.readers.tempo.trace_cache is not None
-    assert adapter.fetching_traces_once().readers.tempo is not capture.readers.tempo
+    assert capture.readers.tempo.capture_scope is not None
+    assert capture.readers.tempo.flights is reader.flights
     assert _provider_adapter(None, "CAPTURE").fetching_traces_once().readers.tempo is None
+    with pytest.raises(ValueError):
+        reader.fetching_once("not-a-scope")
 
 
 def test_otlp_parser_scalar_attributes_kinds_status_and_ids() -> None:

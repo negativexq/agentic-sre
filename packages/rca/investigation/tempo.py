@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import logging
 import os
 import re
 import threading
@@ -25,6 +26,8 @@ from packages.rca.model import (
     TraceSpanStatus,
 )
 from packages.rca.traces import SEMANTIC_ATTRIBUTE_ALLOWLIST
+
+logger = logging.getLogger(__name__)
 
 _MAX_SEARCH_TRACE_IDS = 8
 _MAX_SEARCH_RESPONSE_BYTES = 1_048_576
@@ -81,6 +84,8 @@ class TempoConfig:
     tenant_id: str | None = None
     bearer_token: str | None = field(default=None, repr=False)
     timeout_seconds: float = 5.0
+    # live-trace-design.md §14.2: joined waiters also fetch for themselves and report differences
+    verify_single_flight: bool = False
 
     def __post_init__(self) -> None:
         try:
@@ -114,7 +119,14 @@ class TempoConfig:
             timeout = float(raw_timeout)
         except ValueError as error:
             raise ValueError("TEMPO_TIMEOUT_SECONDS must be numeric") from error
-        return cls(base_url, tenant_id=tenant, bearer_token=token, timeout_seconds=timeout)
+        verify = os.getenv("TEMPO_VERIFY_SINGLE_FLIGHT", "").strip().lower() in {"1", "true"}
+        return cls(
+            base_url,
+            tenant_id=tenant,
+            bearer_token=token,
+            timeout_seconds=timeout,
+            verify_single_flight=verify,
+        )
 
 
 class TempoSearchCompleteness(StrEnum):
@@ -475,43 +487,166 @@ def _metrics(
     )
 
 
-class TraceFetchCache:
-    """One capture's trace-by-ID responses (live-trace-design.md §13).
+TRACE_SCOPE_IDLE_SECONDS = 120.0
+TRACE_SCOPE_MAX = 64
+CAPTURE_SCOPE_PATTERN = re.compile(r"^[0-9a-f]{32}$")
+_FlightKey = tuple[str, str | None, str, str, int, int]
 
-    A request identical to one already answered in the same capture (same trace ID, same range) is not sent
-    again. A 404 is kept as ``None``; any other failure is not kept, so a later read asks Tempo itself.
+
+@dataclass
+class TraceFlightCounts:
+    """What one capture scope (or the reader in all) asked of Tempo (live-trace-design.md §14.2)."""
+
+    requests: int = 0
+    joined: int = 0
+    http_fetches: int = 0
+    failures: int = 0
+    verify_differences: int = 0
+
+    def as_dict(self) -> dict[str, int]:
+        return {
+            "requests": self.requests,
+            "joined": self.joined,
+            "http_fetches": self.http_fetches,
+            "failures": self.failures,
+            "verify_differences": self.verify_differences,
+        }
+
+
+class _Flight:
+    def __init__(self) -> None:
+        self.done = threading.Event()
+        self.payload: Mapping[str, object] | None = None
+        self.error: BaseException | None = None
+
+
+class TraceSingleFlight:
+    """Identical trace fetches in flight at the same time, within one capture scope, are made once (§14.2).
+
+    Nothing is kept once a fetch is done: the next identical request goes to Tempo. A failure reaches every
+    waiter of that fetch and nothing else. With ``verify``, every joined waiter also fetches for itself, keeps
+    its own fetch, and a difference from the shared one is logged and counted.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, verify: bool = False, clock: Callable[[], float] | None = None) -> None:
+        import time
+
+        self.verify = verify
+        self._clock = clock or time.monotonic
         self._lock = threading.Lock()
-        self._keys: dict[tuple[str, int, int], threading.Lock] = {}
-        self._payloads: dict[tuple[str, int, int], Mapping[str, object] | None] = {}
+        self._flights: dict[_FlightKey, _Flight] = {}
+        self._scopes: dict[str, tuple[TraceFlightCounts, float]] = {}
+        self.totals = TraceFlightCounts()
+
+    def _scope(self, scope: str) -> TraceFlightCounts:
+        now = self._clock()
+        for name, (counts, last) in list(self._scopes.items()):
+            if now - last > TRACE_SCOPE_IDLE_SECONDS:
+                self._end(name, counts)
+        counts = self._scopes.pop(scope, (TraceFlightCounts(), now))[0]
+        self._scopes[scope] = (counts, now)
+        while len(self._scopes) > TRACE_SCOPE_MAX:
+            oldest = next(iter(self._scopes))
+            self._end(oldest, self._scopes[oldest][0])
+        return counts
+
+    def _end(self, scope: str, counts: TraceFlightCounts) -> None:
+        del self._scopes[scope]
+        logger.info(
+            "trace capture scope %s ended: %s",
+            scope,
+            " ".join(f"{name}={value}" for name, value in counts.as_dict().items()),
+        )
+
+    def _count(self, counts: TraceFlightCounts, name: str) -> None:
+        with self._lock:
+            setattr(counts, name, getattr(counts, name) + 1)
+            setattr(self.totals, name, getattr(self.totals, name) + 1)
 
     def fetch(
         self,
-        key: tuple[str, int, int],
+        key: _FlightKey,
         get: Callable[[], Mapping[str, object] | None],
     ) -> Mapping[str, object] | None:
+        scope = key[2]
         with self._lock:
-            key_lock = self._keys.setdefault(key, threading.Lock())
-        # a concurrent read of the same trace waits for the first instead of sending its own
-        with key_lock:
-            if key in self._payloads:
-                return self._payloads[key]
-            payload = get()
-            self._payloads[key] = payload
-            return payload
+            counts = self._scope(scope)
+            counts.requests += 1
+            self.totals.requests += 1
+            flight = self._flights.get(key)
+            leader = flight is None
+            if flight is None:
+                flight = _Flight()
+                self._flights[key] = flight
+            else:
+                counts.joined += 1
+                self.totals.joined += 1
+
+        def fetched() -> Mapping[str, object] | None:
+            self._count(counts, "http_fetches")
+            try:
+                return get()
+            except BaseException:
+                self._count(counts, "failures")
+                raise
+
+        if leader:
+            try:
+                flight.payload = fetched()
+            except BaseException as error:
+                flight.error = error
+                raise
+            finally:
+                with self._lock:
+                    del self._flights[key]
+                flight.done.set()
+            return flight.payload
+        flight.done.wait()
+        if flight.error is not None:
+            raise flight.error
+        if not self.verify:
+            return flight.payload
+        own = fetched()
+        if _span_set(own) != _span_set(flight.payload):
+            self._count(counts, "verify_differences")
+            logger.warning(
+                "trace single-flight verification: trace %s differs (shared %d spans, own %d spans)",
+                key[3],
+                len(_span_set(flight.payload)),
+                len(_span_set(own)),
+            )
+        return own
+
+
+def _span_set(payload: Mapping[str, object] | None) -> frozenset[str]:
+    if payload is None:
+        return frozenset()
+    return frozenset(
+        json.dumps(span.model_dump(mode="json"), sort_keys=True)
+        for span in parse_tempo_trace_json(payload)
+    )
 
 
 @dataclass(frozen=True)
 class TempoTraceReader:
     config: TempoConfig
     opener: _TempoOpener = field(default=_default_opener, repr=False, compare=False)
-    trace_cache: TraceFetchCache | None = field(default=None, repr=False, compare=False)
+    flights: TraceSingleFlight | None = field(default=None, repr=False, compare=False)
+    capture_scope: str | None = field(default=None, compare=False)
 
-    def fetching_once(self) -> TempoTraceReader:
-        """This reader for one capture: an identical trace fetch reaches Tempo once (§13)."""
-        return replace(self, trace_cache=TraceFetchCache())
+    def __post_init__(self) -> None:
+        if self.flights is None:
+            object.__setattr__(
+                self, "flights", TraceSingleFlight(verify=self.config.verify_single_flight)
+            )
+        if self.capture_scope is not None and not CAPTURE_SCOPE_PATTERN.match(self.capture_scope):
+            raise ValueError("capture scope must be 32 lowercase hex characters")
+
+    def fetching_once(self, capture_scope: str | None = None) -> TempoTraceReader:
+        """This reader for one capture: concurrent identical trace fetches reach Tempo once (§14.2)."""
+        import secrets
+
+        return replace(self, capture_scope=capture_scope or secrets.token_hex(16))
 
     def _headers(self) -> dict[str, str]:
         headers = {"Accept": "application/json"}
@@ -561,9 +696,17 @@ class TempoTraceReader:
                     return None
                 raise
 
-        if self.trace_cache is None:
+        if self.capture_scope is None or self.flights is None:
             return get()
-        return self.trace_cache.fetch((trace_id, start, end), get)
+        key = (
+            self.config.base_url,
+            self.config.tenant_id,
+            self.capture_scope,
+            trace_id,
+            start,
+            end,
+        )
+        return self.flights.fetch(key, get)
 
     def query(self, target: EntityRef, query: InvestigationQuery) -> TempoTraceBatch:
         start, end = _validate_query(query)
@@ -632,7 +775,8 @@ __all__ = [
     "TempoSearchDiagnostics",
     "TempoTraceBatch",
     "TempoTraceReader",
-    "TraceFetchCache",
+    "TraceFlightCounts",
+    "TraceSingleFlight",
     "_compile_target_traceql",
     "parse_tempo_trace_json",
 ]

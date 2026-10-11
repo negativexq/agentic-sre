@@ -349,3 +349,220 @@ spans, so it needs its own rule.
 - Two concurrent reads of the same trace wait for one fetch.
 - Unit tests in `test_tempo_backend.py` show that reads with reuse return the same batches as reads without, with
   fewer fetches.
+- **Superseded by §14.2.** The sequential reuse and the kept 404 are withdrawn; only concurrent identical fetches are
+  joined.
+
+## 14. Trace reads through the Connector: fetch once (P0) and one shared read budget (P1) (2026-10-11, owner-approved with the revisions of §14.2 and §14.3)
+
+### 14.1 Measured problem
+
+**§13 never ran on the lab's path** (testbed-scenarios-design §37.1):
+- The lab's control plane reads Tempo through the Connector (`SRE_CONNECTOR_MODE=remote`).
+- `ConnectorTempoReader` has no `fetching_once`, so `fetching_traces_once()` returns the adapter unchanged.
+- The Connector makes the HTTP requests, and its image does not contain #112.
+- `tests/unit/rca/test_connector_trace_fetch_once.py` shows it on the real path (`ProviderAdapter` →
+  `ConnectorTempoReader` → `ConnectorClient` → encoded bytes → `Connector` → `TempoTraceReader`): one capture of
+  three services sends **6 trace-by-ID requests where 4 are distinct**. The test is marked `xfail(strict=True)` until
+  P0 lands.
+
+**The read budget is per incident, not shared:**
+- `_capture_traces` reads with `max_workers=2`, but each incident's diagnosis runs on its own thread
+  (`diagnose_in_background`), and no lock spans them.
+- In the twenty-first `HOLDOUT` two incidents captured in the same second, so up to four reads reached Tempo at once.
+- The bulk log capture already has the shared slot it needed for the same reason (`_log_capture_slot`).
+
+**From Tempo's own log, the first 1.5 runs of the twenty-first `HOLDOUT` (16:33–16:45):**
+- 1,525 trace-by-ID requests, 575 distinct requests (same ID, same range), 241 distinct traces.
+- One run opened five incidents. Each captured the same slices of the same three services.
+- 60 s capture reads: 1,127 requests, 6.6 GB inspected (5.9 MB per request).
+- Wide investigation reads (about 31 min): 190 requests, 0.4 GB.
+
+**Tempo 2.8.2's metrics, read from the running pod's `/metrics`:**
+- **Requests:**
+  - `tempo_query_frontend_queries_total{op="traces"|"search", result}`;
+  - `tempo_request_duration_seconds_count{route="api_v2_traces_traceid", status_code}`.
+- **Failures:**
+  - the same two series, with `result` other than `completed`, or `status_code` other than `200`;
+  - `tempo_query_frontend_retries`.
+- **Concurrency:**
+  - `tempo_inflight_requests{route="api_v2_traces_traceid"|"api_search"}`;
+  - `tempo_query_frontend_queue_length`;
+  - `tempo_query_frontend_queue_duration_seconds`.
+- **Memory:** `process_resident_memory_bytes` and `go_memstats_heap_inuse_bytes`. The kind node's cgroup files, as
+  sampled today, are the limit's view.
+- **Bytes inspected:** Tempo 2.8.2 exposes no metric for it. The name proposed in review
+  (`tempo_query_frontend_bytes_inspected_total`) does not exist in this version. It stays read from the log: the
+  `inspected_bytes` field of `msg="trace id response"`.
+- **Sharding:** each trace-by-ID request is split into 50 querier jobs (`query_frontend.trace_by_id.query_shards`,
+  default 50). 3,930 frontend requests ran as 196,500 querier requests. This is recorded here and not changed by
+  this section.
+
+### 14.2 P0: concurrent identical fetches are made once, through the Connector (revised by the owner, 2026-10-11)
+
+**Base rule: single-flight only.**
+- Within one capture, identical trace-by-ID requests to Tempo that are **in flight at the same time** are made once.
+  Each waiter receives that one response.
+- Once the fetch is done, **nothing is kept**. The next identical request goes to Tempo.
+- **What a waiter receives:** Tempo's state when the first request was served. That is at most one fetch's duration
+  (milliseconds to a second) before the waiter would have asked. It is what the waiter would have received had it
+  asked that much earlier. A span reaching Tempo in that interval is seen by the next read, as today.
+
+**The scope travels with the read:**
+- `_capture_traces` makes a random 128-bit `capture_scope` (32 hex characters).
+- `fetching_traces_once()` binds it:
+  - to a direct `TempoTraceReader`;
+  - to a `ConnectorTempoReader`, which then sends it with every `query_traces` of that capture.
+- The scope is opaque. It names no incident, service or object.
+- Requests of different scopes are never joined. Reuse across incidents is P2.
+
+**The wire is extended, and negotiated (amends connector-boundary-contract §3 and §4):**
+- `query_traces` accepts an optional `capture_scope` (`^[0-9a-f]{32}$`).
+- A Connector that accepts it lists the capability `trace_capture_scope`.
+- The client sends the field only to a Connector that lists it. An older Connector rejects unknown fields
+  (`extra="forbid"`), so it is never sent one, and its reads stay as today.
+- `WIRE_VERSION` stays `connector.v2`.
+
+**Key:** backend URL, tenant, scope, trace ID, exact `start` and `end`. Another backend, tenant, scope or range is
+another key.
+
+**Bounded:**
+- Only in-flight fetches are held: at most the number of concurrent reads.
+- A scope's bookkeeping ends when its last waiter returns.
+- A response is bounded by the existing 4 MiB limit.
+
+**A failure is never shared beyond the fetch that failed:**
+- Any failure (HTTP error, timeout, oversized or invalid response) is raised to every waiter of that fetch, as if each
+  had made it, and is not kept.
+- A 404 is not kept either. A trace missing at one moment can appear when its spans arrive. This replaces §13's
+  reuse of a 404 for the direct reader too: §13's sequential reuse inside a capture is withdrawn for the direct reader
+  as well, so both paths follow this rule.
+
+**Sequential reuse inside a capture is not adopted:**
+- **The idea:** reuse a finished fetch for a later identical request in the same capture, for example only for a
+  range that ended 60 s before the fetch.
+- **Why it is not a correctness rule:** 60 s does not prove that every span of the trace was emitted and ingested.
+  The exporter's 5 s schedule and 30 s timeout say nothing of when an asynchronous Kafka consumer runs; a delayed
+  consumption can add a span minutes later.
+- **What it may become:** a performance assumption tested on its own, behind a flag that is off. It needs a design
+  for freshness and span equivalence before it is used.
+
+**Deterministic tests:**
+- **Late spans, with a fake Tempo whose traces change over time:**
+  - a delayed Kafka consumer span added after a first fetch is present in the next identical read of the same
+    capture;
+  - late ingestion: a trace first 404, then present, is found by the next read;
+  - a partial trace (producer only) shared by concurrent waiters, then complete, is complete in the next read.
+- **Single-flight:**
+  - two and eight concurrent identical requests make one HTTP fetch;
+  - a failure reaches every waiter and is not kept;
+  - different scopes, tenants or ranges are never joined.
+- **Compatibility:** an old Connector (no capability) receives no `capture_scope`.
+- **The Connector-path test:** it fails before P0 and passes after. Its `xfail` is removed in the P0 commit, so it
+  does not stay.
+
+**Verification mode (off by default):**
+- Every joined waiter also fetches from Tempo itself, compares the span sets (`trace_id`, `span_id` and the parsed
+  span) and keeps the fresh fetch, so verifying changes no data.
+- Every difference is logged with its trace ID and the spans that differ.
+- **Acceptance:** a `DEV` run with verification on, with 0 differences. It is an acceptance check, not proof that no
+  late-span case can differ. The deterministic tests above cover those.
+
+**Counted:**
+- **Per scope, logged by the Connector when the scope ends:**
+  - requests;
+  - joined waiters;
+  - actual HTTP fetches;
+  - failures;
+  - verification differences.
+- **Cumulative totals:** the Connector's `preflight` reports them.
+
+**Expected gain: modest.** Only reads that overlap in time are joined: the two workers of one capture reading one
+slice. The counters measure it. A larger reduction needs P2 or a proven sequential reuse.
+
+### 14.3 P1: one shared capture-read budget in the control plane (revised by the owner, 2026-10-11)
+
+**Rule:**
+- The `Diagnoser` holds one **FIFO** admission gate with **2 slots**, `_trace_read_slots`, shared by every incident's
+  capture.
+- Each single capture read (one search and its at most 8 fetches, for one service and one slice) is admitted for
+  that read and releases its slot after, in a `finally`, whatever the read's outcome.
+- `max_workers=2` per capture stays.
+
+**Fairness and starvation:**
+- Waiters are admitted strictly in arrival order (a ticket queue). Python's `threading.Semaphore` does not promise
+  that.
+- No waiter is passed by a later one. A read therefore waits at most for the reads queued before it.
+
+**Why per read and not per capture:**
+- A lock around the whole capture, as for logs, would make a fifth incident wait for four whole captures.
+- Per-read admission keeps capture reads at two at a time, and the incidents' reads interleave.
+
+**Admission timeout is its own class:**
+- A read waits at most **120 s** to be admitted.
+- If it is not admitted, it is not sent. It is recorded with completeness `FAILED` and error
+  `TraceReadAdmissionTimeout`.
+- That error is distinct from every backend error (`TempoHttpError`, timeouts, `ProviderReadFailure`), and the two are
+  counted separately.
+- **Epistemically it stays `FAILED`:** a read not made is coverage, never absence (§3.2), and m21 §29 C stays blocked
+  (`TRACE_READ_FAILED`) for that caller.
+- **A waiter that times out or is cancelled leaves the queue without taking a slot.** No slot is lost.
+
+**What it bounds, and what it does not:**
+- **Bounded:** the control plane's capture reads, to two at once.
+- **Not bounded: the engine's investigation reads (`ENGINE` caller class).** Delaying them could change what an
+  investigation sees, and engine 2.10.0 is not changed.
+- **So this is not a global bound on Tempo's concurrency.** The `CAPTURE` and `ENGINE` loads are measured
+  separately: from the provider read records (`caller_class`) and from Tempo's log by range width.
+- **More than one control-plane replica:** the gate is per process. Each replica would allow two.
+- **The global point is the Connector,** one per cluster. If the measurements call for it, a total bound there is a
+  separate design.
+
+**Tests, at 5 and 10 concurrent incident captures,** against a fake reader with fixed latency:
+- at most 2 reads in flight at any time;
+- admission strictly in arrival order;
+- every read completes;
+- total time within one read's latency of reads × latency / 2;
+- no incident's capture waits for another's to finish whole;
+- a short admission wait times out late reads as `TraceReadAdmissionTimeout`, distinct from a backend failure, and
+  the capture still completes;
+- a timed-out or failing read leaves no slot held.
+
+### 14.4 Unchanged, and not decided here
+
+**Unchanged:**
+- engine 2.10.0;
+- the slices and services read (§12);
+- the 8-trace search limit and the span cap;
+- persistence, replay, and completeness as coverage;
+- the twenty-first `HOLDOUT`'s frozen code and criteria.
+
+**Not decided here:**
+- **P2,** reuse across incidents or captures;
+- **sequential reuse inside a capture** (§14.2);
+- **a Connector-side total bound** (§14.3).
+
+**Delivery:**
+- P0 and P1 are separate commits.
+- **The Connector may be rebuilt locally and used in tests.** Deploying it, or the control-plane change, to the
+  running lab needs the owner's separate approval.
+- **No new `HOLDOUT` is started by this section.**
+
+### 14.5 Planned after P0 and P1: Tempo's trace-by-ID fan-out (`query_shards`), an isolated A/B
+
+**Not changed now.** Tempo splits each trace-by-ID request into 50 querier jobs.
+
+**The plan, to be pre-registered before it runs:**
+- **Data:**
+  - a copy of the lab Tempo's stored blocks, taken after the twenty-first `HOLDOUT` ends;
+  - the recorded trace-by-ID requests of one `HOLDOUT` suite, from the streamed log.
+- **Where:** a separate local Tempo 2.8.2, one per setting, outside the lab.
+- **Settings:** `query_shards` 50 (default), 16 and 4. Nothing else differs.
+- **Replay:** the same requests, in the same order and concurrency.
+- **Measured:**
+  - latency per request (p50, p95);
+  - bytes inspected;
+  - CPU;
+  - memory peak;
+  - **trace correctness:** each response's span set compared with the default's, where any difference fails the
+    setting.
+- **Lab:** no setting reaches the lab without the owner's approval.

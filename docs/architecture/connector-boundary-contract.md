@@ -722,3 +722,15 @@ injection (in the first `HOLDOUT`, for example, an alert ended at 06:47:44, `W�
 06:52:04). Runs with an incident opened before their injection: **74 → 2**. No scored incident is affected.
 
 §17.5 stays open. The lab measurement of §17.4.3 comes with the next full `HOLDOUT`.
+
+## 18. `query_traces` takes an optional capture scope (APPROVED 2026-10-11, live-trace-design §14.2)
+
+- **The field:** `query_traces` accepts an optional `capture_scope`, 32 lowercase hex characters. It is opaque: it
+  names no incident, service or object.
+- **What the Connector does with it:** within one scope, concurrent identical trace-by-ID requests to Tempo are made
+  once. Nothing is kept after the fetch, and a failure reaches only the requests that waited on it.
+- **Negotiated:** a Connector that accepts the field lists the capability `trace_capture_scope`. The client sends it
+  only to such a Connector. An older Connector rejects unknown fields, so it is never sent one.
+- `WIRE_VERSION` stays `connector.v2`: the change is additive.
+- **`preflight`** also reports `trace_fetches`: the totals of requests, joined waiters, HTTP fetches, failures and
+  verification differences since the Connector started.

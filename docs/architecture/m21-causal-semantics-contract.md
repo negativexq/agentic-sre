@@ -2886,3 +2886,125 @@ identical apart from the commit and the run time; no prediction changes its root
 claim level, basis or dimensions (`AMBIGUOUS` 23, `INSUFFICIENT_EVIDENCE` 12).
 
 **3. The `DEV` checks and the full `HOLDOUT`** are pre-registered in testbed design §35.
+
+## 29. A dependency question answered by the claim's own path, by healthy calls, or by a declaration never used (C4; owner-approved 2026-10-11)
+
+### 29.1 Measured problem
+
+After §25 to §28, the nineteenth `HOLDOUT` (testbed design §35.1) answered every `configuration_source` question.
+- The `dependency` frontier now limits **83 of the 87 scored diagnoses that are not `RESOLVED`**. Only `scheduled-b`'s
+  4 do not have it.
+- It is the only blocker of 3 of them. 29 also have an uncovered declared symptom, and 55 an unresolved rival.
+- So no diagnosis behind an `order-service` alert can be `RESOLVED` while the question stays open, whatever else is
+  answered.
+
+**Where the question comes from.** A `calls` edge is derived from the hosts a workload declares in its environment
+(`_declared_hosts`), not from traffic. `order-service` reads the shared `workload-config`. That ConfigMap declares
+`PAYMENT_SERVICE_URL`, `KAFKA_BOOTSTRAP_SERVERS` and `REDIS_URL`, so every material claim through `order-service`
+carries three questions, one per Service.
+
+**What the run recorded,** for the 249 open questions (83 for each Service):
+
+| Dependency | On the material claim's own causal path | What the run recorded around the onset |
+|---|---|---|
+| `payment-service` | 79 of 83 | 62 with failing calls: the observed fault itself |
+| `kafka` | 0 of 83 | 79 with `kafka publish` calls in `[onset − 5 min, onset]`, none failing, none slower |
+| `redis` | 0 of 83 | **no span names it in any run**: `order-service` never calls it, only `order-worker` does |
+
+The rest:
+- **4 `payment-service` questions off the path** (`config-c`, the `order-worker` alerts): there the claim's path does
+  not reach the Service.
+- **4 `kafka` questions with no call near the onset** (`competing-b` #2): that run lost 117 trace reads when Tempo was
+  killed (§35.1).
+
+**`answer_frontier` cannot answer any of them.** It transfers a role only when the dependency's actor explains a claim
+of its own, and none of these three actors has a claim.
+
+### 29.2 Amendment
+
+Three rules. Each answers the question for one material claim, or leaves it `OPEN` with the failed condition named.
+None of them reads a name (§3 I3).
+
+**A. `m21.frontier.dependency-on-claim-path` (v1), answer `ANSWERED_ON_CLAIM_PATH`.**
+- **When:** the dependency's Service is a hop of the material claim's own observed causal path (a `CausalHop` source or
+  target of the claim's paths).
+- **Why:** the claim already explains what happened at the dependency. Whether something behind it acted is a question
+  about rival claims, adjudicated as before, not an unknown upstream role.
+- **Scope:** it answers only for the claims whose path holds the hop. A material claim whose path does not reach the
+  Service keeps the question open.
+- **Parameter:** none.
+
+**B. `m21.frontier.dependency-observed-healthy` (v1), answer `ANSWERED_OBSERVED_HEALTHY`.** All of these must hold:
+1. **Enough calls.** At least 3 call spans of the caller name the dependency in `[onset − 5 min, onset]`. The window
+   is `BASELINE_BEFORE_EXECUTION`; the 3 is §12.5's.
+2. **None failed.** No span in that window has status `ERROR`.
+3. **None slower.** Their median duration is at most twice the median of the same calls before the window, inside the
+   evidence window. With no earlier call, the condition fails.
+4. **Nothing is missing.** No trace read of the caller's service failed for the incident.
+5. **The dependency raised nothing.** No alert of the incident's window carries the dependency's Service.
+
+Otherwise it stays `OPEN` with one of `TOO_FEW_CALLS`, `FAILED_CALLS`, `SLOWER_CALLS`, `NO_EARLIER_CALLS`,
+`TRACE_READ_FAILED` or `DEPENDENCY_ALERTED`. The thresholds are fixed here, before any measurement of the rule.
+They come from existing constants, not from the results above.
+
+**C. `m21.frontier.dependency-declared-unused` (v1), answer `ANSWERED_DECLARED_UNUSED`.** All of these must hold:
+1. **The caller is traced.** The caller's server spans are present in the evidence window.
+2. **Its outgoing calls are traced.** At least one call span of the caller names another dependency it declares.
+3. **Nothing is missing.** No trace read of the caller's service failed for the incident.
+4. **The dependency is never called.** No span of the caller names the dependency anywhere from the evidence window's
+   start to the onset.
+
+Otherwise it stays `OPEN` with `CALLER_NOT_TRACED`, `CALLS_NOT_TRACED`, `TRACE_READ_FAILED` or `CALLED`. A
+dependency that is called goes to B.
+
+**C is a bounded exception to §3 I1** ("missing is not exclusion"), decided by the owner (2026-10-11).
+- I1 forbids reading absence as evidence, an uninstrumented actor and a partial window among them. C reads absence only
+  where its conditions show that a call would have been seen: the caller and its outgoing calls are traced, and no read
+  was lost. This is the standard of §26's continuous observation.
+- C never excludes or contradicts a claim. It only declares a declared-but-unused dependency not material for the
+  question.
+- I1 is otherwise unchanged.
+
+**Unchanged.**
+- `calls` edges, the frontier's derivation and materiality.
+- Leader selection, support, witnesses, explanations, coverage (§27, §28).
+- Every other condition of `RESOLVED`.
+- An answered question is answered for its claims only. A rival claim keeps its own adjudication.
+
+### 29.3 Consequences
+
+- The three rules apply only to the `dependency` role, so they cannot touch another role's question.
+- They can make a diagnosis `RESOLVED` only if every other condition already holds.
+- They answer questions; they never add, remove or reorder a claim.
+- On the nineteenth `HOLDOUT`'s questions, they would answer:
+  - A, 79 `payment-service` questions;
+  - B, 79 `kafka` questions (the 4 of `competing-b` #2 stay open, `TRACE_READ_FAILED`);
+  - C, 83 `redis` questions.
+
+  The 4 `payment-service` questions off the path stay open.
+
+### 29.4 Measurement, pre-registered
+
+1. **Offline replay of every stored run** (2.8.0 against the engine with §29).
+   - Hard:
+     - no root, leader, tier or display change;
+     - no new `RESOLVED` whose leader is not the run's cause or its execution instance.
+   - Reported:
+     - every answer with its rule and the evidence it cites;
+     - every question left open, with its condition;
+     - every new `RESOLVED`.
+2. **`DEV` checks, unscored, before the `HOLDOUT`.** Each check's harness goes in its own commit.
+   - **A delay on `kafka`** (a `NetworkChaos` on its Pod, during an existing variant): no `kafka` question may be
+     answered `ANSWERED_OBSERVED_HEALTHY` (hard).
+   - **A dependency that is used.** If the lab has no path where `order-service` calls `redis`, unit tests break each
+     condition of C in turn instead. The lab is not changed for it.
+3. **ITBench-Lite,** as a regression check.
+4. **The twentieth `HOLDOUT`,** pre-registered separately before it runs.
+
+### 29.5 Not decided here
+
+- **The 55 diagnoses with an unresolved rival,** almost all Pods: the target's own Pod in its effect role, or Pods off
+  the chain.
+- **The 29 diagnoses with an uncovered declared symptom,** most in `config-c` and `negative-c`. It is likely, but not
+  yet checked, that a rollout keeps two Pods ready and §28 then rightly does not cover the Service.
+- **Deriving `calls` from observed traffic.** C reads the declaration; it does not change where edges come from.

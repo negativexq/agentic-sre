@@ -1002,7 +1002,12 @@ def resolve_hypotheses(
         )
         for audit in trace.hypothesis_audits
     )
-    from packages.rca.frontier import ANSWERED_STATES, material_frontier, unchanged_configuration
+    from packages.rca.frontier import (
+        ANSWERED_STATES,
+        dependency_on_claim_path,
+        material_frontier,
+        unchanged_configuration,
+    )
 
     material = material_frontier(structural_alternatives, admitted_claims)
     supported_ids = set(trace.plausible_hypotheses)
@@ -1016,6 +1021,13 @@ def resolve_hypotheses(
             )
             or a
         )
+        if a.state == "OPEN"
+        else a
+        for a in answers
+    )
+    # m21 §29 A: a dependency on the material claims' own paths, where no observed role answered it
+    answers = tuple(
+        (dependency_on_claim_path(by_id[a.alternative_id], admitted_claims) or a)
         if a.state == "OPEN"
         else a
         for a in answers

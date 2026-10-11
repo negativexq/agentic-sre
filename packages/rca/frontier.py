@@ -353,7 +353,12 @@ def material_frontier(
 
 
 UNCHANGED_CONFIGURATION_RULE = "m21.frontier.unchanged-configuration"
-ANSWERED_STATES = frozenset({"ANSWERED_ROLE_TRANSFERRED", "ANSWERED_NO_CHANGE_IN_WINDOW"})
+DEPENDENCY_ON_CLAIM_PATH_RULE = "m21.frontier.dependency-on-claim-path"
+ANSWERED_STATES = frozenset(
+    {"ANSWERED_ROLE_TRANSFERRED", "ANSWERED_NO_CHANGE_IN_WINDOW", "ANSWERED_ON_CLAIM_PATH"}
+)
+# Rules whose open answer names a condition of the evidence, which no read of the investigation changes
+EVIDENCE_RULES = frozenset({UNCHANGED_CONFIGURATION_RULE, DEPENDENCY_ON_CLAIM_PATH_RULE})
 
 
 def _write_record(body: Mapping[str, object]) -> datetime | None:
@@ -443,6 +448,49 @@ def unchanged_configuration(
     )
 
 
+def dependency_on_claim_path(
+    alternative: StructuralAlternative, hypotheses: Sequence[Hypothesis]
+) -> FrontierAnswer | None:
+    """m21 §29 A: a dependency that is a hop of each material claim's own observed path is no unknown upstream role.
+
+    None when the rule does not apply (not a dependency question, or no material claim's path holds the hop): the
+    question then keeps the answer it had. ``OPEN`` when some claims' paths hold it and others do not.
+    """
+    if alternative.role != "dependency":
+        return None
+    by_id = {hypothesis.hypothesis_id: hypothesis for hypothesis in hypotheses}
+    holding: list[str] = []
+    evidence: set[str] = set()
+    for hypothesis_id in alternative.material_for_hypothesis_ids:
+        hypothesis = by_id.get(hypothesis_id)
+        if hypothesis is None:
+            continue
+        hops = {
+            entity
+            for _symptom, path in symptom_links(hypothesis)
+            for hop in path
+            for entity in (hop.source, hop.target)
+        }
+        if alternative.actor in hops:
+            holding.append(hypothesis_id)
+            evidence.update(hypothesis.relation_evidence_ids)
+    if not holding:
+        return None
+    complete = set(alternative.material_for_hypothesis_ids).issubset(holding)
+    return FrontierAnswer(
+        alternative_id=alternative.alternative_id,
+        question="IS_THE_DEPENDENCY_AN_UNKNOWN_UPSTREAM_ROLE",
+        state="ANSWERED_ON_CLAIM_PATH" if complete else "OPEN",
+        blocked_reason=None if complete else "NOT_ON_EVERY_CLAIM_PATH",
+        evidence_ids=tuple(sorted(evidence)),
+        affected_claims=tuple(sorted(holding)),
+        remaining_uncertainty=("TRANSFERRED_CLAIM_STILL_REQUIRES_ADJUDICATION",)
+        if complete
+        else ("UPSTREAM_ROLE_PARTIALLY_DETERMINED",),
+        rule_id=DEPENDENCY_ON_CLAIM_PATH_RULE,
+    )
+
+
 def investigation_status(
     alternatives: Sequence[StructuralAlternative], *, bounded: bool
 ) -> InvestigationStatus:
@@ -460,9 +508,12 @@ def investigation_status(
 
 __all__ = [
     "ANSWERED_STATES",
+    "DEPENDENCY_ON_CLAIM_PATH_RULE",
+    "EVIDENCE_RULES",
     "UNCHANGED_CONFIGURATION_RULE",
     "apply_frontier_progress",
     "covered_frontier_dimensions",
+    "dependency_on_claim_path",
     "derive_structural_frontier",
     "investigation_status",
     "unchanged_configuration",

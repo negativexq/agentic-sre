@@ -1660,7 +1660,7 @@ For information only (this never selects or tunes a rule):
 - **Recall against the eighteenth:** cause, instance and execution witness 1.0 in every variant, as there.
   `competing-b`'s group recall is 0.81 (0.88).
 
-## 36. Twentieth HOLDOUT, full: pre-registration for m21 §29 A and C (2026-10-11, proposed, frozen before the run)
+## 36. Twentieth HOLDOUT, full: pre-registration for m21 §29 A and C (2026-10-11, owner-approved, frozen before the run)
 
 Per §23.3, a full measurement after an engine change and a lab change, together.
 

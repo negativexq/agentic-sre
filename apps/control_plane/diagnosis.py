@@ -7,7 +7,6 @@ import os
 import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -21,6 +20,12 @@ from apps.control_plane.scheduler import (
     SchedulerPass,
     reevaluation_from_environment,
     run_scheduler_pass,
+)
+from apps.control_plane.trace_admission import (
+    TRACE_READ_ADMISSION_WAIT_SECONDS,
+    TRACE_READ_SLOTS,
+    FifoSlots,
+    read_slices,
 )
 from packages.connector.client import (
     ConnectorClient,
@@ -63,7 +68,6 @@ from packages.rca.live import (
     ObjectSnapshot,
     TraceCapture,
     capture_error_logs,
-    capture_traces,
     incident_window,
     trace_slices,
 )
@@ -409,6 +413,13 @@ class DiagnosisService:
     _log_capture_slot: threading.Lock = field(
         default_factory=threading.Lock, init=False, repr=False
     )
+    # live-trace-design.md §14.3: the capture reads of every incident share two slots, first come first served.
+    # Per process: with several control-plane replicas this is no global bound, and the engine's own
+    # investigation reads are not counted here.
+    _trace_read_slots: FifoSlots = field(
+        default_factory=lambda: FifoSlots(TRACE_READ_SLOTS), init=False, repr=False
+    )
+    trace_read_admission_wait: float = TRACE_READ_ADMISSION_WAIT_SECONDS
     # A STATUS_SNAPSHOT with unchanged content is written at most this often.
     status_snapshot_interval: timedelta = timedelta(seconds=30)
     # How a polling gap breaks alert-channel coverage (frozen into each run boundary).
@@ -976,18 +987,12 @@ class DiagnosisService:
             for namespace, service in targets
             if (namespace, service, start, stop) not in done
         ]
-        # §13: within this capture a trace is fetched once, whichever service's search found it
+        # §14.2: within this capture, concurrent identical trace fetches reach Tempo once
         provider_adapter = provider_adapter.fetching_traces_once()
-        # §11: at most two reads reach Tempo at once
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            results = list(
-                pool.map(
-                    lambda read: capture_traces(
-                        provider_adapter, [(read[0], read[1])], read[2], read[3]
-                    ),
-                    reads,
-                )
-            )
+        # §11, §14.3: two reads at a time, admitted through one budget shared by every incident's capture
+        results = read_slices(
+            provider_adapter, reads, self._trace_read_slots, wait=self.trace_read_admission_wait
+        )
         capture = TraceCapture(
             tuple(
                 {

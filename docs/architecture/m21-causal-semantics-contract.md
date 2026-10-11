@@ -2887,7 +2887,7 @@ claim level, basis or dimensions (`AMBIGUOUS` 23, `INSUFFICIENT_EVIDENCE` 12).
 
 **3. The `DEV` checks and the full `HOLDOUT`** are pre-registered in testbed design §35.
 
-## 29. A dependency question answered by the claim's own path, by healthy calls, or by a declaration never used (C4)
+## 29. A dependency question answered by the claim's own path, by healthy calls, or by a declaration never used (C4; owner-approved 2026-10-11)
 
 ### 29.1 Measured problem
 
@@ -2957,8 +2957,7 @@ They come from existing constants, not from the results above.
 Otherwise it stays `OPEN` with `CALLER_NOT_TRACED`, `CALLS_NOT_TRACED`, `TRACE_READ_FAILED` or `CALLED`. A
 dependency that is called goes to B.
 
-**C is a bounded exception to §3 I1** ("missing is not exclusion"), and it is the decision this section asks the owner
-for.
+**C is a bounded exception to §3 I1** ("missing is not exclusion"), decided by the owner (2026-10-11).
 - I1 forbids reading absence as evidence, an uninstrumented actor and a partial window among them. C reads absence only
   where its conditions show that a call would have been seen: the caller and its outgoing calls are traced, and no read
   was lost. This is the standard of §26's continuous observation.

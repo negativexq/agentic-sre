@@ -1569,3 +1569,93 @@ first, and the `HOLDOUT` starts only if both hold.
 - **The run's incidents replayed offline with engine 2.6.1** (before §24). Every change of leader, tier, display or
   resolution is listed with its reason.
 - Recall per variant against the eighteenth, as §34.
+
+### 35.1 Nineteenth HOLDOUT result (2026-10-11, engine 2.8.0, 24 runs from a worktree)
+
+**Before the run: the two `DEV` checks** (engine `bb54305`, unscored).
+- The first `DEV` run found an implementation defect: the bounded investigation wrote its own stop reason over every
+  frontier answer, so an `ANSWERED_NO_CHANGE_IN_WINDOW` answer showed `BLOCKED_BUDGET` and an open one lost its
+  `WRITTEN_IN_WINDOW`. It was fixed before the merge (m21 §28.6), and both checks ran again on the merged commit.
+- **§26, written inside the window** (`dev19b-config-edited`): in all 10 incidents the `workload-config` question
+  stayed `OPEN` with `WRITTEN_IN_WINDOW`, last write 21:07:44, the edit itself.
+- **The same variant without the edit** (`dev19b-config-unedited`, run 23:15, two hours after the last write at
+  21:11:22): answered `ANSWERED_NO_CHANGE_IN_WINDOW` in every incident.
+- **§28, two ready replicas** (`dev19b-two-replicas`): no §28 coverage of `Service/payment-service`, no `RESOLVED`.
+  The single-replica `order-service` was covered through its Service, as the rule says.
+
+**24/24 valid**; 0 false strong authority, **0 false `RESOLVED`**, the decoy never named.
+
+| Variant | Valid | Cause | Instance | Execution witness | Group | `RESOLVED` |
+|---|---|---|---|---|---|---|
+| `dependency-b` | 3/3 | 1.0 | 1.0 | 1.0 | | 1/9 |
+| `direct-b` | 3/3 | 1.0 | 1.0 | 1.0 | | 6/16 |
+| `scheduled-b` | 3/3 | 1.0 | 1.0 | 1.0 | | 0/4 |
+| `config-b` | 3/3 | 1.0 | 1.0 | 1.0 | | 0/12 |
+| `negative-b` | 3/3 | 1.0 | 1.0 | 1.0 | | 0/8 |
+| `competing-b` | 3/3 | 1.0 | 1.0 | 1.0 | 0.81 | 5/21 |
+| `config-c` | 3/3 | 1.0 | 1.0 | 1.0 | | 0/15 |
+| `negative-c` | 3/3 | 1.0 | 1.0 | 1.0 | | 0/14 |
+
+**The first `RESOLVED` diagnoses: 12 of 99.** Each leads with its run's own experiment, which is the `execution` link
+of the run's chain (`MECHANISM_VERIFIED_CAUSE`, basis `OBSERVED_MECHANISM_DISAMBIGUATED_V1`).
+
+**Carried over from §34:**
+- **Effect relations:** no scored root and no strong witness (48) off the chain. One run with failed trace reads
+  (`competing-b` #2, see Tempo), 23 of 24 without: above the 90% bar.
+- **m21 §19 and §20:** no leader from an execution after the onset; no scored diagnosis `NOT_ESTABLISHED`.
+- **m21 §21:** all 46 scored diagnoses led by a chaos experiment have their family `EXACT` and the experiment's UID.
+- **m21 §22:** no scored diagnosis holds chaos objects of another incarnation.
+- **m21 §23:** 6 witnesses of the third form (`dependency-b` 4, `competing-b` 2), each naming its run's target pod
+  and experiment; none for the decoy.
+- **F10:** every journal opens with `code_identity` naming the worktree, `bb54305` and `dirty` false. No repeat was set
+  aside.
+- **F13:** every run journals `baseline_window` with `earliest_injection` = `quiet_since` + 6 min, and no inject call
+  came before it (waits 277 to 295 s, median 284 s).
+- **F14:** 4,189 trace reads, each at most 60 s and inside `[onset − 10 min, onset + 5 min]`; no slice read twice.
+- **Tempo:** it was killed for memory once, at 02:53:30 during `competing-b` #2 (restart count 0 → 1), in spite of
+  `GOMEMLIMIT`. That run's 117 failed reads (`ConnectorReadError`, 02:42 to 02:53) are the effect. Its memory was not
+  sampled this time.
+- **The Connector:** no run's database holds an enrollment, and the running pod logs "identity restored", never
+  "enrolled".
+- **Connector §17:** 1 of 24 runs opened an incident before its injection. In `scheduled-b` #0, `KafkaConsumerLag` and
+  `OrderWorkerLagHigh` on `order-worker` began at 00:37:04: after the lab was made quiet (00:33:22) and before the
+  injection (00:39:23). They are not scored. It is a lag in the baseline, not an alert left by an earlier run.
+
+**m21 §24:** 114 claims explained by `m21.explanation.shared-evidence`. Their actors are 74 on the chain and 40 off
+it; none is a cause in the run's chain, and none is the decoy.
+
+**m21 §25:** 99 `api_access` references, all `kube-root-ca.crt`. Re-checked from the stored Pod and ReplicaSet
+versions: each is reached only through the projected volume with a `serviceAccountToken` source, and no owner's
+template references it.
+
+**m21 §26:**
+- every one of the 305 run boundaries holds `evidence_coverage`;
+- all 72 stored ConfigMap versions carry `managedFields` times;
+- all 99 scored diagnoses answer the `workload-config` question `ANSWERED_NO_CHANGE_IN_WINDOW`. Last write 21:11:22
+  (the `DEV` restore), listings 23:28 to 03:53. Each is re-checked from the database: written before the window, the
+  stream followed since the listing, transport `PROVEN`, no gap in `[listing, onset]`, one content in the window.
+
+**m21 §27 and §28,** re-checked by replaying each run's incidents with the frozen engine and recording every coverage
+the two rules add:
+- 26 workloads, each owning the covered Pod through its owner references. 12 own the witnessed Pod; 14 own a Pod that
+  §28 covered.
+- 12 Services and 14 Pods covered by §28: 26 Service and Pod pairs. In each, the ledger shows no other ready Pod the
+  Service selects in the witness's execution interval.
+
+Every pre-registered criterion holds.
+
+For information only (this never selects or tunes a rule):
+- **What blocked the 87 scored diagnoses that are not `RESOLVED`:**
+  - 55 have an unresolved rival. They are also limited by the `dependency` frontier (51), or by `fault_actor` (12;
+    the `Schedule` and its experiments in `scheduled-b`, and `competing-b`'s second cause);
+  - 29 are limited by the `dependency` frontier with a declared symptom uncovered: `config-c` 15 (all),
+    `negative-c` 11, `negative-b` 2, `config-b` 1;
+  - 3 by the `dependency` frontier alone, one each in `dependency-b`, `direct-b` and `competing-b`.
+
+  No diagnosis is limited by `configuration_source`.
+- **Every `configuration_source` answer:** above (§26), all answered.
+- **Replayed offline with engine 2.6.1** (`dd63bd6`, before §24), all 119 incidents of the 24 databases: no errors;
+  no change of root, leader, tier or display. 12 change resolution from `AMBIGUOUS` to `RESOLVED`: the 12 above,
+  through §24 to §28.
+- **Recall against the eighteenth:** cause, instance and execution witness 1.0 in every variant, as there.
+  `competing-b`'s group recall is 0.81 (0.88).

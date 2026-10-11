@@ -202,7 +202,7 @@ reads (11%) failed within half a second of being made, all in the minutes of a r
 Tempo's memory limit to 2 GiB (`infra/kubernetes/lab-tempo-patch.yaml`); the observability manifest is unchanged.
 The node had 5 GiB free. Restarts are counted again in the next fault run.
 
-## 15. Tempo cuts its blocks sooner, keeps a day, and bounds its queries (proposed 2026-10-11)
+## 15. Tempo cuts its blocks sooner, keeps a day, and bounds its queries (owner-approved 2026-10-11)
 
 **Measured problem.** Tempo is still killed for memory at 2 GiB (§14), in the nineteenth `HOLDOUT` once and in the
 twentieth once by 16:00. Its configuration sets only the receivers and the local storage path, so everything else is

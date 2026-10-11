@@ -1745,3 +1745,18 @@ is the first that can show C. Expected, from §29.1 and the `DEV` runs:
 - **Tempo:**
   - its restart count and memory, sampled before and after each run;
   - every failed trace read, with its time.
+
+### 36.1 Stopped by the owner at 14 of 24 runs (2026-10-11, not scored)
+
+The owner stopped the twentieth `HOLDOUT` at 16:21 so that it could run again with Tempo's load reduced
+(live-trace-design §13, testbed-lab-design §15). A full run takes about seven hours, and Tempo had been killed for
+memory once and was again near its limit.
+- **Completed:** 14 runs, all valid:
+  - `dependency-b`, `direct-b`, `scheduled-b` and `config-b`, 3 each;
+  - `negative-b` #0 and #1.
+- **Stopped:** `negative-b` #2 was interrupted. The run's own teardown restored the lab: no chaos object is left, the
+  ConfigMap value and the replicas are restored, and the images are `:dev`.
+- **Tempo:** killed for memory at 14:37:13, during `direct-b` #2, whose last 62 reads failed. Its memory had reached
+  1.8 GiB again by 15:52.
+- **No diagnosis of these runs was read or scored.** They select nothing, and their stored data stays as it is.
+- **The twenty-first `HOLDOUT`** is pre-registered separately, with new seeds.

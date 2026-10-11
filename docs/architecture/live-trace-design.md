@@ -287,7 +287,7 @@ the onset) is left out and the slice before it kept; a slice ending 0.9 s after 
 kept; a later capture reads the part left out as its own last slice. The two tests of a left-out slice fail without
 the change. The integration test of §12.6 is unchanged and passes.
 
-## 13. A trace is fetched once per capture (proposed 2026-10-11)
+## 13. A trace is fetched once per capture (owner-approved 2026-10-11)
 
 ### 13.1 Measured problem
 

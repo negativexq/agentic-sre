@@ -38,6 +38,8 @@ BOUNDARY_KEYS = {
     "alert_coverage",
     # m21 §26.6: the object channel's coverage, frozen with the members
     "evidence_coverage",
+    # m21 §29: the incident's trace reads, frozen with the spans
+    "trace_reads",
 }
 
 

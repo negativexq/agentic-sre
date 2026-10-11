@@ -14,7 +14,7 @@ from datetime import datetime
 from hashlib import sha256
 
 from packages.rca.claims import admitted, symptom_links
-from packages.rca.evidence_coverage import EvidenceCoverage, continuously_observed
+from packages.rca.evidence_coverage import EvidenceCoverage, TraceRead, continuously_observed
 from packages.rca.model import (
     Diagnosis,
     EntityRef,
@@ -26,9 +26,16 @@ from packages.rca.model import (
     Lifecycle,
     ObjectVersion,
     StructuralAlternative,
+    TraceSpanObservation,
 )
 from packages.rca.ranking import Context
-from packages.rca.topology import WORKLOAD_KINDS, api_access_refs, config_refs, pod_spec_of
+from packages.rca.topology import (
+    WORKLOAD_KINDS,
+    api_access_refs,
+    config_refs,
+    declared_hosts,
+    pod_spec_of,
+)
 
 _ROLE_BY_RELATION = {
     "uses_config": "configuration_source",
@@ -354,11 +361,25 @@ def material_frontier(
 
 UNCHANGED_CONFIGURATION_RULE = "m21.frontier.unchanged-configuration"
 DEPENDENCY_ON_CLAIM_PATH_RULE = "m21.frontier.dependency-on-claim-path"
+DEPENDENCY_DECLARED_UNUSED_RULE = "m21.frontier.dependency-declared-unused"
 ANSWERED_STATES = frozenset(
-    {"ANSWERED_ROLE_TRANSFERRED", "ANSWERED_NO_CHANGE_IN_WINDOW", "ANSWERED_ON_CLAIM_PATH"}
+    {
+        "ANSWERED_ROLE_TRANSFERRED",
+        "ANSWERED_NO_CHANGE_IN_WINDOW",
+        "ANSWERED_ON_CLAIM_PATH",
+        "ANSWERED_DECLARED_UNUSED",
+    }
 )
 # Rules whose open answer names a condition of the evidence, which no read of the investigation changes
-EVIDENCE_RULES = frozenset({UNCHANGED_CONFIGURATION_RULE, DEPENDENCY_ON_CLAIM_PATH_RULE})
+EVIDENCE_RULES = frozenset(
+    {
+        UNCHANGED_CONFIGURATION_RULE,
+        DEPENDENCY_ON_CLAIM_PATH_RULE,
+        DEPENDENCY_DECLARED_UNUSED_RULE,
+    }
+)
+# span kinds that receive a call; every other span of a caller is one it makes (m21 §29.6)
+_INBOUND_KINDS = frozenset({"SERVER", "CONSUMER"})
 
 
 def _write_record(body: Mapping[str, object]) -> datetime | None:
@@ -491,6 +512,76 @@ def dependency_on_claim_path(
     )
 
 
+def dependency_declared_unused(
+    alternative: StructuralAlternative,
+    latest: Mapping[EntityRef, ObjectVersion],
+    spans: Sequence[TraceSpanObservation],
+    reads: Sequence[TraceRead] | None,
+    onset: datetime | None,
+) -> FrontierAnswer | None:
+    """m21 §29 C: a dependency its traced caller declares and never called up to the onset.
+
+    A span is a call to the dependency only when its ``server.address`` is a host the caller declares for that
+    Service (§29.6). None when the rule cannot be assessed (not a dependency question, no record of the trace
+    reads, no onset, no declaration): the question then keeps the answer it had. Otherwise the answer, ``OPEN``
+    with the failed condition named; a dependency that is called is ``CALLED`` (B is withdrawn, §29.9).
+    """
+    if alternative.role != "dependency" or reads is None or onset is None:
+        return None
+    callers = [entity for entity in alternative.affected_entities if entity.kind in WORKLOAD_KINDS]
+    hosts = {caller: declared_hosts(latest, caller, alternative.actor) for caller in callers}
+    if not callers or not all(hosts.values()):
+        return None
+    observed = {
+        caller: [span for span in spans if span.service == caller.name and span.start_at <= onset]
+        for caller in callers
+    }
+    outbound = {
+        caller: [span for span in own if span.span_kind not in _INBOUND_KINDS]
+        for caller, own in observed.items()
+    }
+
+    def answer(state: str, reason: str | None, evidence: Sequence[str] = ()) -> FrontierAnswer:
+        return FrontierAnswer(
+            alternative_id=alternative.alternative_id,
+            question="IS_THE_DEPENDENCY_AN_UNKNOWN_UPSTREAM_ROLE",
+            state=state,
+            blocked_reason=reason,
+            evidence_ids=tuple(sorted(set(evidence))),
+            affected_claims=alternative.material_for_hypothesis_ids,
+            remaining_uncertainty=("DECLARATION_MAY_BE_USED_OUTSIDE_THE_WINDOW",)
+            if reason is None
+            else ("UPSTREAM_ROLE_UNDETERMINED",),
+            rule_id=DEPENDENCY_DECLARED_UNUSED_RULE,
+        )
+
+    if any(
+        span.semantic_attributes.get("server.address") in hosts[caller]
+        for caller, own in outbound.items()
+        for span in own
+    ):
+        return answer("OPEN", "CALLED")
+    if not all(any(span.span_kind == "SERVER" for span in own) for own in observed.values()):
+        return answer("OPEN", "CALLER_NOT_TRACED")
+    if not all(
+        own and all(span.semantic_attributes.get("server.address") for span in own)
+        for own in outbound.values()
+    ):
+        return answer("OPEN", "CALLS_NOT_TRACED")
+    if any(
+        read.completeness == "FAILED"
+        and (read.namespace, read.service) == (caller.namespace, caller.name)
+        for read in reads
+        for caller in callers
+    ):
+        return answer("OPEN", "TRACE_READ_FAILED")
+    return answer(
+        "ANSWERED_DECLARED_UNUSED",
+        None,
+        [span.evidence_id for own in outbound.values() for span in own],
+    )
+
+
 def investigation_status(
     alternatives: Sequence[StructuralAlternative], *, bounded: bool
 ) -> InvestigationStatus:
@@ -508,11 +599,13 @@ def investigation_status(
 
 __all__ = [
     "ANSWERED_STATES",
+    "DEPENDENCY_DECLARED_UNUSED_RULE",
     "DEPENDENCY_ON_CLAIM_PATH_RULE",
     "EVIDENCE_RULES",
     "UNCHANGED_CONFIGURATION_RULE",
     "apply_frontier_progress",
     "covered_frontier_dimensions",
+    "dependency_declared_unused",
     "dependency_on_claim_path",
     "derive_structural_frontier",
     "investigation_status",

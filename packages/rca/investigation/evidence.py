@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TypeVar
 
-from packages.rca.evidence_coverage import EvidenceCoverage
+from packages.rca.evidence_coverage import EvidenceCoverage, TraceRead
 from packages.rca.model import (
     Alert,
     AlertEpisode,
@@ -194,6 +194,10 @@ class OverlayObservationSource:
     def evidence_coverage_record(self) -> EvidenceCoverage | None:
         # An overlay never changes the base run's object coverage boundary.
         return self.base.evidence_coverage_record()
+
+    def trace_read_record(self) -> Sequence[TraceRead] | None:
+        # An overlay never changes the base run's trace reads.
+        return self.base.trace_read_record()
 
     def alert_episodes(self) -> Sequence[AlertEpisode] | None:
         # Capture history is a property of the alert channel; an overlay never adds to it.

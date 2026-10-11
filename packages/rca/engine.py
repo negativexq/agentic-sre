@@ -180,7 +180,7 @@ class Investigator(Protocol):
 # evidence; replay refuses a run recorded under another version (M20.3a).
 # Rule (owner, 2026-10-05; roadmap F1): minor for a change that can alter a diagnosis,
 # patch for one that cannot change any digest, major when the contract version moves.
-RCA_ENGINE_VERSION = "2.9.0"
+RCA_ENGINE_VERSION = "2.10.0"
 
 
 @dataclass(frozen=True)
@@ -581,6 +581,8 @@ def _resolution_trace(case: Case, config: EngineConfig) -> ResolutionTrace:
         selects=_selected_pods(case.context.topology),
         evidence_coverage=case.source.evidence_coverage_record(),
         causal_onset=case.symptoms.onset,
+        latest=case.context.topology.latest,
+        trace_reads=case.source.trace_read_record(),
     )
 
 

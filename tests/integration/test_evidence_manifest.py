@@ -52,6 +52,7 @@ from packages.storage.repositories import (
     DiagnosisRepository,
     IncidentEventRepository,
     IncidentRepository,
+    TraceCaptureRepository,
 )
 
 POD = {
@@ -526,3 +527,50 @@ def test_the_trace_range_is_read_in_slices_and_a_read_slice_is_not_read_again(
     ]
     with factory() as session:
         assert len(TraceCaptureRepository(session).read_windows(incident_id)) == 16
+
+
+# ---- m21 §29: the incident's trace reads are frozen at the boundary, and replay reads the same record ----------
+
+
+def test_the_trace_reads_are_frozen_at_the_boundary_and_replayed_as_frozen(
+    setup: Any,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from packages.rca.replay import ReplaySource
+    from packages.storage.manifest import load_run_boundary
+
+    factory, incident_id, run_id, seen = _run(setup, monkeypatch, traces=True)
+    live = seen.source.trace_read_record()
+    assert live and {read.completeness for read in live} == {"BEST_EFFORT"}
+    with factory() as session:
+        assert load_run_boundary(session, run_id).trace_reads == tuple(live)
+    assert ReplaySource.from_run(run_id, session_factory=factory).trace_read_record() == tuple(live)
+    # a read recorded after the boundary is not the run's
+    with factory() as session:
+        TraceCaptureRepository(session).record(incident_id, [_failed_read()], T0)
+        session.commit()
+        assert load_run_boundary(session, run_id).trace_reads == tuple(live)
+
+
+def test_a_run_recorded_before_the_trace_reads_has_no_record(
+    setup: Any,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from packages.storage.manifest import load_run_boundary
+
+    factory, incident_id, run_id, _ = _run(setup, monkeypatch)
+    with factory() as session:
+        row = session.scalars(
+            select(IncidentEventRow).where(
+                IncidentEventRow.event_type == IncidentEventType.EVIDENCE_GATHERED.value
+            )
+        ).one()
+        row.payload = {k: v for k, v in row.payload.items() if k != "trace_reads"}
+        session.commit()
+        assert load_run_boundary(session, run_id).trace_reads is None
+
+
+def _failed_read() -> Any:
+    from packages.rca.live import TraceServiceCapture
+
+    return TraceServiceCapture("order-service", "sre-demo", T0, T0, "FAILED", 0, "Timeout")

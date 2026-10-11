@@ -82,6 +82,21 @@ class EvidenceCoverage(BaseModel):
     scopes: tuple[ScopeCoverage, ...] = ()
 
 
+class TraceRead(BaseModel):
+    """One service's trace read for the incident, as the capture recorded it (live-trace-design.md §3.2).
+
+    Frozen at the run boundary (m21 §29): a rule may read a failed read, never the absence of a span it lost.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    namespace: str
+    service: str
+    starts_at: datetime
+    ends_at: datetime
+    completeness: str  # BEST_EFFORT, TRUNCATED or FAILED
+
+
 def evidence_coverage(
     scopes: Iterable[tuple[str, str]],
     gaps: Iterable[StreamGap],

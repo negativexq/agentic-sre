@@ -1081,6 +1081,7 @@ class DiagnosisService:
             boundary = load_run_boundary(session, run_id)
             alert_coverage = boundary.alert_coverage
             coverage = boundary.evidence_coverage
+            trace_reads = boundary.trace_reads
         source = LiveSource(
             incident=str(incident_id),
             alert_items=[alert_from_payload(item) for item in members.alerts],
@@ -1098,6 +1099,7 @@ class DiagnosisService:
             snapshot_observed_at=members.snapshot.observed_at if members.snapshot else None,
             alert_coverage=alert_coverage,
             evidence_coverage=coverage,
+            trace_reads=trace_reads,
         )
         bounded_policy = self.bounded_policy_factory()
         # The effective configs are explicit so the revision can record them.

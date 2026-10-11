@@ -168,6 +168,8 @@ _DIAGNOSES = text(
 
 # design §35 DEV check 1: one value of the workloads' ConfigMap, written and put back. The workloads read the flag
 # lower-cased, so the write changes the object and not what any workload does.
+# m21 §29.4 DEV check: the dependency every order-service claim declares and calls
+DELAYED_DEPENDENCY = "kafka"
 EDITED_CONFIG, EDITED_KEY, EDITED_VALUE, KEPT_VALUE = (
     "workload-config",
     "ENABLE_TEST_FAULTS",
@@ -371,6 +373,8 @@ class LabWorld:
                 )
 
     def before_injection(self, params: RunParameters, journal: InjectorJournal) -> None:
+        if params.dependency_delay_ms:
+            self._delay_dependency(params, journal)
         if not params.edit_config:
             return
         result = self._set_config_value(EDITED_VALUE)
@@ -383,6 +387,30 @@ class LabWorld:
         )
         if result.returncode != 0:
             raise RuntimeError(f"the configuration was not edited: {result.stderr.strip()[:200]}")
+
+    def _delay_dependency(self, params: RunParameters, journal: InjectorJournal) -> None:
+        """m21 §29.4: a delay on kafka's Pod, lasting past the run, so no kafka call before the onset is healthy."""
+        name = f"{DELAYED_DEPENDENCY}-delay-{params.seed}"
+        manifest = (
+            f"apiVersion: chaos-mesh.org/v1alpha1\nkind: NetworkChaos\n"
+            f"metadata: {{name: {name}, namespace: {NAMESPACE}, "
+            f"labels: {{{RUN_LABEL}: {self.database}}}}}\nspec:\n"
+            "  action: delay\n  mode: all\n"
+            f"  selector: {{namespaces: [{NAMESPACE}], labelSelectors: {{app: {DELAYED_DEPENDENCY}}}}}\n"
+            f"  delay: {{latency: {params.dependency_delay_ms}ms}}\n"
+            f"  duration: {int(params.duration_seconds) + 600}s\n"
+        )
+        self._experiments.add(name)
+        result = self._run(["kubectl", "apply", "-f", "-"], stdin=manifest, check=False)
+        journal.record(
+            verb="apply",
+            object=f"networkchaos {name}",
+            ok=result.returncode == 0,
+            response=result.stdout if result.returncode == 0 else result.stderr,
+            role="dependency_delayed",
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"the dependency was not delayed: {result.stderr.strip()[:200]}")
 
     def _set_config_value(self, value: str) -> subprocess.CompletedProcess[str]:
         body = json.dumps({"data": {EDITED_KEY: value}})
@@ -1472,6 +1500,13 @@ SPECS: dict[str, Callable[..., ScenarioSpec]] = {
         "dependency-loss-payment",
         loss_percent=LOSS,
         edit_config=ParameterRange(low=1, high=1),
+    )(repeats, seeds, tier=tier),
+    # m21 §29.4 DEV check: variant B of the dependency family with kafka delayed from the baseline's end
+    "dependency-b-kafka-delay": lambda repeats, seeds, tier="DEV": _variant_b(
+        dependency_spec,
+        "dependency-loss-payment",
+        loss_percent=LOSS,
+        dependency_delay_ms=ParameterRange(low=300, high=300),
     )(repeats, seeds, tier=tier),
     # m21 §13.4: the rollout witness's held-out variants, mechanisms variant A did not use
     "config-c": _variant_b(config_spec, "config-error-payment"),

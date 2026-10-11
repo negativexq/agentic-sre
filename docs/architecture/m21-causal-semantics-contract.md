@@ -3165,3 +3165,54 @@ the same variant and the same seed as `dev20-kafka-delay`.
    stays `ANSWERED_DECLARED_UNUSED`.
 2. **The other measurements of §29.4** follow: offline replay, ITBench-Lite, and the twentieth `HOLDOUT` on its own
    pre-registration.
+
+### 29.10 Implementation and measurement of §29 C (2026-10-11)
+
+**Implementation.** Engine 2.10.0.
+- **C:** `dependency_declared_unused` in `frontier.py`, applied in `resolution.py` after A to the questions still
+  `OPEN`.
+  - **The caller** is each workload whose `calls` edge raised the question. Every caller must meet the conditions.
+  - **A span is a call to the dependency** only when its `server.address` is a host the caller declares for that
+    Service (`declared_hosts` in `topology.py`, the same declaration the edge comes from).
+  - **The checks run in this order:** `CALLED`, `CALLER_NOT_TRACED`, `CALLS_NOT_TRACED`, `TRACE_READ_FAILED`.
+  - **A dependency that is called** stays `OPEN` with `CALLED`: B is withdrawn (§29.9).
+  - **Where C stays open,** a partial answer of A (`NOT_ON_EVERY_CLAIM_PATH`) is kept as it was.
+- **C, conditions of §29.2 as amended by §29.6.**
+  - **Condition 1:** the caller has a `SERVER` span up to the onset.
+  - **Condition 2:** the caller has at least one span that is neither `SERVER` nor `CONSUMER`, and every such span
+    carries `server.address`. The "at least one" stops a caller with no outgoing spans from meeting the condition
+    vacuously. Owner-approved 2026-10-11.
+  - A caller with only `CONSUMER` spans has no `SERVER` span, so it is `CALLER_NOT_TRACED`.
+  - **Condition 3:** a read cut at its bound (`TRUNCATED`) is not a failed read; only `FAILED` is.
+- **The trace reads are frozen at the run boundary.**
+  - The `EVIDENCE_GATHERED` event carries `trace_reads`: every read recorded for the incident, with its completeness.
+    The live diagnosis and the replay read that record (`trace_read_record`), as for §26.6.
+  - A run recorded before it has no record, and there C does not apply, as §26 does not apply without a coverage
+    record. Owner-approved 2026-10-11.
+- **The `DEV` harness** (`dependency-b-kafka-delay`): variant B of the dependency family, with a 300 ms delay on
+  kafka's Pod from the baseline's end. Its two runs are recorded in §29.8 and §29.9.
+
+**1. The pre-registered check of §29.9:** a replay of the two `DEV` runs on the engine without B (8 runs).
+- **Hard: passed.** No `kafka` question is answered `ANSWERED_OBSERVED_HEALTHY`. In every run it stays `OPEN` with
+  `NOT_ON_EVERY_CLAIM_PATH`.
+- **`redis` differs by alert.**
+  - The 4 runs of the `order-service` alerts: `ANSWERED_DECLARED_UNUSED`.
+  - The 4 runs of the `order-worker` alerts (`KafkaConsumerLag`, `OrderWorkerLagHigh`): `OPEN` with `CALLED`.
+    `order-worker` calls redis, 150 attributed calls per run.
+  - §29.9 expected `ANSWERED_DECLARED_UNUSED` throughout because the live run stored only the two `order-service`
+    diagnoses. The `order-worker` answer is the correct one.
+
+**2. Offline replay** of every stored testbed run (3,128), 2.9.0 against 2.10.0 at `d2c807a`. No errors.
+- **The 3,118 runs of the 2.9.0 replay:** no root, leader, display, tier, claim level, basis, resolution or digest
+  change. No stored run before this change has a trace-read record, so C does not apply to them.
+- **The 10 new runs:**
+  - 8 are the two `DEV` runs above.
+  - 2 are in `holdout19-negative-c` #2, added after the 2.9.0 replay. Both are `AMBIGUOUS`.
+  - None of the 10 is `RESOLVED`.
+
+**3. ITBench-Lite:** run `all-2.10.0c-20261011T1245` at `d2c807a`, against `all-2.9.0-20261011T1102`.
+- The report is identical apart from the commit and the run time.
+- No prediction changes its root, resolution, leader, tier or rank, and no frontier answer changes. ITBench records no
+  trace reads, so C does not apply.
+
+**4. The twentieth `HOLDOUT`** is pre-registered separately in testbed design.

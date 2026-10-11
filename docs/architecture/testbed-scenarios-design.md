@@ -1932,3 +1932,53 @@ The run went from 16:33 to 21:11 UTC, frozen at `e6f58fc` (engine 2.10.0) and ru
   prevent it.
 - **Next, as approved:** P0 and P1 (live-trace-design §14) on the lab, in one `DEV` run with verification on. No new
   `HOLDOUT` is started without the owner's approval.
+
+## 38. Twenty-second HOLDOUT, full: §37 again with live-trace §14 active (2026-10-12, owner-approved, frozen before the run)
+
+The owner approved this run on 2026-10-12, after live-trace §14.6. It measures the same engine with the same
+criteria, with new seeds, now with P0 and P1 active through the Connector.
+
+**Changes since §37:**
+- **Live-trace §14.2 P0,** through the Connector: within one capture, concurrent identical trace fetches reach Tempo
+  once. The lab's Connector runs the image built from `c1c8f25`. The Connector's code is unchanged since then.
+- **Live-trace §14.3 P1:** one shared budget of 2 capture reads at a time across all captures in the control plane.
+- **The harness** (live-trace §14.6):
+  - each run's journal keeps the Connector's trace-fetch totals at its start and end, and their difference;
+  - it keeps the control plane's per-capture read-budget lines.
+- **The lab:** lab §15 is unchanged. The traces stored before this run are kept.
+- **The engine** stays 2.10.0, so §36's expectations for m21 §29 A and C stand.
+
+**The setup:**
+- **Variants and seeds:**
+
+  | Variant | Seeds |
+  |---|---|
+  | `dependency-b` | 494–496 |
+  | `direct-b` | 497–499 |
+  | `scheduled-b` | 500–502 |
+  | `config-b` | 503–505 |
+  | `negative-b` | 506–508 |
+  | `competing-b` | 509–511 |
+  | `config-c` | 512–514 |
+  | `negative-c` | 515–517 |
+
+- **Suites:** `holdout22-<variant>`.
+- **Frozen commit:** the merge commit of this pre-registration, recorded in the manifests. It holds engine 2.10.0 and
+  live-trace §14.
+- **Where it runs:** as §32, from a worktree of that commit, with links to the main tree's `.venv` and `.local`.
+- **Scoring:** with §20's grader.
+
+**Criteria (hard):** exactly §36's, as §37 kept them.
+
+**Reported beside them, for information only** (these never select or tune a rule), against §37:
+- **Diagnosis accuracy:** everything §37 reports, including `RESOLVED` per variant, every `dependency` answer, the
+  offline replay with engine 2.8.0, and recall per variant.
+- **Tempo memory:** current and peak, sampled every minute; restarts, with their times (the aim is none).
+- **Failed trace reads:** per run, with their times and errors. Admission timeouts (P1) are counted apart.
+- **CAPTURE and ENGINE load, each on its own:**
+  - trace-by-ID requests per incident, and how many repeat a trace in the same incident;
+  - Tempo's concurrency over time;
+  - bytes inspected per lookup.
+- **P0:** the Connector's totals per run (requests, joined, Tempo fetches, failures).
+- **P1:** admission waits per capture (total and maximum).
+- **If Tempo is killed,** it is reported and the run continues as §37 did. The next step is decided after the run.

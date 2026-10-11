@@ -1760,3 +1760,59 @@ memory once and was again near its limit.
   1.8 GiB again by 15:52.
 - **No diagnosis of these runs was read or scored.** They select nothing, and their stored data stays as it is.
 - **The twenty-first `HOLDOUT`** is pre-registered separately, with new seeds.
+
+## 37. Twenty-first HOLDOUT, full: §36 again with Tempo's load reduced (2026-10-11, proposed, frozen before the run)
+
+The twentieth (§36) was stopped by the owner (§36.1) so that it could run again with Tempo's load reduced. This one
+measures the same engine with the same criteria, with new seeds. It also measures the two load changes.
+
+**Changes since §36:**
+- **The control plane** (live-trace-design §13, PR #112): within one capture, an identical trace fetch (same trace
+  ID, same range) reaches Tempo once. No stored span changes, and the engine is unchanged.
+- **The lab** (testbed-lab-design §15, PR #113): Tempo cuts its blocks at 2 minutes, keeps 24 hours and allows 4
+  concurrent queries. Its memory limit and `GOMEMLIMIT` are unchanged. The traces stored before the change were not
+  kept.
+- **The engine** stays 2.10.0, so §36's expectations for m21 §29 A and C stand.
+
+**The setup:**
+- **Variants and seeds:**
+
+  | Variant | Seeds |
+  |---|---|
+  | `dependency-b` | 470–472 |
+  | `direct-b` | 473–475 |
+  | `scheduled-b` | 476–478 |
+  | `config-b` | 479–481 |
+  | `negative-b` | 482–484 |
+  | `competing-b` | 485–487 |
+  | `config-c` | 488–490 |
+  | `negative-c` | 491–493 |
+
+- **Suites:** `holdout21-<variant>`.
+- **Frozen commit:** the merge commit of this pre-registration, recorded in the manifests. It holds engine 2.10.0 and
+  §13.
+- **Where it runs:** as §32, from a worktree of that commit, with links to the main tree's `.venv` and `.local`.
+- **Scoring:** with §20's grader.
+
+**Criteria (hard):** exactly §36's:
+- acceptance;
+- the checks carried over from §35;
+- m21 §29 A and C;
+- m21 §29.9;
+- the lab change of §36 (a `PRODUCER` span with `server.address` in every run's `order-service` spans).
+
+**Reported beside them, for information only** (these never select or tune a rule):
+- **Everything §36 reports:**
+  - `RESOLVED` per variant and what blocked the rest;
+  - every `dependency` answer;
+  - the offline replay with engine 2.8.0;
+  - recall per variant against the nineteenth.
+- **Tempo, against §36's 14 runs** (§13.3 and lab §15):
+  - **restarts,** with their times (the aim is none);
+  - **memory,** current and peak, sampled every minute;
+  - **trace-by-ID requests per incident,** and how many repeat a trace in the same incident. Tempo's log is streamed
+    to a file for the whole run, so that a restart does not lose it;
+  - **bytes inspected per lookup,** from the same log;
+  - **failed trace reads per run,** with their times.
+- **If Tempo is killed again,** it is reported and the run continues as §36 did. The next step is decided after the
+  run. Raising the limit is not the default.

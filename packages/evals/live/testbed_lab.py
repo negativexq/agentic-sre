@@ -62,6 +62,7 @@ from packages.rca.model import Diagnosis
 REPO = Path(__file__).resolve().parents[3]
 # the kubectl port-forwards the testbed started, so a later start can end any that outlived their run (§31.2 B)
 FORWARDS_FILE = REPO / ".local/testbed/forwards.json"
+CP_LOG = REPO / ".local/lab/cp.log"  # `make cp-up` writes it anew for every run
 NAMESPACE = "sre-demo"
 SCENARIO_ID = "dependency-delay-payment"
 CONFIG_SCENARIO_ID = "config-delay-payment"
@@ -1263,6 +1264,28 @@ class LabWorld:
             except OSError:
                 pass  # the earlier diagnosis stays the latest; the run records how many were asked
         return asked
+
+    def trace_fetches(self) -> dict[str, dict[str, int]]:
+        """Each connected Connector's trace-by-ID fetch totals (live-trace §14.6)."""
+        listed = self._get_json(f"{self.control_plane}/api/v1/console/connectors")
+        return {
+            row["id"]: self._get_json(
+                f"{self.control_plane}/api/v1/console/connectors/{row['id']}/trace-fetches",
+                timeout=30,
+            )
+            for row in listed.get("connectors", [])
+            if row.get("connected")
+        }
+
+    def capture_summaries(self) -> list[str]:
+        """The control plane's per-capture read-budget lines since it started (live-trace §14.6)."""
+        if not CP_LOG.exists():
+            return []
+        return [
+            line
+            for line in CP_LOG.read_text(encoding="utf-8", errors="replace").splitlines()
+            if "trace capture:" in line
+        ]
 
     def cleanup(self) -> None:
         if self._last_delay:

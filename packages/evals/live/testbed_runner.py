@@ -17,7 +17,7 @@ from collections.abc import Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from packages.evals.live.ground_truth import (
     Chain,
@@ -858,6 +858,7 @@ def run_once(
     try:
         world.shape(params)
         world.isolate(run_id)
+        fetches_at_start = _record_trace_fetches(world, run, "start", None)
         world.start_load(params.load_rps)  # the client probe and the alerts need traffic
         # 1. quiet baseline, then thresholds fixed from it and written to the journal
         run.wait(params.baseline_seconds)
@@ -1041,6 +1042,15 @@ def run_once(
         stored = _await_diagnoses(
             world, clock, run, alerts, injection.injected_at, not_before=not_before
         )
+        _record_trace_fetches(world, run, "end", fetches_at_start)
+        summaries = getattr(world, "capture_summaries", None)
+        if summaries is not None:
+            run.journal.record(
+                verb="observe",
+                object="control-plane/log",
+                role="trace_capture_summaries",
+                payload={"lines": summaries()},
+            )
         foreign = world.foreign_faults()
         run.journal.record(
             verb="check",
@@ -1070,6 +1080,44 @@ def run_once(
         world.stop_load()
         world.cleanup()
     return _finish(manifest, spec, repeat, run, store, injection, stored, problems, work)
+
+
+def _record_trace_fetches(
+    world: World, run: _Run, when: str, start: dict[str, dict[str, int]] | None
+) -> dict[str, dict[str, int]] | None:
+    """The Connector's trace-fetch totals at the run's start or end, and at the end their difference (live-trace §14.6).
+
+    A measurement only: a failed read is journaled and never stops the run.
+    """
+    read = getattr(world, "trace_fetches", None)
+    if read is None:
+        return None
+    try:
+        totals: dict[str, dict[str, int]] = read()
+    except (OSError, ValueError, KeyError) as error:
+        run.journal.record(
+            verb="observe",
+            object="connector/trace-fetches",
+            ok=False,
+            response=f"{type(error).__name__}: {error}",
+            role=f"trace_fetches_{when}",
+        )
+        return None
+    payload: dict[str, Any] = {"totals": totals}
+    if start is not None:
+        payload["difference"] = {
+            connector: {
+                key: value - start.get(connector, {}).get(key, 0) for key, value in counts.items()
+            }
+            for connector, counts in totals.items()
+        }
+    run.journal.record(
+        verb="observe",
+        object="connector/trace-fetches",
+        role=f"trace_fetches_{when}",
+        payload=payload,
+    )
+    return totals
 
 
 def _await_diagnoses(

@@ -14,6 +14,8 @@ from packages.connector.enrollment import MemoryStore, Registry
 from packages.connector.pki import new_ca, new_key_and_request
 from packages.connector.preflight import Check
 from packages.connector.service import Connector
+from packages.rca.investigation.tempo import TempoConfig, TempoTraceReader
+from packages.rca.provider_adapter import ProviderReaders
 
 World = tuple[Registry, TestClient]
 
@@ -124,6 +126,31 @@ def test_preflight_is_relayed_for_a_connected_connector_only(world: World) -> No
     assert (
         client.post("/api/v1/console/connectors/other/preflight", headers=AUTH).status_code == 409
     )
+
+
+def test_the_trace_fetch_totals_are_read_from_preflight(world: World) -> None:
+    """live-trace §14.6: the harness reads these at a run's start and end; no Tempo reader, no totals."""
+    _, client = world
+    assert client.get("/api/v1/console/connectors/prod-eu/trace-fetches").json() == {}
+    assert client.get("/api/v1/console/connectors/other/trace-fetches").status_code == 409
+    gateway = Gateway(
+        Connector(
+            providers=ProviderReaders(
+                tempo=TempoTraceReader(TempoConfig("https://tempo.example.internal"))
+            )
+        ),
+        {"lab"},
+    )
+    app = FastAPI()
+    app.include_router(create_connectors_router(None, gateway))  # type: ignore[arg-type]
+    totals = TestClient(app).get("/api/v1/console/connectors/lab/trace-fetches").json()
+    assert totals == {
+        "requests": 0,
+        "joined": 0,
+        "http_fetches": 0,
+        "failures": 0,
+        "verify_differences": 0,
+    }
 
 
 def test_the_install_command_carries_the_public_endpoints_when_set(

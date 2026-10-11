@@ -15,7 +15,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from packages.rca.alert_coverage import AlertCoverageBoundary
-from packages.rca.evidence_coverage import EvidenceCoverage
+from packages.rca.evidence_coverage import EvidenceCoverage, TraceRead
 from packages.rca.investigation.environment import (
     InvestigationBackend,
     PrometheusInvestigationBackend,
@@ -638,6 +638,8 @@ class LiveSource:
     alert_coverage: AlertCoverageBoundary | None = None
     # The object channel's coverage frozen at the run boundary (m21 §26.6).
     evidence_coverage: EvidenceCoverage | None = None
+    # The incident's trace reads frozen at the run boundary (m21 §29).
+    trace_reads: Sequence[TraceRead] | None = None
     # Persisted ``event:<version_pk>`` ids, one per ``event_bodies`` item.
     event_evidence_ids: Sequence[str] | None = None
     # Spans captured for the incident and frozen by the run's manifest (live-trace-design.md §3).
@@ -659,6 +661,9 @@ class LiveSource:
 
     def evidence_coverage_record(self) -> EvidenceCoverage | None:
         return self.evidence_coverage
+
+    def trace_read_record(self) -> Sequence[TraceRead] | None:
+        return self.trace_reads
 
     def object_history(self) -> Mapping[EntityRef, Sequence[ObjectVersion]]:
         """Journal versions plus the run's persisted snapshot cycle.

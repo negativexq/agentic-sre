@@ -28,7 +28,7 @@ from packages.rca.alert_coverage import (
     AlertCoverageBoundaryError,
     AlertCoverageConfig,
 )
-from packages.rca.evidence_coverage import EvidenceCoverage
+from packages.rca.evidence_coverage import EvidenceCoverage, TraceRead
 from packages.rca.manifest import ManifestEntry, manifest_membership_digest, ordered_entries
 from packages.rca.model import JournalEntry, LogRecord, TraceSpanObservation
 from packages.rca.provider_adapter import PROVIDER_CAPABILITIES, ProviderIntegrityError
@@ -50,6 +50,7 @@ from packages.storage.repositories import (
     ObjectVersionRepository,
     PersistedSnapshotCycle,
     SnapshotCycleRepository,
+    TraceCaptureRepository,
     TraceObservationRepository,
     _lifecycle_record,
 )
@@ -223,6 +224,8 @@ def build_manifest(
             if request.evidence_coverage is not None
             else None
         )
+        # m21 §29: the incident's trace reads, frozen with the spans they returned
+        trace_reads = TraceCaptureRepository(session).reads(request.incident_id)
         IncidentEventRepository(session).append(
             IncidentEvent(
                 incident_id=request.incident_id,
@@ -242,6 +245,7 @@ def build_manifest(
                         request.provider_capabilities
                     ),
                     "alert_coverage": alert_coverage.to_payload(),
+                    "trace_reads": [read.model_dump(mode="json") for read in trace_reads],
                     **(
                         {"evidence_coverage": evidence_coverage.model_dump(mode="json")}
                         if evidence_coverage is not None
@@ -310,6 +314,8 @@ class RunBoundary:
     alert_coverage: AlertCoverageBoundary | None = None
     # The object channel's coverage frozen at the boundary (m21 §26.6); None for runs recorded before it.
     evidence_coverage: EvidenceCoverage | None = None
+    # The incident's trace reads frozen at the boundary (m21 §29); None for runs recorded before it.
+    trace_reads: tuple[TraceRead, ...] | None = None
 
 
 def load_run_boundary(session: Session, run_id: str) -> RunBoundary:
@@ -370,6 +376,15 @@ def load_run_boundary(session: Session, run_id: str) -> RunBoundary:
             evidence_coverage = EvidenceCoverage.model_validate(payload["evidence_coverage"])
         except ValueError as error:
             raise ReplayDataError(f"run {run_id} boundary evidence_coverage: {error}") from error
+    trace_reads = None
+    if "trace_reads" in payload:
+        raw_reads = payload["trace_reads"]
+        if not isinstance(raw_reads, list):
+            raise ReplayDataError(f"run {run_id} boundary trace_reads is {raw_reads!r}")
+        try:
+            trace_reads = tuple(TraceRead.model_validate(read) for read in raw_reads)
+        except ValueError as error:
+            raise ReplayDataError(f"run {run_id} boundary trace_reads: {error}") from error
     return RunBoundary(
         run_id,
         rows[0].incident_id,
@@ -379,6 +394,7 @@ def load_run_boundary(session: Session, run_id: str) -> RunBoundary:
         listed,
         alert_coverage,
         evidence_coverage,
+        trace_reads,
     )
 
 

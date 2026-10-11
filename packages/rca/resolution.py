@@ -25,7 +25,7 @@ from packages.rca.claims import actor_findings, admission_reasons, admitted, sym
 from packages.rca.episode_end import RULE_ID as EPISODE_END_RULE_ID
 from packages.rca.episode_end import RULE_VERSION as EPISODE_END_RULE_VERSION
 from packages.rca.episode_end import EndedEpisode
-from packages.rca.evidence_coverage import EvidenceCoverage
+from packages.rca.evidence_coverage import EvidenceCoverage, TraceRead
 from packages.rca.model import (
     CausalExplanation,
     CausalFamily,
@@ -836,6 +836,9 @@ def resolve_hypotheses(
     selects: Mapping[EntityRef, Collection[EntityRef]] | None = None,
     evidence_coverage: EvidenceCoverage | None = None,
     causal_onset: datetime | None = None,
+    latest: Mapping[EntityRef, ObjectVersion] | None = None,
+    trace_reads: Sequence[TraceRead] | None = None,
+    alerted: Collection[EntityRef] = (),
 ) -> ResolutionTrace:
     """Resolve distinguishability without treating missing proof as contradiction.
 
@@ -1004,6 +1007,8 @@ def resolve_hypotheses(
     )
     from packages.rca.frontier import (
         ANSWERED_STATES,
+        DEPENDENCY_ON_CLAIM_PATH_RULE,
+        dependency_calls,
         dependency_on_claim_path,
         material_frontier,
         unchanged_configuration,
@@ -1030,6 +1035,29 @@ def resolve_hypotheses(
         (dependency_on_claim_path(by_id[a.alternative_id], admitted_claims) or a)
         if a.state == "OPEN"
         else a
+        for a in answers
+    )
+    # m21 §29 B and C: healthy observed calls, or a declaration the traced caller never used. An answer holds
+    # for every material claim; an open one leaves a partial answer of A as it was.
+    calls_answers = {
+        a.alternative_id: dependency_calls(
+            by_id[a.alternative_id],
+            latest or {},
+            trace_spans,
+            trace_reads,
+            alerted,
+            causal_onset,
+        )
+        for a in answers
+        if a.state == "OPEN"
+    }
+    answers = tuple(
+        (
+            found
+            if (found := calls_answers.get(a.alternative_id)) is not None
+            and (found.state in ANSWERED_STATES or a.rule_id != DEPENDENCY_ON_CLAIM_PATH_RULE)
+            else a
+        )
         for a in answers
     )
     answered = {a.alternative_id for a in answers if a.state in ANSWERED_STATES}

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Protocol, cast
 
-from packages.rca.evidence_coverage import EvidenceCoverage
+from packages.rca.evidence_coverage import EvidenceCoverage, TraceRead
 from packages.rca.investigation.actions import observation_identity
 from packages.rca.investigation.tempo import TempoTraceBatch
 from packages.rca.model import (
@@ -748,6 +748,10 @@ class InitialObservationView:
     def evidence_coverage_record(self) -> EvidenceCoverage | None:
         # Object-channel coverage is a property of the channel, not of the bounded view.
         return self.full_source.evidence_coverage_record()
+
+    def trace_read_record(self) -> Sequence[TraceRead] | None:
+        # The capture's reads are a property of the run, not of the bounded view.
+        return self.full_source.trace_read_record()
 
     def alert_episodes(self) -> Sequence[AlertEpisode] | None:
         # Capture history is also a property of the channel, not of the bounded view.

@@ -144,6 +144,10 @@ class RecordedSeed:
         # the tapes hold no object-channel coverage (m21 §26.6): as a run recorded before it
         return None
 
+    def trace_read_record(self) -> None:
+        # nor trace reads (m21 §29)
+        return None
+
     def __getattr__(self, name: str) -> Any:
         if name not in _SOURCE_METHODS:
             raise AttributeError(name)

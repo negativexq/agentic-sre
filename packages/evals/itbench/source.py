@@ -401,6 +401,10 @@ class SnapshotSource:
         """No Connector stream recorded the scenario: no object coverage (m21 §26.6)."""
         return None
 
+    def trace_read_record(self) -> None:
+        """The scenario's traces were not read by the capture: no record of its reads (m21 §29)."""
+        return None
+
     def alert_observation_start(self) -> datetime | None:
         """W: the earliest alert-channel capture, from the alert snapshot file names.
 

@@ -32,6 +32,7 @@ from packages.contracts import (
     IncidentStatus,
     TimeWindow,
 )
+from packages.rca.evidence_coverage import TraceRead
 from packages.rca.json_access import child, object_content_hash
 from packages.rca.model import (
     CLUSTER_SCOPE,
@@ -629,6 +630,24 @@ class TraceCaptureRepository:
                 )
             )
         self._session.flush()
+
+    def reads(self, incident_id: object) -> list[TraceRead]:
+        """Every read recorded for the incident, in recording order (m21 §29)."""
+        rows = self._session.scalars(
+            select(TraceCaptureRow)
+            .where(TraceCaptureRow.incident_id == incident_id)
+            .order_by(TraceCaptureRow.capture_id)
+        )
+        return [
+            TraceRead(
+                namespace=row.namespace,
+                service=row.service,
+                starts_at=row.starts_at,
+                ends_at=row.ends_at,
+                completeness=row.completeness,
+            )
+            for row in rows
+        ]
 
     def read_windows(self, incident_id: object) -> set[tuple[str, str, datetime, datetime]]:
         """``(namespace, service, starts_at, ends_at)`` of the incident's reads that did not fail."""

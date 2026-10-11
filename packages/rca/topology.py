@@ -294,6 +294,43 @@ def _pod_spec(body: Mapping[str, Any]) -> Mapping[str, Any] | None:
     return inner if isinstance(inner, dict) else None
 
 
+def _declared_calls(
+    ref: EntityRef,
+    pod_spec: Mapping[str, Any],
+    services: Mapping[tuple[str, str], EntityRef],
+    config_data: Mapping[str, Mapping[str, Mapping[str, Any]]],
+) -> set[tuple[str, EntityRef]]:
+    """Each declared host of a workload that names another Service, with that Service."""
+    calls: set[tuple[str, EntityRef]] = set()
+    for host, _env_name in _declared_hosts(pod_spec, config_data.get(ref.namespace)):
+        parts = host.split(".")
+        namespace = parts[1] if len(parts) > 1 and parts[1] != "svc" else ref.namespace
+        target_service = services.get((namespace, parts[0]))
+        if target_service is not None and target_service.name != ref.name:
+            calls.add((host, target_service))
+    return calls
+
+
+def declared_hosts(
+    latest: Mapping[EntityRef, ObjectVersion], caller: EntityRef, target: EntityRef
+) -> frozenset[str]:
+    """The hosts ``caller`` declares for the Service ``target``: the declaration its ``calls`` edge comes from."""
+    version = latest.get(caller)
+    pod_spec = _pod_spec(version.body) if version is not None else None
+    if pod_spec is None or caller.kind == "Pod":
+        return frozenset()
+    services = {(ref.namespace, ref.name): ref for ref in latest if ref.kind == "Service"}
+    config_data: dict[str, dict[str, dict[str, Any]]] = {}
+    for ref, item in latest.items():
+        if ref.kind == "ConfigMap":
+            config_data.setdefault(ref.namespace, {})[ref.name] = child(item.body, "data")
+    return frozenset(
+        host
+        for host, service in _declared_calls(caller, pod_spec, services, config_data)
+        if service == target
+    )
+
+
 def derive_edges(
     latest: Mapping[EntityRef, ObjectVersion], events: Sequence[ClusterEvent] = ()
 ) -> tuple[Edge, ...]:
@@ -353,12 +390,8 @@ def derive_edges(
                             edges.add(Edge(source=ref, target=pod, relation="disrupts"))
         pod_spec = _pod_spec(body)
         if pod_spec is not None and ref.kind != "Pod":
-            for host, _env_name in _declared_hosts(pod_spec, config_data.get(ref.namespace)):
-                parts = host.split(".")
-                namespace = parts[1] if len(parts) > 1 and parts[1] != "svc" else ref.namespace
-                target_service = services.get((namespace, parts[0]))
-                if target_service is not None and target_service.name != ref.name:
-                    edges.add(Edge(source=ref, target=target_service, relation="calls"))
+            for _host, target_service in _declared_calls(ref, pod_spec, services, config_data):
+                edges.add(Edge(source=ref, target=target_service, relation="calls"))
         if pod_spec is not None:
             for kind, name in _config_refs(pod_spec):
                 edges.add(
@@ -690,6 +723,7 @@ __all__ = [
     "RelationSemantics",
     "WORKLOAD_KINDS",
     "Topology",
+    "declared_hosts",
     "derive_edges",
     "is_chaos_kind",
     "pod_workload_name",

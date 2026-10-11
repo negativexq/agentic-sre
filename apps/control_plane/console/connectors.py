@@ -204,6 +204,19 @@ def create_connectors_router(
             raise HTTPException(status_code=502, detail=f"preflight failed: {error}") from error
         return [PreflightCheck.model_validate(check) for check in answer.get("checks", [])]
 
+    @router.get("/{connector_id}/trace-fetches")
+    def trace_fetches(connector_id: str) -> dict[str, int]:
+        """The Connector's trace-by-ID fetch totals since it started (live-trace §14.6)."""
+        if gateway is None or connector_id not in gateway.connected():
+            raise HTTPException(status_code=409, detail=f"{connector_id} is not connected")
+        try:
+            answer: dict[str, Any] = ConnectorClient(gateway.transport(connector_id)).call(
+                "preflight"
+            )
+        except ConnectorError as error:
+            raise HTTPException(status_code=502, detail=f"preflight failed: {error}") from error
+        return {str(k): int(v) for k, v in (answer.get("trace_fetches") or {}).items()}
+
     return router
 
 

@@ -566,3 +566,53 @@ slice. The counters measure it. A larger reduction needs P2 or a proven sequenti
   - **trace correctness:** each response's span set compared with the default's, where any difference fails the
     setting.
 - **Lab:** no setting reaches the lab without the owner's approval.
+
+### 14.6 DEV validation of P0 and P1 on the lab (2026-10-11, owner-approved)
+
+**The run is not valid.** It ended `INVALID: missing recovery_at`, the same harness defect as dev20b. Its diagnoses
+are not scored and are not evidence for engine 2.10.0. **Its load and read measurements are kept**: they do not
+depend on the recovery time.
+
+**Identities:**
+- **Code:** main `c1c8f25` (engine 2.10.0, §14.2 P0, §14.3 P1); `make check` 2812 passed, 25 skipped.
+- **Control plane:** run by the harness from a worktree at that commit.
+- **Connector:** `agentic-sre/connector:dev`, built locally from a clean worktree at that commit, label
+  `org.opencontainers.image.revision=c1c8f25`, digest `sha256:e2c96279f0db…`.
+  - The image it replaced is kept in the kind node as `agentic-sre/connector:before-p0` (`sha256:8df6e56c…`).
+  - **It stays in the lab** (owner, 2026-10-12); no rollback.
+- **Verification mode** (`TEMPO_VERIFY_SINGLE_FLIGHT`) was on for this run only and removed after it.
+
+**The run:** suite dev21-kafka-delay, `dependency-b-kafka-delay`, seed 2101, one run, 21:21–21:34 UTC.
+- **Smoke:** capabilities listed `trace_capture_scope`; `preflight` reported `trace_fetches`; a scoped
+  `query_traces` returned 80 spans.
+- **Guard:** never triggered (Tempo memory above 1800 MiB, or any FAILED trace read).
+
+**Measured, against the twenty-first `HOLDOUT`'s `dependency-b` window:**
+
+| | DEV21 | HOLDOUT21 dependency-b |
+|---|---|---|
+| Tempo memory peak | 1,093 MiB | 1,816 MiB |
+| Tempo trace-by-ID concurrency, max | 2 | 4 |
+| FAILED trace reads | 0 | 0 in that window |
+| ENGINE (`INVESTIGATION`) reads per incident | 24 | 16–20 |
+
+- **CAPTURE:** 856 trace-by-ID requests, 328 distinct.
+- **P0, the one scope summary logged:** 200 requests, 4 joined (2%), 0 failures, 0 verification differences.
+  - In verification mode a joined request is also fetched for comparison, so `http_fetches` (200) counts those.
+  - No "differs" warning in the whole Connector log.
+- **P1:** no admission timeout. The per-capture wait summaries were not recorded (below).
+
+**What this does and does not show:**
+- One run, one scenario. The lower peak and concurrency are consistent with P1's shared budget; they are not a
+  measured effect size.
+- **P0 joins little here:** most repeats in a capture are sequential, not concurrent (§14.2 leaves sequential reuse
+  undecided).
+- The ENGINE count is higher than the window's; one run does not say why.
+
+**Two observability gaps, closed before the next `HOLDOUT` (owner, 2026-10-12), with no new protocol:**
+- **P0:** a scope summary is logged only when a later request sweeps idle scopes, so most scopes never report.
+  - The harness reads the Connector's `preflight` `trace_fetches` totals at the start and the end of each run and
+    records both and their difference in the run journal.
+- **P1:** the per-capture wait summary is an INFO line, and the lab control plane logged only WARNING.
+  - The lab control plane now runs with the existing `SRE_LOG_LEVEL=INFO`, and the harness copies the run's
+    summary lines into the run directory.

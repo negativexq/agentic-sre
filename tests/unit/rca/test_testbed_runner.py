@@ -578,3 +578,55 @@ def test_a_lab_quiet_long_before_the_run_adds_no_wait(tmp_path: Path) -> None:
     window = next(e for e in journal.entries() if e.role == "baseline_window")
     assert window.payload["waited_seconds"] == 0
     assert world.injected is not None and world.injected < T0 + timedelta(minutes=5)
+
+
+class MeasuredWorld(FakeWorld):
+    """A lab whose Connector reports trace-fetch totals and whose control plane logs capture summaries."""
+
+    def __init__(self, clock: FakeClock, *, unreachable: bool = False) -> None:
+        super().__init__(clock)
+        self.readings = iter(
+            [
+                {"lab": {"requests": 3, "joined": 0, "http_fetches": 3}},
+                {"lab": {"requests": 103, "joined": 7, "http_fetches": 96}},
+            ]
+        )
+        self.unreachable = unreachable
+
+    def trace_fetches(self) -> dict[str, dict[str, int]]:
+        if self.unreachable:
+            raise OSError("connection refused")
+        return next(self.readings)
+
+    def capture_summaries(self) -> list[str]:
+        return ["trace capture: 4 reads, admission wait total 0.0s max 0.0s, 0 not admitted"]
+
+
+def test_the_run_journal_keeps_the_trace_fetch_difference_and_the_capture_summaries(
+    tmp_path: Path,
+) -> None:
+    """live-trace §14.6: the Connector's totals at the start and the end, and the read-budget lines."""
+    _, store, outcome = run(tmp_path, MeasuredWorld(FakeClock()))
+    assert outcome.record.valid, outcome.record.invalid_reasons
+    entries = InjectorJournal(
+        store.run_dir("s1", "dependency-delay", 0) / "journal.jsonl"
+    ).entries()
+    by_role = {e.role: e for e in entries}
+    roles = [e.role for e in entries]
+    assert roles.index("trace_fetches_start") < roles.index(ROLE_CAUSE_CREATED)
+    assert roles.index("rediagnose_requested") < roles.index("trace_fetches_end")
+    assert by_role["trace_fetches_end"].payload["difference"] == {
+        "lab": {"requests": 100, "joined": 7, "http_fetches": 93}
+    }
+    assert by_role["trace_capture_summaries"].payload["lines"][0].startswith("trace capture: 4")
+
+
+def test_an_unreadable_connector_is_journaled_and_does_not_stop_the_run(tmp_path: Path) -> None:
+    _, store, outcome = run(tmp_path, MeasuredWorld(FakeClock(), unreachable=True))
+    assert outcome.record.valid, outcome.record.invalid_reasons
+    entries = InjectorJournal(
+        store.run_dir("s1", "dependency-delay", 0) / "journal.jsonl"
+    ).entries()
+    failed = [e for e in entries if e.role in ("trace_fetches_start", "trace_fetches_end")]
+    assert [e.ok for e in failed] == [False, False]
+    assert "connection refused" in failed[0].response

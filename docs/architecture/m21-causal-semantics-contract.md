@@ -3122,3 +3122,46 @@ with `TOO_FEW_CALLS`.
 2. **The other measurements of §29.4** follow unchanged.
 
 **Added to §29.5, not decided here.** Whether the traces a cut read returns are a fair sample of the slice's calls.
+
+**Withdrawn with B by §29.9.**
+
+### 29.9 B is withdrawn until a new design (amendment found by the second `DEV` check; proposed 2026-10-11)
+
+**Found by the second `DEV` check** (`dev20b-kafka-delay`, engine 2.10.0 at `2d96d00`, with §29.8, unscored). It ran
+the same variant and the same seed as `dev20-kafka-delay`.
+- **Timing:**
+  - the kafka delay began at 12:28:07 and the payment loss at 12:28:08;
+  - the onset was 12:28:34;
+  - the last kafka call observed was 12:27:50, 17 s before the delay and 44 s before the onset.
+- **The last minute held only calls from before the delay.** All 23 calls in `[12:27:34, 12:28:34]` began before
+  12:27:51, with durations as before (about 1 ms).
+- **Result:** in both incidents the `kafka` question was again answered `ANSWERED_OBSERVED_HEALTHY`. The hard
+  condition of §29.4 failed again.
+- **C was again correct:** `redis` was answered `ANSWERED_DECLARED_UNUSED`.
+
+**The defect is not the window's length.**
+- When a dependency's fault stops the calls to it, any window before the onset still holds the healthy calls made
+  before the fault, however short the window is.
+- A shorter window moves the blind interval; it does not close it.
+- What B reads as "healthy just before the onset" is in fact a stretch without observation, and §3 I1 forbids reading
+  that as exclusion.
+
+**Amendment.**
+- **B (`m21.frontier.dependency-observed-healthy`) is withdrawn.** No rule answers a `dependency` question from
+  observed call health. §29.8 is withdrawn with it.
+- **A and C stand,** with §29.6.
+- **A `dependency` question that A and C do not answer** keeps the answer it had before §29.
+- **What a new B would have to show** is left to §29.5: that the calls reached the dependency up to the onset, or
+  evidence after the onset (late-evidence-design). It is a new design, decided separately.
+
+**Consequences.**
+- The `kafka` questions of `order-service` claims stay open.
+- No diagnosis whose only other blocker is such a question becomes `RESOLVED` from §29.
+- The trace reads stay frozen at the run boundary. C reads them.
+
+**Measurement, pre-registered.**
+1. **The withdrawal is checked on the two `DEV` runs' stored evidence.** A replay of `dev20-kafka-delay` and
+   `dev20b-kafka-delay` on the engine without B answers no `kafka` question `ANSWERED_OBSERVED_HEALTHY` (hard). `redis`
+   stays `ANSWERED_DECLARED_UNUSED`.
+2. **The other measurements of §29.4** follow: offline replay, ITBench-Lite, and the twentieth `HOLDOUT` on its own
+   pre-registration.

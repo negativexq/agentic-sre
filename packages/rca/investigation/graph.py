@@ -19,7 +19,7 @@ from packages.rca.engine import Case, EngineConfig, build_case, diagnose_case
 from packages.rca.epistemic_digest import diagnosis_epistemic_digest
 from packages.rca.frontier import (
     ANSWERED_STATES,
-    UNCHANGED_CONFIGURATION_RULE,
+    EVIDENCE_RULES,
     apply_frontier_progress,
     covered_frontier_dimensions,
 )
@@ -2372,10 +2372,10 @@ def _investigated_answers(
             if reads
             else "UNEXPLORED"
         )
-        # m21 §26: the unchanged-configuration rule names its own failed condition, which no read changes
+        # m21 §26, §29: an evidence rule names its own failed condition, which no read changes
         blocked = (
             answer.blocked_reason
-            if answer.rule_id == UNCHANGED_CONFIGURATION_RULE
+            if answer.rule_id in EVIDENCE_RULES
             else reason.value
             if phase.startswith("BLOCKED")
             else None

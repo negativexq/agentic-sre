@@ -3036,3 +3036,38 @@ unused" although `order-service` publishes to it: its condition 2 holds through 
 - C never applies: `CALLS_NOT_TRACED`, since `kafka publish` and the `postgres` spans carry no peer.
 - The `kafka` and `redis` questions stay open until the workload's spans carry the standard peer attributes. That is
   a separate lab decision, not part of this contract.
+
+### 29.7 Implementation and measurement of §29 A (2026-10-11)
+
+**Implementation.** Engine 2.9.0.
+- **A:** `m21.frontier.dependency-on-claim-path` in `frontier.py`, applied in `resolution.py` after §26 to the
+  questions still `OPEN`. It reads only the hops of each material claim's validated `symptom_links` path.
+  - On every material claim's path: `ANSWERED_ON_CLAIM_PATH`, with the claims' relation evidence.
+  - On some but not all: `OPEN` with `NOT_ON_EVERY_CLAIM_PATH`.
+  - On none: left to the other rules.
+- **Investigation:** the bounded investigation keeps both answers. An answered question is `ANSWERED`; an open
+  question keeps the rule's condition, as in §28.6.
+- **Lab:** the workload's client spans now carry `server.address`: `kafka publish` as a `PRODUCER` span, postgres
+  and redis calls as `CLIENT` spans. Every value is read from the workload's own configured URL. Trace counts from
+  later runs are not comparable with earlier `HOLDOUT`s.
+
+**1. Offline replay** of every stored testbed run (3,118 incidents), 2.8.0 against 2.9.0. No errors.
+- **No root, leader, display, tier, basis or resolution change.** No new `RESOLVED`. The digest changes in 2,146
+  incidents.
+- **A answers 2,053 `payment-service` questions.**
+- **Material `payment-service` questions still limiting the diagnosis:** 1,714 before, 186 after.
+  - 87 of the 186 are `NOT_ON_EVERY_CLAIM_PATH`.
+  - The other 99 are on no material claim's path.
+- **`kafka` and `redis`** stay open (1,720 each), as §29.6 expects until B and C.
+
+**2. ITBench-Lite:** run `all-2.9.0-20261011T1102` at `948ba5b`, against `all-2.8.0-20261010T1957`.
+- **The report is identical** apart from the commit and the run time. The "dirty tree" in its header comes from two
+  untracked symlinks (`.local`, `.venv`) in the run's worktree.
+- **No prediction changes** its root, resolution, leader, tier or rank.
+- **The frontier answers change only through A:**
+  - 130 questions `ANSWERED_ON_CLAIM_PATH`;
+  - 290 `OPEN` with `NOT_ON_EVERY_CLAIM_PATH`;
+  - `m21.frontier.observed-role` `OPEN` 1,204 → 784.
+
+**3. B, C and the `HOLDOUT`.** B and C follow, under §29.6. The `HOLDOUT` that measures §29 is pre-registered in
+testbed design once B and C are implemented.

@@ -106,8 +106,10 @@ class KafkaOrderWorker:
 
 def build_default_worker(handler: Callable[[OrderCreatedEvent], None]) -> KafkaOrderWorker:
     """Build the production worker with Redis-backed idempotency."""
-    state_store = RedisProcessedStateStore(os.getenv("REDIS_URL", "redis://redis:6379/0"))
     runtime = create_runtime("order-worker", otlp_endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+    state_store = RedisProcessedStateStore(
+        os.getenv("REDIS_URL", "redis://redis:6379/0"), runtime=runtime
+    )
     return KafkaOrderWorker(
         os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092"),
         os.getenv("KAFKA_CONSUMER_GROUP", "order-worker"),

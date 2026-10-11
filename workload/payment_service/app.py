@@ -7,6 +7,7 @@ from contextlib import nullcontext
 from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException
+from opentelemetry.trace import SpanKind
 from prometheus_client import make_asgi_app
 from prometheus_client.registry import CollectorRegistry
 from pydantic import BaseModel, ConfigDict, Field
@@ -15,6 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from packages.storage import create_database_engine, create_session_factory
 from packages.telemetry import TelemetryMiddleware, TelemetryRuntime, create_runtime
+from workload.common.adapters import peer_host
 from workload.common.contracts import PaymentRequest, PaymentResponse, PaymentStatus
 from workload.common.faults import MemoryBallast
 from workload.common.persistence import PaymentRepository
@@ -47,12 +49,17 @@ class PaymentService:
         clock: Callable[[], datetime] | None = None,
         decline_above_cents: int | None = None,
         runtime: TelemetryRuntime | None = None,
+        db_address: str | None = None,
         fault_config: FaultConfig | None = None,
     ) -> None:
         self._repository_factory = repository_factory
         self._clock = clock or (lambda: datetime.now(UTC))
         self._decline_above_cents = decline_above_cents
         self._runtime = runtime
+        # the database's host as the service was configured with it (OpenTelemetry `server.address`)
+        self._db_attributes = {"db.system": "postgresql"} | (
+            {"server.address": db_address} if db_address else {}
+        )
         self._fault_config = fault_config
 
     def charge(self, request: PaymentRequest) -> PaymentResponse:
@@ -83,7 +90,11 @@ class PaymentService:
                         {"delay_seconds": self._fault_config.db_query_delay_ms / 1000},
                     )
                 span_context = (
-                    self._runtime.tracer.start_as_current_span("postgres payment create")
+                    self._runtime.tracer.start_as_current_span(
+                        "postgres payment create",
+                        kind=SpanKind.CLIENT,
+                        attributes=self._db_attributes,
+                    )
                     if self._runtime is not None
                     else nullcontext()
                 )
@@ -109,8 +120,10 @@ def create_app(
     service: PaymentService | None = None,
 ) -> FastAPI:
     """Build the payment HTTP application."""
+    db_address = None
     if session_factory is None:
         database_url = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
+        db_address = peer_host(database_url)
         session_factory = create_session_factory(create_database_engine(database_url))
     registry = CollectorRegistry()
     telemetry = create_runtime(
@@ -126,7 +139,7 @@ def create_app(
     )
     faults_enabled = os.getenv("ENABLE_TEST_FAULTS", "false").lower() == "true"
     payment_service = service or PaymentService(
-        session_factory, runtime=telemetry, fault_config=fault_config
+        session_factory, runtime=telemetry, db_address=db_address, fault_config=fault_config
     )
     ballast = MemoryBallast()
 

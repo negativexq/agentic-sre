@@ -976,6 +976,8 @@ class DiagnosisService:
             for namespace, service in targets
             if (namespace, service, start, stop) not in done
         ]
+        # §13: within this capture a trace is fetched once, whichever service's search found it
+        provider_adapter = provider_adapter.fetching_traces_once()
         # §11: at most two reads reach Tempo at once
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(

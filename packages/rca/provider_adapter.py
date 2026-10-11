@@ -6,7 +6,7 @@ import json
 import os
 import re
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass, replace
 from datetime import UTC, datetime
 from enum import Enum
 from hashlib import sha256
@@ -298,6 +298,18 @@ class ProviderAdapter:
     def for_caller(self, caller_class: ProviderCallerClass) -> ProviderAdapter:
         """Share configured readers while assigning a caller class for one path."""
         return ProviderAdapter(self.run_id, caller_class, self.session_factory, self.readers)
+
+    def fetching_traces_once(self) -> ProviderAdapter:
+        """This adapter for one trace capture: an identical trace fetch reaches Tempo once (live-trace §13)."""
+        fetching_once = getattr(self.readers.tempo, "fetching_once", None)
+        if fetching_once is None:
+            return self
+        return ProviderAdapter(
+            self.run_id,
+            self.caller_class,
+            self.session_factory,
+            replace(self.readers, tempo=fetching_once()),
+        )
 
     def supports(self, capability: str) -> bool:
         if capability in {"resource_pressure", "traffic"}:

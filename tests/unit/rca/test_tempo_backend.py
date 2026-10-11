@@ -36,6 +36,7 @@ from packages.rca.investigation.tempo import (
     TempoTraceReader,
     _compile_target_traceql,
     _TempoHttpResponse,
+    _TempoOpener,
     parse_tempo_trace_json,
 )
 from packages.rca.investigation.tools import RuntimeTracesTool
@@ -329,6 +330,90 @@ def test_fetch_404_is_missing_but_other_errors_fail() -> None:
         TempoTraceReader(TempoConfig("https://tempo.example.internal"), server_error).query(
             _entity(), _query()
         )
+
+
+def _fetch_once_opener(calls: list[str]) -> _TempoOpener:
+    shared = "b" * 32
+    own = {"payment": "c" * 32, "order": "d" * 32, "worker": "e" * 32}
+    search_url = "https://tempo.example.internal/api/search"
+
+    def opener(request: Request, *, timeout: float) -> _Response:
+        del timeout
+        url = request.full_url
+        calls.append(url)
+        if url.startswith(search_url):
+            service = next(name for name in own if f"%22{name}%22" in url)
+            ids = [shared, own[service]]
+            return _Response(json.dumps({"traces": [{"traceID": i} for i in ids]}).encode())
+        if f"/{own['worker']}?" in url:
+            raise HTTPError(url, 404, "missing", Message(), None)
+        trace_id = next(i for i in (shared, *own.values()) if f"/{i}?" in url)
+        spans = [
+            _raw_span(trace_id[:16], trace_id=trace_id),
+            _raw_span("2" * 16, trace_id=trace_id),
+        ]
+        return _Response(json.dumps(_trace_payload(spans)).encode())
+
+    return opener
+
+
+def test_a_capture_fetches_an_identical_trace_once_and_stores_the_same_spans() -> None:
+    """live-trace-design.md §13: the services' searches of one slice share a trace; it reaches Tempo once."""
+    services = ("payment", "order", "worker")
+    plain_calls: list[str] = []
+    plain = TempoTraceReader(
+        TempoConfig("https://tempo.example.internal"), _fetch_once_opener(plain_calls)
+    )
+    once_calls: list[str] = []
+    once = TempoTraceReader(
+        TempoConfig("https://tempo.example.internal"), _fetch_once_opener(once_calls)
+    ).fetching_once()
+
+    without = [plain.query(_entity(name=name), _query()) for name in services]
+    with_reuse = [once.query(_entity(name=name), _query()) for name in services]
+
+    assert with_reuse == without
+    fetches = [url for url in once_calls if "/api/v2/traces/" in url]
+    assert len(fetches) == len(set(fetches)) == 4
+    assert len([url for url in plain_calls if "/api/v2/traces/" in url]) == 6
+    # a 404 is answered once too, and stays missing
+    assert with_reuse[2].diagnostics.missing_trace_ids == ("e" * 32,)
+    # another range is another request
+    later = InvestigationQuery(start=T0, end=T0 + timedelta(minutes=2), limit=32)
+    once.query(_entity(name="payment"), later)
+    assert len([url for url in once_calls if "/api/v2/traces/" in url]) == 6
+
+
+def test_a_failed_fetch_is_not_kept_and_a_new_capture_starts_empty() -> None:
+    calls: list[str] = []
+
+    def opener(request: Request, *, timeout: float) -> _Response:
+        del timeout
+        url = request.full_url
+        calls.append(url)
+        if url.startswith("https://tempo.example.internal/api/search"):
+            return _Response(json.dumps({"traces": [{"traceID": TRACE_ID}]}).encode())
+        raise HTTPError(url, 500, "failure", Message(), None)
+
+    reader = TempoTraceReader(TempoConfig("https://tempo.example.internal"), opener)
+    once = reader.fetching_once()
+    for _ in range(2):
+        with pytest.raises(TempoHttpError):
+            once.query(_entity(), _query())
+    assert len([url for url in calls if "/api/v2/traces/" in url]) == 2
+    assert reader.trace_cache is None
+    assert once.fetching_once().trace_cache is not once.trace_cache
+
+
+def test_the_capture_adapter_scopes_the_reuse_to_one_capture() -> None:
+    reader = TempoTraceReader(TempoConfig("https://tempo.example.internal"), _Transport({}))
+    adapter = _provider_adapter(reader, "CAPTURE")
+    capture = adapter.fetching_traces_once()
+    assert adapter.readers.tempo is reader
+    assert isinstance(capture.readers.tempo, TempoTraceReader)
+    assert capture.readers.tempo.trace_cache is not None
+    assert adapter.fetching_traces_once().readers.tempo is not capture.readers.tempo
+    assert _provider_adapter(None, "CAPTURE").fetching_traces_once().readers.tempo is None
 
 
 def test_otlp_parser_scalar_attributes_kinds_status_and_ids() -> None:

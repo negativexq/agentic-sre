@@ -137,13 +137,10 @@ def extract_symptoms(
 
 def symptom_entities(alerts: Sequence[Alert], topology: Topology) -> set[EntityRef]:
     """Objects the diagnostic alerts point at, by service, workload, or pod label."""
-    return alerted_entities([a for a in alerts if not is_background_alert(a.name)], topology)
-
-
-def alerted_entities(alerts: Sequence[Alert], topology: Topology) -> set[EntityRef]:
-    """Objects any of the alerts point at, background alerts included (m21 §29 B)."""
     result: set[EntityRef] = set()
     for alert in alerts:
+        if is_background_alert(alert.name):
+            continue
         namespace = alert.namespace or alert.labels.get("namespace")
         names = {alert.service} if alert.service else set()
         names.update(alert.labels[key] for key in _LABEL_KEYS if alert.labels.get(key))
@@ -1192,7 +1189,6 @@ def traffic_findings(
 
 __all__ = [
     "BACKGROUND_ALERTS",
-    "alerted_entities",
     "resource_findings",
     "container_findings",
     "parse_quantity",

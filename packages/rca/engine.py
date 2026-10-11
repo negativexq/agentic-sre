@@ -86,7 +86,6 @@ from packages.rca.runtime_graph import (
 )
 from packages.rca.runtime_propagation import RuntimePropagation, derive_runtime_propagation
 from packages.rca.signals import (
-    alerted_entities,
     autoscaling_findings,
     change_findings,
     container_findings,
@@ -584,7 +583,6 @@ def _resolution_trace(case: Case, config: EngineConfig) -> ResolutionTrace:
         causal_onset=case.symptoms.onset,
         latest=case.context.topology.latest,
         trace_reads=case.source.trace_read_record(),
-        alerted=alerted_entities(case.source.alerts(), case.context.topology),
     )
 
 

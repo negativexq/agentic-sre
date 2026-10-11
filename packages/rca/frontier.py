@@ -9,10 +9,9 @@ that can provide evidence for them.
 from __future__ import annotations
 
 import json
-from collections.abc import Collection, Mapping, Sequence
-from datetime import datetime, timedelta
+from collections.abc import Mapping, Sequence
+from datetime import datetime
 from hashlib import sha256
-from statistics import median
 
 from packages.rca.claims import admitted, symptom_links
 from packages.rca.evidence_coverage import EvidenceCoverage, TraceRead, continuously_observed
@@ -28,10 +27,8 @@ from packages.rca.model import (
     ObjectVersion,
     StructuralAlternative,
     TraceSpanObservation,
-    TraceSpanStatus,
 )
 from packages.rca.ranking import Context
-from packages.rca.service_effect import SERVICE_EFFECT
 from packages.rca.topology import (
     WORKLOAD_KINDS,
     api_access_refs,
@@ -364,14 +361,12 @@ def material_frontier(
 
 UNCHANGED_CONFIGURATION_RULE = "m21.frontier.unchanged-configuration"
 DEPENDENCY_ON_CLAIM_PATH_RULE = "m21.frontier.dependency-on-claim-path"
-DEPENDENCY_OBSERVED_HEALTHY_RULE = "m21.frontier.dependency-observed-healthy"
 DEPENDENCY_DECLARED_UNUSED_RULE = "m21.frontier.dependency-declared-unused"
 ANSWERED_STATES = frozenset(
     {
         "ANSWERED_ROLE_TRANSFERRED",
         "ANSWERED_NO_CHANGE_IN_WINDOW",
         "ANSWERED_ON_CLAIM_PATH",
-        "ANSWERED_OBSERVED_HEALTHY",
         "ANSWERED_DECLARED_UNUSED",
     }
 )
@@ -380,14 +375,9 @@ EVIDENCE_RULES = frozenset(
     {
         UNCHANGED_CONFIGURATION_RULE,
         DEPENDENCY_ON_CLAIM_PATH_RULE,
-        DEPENDENCY_OBSERVED_HEALTHY_RULE,
         DEPENDENCY_DECLARED_UNUSED_RULE,
     }
 )
-# m21 §29 B: the calls just before the onset are at most this many times slower than the earlier ones
-HEALTHY_SLOWDOWN = 2.0
-# m21 §29.8: B reads the calls of this last stretch before the onset, the trace capture's slice (``TRACE_SLICE``)
-RECENT_CALLS = timedelta(minutes=1)
 # span kinds that receive a call; every other span of a caller is one it makes (m21 §29.6)
 _INBOUND_KINDS = frozenset({"SERVER", "CONSUMER"})
 
@@ -522,20 +512,19 @@ def dependency_on_claim_path(
     )
 
 
-def dependency_calls(
+def dependency_declared_unused(
     alternative: StructuralAlternative,
     latest: Mapping[EntityRef, ObjectVersion],
     spans: Sequence[TraceSpanObservation],
     reads: Sequence[TraceRead] | None,
-    alerted: Collection[EntityRef],
     onset: datetime | None,
 ) -> FrontierAnswer | None:
-    """m21 §29 B and C: a dependency whose calls were observed healthy, or that its traced caller never called.
+    """m21 §29 C: a dependency its traced caller declares and never called up to the onset.
 
     A span is a call to the dependency only when its ``server.address`` is a host the caller declares for that
-    Service (§29.6). None when the rules cannot be assessed (not a dependency question, no record of the trace
-    reads, no onset, no declaration): the question then keeps the answer it had. Otherwise C when no caller calls
-    the dependency, B when one does; ``OPEN`` with the failed condition named.
+    Service (§29.6). None when the rule cannot be assessed (not a dependency question, no record of the trace
+    reads, no onset, no declaration): the question then keeps the answer it had. Otherwise the answer, ``OPEN``
+    with the failed condition named; a dependency that is called is ``CALLED`` (B is withdrawn, §29.9).
     """
     if alternative.role != "dependency" or reads is None or onset is None:
         return None
@@ -551,86 +540,46 @@ def dependency_calls(
         caller: [span for span in own if span.span_kind not in _INBOUND_KINDS]
         for caller, own in observed.items()
     }
-    calls = {
-        caller: [
-            span for span in own if span.semantic_attributes.get("server.address") in hosts[caller]
-        ]
-        for caller, own in outbound.items()
-    }
-    read_failed = any(
-        read.completeness == "FAILED"
-        and (read.namespace, read.service) == (caller.namespace, caller.name)
-        for read in reads
-        for caller in callers
-    )
-    question = "IS_THE_DEPENDENCY_AN_UNKNOWN_UPSTREAM_ROLE"
 
-    def answer(
-        rule: str, state: str, reason: str | None, evidence: Sequence[str]
-    ) -> FrontierAnswer:
-        uncertainty = {
-            "ANSWERED_OBSERVED_HEALTHY": ("DEPENDENCY_MAY_REMAIN_A_CONDITION",),
-            "ANSWERED_DECLARED_UNUSED": ("DECLARATION_MAY_BE_USED_OUTSIDE_THE_WINDOW",),
-        }.get(state, ("UPSTREAM_ROLE_UNDETERMINED",))
+    def answer(state: str, reason: str | None, evidence: Sequence[str] = ()) -> FrontierAnswer:
         return FrontierAnswer(
             alternative_id=alternative.alternative_id,
-            question=question,
+            question="IS_THE_DEPENDENCY_AN_UNKNOWN_UPSTREAM_ROLE",
             state=state,
             blocked_reason=reason,
             evidence_ids=tuple(sorted(set(evidence))),
             affected_claims=alternative.material_for_hypothesis_ids,
-            remaining_uncertainty=uncertainty,
-            rule_id=rule,
+            remaining_uncertainty=("DECLARATION_MAY_BE_USED_OUTSIDE_THE_WINDOW",)
+            if reason is None
+            else ("UPSTREAM_ROLE_UNDETERMINED",),
+            rule_id=DEPENDENCY_DECLARED_UNUSED_RULE,
         )
 
-    if not any(calls.values()):
-        # C: a declaration the traced caller never used
-        rule = DEPENDENCY_DECLARED_UNUSED_RULE
-        if not all(any(span.span_kind == "SERVER" for span in own) for own in observed.values()):
-            return answer(rule, "OPEN", "CALLER_NOT_TRACED", ())
-        if not all(
-            own and all(span.semantic_attributes.get("server.address") for span in own)
-            for own in outbound.values()
-        ):
-            return answer(rule, "OPEN", "CALLS_NOT_TRACED", ())
-        if read_failed:
-            return answer(rule, "OPEN", "TRACE_READ_FAILED", ())
-        return answer(
-            rule,
-            "ANSWERED_DECLARED_UNUSED",
-            None,
-            [span.evidence_id for own in outbound.values() for span in own],
-        )
-    # B: the calls of the last minute before the onset, against the same calls before them (§29.8)
-    rule = DEPENDENCY_OBSERVED_HEALTHY_RULE
-    if read_failed:
-        return answer(rule, "OPEN", "TRACE_READ_FAILED", ())
-    if alternative.actor in alerted:
-        return answer(rule, "OPEN", "DEPENDENCY_ALERTED", ())
-    since = onset - RECENT_CALLS
-    evidence: list[str] = []
-    for own in calls.values():
-        recent = [span for span in own if since <= span.start_at]
-        if len(recent) < SERVICE_EFFECT.calls:
-            return answer(rule, "OPEN", "TOO_FEW_CALLS", ())
-        if any(span.status is TraceSpanStatus.ERROR for span in recent):
-            return answer(rule, "OPEN", "FAILED_CALLS", ())
-        earlier = [
-            _seconds(span) for span in own if span.start_at < since and span.end_at is not None
-        ]
-        if not earlier:
-            return answer(rule, "OPEN", "NO_EARLIER_CALLS", ())
-        durations = [_seconds(span) for span in recent if span.end_at is not None]
-        # a call still open has no duration: it is not shown no slower
-        if len(durations) < len(recent) or median(durations) > HEALTHY_SLOWDOWN * median(earlier):
-            return answer(rule, "OPEN", "SLOWER_CALLS", ())
-        evidence.extend(span.evidence_id for span in recent)
-    return answer(rule, "ANSWERED_OBSERVED_HEALTHY", None, evidence)
-
-
-def _seconds(span: TraceSpanObservation) -> float:
-    assert span.end_at is not None
-    return (span.end_at - span.start_at) / timedelta(seconds=1)
+    if any(
+        span.semantic_attributes.get("server.address") in hosts[caller]
+        for caller, own in outbound.items()
+        for span in own
+    ):
+        return answer("OPEN", "CALLED")
+    if not all(any(span.span_kind == "SERVER" for span in own) for own in observed.values()):
+        return answer("OPEN", "CALLER_NOT_TRACED")
+    if not all(
+        own and all(span.semantic_attributes.get("server.address") for span in own)
+        for own in outbound.values()
+    ):
+        return answer("OPEN", "CALLS_NOT_TRACED")
+    if any(
+        read.completeness == "FAILED"
+        and (read.namespace, read.service) == (caller.namespace, caller.name)
+        for read in reads
+        for caller in callers
+    ):
+        return answer("OPEN", "TRACE_READ_FAILED")
+    return answer(
+        "ANSWERED_DECLARED_UNUSED",
+        None,
+        [span.evidence_id for own in outbound.values() for span in own],
+    )
 
 
 def investigation_status(
@@ -651,13 +600,12 @@ def investigation_status(
 __all__ = [
     "ANSWERED_STATES",
     "DEPENDENCY_DECLARED_UNUSED_RULE",
-    "DEPENDENCY_OBSERVED_HEALTHY_RULE",
     "DEPENDENCY_ON_CLAIM_PATH_RULE",
     "EVIDENCE_RULES",
     "UNCHANGED_CONFIGURATION_RULE",
     "apply_frontier_progress",
     "covered_frontier_dimensions",
-    "dependency_calls",
+    "dependency_declared_unused",
     "dependency_on_claim_path",
     "derive_structural_frontier",
     "investigation_status",

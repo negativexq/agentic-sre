@@ -838,7 +838,6 @@ def resolve_hypotheses(
     causal_onset: datetime | None = None,
     latest: Mapping[EntityRef, ObjectVersion] | None = None,
     trace_reads: Sequence[TraceRead] | None = None,
-    alerted: Collection[EntityRef] = (),
 ) -> ResolutionTrace:
     """Resolve distinguishability without treating missing proof as contradiction.
 
@@ -1008,7 +1007,7 @@ def resolve_hypotheses(
     from packages.rca.frontier import (
         ANSWERED_STATES,
         DEPENDENCY_ON_CLAIM_PATH_RULE,
-        dependency_calls,
+        dependency_declared_unused,
         dependency_on_claim_path,
         material_frontier,
         unchanged_configuration,
@@ -1037,16 +1036,11 @@ def resolve_hypotheses(
         else a
         for a in answers
     )
-    # m21 §29 B and C: healthy observed calls, or a declaration the traced caller never used. An answer holds
-    # for every material claim; an open one leaves a partial answer of A as it was.
-    calls_answers = {
-        a.alternative_id: dependency_calls(
-            by_id[a.alternative_id],
-            latest or {},
-            trace_spans,
-            trace_reads,
-            alerted,
-            causal_onset,
+    # m21 §29 C: a declaration the traced caller never used. An answer holds for every material claim; an open
+    # one leaves a partial answer of A as it was.
+    unused = {
+        a.alternative_id: dependency_declared_unused(
+            by_id[a.alternative_id], latest or {}, trace_spans, trace_reads, causal_onset
         )
         for a in answers
         if a.state == "OPEN"
@@ -1054,7 +1048,7 @@ def resolve_hypotheses(
     answers = tuple(
         (
             found
-            if (found := calls_answers.get(a.alternative_id)) is not None
+            if (found := unused.get(a.alternative_id)) is not None
             and (found.state in ANSWERED_STATES or a.rule_id != DEPENDENCY_ON_CLAIM_PATH_RULE)
             else a
         )

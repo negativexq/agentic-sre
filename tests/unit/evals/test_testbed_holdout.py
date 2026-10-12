@@ -64,6 +64,14 @@ def test_the_kafka_delay_dev_variant_is_variant_b_with_its_dependency_delayed() 
     assert delayed.loss_percent == plain.loss_percent
 
 
+def test_the_kafka_delay_alone_dev_variant_delays_kafka_and_nothing_else() -> None:
+    spec = SPECS["dependency-kafka-delay"](1, (1,))
+    assert (spec.scenario_id, spec.tier) == ("dependency-delay-kafka", "DEV")
+    params = derive_parameters(spec, 1)
+    assert (params.fault, params.latency_ms) == ("kafka-delay", 1000)
+    assert (params.loss_percent, params.dependency_delay_ms) == (0, 0)
+
+
 def test_a_manifest_without_an_engine_commit_keeps_its_old_digest() -> None:
     spec = SPECS["dependency-b"](3, (1, 2, 3))
     old = SuiteManifest(

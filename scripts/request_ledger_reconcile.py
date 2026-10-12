@@ -23,6 +23,7 @@ import urllib.parse
 import urllib.request
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any
@@ -30,6 +31,7 @@ from uuid import UUID, uuid5
 
 from sqlalchemy import bindparam, create_engine, text
 
+TEMPO_LIMIT = 5000
 EVENT_NAMESPACE = UUID("d9e0822c-d6dc-4e7d-aea3-59f30df796fb")  # workload/order_service/app.py
 PROCESSED_PREFIX = "agentic-sre:processed:"  # workload/common/adapters.py RedisStateStore
 
@@ -200,29 +202,97 @@ def _tempo(url: str, trace_id: str) -> Mapping[str, Any] | None:
         raise
 
 
-def _loki(url: str, start: datetime, end: datetime) -> list[dict[str, str]]:
-    """Every order-service ExecutionRecord entry in [start, end], paged forward in time."""
+def _loki_window(url: str, start: int, stop: int) -> dict[tuple[int, str], dict[str, str]]:
     seen: dict[tuple[int, str], dict[str, str]] = {}
-    cursor = int(start.timestamp() * 1e9)
-    stop = int(end.timestamp() * 1e9)
+    cursor = start
     query = '{service_name="order-service"} |= "execution."'
     while True:
         params = urllib.parse.urlencode(
-            {"query": query, "start": cursor, "end": stop, "limit": 5000, "direction": "forward"}
+            {"query": query, "start": cursor, "end": stop, "limit": 2000, "direction": "forward"}
         )
         with urllib.request.urlopen(
-            f"{url}/loki/api/v1/query_range?{params}", timeout=60
+            f"{url}/loki/api/v1/query_range?{params}", timeout=300
         ) as response:  # noqa: S310
             result = json.loads(response.read())["data"]["result"]
         page = [(int(v[0]), dict(s["stream"]), v[1]) for s in result for v in s["values"]]
         for ts, labels, line in page:
             seen[(ts, json.dumps(labels, sort_keys=True) + line)] = labels
-        if len(page) < 5000:
-            return list(seen.values())
+        if len(page) < 2000:
+            return seen
         last = max(ts for ts, _, _ in page)
         if last == cursor:
-            raise RuntimeError("more than one Loki page of entries share one nanosecond")
+            raise RuntimeError("more than one page of entries share one nanosecond")
         cursor = last  # the last nanosecond is read again; duplicates are dropped by key
+
+
+def windows(start_ns: int, stop_ns: int, step_ns: int) -> list[tuple[int, int]]:
+    """Consecutive, non-overlapping inclusive windows covering [start_ns, stop_ns]."""
+    result = []
+    cursor = start_ns
+    while cursor <= stop_ns:
+        upper = min(stop_ns, cursor + step_ns)
+        result.append((cursor, upper))
+        cursor = upper + 1
+    return result
+
+
+def _loki(url: str, start: datetime, end: datetime) -> list[dict[str, str]]:
+    """Every order-service ExecutionRecord entry in [start, end].
+
+    Read in ten-second windows, eight at a time: one query over a whole run's window of entries, each with its
+    own structured metadata, outlived Loki's response timeout.
+    """
+    seen: dict[tuple[int, str], dict[str, str]] = {}
+    spans = windows(int(start.timestamp() * 1e9), int(end.timestamp() * 1e9), 10 * 1_000_000_000)
+    with ThreadPoolExecutor(8) as pool:
+        for page in pool.map(lambda w: _loki_window(url, *w), spans):
+            seen.update(page)
+    return list(seen.values())
+
+
+def _tempo_window(url: str, start_ns: int, stop_ns: int) -> dict[str, TraceFacts]:
+    query = (
+        '{resource.service.name="order-service" && kind=server && name="POST /orders"}'
+        " | select(span.app.order.id)"
+    )
+    params = urllib.parse.urlencode(
+        {
+            "q": query,
+            "start": start_ns // 1_000_000_000,
+            "end": stop_ns // 1_000_000_000 + 1,
+            "limit": TEMPO_LIMIT,
+            "spss": 1,
+        }
+    )
+    with urllib.request.urlopen(f"{url}/api/search?{params}", timeout=120) as response:  # noqa: S310
+        traces = json.loads(response.read()).get("traces") or []
+    if len(traces) >= TEMPO_LIMIT:
+        raise RuntimeError("a Tempo search window reached its limit; results would be truncated")
+    found: dict[str, TraceFacts] = {}
+    for found_trace in traces:
+        order_id = None
+        for span_set in found_trace.get("spanSets") or [found_trace.get("spanSet") or {}]:
+            for span in span_set.get("spans", []):
+                for attribute in span.get("attributes", []):
+                    if attribute.get("key") == "app.order.id":
+                        order_id = str(_value(attribute))
+        # Tempo's search drops a trace id's leading zeros
+        found[str(found_trace["traceID"]).zfill(32)] = TraceFacts(server=True, order_id=order_id)
+    return found
+
+
+def _tempo_servers(url: str, start: datetime, end: datetime) -> dict[str, TraceFacts]:
+    """order-service's server span, and the order it created, for every trace in [start, end].
+
+    One search per ten-second window: looking traces up one by one took about 34 ms each and did not speed up
+    with concurrency.
+    """
+    found: dict[str, TraceFacts] = {}
+    spans = windows(int(start.timestamp() * 1e9), int(end.timestamp() * 1e9), 10 * 1_000_000_000)
+    with ThreadPoolExecutor(4) as pool:
+        for page in pool.map(lambda w: _tempo_window(url, *w), spans):
+            found.update(page)
+    return found
 
 
 def main() -> None:
@@ -231,6 +301,11 @@ def main() -> None:
     parser.add_argument("out")
     parser.add_argument("--tempo", default="http://127.0.0.1:13200")
     parser.add_argument("--loki", default="http://127.0.0.1:13100")
+    parser.add_argument(
+        "--full-traces",
+        action="store_true",
+        help="read every trace whole (slow) instead of searching for order-service's server spans",
+    )
     parser.add_argument("--workload-db")
     parser.add_argument("--redis")
     args = parser.parse_args()
@@ -241,9 +316,13 @@ def main() -> None:
     last = max(datetime.fromisoformat(r["finished"]) for r in rows)
     executions = execution_facts(_loki(args.loki, first, last))
     facts: dict[str, TraceFacts | None] = {}
-    for row in rows:
-        document = _tempo(args.tempo, row["trace_id"])
-        facts[row["trace_id"]] = trace_facts(document) if document else None
+    if args.full_traces:
+        for row in rows:
+            document = _tempo(args.tempo, row["trace_id"])
+            facts[row["trace_id"]] = trace_facts(document) if document else None
+    else:
+        servers = _tempo_servers(args.tempo, first, last)
+        facts = {row["trace_id"]: servers.get(row["trace_id"]) for row in rows}
     order_ids = {
         row["trace_id"]: row.get("order_id")
         or (facts[row["trace_id"]].order_id if facts[row["trace_id"]] else None)  # type: ignore[union-attr]
@@ -279,9 +358,10 @@ def main() -> None:
         import redis
 
         client = redis.Redis.from_url(args.redis)
+        pipeline = client.pipeline(transaction=False)
         for order_id in known:
-            event_id = uuid5(EVENT_NAMESPACE, order_id)
-            consumed[order_id] = bool(client.exists(f"{PROCESSED_PREFIX}{event_id}"))
+            pipeline.exists(f"{PROCESSED_PREFIX}{uuid5(EVENT_NAMESPACE, order_id)}")
+        consumed = {o: bool(n) for o, n in zip(known, pipeline.execute(), strict=True)}
 
     counts: Counter[str] = Counter()
     with open(args.out, "w") as output:

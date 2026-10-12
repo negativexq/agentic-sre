@@ -22,6 +22,7 @@ from scripts.request_ledger_reconcile import (
     lifecycle,
     place,
     trace_facts,
+    windows,
 )
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -260,3 +261,55 @@ def test_a_start_without_a_terminal_is_an_open_lifecycle_not_a_success() -> None
     assert lifecycle(facts) == {
         "uid-1": {"starts": 2, "terminals": 2, "open": 1, "terminal_without_start": 1}
     }
+
+
+@pytest.mark.parametrize(
+    ("start", "stop", "step", "expected"),
+    [
+        (0, 25, 10, [(0, 10), (11, 21), (22, 25)]),
+        (5, 5, 10, [(5, 5)]),
+        (6, 5, 10, []),
+    ],
+)
+def test_loki_windows_cover_the_range_without_overlap(
+    start: int, stop: int, step: int, expected: list[tuple[int, int]]
+) -> None:
+    assert windows(start, stop, step) == expected
+
+
+def test_a_tempo_search_window_restores_trace_ids_and_reads_the_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import scripts.request_ledger_reconcile as reconcile
+
+    found = [
+        {
+            "traceID": "abc",  # Tempo's search drops leading zeros
+            "spanSets": [{"spans": [{"attributes": [_attribute("app.order.id", ORDER)]}]}],
+        }
+    ]
+
+    class _Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802 - http.server hook
+            body = json.dumps({"traces": found}).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            del format, args
+
+    server = HTTPServer(("127.0.0.1", 0), _Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        assert reconcile._tempo_window(url, 0, 10**10) == {
+            "0" * 29 + "abc": TraceFacts(server=True, order_id=ORDER)
+        }
+        monkeypatch.setattr(reconcile, "TEMPO_LIMIT", 1)
+        with pytest.raises(RuntimeError, match="truncated"):
+            reconcile._tempo_window(url, 0, 10**10)
+    finally:
+        server.shutdown()
+        server.server_close()

@@ -51,4 +51,46 @@ witnessed symptoms retain their existing scope.
 
 ## Results
 
-Pending the paired measurement. No collective coverage gain is claimed.
+Completed before the production edit: 559 databases (557 with frozen windows,
+two without evidence-gathered events), 7,945 runs including intermediate revisions.
+There were zero input/recalculation errors and zero lost or new resolutions.
+
+| Measurement | All frozen runs | Widest window per incident |
+|---|---:|---:|
+| Runs/windows | 7,945 | 3,444 |
+| Additional bridge denials | 28 | 23 |
+| `RESOLVED` before / after | 101 / 101 | 54 / 54 |
+| `AMBIGUOUS` before / after | 7,050 / 7,050 | 2,651 / 2,651 |
+| `INSUFFICIENT_EVIDENCE` before / after | 794 / 794 | 739 / 739 |
+| Root, support, execution witness, display or digest changes | 0 | 0 |
+
+Every additional denial was `READINESS_AT_EXECUTION_START_UNKNOWN`: records exist
+but cannot show the competing Pod's state at the start. All affected runs were
+already ambiguous for other reasons. Thus the internal coverage bridge changes
+without a change to the serialized decision/digest. Unit counterexamples cover
+the completely absent and explicitly unknown cases, not observed in these denials.
+
+**Lost resolution inventory: empty.** The audit keeps `lost_resolutions.json` as
+an explicit empty list; there is no lost decision to attribute or grade. Retention
+does not certify that the 101 old resolutions are otherwise correct. The change
+fixes this particular readiness authority boundary and claims no collective gain.
+
+Local output: `.local/diagnostics/sole-ready/paired/` contains provenance,
+`rows.jsonl`, `summary.json`, and `lost_resolutions.json`. Denial entries retain
+the witnessed Pod, other Pod, execution interval, and all available readiness
+observations. All database access was read-only.
+
+```sh
+.venv/bin/python -m scripts.sole_ready_recalculation --output .local/diagnostics/sole-ready/repeat --workers 3
+```
+
+The script freezes the old predicate and adds denials with a scoped override.
+Its other engine behavior must match the recorded baseline commit for the same
+experiment; it is not a generic simulator for arbitrary future engine changes.
+After production edit, engine 2.12.0 uses the same preconditions; ordinary replay
+rejects 2.11.0 records. The lab process is not restarted by this code change.
+
+Validation: `make check` passes (lint, formatting, type checking; 2,856 tests
+passed, 23 optional tests skipped). The applied predicate also matches the
+pre-measured policy across 2,353 readiness combinations. Integration tests pin
+engine 2.12.0 and reject ordinary replay of both 2.11.0 and older 1.2.2 records.

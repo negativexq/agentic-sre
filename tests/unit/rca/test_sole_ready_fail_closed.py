@@ -4,10 +4,11 @@ from itertools import permutations
 
 import pytest
 from rca_builders import at
-from scripts.sole_ready_policy import baseline_sole_ready, corrected_sole_ready
+from scripts.sole_ready_policy import baseline_sole_ready
 from test_declared_symptom_coverage import OTHER, OWNED_BY, POD, SERVICE, ready, witness
 
 from packages.rca.model import PodStatusObservation
+from packages.rca.resolution import _sole_ready as corrected_sole_ready
 
 
 def status(minutes: float, value: bool | None, since: float | None = None) -> PodStatusObservation:

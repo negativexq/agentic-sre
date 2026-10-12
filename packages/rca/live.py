@@ -929,19 +929,36 @@ def capture_traces(
     from packages.rca.model import InvestigationQuery, ProviderReadFailure
 
     start = max(starts_at, ends_at - TRACE_QUERY_MAX_SPAN)
+    query = InvestigationQuery(start=start, end=ends_at, limit=32)
+    wanted = list(dict.fromkeys(services))[:max_services]
+    targets = [
+        EntityRef(kind="Deployment", name=service, namespace=namespace)
+        for namespace, service in wanted
+    ]
+
+    def ask(target: EntityRef) -> Any:
+        try:
+            return reader.query_tempo(target, query)
+        except Exception as error:  # noqa: BLE001 - a failed read is recorded, never fatal
+            return error
+
+    # live-trace-design.md §15: one call for the slice's targets, so a trace several of them found is fetched once
+    query_many = getattr(reader, "query_tempo_many", None)
+    if query_many is not None and len(targets) > 1:
+        try:
+            answers = list(query_many(targets, query))
+        except Exception as error:  # noqa: BLE001 - every target's read failed
+            answers = [error] * len(targets)
+    else:
+        answers = [ask(target) for target in targets]
 
     def read(
-        namespace: str, service: str
+        namespace: str, service: str, result: Any
     ) -> tuple[TraceServiceCapture, list[TraceSpanObservation]]:
-        target = EntityRef(kind="Deployment", name=service, namespace=namespace)
-        try:
-            result = reader.query_tempo(
-                target, InvestigationQuery(start=start, end=ends_at, limit=32)
-            )
-        except Exception as error:  # noqa: BLE001 - a failed read is recorded, never fatal
+        if isinstance(result, Exception):
             return (
                 TraceServiceCapture(
-                    service, namespace, start, ends_at, "FAILED", 0, type(error).__name__
+                    service, namespace, start, ends_at, "FAILED", 0, type(result).__name__
                 ),
                 [],
             )
@@ -967,8 +984,8 @@ def capture_traces(
         )
 
     results = [
-        read(namespace, service)
-        for namespace, service in list(dict.fromkeys(services))[:max_services]
+        read(namespace, service, answer)
+        for (namespace, service), answer in zip(wanted, answers, strict=True)
     ]
     seen: dict[tuple[str, str], TraceSpanObservation] = {}
     reads: list[TraceServiceCapture] = []

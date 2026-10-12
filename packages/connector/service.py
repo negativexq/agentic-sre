@@ -199,6 +199,17 @@ class Connector:
             )
         return encoded
 
+    def _tempo(self, capture_scope: str | None) -> Any:
+        reader = self.providers.tempo
+        if reader is None:
+            raise LookupError("tempo backend is not configured")
+        if capture_scope is None:
+            return reader
+        fetching_once = getattr(reader, "fetching_once", None)
+        if fetching_once is None:
+            raise LookupError("tempo backend does not take a capture scope")
+        return fetching_once(capture_scope)
+
     def capabilities(self) -> list[str]:
         names = []
         if self.cluster is not None:
@@ -211,6 +222,8 @@ class Connector:
             names.append("runtime_traces")
             if hasattr(self.providers.tempo, "fetching_once"):
                 names.append("trace_capture_scope")
+            if hasattr(self.providers.tempo, "query_many"):
+                names.append("trace_slice_fetch")
         if self.cluster is not None:
             names.append("changes")
         if self.alert_source is not None or self.accept_webhook:
@@ -849,15 +862,14 @@ class Connector:
             )
         if request.op == "query_traces":
             traces = _args(wire.TraceQueryArgs, args)
-            reader = self.providers.tempo
-            if reader is None:
-                raise LookupError("tempo backend is not configured")
-            if traces.capture_scope is not None:
-                fetching_once = getattr(reader, "fetching_once", None)
-                if fetching_once is None:
-                    raise LookupError("tempo backend does not take a capture scope")
-                reader = fetching_once(traces.capture_scope)
+            reader = self._tempo(traces.capture_scope)
             return wire.traces_to_wire(reader.query(traces.target, traces.query))
+        if request.op == "query_traces_many":
+            many = _args(wire.TraceManyArgs, args)
+            reader = self._tempo(many.capture_scope)
+            if not hasattr(reader, "query_many"):
+                raise LookupError("tempo backend does not fetch a slice's traces once")
+            return wire.trace_results_to_wire(reader.query_many(many.targets, many.query))
         query = _args(wire.TargetQueryArgs, args)
         if self.providers.prometheus is None:
             raise LookupError("prometheus backend is not configured")

@@ -8,6 +8,7 @@ Python object.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, Literal
 
@@ -41,6 +42,7 @@ Op = Literal[
     "query_resource_pressure",
     "query_traffic",
     "query_traces",
+    "query_traces_many",
     "read_alerts",
     "read_changes",
 ]
@@ -81,6 +83,13 @@ class TargetQueryArgs(WireModel):
 
 class TraceQueryArgs(TargetQueryArgs):
     # live-trace-design.md §14.2: only sent to a Connector that lists ``trace_capture_scope``
+    capture_scope: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+
+
+class TraceManyArgs(WireModel):
+    # live-trace-design.md §15: one slice's targets; only sent to a Connector that lists ``trace_slice_fetch``
+    targets: list[EntityRef] = Field(min_length=1, max_length=8)
+    query: InvestigationQuery
     capture_scope: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
 
 
@@ -202,6 +211,18 @@ def traces_from_wire(result: dict[str, Any]) -> tuple[TraceSpanObservation, ...]
     if result["shape"] == "tempo_batch":
         return _TEMPO.validate_python(result["batch"])
     return tuple(records_from_wire("spans", result))
+
+
+def trace_results_to_wire(results: Sequence[Any]) -> dict[str, Any]:
+    """One result per target, in order: its traces, or the failure of its own read (§15)."""
+    return {
+        "results": [
+            {"shape": "failure", "error_type": type(r).__name__, "message": str(r)[:500]}
+            if isinstance(r, Exception)
+            else traces_to_wire(r)
+            for r in results
+        ]
+    }
 
 
 # ---- streams as cursor-paged reads (contract §10) -------------------------------------------

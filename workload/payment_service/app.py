@@ -3,11 +3,11 @@
 import os
 import time
 from collections.abc import Callable
-from contextlib import nullcontext
+from contextlib import AbstractContextManager, nullcontext
 from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException
-from opentelemetry.trace import SpanKind
+from opentelemetry.trace import Span, SpanKind
 from prometheus_client import make_asgi_app
 from prometheus_client.registry import CollectorRegistry
 from pydantic import BaseModel, ConfigDict, Field
@@ -51,6 +51,7 @@ class PaymentService:
         runtime: TelemetryRuntime | None = None,
         db_address: str | None = None,
         fault_config: FaultConfig | None = None,
+        phase_spans: bool = False,
     ) -> None:
         self._repository_factory = repository_factory
         self._clock = clock or (lambda: datetime.now(UTC))
@@ -61,6 +62,21 @@ class PaymentService:
             {"server.address": db_address} if db_address else {}
         )
         self._fault_config = fault_config
+        self._phase_spans = phase_spans
+
+    def _phase_span(
+        self,
+        name: str,
+        *,
+        kind: SpanKind = SpanKind.INTERNAL,
+        attributes: dict[str, str] | None = None,
+    ) -> AbstractContextManager[Span | None]:
+        """Opt-in observation of a normal operation; no fault/cause attributes."""
+        if self._phase_spans and self._runtime is not None:
+            return self._runtime.tracer.start_as_current_span(
+                name, kind=kind, attributes=attributes
+            )
+        return nullcontext()
 
     def charge(self, request: PaymentRequest) -> PaymentResponse:
         """Persist a deterministic approval or decline."""
@@ -74,7 +90,8 @@ class PaymentService:
             query_started = time.perf_counter()
             try:
                 acquisition_started = time.perf_counter()
-                session.connection()
+                with self._phase_span("postgres connection acquire"):
+                    session.connection()
                 if self._runtime is not None:
                     self._runtime.record_db(
                         "payment-service",
@@ -82,13 +99,19 @@ class PaymentService:
                         acquisition=True,
                     )
                 if self._fault_config is not None and self._fault_config.db_hold_ms:
-                    time.sleep(self._fault_config.db_hold_ms / 1000)
+                    with self._phase_span("payment transaction wait"):
+                        time.sleep(self._fault_config.db_hold_ms / 1000)
                 query_started = time.perf_counter()
                 if self._fault_config is not None and self._fault_config.db_query_delay_ms:
-                    session.execute(
-                        text("SELECT pg_sleep(:delay_seconds)"),
-                        {"delay_seconds": self._fault_config.db_query_delay_ms / 1000},
-                    )
+                    with self._phase_span(
+                        "postgres payment execute",
+                        kind=SpanKind.CLIENT,
+                        attributes=self._db_attributes | {"db.operation.name": "execute"},
+                    ):
+                        session.execute(
+                            text("SELECT pg_sleep(:delay_seconds)"),
+                            {"delay_seconds": self._fault_config.db_query_delay_ms / 1000},
+                        )
                 span_context = (
                     self._runtime.tracer.start_as_current_span(
                         "postgres payment create",
@@ -138,8 +161,13 @@ def create_app(
         db_query_delay_ms=int(os.getenv("FAULT_PAYMENT_DB_QUERY_DELAY_MS", "0")),
     )
     faults_enabled = os.getenv("ENABLE_TEST_FAULTS", "false").lower() == "true"
+    phase_spans = os.getenv("SRE_PAYMENT_PHASE_SPANS", "false").lower() == "true"
     payment_service = service or PaymentService(
-        session_factory, runtime=telemetry, db_address=db_address, fault_config=fault_config
+        session_factory,
+        runtime=telemetry,
+        db_address=db_address,
+        fault_config=fault_config,
+        phase_spans=phase_spans,
     )
     ballast = MemoryBallast()
 
@@ -150,11 +178,17 @@ def create_app(
 
     @app.post("/payments", response_model=PaymentResponse, status_code=201)
     def create_payment(request: PaymentRequest) -> PaymentResponse:
-        if fault_config.delay_ms > 0:
-            time.sleep(fault_config.delay_ms / 1000)
-        if fault_config.error:
-            raise RuntimeError("injected payment failure")
-        return payment_service.charge(request)
+        context = (
+            telemetry.tracer.start_as_current_span("payment authorize")
+            if phase_spans
+            else nullcontext()
+        )
+        with context:
+            if fault_config.delay_ms > 0:
+                time.sleep(fault_config.delay_ms / 1000)
+            if fault_config.error:
+                raise RuntimeError("injected payment failure")
+            return payment_service.charge(request)
 
     @app.post("/__faults", response_model=FaultConfig)
     def set_faults(config: FaultConfig) -> FaultConfig:

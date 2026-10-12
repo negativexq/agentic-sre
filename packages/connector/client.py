@@ -178,18 +178,62 @@ class ConnectorLokiReader:
 
 
 class ConnectorTempoReader:
-    def __init__(self, client: ConnectorClient, capture_scope: str | None = None) -> None:
+    def __init__(
+        self,
+        client: ConnectorClient,
+        capture_scope: str | None = None,
+        *,
+        slice_fetch: bool = False,
+    ) -> None:
         self._client = client
         self._capture_scope = capture_scope
+        self._slice_fetch = slice_fetch
 
     def fetching_once(self) -> ConnectorTempoReader:
-        """This reader for one capture (live-trace-design.md §14.2), if the Connector takes a scope.
+        """This reader for one capture (live-trace-design.md §14.2, §15), as far as the Connector supports it.
 
-        An older Connector rejects the unknown field, so it is never sent one.
+        An older Connector rejects an unknown field or operation, so it is never sent one.
         """
-        if "trace_capture_scope" not in self._client.capabilities():
+        capabilities = self._client.capabilities()
+        if "trace_capture_scope" not in capabilities:
             return self
-        return ConnectorTempoReader(self._client, secrets.token_hex(16))
+        return ConnectorTempoReader(
+            self._client,
+            secrets.token_hex(16),
+            slice_fetch="trace_slice_fetch" in capabilities,
+        )
+
+    def query_many(
+        self, targets: Sequence[EntityRef], query: InvestigationQuery
+    ) -> list[tuple[TraceSpanObservation, ...] | TempoTraceBatch | Exception]:
+        """One slice's targets (§15): in one call when the Connector fetches their traces once, else one by one."""
+        if not self._slice_fetch:
+            results: list[tuple[TraceSpanObservation, ...] | TempoTraceBatch | Exception] = []
+            for target in targets:
+                try:
+                    results.append(self.query(target, query))
+                except Exception as error:  # noqa: BLE001 - this target's read fails, the others go on
+                    results.append(error)
+            return results
+        args: dict[str, Any] = {
+            "targets": [target.model_dump(mode="json") for target in targets],
+            "query": query.model_dump(mode="json"),
+        }
+        if self._capture_scope is not None:
+            args["capture_scope"] = self._capture_scope
+        answer = self._client.call("query_traces_many", args)
+        try:
+            items = list(answer["results"])
+            if len(items) != len(targets):
+                raise ValueError(f"{len(items)} results for {len(targets)} targets")
+            return [
+                ConnectorReadError(str(item["error_type"]), str(item["message"]))
+                if item["shape"] == "failure"
+                else wire.traces_from_wire(item)
+                for item in items
+            ]
+        except (KeyError, TypeError, ValueError) as error:
+            raise ConnectorUnavailable(f"malformed trace results: {error}") from error
 
     def query(
         self, target: EntityRef, query: InvestigationQuery

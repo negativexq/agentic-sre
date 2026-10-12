@@ -405,6 +405,44 @@ class ProviderAdapter:
             ),
         )
 
+    def query_tempo_many(
+        self, targets: Sequence[EntityRef], query: InvestigationQuery
+    ) -> list[tuple[TraceSpanObservation, ...] | TempoTraceBatch | ProviderReadFailure]:
+        """One slice's targets (live-trace-design.md §15), each recorded as its own read.
+
+        A reader that fetches a slice's traces once answers all of them in one call, which every read's timing
+        covers; any other reader is asked one target at a time.
+        """
+        reader = self.readers.tempo
+        if reader is None:
+            raise RuntimeError("Tempo reader is not configured")
+        query_many = getattr(reader, "query_many", None)
+        if query_many is None or len(targets) < 2:
+            return [self.query_tempo(target, query) for target in targets]
+        started_at = datetime.now(UTC)
+        try:
+            results = list(query_many(targets, query))
+        except Exception as error:  # noqa: BLE001 - the call failed for every target
+            results = [error] * len(targets)
+        finished_at = datetime.now(UTC)
+        recorded = []
+        for target, result in zip(targets, results, strict=True):
+            descriptor = tempo_descriptor(target, query)
+            recorded.append(
+                cast(
+                    tuple[TraceSpanObservation, ...] | TempoTraceBatch | ProviderReadFailure,
+                    self._record(
+                        capability="tempo_traces",
+                        query_key=provider_query_key(descriptor),
+                        descriptor=descriptor,
+                        started_at=started_at,
+                        finished_at=finished_at,
+                        result=result,
+                    ),
+                )
+            )
+        return recorded
+
     def query_loki(
         self,
         services: Sequence[str],
@@ -498,9 +536,32 @@ class ProviderAdapter:
     ) -> _T | tuple[_T, int] | ProviderReadFailure:
         started_at = datetime.now(UTC)
         try:
-            result = call()
-        except Exception as error:
-            finished_at = datetime.now(UTC)
+            result: _T | Exception = call()
+        except Exception as error:  # noqa: BLE001 - recorded as the read's failure
+            result = error
+        return self._record(
+            capability=capability,
+            query_key=query_key,
+            descriptor=descriptor,
+            started_at=started_at,
+            finished_at=datetime.now(UTC),
+            result=result,
+            include_read_id=include_read_id,
+        )
+
+    def _record(
+        self,
+        *,
+        capability: str,
+        query_key: str,
+        descriptor: dict[str, Any],
+        started_at: datetime,
+        finished_at: datetime,
+        result: _T | Exception,
+        include_read_id: bool = False,
+    ) -> _T | tuple[_T, int] | ProviderReadFailure:
+        if isinstance(result, Exception):
+            error = result
             from packages.storage.repositories import InvestigationReadRepository
 
             try:
@@ -526,7 +587,6 @@ class ProviderAdapter:
                 error_message=_provider_error_message(error),
             )
         observation = _json_value(result)
-        finished_at = datetime.now(UTC)
         from packages.storage.repositories import InvestigationReadRepository
 
         try:

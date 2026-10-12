@@ -9,7 +9,7 @@ import logging
 import os
 import re
 import threading
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -709,60 +709,143 @@ class TempoTraceReader:
         return self.flights.fetch(key, get)
 
     def query(self, target: EntityRef, query: InvestigationQuery) -> TempoTraceBatch:
+        (result,) = self.query_many((target,), query)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    def query_many(
+        self, targets: Sequence[EntityRef], query: InvestigationQuery
+    ) -> list[TempoTraceBatch | Exception]:
+        """Each target's own search, then every trace they selected fetched once (live-trace-design.md §15).
+
+        Each target keeps its own search, limit, diagnostics and spans. A failed search or fetch fails only the
+        targets that needed it, and a trace is not fetched once every target that selected it has failed.
+        """
         start, end = _validate_query(query)
-        traceql = _compile_target_traceql(target)
-        search_payload = self._get_json(
+        searches: list[_Search | Exception] = []
+        for target in targets:
+            try:
+                searches.append(self._search(target, start, end))
+            except Exception as error:  # noqa: BLE001 - this target's read fails, the others go on
+                searches.append(error)
+        fetched: dict[str, Mapping[str, object] | Exception | None] = {}
+        for search in searches:
+            if isinstance(search, Exception):
+                continue
+            for trace_id in search.selected_ids:
+                if trace_id in fetched:
+                    continue
+                needed = any(
+                    not isinstance(other, Exception)
+                    and trace_id in other.selected_ids
+                    and not any(
+                        isinstance(fetched.get(earlier), Exception)
+                        for earlier in other.selected_ids
+                    )
+                    for other in searches
+                )
+                if not needed:
+                    continue
+                try:
+                    fetched[trace_id] = self._fetch_trace(trace_id, start, end)
+                except Exception as error:  # noqa: BLE001 - fails the targets that selected it
+                    fetched[trace_id] = error
+        return [
+            search if isinstance(search, Exception) else _batch(search, fetched)
+            for search in searches
+        ]
+
+    def _search(self, target: EntityRef, start: int, end: int) -> _Search:
+        payload = self._get_json(
             "/api/search",
-            {"q": traceql, "start": start, "end": end, "limit": 8, "spss": 1},
+            {
+                "q": _compile_target_traceql(target),
+                "start": start,
+                "end": end,
+                "limit": 8,
+                "spss": 1,
+            },
             _MAX_SEARCH_RESPONSE_BYTES,
         )
-        all_ids = _trace_ids(search_payload)
-        selected_ids = all_ids[:_MAX_SEARCH_TRACE_IDS]
-        inspected_traces, inspected_bytes, completed_jobs, total_jobs = _metrics(search_payload)
-        truncated = len(all_ids) >= _MAX_SEARCH_TRACE_IDS or (
-            completed_jobs is not None and total_jobs is not None and completed_jobs < total_jobs
-        )
-        fetched: list[str] = []
-        missing: list[str] = []
-        spans: dict[tuple[str, str], TraceSpanObservation] = {}
-        for trace_id in selected_ids:
-            payload = self._fetch_trace(trace_id, start, end)
-            if payload is None:
-                missing.append(trace_id)
-                continue
-            fetched.append(trace_id)
-            for span in parse_tempo_trace_json(payload):
-                identity = (span.trace_id, span.span_id)
-                previous = spans.get(identity)
-                if previous is not None and previous.model_dump(mode="json") != span.model_dump(
-                    mode="json"
-                ):
-                    raise TempoProtocolError("Tempo returned conflicting duplicate span")
-                spans[identity] = span
-        diagnostics = TempoSearchDiagnostics(
-            completeness=(
-                TempoSearchCompleteness.TRUNCATED
-                if truncated
-                else TempoSearchCompleteness.BEST_EFFORT
-            ),
-            candidate_trace_ids=selected_ids,
-            search_limit_reached=len(all_ids) >= _MAX_SEARCH_TRACE_IDS,
+        all_ids = _trace_ids(payload)
+        inspected_traces, inspected_bytes, completed_jobs, total_jobs = _metrics(payload)
+        return _Search(
+            selected_ids=all_ids[:_MAX_SEARCH_TRACE_IDS],
+            limit_reached=len(all_ids) >= _MAX_SEARCH_TRACE_IDS,
             inspected_traces=inspected_traces,
             inspected_bytes=inspected_bytes,
             completed_jobs=completed_jobs,
             total_jobs=total_jobs,
-            fetched_trace_ids=tuple(fetched),
-            missing_trace_ids=tuple(missing),
         )
-        return TempoTraceBatch(
-            spans=tuple(
-                sorted(
-                    spans.values(),
-                    key=lambda span: (span.start_at, span.trace_id, span.span_id, span.evidence_id),
-                )
-            ),
-            diagnostics=diagnostics,
-        )
+
+
+@dataclass(frozen=True)
+class _Search:
+    """One target's search: the trace IDs it selected and Tempo's report of the search."""
+
+    selected_ids: tuple[str, ...]
+    limit_reached: bool
+    inspected_traces: int | None
+    inspected_bytes: int | None
+    completed_jobs: int | None
+    total_jobs: int | None
+
+
+def _batch(
+    search: _Search, fetched: Mapping[str, Mapping[str, object] | Exception | None]
+) -> TempoTraceBatch | Exception:
+    """One target's batch from the traces its own search selected."""
+    found: list[str] = []
+    missing: list[str] = []
+    spans: dict[tuple[str, str], TraceSpanObservation] = {}
+    for trace_id in search.selected_ids:
+        payload = fetched.get(trace_id)
+        if isinstance(payload, Exception):
+            return payload
+        if payload is None:
+            missing.append(trace_id)
+            continue
+        found.append(trace_id)
+        try:
+            parsed = parse_tempo_trace_json(payload)
+        except Exception as error:  # noqa: BLE001 - a malformed trace fails this target's read
+            return error
+        for span in parsed:
+            identity = (span.trace_id, span.span_id)
+            previous = spans.get(identity)
+            if previous is not None and previous.model_dump(mode="json") != span.model_dump(
+                mode="json"
+            ):
+                return TempoProtocolError("Tempo returned conflicting duplicate span")
+            spans[identity] = span
+    truncated = search.limit_reached or (
+        search.completed_jobs is not None
+        and search.total_jobs is not None
+        and search.completed_jobs < search.total_jobs
+    )
+    diagnostics = TempoSearchDiagnostics(
+        completeness=(
+            TempoSearchCompleteness.TRUNCATED if truncated else TempoSearchCompleteness.BEST_EFFORT
+        ),
+        candidate_trace_ids=search.selected_ids,
+        search_limit_reached=search.limit_reached,
+        inspected_traces=search.inspected_traces,
+        inspected_bytes=search.inspected_bytes,
+        completed_jobs=search.completed_jobs,
+        total_jobs=search.total_jobs,
+        fetched_trace_ids=tuple(found),
+        missing_trace_ids=tuple(missing),
+    )
+    return TempoTraceBatch(
+        spans=tuple(
+            sorted(
+                spans.values(),
+                key=lambda span: (span.start_at, span.trace_id, span.span_id, span.evidence_id),
+            )
+        ),
+        diagnostics=diagnostics,
+    )
 
 
 __all__ = [

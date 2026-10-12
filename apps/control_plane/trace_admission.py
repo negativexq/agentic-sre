@@ -79,37 +79,44 @@ def read_slices(
     wait: float = TRACE_READ_ADMISSION_WAIT_SECONDS,
     capture: Callable[..., TraceCapture] = capture_traces,
 ) -> list[TraceCapture]:
-    """One capture's reads, two at a time (§11), each admitted through the shared ``slots`` (§14.3).
+    """One capture's reads, one slice at a time per slot, two at a time (§11), through the shared ``slots`` (§14.3).
 
-    A read not admitted within ``wait`` is not sent. It is a ``FAILED`` read with ``TraceReadAdmissionTimeout``:
-    coverage, never absence, and distinct from every backend failure.
+    A slice's services are read together (live-trace-design.md §15): each keeps its own search and read, and a
+    trace several of them found is fetched once. A slice not admitted within ``wait`` is not sent. Each of its
+    reads is ``FAILED`` with ``TraceReadAdmissionTimeout``: coverage, never absence, and distinct from every backend
+    failure.
     """
+    slices: dict[tuple[datetime, datetime], list[tuple[str, str]]] = {}
+    for namespace, service, start, stop in reads:
+        slices.setdefault((start, stop), []).append((namespace, service))
     waits: list[float] = []
 
-    def read(item: SliceRead) -> TraceCapture:
-        namespace, service, start, stop = item
+    def read(item: tuple[tuple[datetime, datetime], list[tuple[str, str]]]) -> TraceCapture:
+        (start, stop), services = item
         waited = slots.admit(wait)
         if waited is None:
             return TraceCapture(
                 (),
-                (
+                tuple(
                     TraceServiceCapture(
                         service, namespace, start, stop, "FAILED", 0, ADMISSION_TIMEOUT
-                    ),
+                    )
+                    for namespace, service in services
                 ),
             )
         waits.append(waited)
         try:
-            return capture(reader, [(namespace, service)], start, stop)
+            return capture(reader, services, start, stop)
         finally:
             slots.release()
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        results = list(pool.map(read, reads))
+        results = list(pool.map(read, slices.items()))
     timed_out = sum(r.error == ADMISSION_TIMEOUT for result in results for r in result.reads)
     logger.info(
-        "trace capture: %d reads, admission wait total %.1fs max %.1fs, %d not admitted",
+        "trace capture: %d reads in %d slices, admission wait total %.1fs max %.1fs, %d not admitted",
         len(reads),
+        len(slices),
         sum(waits),
         max(waits, default=0.0),
         timed_out,

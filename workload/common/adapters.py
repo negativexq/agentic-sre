@@ -4,7 +4,7 @@ from collections.abc import Callable
 from contextlib import nullcontext
 from time import perf_counter
 from typing import Any, Protocol
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
@@ -87,38 +87,59 @@ class HttpPaymentGateway:
             if self._runtime is not None
             else nullcontext(trace.INVALID_SPAN)
         )
+        host = peer_host(self._base_url)
         started = perf_counter()
         try:
             with span_context as span:
-                headers = {"Content-Type": "application/json"}
-                propagate.inject(headers)
-                http_request = Request(
-                    f"{self._base_url}/payments",
-                    data=body,
-                    headers=headers,
-                    method="POST",
-                )
-                span.set_attribute("http.request.method", "POST")
-                span.set_attribute("server.address", peer_host(self._base_url))
                 try:
+                    headers = {"Content-Type": "application/json"}
+                    propagate.inject(headers)
+                    http_request = Request(
+                        f"{self._base_url}/payments",
+                        data=body,
+                        headers=headers,
+                        method="POST",
+                    )
+                    span.set_attribute("http.request.method", "POST")
+                    span.set_attribute("server.address", host)
                     with urlopen(http_request, timeout=self._timeout_seconds) as response:
                         span.set_attribute("http.response.status_code", response.status)
                         return PaymentResponse.model_validate_json(response.read())
-                except HTTPError as exc:
-                    span.set_attribute("http.response.status_code", exc.code)
-                    span.set_status(Status(StatusCode.ERROR, f"HTTP {exc.code}"))
+                except Exception as exc:
+                    kind = error_type(exc)
+                    span.set_attribute("error.type", kind)
+                    if isinstance(exc, HTTPError):
+                        span.set_attribute("http.response.status_code", exc.code)
+                        span.set_status(Status(StatusCode.ERROR, f"HTTP {exc.code}"))
+                    if self._runtime is not None:
+                        # Logged inside the client span, so the record carries this call's span, its configured
+                        # peer and the failure's type as structured attributes, not only in the text.
+                        self._runtime.logger.error(
+                            f"dependency.request error: payment-service {type(exc).__name__}: {exc}",
+                            extra={
+                                "http.request.method": "POST",
+                                "server.address": host,
+                                "error.type": kind,
+                            },
+                        )
                     raise
-        except Exception as exc:
-            if self._runtime is not None:
-                self._runtime.logger.error(
-                    f"dependency.request error: payment-service {type(exc).__name__}: {exc}"
-                )
-            raise
         finally:
             if self._runtime is not None:
                 self._runtime.record_dependency(
-                    self._runtime.service_name, "payment-service", perf_counter() - started
+                    self._runtime.service_name,
+                    "payment-service",
+                    perf_counter() - started,
+                    server_address=host,
                 )
+
+
+def error_type(error: BaseException) -> str:
+    """OpenTelemetry ``error.type``: an HTTP error's status code, else the class of the failure's own cause."""
+    if isinstance(error, HTTPError):
+        return str(error.code)
+    if isinstance(error, URLError) and isinstance(error.reason, BaseException):
+        return type(error.reason).__name__
+    return type(error).__name__
 
 
 def peer_host(address: str) -> str:

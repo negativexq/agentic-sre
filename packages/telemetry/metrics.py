@@ -38,7 +38,7 @@ class WorkloadMetrics:
         self.dependency_duration = Histogram(
             "dependency_request_duration_seconds",
             "Outbound dependency request duration",
-            ["service", "dependency"],
+            ["service", "dependency", "server_address"],
             registry=registry,
         )
         self.db_acquisition = Histogram(

@@ -1,6 +1,6 @@
 # M21 Causal Semantics Contract — actor-specific claims
 
-Contract version: `m21.v3`; current engine `2.13.0` (§34; version policy in roadmap F1); D1 remains `m21.support.change-onset-path.v2`.
+Contract version: `m21.v3`; current engine `2.14.0` (§35; version policy in roadmap F1); D1 remains `m21.support.change-onset-path.v2`.
 Authorized replacement of the conflicting frozen v1 clauses, 2026-09-28.
 The v2 clauses below govern current code. The original v1 text is retained below
 as historical rationale; its default competition, D1 audit-only, dominance and
@@ -3789,3 +3789,33 @@ the widest windows, remain `RESOLVED`.
 revision found by ownership, not name; a replica known not `Ready` at the start; an unknown state during the
 interval; a replica gone before the interval; a pod of another workload with a similar name; `T` missing from the
 ledger. Five existing §23 tests build their positive case without a journal; under §34 that case is unknown.
+
+## 35. A rollout witness's execution interval is §13's (owner-approved correction, 2026-10-12)
+
+This completes §28.2 condition 2 for rollout witnesses. It changes no witness, no support rule and no other part of
+§28, §33 or §13.
+
+**Measured problem.** §28.2 condition 2 asks for "the witness's execution interval" with no restriction on the
+witness's kind, but the engine found an interval only for fault witnesses, from the experiment's `execution_targets`.
+A rollout witness (`m21.support.observed-rollout-execution`, `m21.support.observed-failed-rollout`; path
+`rolls_out` → new Pod → `called_by` → symptom) had none, so §28's bridge was never tried for it: a rollout witnessed
+at a caller Service whose only ready Pod is known left that Pod and its workload uncovered.
+
+**Amendment** (engine **2.14.0**). A witness whose path has no `fault_targets` hop and whose first `rolls_out` hop
+reaches a Pod has the interval §13 already uses for that Pod: from its journaled `CREATED` version to its `DELETED`
+version, else the observation cutoff. No journal, no `CREATED` version, or no end leaves the interval unknown and the
+bridge is not applied. §28's other conditions, with §33's fail-closed readiness, apply unchanged.
+
+**Out of scope.** Quota witnesses (`quota_blocks`) still have no interval; a fault witness's interval is unchanged.
+
+**Paired measurement before the edit.** 2.13.0's interval, frozen, against this one, on 559 databases and 7,945
+frozen runs (every persisted diagnosis run plus each incident's widest evidence window, 3,444), read-only. Zero
+errors. 445 runs (164 widest windows) cover more: in each, one strongly supported rollout claim (131 rollout
+execution, 314 failed rollout) now covers the caller Service's only ready Pod and its Deployment, and in the 164 widest
+windows that claim has no uncovered symptom left. No root, support, witness, tier, digest or resolution change in any
+run; 101/101 `RESOLVED` revisions, and 54/54 in the widest windows, remain `RESOLVED`: these diagnoses are still held
+by open questions or rivals.
+
+**Tests.** New: the interval from creation to deletion or the cutoff; no journal, no creation, no cutoff; a rollout
+witness at a Service covering its only ready Pod and Deployment; a second ready Pod keeping it to the Service. The
+existing coverage tests, which pass no journal, are unchanged.

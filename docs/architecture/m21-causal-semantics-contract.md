@@ -3337,7 +3337,7 @@ stored run therefore replays unchanged.
   - Whether the lab's alert rule changes is a lab decision.
 - **The pressure that `evaluate_resource_mechanisms` reads** (the whole read's `peak`).
 
-## 31. A dependency that the symptom's anomalous requests never reached (D1'; owner-approved 2026-10-12, with §31.3)
+## 31. A dependency that the symptom's anomalous requests never reached (D1'; owner-approved 2026-10-12, with §31.3; withdrawn, §31.7)
 
 ### 31.1 Measured problem
 
@@ -3525,3 +3525,34 @@ anomalous request of the window had an anomalous call to that dependency.
 - The `DEV` runs of step 3 that ran live with §31 as first written are replayed offline with the restated rule, and
   their hard conditions are judged on that replay. Their live diagnoses are reported.
 - §30 is not changed, so its `DEV` check (§30.4) is judged on the live runs.
+
+### 31.7 Withdrawn (owner decision, 2026-10-12)
+
+**§31 is withdrawn,** with §31.6. No engine carries it. §30 goes on alone.
+
+**The replay of §31.6** read the same 553 run databases and 3417 diagnoses.
+- **Passed:**
+  - no error;
+  - no root, leader, tier or display change;
+  - 4 new `RESOLVED` (3 `competing-b`, 1 `direct-b`), each led by the run's cause;
+  - none lost;
+  - 80 `kafka` questions answered.
+- **Failed:** the hard condition of §31.6, checked over every stored span of the caller.
+  - In 4 of the 80 answers, one request the diagnosis did not read had a call to `kafka` of 2 to 11 ms.
+  - The baseline median of those calls is 0.45 to 0.6 ms, so `F` × the median makes them anomalous.
+  - §31.2 has no absolute floor, unlike §12.6's `D`.
+
+**Why the rule is withdrawn rather than amended again:**
+- **Amended twice on the same data.** The rule would have been amended a second time on the data that showed its
+  failures. That replay can no longer test it.
+- **A universal claim from a sample.** The rule states a fact of every anomalous request of the window, but the
+  diagnosis reads a cut sample of them, 6 to 8 of about 20. A floor removes the noise, not the sample (§3 I1).
+- **The `DEV` check did not test it.** In the kafka delay alone, the delay was the claim's cause, and A answered the
+  `kafka` question (`ANSWERED_ON_CLAIM_PATH`); §31 was never applied.
+
+**What would bring it back** is a design question, not an amendment: a read of the window's anomalous requests that
+is complete, not a sample. Such a read would be a trace capture of its own (live-trace-design). The rule could then
+answer only when that read is not cut. It will be proposed separately, with its own measurement and a `HOLDOUT` not
+yet seen.
+
+**§30 is measured as §30.4 pre-registers it,** steps 1 to 5, without §31's conditions.

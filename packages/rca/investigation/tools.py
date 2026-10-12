@@ -748,6 +748,12 @@ class ResourcePressureTool(_BaseTool):
             return self.execute(case, gap, target)
         requested = _default_query(query, onset=case.symptoms.reference_time)
         records = self.backend.query_resource_pressure(target, requested)
+        if not isinstance(records, ProviderReadFailure):
+            # m21 §30: this read's window is the tool's own, so its first minutes are no baseline
+            records = tuple(
+                item.model_copy(update={"lead_peak": None, "recent_peak": None, "recent_at": None})
+                for item in records
+            )
         if isinstance(records, ProviderReadFailure):
             runtime = _prometheus_runtime_context(
                 backend=self.backend,

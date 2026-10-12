@@ -706,26 +706,39 @@ def resource_findings(
 
     Pressure that already existed before the incident is normal for that
     workload and is ignored, as is pressure without a baseline to compare with.
+    The baseline is the maximum of the read's lead and the pressure the maximum
+    after it (m21 §30); a record read before §30 compares its first sample with
+    its peak.
     The metric names a pod, not its UID; the finding takes the pod instance only
     when the journal shows exactly one holding the name over the whole sample
     interval (m21 §21 Rule B).
     """
-    worst: dict[EntityRef, list[ResourcePressure]] = {}
+    worst: dict[EntityRef, list[tuple[ResourcePressure, float, float, datetime | None]]] = {}
     for item in pressures:
         threshold = PRESSURE_THRESHOLD.get(item.resource)
-        if threshold is None or item.baseline is None or item.peak < threshold:
+        if threshold is None:
             continue
-        if item.baseline <= item.peak * PRESSURE_BASELINE_FACTOR:
-            worst.setdefault(item.pod, []).append(item)
+        # m21 §30: the read's recent part against its lead; a record read before §30 has neither
+        before: float | None
+        peak: float | None
+        if item.lead_peak is None and item.recent_peak is None:
+            before, peak, at = item.baseline, item.peak, item.at
+        else:
+            before, peak, at = item.lead_peak, item.recent_peak, item.recent_at
+        if before is None or peak is None or peak < threshold:
+            continue
+        if before <= peak * PRESSURE_BASELINE_FACTOR:
+            worst.setdefault(item.pod, []).append((item, before, peak, at))
     findings: list[Finding] = []
-    for pod, items in worst.items():
-        items.sort(key=lambda item: item.peak, reverse=True)
+    for pod, rows in worst.items():
+        rows.sort(key=lambda row: row[2], reverse=True)
+        items = [row[0] for row in rows]
         parts = [
             f"{item.container} {item.resource} {_PRESSURE_NOUN[item.resource]} rose from "
-            f"{item.baseline or 0:.0%} to {item.peak:.0%}"
-            for item in items[:3]
+            f"{before:.0%} to {peak:.0%}"
+            for item, before, peak, _ in rows[:3]
         ]
-        times = [item.at for item in items if item.at is not None]
+        times = [at for *_, at in rows if at is not None]
         starts = [t for item in items if (t := item.sample_start or item.at) is not None]
         ends = [t for item in items if (t := item.sample_end or item.at) is not None]
         uid = (
@@ -743,7 +756,7 @@ def resource_findings(
                 evidence_ids=tuple(item.evidence_id for item in items[:3]),
                 details={
                     "resources": sorted({item.resource for item in items}),
-                    "peak": round(items[0].peak, 3),
+                    "peak": round(rows[0][2], 3),
                 },
             )
         )

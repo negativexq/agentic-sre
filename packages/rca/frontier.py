@@ -9,8 +9,10 @@ that can provide evidence for them.
 from __future__ import annotations
 
 import json
+import statistics
+from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from hashlib import sha256
 
 from packages.rca.claims import admitted, symptom_links
@@ -27,8 +29,10 @@ from packages.rca.model import (
     ObjectVersion,
     StructuralAlternative,
     TraceSpanObservation,
+    TraceSpanStatus,
 )
 from packages.rca.ranking import Context
+from packages.rca.service_effect import BASELINE_FROM, BASELINE_TO, SERVICE_EFFECT
 from packages.rca.topology import (
     WORKLOAD_KINDS,
     api_access_refs,
@@ -362,12 +366,14 @@ def material_frontier(
 UNCHANGED_CONFIGURATION_RULE = "m21.frontier.unchanged-configuration"
 DEPENDENCY_ON_CLAIM_PATH_RULE = "m21.frontier.dependency-on-claim-path"
 DEPENDENCY_DECLARED_UNUSED_RULE = "m21.frontier.dependency-declared-unused"
+DEPENDENCY_NOT_REACHED_RULE = "m21.frontier.dependency-not-reached-by-anomaly"
 ANSWERED_STATES = frozenset(
     {
         "ANSWERED_ROLE_TRANSFERRED",
         "ANSWERED_NO_CHANGE_IN_WINDOW",
         "ANSWERED_ON_CLAIM_PATH",
         "ANSWERED_DECLARED_UNUSED",
+        "ANSWERED_NOT_REACHED",
     }
 )
 # Rules whose open answer names a condition of the evidence, which no read of the investigation changes
@@ -376,10 +382,14 @@ EVIDENCE_RULES = frozenset(
         UNCHANGED_CONFIGURATION_RULE,
         DEPENDENCY_ON_CLAIM_PATH_RULE,
         DEPENDENCY_DECLARED_UNUSED_RULE,
+        DEPENDENCY_NOT_REACHED_RULE,
     }
 )
 # span kinds that receive a call; every other span of a caller is one it makes (m21 §29.6)
 _INBOUND_KINDS = frozenset({"SERVER", "CONSUMER"})
+_CALL_KINDS = frozenset({"CLIENT", "PRODUCER"})
+# m21 §31: the trace capture's slice (TRACE_SLICE) from the onset
+ANOMALY_WINDOW = timedelta(minutes=1)
 
 
 def _write_record(body: Mapping[str, object]) -> datetime | None:
@@ -582,6 +592,165 @@ def dependency_declared_unused(
     )
 
 
+def dependency_not_reached_by_anomaly(
+    alternative: StructuralAlternative,
+    latest: Mapping[EntityRef, ObjectVersion],
+    spans: Sequence[TraceSpanObservation],
+    reads: Sequence[TraceRead] | None,
+    onset: datetime | None,
+    cutoff: datetime | None,
+) -> FrontierAnswer | None:
+    """m21 §31: a called dependency the symptom's anomalous requests never reached, their anomalies located elsewhere.
+
+    The caller's requests are its ``SERVER`` spans; a request's calls are the caller's ``CLIENT`` and ``PRODUCER``
+    spans below it through the caller's own spans, attributed by §29.6. A request or call is anomalous when it is
+    ``ERROR`` or slower than ``F`` times its baseline median (a call's by peer; a peer without baseline calls only
+    by ``ERROR``). None when the rule cannot be assessed, as for C; otherwise the answer, ``OPEN`` with the first
+    failed condition named.
+    """
+    if alternative.role != "dependency" or reads is None or onset is None or cutoff is None:
+        return None
+    callers = [entity for entity in alternative.affected_entities if entity.kind in WORKLOAD_KINDS]
+    hosts = {caller: declared_hosts(latest, caller, alternative.actor) for caller in callers}
+    if not callers or not all(hosts.values()):
+        return None
+    window_end = onset + ANOMALY_WINDOW
+    base_from, base_to = onset - BASELINE_FROM, onset - BASELINE_TO
+    unique = {(span.trace_id, span.span_id): span for span in reversed(spans)}
+
+    def answer(state: str, reason: str | None, evidence: Sequence[str] = ()) -> FrontierAnswer:
+        return FrontierAnswer(
+            alternative_id=alternative.alternative_id,
+            question="IS_THE_DEPENDENCY_AN_UNKNOWN_UPSTREAM_ROLE",
+            state=state,
+            blocked_reason=reason,
+            evidence_ids=tuple(sorted(set(evidence))),
+            affected_claims=alternative.material_for_hypothesis_ids,
+            remaining_uncertainty=(
+                "AN_EFFECT_OUTSIDE_THE_REQUESTS",
+                "ANOMALIES_OUTSIDE_THE_WINDOW",
+                "THE_SAMPLE_OF_A_CUT_READ",
+            )
+            if reason is None
+            else ("UPSTREAM_ROLE_UNDETERMINED",),
+            rule_id=DEPENDENCY_NOT_REACHED_RULE,
+        )
+
+    if cutoff < window_end:
+        return answer("OPEN", "WINDOW_NOT_COMPLETE")
+    failed: list[tuple[int, str]] = []
+    evidence: list[str] = []
+    for caller in callers:
+        result = _caller_not_reached(
+            [span for span in unique.values() if span.service == caller.name],
+            hosts[caller],
+            (base_from, base_to),
+            (onset, window_end),
+        )
+        if isinstance(result, tuple):
+            failed.append(result)
+        else:
+            evidence.extend(result)
+    if failed:
+        return answer("OPEN", min(failed)[1])
+    if any(
+        read.completeness == "FAILED"
+        and (read.namespace, read.service) == (caller.namespace, caller.name)
+        for read in reads
+        for caller in callers
+    ):
+        return answer("OPEN", "TRACE_READ_FAILED")
+    return answer("ANSWERED_NOT_REACHED", None, evidence)
+
+
+def _caller_not_reached(
+    own: Sequence[TraceSpanObservation],
+    hosts: frozenset[str],
+    baseline: tuple[datetime, datetime],
+    window: tuple[datetime, datetime],
+) -> tuple[int, str] | list[str]:
+    """§31's conditions 2–6 for one caller: the first failed one, or the evidence of its anomalies."""
+    factor = SERVICE_EFFECT.factor
+
+    def seconds(span: TraceSpanObservation) -> float | None:
+        return (span.end_at - span.start_at).total_seconds() if span.end_at is not None else None
+
+    def within(span: TraceSpanObservation, bounds: tuple[datetime, datetime]) -> bool:
+        return bounds[0] <= span.start_at <= bounds[1]
+
+    def median(values: Sequence[float | None]) -> float | None:
+        known = [value for value in values if value is not None]
+        return statistics.median(known) if known else None
+
+    def anomalous(span: TraceSpanObservation, typical: float | None) -> bool:
+        took = seconds(span)
+        return span.status == TraceSpanStatus.ERROR or (
+            typical is not None and took is not None and took > factor * typical
+        )
+
+    requests = [span for span in own if span.span_kind == "SERVER"]
+    base_requests = [span for span in requests if within(span, baseline)]
+    if len(base_requests) < SERVICE_EFFECT.calls:
+        return (2, "NO_BASELINE")
+    typical = median([seconds(span) for span in base_requests])
+    flagged = [span for span in requests if within(span, window) and anomalous(span, typical)]
+    if len(flagged) < SERVICE_EFFECT.calls:
+        return (3, "TOO_FEW_ANOMALOUS_REQUESTS")
+    calls = [span for span in own if span.span_kind in _CALL_KINDS]
+    peer_base: dict[str, list[float | None]] = defaultdict(list)
+    for span in calls:
+        peer = span.semantic_attributes.get("server.address")
+        if peer and within(span, baseline):
+            peer_base[peer].append(seconds(span))
+    peer_typical = {peer: median(values) for peer, values in peer_base.items()}
+    by_trace: dict[str, list[TraceSpanObservation]] = defaultdict(list)
+    for span in own:
+        by_trace[span.trace_id].append(span)
+
+    def below(request: TraceSpanObservation) -> list[TraceSpanObservation]:
+        parent = {span.span_id: span.parent_span_id for span in by_trace[request.trace_id]}
+        found = []
+        for span in by_trace[request.trace_id]:
+            if span.span_kind not in _CALL_KINDS:
+                continue
+            step, seen = span.parent_span_id, set()
+            while (
+                step is not None and step != request.span_id and step in parent and step not in seen
+            ):
+                seen.add(step)
+                step = parent[step]
+            if step == request.span_id:
+                found.append(span)
+        return found
+
+    made = {request.span_id: below(request) for request in flagged}
+    if any(
+        span.semantic_attributes.get("server.address") in hosts
+        for request_calls in made.values()
+        for span in request_calls
+    ):
+        return (4, "REACHED")
+    evidence: list[str] = []
+    for request in flagged:
+        located = [
+            span
+            for span in made[request.span_id]
+            if (peer := span.semantic_attributes.get("server.address"))
+            and peer not in hosts
+            and anomalous(span, peer_typical.get(peer))
+        ]
+        if not located:
+            return (5, "ANOMALY_NOT_LOCATED")
+        evidence.extend([request.evidence_id, *(span.evidence_id for span in located)])
+    if not all(
+        span.semantic_attributes.get("server.address")
+        for span in own
+        if span.span_kind not in _INBOUND_KINDS and span.start_at <= window[1]
+    ):
+        return (6, "CALLS_NOT_TRACED")
+    return evidence
+
+
 def investigation_status(
     alternatives: Sequence[StructuralAlternative], *, bounded: bool
 ) -> InvestigationStatus:
@@ -600,12 +769,14 @@ def investigation_status(
 __all__ = [
     "ANSWERED_STATES",
     "DEPENDENCY_DECLARED_UNUSED_RULE",
+    "DEPENDENCY_NOT_REACHED_RULE",
     "DEPENDENCY_ON_CLAIM_PATH_RULE",
     "EVIDENCE_RULES",
     "UNCHANGED_CONFIGURATION_RULE",
     "apply_frontier_progress",
     "covered_frontier_dimensions",
     "dependency_declared_unused",
+    "dependency_not_reached_by_anomaly",
     "dependency_on_claim_path",
     "derive_structural_frontier",
     "investigation_status",

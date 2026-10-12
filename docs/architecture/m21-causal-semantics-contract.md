@@ -3675,11 +3675,11 @@ parentheses).
 | — no dependency call captured in the baseline, no sibling (`dbdelay`) | 9 (3) | 9 (3) |
 
 - **R1–R3 hold in all 49:** each has one new-revision Pod, resolved to one UID; the effect is non-success
-  (`config-error`, 22) or latency (`dbdelay`, 27, median 0.9–1.5 s against 3 ms); no effect in the baseline.
+  (`config-error`, 22) or latency (`dbdelay`, 27, median 0.7–1.5 s against a baseline of about 3 ms); no effect in the baseline.
 - **No sibling control:** while the new Pod's effect lasts, the old revision's Pods received at most 1 captured call.
-- **`config-error`:** the requests fail in about 1.6 ms with no child call. A failure before the connection is
+- **`config-error`:** the requests fail in 1.5 to 3.2 ms with no child call. A failure before the connection is
   acquired would look the same, so R4 cannot separate it.
-- **`dbdelay`:** the effect spans hold a normal `postgres` call (child union 0.2–0.3 % of the excess). The time is
+- **`dbdelay`:** the effect spans hold a normal `postgres` call (child union 0.2–0.6 % of the excess). The time is
   spent outside it, in the uninstrumented `pg_sleep`; R4 4 applies.
 - **Alarm match (R5), all 49:** `config-error`: rate threshold matched by the target alone 16, no captured span in the
   window 6. `dbdelay`: mean latency with old Pods possibly `Ready` 13, a metric no span measures 6, no captured span

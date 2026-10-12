@@ -16,7 +16,13 @@ import pytest
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-from scripts.request_ledger_reconcile import TraceFacts, place, trace_facts
+from scripts.request_ledger_reconcile import (
+    TraceFacts,
+    execution_facts,
+    lifecycle,
+    place,
+    trace_facts,
+)
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from workload.common.adapters import InMemoryEventPublisher, InProcessPaymentGateway
@@ -194,3 +200,63 @@ def test_a_request_is_placed_only_by_its_records(
     expected: str,
 ) -> None:
     assert place(caller_ok, facts, status, consumed) == expected
+
+
+def _entry(trace: str, record: str, **labels: str) -> dict[str, str]:
+    return {"trace_id": trace, "execution_record": record, "k8s_pod_uid": "uid-1", **labels}
+
+
+def test_the_execution_record_names_the_last_failed_operation_of_a_5xx() -> None:
+    def operation(started: str, kind: str, outcome: str, **labels: str) -> dict[str, str]:
+        return _entry(
+            "t1",
+            "operation",
+            execution_operation_started_ns=started,
+            execution_operation_kind=kind,
+            execution_operation_outcome=outcome,
+            **labels,
+        )
+
+    facts = execution_facts(
+        [
+            _entry("t1", "start"),
+            operation("1", "DB", "OK", server_address="postgres"),
+            operation(
+                "2",
+                "HTTP_CLIENT",
+                "ERROR",
+                server_address="payment-service",
+                error_type="TimeoutError",
+            ),
+            _entry("t1", "terminal", http_response_status_code="500"),
+            _entry("t2", "start"),
+            operation("1", "DB", "ERROR"),
+            _entry("t2", "terminal", http_response_status_code="201"),
+            {"trace_id": "t3", "detected_level": "info"},  # not an ExecutionRecord entry
+        ]
+    )
+    assert set(facts) == {"t1", "t2"}
+    terminal = facts["t1"].terminal_operation
+    assert terminal is not None
+    assert (terminal.kind, terminal.server_address, terminal.error_type) == (
+        "HTTP_CLIENT",
+        "payment-service",
+        "TimeoutError",
+    )
+    # a request that succeeded has no terminal operation, whatever failed inside it
+    assert facts["t2"].terminal_operation is None
+
+
+def test_a_start_without_a_terminal_is_an_open_lifecycle_not_a_success() -> None:
+    facts = execution_facts(
+        [
+            _entry("a", "start"),
+            _entry("a", "terminal", http_response_status_code="201"),
+            _entry("b", "start"),
+            _entry("c", "terminal", http_response_status_code="500"),
+        ]
+    )
+    assert facts["b"].terminal_status is None
+    assert lifecycle(facts) == {
+        "uid-1": {"starts": 2, "terminals": 2, "open": 1, "terminal_without_start": 1}
+    }

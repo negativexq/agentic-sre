@@ -119,11 +119,18 @@ class RuntimeMetrics:
         self._kafka_lag.add(value - previous, {"service": service, "topic": topic})
         self._kafka_lag_values[key] = value
 
-    def dependency(self, service: str, dependency: str, duration_seconds: float) -> None:
-        """Record one outbound dependency call, including failed calls."""
-        self._dependency_duration.record(
-            duration_seconds, {"service": service, "dependency": dependency}
-        )
+    def dependency(
+        self,
+        service: str,
+        dependency: str,
+        duration_seconds: float,
+        server_address: str | None = None,
+    ) -> None:
+        """Record one outbound dependency call, including failed calls, with its configured peer when known."""
+        attributes = {"service": service, "dependency": dependency}
+        if server_address is not None:
+            attributes["server.address"] = server_address
+        self._dependency_duration.record(duration_seconds, attributes)
 
     def kafka_error(self, service: str, topic: str) -> None:
         """Record one bounded consumer processing failure."""
@@ -176,12 +183,23 @@ class TelemetryRuntime:
         else:
             instrument.labels(service, operation).observe(duration_seconds)
 
-    def record_dependency(self, service: str, dependency: str, duration_seconds: float) -> None:
-        """Record an outbound dependency observation in both metric paths."""
-        self.metrics.dependency(service, dependency, duration_seconds)
-        self.prometheus_metrics.dependency_duration.labels(service, dependency).observe(
-            duration_seconds
-        )
+    def record_dependency(
+        self,
+        service: str,
+        dependency: str,
+        duration_seconds: float,
+        *,
+        server_address: str | None = None,
+    ) -> None:
+        """Record an outbound dependency observation in both metric paths.
+
+        ``server_address`` is the peer host the client was configured with (m21 §29.6), so the measurement binds to
+        a Service through the caller's own declaration rather than through the ``dependency`` name.
+        """
+        self.metrics.dependency(service, dependency, duration_seconds, server_address)
+        self.prometheus_metrics.dependency_duration.labels(
+            service, dependency, server_address or ""
+        ).observe(duration_seconds)
 
     def record_kafka_error(self, service: str, topic: str) -> None:
         """Record a consumer processing failure in both metric paths."""

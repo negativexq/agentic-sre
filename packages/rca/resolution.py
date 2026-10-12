@@ -1008,7 +1008,7 @@ def resolve_hypotheses(
         ANSWERED_STATES,
         DEPENDENCY_ON_CLAIM_PATH_RULE,
         dependency_declared_unused,
-        dependency_not_reached_by_anomaly,
+        dependency_not_at_the_anomaly,
         dependency_on_claim_path,
         material_frontier,
         unchanged_configuration,
@@ -1055,10 +1055,10 @@ def resolve_hypotheses(
         )
         for a in answers
     )
-    # m21 §31: a called dependency the symptom's anomalous requests never reached; an open one names its condition
+    # m21 §31 and §31.6: a called dependency where none of the anomalies is; an open one names its condition
     answers = tuple(
         (
-            dependency_not_reached_by_anomaly(
+            dependency_not_at_the_anomaly(
                 by_id[a.alternative_id],
                 latest or {},
                 trace_spans,

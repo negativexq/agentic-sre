@@ -1,4 +1,4 @@
-"""m21 §31: a called dependency the symptom's anomalous requests never reached."""
+"""m21 §31 with condition 4 as §31.6: a called dependency where none of the symptom's anomalies is."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from rca_builders import at, microservice, ref
 from packages.rca.evidence_coverage import TraceRead
 from packages.rca.frontier import (
     DEPENDENCY_DECLARED_UNUSED_RULE,
-    DEPENDENCY_NOT_REACHED_RULE,
-    dependency_not_reached_by_anomaly,
+    DEPENDENCY_NOT_AT_THE_ANOMALY_RULE,
+    dependency_not_at_the_anomaly,
 )
 from packages.rca.model import (
     EntityRef,
@@ -133,7 +133,7 @@ def answer(
     reads: list[TraceRead] | None = READS,
     cutoff: datetime | None = CUTOFF,
 ) -> FrontierAnswer | None:
-    return dependency_not_reached_by_anomaly(
+    return dependency_not_at_the_anomaly(
         alternative or question(), LATEST, spans, reads, ONSET, cutoff
     )
 
@@ -147,8 +147,8 @@ def test_anomalous_requests_that_failed_elsewhere_and_never_reached_it_answer_th
 ):
     spans = baseline() + failing()
     found = answer(spans)
-    assert state(found) == ("ANSWERED_NOT_REACHED", None)
-    assert found is not None and found.rule_id == DEPENDENCY_NOT_REACHED_RULE
+    assert state(found) == ("ANSWERED_ANOMALY_ELSEWHERE", None)
+    assert found is not None and found.rule_id == DEPENDENCY_NOT_AT_THE_ANOMALY_RULE
     assert found.affected_claims == ("leader",)
     assert found.remaining_uncertainty == (
         "AN_EFFECT_OUTSIDE_THE_REQUESTS",
@@ -164,17 +164,48 @@ def failing_spans(spans: list[TraceSpanObservation]) -> list[TraceSpanObservatio
     return [s for s in spans if s.start_at >= ONSET]
 
 
-def test_hard_an_anomalous_request_that_reached_the_dependency_is_never_answered() -> None:
-    reached = request(60.8, status=ERROR, pay=(ERROR, 0.05), broker=True)
-    assert state(answer(baseline() + failing() + reached)) == ("OPEN", "REACHED")
-    # a call below the request through the caller's own span reaches it too
+def test_hard_an_anomalous_call_to_the_dependency_is_never_answered() -> None:
+    slow_publish = request(
+        60.8,
+        status=ERROR,
+        pay=(ERROR, 0.05),
+        broker=False,
+        extra=(("PRODUCER", "broker", OK, 0.5),),
+    )
+    assert state(answer(baseline() + failing() + slow_publish)) == ("OPEN", "ANOMALOUS_CALL_TO_IT")
+    failed_publish = request(
+        60.8,
+        status=ERROR,
+        pay=(ERROR, 0.05),
+        broker=False,
+        extra=(("PRODUCER", "broker", ERROR, 0.01),),
+    )
+    assert state(answer(baseline() + failing() + failed_publish)) == (
+        "OPEN",
+        "ANOMALOUS_CALL_TO_IT",
+    )
+    # a call below the request through the caller's own span counts too
     trace = "deep"
     server = _span(trace, None, at(60.9), 0.1, kind="SERVER", status=ERROR)
     pay = _span(trace, server.span_id, at(60.9), 0.05, kind="CLIENT", address="pay", status=ERROR)
-    publish = _span(trace, pay.span_id, at(60.9), 0.01, kind="PRODUCER", address="broker")
-    assert state(answer(baseline() + failing() + [server, pay, publish])) == ("OPEN", "REACHED")
-    # a healthy request's call does not count; only anomalous requests are read
-    assert state(answer(baseline() + failing() + request(60.5))) == ("ANSWERED_NOT_REACHED", None)
+    publish = _span(
+        trace, pay.span_id, at(60.9), 0.01, kind="PRODUCER", address="broker", status=ERROR
+    )
+    found = answer(baseline() + failing() + [server, pay, publish])
+    assert state(found) == ("OPEN", "ANOMALOUS_CALL_TO_IT")
+
+
+def test_m21_31_6_a_request_that_reached_the_dependency_with_a_normal_call_does_not_keep_it_open() -> (
+    None
+):
+    # §31.6: slow at payment-service, then published normally
+    reached = request(60.8, seconds=1.0, pay=(OK, 0.9), broker=True)
+    assert state(answer(baseline() + failing() + reached)) == ("ANSWERED_ANOMALY_ELSEWHERE", None)
+    # a healthy request's call does not count either; only anomalous requests are read
+    assert state(answer(baseline() + failing() + request(60.5))) == (
+        "ANSWERED_ANOMALY_ELSEWHERE",
+        None,
+    )
 
 
 def test_a_slow_request_located_at_a_slow_call_is_anomalous() -> None:
@@ -183,7 +214,7 @@ def test_a_slow_request_located_at_a_slow_call_is_anomalous() -> None:
         for i in range(3)
         for span in request(60.1 + 0.2 * i, seconds=1.0, pay=(OK, 0.9), broker=False)
     ]
-    assert state(answer(baseline() + slow)) == ("ANSWERED_NOT_REACHED", None)
+    assert state(answer(baseline() + slow)) == ("ANSWERED_ANOMALY_ELSEWHERE", None)
     # not slower than 3 x the baseline median: not anomalous
     mild = [s for i in range(3) for s in request(60.1 + 0.2 * i, seconds=0.25, broker=False)]
     assert state(answer(baseline() + mild)) == ("OPEN", "TOO_FEW_ANOMALOUS_REQUESTS")
@@ -222,7 +253,10 @@ def test_each_anomalous_request_must_have_an_anomalous_call_to_another_peer() ->
     failed_new = request(
         60.8, status=ERROR, pay=None, broker=False, extra=(("CLIENT", "db", ERROR, 0.01),)
     )
-    assert state(answer(baseline() + failing() + failed_new)) == ("ANSWERED_NOT_REACHED", None)
+    assert state(answer(baseline() + failing() + failed_new)) == (
+        "ANSWERED_ANOMALY_ELSEWHERE",
+        None,
+    )
 
 
 def test_the_callers_calls_must_be_traced() -> None:
@@ -250,7 +284,7 @@ def test_the_rule_needs_a_dependency_question_a_declaration_reads_and_a_cutoff()
     assert answer(spans, alternative=question(ref("shop/Service/elsewhere"))) is None
     other = question().model_copy(update={"role": "configuration_source"})
     assert answer(spans, alternative=other) is None
-    assert dependency_not_reached_by_anomaly(question(), LATEST, spans, READS, None, CUTOFF) is None
+    assert dependency_not_at_the_anomaly(question(), LATEST, spans, READS, None, CUTOFF) is None
 
 
 def test_duplicate_observations_of_a_span_are_read_once() -> None:
@@ -279,9 +313,13 @@ def test_in_the_resolution_it_follows_c_only_for_a_called_dependency() -> None:
         (found,) = [a for a in trace.frontier_answers if a.alternative_id == "alternative:broker"]
         return found.state, found.blocked_reason, found.rule_id
 
-    assert resolved(CUTOFF) == ("ANSWERED_NOT_REACHED", None, DEPENDENCY_NOT_REACHED_RULE)
+    assert resolved(CUTOFF) == (
+        "ANSWERED_ANOMALY_ELSEWHERE",
+        None,
+        DEPENDENCY_NOT_AT_THE_ANOMALY_RULE,
+    )
     # an open §31 answer names its condition in place of C's CALLED
-    assert resolved(at(60.5)) == ("OPEN", "WINDOW_NOT_COMPLETE", DEPENDENCY_NOT_REACHED_RULE)
+    assert resolved(at(60.5)) == ("OPEN", "WINDOW_NOT_COMPLETE", DEPENDENCY_NOT_AT_THE_ANOMALY_RULE)
     # a dependency never called up to the onset stays C's
     unused = resolve_hypotheses(
         claims,

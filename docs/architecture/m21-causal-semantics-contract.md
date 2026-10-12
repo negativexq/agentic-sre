@@ -3216,3 +3216,115 @@ the same variant and the same seed as `dev20-kafka-delay`.
   trace reads, so C does not apply.
 
 **4. The twentieth `HOLDOUT`** is pre-registered separately in testbed design.
+
+## 30. Resource pressure is a rise over the minutes before it (E; proposal, 2026-10-12, awaiting the owner)
+
+### 30.1 Measured problem
+
+**Source:** the twenty-second `HOLDOUT`'s 30 diagnoses behind `order-service` alerts.
+
+**16 of them keep an `order-service` Pod as an unresolved rival claim.**
+- Each of these rivals holds one fact: a `RESOURCE_PRESSURE` finding on its own CPU throttling, for example "rose from
+  0% to 39%".
+- In all 16 the throttling peak came **19 to 515 s before the fault began**.
+
+**How the finding is derived today** (`resource_findings`, `query_resource_pressure`):
+- **The read** covers `[reference − 10 min, cutoff]`. The 10 minutes are `pressure_baseline_gap` plus
+  `RESOURCE_BASELINE_LEAD`.
+- **`baseline`** is the read's **first sample**. **`peak`** is its maximum anywhere in the read.
+- **A finding is made** when `peak ≥ PRESSURE_THRESHOLD` (CPU 0.25, memory 0.9) and
+  `baseline ≤ PRESSURE_BASELINE_FACTOR × peak` (0.6).
+
+**Under normal load `order-service` throttles in bursts of 0.3 to 0.6.**
+- Whether a finding appears depends on where the first sample falls in a burst.
+- In 8 of the 21 `order-service` windows ending at the fault's start, the rule makes a finding with no fault at all;
+  1 of these 8 is in a negative control.
+
+The finding's own description says that pressure already present before the incident is ignored. A first sample
+cannot show that for a series that comes in bursts.
+
+**Prometheus's retained series** (the same 1-minute rate, 15-second steps): the current rule against the rule of
+§30.2.
+
+| Runs | Stressed Pod keeps its finding (current / §30.2) | Unstressed `order-service` Pods with a finding (current / §30.2) |
+|---|---|---|
+| Twenty-second `HOLDOUT` (24 runs) | 6 / 6 of 6 | 17 / 0 of 21 |
+| Nineteenth to twenty-first `HOLDOUT` and `DEV` 20–22 | 17 / 17 of 18 | 45 / 2 of 62 |
+
+- **The stressed Pods:**
+  - `direct-b`: a `StressChaos` on `payment-service`.
+  - `scheduled-b`: the stressed Pod is `order-service`'s own.
+  - The one stressed Pod that neither rule finds peaked at 0.18 (nineteenth `HOLDOUT`, `scheduled-b` #0).
+- **The 2 that remain under §30.2** rose near the onset: 0.34 to 0.60 and 0.36 to 0.63.
+- **How §30.2 was found.** It was designed on the twenty-second `HOLDOUT` and checked on the earlier runs. Those
+  earlier runs serve only as a check, not as validation. The validation is §30.4.
+
+### 30.2 Amendment
+
+**The read is split at `reference − 5 min`:**
+- **the lead:** `[reference − 10 min, reference − 5 min)`. This is §12.7's baseline window.
+- **the recent part:** `[reference − 5 min, cutoff]`.
+
+The query and its window stay unchanged. The reader reports the maximum of each part. The split comes from the read
+itself: its first `RESOURCE_BASELINE_LEAD`.
+
+**A `RESOURCE_PRESSURE` finding is made** for a container and resource when both hold:
+1. **The recent part crossed the threshold:** its maximum is at least `PRESSURE_THRESHOLD`.
+2. **The lead stayed clearly below it:** the lead's maximum is at most `PRESSURE_BASELINE_FACTOR` times the recent
+   maximum.
+
+Bursts present before the incident therefore fail condition 2, whatever the phase of the first sample.
+
+**A container with no sample in the lead,** for example a Pod created after it began, has no baseline. No finding is
+made for it, as the function's existing rule says.
+
+**Constants:** none is new and none changes. The threshold, the factor and the two 5-minute spans are the existing
+ones.
+
+**The finding's text and time** are those of the recent maximum: "rose from {lead maximum} to {recent maximum}".
+
+**A record read before this section** carries no lead maximum. For it the finding is derived exactly as before. A
+stored run therefore replays unchanged.
+
+**Unchanged:**
+- `evaluate_resource_mechanisms` and m16's `OBSERVED_NORMAL`, which read the whole read's `peak`.
+- Every claim, support, witness, explanation and frontier rule.
+- Every condition of `RESOLVED`.
+
+### 30.3 Consequences
+
+- **Fewer claims, not different ones.** A Pod whose only fact was such a burst no longer becomes a claim. A Pod that
+  has other facts keeps its claim without the finding.
+- **The stressed Pods of `direct-b` and `scheduled-b`** keep their finding (§30.1).
+- **On the twenty-second `HOLDOUT` alone,** the 16 `order-service` Pod rivals would go. No diagnosis would become
+  `RESOLVED`: each of them still holds an open `kafka` question.
+
+### 30.4 Measurement, pre-registered
+
+1. **Unit tests:**
+   - a burst in the lead and a recent maximum below the factor: no finding;
+   - a rise in the recent part: a finding;
+   - no sample in the lead: no finding;
+   - a record without a lead maximum: the previous rule.
+2. **Offline replay** of every stored run, 2.10.0 against the engine with §30.
+   - **Hard:** no change at all, since no stored record holds a lead maximum.
+3. **`DEV` checks, unscored,** on the engine with §30. Each check's harness goes in its own commit.
+   - **`direct-b` and `scheduled-b`.** Hard: the stressed Pod keeps its `RESOURCE_PRESSURE` finding in every run.
+   - **`dependency-b` and `negative-b`.** Reported: every `RESOURCE_PRESSURE` finding with its lead and recent maxima,
+     and every unresolved Pod rival.
+4. **ITBench-Lite,** as a regression check. Reported: every prediction whose root, resolution, leader, tier or rank
+   changes.
+5. **The twenty-third `HOLDOUT`,** pre-registered separately before it runs.
+   - **Hard:**
+     - no `direct-b` or `scheduled-b` stressed Pod loses its finding;
+     - no new `RESOLVED` whose leader is not the run's cause or its execution instance.
+
+### 30.5 Not decided here
+
+- **The `kafka` questions of the `order-service` claims.** They are the remaining blocker of those diagnoses (a
+  separate proposal, D1').
+- **The `order-worker` lag alerts.**
+  - The rule `increase(produced[2m]) − increase(consumed[2m]) > 10` already reads 4 to 9 under normal traffic.
+  - It jumps to 27–68 when traffic stops. The traces show every sampled message consumed in about 1 ms.
+  - Whether the lab's alert rule changes is a lab decision.
+- **The pressure that `evaluate_resource_mechanisms` reads** (the whole read's `peak`).
